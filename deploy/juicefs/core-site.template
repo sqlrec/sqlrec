@@ -1,0 +1,18 @@
+<configuration>
+    <property>
+      <name>fs.defaultFS</name>
+      <value>jfs://myjfs</value>
+    </property>
+    <property>
+        <name>fs.jfs.impl</name>
+        <value>io.juicefs.JuiceFileSystem</value>
+    </property>
+    <property>
+        <name>fs.AbstractFileSystem.jfs.impl</name>
+        <value>io.juicefs.JuiceFS</value>
+    </property>
+    <property>
+        <name>juicefs.meta</name>
+        <value>mysql://juicefs:abc123456@(NODE_IP:30306)/juicefs</value>
+    </property>
+</configuration>
