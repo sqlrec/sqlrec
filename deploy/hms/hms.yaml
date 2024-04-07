@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hms
+  labels:
+    app: hms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hms
+  template:
+    metadata:
+      labels:
+        app: hms
+    spec:
+      containers:
+        - name: hms
+          image: apache/hive:3.1.3
+          env:
+            - name: SERVICE_NAME
+              value: metastore
+            - name: DB_DRIVER
+              value: mysql
+          ports:
+            - containerPort: 9083
+          volumeMounts:
+            - mountPath: /opt/hive/lib/MYSQL_JAR_NAME
+              name: mysql-jar
+            - mountPath: /opt/hive/lib/JUICEFS_JAR_NAME
+              name: juicefs-jar
+            - mountPath: /opt/hive/conf/hive-site.xml
+              name: hive-site
+              subPath: hive-site.xml
+            - mountPath: /opt/hive/conf/core-site.xml
+              name: core-site
+              subPath: core-site.xml
+      volumes:
+        - name: mysql-jar
+          hostPath:
+            path: MYSQL_JAR_LOCATION
+            type: File
+        - name: juicefs-jar
+          hostPath:
+            path: JUICEFS_JAR_LOCATION
+            type: File
+        - name: core-site
+          configMap:
+            name: core-site
+        - name: hive-site
+          configMap:
+            name: hive-site
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hms
+spec:
+  type: NodePort
+  selector:
+    app: hms
+  ports:
+    - protocol: TCP
+      port: 9083
+      targetPort: 9083

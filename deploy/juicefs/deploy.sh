@@ -31,11 +31,11 @@ juicefs format \
 
 dir=$(dirname $(realpath $0))
 JFS_LATEST_TAG=$(curl -s https://api.github.com/repos/juicedata/juicefs/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d 'v')
-if [ ! -f "juicefs-hadoop-${JFS_LATEST_TAG}.jar" ];then
+if [ ! -f "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" ];then
   wget -P "${dir}" "https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-hadoop-${JFS_LATEST_TAG}.jar"
 fi
 
-if [ ! -e "hadoop" ];then
+if [ ! -e "${dir}/hadoop" ];then
   wget -P "${dir}" https://dlcdn.apache.org/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz
   tar -zxvf "${dir}/hadoop-3.4.0.tar.gz"
   ln -s "${dir}/hadoop-3.4.0" "${dir}/hadoop"
@@ -44,3 +44,5 @@ fi
 
 sed "s/NODE_IP/${node_ip}/" "${dir}/core-site.template"  > "${dir}/core-site.xml"
 cp "${dir}/core-site.xml" "${dir}/hadoop/etc/hadoop/"
+
+kubectl create configmap core-site --from-file="${dir}/core-site.xml" -n "${namespace}"
