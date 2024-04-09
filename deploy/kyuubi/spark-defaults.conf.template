@@ -1,0 +1,9 @@
+# https://spark.apache.org/docs/latest/running-on-kubernetes.html
+
+spark.master k8s://https://K8S-APISERVER-ADDR
+spark.executor.instances 3
+spark.dynamicAllocation.enabled false
+spark.shuffle.service.enabled false
+spark.kubernetes.container.image apache/spark:3.5.1
+spark.kubernetes.authenticate.driver.serviceAccountName spark
+spark.kubernetes.namespace NAMESPACE

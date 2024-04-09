@@ -37,7 +37,7 @@ fi
 
 if [ ! -e "${dir}/hadoop" ];then
   wget -P "${dir}" https://dlcdn.apache.org/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz
-  tar -zxvf "${dir}/hadoop-3.4.0.tar.gz"
+  tar -zxvf "${dir}/hadoop-3.4.0.tar.gz" -C "${dir}"
   ln -s "${dir}/hadoop-3.4.0" "${dir}/hadoop"
   cp "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" "${dir}/hadoop/share/hadoop/common/lib/"
 fi

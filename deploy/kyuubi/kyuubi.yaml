@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kyuubi
+  labels:
+    app: kyuubi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kyuubi
+  template:
+    metadata:
+      labels:
+        app: kyuubi
+    spec:
+      serviceAccount: spark
+      serviceAccountName: spark
+      containers:
+        - name: kyuubi
+          image: apache/kyuubi:1.9.0-spark
+          env:
+            - name: SPARK_HOME
+              value: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3
+          ports:
+            - containerPort: 10009
+          volumeMounts:
+            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/jars/JUICEFS_JAR_NAME
+              name: juicefs-jar
+            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf/hive-site.xml
+              name: hive-site
+              subPath: hive-site.xml
+            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf/core-site.xml
+              name: core-site
+              subPath: core-site.xml
+            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf/spark-defaults.conf
+              name: spark-defaults
+              subPath: spark-defaults.conf
+      volumes:
+        - name: juicefs-jar
+          hostPath:
+            path: JUICEFS_JAR_LOCATION
+            type: File
+        - name: core-site
+          configMap:
+            name: core-site
+        - name: hive-site
+          configMap:
+            name: hive-site
+        - name: spark-defaults
+          configMap:
+            name: spark-defaults
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kyuubi
+spec:
+  type: NodePort
+  selector:
+    app: kyuubi
+  ports:
+    - protocol: TCP
+      port: 10009
+      targetPort: 10009
