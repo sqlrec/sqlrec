@@ -1,9 +1,16 @@
-# https://spark.apache.org/docs/latest/running-on-kubernetes.html
-
 spark.master k8s://https://K8S-APISERVER-ADDR
+spark.submit.deployMode cluster
+spark.kubernetes.file.upload.path jfs://myjfs/spark/upload
 spark.executor.instances 3
 spark.dynamicAllocation.enabled false
 spark.shuffle.service.enabled false
 spark.kubernetes.container.image apache/spark:3.5.1
 spark.kubernetes.authenticate.driver.serviceAccountName spark
 spark.kubernetes.namespace NAMESPACE
+
+spark.kubernetes.driver.volumes.hostPath.juicefs.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.driver.volumes.hostPath.juicefs.options.type File
+spark.kubernetes.driver.volumes.hostPath.juicefs.options.path JUICEFS_JAR_LOCATION
+spark.kubernetes.executor.volumes.hostPath.juicefs.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.executor.volumes.hostPath.juicefs.options.type File
+spark.kubernetes.executor.volumes.hostPath.juicefs.options.path JUICEFS_JAR_LOCATION

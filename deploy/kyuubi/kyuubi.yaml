@@ -22,10 +22,12 @@ spec:
           env:
             - name: SPARK_HOME
               value: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3
+            - name: HADOOP_CONF_DIR
+              value: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf
           ports:
             - containerPort: 10009
           volumeMounts:
-            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/jars/JUICEFS_JAR_NAME
+            - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/jars/juicefs-hadoop.jar
               name: juicefs-jar
             - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf/hive-site.xml
               name: hive-site

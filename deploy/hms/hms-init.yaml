@@ -1,31 +1,19 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: hms
-  labels:
-    app: hms
+  name: hms-init
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: hms
   template:
-    metadata:
-      labels:
-        app: hms
     spec:
       containers:
-        - name: hms
+        - name: hms-init
           image: apache/hive:3.1.3
           env:
             - name: SERVICE_NAME
               value: metastore
             - name: DB_DRIVER
               value: mysql
-            - name: IS_RESUME
-              value: "true"
-          ports:
-            - containerPort: 9083
+          command: ["/opt/hive/bin/schematool",  "-dbType", "mysql", "-initSchema"]
           volumeMounts:
             - mountPath: /opt/hive/lib/mysql-connector-java.jar
               name: mysql-jar
@@ -52,16 +40,4 @@ spec:
         - name: hive-site-hms
           configMap:
             name: hive-site-hms
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: hms
-spec:
-  type: NodePort
-  selector:
-    app: hms
-  ports:
-    - protocol: TCP
-      port: 9083
-      targetPort: 9083
+      restartPolicy: Never

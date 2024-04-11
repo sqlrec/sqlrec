@@ -4,6 +4,8 @@ source ~/.bash_profile
 
 namespace=$1
 
+helm uninstall mysql-juicefs --namespace "$namespace"
+kubectl delete pvc data-mysql-juicefs-0 --namespace "$namespace"
 helm install mysql-juicefs \
   --namespace "$namespace" \
   --set primary.service.type=NodePort \
@@ -33,16 +35,19 @@ dir=$(dirname $(realpath $0))
 JFS_LATEST_TAG=$(curl -s https://api.github.com/repos/juicedata/juicefs/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d 'v')
 if [ ! -f "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" ];then
   wget -P "${dir}" "https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-hadoop-${JFS_LATEST_TAG}.jar"
+  ln -s "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" "${dir}/juicefs-hadoop.jar"
 fi
 
 if [ ! -e "${dir}/hadoop" ];then
   wget -P "${dir}" https://dlcdn.apache.org/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz
   tar -zxvf "${dir}/hadoop-3.4.0.tar.gz" -C "${dir}"
   ln -s "${dir}/hadoop-3.4.0" "${dir}/hadoop"
-  cp "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" "${dir}/hadoop/share/hadoop/common/lib/"
+  cp "${dir}/juicefs-hadoop-*.jar" "${dir}/hadoop/share/hadoop/common/lib/"
 fi
 
 sed "s/NODE_IP/${node_ip}/" "${dir}/core-site.template"  > "${dir}/core-site.xml"
 cp "${dir}/core-site.xml" "${dir}/hadoop/etc/hadoop/"
+./hadoop/bin/hadoop fs -mkdir -p /spark/upload
+./hadoop/bin/hadoop fs chmod 777 /spark/upload
 
 kubectl create configmap core-site --from-file="${dir}/core-site.xml" -n "${namespace}"
