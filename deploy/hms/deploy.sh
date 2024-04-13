@@ -2,7 +2,7 @@
 shopt -s expand_aliases
 source ~/.bash_profile
 
-namespace=$1
+namespace="${1:-sqlrec}"
 
 helm uninstall mysql-hms --namespace "$namespace"
 kubectl delete pvc data-mysql-hms-0 --namespace "$namespace"

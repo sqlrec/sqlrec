@@ -2,7 +2,7 @@
 shopt -s expand_aliases
 source ~/.bash_profile
 
-namespace=$1
+namespace="${1:-sqlrec}"
 
 dir=$(dirname $(realpath $0))
 juicefs_dir=$(dirname ${dir})"/juicefs/juicefs-hadoop.jar"

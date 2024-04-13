@@ -2,12 +2,13 @@
 shopt -s expand_aliases
 source ~/.bash_profile
 
-kubectl create namespace sqlrec
+namespace="${1:-sqlrec}"
+kubectl create namespace "${namespace}"
 
-bash ./minio/deploy.sh sqlrec
-bash ./juicefs/deploy.sh sqlrec
-bash ./kafka/deploy.sh sqlrec
-bash ./redis/deploy.sh sqlrec
-bash ./hms/deploy.sh sqlrec
-bash ./kyuubi/deploy.sh sqlrec
+bash ./minio/deploy.sh "${namespace}"
+bash ./juicefs/deploy.sh "${namespace}"
+bash ./kafka/deploy.sh "${namespace}"
+bash ./redis/deploy.sh "${namespace}"
+bash ./hms/deploy.sh "${namespace}"
+bash ./kyuubi/deploy.sh "${namespace}"
 

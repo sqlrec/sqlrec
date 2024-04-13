@@ -2,7 +2,7 @@
 shopt -s expand_aliases
 source ~/.bash_profile
 
-namespace=$1
+namespace="${1:-sqlrec}"
 
 # refer to https://github.com/bitnami/charts/tree/main/bitnami/redis
 helm install redis \

@@ -2,7 +2,7 @@
 shopt -s expand_aliases
 source ~/.bash_profile
 
-namespace=$1
+namespace="${1:-sqlrec}"
 
 helm uninstall mysql-juicefs --namespace "$namespace"
 kubectl delete pvc data-mysql-juicefs-0 --namespace "$namespace"
@@ -47,7 +47,7 @@ fi
 
 sed "s/NODE_IP/${node_ip}/" "${dir}/core-site.template"  > "${dir}/core-site.xml"
 cp "${dir}/core-site.xml" "${dir}/hadoop/etc/hadoop/"
-./hadoop/bin/hadoop fs -mkdir -p /spark/upload
-./hadoop/bin/hadoop fs chmod 777 /spark/upload
+${dir}/hadoop/bin/hadoop fs -mkdir -p /spark/upload
+${dir}/hadoop/bin/hadoop fs -chmod 777 /spark/upload
 
 kubectl create configmap core-site --from-file="${dir}/core-site.xml" -n "${namespace}"
