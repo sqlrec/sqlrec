@@ -11,4 +11,5 @@ bash ./kafka/deploy.sh "${namespace}"
 bash ./redis/deploy.sh "${namespace}"
 bash ./hms/deploy.sh "${namespace}"
 bash ./kyuubi/deploy.sh "${namespace}"
+bash ./flink/deploy.sh "${namespace}"
 

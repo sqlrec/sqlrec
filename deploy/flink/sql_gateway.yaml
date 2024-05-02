@@ -1,0 +1,134 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: flink-session-cluster
+spec:
+  image: flink:1.19
+  flinkVersion: v1_19
+  mode: standalone
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+  serviceAccount: flink
+  podTemplate:
+    spec:
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          env:
+            - name: HADOOP_CONF_DIR
+              value: /opt/hadoop/conf
+          volumeMounts:
+            - mountPath: /opt/flink/lib/juicefs-hadoop.jar
+              name: juicefs-jar
+            - mountPath: /opt/flink/lib/flink-hadoop.jar
+              name: hadoop-jar
+            - mountPath: /opt/flink/lib/hive-hadoop.jar
+              name: hive-jar
+            - mountPath: /opt/hadoop/conf/hive-site.xml
+              name: hive-site
+              subPath: hive-site.xml
+            - mountPath: /opt/hadoop/conf/core-site.xml
+              name: core-site
+              subPath: core-site.xml
+      volumes:
+        - name: juicefs-jar
+          hostPath:
+            path: JUICEFS_JAR_LOCATION
+            type: File
+        - name: hadoop-jar
+          hostPath:
+            path: HADOOP_JAR_LOCATION
+            type: File
+        - name: hive-jar
+          hostPath:
+            path: HIVE_JAR_LOCATION
+            type: File
+        - name: core-site
+          configMap:
+            name: core-site
+        - name: hive-site
+          configMap:
+            name: hive-site
+  jobManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-sql-gateway
+  labels:
+    app: flink-sql-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink-sql-gateway
+  template:
+    metadata:
+      labels:
+        app: flink-sql-gateway
+    spec:
+      containers:
+        - name: flink-sql-gateway
+          image: flink:1.19
+          env:
+            - name: HADOOP_CONF_DIR
+              value: /opt/flink/conf
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - /opt/flink/bin/sql-gateway.sh start-foreground -Drest.address=flink-session-cluster -Dsql-gateway.endpoint.type=hiveserver2 -Dsql-gateway.endpoint.hiveserver2.catalog.hive-conf-dir=/opt/flink/conf
+          ports:
+            - containerPort: 10000
+          volumeMounts:
+            - mountPath: /opt/flink/lib/juicefs-hadoop.jar
+              name: juicefs-jar
+            - mountPath: /opt/flink/lib/flink-hadoop.jar
+              name: hadoop-jar
+            - mountPath: /opt/flink/lib/hive-hadoop.jar
+              name: hive-jar
+            - mountPath: /opt/flink/conf/hive-site.xml
+              name: hive-site
+              subPath: hive-site.xml
+            - mountPath: /opt/flink/conf/core-site.xml
+              name: core-site
+              subPath: core-site.xml
+      volumes:
+        - name: juicefs-jar
+          hostPath:
+            path: JUICEFS_JAR_LOCATION
+            type: File
+        - name: hadoop-jar
+          hostPath:
+            path: HADOOP_JAR_LOCATION
+            type: File
+        - name: hive-jar
+          hostPath:
+            path: HIVE_JAR_LOCATION
+            type: File
+        - name: core-site
+          configMap:
+            name: core-site
+        - name: hive-site
+          configMap:
+            name: hive-site
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-sql-gateway
+spec:
+  type: NodePort
+  selector:
+    app: flink-sql-gateway
+  ports:
+    - protocol: TCP
+      port: 10000
+      targetPort: 10000
