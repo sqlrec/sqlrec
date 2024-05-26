@@ -7,6 +7,10 @@
     <groupId>org.sqlrec</groupId>
     <artifactId>sqlrec-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>sqlrec-frontend</module>
+    </modules>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
