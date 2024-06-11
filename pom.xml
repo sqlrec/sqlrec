@@ -11,6 +11,7 @@
     <modules>
         <module>sqlrec-frontend</module>
         <module>sqlrec-core</module>
+        <module>sqlrec-connectors</module>
     </modules>
 
     <properties>
