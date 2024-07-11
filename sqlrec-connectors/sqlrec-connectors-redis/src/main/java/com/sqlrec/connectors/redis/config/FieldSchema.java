@@ -22,4 +22,12 @@ public class FieldSchema {
         }
         return fieldSchemas;
     }
+
+    public static List<FieldSchema> parse(List<org.apache.hadoop.hive.metastore.api.FieldSchema> fieldSchemas) {
+        List<FieldSchema> fieldSchemaList = new ArrayList<>();
+        for (org.apache.hadoop.hive.metastore.api.FieldSchema fieldSchema : fieldSchemas) {
+            fieldSchemaList.add(new FieldSchema(fieldSchema.getName(), fieldSchema.getType()));
+        }
+        return fieldSchemaList;
+    }
 }

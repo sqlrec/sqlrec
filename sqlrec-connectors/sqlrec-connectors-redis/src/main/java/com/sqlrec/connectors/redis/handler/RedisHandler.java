@@ -50,6 +50,9 @@ public class RedisHandler {
         if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
             RedisFuture<List<byte[]>> future = redisClient.lrange(getKeyBytes(rowKey), 0, -1);
             return future.toCompletableFuture().thenApply(list -> {
+                if (list == null) {
+                    return new ArrayList<>();
+                }
                 return list.stream()
                         .map(bytes -> codec.decode(bytes))
                         .collect(Collectors.toList());
@@ -59,7 +62,9 @@ public class RedisHandler {
         RedisFuture<byte[]> future = redisClient.get(getKeyBytes(rowKey));
         return future.toCompletableFuture().thenApply(bytes -> {
             List<Object[]> list = new ArrayList<>();
-            list.add(codec.decode(bytes));
+            if (bytes != null) {
+                list.add(codec.decode(bytes));
+            }
             return list;
         });
     }
