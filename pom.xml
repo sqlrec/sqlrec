@@ -12,12 +12,15 @@
         <module>sqlrec-frontend</module>
         <module>sqlrec-core</module>
         <module>sqlrec-connectors</module>
+        <module>sqlrec-sql-parser</module>
     </modules>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <calcite.version>1.32.0</calcite.version>
+        <flink.version>1.19.0</flink.version>
     </properties>
 
 </project>
