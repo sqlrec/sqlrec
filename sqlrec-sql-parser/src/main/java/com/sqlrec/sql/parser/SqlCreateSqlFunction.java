@@ -9,8 +9,11 @@ import java.util.List;
 public class SqlCreateSqlFunction extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CREATE_SQL_FUNCTION", SqlKind.OTHER);
 
+    private SqlIdentifier funcName;
+
     public SqlCreateSqlFunction(SqlParserPos pos, SqlIdentifier funcName) {
         super(pos);
+        this.funcName = funcName;
     }
 
     @Override

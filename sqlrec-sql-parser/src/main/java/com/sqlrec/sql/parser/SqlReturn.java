@@ -9,8 +9,11 @@ import java.util.List;
 public class SqlReturn extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("RETURN", SqlKind.OTHER);
 
+    private SqlIdentifier tableName;
+
     public SqlReturn(SqlParserPos pos, SqlIdentifier tableName) {
         super(pos);
+        this.tableName = tableName;
     }
 
     @Override

@@ -2,7 +2,6 @@ package com.sqlrec;
 
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
-import org.apache.calcite.config.Lex;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.plan.RelTraitSet;
@@ -20,12 +19,11 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.tools.Frameworks;
+import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.Collections;
 import java.util.Map;
-
-import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 
 public class TestCalciteSql {
 
@@ -60,21 +58,7 @@ public class TestCalciteSql {
         // Parse the SQL query
         SqlParser parser = SqlParser.create(sql, parserConfig);
         SqlNode sqlNode = parser.parseQuery();
-        System.out.println(sqlNode);
-
-//        // Validate the SQL query
-//        CalciteCatalogReader catalogReader = new CalciteCatalogReader(
-//                CalciteSchema.from(rootSchema),
-//                Collections.singletonList("mySchema"),
-//                new JavaTypeFactoryImpl(),
-//                null);
-//        SqlValidator validator = SqlValidatorUtil.newValidator(
-//                Frameworks.newConfigBuilder().build().getOperatorTable(),
-//                catalogReader,
-//                new JavaTypeFactoryImpl(),
-//                SqlValidator.Config.DEFAULT
-//        );
-//        SqlNode validatedSqlNode = validator.validate(sqlNode);
+        System.out.println(sqlNode.getClass());
     }
 
     public static class MyTable extends AbstractTable implements ScannableTable {
