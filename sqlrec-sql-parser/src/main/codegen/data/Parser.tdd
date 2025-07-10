@@ -140,6 +140,7 @@
   # keyword, please also add it to 'nonReservedKeywords' section.
   # Please keep the keyword in alphabetical order if new keyword is added.
   keywords: [
+    "CALL_SQL_FUNCTION"
     "API"
     "BYTES"
     "CATALOGS"
@@ -551,6 +552,8 @@
   # Return type of method implementation should be 'SqlNode'.
   # Example: SqlShowDatabases(), SqlShowTables().
   statementParserMethods: [
+    "SqlDefineInputTable()"
+    "SqlCallSqlFunction()"
     "SqlCache()"
     "SqlCreateApi()"
     "SqlCreateSqlFunction()"

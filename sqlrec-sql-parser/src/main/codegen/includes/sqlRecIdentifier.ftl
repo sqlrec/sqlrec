@@ -2,8 +2,7 @@
 SqlCache SqlCache() :
 {
     SqlIdentifier tableName = null;
-    SqlIdentifier funcName = null;
-    List<SqlIdentifier> inputTableList = new ArrayList<SqlIdentifier>();
+    SqlCallSqlFunction callSqlFunction = null;
     SqlSelect select = null;
 }
 {
@@ -13,20 +12,45 @@ SqlCache SqlCache() :
     (
         select = SqlSelect()
     |
-        funcName = SimpleIdentifier()
-        <LPAREN>
-        [
-            AddCacheFunTable(inputTableList)
-            ( <COMMA> AddCacheFunTable(inputTableList) )*
-        ]
-        <RPAREN>
+        callSqlFunction = GetCallSqlFunction()
     )
     {
-        return new SqlCache(getPos(), tableName, select, funcName, inputTableList);
+        return new SqlCache(getPos(), tableName, select, callSqlFunction);
     }
 }
 
-void AddCacheFunTable(List<SqlIdentifier> list) :
+SqlCallSqlFunction SqlCallSqlFunction() :
+{
+    SqlCallSqlFunction callSqlFunction = null;
+}
+{
+    <CALL_SQL_FUNCTION>
+    callSqlFunction = GetCallSqlFunction()
+    {
+        return callSqlFunction;
+    }
+}
+
+
+SqlCallSqlFunction GetCallSqlFunction() :
+{
+    SqlIdentifier funcName = null;
+    List<SqlIdentifier> inputList = new ArrayList<SqlIdentifier>();
+}
+{
+    funcName = CompoundTableIdentifier()
+    <LPAREN>
+    [
+        AddCallSqlFunction(inputList)
+        ( <COMMA> AddCallSqlFunction(inputList) )*
+    ]
+    <RPAREN>
+    {
+        return new SqlCallSqlFunction(getPos(), funcName, inputList);
+    }
+}
+
+void AddCallSqlFunction(List<SqlIdentifier> list) :
 {
     final SqlIdentifier tableName;
 }
@@ -35,33 +59,69 @@ void AddCacheFunTable(List<SqlIdentifier> list) :
     { list.add(tableName); }
 }
 
+SqlDefineInputTable SqlDefineInputTable():
+{
+    SqlIdentifier tableName = null;
+    List<SqlIdentifier> columnList = new ArrayList<SqlIdentifier>();
+    List<SqlTypeNameSpec> columnTypeList = new ArrayList<SqlTypeNameSpec>();
+}
+{
+    <DEFINE> <INPUT> <TABLE>
+    tableName = CompoundTableIdentifier()
+    <LPAREN>
+        AddDefineInputTable(columnList, columnTypeList)
+        ( <COMMA> AddDefineInputTable(columnList, columnTypeList) )*
+    <RPAREN>
+    {
+        return new SqlDefineInputTable(getPos(), tableName, columnList, columnTypeList);
+    }
+}
+
+void AddDefineInputTable(List<SqlIdentifier> columnList, List<SqlTypeNameSpec> columnTypeList):
+{
+    final SqlIdentifier columnName;
+    final SqlTypeNameSpec columnType;
+}
+{
+    columnName = SimpleIdentifier()
+    columnType = TypeName()
+    {
+        columnList.add(columnName);
+        columnTypeList.add(columnType);
+    }
+}
+
 SqlCreateApi SqlCreateApi() :
 {
     SqlIdentifier apiName = null;
     SqlIdentifier funcName = null;
+    boolean orReplace = false;
 }
 {
     <CREATE>
+    orReplace = OrReplaceOpt()
     <API>
     apiName = SimpleIdentifier()
     <WITH>
     funcName = SimpleIdentifier()
     {
-        return new SqlCreateApi(getPos(), apiName, funcName);
+        return new SqlCreateApi(getPos(), apiName, funcName, orReplace);
     }
 }
 
 SqlCreateSqlFunction SqlCreateSqlFunction() :
 {
     SqlIdentifier funcName = null;
+    boolean orReplace = false;
 }
 {
     <CREATE>
+    orReplace = OrReplaceOpt()
     <SQL>
     <FUNCTION>
     funcName = CompoundTableIdentifier()
     {
-        return new SqlCreateSqlFunction(getPos(), funcName);
+        return new SqlCreateSqlFunction(getPos(), funcName, orReplace);
     }
 }
 
@@ -71,8 +131,22 @@ SqlReturn SqlReturn() :
 }
 {
     <RETURN>
-    tableName = CompoundTableIdentifier()
+    [
+        tableName = CompoundTableIdentifier()
+    ]
     {
         return new SqlReturn(getPos(), tableName);
     }
+}
+
+boolean OrReplaceOpt() :
+{
+}
+{
+    (
+        LOOKAHEAD(2)
+        <OR> <REPLACE> { return true; }
+    |
+        { return false; }
+    )
 }

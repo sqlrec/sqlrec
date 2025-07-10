@@ -10,10 +10,12 @@ public class SqlCreateSqlFunction extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CREATE_SQL_FUNCTION", SqlKind.OTHER);
 
     private SqlIdentifier funcName;
+    private boolean orReplace;
 
-    public SqlCreateSqlFunction(SqlParserPos pos, SqlIdentifier funcName) {
+    public SqlCreateSqlFunction(SqlParserPos pos, SqlIdentifier funcName, boolean orReplace) {
         super(pos);
         this.funcName = funcName;
+        this.orReplace = orReplace;
     }
 
     @Override

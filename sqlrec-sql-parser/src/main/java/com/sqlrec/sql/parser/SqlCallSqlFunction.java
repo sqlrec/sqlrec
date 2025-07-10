@@ -6,18 +6,15 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlCreateApi extends SqlCall {
-    public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CREATE_API", SqlKind.OTHER);
-
-    private SqlIdentifier apiName;
+public class SqlCallSqlFunction extends SqlCall {
+    public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CALL_SQL_FUNCTION", SqlKind.OTHER);
     private SqlIdentifier funcName;
-    private boolean orReplace;
+    private List<SqlIdentifier> inputTableList;
 
-    public SqlCreateApi(SqlParserPos pos, SqlIdentifier apiName, SqlIdentifier funcName, boolean orReplace) {
+    public SqlCallSqlFunction(SqlParserPos pos, SqlIdentifier funcName, List<SqlIdentifier> inputTableList) {
         super(pos);
-        this.apiName = apiName;
         this.funcName = funcName;
-        this.orReplace = orReplace;
+        this.inputTableList = inputTableList;
     }
 
     @Override

@@ -11,15 +11,13 @@ public class SqlCache extends SqlCall {
 
     private SqlIdentifier tableName;
     private SqlSelect select;
-    private SqlIdentifier funcName;
-    private List<SqlIdentifier> inputTableList;
+    private SqlCallSqlFunction callSqlFunction;
 
-    public SqlCache(SqlParserPos pos, SqlIdentifier tableName, SqlSelect select, SqlIdentifier funcName, List<SqlIdentifier> inputTableList) {
+    public SqlCache(SqlParserPos pos, SqlIdentifier tableName, SqlSelect select, SqlCallSqlFunction callSqlFunction) {
         super(pos);
         this.tableName = tableName;
         this.select = select;
-        this.funcName = funcName;
-        this.inputTableList = inputTableList;
+        this.callSqlFunction = callSqlFunction;
     }
 
     @Override
