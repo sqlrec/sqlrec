@@ -1,40 +1,53 @@
 package com.sqlrec.schema;
 
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.MetaException;
 
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchema extends AbstractSchema {
-    private Map<String, HmsTableFactory> tableFactories;
-    private String hiveMetastoreUri;
+    private static Map<String, HmsTableFactory> tableFactories;
+    private static Map<String, HmsSchema> schemaMap = new ConcurrentHashMap<>();
+
     private String databaseName;
-    private HiveMetaStoreClient client;
+    private Map<String, Table> tableMap = new ConcurrentHashMap<>();
 
-    public HmsSchema(String hiveMetastoreUri, String databaseName) throws MetaException {
-        this.hiveMetastoreUri = hiveMetastoreUri;
+    public HmsSchema(String databaseName) {
         this.databaseName = databaseName;
+    }
 
-        HiveConf hiveConf = new HiveConf();
-        hiveConf.setVar(HiveConf.ConfVars.METASTOREURIS, hiveMetastoreUri);
-        client = new HiveMetaStoreClient(hiveConf);
+    public static CalciteSchema getHmsCalciteSchema() throws Exception {
+        CalciteSchema rootSchema = CalciteSchema.createRootSchema(false);
+        for (String database : HmsClient.getAllDatabases()) {
+            if (!schemaMap.containsKey(database)) {
+                schemaMap.put(database, new HmsSchema(database));
+            }
+            rootSchema.add(database, schemaMap.get(database));
+        }
+        return rootSchema;
     }
 
     @Override
     protected Map<String, Table> getTableMap() {
-        Map<String, Table> tableMap = new java.util.HashMap<>();
         try {
-            List<String> tables = client.getAllTables(databaseName);
+            List<String> tables = HmsClient.getAllTables(databaseName);
             for (String table : tables) {
-                org.apache.hadoop.hive.metastore.api.Table tableObj = client.getTable(databaseName, table);
+                if (tableMap.containsKey(table)) {
+                    continue;
+                }
+                org.apache.hadoop.hive.metastore.api.Table tableObj = HmsClient.getTableObj(databaseName, table);
                 Table tableFromHmsTable = getTableFromHmsTable(tableObj);
                 if (tableFromHmsTable != null) {
                     tableMap.put(table, tableFromHmsTable);
+                }
+            }
+            for (String table : tableMap.keySet()) {
+                if (!tables.contains(table)) {
+                    tableMap.remove(table);
                 }
             }
         } catch (Exception e) {
@@ -59,6 +72,7 @@ public class HmsSchema extends AbstractSchema {
 
     private synchronized HmsTableFactory getTableFactory(String connector) {
         if (tableFactories == null) {
+            tableFactories = new ConcurrentHashMap<>();
             ServiceLoader<HmsTableFactory> serviceLoader = ServiceLoader.load(HmsTableFactory.class);
             for (HmsTableFactory tableFactory : serviceLoader) {
                 tableFactories.put(tableFactory.getConnectorName(), tableFactory);
