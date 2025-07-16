@@ -20,13 +20,17 @@ public class HmsSchema extends AbstractSchema {
         this.databaseName = databaseName;
     }
 
-    public static CalciteSchema getHmsCalciteSchema() throws Exception {
+    public static CalciteSchema getHmsCalciteSchema() {
         CalciteSchema rootSchema = CalciteSchema.createRootSchema(false);
-        for (String database : HmsClient.getAllDatabases()) {
-            if (!schemaMap.containsKey(database)) {
-                schemaMap.put(database, new HmsSchema(database));
+        try {
+            for (String database : HmsClient.getAllDatabases()) {
+                if (!schemaMap.containsKey(database)) {
+                    schemaMap.put(database, new HmsSchema(database));
+                }
+                rootSchema.add(database, schemaMap.get(database));
             }
-            rootSchema.add(database, schemaMap.get(database));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
         return rootSchema;
     }
