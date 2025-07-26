@@ -6,10 +6,12 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 
+import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 
 public class FunctionBindable implements BindableInterface {
+    private String funName;
     private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;
     private List<BindableInterface> bindableList;
     private String returnTableName;
@@ -27,7 +29,11 @@ public class FunctionBindable implements BindableInterface {
         for (BindableInterface bindable : bindableList) {
             bindable.bind(schema);
         }
-        Table table = schema.getTable(returnTableName, false).getTable();
+        CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
+        if (tableEntry == null) {
+            throw new RuntimeException("function return table not exist");
+        }
+        Table table = tableEntry.getTable();
         if (table instanceof CacheTable) {
             return ((CacheTable) table).scan(null);
         } else {
@@ -42,5 +48,41 @@ public class FunctionBindable implements BindableInterface {
 
     public List<Map.Entry<String, List<RelDataTypeField>>> getInputTables() {
         return inputTables;
+    }
+
+    public void addInputTable(String tableName, List<RelDataTypeField> dataFields) {
+        inputTables.add(new AbstractMap.SimpleEntry<>(tableName, dataFields));
+    }
+
+    public void setInputTables(List<Map.Entry<String, List<RelDataTypeField>>> inputTables) {
+        this.inputTables = inputTables;
+    }
+
+    public List<BindableInterface> getBindableList() {
+        return bindableList;
+    }
+
+    public void setBindableList(List<BindableInterface> bindableList) {
+        this.bindableList = bindableList;
+    }
+
+    public String getReturnTableName() {
+        return returnTableName;
+    }
+
+    public void setReturnTableName(String returnTableName) {
+        this.returnTableName = returnTableName;
+    }
+
+    public void setReturnDataFields(List<RelDataTypeField> returnDataFields) {
+        this.returnDataFields = returnDataFields;
+    }
+
+    public String getFunName() {
+        return funName;
+    }
+
+    public void setFunName(String funName) {
+        this.funName = funName;
     }
 }

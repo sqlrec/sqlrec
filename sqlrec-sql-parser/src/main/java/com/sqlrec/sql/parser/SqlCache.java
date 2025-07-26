@@ -29,4 +29,16 @@ public class SqlCache extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public SqlIdentifier getTableName() {
+        return tableName;
+    }
+
+    public SqlSelect getSelect() {
+        return select;
+    }
+
+    public SqlCallSqlFunction getCallSqlFunction() {
+        return callSqlFunction;
+    }
 }

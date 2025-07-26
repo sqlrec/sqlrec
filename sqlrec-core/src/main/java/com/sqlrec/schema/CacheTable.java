@@ -31,4 +31,8 @@ public class CacheTable extends AbstractTable implements ScannableTable {
     public Enumerable<@Nullable Object[]> scan(DataContext root) {
         return enumerable;
     }
+
+    public List<RelDataTypeField> getDataFields() {
+        return dataFields;
+    }
 }

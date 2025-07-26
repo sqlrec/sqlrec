@@ -27,4 +27,20 @@ public class SqlCreateSqlFunction extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public boolean isOrReplace() {
+        return orReplace;
+    }
+
+    public void setOrReplace(boolean orReplace) {
+        this.orReplace = orReplace;
+    }
+
+    public SqlIdentifier getFuncName() {
+        return funcName;
+    }
+
+    public void setFuncName(SqlIdentifier funcName) {
+        this.funcName = funcName;
+    }
 }

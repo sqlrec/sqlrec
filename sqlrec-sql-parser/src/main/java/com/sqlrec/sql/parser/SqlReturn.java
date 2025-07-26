@@ -25,4 +25,8 @@ public class SqlReturn extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public SqlIdentifier getTableName() {
+        return tableName;
+    }
 }

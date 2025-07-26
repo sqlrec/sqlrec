@@ -28,4 +28,28 @@ public class SqlDefineInputTable extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public SqlIdentifier getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(SqlIdentifier tableName) {
+        this.tableName = tableName;
+    }
+
+    public List<SqlIdentifier> getColumnList() {
+        return columnList;
+    }
+
+    public void setColumnList(List<SqlIdentifier> columnList) {
+        this.columnList = columnList;
+    }
+
+    public List<SqlTypeNameSpec> getColumnTypeList() {
+        return columnTypeList;
+    }
+
+    public void setColumnTypeList(List<SqlTypeNameSpec> columnTypeList) {
+        this.columnTypeList = columnTypeList;
+    }
 }

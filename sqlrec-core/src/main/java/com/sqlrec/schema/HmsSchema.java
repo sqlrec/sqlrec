@@ -74,7 +74,11 @@ public class HmsSchema extends AbstractSchema {
         return null;
     }
 
-    private synchronized HmsTableFactory getTableFactory(String connector) {
+    public static HmsTableFactory getTableFactory(String connector) {
+        return getTableFactorieMap().getOrDefault(connector, null);
+    }
+
+    public static synchronized Map<String, HmsTableFactory> getTableFactorieMap() {
         if (tableFactories == null) {
             tableFactories = new ConcurrentHashMap<>();
             ServiceLoader<HmsTableFactory> serviceLoader = ServiceLoader.load(HmsTableFactory.class);
@@ -82,6 +86,6 @@ public class HmsSchema extends AbstractSchema {
                 tableFactories.put(tableFactory.getConnectorName(), tableFactory);
             }
         }
-        return tableFactories.get(connector);
+        return tableFactories;
     }
 }

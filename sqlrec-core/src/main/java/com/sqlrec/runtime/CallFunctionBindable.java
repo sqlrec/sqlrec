@@ -5,7 +5,6 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +25,7 @@ public class CallFunctionBindable implements BindableInterface {
         CalciteSchema tmpSchema = HmsSchema.getHmsCalciteSchema();
         for (Map.Entry<String, List<RelDataTypeField>> entry : tablePlaceholders) {
             String tableName = entry.getKey();
+            // todo check table schema
             tmpSchema.add(tableName, schema.getTable(tableName, false).getTable());
         }
         return functionBindable.bind(tmpSchema);

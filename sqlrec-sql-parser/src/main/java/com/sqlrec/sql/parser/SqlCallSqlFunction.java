@@ -26,4 +26,12 @@ public class SqlCallSqlFunction extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public SqlIdentifier getFuncName() {
+        return funcName;
+    }
+
+    public List<SqlIdentifier> getInputTableList() {
+        return inputTableList;
+    }
 }
