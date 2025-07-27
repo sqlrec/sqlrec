@@ -6,12 +6,11 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.ScannableTable;
-import org.apache.calcite.schema.impl.AbstractTable;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
 
-public class CacheTable extends AbstractTable implements ScannableTable {
+public class CacheTable extends SqlRecTable implements ScannableTable {
     private String tableName;
     private Enumerable<Object[]> enumerable;
     private List<RelDataTypeField> dataFields;
@@ -34,5 +33,10 @@ public class CacheTable extends AbstractTable implements ScannableTable {
 
     public List<RelDataTypeField> getDataFields() {
         return dataFields;
+    }
+
+    @Override
+    public SqlRecTableType getSqlRecTableType() {
+        return SqlRecTableType.MEMORY;
     }
 }

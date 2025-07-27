@@ -3,6 +3,7 @@ package com.sqlrec.connectors.redis.calcite;
 import com.sqlrec.connectors.redis.config.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
+import com.sqlrec.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -25,7 +26,6 @@ import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
-import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -33,7 +33,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.lang.reflect.Type;
 import java.util.*;
 
-public class RedisCalciteTable extends AbstractTable implements ModifiableTable, FilterableTable {
+public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, FilterableTable {
     private RedisConfig redisConfig;
     private List<FieldSchema> fieldSchemas;
     private RedisHandler redisHandler;
@@ -56,12 +56,12 @@ public class RedisCalciteTable extends AbstractTable implements ModifiableTable,
         }
         final RexCall call = (RexCall) filter;
         RexNode left = call.getOperands().get(0);
-        if(!(left instanceof RexInputRef)){
+        if (!(left instanceof RexInputRef)) {
             throw new RuntimeException("Redis Calcite Table only support EQUALS filter with input ref");
         }
 
         int index = ((RexInputRef) left).getIndex();
-        if(index != 0){
+        if (index != 0) {
             throw new RuntimeException("Redis Calcite Table only support EQUALS filter with index 0");
         }
 
@@ -112,6 +112,11 @@ public class RedisCalciteTable extends AbstractTable implements ModifiableTable,
     public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
         return Schemas.tableExpression(schema, getElementType(),
                 tableName, clazz);
+    }
+
+    @Override
+    public SqlRecTableType getSqlRecTableType() {
+        return SqlRecTableType.KV;
     }
 
     public static class RedisCollection implements Collection<Object[]> {

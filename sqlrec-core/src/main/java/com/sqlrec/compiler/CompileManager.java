@@ -31,33 +31,8 @@ public class CompileManager {
         return parser.parseQuery();
     }
 
-    public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode) {
-        if (flinkSqlNode instanceof SqlCreateSqlFunction) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlReturn) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlDefineInputTable) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlCreateApi) {
-            return false;
-        }
-
-        if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            return true;
-        }
-        if (flinkSqlNode instanceof SqlCache) {
-            return true;
-        }
-
-        // todo add sql type check, only crud not on hive is compilable
-        return true;
-    }
-
     public static BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema) throws Exception {
-        if (!isFlinkSqlCompilable(flinkSqlNode)) {
+        if (!SqlTypeChecker.isFlinkSqlCompilable(flinkSqlNode, schema)) {
             throw new Exception("sql is not compilable");
         }
 
