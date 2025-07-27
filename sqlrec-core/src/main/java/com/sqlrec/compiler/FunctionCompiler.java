@@ -1,6 +1,7 @@
 package com.sqlrec.compiler;
 
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.CacheTableBindable;
 import com.sqlrec.runtime.FunctionBindable;
 import com.sqlrec.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
@@ -32,10 +33,14 @@ public class FunctionCompiler {
     private FunctionBindable functionBindable;
     private List<String> sqlList;
 
-    public FunctionCompiler() {
+    public FunctionCompiler(CalciteSchema schema) {
         this.isOrReplace = false;
         this.stage = FunctionCompileStage.FUNCTION_DEFINITION;
-        this.schema = HmsSchema.getHmsCalciteSchema();
+        if (schema != null) {
+            this.schema = schema;
+        } else {
+            this.schema = HmsSchema.getHmsCalciteSchema();
+        }
         this.functionBindable = new FunctionBindable(
                 new ArrayList<>(),
                 new ArrayList<>(),
@@ -94,7 +99,7 @@ public class FunctionCompiler {
         }
     }
 
-    private void compileFunctionParam(SqlNode flinkSqlNode) {
+    private void compileFunctionParam(SqlNode flinkSqlNode) throws Exception {
         if (flinkSqlNode instanceof SqlDefineInputTable) {
             SqlDefineInputTable sqlDefineInputTable = (SqlDefineInputTable) flinkSqlNode;
             List<RelDataTypeField> relDataTypeFields = getTableFieldsTypes(
@@ -110,6 +115,7 @@ public class FunctionCompiler {
             schema.add(sqlDefineInputTable.getTableName().getSimple(), tmpTable);
         } else {
             stage = FunctionCompileStage.FUNCTION_BODY;
+            compileFunctionBody(flinkSqlNode);
         }
     }
 
@@ -137,6 +143,15 @@ public class FunctionCompiler {
         } else {
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema);
             functionBindable.getBindableList().add(bindable);
+            if (bindable instanceof CacheTableBindable) {
+                CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
+                CacheTable tmpTable = new CacheTable(
+                        cacheTableBindable.getTableName(),
+                        null,
+                        cacheTableBindable.getReturnDataFields()
+                );
+                schema.add(cacheTableBindable.getTableName(), tmpTable);
+            }
         }
     }
 

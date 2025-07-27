@@ -77,7 +77,10 @@ public class CompileManager {
                 .stream()
                 .map(SqlIdentifier::getSimple)
                 .collect(Collectors.toList());
-        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName);
+        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName, schema);
+        if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
+            throw new Exception("function input table not match");
+        }
         return new CallFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
     }
 
@@ -107,7 +110,8 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName) {
+    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema) {
+        functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
         }
@@ -115,10 +119,14 @@ public class CompileManager {
         throw new RuntimeException("function not found: " + functionName);
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
-        FunctionCompiler functionCompiler = new FunctionCompiler();
+    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema, List<String> sqlList) throws Exception {
+        functionName = functionName.toUpperCase();
+        FunctionCompiler functionCompiler = new FunctionCompiler(schema);
         functionCompiler.compileAllSql(sqlList);
         if (functionCompiler.isFunctionCompileFinish()) {
+            if (!functionName.equalsIgnoreCase(functionCompiler.getFunctionBindable().getFunName())) {
+                throw new RuntimeException("function name not match");
+            }
             functionBindableMap.put(functionName, functionCompiler.getFunctionBindable());
             return functionCompiler.getFunctionBindable();
         }

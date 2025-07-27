@@ -16,12 +16,26 @@ public class HmsSchema extends AbstractSchema {
     private String databaseName;
     private Map<String, Table> tableMap = new ConcurrentHashMap<>();
 
+    private static CalciteSchema globalSchema;  // for test
+
     public HmsSchema(String databaseName) {
         this.databaseName = databaseName;
     }
 
+    public static void setGlobalSchema(CalciteSchema schema) {
+        globalSchema = schema;
+    }
+
     public static CalciteSchema getHmsCalciteSchema() {
         CalciteSchema rootSchema = CalciteSchema.createRootSchema(false);
+
+        if (globalSchema != null) {
+            globalSchema.getSubSchemaMap().forEach((k, v) -> {
+                rootSchema.add(k, v.schema);
+            });
+            return rootSchema;
+        }
+
         try {
             for (String database : HmsClient.getAllDatabases()) {
                 if (!schemaMap.containsKey(database)) {
