@@ -7,7 +7,7 @@ SqlCache SqlCache() :
 }
 {
     <CACHE> <TABLE>
-    tableName = CompoundTableIdentifier()
+    tableName = SimpleIdentifier()
     <AS>
     (
         select = SqlSelect()
@@ -38,7 +38,7 @@ SqlCallSqlFunction GetCallSqlFunction() :
     List<SqlIdentifier> inputList = new ArrayList<SqlIdentifier>();
 }
 {
-    funcName = CompoundTableIdentifier()
+    funcName = SimpleIdentifier()
     <LPAREN>
     [
         AddCallSqlFunction(inputList)
@@ -67,7 +67,7 @@ SqlDefineInputTable SqlDefineInputTable():
 }
 {
     <DEFINE> <INPUT> <TABLE>
-    tableName = CompoundTableIdentifier()
+    tableName = SimpleIdentifier()
     <LPAREN>
         AddDefineInputTable(columnList, columnTypeList)
         ( <COMMA> AddDefineInputTable(columnList, columnTypeList) )*
@@ -119,7 +119,7 @@ SqlCreateSqlFunction SqlCreateSqlFunction() :
     orReplace = OrReplaceOpt()
     <SQL>
     <FUNCTION>
-    funcName = CompoundTableIdentifier()
+    funcName = SimpleIdentifier()
     {
         return new SqlCreateSqlFunction(getPos(), funcName, orReplace);
     }
@@ -132,7 +132,7 @@ SqlReturn SqlReturn() :
 {
     <RETURN>
     [
-        tableName = CompoundTableIdentifier()
+        tableName = SimpleIdentifier()
     ]
     {
         return new SqlReturn(getPos(), tableName);
