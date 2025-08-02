@@ -70,6 +70,10 @@ public class FunctionCompiler {
 
     public void compile(String sql) throws Exception {
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+        compile(flinkSqlNode, sql);
+    }
+
+    public void compile(SqlNode flinkSqlNode, String sql) throws Exception {
         switch (stage) {
             case FUNCTION_DEFINITION:
                 compileFunctionDefinition(flinkSqlNode);

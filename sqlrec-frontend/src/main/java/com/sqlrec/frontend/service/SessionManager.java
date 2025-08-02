@@ -6,14 +6,14 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SessionManager {
-    private Map<THandleIdentifier, TCLIService.Client> hiveClientMap = new HashMap<>();
-    private Map<THandleIdentifier, THandleIdentifier> operationToSessionMap = new HashMap<>();
+    private Map<THandleIdentifier, TCLIService.Client> hiveClientMap = new ConcurrentHashMap<>();
+    private Map<THandleIdentifier, THandleIdentifier> operationToSessionMap = new ConcurrentHashMap<>();
+    private Map<THandleIdentifier, SqlProcessor> sqlProcessorMap = new ConcurrentHashMap<>();
 
     public TOpenSessionResp openSession(TOpenSessionReq tOpenSessionReq) throws TException {
         TTransport transport = new TSocket("192.168.1.5", 10000, 30000);
@@ -25,6 +25,7 @@ public class SessionManager {
 
         TOpenSessionResp resp = client.OpenSession(tOpenSessionReq);
         hiveClientMap.put(resp.getSessionHandle().getSessionId(), client);
+        sqlProcessorMap.put(resp.getSessionHandle().getSessionId(), new SqlProcessor());
 
         return resp;
     }
@@ -33,6 +34,7 @@ public class SessionManager {
         TCLIService.Client client = getHiveClient(tCloseSessionReq.getSessionHandle().getSessionId());
         if(client!=null){
             hiveClientMap.remove(tCloseSessionReq.getSessionHandle().getSessionId());
+            sqlProcessorMap.remove(tCloseSessionReq.getSessionHandle().getSessionId());
             return client.CloseSession(tCloseSessionReq);
         }
         return null;

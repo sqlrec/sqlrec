@@ -12,27 +12,6 @@ import java.util.List;
 
 public class SqlTypeChecker {
     public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema) {
-        if (!isSqlTypeRunable(flinkSqlNode)) {
-            return false;
-        }
-
-        return isSqlTableRunable(flinkSqlNode, schema);
-    }
-
-    private static boolean isSqlTypeRunable(SqlNode flinkSqlNode) {
-        if (flinkSqlNode instanceof SqlCreateSqlFunction) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlReturn) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlDefineInputTable) {
-            return false;
-        }
-        if (flinkSqlNode instanceof SqlCreateApi) {
-            return false;
-        }
-
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return true;
         }
@@ -40,6 +19,13 @@ public class SqlTypeChecker {
             return true;
         }
 
+        if (!isCrudSql(flinkSqlNode)) {
+            return false;
+        }
+        return isSqlTableRunable(flinkSqlNode, schema);
+    }
+
+    private static boolean isCrudSql(SqlNode flinkSqlNode) {
         if (flinkSqlNode instanceof SqlSelect) {
             return true;
         }
