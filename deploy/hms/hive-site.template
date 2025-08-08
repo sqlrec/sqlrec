@@ -7,12 +7,12 @@
     </property>
     <property>
         <name>metastore.thrift.uris</name>
-        <value>thrift://HMS_DNS_PLACEHOLDER:9083</value>
+        <value>thrift://${NODE_IP}:${HMS_PORT}</value>
         <description>Thrift URI for the remote metastore. Used by metastore client to connect to remote metastore.</description>
     </property>
     <property>
         <name>hive.metastore.uris</name>
-        <value>thrift://HMS_DNS_PLACEHOLDER:9083</value>
+        <value>thrift://${NODE_IP}:${HMS_PORT}</value>
     </property>
     <property>
       <name>hive.metastore.warehouse.dir</name>

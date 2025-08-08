@@ -1,45 +1,27 @@
 #!/bin/bash
+set -ex
 shopt -s expand_aliases
 source ~/.bash_profile
+dir=$(dirname $(realpath $0))
 
-namespace="${1:-sqlrec}"
-
-helm uninstall mysql-hms --namespace "$namespace"
-kubectl delete pvc data-mysql-hms-0 --namespace "$namespace"
-helm install mysql-hms \
-  --namespace "$namespace" \
+helm upgrade --install mysql-hms \
+  --namespace "${NAMESPACE}" \
   --set primary.service.type=NodePort \
-  --set auth.database=metastore,auth.username=metastore,auth.password=abc123456 \
+  --set primary.service.nodePorts.mysql=${HMS_MYSQL_PORT} \
+  --set auth.database=metastore,auth.username=${HMS_MYSQL_USER},auth.password=${HMS_MYSQL_PASSWORD} \
   --wait \
   --timeout 3600s \
   oci://registry-1.docker.io/bitnamicharts/mysql
 
-dir=$(dirname $(realpath $0))
-if [ ! -f "${dir}/mysql-connector-java.jar" ];then
-  wget -P "${dir}" "https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.27/mysql-connector-java-8.0.27.jar"
-  ln -s "${dir}/mysql-connector-java-8.0.27.jar" "${dir}/mysql-connector-java.jar"
-fi
+envsubst < ${dir}/hms.yaml > ${dir}/hms.yaml.tmp
+envsubst < ${dir}/hms-init.yaml > ${dir}/hms-init.yaml.tmp
+envsubst < ${dir}/hive-site-hms.template > ${CONF_DIR}/hive-site-hms.xml
+envsubst < ${dir}/hive-site.template > ${CONF_DIR}/hive-site.xml
 
-mysql_dir="${dir}/mysql-connector-java.jar"
-juicefs_dir=$(dirname ${dir})"/juicefs/juicefs-hadoop.jar"
-sed "s|MYSQL_JAR_LOCATION|${mysql_dir}|" "${dir}/hms.yaml" | \
-  sed "s|JUICEFS_JAR_LOCATION|${juicefs_dir}|" > "${dir}/hms.yaml.tmp"
+kubectl create configmap hive-site-hms --from-file="${CONF_DIR}/hive-site-hms.xml" -n "${NAMESPACE}"
+kubectl create configmap hive-site --from-file="${CONF_DIR}/hive-site.xml" -n "${NAMESPACE}"
 
-sed "s|MYSQL_JAR_LOCATION|${mysql_dir}|" "${dir}/hms-init.yaml" | \
-  sed "s|JUICEFS_JAR_LOCATION|${juicefs_dir}|" > "${dir}/hms-init.yaml.tmp"
-
-mysql_dns="mysql-hms.${namespace}.svc.cluster.local"
-hms_dns="hms.${namespace}.svc.cluster.local"
-sed "s/MYSQL_DNS_PLACEHOLDER/${mysql_dns}/" "${dir}/hive-site-hms.template" | \
- sed "s/HMS_DNS_PLACEHOLDER/${hms_dns}/" > "${dir}/hive-site-hms.xml"
-kubectl delete configmap hive-site-hms -n "${namespace}"
-kubectl create configmap hive-site-hms --from-file="${dir}/hive-site-hms.xml" -n "${namespace}"
-
-sed "s/HMS_DNS_PLACEHOLDER/${hms_dns}/" "${dir}/hive-site.template" > "${dir}/hive-site.xml"
-kubectl delete configmap hive-site -n "${namespace}"
-kubectl create configmap hive-site --from-file="${dir}/hive-site.xml" -n "${namespace}"
-
-kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${namespace}"
+kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${NAMESPACE}"
 sleep 15
 
-kubectl apply -f "${dir}/hms.yaml.tmp" -n "${namespace}"
+kubectl apply -f "${dir}/hms.yaml.tmp" -n "${NAMESPACE}"

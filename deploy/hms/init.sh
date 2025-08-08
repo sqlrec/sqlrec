@@ -1,0 +1,8 @@
+if [ ! -f ${LIB_DIR}/${MYSQL_CONNECTOR_JAR_NAME} ]; then
+  wget -P ${LIB_DIR} ${MYSQL_CONNECTOR_JAR_URL}
+fi
+
+if [ ! -f ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} ]; then
+  wget -P ${CLIENT_DIR} ${HIVE_CLIENT_URL}
+  tar -xzf ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} -C ${CLIENT_DIR}
+fi

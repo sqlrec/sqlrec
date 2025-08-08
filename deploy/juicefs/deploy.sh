@@ -1,53 +1,31 @@
 #!/bin/bash
+set -ex
 shopt -s expand_aliases
 source ~/.bash_profile
+dir=$(dirname $(realpath $0))
 
-namespace="${1:-sqlrec}"
-
-helm uninstall mysql-juicefs --namespace "$namespace"
-kubectl delete pvc data-mysql-juicefs-0 --namespace "$namespace"
-helm install mysql-juicefs \
-  --namespace "$namespace" \
+helm upgrade --install mysql-juicefs \
+  --namespace "${NAMESPACE}" \
   --set primary.service.type=NodePort \
-  --set primary.service.nodePorts.mysql=30306 \
-  --set auth.database=juicefs,auth.username=juicefs,auth.password=abc123456 \
+  --set primary.service.nodePorts.mysql=${JUICEFS_MYSQL_PORT} \
+  --set auth.database=juicefs,auth.username=${JUICEFS_MYSQL_USER},auth.password=${JUICEFS_MYSQL_PASSWORD} \
   --wait \
   --timeout 3600s \
   oci://registry-1.docker.io/bitnamicharts/mysql
 
 if command -v juicefs >/dev/null 2>&1; then
-  echo 'exists juicefs'
+  echo 'juicefs has installed'
 else
-  # refer to https://juicefs.com/docs/zh/community/introduction/
-  curl -sSL https://d.juicefs.com/install | sh -
+  sudo install ${CLIENT_DIR}/juicefs /usr/local/bin
 fi
 
-node_ip=`kubectl get node -o wide | awk 'NR==2{print $6}'`
 juicefs format \
     --storage minio \
-    --bucket http://${node_ip}:32000/bucket1 \
-    --access-key rootuser \
-    --secret-key rootpass123 \
-    "mysql://juicefs:abc123456@(${node_ip}:30306)/juicefs" \
+    --bucket http://${NODE_IP}:${MINIO_PORT}/bucket1 \
+    --access-key ${MINIO_USER} \
+    --secret-key ${MINIO_PASSWORD} \
+    "mysql://${JUICEFS_MYSQL_USER}:${JUICEFS_MYSQL_PASSWORD}@(${NODE_IP}:${JUICEFS_MYSQL_PORT})/juicefs" \
     myjfs
 
-dir=$(dirname $(realpath $0))
-JFS_LATEST_TAG=$(curl -s https://api.github.com/repos/juicedata/juicefs/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d 'v')
-if [ ! -f "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" ];then
-  wget -P "${dir}" "https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-hadoop-${JFS_LATEST_TAG}.jar"
-  ln -s "${dir}/juicefs-hadoop-${JFS_LATEST_TAG}.jar" "${dir}/juicefs-hadoop.jar"
-fi
-
-if [ ! -e "${dir}/hadoop" ];then
-  wget -P "${dir}" https://dlcdn.apache.org/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz
-  tar -zxvf "${dir}/hadoop-3.4.0.tar.gz" -C "${dir}"
-  ln -s "${dir}/hadoop-3.4.0" "${dir}/hadoop"
-  cp "${dir}/juicefs-hadoop-*.jar" "${dir}/hadoop/share/hadoop/common/lib/"
-fi
-
-sed "s/NODE_IP/${node_ip}/" "${dir}/core-site.template"  > "${dir}/core-site.xml"
-cp "${dir}/core-site.xml" "${dir}/hadoop/etc/hadoop/"
-${dir}/hadoop/bin/hadoop fs -mkdir -p /spark/upload
-${dir}/hadoop/bin/hadoop fs -chmod 777 /spark/upload
-
-kubectl create configmap core-site --from-file="${dir}/core-site.xml" -n "${namespace}"
+envsubst < ${dir}/core-site.template > ${CONF_DIR}/core-site.xml
+kubectl create configmap core-site --from-file="${CONF_DIR}/core-site.xml" -n "${NAMESPACE}"

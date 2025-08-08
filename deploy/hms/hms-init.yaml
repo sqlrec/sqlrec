@@ -15,10 +15,12 @@ spec:
               value: mysql
           command: ["/opt/hive/bin/schematool",  "-dbType", "mysql", "-initSchema"]
           volumeMounts:
-            - mountPath: /opt/hive/lib/mysql-connector-java.jar
-              name: mysql-jar
-            - mountPath: /opt/hive/lib/juicefs-hadoop.jar
-              name: juicefs-jar
+            - mountPath: /opt/hive/lib/${MYSQL_CONNECTOR_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${MYSQL_CONNECTOR_JAR_NAME}
+            - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/hive/conf/hive-site.xml
               name: hive-site-hms
               subPath: hive-site-hms.xml
@@ -26,14 +28,9 @@ spec:
               name: core-site
               subPath: core-site.xml
       volumes:
-        - name: mysql-jar
-          hostPath:
-            path: MYSQL_JAR_LOCATION
-            type: File
-        - name: juicefs-jar
-          hostPath:
-            path: JUICEFS_JAR_LOCATION
-            type: File
+        - name: ${RESOURCE_PV_NAME}
+          persistentVolumeClaim:
+            claimName: ${RESOURCE_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site

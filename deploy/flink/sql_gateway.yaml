@@ -18,12 +18,15 @@ spec:
             - name: HADOOP_CONF_DIR
               value: /opt/hadoop/conf
           volumeMounts:
-            - mountPath: /opt/flink/lib/juicefs-hadoop.jar
-              name: juicefs-jar
-            - mountPath: /opt/flink/lib/flink-hadoop.jar
-              name: hadoop-jar
-            - mountPath: /opt/flink/lib/hive-hadoop.jar
-              name: hive-jar
+            - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${JUICEFS_HADOOP_JAR_NAME}
+            - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${FLINK_HADOOP_JAR_NAME}
+            - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
             - mountPath: /opt/hadoop/conf/hive-site.xml
               name: hive-site
               subPath: hive-site.xml
@@ -31,18 +34,9 @@ spec:
               name: core-site
               subPath: core-site.xml
       volumes:
-        - name: juicefs-jar
-          hostPath:
-            path: JUICEFS_JAR_LOCATION
-            type: File
-        - name: hadoop-jar
-          hostPath:
-            path: HADOOP_JAR_LOCATION
-            type: File
-        - name: hive-jar
-          hostPath:
-            path: HIVE_JAR_LOCATION
-            type: File
+        - name: ${RESOURCE_PV_NAME}
+          persistentVolumeClaim:
+            claimName: ${RESOURCE_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site
@@ -88,12 +82,15 @@ spec:
           ports:
             - containerPort: 10000
           volumeMounts:
-            - mountPath: /opt/flink/lib/juicefs-hadoop.jar
-              name: juicefs-jar
-            - mountPath: /opt/flink/lib/flink-hadoop.jar
-              name: hadoop-jar
-            - mountPath: /opt/flink/lib/hive-hadoop.jar
-              name: hive-jar
+            - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${JUICEFS_HADOOP_JAR_NAME}
+            - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${FLINK_HADOOP_JAR_NAME}
+            - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
+              name: ${RESOURCE_PV_NAME}
+              subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
             - mountPath: /opt/flink/conf/hive-site.xml
               name: hive-site
               subPath: hive-site.xml
@@ -101,18 +98,9 @@ spec:
               name: core-site
               subPath: core-site.xml
       volumes:
-        - name: juicefs-jar
-          hostPath:
-            path: JUICEFS_JAR_LOCATION
-            type: File
-        - name: hadoop-jar
-          hostPath:
-            path: HADOOP_JAR_LOCATION
-            type: File
-        - name: hive-jar
-          hostPath:
-            path: HIVE_JAR_LOCATION
-            type: File
+        - name: ${RESOURCE_PV_NAME}
+          persistentVolumeClaim:
+            claimName: ${RESOURCE_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site
@@ -132,3 +120,4 @@ spec:
     - protocol: TCP
       port: 10000
       targetPort: 10000
+      nodePort: ${SQL_GATEWAY_PORT}

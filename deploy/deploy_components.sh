@@ -1,15 +1,25 @@
 #!/bin/bash
 shopt -s expand_aliases
 source ~/.bash_profile
+set -ex
+dir=$(dirname $(realpath $0))
+source ${dir}/env.sh
 
-namespace="${1:-sqlrec}"
-kubectl create namespace "${namespace}"
+# check if NODE_IP is set
+if [ -z "${NODE_IP}" ]; then
+  echo "NODE_IP is not set"
+  exit 1
+fi
 
-bash ./minio/deploy.sh "${namespace}"
-bash ./juicefs/deploy.sh "${namespace}"
-bash ./kafka/deploy.sh "${namespace}"
-bash ./redis/deploy.sh "${namespace}"
-bash ./hms/deploy.sh "${namespace}"
-bash ./kyuubi/deploy.sh "${namespace}"
-bash ./flink/deploy.sh "${namespace}"
+kubectl create namespace "${NAMESPACE}"
+
+bash ${dir}/minio/deploy.sh
+bash ${dir}/juicefs/deploy.sh
+bash ${dir}/kafka/deploy.sh
+bash ${dir}/redis/deploy.sh
+bash ${dir}/hms/deploy.sh
+bash ${dir}/flink/deploy.sh
+
+cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
+cp ${CONF_DIR}/* ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/
 

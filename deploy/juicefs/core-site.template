@@ -13,6 +13,6 @@
     </property>
     <property>
         <name>juicefs.meta</name>
-        <value>mysql://juicefs:abc123456@(NODE_IP:30306)/juicefs</value>
+        <value>mysql://${JUICEFS_MYSQL_USER}:${JUICEFS_MYSQL_PASSWORD}@(${NODE_IP}:${JUICEFS_MYSQL_PORT})/juicefs</value>
     </property>
 </configuration>
