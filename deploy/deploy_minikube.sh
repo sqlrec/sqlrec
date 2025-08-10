@@ -47,9 +47,6 @@ minikube start \
 
 minikube addons enable storage-provisioner-rancher
 
-envsubst < ${dir}/pv.yaml > ${dir}/pv.yaml.tmp
-kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
-
 # refer to https://helm.sh/docs/intro/install/
 if command -v helm >/dev/null 2>&1; then
   echo 'skip install helm'
