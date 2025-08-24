@@ -36,3 +36,4 @@ build/
 
 deploy/data
 *.yaml.tmp
+dependency-reduced-pom.xml

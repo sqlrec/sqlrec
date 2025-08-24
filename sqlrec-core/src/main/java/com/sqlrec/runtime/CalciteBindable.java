@@ -5,6 +5,7 @@ import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -12,7 +13,7 @@ import org.apache.calcite.runtime.Bindable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +32,7 @@ public class CalciteBindable implements BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema) {
-        return bindable.bind(new DataContext() {
+        Enumerable rawData = bindable.bind(new DataContext() {
             @Override
             public @Nullable SchemaPlus getRootSchema() {
                 return schema.plus();
@@ -52,6 +53,16 @@ public class CalciteBindable implements BindableInterface {
                 return null;
             }
         });
+
+        List<Object[]> objArrayList = new ArrayList<>();
+        for (Object obj : rawData) {
+            if (obj instanceof Object[]) {
+                objArrayList.add((Object[]) obj);
+            } else {
+                objArrayList.add(new Object[]{obj});
+            }
+        }
+        return Linq4j.asEnumerable(objArrayList);
     }
 
     @Override

@@ -9,33 +9,56 @@ import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.hive.service.rpc.thrift.*;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SqlProcessor {
     private CalciteSchema schema;
     private FunctionCompiler functionCompiler;
+    private Map<THandleIdentifier, SqlProcessResult> sqlProcessorMap;
 
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
+        sqlProcessorMap = new ConcurrentHashMap<>();
     }
 
-    public TRowSet tryExecuteSql(String sql) throws Exception {
+    public SqlProcessResult getProcessProcessResult(THandleIdentifier handleIdentifier) {
+        return sqlProcessorMap.getOrDefault(handleIdentifier, null);
+    }
+
+    public void closeProcessProcessResult(THandleIdentifier handleIdentifier) {
+        sqlProcessorMap.remove(handleIdentifier);
+    }
+
+    public SqlProcessResult tryExecuteSql(String sql) throws Exception {
+        SqlProcessResult result = executeSql(sql);
+        if (result != null) {
+            sqlProcessorMap.put(result.handleIdentifier, result);
+        }
+        return result;
+    }
+
+    private SqlProcessResult executeSql(String sql) throws Exception {
         SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
 
-        TRowSet rowSet = tryCompileFunction(sqlNode, sql);
-        if (rowSet != null) {
-            return rowSet;
+        SqlProcessResult result = tryCompileFunction(sqlNode, sql);
+        if (result != null) {
+            return result;
         }
 
         if (sqlNode instanceof SqlCreateApi) {
             // todo save api
-            return convertMsgToTRowSet("create api success");
+            return convertMsgToResult("create api success");
         }
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema)) {
@@ -48,124 +71,198 @@ public class SqlProcessor {
         return null;
     }
 
-    private TRowSet tryCompileFunction(SqlNode sqlNode, String sql) {
+    private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) {
         try {
             if (functionCompiler != null) {
                 functionCompiler.compile(sqlNode, sql);
                 if (functionCompiler.isFunctionCompileFinish()) {
                     functionCompiler = null;
                     // todo save function
-                    return convertMsgToTRowSet("function compile success");
+                    return convertMsgToResult("function compile success");
                 } else {
-                    return convertMsgToTRowSet("sql compile finish");
+                    return convertMsgToResult("sql compile finish");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
                 functionCompiler = new FunctionCompiler(null);
                 functionCompiler.compile(sqlNode, sql);
-                return convertMsgToTRowSet("sql compile success");
+                return convertMsgToResult("sql compile success");
             }
         } catch (Exception e) {
-            return convertMsgToTRowSet("compile fcuntion error: " + e.getMessage());
+            functionCompiler = null;
+            return convertMsgToResult("compile fcuntion error: " + e.getMessage());
         }
 
         return null;
     }
 
-    public TRowSet convertMsgToTRowSet(String msg) {
-        TRowSet tRowSet = new TRowSet();
+    public SqlProcessResult convertMsgToResult(String msg) {
+        List<Object[]> msgList = Collections.singletonList(new String[]{msg});
+        Enumerable<Object[]> enumerable = Linq4j.asEnumerable(msgList);
+        List<RelDataTypeField> fields = getStringTypeFields("msg");
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId());
+    }
 
-        TRow tRow = new TRow();
-        TColumnValue tColumn = new TColumnValue();
-        TStringValue tStringValue = new TStringValue();
-        tStringValue.setValue(msg);
-        tColumn.setFieldValue(TColumnValue._Fields.STRING_VAL, tStringValue);
-        tRow.addToColVals(tColumn);
-        tRowSet.addToRows(tRow);
-        tRowSet.setColumnCount(1);
+    public SqlProcessResult convertEnumerableToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId());
+    }
+
+    public TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
+        TRowSet tRowSet = new TRowSet();
+        List<TColumn> columns = new ArrayList<>();
+        for (RelDataTypeField field : fields) {
+            TColumn column = new TColumn();
+            columns.add(column);
+            switch (field.getType().getSqlTypeName()) {
+                case VARCHAR:
+                case CHAR:
+                    TStringColumn stringColumn = new TStringColumn();
+                    stringColumn.setValues(getValueList(enumerable, field.getIndex(), String.class));
+                    stringColumn.setNulls(new byte[]{});
+                    column.setStringVal(stringColumn);
+                    break;
+                case SMALLINT:
+                case TINYINT:
+                    TI16Column i16Column = new TI16Column();
+                    i16Column.setValues(getValueList(enumerable, field.getIndex(), Short.class));
+                    i16Column.setNulls(new byte[]{});
+                    column.setI16Val(i16Column);
+                    break;
+                case INTEGER:
+                    TI32Column i32Column = new TI32Column();
+                    i32Column.setValues(getValueList(enumerable, field.getIndex(), Integer.class));
+                    i32Column.setNulls(new byte[]{});
+                    column.setI32Val(i32Column);
+                    break;
+                case BIGINT:
+                    TI64Column i64Column = new TI64Column();
+                    i64Column.setValues(getValueList(enumerable, field.getIndex(), Long.class));
+                    i64Column.setNulls(new byte[]{});
+                    column.setI64Val(i64Column);
+                    break;
+                case FLOAT:
+                case DOUBLE:
+                    TDoubleColumn doubleColumn = new TDoubleColumn();
+                    doubleColumn.setValues(getValueList(enumerable, field.getIndex(), Double.class));
+                    doubleColumn.setNulls(new byte[]{});
+                    column.setDoubleVal(doubleColumn);
+                    break;
+                case BOOLEAN:
+                    TBoolColumn booleanColumn = new TBoolColumn();
+                    booleanColumn.setValues(getValueList(enumerable, field.getIndex(), Boolean.class));
+                    booleanColumn.setNulls(new byte[]{});
+                    column.setBoolVal(booleanColumn);
+                    break;
+                default:
+                    throw new RuntimeException("not support type: " + field.getType().getSqlTypeName());
+            }
+        }
+        tRowSet.setRows(new ArrayList<>());
+        tRowSet.setColumns(columns);
+        tRowSet.setStartRowOffsetIsSet(true);
         return tRowSet;
     }
 
-    public TRowSet convertEnumerableToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
-        TRowSet tRowSet = new TRowSet();
-        List<TRow> rows = new ArrayList<>();
-        List<TColumn> columns = new ArrayList<>();
-
-        if (fields == null || fields.isEmpty()) {
-            tRowSet.setRows(rows);
-            return tRowSet;
+    public <T> List<T> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
+        List<T> list = new ArrayList<>();
+        if (enumerable == null) {
+            return list;
         }
 
-        int fieldCount = fields.size();
-        Iterator<Object[]> iterator = enumerable.iterator();
-        while (iterator.hasNext()) {
-            Object[] rowData = iterator.next();
-            TRow tRow = new TRow();
+        for (Object[] objects : enumerable) {
+            Object object = objects[index];
+            list.add(tryCast(object, clazz));
+        }
+        return list;
+    }
 
-            for (int i = 0; i < fieldCount; i++) {
-                Object value = rowData[i];
-                TColumnValue tColumn = convertValueToTColumn(value, fields.get(i));
-                tRow.addToColVals(tColumn);
+    public <T> T tryCast(Object object, Class<T> clazz) {
+        if (object == null) {
+            return null;
+        }
+        if (clazz.isInstance(object)) {
+            return clazz.cast(object);
+        }
+        return null;
+    }
+
+    public TTableSchema convertFieldsToTTableSchema(List<RelDataTypeField> fields) {
+        TTableSchema schema = new TTableSchema();
+
+        for (RelDataTypeField field : fields) {
+            TTypeId tTypeId = null;
+            switch (field.getType().getSqlTypeName()) {
+                case VARCHAR:
+                    tTypeId = TTypeId.STRING_TYPE;
+                    break;
+                case CHAR:
+                    tTypeId = TTypeId.CHAR_TYPE;
+                    break;
+                case SMALLINT:
+                    tTypeId = TTypeId.SMALLINT_TYPE;
+                    break;
+                case TINYINT:
+                    tTypeId = TTypeId.TINYINT_TYPE;
+                    break;
+                case INTEGER:
+                    tTypeId = TTypeId.INT_TYPE;
+                    break;
+                case BIGINT:
+                    tTypeId = TTypeId.BIGINT_TYPE;
+                    break;
+                case FLOAT:
+                    tTypeId = TTypeId.FLOAT_TYPE;
+                    break;
+                case DOUBLE:
+                    tTypeId = TTypeId.DOUBLE_TYPE;
+                    break;
+                case BOOLEAN:
+                    tTypeId = TTypeId.BOOLEAN_TYPE;
+                    break;
+                default:
+                    throw new RuntimeException("not support type: " + field.getType().getSqlTypeName());
             }
 
-            rows.add(tRow);
+            TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(tTypeId);
+            typeEntry.setTypeQualifiers(new TTypeQualifiers(new HashMap<>()));
+            TTypeDesc tTypeDesc = new TTypeDesc(
+                    Collections.singletonList(TTypeEntry.primitiveEntry(typeEntry))
+            );
+            TColumnDesc columnDesc = new TColumnDesc(field.getName(), tTypeDesc, schema.getColumnsSize());
+            schema.addToColumns(columnDesc);
         }
-
-        tRowSet.setRows(rows);
-        tRowSet.setColumns(columns);
-        tRowSet.setColumnCount(fields.size());
-        return tRowSet;
+        return schema;
     }
 
-    private TColumnValue convertValueToTColumn(Object value, RelDataTypeField field) {
-        TColumnValue tColumn = new TColumnValue();
+    public static THandleIdentifier getHandleIdentifier() {
+        UUID publicId = UUID.randomUUID();
+        UUID secretId = UUID.randomUUID();
 
-        if (value == null) {
-            return tColumn;
-        }
+        byte[] guid = new byte[16];
+        ByteBuffer pbb = ByteBuffer.wrap(guid);
 
-        switch (field.getType().getSqlTypeName()) {
-            case CHAR:
-            case VARCHAR:
-                TStringValue tStringValue = new TStringValue();
-                tStringValue.setValue(value.toString());
-                tColumn.setFieldValue(TColumnValue._Fields.STRING_VAL, tStringValue);
-                break;
-            case BOOLEAN:
-                TBoolValue tBooleanValue = new TBoolValue();
-                tBooleanValue.setValue((Boolean) value);
-                tColumn.setFieldValue(TColumnValue._Fields.BOOL_VAL, tBooleanValue);
-                break;
-            case TINYINT:
-            case SMALLINT:
-            case INTEGER:
-                TI32Value tIntValue = new TI32Value();
-                tIntValue.setValue((Integer) value);
-                tColumn.setFieldValue(TColumnValue._Fields.I32_VAL, tIntValue);
-                break;
-            case BIGINT:
-                TI64Value tLongValue = new TI64Value();
-                tLongValue.setValue((Long) value);
-                tColumn.setFieldValue(TColumnValue._Fields.I64_VAL, tLongValue);
-                break;
-            case FLOAT:
-            case DOUBLE:
-                TDoubleValue tDoubleValue = new TDoubleValue();
-                tDoubleValue.setValue((Double) value);
-                tColumn.setFieldValue(TColumnValue._Fields.DOUBLE_VAL, tDoubleValue);
-                break;
-            case DATE:
-            case TIME:
-            case TIMESTAMP:
-                tStringValue = new TStringValue();
-                tStringValue.setValue(value.toString());
-                tColumn.setFieldValue(TColumnValue._Fields.STRING_VAL, tStringValue);
-                break;
-            default:
-                tStringValue = new TStringValue();
-                tStringValue.setValue(value.toString());
-                tColumn.setFieldValue(TColumnValue._Fields.STRING_VAL, tStringValue);
-        }
+        byte[] secret = new byte[16];
+        ByteBuffer sbb = ByteBuffer.wrap(secret);
 
-        return tColumn;
+        pbb.putLong(publicId.getMostSignificantBits());
+        pbb.putLong(publicId.getLeastSignificantBits());
+
+        sbb.putLong(secretId.getMostSignificantBits());
+        sbb.putLong(secretId.getLeastSignificantBits());
+
+        return new THandleIdentifier(ByteBuffer.wrap(guid), ByteBuffer.wrap(secret));
+    }
+
+    public static String getQueryId() {
+        return UUID.randomUUID().toString();
+    }
+
+    public static List<RelDataTypeField> getStringTypeFields(String fieldName) {
+        return Collections.singletonList(
+                new RelDataTypeFieldImpl(
+                        fieldName,
+                        0,
+                        new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
+                )
+        );
     }
 }

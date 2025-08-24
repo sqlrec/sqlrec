@@ -63,11 +63,7 @@ public class HmsSchema extends AbstractSchema {
                     tableMap.put(table, tableFromHmsTable);
                 }
             }
-            for (String table : tableMap.keySet()) {
-                if (!tables.contains(table)) {
-                    tableMap.remove(table);
-                }
-            }
+            tableMap.keySet().removeIf(table -> !tables.contains(table));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

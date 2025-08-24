@@ -30,6 +30,8 @@ public class TestSqlCompile {
         testSqlFunctionCompile(schema);
 
         List<String> sqlList = Arrays.asList(
+                "cache table t0 as select 1 as a",
+                "select * from t0",
                 "cache table t1 as SELECT * FROM myTable",
                 "select * from t1",
                 "cache table t2 as SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME",

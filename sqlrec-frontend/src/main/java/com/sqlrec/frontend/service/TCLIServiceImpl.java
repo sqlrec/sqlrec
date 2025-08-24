@@ -73,9 +73,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
-        return sessionManager
-                .getHiveClientByOperationId(tGetOperationStatusReq.getOperationHandle().getOperationId())
-                .GetOperationStatus(tGetOperationStatusReq);
+        return sessionManager.GetOperationStatus(tGetOperationStatusReq);
     }
 
     @Override
@@ -90,16 +88,12 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
-        return sessionManager
-                .getHiveClientByOperationId(tGetResultSetMetadataReq.getOperationHandle().getOperationId())
-                .GetResultSetMetadata(tGetResultSetMetadataReq);
+        return sessionManager.GetResultSetMetadata(tGetResultSetMetadataReq);
     }
 
     @Override
     public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
-        return sessionManager
-                .getHiveClientByOperationId(tFetchResultsReq.getOperationHandle().getOperationId())
-                .FetchResults(tFetchResultsReq);
+        return sessionManager.FetchResults(tFetchResultsReq);
     }
 
     @Override
@@ -119,9 +113,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
-        return sessionManager
-                .getHiveClientByOperationId(tGetQueryIdReq.getOperationHandle().getOperationId())
-                .GetQueryId(tGetQueryIdReq);
+        return sessionManager.GetQueryId(tGetQueryIdReq);
     }
 
     @Override

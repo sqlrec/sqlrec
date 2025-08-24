@@ -1,8 +1,10 @@
 package com.sqlrec.schema;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
 
 import java.util.List;
@@ -18,8 +20,9 @@ public class HmsClient {
             }
         }
 
-        HiveConf hiveConf = new HiveConf();
-        hiveConf.setVar(HiveConf.ConfVars.METASTOREURIS, hiveMetastoreUri);
+        Configuration hiveConf = new Configuration();
+        hiveConf.set(HiveConf.ConfVars.METASTOREURIS.toString(), hiveMetastoreUri);
+        hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), "false");
         try {
             return new HiveMetaStoreClient(hiveConf);
         } catch (MetaException e) {

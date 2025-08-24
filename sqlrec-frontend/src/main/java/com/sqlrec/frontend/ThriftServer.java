@@ -10,7 +10,7 @@ import org.apache.thrift.transport.TTransportException;
 
 public class ThriftServer {
     public static void main(String[] args) throws TTransportException {
-        TServerSocket serverTransport = new TServerSocket(10001);
+        TServerSocket serverTransport = new TServerSocket(8000);
         TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
         tArgs.protocolFactory(new TBinaryProtocol.Factory());
 

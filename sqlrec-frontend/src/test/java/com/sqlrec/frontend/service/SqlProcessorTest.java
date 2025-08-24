@@ -54,7 +54,7 @@ class SqlProcessorTest {
         SqlProcessor processor = new SqlProcessor();
         for (String sql : sqlList) {
             System.out.println("\n\n" + sql);
-            TRowSet rowSet = processor.tryExecuteSql(sql);
+            SqlProcessResult rowSet = processor.tryExecuteSql(sql);
             System.out.println(rowSet);
         }
     }
