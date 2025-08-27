@@ -10,6 +10,7 @@ import java.util.List;
 public class TestSqlTypeChecker {
     public static void main(String[] args) throws Exception {
         List<String> sqlList = Arrays.asList(
+                "use `default`",
                 "select * from tt.t1",
                 "select * from ( select * from tt.t1) t",
                 "SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME",

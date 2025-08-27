@@ -4,16 +4,17 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
 import com.sqlrec.runtime.CallFunctionBindable;
 import com.sqlrec.runtime.FunctionBindable;
-import com.sqlrec.sql.parser.*;
+import com.sqlrec.sql.parser.SqlCache;
+import com.sqlrec.sql.parser.SqlCallSqlFunction;
+import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.validate.SqlConformanceEnum;
-import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
+import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 
 import java.util.List;
 import java.util.Map;
@@ -25,14 +26,15 @@ public class CompileManager {
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
         SqlParser.Config parserConfig = SqlParser.config()
-                .withConformance(SqlConformanceEnum.DEFAULT)
-                .withParserFactory(FlinkSqlParserImpl.FACTORY);
+                .withConformance(FlinkSqlConformance.DEFAULT)
+                .withParserFactory(FlinkSqlParserImpl.FACTORY)
+                .withLex(Lex.JAVA);
         SqlParser parser = SqlParser.create(sql, parserConfig);
         return parser.parseQuery();
     }
 
-    public static BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema) throws Exception {
-        if (!SqlTypeChecker.isFlinkSqlCompilable(flinkSqlNode, schema)) {
+    public static BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) throws Exception {
+        if (!SqlTypeChecker.isFlinkSqlCompilable(flinkSqlNode, schema, defaultSchema)) {
             throw new Exception("sql is not compilable");
         }
 
@@ -40,10 +42,10 @@ public class CompileManager {
             return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
         }
         if (flinkSqlNode instanceof SqlCache) {
-            return getCacheBindable((SqlCache) flinkSqlNode, schema);
+            return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
         }
 
-        return getNormalSqlBindable(getSqlStr(flinkSqlNode), schema);
+        return getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
     }
 
     private static BindableInterface getCallSqlFunctionBindable(SqlCallSqlFunction callSqlFunction, CalciteSchema schema) throws Exception {
@@ -59,7 +61,7 @@ public class CompileManager {
         return new CallFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
     }
 
-    private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema) throws Exception {
+    private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
         String tableName = cache.getTableName().getSimple();
 
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
@@ -70,15 +72,15 @@ public class CompileManager {
 
         SqlSelect select = cache.getSelect();
         if (select != null) {
-            BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema);
+            BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
             return new CacheTableBindable(tableName, bindableInterface);
         }
 
         throw new Exception("cache sql obj is invalid");
     }
 
-    private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema) throws Exception {
-        return NormalSqlCompiler.getNormalSqlBindable(sqlStr, schema);
+    private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema, String defaultSchema) throws Exception {
+        return NormalSqlCompiler.getNormalSqlBindable(sqlStr, schema, defaultSchema);
     }
 
     private static String getSqlStr(SqlNode sqlNode) {
@@ -106,9 +108,5 @@ public class CompileManager {
             return functionCompiler.getFunctionBindable();
         }
         throw new RuntimeException("function compile failed");
-    }
-
-    public static SqlValidator createSqlValidate(CalciteSchema schema) {
-        return NormalSqlCompiler.createSqlValidate(schema);
     }
 }

@@ -50,7 +50,7 @@ public class CalciteBindable implements BindableInterface {
 
             @Override
             public @Nullable Object get(String name) {
-                return null;
+                return parameters.get(name);
             }
         });
 

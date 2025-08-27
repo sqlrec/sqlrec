@@ -30,6 +30,7 @@ public class TestSqlCompile {
         testSqlFunctionCompile(schema);
 
         List<String> sqlList = Arrays.asList(
+                "select * from myTable",
                 "cache table t0 as select 1 as a",
                 "select * from t0",
                 "cache table t1 as SELECT * FROM myTable",
@@ -44,7 +45,7 @@ public class TestSqlCompile {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema);
             if (enumerable != null) {

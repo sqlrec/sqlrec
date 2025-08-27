@@ -46,7 +46,7 @@ import static org.apache.calcite.prepare.Prepare.THREAD_INSUBQUERY_THRESHOLD;
 public class NormalSqlCompiler {
     public static String DEFAULT_SCHEMA_NAME = "default";
 
-    public static BindableInterface getNormalSqlBindable(String sql, CalciteSchema schema) throws Exception {
+    public static BindableInterface getNormalSqlBindable(String sql, CalciteSchema schema, String defaultSchema) throws Exception {
         SqlParser.Config parserConfig = SqlParser.configBuilder()
                 .setLex(Lex.MYSQL)
                 .setConformance(SqlConformanceEnum.DEFAULT)
@@ -57,8 +57,8 @@ public class NormalSqlCompiler {
         SqlNode sqlNode = parser.parseQuery();
 
         // Validate the SQL query
-        CalciteCatalogReader catalogReader = getCatalogReader(schema);
-        SqlValidator validator = createSqlValidate(schema);
+        CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
+        SqlValidator validator = createSqlValidate(schema, defaultSchema);
         SqlNode validatedSqlNode = validator.validate(sqlNode);
 
         // Convert the SQL query to a relational expression
@@ -106,16 +106,16 @@ public class NormalSqlCompiler {
         return new CalciteBindable(parameters, bindable, bestExp);
     }
 
-    public static CalciteCatalogReader getCatalogReader(CalciteSchema schema) {
+    public static CalciteCatalogReader getCatalogReader(CalciteSchema schema, String defaultSchema) {
         return new CalciteCatalogReader(
                 schema,
-                Collections.singletonList(DEFAULT_SCHEMA_NAME),
+                Collections.singletonList(defaultSchema),
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT),
                 null);
     }
 
-    public static SqlValidator createSqlValidate(CalciteSchema schema) {
-        CalciteCatalogReader catalogReader = getCatalogReader(schema);
+    public static SqlValidator createSqlValidate(CalciteSchema schema, String defaultSchema) {
+        CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
         SqlValidator validator = SqlValidatorUtil.newValidator(
                 Frameworks.newConfigBuilder().build().getOperatorTable(),
                 catalogReader,

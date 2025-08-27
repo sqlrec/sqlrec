@@ -1,5 +1,6 @@
 package com.sqlrec;
 
+import com.sqlrec.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
@@ -166,7 +167,7 @@ public class TestCalciteSql {
         }
     }
 
-    public static class MyTable extends AbstractTable implements ScannableTable {
+    public static class MyTable extends SqlRecTable implements ScannableTable {
 
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
@@ -183,6 +184,11 @@ public class TestCalciteSql {
                     .add("ID", SqlTypeName.INTEGER)
                     .add("NAME", SqlTypeName.VARCHAR, 20)
                     .build();
+        }
+
+        @Override
+        public SqlRecTableType getSqlRecTableType() {
+            return SqlRecTableType.MEMORY;
         }
     }
 }

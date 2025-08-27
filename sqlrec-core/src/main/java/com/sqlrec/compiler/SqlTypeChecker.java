@@ -11,18 +11,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SqlTypeChecker {
-    public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema) {
+    public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return true;
         }
         if (flinkSqlNode instanceof SqlCache) {
+            if (((SqlCache) flinkSqlNode).getSelect()!=null){
+                return isSqlTableRunable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
+            }
             return true;
         }
 
         if (!isCrudSql(flinkSqlNode)) {
             return false;
         }
-        return isSqlTableRunable(flinkSqlNode, schema);
+        return isSqlTableRunable(flinkSqlNode, schema, defaultSchema);
     }
 
     private static boolean isCrudSql(SqlNode flinkSqlNode) {
@@ -42,10 +45,10 @@ public class SqlTypeChecker {
         return false;
     }
 
-    public static boolean isSqlTableRunable(SqlNode flinkSqlNode, CalciteSchema schema) {
+    public static boolean isSqlTableRunable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         List<String> tableNames = getTableFromSqlNode(flinkSqlNode);
         if (tableNames.isEmpty()) {
-            return false;
+            return true;
         }
         for (String tableName : tableNames) {
             if (tableName.contains(".")) {
@@ -64,7 +67,8 @@ public class SqlTypeChecker {
                 }
             } else {
                 if (!checkIsTableRunable(schema, tableName)) {
-                    return false;
+                    CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
+                    return checkIsTableRunable(subSchema, tableName);
                 }
             }
         }
@@ -72,6 +76,10 @@ public class SqlTypeChecker {
     }
 
     private static boolean checkIsTableRunable(CalciteSchema schema, String tableName) {
+        if (schema == null) {
+            return false;
+        }
+
         CalciteSchema.TableEntry tableEntry = schema.getTable(tableName, false);
         if (tableEntry == null) {
             return false;

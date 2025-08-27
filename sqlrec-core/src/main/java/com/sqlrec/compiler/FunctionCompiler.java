@@ -145,7 +145,7 @@ public class FunctionCompiler {
 
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
             functionBindable.getBindableList().add(bindable);
             if (bindable instanceof CacheTableBindable) {
                 CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
@@ -164,7 +164,7 @@ public class FunctionCompiler {
             throw new RuntimeException("column list size not equal to column type list size");
         }
 
-        SqlValidator validator = CompileManager.createSqlValidate(schema);
+        SqlValidator validator = NormalSqlCompiler.createSqlValidate(schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
         List<RelDataTypeField> relDataTypeFields = new ArrayList<>();
         for (int i = 0; i < columnList.size(); i++) {
             relDataTypeFields.add(

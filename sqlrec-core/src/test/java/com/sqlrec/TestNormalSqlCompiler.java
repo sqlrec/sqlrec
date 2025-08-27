@@ -25,7 +25,7 @@ public class TestNormalSqlCompiler {
 
         String sql = "SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME";
 
-        BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(sql, schema);
+        BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(sql, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
         Enumerable enumerable = bindable.bind(schema);
         List<Object[]> results = enumerable.toList();

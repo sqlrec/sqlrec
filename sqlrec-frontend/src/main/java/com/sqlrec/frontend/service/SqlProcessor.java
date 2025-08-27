@@ -2,6 +2,7 @@ package com.sqlrec.frontend.service;
 
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
+import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.HmsSchema;
@@ -19,11 +20,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class SqlProcessor {
     private CalciteSchema schema;
+    private String defaultSchema;
     private FunctionCompiler functionCompiler;
     private Map<THandleIdentifier, SqlProcessResult> sqlProcessorMap;
 
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
+        defaultSchema = NormalSqlCompiler.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
     }
 
@@ -56,8 +59,8 @@ public class SqlProcessor {
             return Utils.convertMsgToResult("create api success");
         }
 
-        if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema)) {
-            BindableInterface bindableInterface = CompileManager.compileSql(sqlNode, schema);
+        if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
+            BindableInterface bindableInterface = CompileManager.compileSql(sqlNode, schema, defaultSchema);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema);
             List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
             return Utils.convertEnumerableToTRowSet(enumerable, fields);
