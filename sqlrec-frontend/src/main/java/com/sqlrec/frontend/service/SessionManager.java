@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.service;
 
+import org.apache.calcite.linq4j.Enumerable;
 import org.apache.hive.service.cli.FetchType;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
@@ -120,7 +121,9 @@ public class SessionManager {
             SqlProcessResult sqlProcessResult = sqlProcessor.getProcessProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-                resp.setSchema(sqlProcessor.convertFieldsToTTableSchema(sqlProcessResult.fields));
+                if (sqlProcessResult.fields != null) {
+                    resp.setSchema(sqlProcessor.convertFieldsToTTableSchema(sqlProcessResult.fields));
+                }
                 return resp;
             }
         }
@@ -138,10 +141,14 @@ public class SessionManager {
             if (sqlProcessResult != null) {
                 TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 if (tFetchResultsReq.getFetchType() == FetchType.QUERY_OUTPUT.toTFetchType()) {
-                    resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
-                    sqlProcessResult.enumerable = null;
+                    if (sqlProcessResult.fields != null) {
+                        resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
+                        sqlProcessResult.enumerable = null;
+                    }
                 } else {
-                    resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(null, SqlProcessor.getStringTypeFields("log")));
+                    Enumerable<Object[]> msgEnumerable = SqlProcessor.getMsgEnumerable(sqlProcessResult.msg);
+                    resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(msgEnumerable, SqlProcessor.getStringTypeFields("log")));
+                    sqlProcessResult.msg = null;
                 }
                 resp.setHasMoreRows(false);
                 return resp;

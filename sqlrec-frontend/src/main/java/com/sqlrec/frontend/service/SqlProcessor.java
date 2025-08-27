@@ -96,14 +96,13 @@ public class SqlProcessor {
     }
 
     public SqlProcessResult convertMsgToResult(String msg) {
-        List<Object[]> msgList = Collections.singletonList(new String[]{msg});
-        Enumerable<Object[]> enumerable = Linq4j.asEnumerable(msgList);
+        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
         List<RelDataTypeField> fields = getStringTypeFields("msg");
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId());
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), msg);
     }
 
     public SqlProcessResult convertEnumerableToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId());
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
     public TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
@@ -264,5 +263,12 @@ public class SqlProcessor {
                         new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
                 )
         );
+    }
+
+    public static Enumerable<Object[]> getMsgEnumerable(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(Collections.singletonList(new String[]{msg}));
     }
 }

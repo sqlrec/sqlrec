@@ -9,6 +9,7 @@ import java.util.List;
 public class SqlProcessResult {
     public THandleIdentifier handleIdentifier;
     public String queryId;
+    public String msg;
     public Enumerable<Object[]> enumerable;
     public List<RelDataTypeField> fields;
 
@@ -20,11 +21,13 @@ public class SqlProcessResult {
             Enumerable<Object[]> enumerable,
             List<RelDataTypeField> fields,
             THandleIdentifier handleIdentifier,
-            String queryId
+            String queryId,
+            String msg
     ) {
         this.enumerable = enumerable;
         this.fields = fields;
         this.handleIdentifier = handleIdentifier;
         this.queryId = queryId;
+        this.msg = msg;
     }
 }
