@@ -122,7 +122,7 @@ public class SessionManager {
             if (sqlProcessResult != null) {
                 TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 if (sqlProcessResult.fields != null) {
-                    resp.setSchema(sqlProcessor.convertFieldsToTTableSchema(sqlProcessResult.fields));
+                    resp.setSchema(Utils.convertFieldsToTTableSchema(sqlProcessResult.fields));
                 }
                 return resp;
             }
@@ -142,12 +142,12 @@ public class SessionManager {
                 TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 if (tFetchResultsReq.getFetchType() == FetchType.QUERY_OUTPUT.toTFetchType()) {
                     if (sqlProcessResult.fields != null) {
-                        resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
+                        resp.setResults(Utils.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
                         sqlProcessResult.enumerable = null;
                     }
                 } else {
-                    Enumerable<Object[]> msgEnumerable = SqlProcessor.getMsgEnumerable(sqlProcessResult.msg);
-                    resp.setResults(sqlProcessor.convertObjectArrayToTRowSet(msgEnumerable, SqlProcessor.getStringTypeFields("log")));
+                    Enumerable<Object[]> msgEnumerable = Utils.getMsgEnumerable(sqlProcessResult.msg);
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(msgEnumerable, Utils.getStringTypeFields("log")));
                     sqlProcessResult.msg = null;
                 }
                 resp.setHasMoreRows(false);
