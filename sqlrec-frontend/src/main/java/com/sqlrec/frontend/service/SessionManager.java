@@ -147,7 +147,7 @@ public class SessionManager {
                     }
                 } else {
                     Enumerable<Object[]> msgEnumerable = Utils.getMsgEnumerable(sqlProcessResult.msg);
-                    resp.setResults(Utils.convertObjectArrayToTRowSet(msgEnumerable, Utils.getStringTypeFields("log")));
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(msgEnumerable, Utils.getStringTypeField("log")));
                     sqlProcessResult.msg = null;
                 }
                 resp.setHasMoreRows(false);

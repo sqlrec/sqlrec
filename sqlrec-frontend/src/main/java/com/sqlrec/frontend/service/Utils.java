@@ -11,16 +11,34 @@ import org.apache.hive.service.rpc.thrift.*;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Utils {
     public static SqlProcessResult convertMsgToResult(String msg) {
         Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = getStringTypeFields("msg");
+        List<RelDataTypeField> fields = getStringTypeField("msg");
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), msg);
+    }
+
+    public static SqlProcessResult convertStringListToResult(List<String> list, String fieldName) {
+        Enumerable<Object[]> enumerable = convertListToEnumerable(list);
+        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
     public static SqlProcessResult convertEnumerableToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
+    }
+
+    public static SqlProcessResult getTableTypeDescResult(List<RelDataTypeField> dataFields) {
+        List<List<String>> fieldNameAndType = dataFields.stream().map(
+                f -> Arrays.asList(f.getName(), f.getType().toString())
+        ).collect(Collectors.toList());
+        Enumerable<Object[]> enumerable = convertListToArrayToEnumerable(fieldNameAndType);
+        List<RelDataTypeField> resultFields = getStringTypeFieldList(
+                Arrays.asList("name", "type")
+        );
+        return new SqlProcessResult(enumerable, resultFields, getHandleIdentifier(), getQueryId(), null);
     }
 
     public static TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
@@ -173,14 +191,21 @@ public class Utils {
         return UUID.randomUUID().toString();
     }
 
-    public static List<RelDataTypeField> getStringTypeFields(String fieldName) {
-        return Collections.singletonList(
-                new RelDataTypeFieldImpl(
-                        fieldName,
-                        0,
-                        new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
-                )
-        );
+    public static List<RelDataTypeField> getStringTypeField(String fieldName) {
+        return getStringTypeFieldList(Collections.singletonList(fieldName));
+    }
+
+    public static List<RelDataTypeField> getStringTypeFieldList(List<String> fieldName) {
+        List<RelDataTypeField> fields = new ArrayList<>();
+        int index = 0;
+        for (String name : fieldName) {
+            fields.add(new RelDataTypeFieldImpl(
+                    name,
+                    index++,
+                    new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
+            ));
+        }
+        return fields;
     }
 
     public static Enumerable<Object[]> getMsgEnumerable(String msg) {
@@ -188,5 +213,19 @@ public class Utils {
             return null;
         }
         return Linq4j.asEnumerable(Collections.singletonList(new String[]{msg}));
+    }
+
+    public static Enumerable<Object[]> convertListToEnumerable(List<String> list) {
+        if (list == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(list.stream().map(o -> new String[]{o}).collect(Collectors.toList()));
+    }
+
+    public static <T> Enumerable<Object[]> convertListToArrayToEnumerable(List<List<T>> list) {
+        if (list == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(list.stream().map(List::toArray).collect(Collectors.toList()));
     }
 }
