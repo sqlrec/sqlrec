@@ -63,17 +63,18 @@ public class CompileManager {
 
     private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
         String tableName = cache.getTableName().getSimple();
+        String createSql = getSqlStr(cache);
 
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
         if (callSqlFunction != null) {
             BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
-            return new CacheTableBindable(tableName, bindableInterface);
+            return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 
         SqlSelect select = cache.getSelect();
         if (select != null) {
             BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
-            return new CacheTableBindable(tableName, bindableInterface);
+            return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 
         throw new Exception("cache sql obj is invalid");

@@ -17,7 +17,7 @@ public class Utils {
     public static SqlProcessResult convertMsgToResult(String msg) {
         Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
         List<RelDataTypeField> fields = getStringTypeField("msg");
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), msg);
+        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
     public static SqlProcessResult convertStringListToResult(List<String> list, String fieldName) {

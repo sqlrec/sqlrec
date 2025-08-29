@@ -30,6 +30,19 @@ public class SqlCache extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("CACHE");
+        writer.keyword("TABLE");
+        tableName.unparse(writer, leftPrec, rightPrec);
+        writer.keyword("AS");
+        if (callSqlFunction != null) {
+            callSqlFunction.unparse(writer, leftPrec, rightPrec);
+        } else {
+            select.unparse(writer, leftPrec, rightPrec);
+        }
+    }
+
     public SqlIdentifier getTableName() {
         return tableName;
     }

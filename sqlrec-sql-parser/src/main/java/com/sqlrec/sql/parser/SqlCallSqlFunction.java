@@ -27,6 +27,20 @@ public class SqlCallSqlFunction extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("call_sql_function");
+        funcName.unparse(writer, leftPrec, rightPrec);
+        writer.literal("(");
+        for (int i = 0; i < inputTableList.size(); i++) {
+            if (i > 0) {
+                writer.literal(", ");
+            }
+            inputTableList.get(i).unparse(writer, leftPrec, rightPrec);
+        }
+        writer.literal(")");
+    }
+
     public SqlIdentifier getFuncName() {
         return funcName;
     }

@@ -14,11 +14,13 @@ public class CacheTable extends SqlRecTable implements ScannableTable {
     private String tableName;
     private Enumerable<Object[]> enumerable;
     private List<RelDataTypeField> dataFields;
+    private String createSql;
 
     public CacheTable(String tableName, Enumerable<Object[]> enumerable, List<RelDataTypeField> dataFields) {
         this.tableName = tableName;
         this.enumerable = enumerable;
         this.dataFields = dataFields;
+        this.createSql = "";
     }
 
     @Override
@@ -38,5 +40,21 @@ public class CacheTable extends SqlRecTable implements ScannableTable {
     @Override
     public SqlRecTableType getSqlRecTableType() {
         return SqlRecTableType.MEMORY;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
+    public String getCreateSql() {
+        return createSql;
+    }
+
+    public void setCreateSql(String createSql) {
+        this.createSql = createSql;
     }
 }

@@ -17,16 +17,20 @@ import java.util.List;
 public class CacheTableBindable implements BindableInterface {
     private String tableName;
     private BindableInterface bindable;
+    private String createSql;
 
-    public CacheTableBindable(String tableName, BindableInterface bindable) {
+    public CacheTableBindable(String tableName, BindableInterface bindable, String createSql) {
         this.tableName = tableName;
         this.bindable = bindable;
+        this.createSql = createSql;
     }
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema) {
         Enumerable<Object[]> enumerable = bindable.bind(schema);
-        schema.add(tableName, new CacheTable(tableName, enumerable, bindable.getReturnDataFields()));
+        CacheTable cacheTable = new CacheTable(tableName, enumerable, bindable.getReturnDataFields());
+        cacheTable.setCreateSql(createSql);
+        schema.add(tableName, cacheTable);
 
         // return cache table counts
         List<Object[]> list = new ArrayList<>();

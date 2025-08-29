@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.service;
 
+import com.google.common.collect.ImmutableList;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.NormalSqlCompiler;
@@ -18,6 +19,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
+import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
 import org.apache.flink.sql.parser.dql.SqlShowTables;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
@@ -151,6 +153,26 @@ public class SqlProcessor {
                 }
             }
         }
+
+        if (sqlNode instanceof SqlShowCreateTable) {
+            ImmutableList<String> names = ((SqlShowCreateTable) sqlNode).getTableName().names;
+            String db = defaultSchema;
+            if (names.size() > 1) {
+                db = names.get(0);
+            }
+            String table = names.get(names.size() - 1);
+
+            if (defaultSchema.equalsIgnoreCase(db)) {
+                CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
+                if (tableEntry != null && tableEntry.getTable()!=null) {
+                    Table tableObj = tableEntry.getTable();
+                    if (tableObj instanceof CacheTable) {
+                        return Utils.convertMsgToResult(((CacheTable) tableObj).getCreateSql());
+                    }
+                }
+            }
+        }
+
         return null;
     }
 
