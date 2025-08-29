@@ -17,6 +17,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
@@ -48,7 +49,13 @@ public class SqlProcessor {
     }
 
     public SqlProcessResult tryExecuteSql(String sql) throws Exception {
-        SqlProcessResult result = executeSql(sql);
+        SqlProcessResult result = null;
+        try {
+            result = executeSql(sql);
+        } catch (Exception e) {
+            String stackTrace = ExceptionUtils.getStackTrace(e);
+            result = Utils.convertMsgToResult("process sql error: " + stackTrace);
+        }
         if (result != null) {
             sqlProcessorMap.put(result.handleIdentifier, result);
         }
