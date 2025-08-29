@@ -41,6 +41,19 @@ public class SqlTypeChecker {
         if (flinkSqlNode instanceof SqlDelete) {
             return true;
         }
+        if (flinkSqlNode instanceof SqlOrderBy) {
+            return true;
+        }
+
+        if (flinkSqlNode instanceof SqlBasicCall) {
+            SqlBasicCall sqlBasicCall = (SqlBasicCall) flinkSqlNode;
+            if (sqlBasicCall.getOperator() instanceof SqlSetOperator) {
+                SqlSetOperator sqlSetOperator = (SqlSetOperator) sqlBasicCall.getOperator();
+                if (sqlSetOperator.getKind() == SqlKind.UNION) {
+                    return true;
+                }
+            }
+        }
 
         return false;
     }
