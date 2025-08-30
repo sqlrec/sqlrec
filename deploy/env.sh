@@ -36,6 +36,9 @@ export MINIO_USER=rootuser
 export MINIO_PASSWORD=rootpass123
 export KAFKA_PORT1=32092
 export REDIS_PORT=32379
+export SQLREC_MYSQL_PORT=30308
+export SQLREC_MYSQL_USER=sqlrec
+export SQLREC_MYSQL_PASSWORD=abc123456
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 

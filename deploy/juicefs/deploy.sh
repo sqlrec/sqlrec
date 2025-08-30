@@ -29,3 +29,6 @@ juicefs format \
 
 envsubst < ${dir}/core-site.template > ${CONF_DIR}/core-site.xml
 kubectl create configmap core-site --from-file="${CONF_DIR}/core-site.xml" -n "${NAMESPACE}"
+
+cp ${dir}/hdfs-site.xml  ${CONF_DIR}/
+kubectl create configmap hdfs-site --from-file="${CONF_DIR}/hdfs-site.xml" -n "${NAMESPACE}"

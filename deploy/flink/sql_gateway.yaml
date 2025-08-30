@@ -52,6 +52,9 @@ spec:
             - mountPath: /opt/hadoop/conf/core-site.xml
               name: core-site
               subPath: core-site.xml
+            - mountPath: /opt/hadoop/conf/hdfs-site.xml
+              name: hdfs-site
+              subPath: hdfs-site.xml
       volumes:
         - name: ${RESOURCE_PV_NAME}
           persistentVolumeClaim:
@@ -62,6 +65,9 @@ spec:
         - name: hive-site
           configMap:
             name: hive-site
+        - name: hdfs-site
+          configMap:
+            name: hdfs-site
   jobManager:
     resource:
       memory: "1024m"
@@ -116,6 +122,9 @@ spec:
             - mountPath: /opt/flink/conf/core-site.xml
               name: core-site
               subPath: core-site.xml
+            - mountPath: /opt/flink/conf/hdfs-site.xml
+              name: hdfs-site
+              subPath: hdfs-site.xml
       volumes:
         - name: ${RESOURCE_PV_NAME}
           persistentVolumeClaim:
@@ -126,6 +135,9 @@ spec:
         - name: hive-site
           configMap:
             name: hive-site
+        - name: hdfs-site
+          configMap:
+            name: hdfs-site
 ---
 apiVersion: v1
 kind: Service

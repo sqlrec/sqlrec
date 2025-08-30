@@ -39,6 +39,9 @@ spec:
             - mountPath: /opt/hive/conf/core-site.xml
               name: core-site
               subPath: core-site.xml
+            - mountPath: /opt/hive/conf/hdfs-site.xml
+              name: hdfs-site
+              subPath: hdfs-site.xml
       volumes:
         - name: ${RESOURCE_PV_NAME}
           persistentVolumeClaim:
@@ -49,6 +52,9 @@ spec:
         - name: hive-site-hms
           configMap:
             name: hive-site-hms
+        - name: hdfs-site
+          configMap:
+            name: hdfs-site
 ---
 apiVersion: v1
 kind: Service
