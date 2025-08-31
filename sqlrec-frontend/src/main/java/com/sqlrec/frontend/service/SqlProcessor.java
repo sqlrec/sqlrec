@@ -2,6 +2,7 @@ package com.sqlrec.frontend.service;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.NormalSqlCompiler;
@@ -12,8 +13,7 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.CacheTable;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.sql.parser.SqlCreateApi;
-import com.sqlrec.sql.parser.SqlCreateSqlFunction;
+import com.sqlrec.sql.parser.*;
 import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -58,7 +58,7 @@ public class SqlProcessor {
             result = executeSql(sql);
         } catch (Exception e) {
             String stackTrace = ExceptionUtils.getStackTrace(e);
-            result = Utils.convertMsgToResult("process sql error: " + stackTrace);
+            result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
         }
         if (result != null) {
             sqlProcessorMap.put(result.handleIdentifier, result);
@@ -77,7 +77,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlCreateApi) {
             SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
-            return Utils.convertMsgToResult("create api success");
+            return Utils.convertMsgToResult("create api success", "msg");
         }
 
         if (sqlNode instanceof SqlUseDatabase) {
@@ -107,18 +107,18 @@ public class SqlProcessor {
                 if (functionCompiler.isFunctionCompileFinish()) {
                     SqlProcessor.saveSqlFunction(functionCompiler);
                     functionCompiler = null;
-                    return Utils.convertMsgToResult("function compile success");
+                    return Utils.convertMsgToResult("function compile success", "msg");
                 } else {
-                    return Utils.convertMsgToResult("add a sql to function");
+                    return Utils.convertMsgToResult("add a sql to function", "msg");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
                 functionCompiler = new FunctionCompiler(null);
                 functionCompiler.compile(sqlNode, sql);
-                return Utils.convertMsgToResult("start compile function");
+                return Utils.convertMsgToResult("start compile function", "msg");
             }
         } catch (Exception e) {
             functionCompiler = null;
-            return Utils.convertMsgToResult("compile fcuntion error: " + e.getMessage());
+            return Utils.convertMsgToResult("compile fcuntion error: " + e.getMessage(), "error");
         }
 
         return null;
@@ -134,7 +134,7 @@ public class SqlProcessor {
 
             CalciteSchema subSchema = schema.getSubSchema(db, false);
             if (subSchema == null) {
-                return Utils.convertMsgToResult("database not exists: " + db);
+                return Utils.convertMsgToResult("database not exists: " + db, "error");
             }
 
             List<String> tableNames = HmsClient.getAllTables(db);
@@ -178,10 +178,49 @@ public class SqlProcessor {
                 if (tableEntry != null && tableEntry.getTable()!=null) {
                     Table tableObj = tableEntry.getTable();
                     if (tableObj instanceof CacheTable) {
-                        return Utils.convertMsgToResult(((CacheTable) tableObj).getCreateSql());
+                        return Utils.convertMsgToResult(((CacheTable) tableObj).getCreateSql(), "create sql");
                     }
                 }
             }
+        }
+
+        if (sqlNode instanceof SqlShowSqlFunction) {
+            List<SqlFunction> sqlFunctions = DbUtils.getSqlFunctionList();
+            return Utils.convertStringListToResult(
+                    sqlFunctions.stream().map(SqlFunction::getName).collect(Collectors.toList()),
+                    "sql function"
+            );
+        }
+
+        if (sqlNode instanceof SqlShowCreateSqlFunction) {
+            SqlShowCreateSqlFunction showCreateSqlFunction = (SqlShowCreateSqlFunction) sqlNode;
+            SqlFunction sqlFunction = DbUtils.getSqlFunction(showCreateSqlFunction.getFuncName().getSimple());
+            if (sqlFunction == null) {
+                return Utils.convertMsgToResult(
+                        "sql function not exists: " + showCreateSqlFunction.getFuncName().getSimple(),
+                        "error"
+                );
+            }
+            List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
+            return Utils.convertMsgToResult(String.join("\n", sqlList), "create sql");
+        }
+
+        if (sqlNode instanceof SqlShowApi) {
+            List<SqlApi> sqlApis = DbUtils.getSqlApiList();
+            return Utils.convertStringListToResult(
+                    sqlApis.stream().map(SqlApi::getName).collect(Collectors.toList()),
+                    "api"
+            );
+        }
+
+        if (sqlNode instanceof SqlShowCreateApi) {
+            SqlShowCreateApi showCreateApi = (SqlShowCreateApi) sqlNode;
+            SqlApi sqlApi = DbUtils.getSqlApi(showCreateApi.getApiName().getSimple());
+            if (sqlApi == null) {
+                return Utils.convertMsgToResult("api not exists: " + showCreateApi.getApiName(), "error");
+            }
+            String sql = "create api " + sqlApi.getName() + " with " + sqlApi.getFunctionName();
+            return Utils.convertMsgToResult(sql, "create sql");
         }
 
         return null;

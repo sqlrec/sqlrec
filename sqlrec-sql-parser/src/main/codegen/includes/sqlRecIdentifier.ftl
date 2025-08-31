@@ -150,3 +150,53 @@ boolean OrReplaceOpt() :
         { return false; }
     )
 }
+
+SqlShowSqlFunction SqlShowSqlFunction() :
+{
+}
+{
+    <SHOW>
+    <SQL>
+    <FUNCTIONS>
+    {
+        return new SqlShowSqlFunction(getPos());
+    }
+}
+
+SqlShowCreateSqlFunction SqlShowCreateSqlFunction() :
+{
+    SqlIdentifier funcName = null;
+}
+{
+    ( <DESCRIBE> | <DESC> )
+    <SQL>
+    <FUNCTION>
+    funcName = SimpleIdentifier()
+    {
+        return new SqlShowCreateSqlFunction(getPos(), funcName);
+    }
+}
+
+SqlShowApi SqlShowApi() :
+{
+}
+{
+    <SHOW>
+    <APIS>
+    {
+        return new SqlShowApi(getPos());
+    }
+}
+
+SqlShowCreateApi SqlShowCreateApi() :
+{
+    SqlIdentifier apiName = null;
+}
+{
+    ( <DESCRIBE> | <DESC> )
+    <API>
+    apiName = SimpleIdentifier()
+    {
+        return new SqlShowCreateApi(getPos(), apiName);
+    }
+}

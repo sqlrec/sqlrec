@@ -142,6 +142,7 @@
   keywords: [
     "CALL_SQL_FUNCTION"
     "API"
+    "APIS"
     "BYTES"
     "CATALOGS"
     "CACHE"
@@ -552,6 +553,10 @@
   # Return type of method implementation should be 'SqlNode'.
   # Example: SqlShowDatabases(), SqlShowTables().
   statementParserMethods: [
+    "SqlShowCreateSqlFunction()"
+    "SqlShowSqlFunction()"
+    "SqlShowCreateApi()"
+    "SqlShowApi()"
     "SqlDefineInputTable()"
     "SqlCallSqlFunction()"
     "SqlCache()"

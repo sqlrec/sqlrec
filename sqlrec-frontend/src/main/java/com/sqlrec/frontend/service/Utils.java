@@ -14,9 +14,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class Utils {
-    public static SqlProcessResult convertMsgToResult(String msg) {
+    public static SqlProcessResult convertMsgToResult(String msg, String fieldName) {
         Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = getStringTypeField("msg");
+        List<RelDataTypeField> fields = getStringTypeField(fieldName);
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
