@@ -12,7 +12,7 @@
     <artifactId>sqlrec-connectors</artifactId>
     <packaging>pom</packaging>
     <modules>
-        <module>sqlrec-connectors-redis</module>
+        <module>sqlrec-connector-redis</module>
     </modules>
 
     <properties>

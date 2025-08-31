@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.utils.HiveTableUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -71,9 +72,7 @@ public class HmsSchema extends AbstractSchema {
     }
 
     private Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        Map<String, String> tableProperties = tableObj.getParameters();
-        // Get specific option such as connector
-        String connector = tableProperties.get("connector");
+        String connector = HiveTableUtils.getTableConnector(tableObj);
         if (connector == null) {
             return null;
         }
