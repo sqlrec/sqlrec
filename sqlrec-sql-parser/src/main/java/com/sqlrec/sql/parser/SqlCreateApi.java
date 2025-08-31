@@ -29,4 +29,16 @@ public class SqlCreateApi extends SqlCall {
     public List<SqlNode> getOperandList() {
         return Collections.emptyList();
     }
+
+    public String getApiName() {
+        return apiName.getSimple();
+    }
+
+    public String getFuncName() {
+        return funcName.getSimple();
+    }
+
+    public boolean isOrReplace() {
+        return orReplace;
+    }
 }

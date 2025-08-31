@@ -152,7 +152,7 @@ public class FunctionCompiler {
                 CacheTable tmpTable = new CacheTable(
                         cacheTableBindable.getTableName(),
                         null,
-                        cacheTableBindable.getReturnDataFields()
+                        cacheTableBindable.getTableDataFields()
                 );
                 schema.add(cacheTableBindable.getTableName(), tmpTable);
             }

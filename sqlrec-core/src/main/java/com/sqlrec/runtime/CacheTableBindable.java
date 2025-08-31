@@ -54,6 +54,10 @@ public class CacheTableBindable implements BindableInterface {
         );
     }
 
+    public List<RelDataTypeField> getTableDataFields() {
+        return bindable.getReturnDataFields();
+    }
+
     public String getTableName() {
         return tableName;
     }

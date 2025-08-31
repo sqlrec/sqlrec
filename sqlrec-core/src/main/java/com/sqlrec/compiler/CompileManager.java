@@ -1,11 +1,15 @@
 package com.sqlrec.compiler;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
 import com.sqlrec.runtime.CallFunctionBindable;
 import com.sqlrec.runtime.FunctionBindable;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
+import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -88,18 +92,23 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema) {
+    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema) throws Exception {
         functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
         }
-        // todo get function define from db
-        throw new RuntimeException("function not found: " + functionName);
+        SqlFunction sqlFunction = DbUtils.getSqlFunction(functionName);
+        if (sqlFunction == null) {
+            throw new RuntimeException("function not found: " + functionName);
+        }
+        List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
+        FunctionBindable functionBindable = compileSqlFunction(functionName, schema, sqlList);
+        return functionBindable;
     }
 
     public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema, List<String> sqlList) throws Exception {
         functionName = functionName.toUpperCase();
-        FunctionCompiler functionCompiler = new FunctionCompiler(schema);
+        FunctionCompiler functionCompiler = new FunctionCompiler(null);
         functionCompiler.compileAllSql(sqlList);
         if (functionCompiler.isFunctionCompileFinish()) {
             if (!functionName.equalsIgnoreCase(functionCompiler.getFunctionBindable().getFunName())) {

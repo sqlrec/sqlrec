@@ -1,16 +1,20 @@
 package com.sqlrec.frontend.service;
 
 import com.google.common.collect.ImmutableList;
+import com.google.gson.Gson;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.entity.SqlApi;
+import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.CacheTable;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
+import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -72,7 +76,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlCreateApi) {
-            // todo save api
+            SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
             return Utils.convertMsgToResult("create api success");
         }
 
@@ -101,16 +105,16 @@ public class SqlProcessor {
             if (functionCompiler != null) {
                 functionCompiler.compile(sqlNode, sql);
                 if (functionCompiler.isFunctionCompileFinish()) {
+                    SqlProcessor.saveSqlFunction(functionCompiler);
                     functionCompiler = null;
-                    // todo save function
                     return Utils.convertMsgToResult("function compile success");
                 } else {
-                    return Utils.convertMsgToResult("sql compile finish");
+                    return Utils.convertMsgToResult("add a sql to function");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
                 functionCompiler = new FunctionCompiler(null);
                 functionCompiler.compile(sqlNode, sql);
-                return Utils.convertMsgToResult("sql compile success");
+                return Utils.convertMsgToResult("start compile function");
             }
         } catch (Exception e) {
             functionCompiler = null;
@@ -198,5 +202,19 @@ public class SqlProcessor {
             return Constant.SHOW_TABLES_IN_DEFAULT_FORMATTED;
         }
         return sql;
+    }
+
+    public static void saveSqlFunction(FunctionCompiler compiler) {
+        SqlFunction sqlFunction = new SqlFunction();
+        sqlFunction.setName(compiler.getFunctionBindable().getFunName());
+        sqlFunction.setSqlList(new Gson().toJson(compiler.getSqlList()));
+        DbUtils.insertSqlFunction(sqlFunction);
+    }
+
+    public static void saveSqlApi(SqlCreateApi api) {
+        SqlApi sqlApi = new SqlApi();
+        sqlApi.setName(api.getApiName());
+        sqlApi.setFunctionName(api.getFuncName());
+        DbUtils.insertSqlApi(sqlApi);
     }
 }
