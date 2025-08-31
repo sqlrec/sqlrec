@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.config.SqlRecConfigs;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -14,10 +15,7 @@ public class HmsClient {
 
     private static HiveMetaStoreClient HmsClientSingleton(String hiveMetastoreUri) {
         if (hiveMetastoreUri == null || hiveMetastoreUri.isEmpty()) {
-            hiveMetastoreUri = System.getenv("HIVE_METASTORE_URI");
-            if (hiveMetastoreUri == null || hiveMetastoreUri.isEmpty()) {
-                throw new IllegalArgumentException("HIVE_METASTORE_URI env not set");
-            }
+            hiveMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getValue();
         }
 
         Configuration hiveConf = new Configuration();

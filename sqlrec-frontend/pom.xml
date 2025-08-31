@@ -47,6 +47,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http</artifactId>
+            <version>4.1.107.Final</version>
+        </dependency>
     </dependencies>
 
     <build>

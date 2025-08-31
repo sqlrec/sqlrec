@@ -2,6 +2,7 @@ package com.sqlrec.compiler;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
@@ -17,6 +18,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 
@@ -58,7 +60,7 @@ public class CompileManager {
                 .stream()
                 .map(SqlIdentifier::getSimple)
                 .collect(Collectors.toList());
-        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName, schema);
+        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName);
         if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
             throw new Exception("function input table not match");
         }
@@ -92,7 +94,7 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema) throws Exception {
+    public static FunctionBindable compileSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
@@ -102,11 +104,11 @@ public class CompileManager {
             throw new RuntimeException("function not found: " + functionName);
         }
         List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
-        FunctionBindable functionBindable = compileSqlFunction(functionName, schema, sqlList);
+        FunctionBindable functionBindable = compileSqlFunction(functionName, sqlList);
         return functionBindable;
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName, CalciteSchema schema, List<String> sqlList) throws Exception {
+    public static FunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
         functionName = functionName.toUpperCase();
         FunctionCompiler functionCompiler = new FunctionCompiler(null);
         functionCompiler.compileAllSql(sqlList);
@@ -118,5 +120,13 @@ public class CompileManager {
             return functionCompiler.getFunctionBindable();
         }
         throw new RuntimeException("function compile failed");
+    }
+
+    public static FunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
+        SqlApi sqlApi = DbUtils.getSqlApi(apiName);
+        if (sqlApi == null || StringUtils.isAllEmpty(sqlApi.getFunctionName())) {
+            throw new Exception("api not fund : " + apiName);
+        }
+        return compileSqlFunction(sqlApi.getFunctionName());
     }
 }

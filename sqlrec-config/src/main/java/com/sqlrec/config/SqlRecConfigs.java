@@ -21,4 +21,10 @@ public class SqlRecConfigs {
             "com.mysql.cj.jdbc.Driver",
             "meta db driver"
     );
+
+    public static final ConfigOption<String> HIVE_METASTORE_URI = new ConfigOption<>(
+            "HIVE_METASTORE_URI",
+            "thrift://127.0.0.1:32083",
+            "hive metastore uri"
+    );
 }
