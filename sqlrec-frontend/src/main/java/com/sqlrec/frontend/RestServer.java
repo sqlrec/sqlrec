@@ -1,5 +1,6 @@
 package com.sqlrec.frontend;
 
+import com.sqlrec.config.SqlRecConfigs;
 import com.sqlrec.frontend.RestService.HttpServerHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
@@ -36,7 +37,7 @@ public class RestServer {
                     .option(ChannelOption.SO_BACKLOG, 128)
                     .childOption(ChannelOption.SO_KEEPALIVE, true);
 
-            ChannelFuture f = b.bind(1000).sync();
+            ChannelFuture f = b.bind(SqlRecConfigs.REST_SERVER_PORT.getValue()).sync();
             f.channel().closeFuture().sync();
         } finally {
             workerGroup.shutdownGracefully();

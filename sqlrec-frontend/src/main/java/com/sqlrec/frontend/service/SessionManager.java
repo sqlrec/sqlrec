@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.service;
 
+import com.sqlrec.config.SqlRecConfigs;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.hive.service.cli.FetchType;
 import org.apache.hive.service.rpc.thrift.*;
@@ -18,7 +19,11 @@ public class SessionManager {
     private Map<THandleIdentifier, SqlProcessor> sqlProcessorMap = new ConcurrentHashMap<>();
 
     public TOpenSessionResp openSession(TOpenSessionReq tOpenSessionReq) throws TException {
-        TTransport transport = new TSocket("127.0.0.1", 30000, 300000);
+        TTransport transport = new TSocket(
+                SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getValue(),
+                SqlRecConfigs.FLINK_SQL_GATEWAY_PORT.getValue(),
+                SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue()
+        );
 
         TProtocol protocol = new TBinaryProtocol(transport);
         TCLIService.Client client = new TCLIService.Client(protocol);

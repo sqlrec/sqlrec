@@ -1,5 +1,6 @@
 package com.sqlrec.frontend;
 
+import com.sqlrec.config.SqlRecConfigs;
 import com.sqlrec.frontend.service.TCLIServiceImpl;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.thrift.TProcessor;
@@ -10,7 +11,7 @@ import org.apache.thrift.transport.TTransportException;
 
 public class ThriftServer {
     public static void main(String[] args) throws TTransportException {
-        TServerSocket serverTransport = new TServerSocket(8000);
+        TServerSocket serverTransport = new TServerSocket(SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
         TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
         tArgs.protocolFactory(new TBinaryProtocol.Factory());
 

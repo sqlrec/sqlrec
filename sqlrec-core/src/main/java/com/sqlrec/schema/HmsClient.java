@@ -20,7 +20,7 @@ public class HmsClient {
 
         Configuration hiveConf = new Configuration();
         hiveConf.set(HiveConf.ConfVars.METASTOREURIS.toString(), hiveMetastoreUri);
-        hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), "false");
+        hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), SqlRecConfigs.EXECUTE_SET_UGI.getValue());
         try {
             return new HiveMetaStoreClient(hiveConf);
         } catch (MetaException e) {
