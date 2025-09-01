@@ -9,6 +9,7 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
+import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,7 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 public class TestSqlCompile {
-    public static void main(String[] args) throws Exception {
+    @Test
+    public void testSqlCompile() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override

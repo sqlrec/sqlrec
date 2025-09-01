@@ -6,15 +6,15 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.parser.SqlParseException;
+import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 public class TestNormalSqlCompiler {
-
-    public static void main(String[] args) throws Exception {
+    @Test
+    public void testNormalSqlCompiler() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override

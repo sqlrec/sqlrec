@@ -4,6 +4,7 @@ package com.sqlrec.frontend.service;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -13,18 +14,18 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-class SqlProcessorTest {
-    public static void main(String[] args) throws Exception {
+public class SqlProcessorTest {
+    @Test
+    public void testSqlProcessor() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
@@ -56,6 +57,7 @@ class SqlProcessorTest {
             System.out.println("\n\n" + sql);
             SqlProcessResult rowSet = processor.tryExecuteSql(sql);
             System.out.println(rowSet);
+            assert rowSet != null;
         }
     }
 
@@ -69,7 +71,7 @@ class SqlProcessorTest {
         CompileManager.compileSqlFunction("fun1", sqlList);
     }
 
-    public static class MyTable extends AbstractTable implements ScannableTable {
+    public static class MyTable extends SqlRecTable implements ScannableTable {
 
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
@@ -86,6 +88,11 @@ class SqlProcessorTest {
                     .add("ID", SqlTypeName.INTEGER)
                     .add("NAME", SqlTypeName.VARCHAR, 20)
                     .build();
+        }
+
+        @Override
+        public SqlRecTableType getSqlRecTableType() {
+            return SqlRecTableType.MEMORY;
         }
     }
 }

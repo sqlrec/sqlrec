@@ -3,12 +3,14 @@ package com.sqlrec;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlTypeChecker;
 import org.apache.calcite.sql.SqlNode;
+import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class TestSqlTypeChecker {
-    public static void main(String[] args) throws Exception {
+    @Test
+    public void testSqlTypeChecker() throws Exception {
         List<String> sqlList = Arrays.asList(
                 "use `default`",
                 "select * from tt.t1",
