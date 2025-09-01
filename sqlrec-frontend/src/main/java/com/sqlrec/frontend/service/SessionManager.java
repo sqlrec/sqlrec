@@ -2,7 +2,6 @@ package com.sqlrec.frontend.service;
 
 import com.sqlrec.config.SqlRecConfigs;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.hive.service.cli.FetchType;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -145,7 +144,8 @@ public class SessionManager {
             SqlProcessResult sqlProcessResult = sqlProcessor.getProcessProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-                if (tFetchResultsReq.getFetchType() == FetchType.QUERY_OUTPUT.toTFetchType()) {
+                // 0 means query output
+                if (tFetchResultsReq.getFetchType() == 0) {
                     if (sqlProcessResult.fields != null) {
                         resp.setResults(Utils.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
                         sqlProcessResult.enumerable = null;
