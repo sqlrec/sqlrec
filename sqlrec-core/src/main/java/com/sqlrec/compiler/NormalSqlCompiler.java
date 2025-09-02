@@ -3,6 +3,7 @@ package com.sqlrec.compiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.RootFirstCatalogReader;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
@@ -107,7 +108,7 @@ public class NormalSqlCompiler {
     }
 
     public static CalciteCatalogReader getCatalogReader(CalciteSchema schema, String defaultSchema) {
-        return new CalciteCatalogReader(
+        return new RootFirstCatalogReader(
                 schema,
                 Collections.singletonList(defaultSchema),
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT),
