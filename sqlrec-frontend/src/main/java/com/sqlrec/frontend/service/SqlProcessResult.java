@@ -12,6 +12,7 @@ public class SqlProcessResult {
     public String msg;
     public Enumerable<Object[]> enumerable;
     public List<RelDataTypeField> fields;
+    public Exception exception;
 
     public SqlProcessResult() {
 

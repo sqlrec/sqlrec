@@ -52,13 +52,14 @@ public class SqlProcessor {
         sqlProcessorMap.remove(handleIdentifier);
     }
 
-    public SqlProcessResult tryExecuteSql(String sql) throws Exception {
+    public SqlProcessResult tryExecuteSql(String sql) {
         SqlProcessResult result = null;
         try {
             result = executeSql(sql);
         } catch (Exception e) {
             String stackTrace = ExceptionUtils.getStackTrace(e);
             result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
+            result.exception = e;
         }
         if (result != null) {
             sqlProcessorMap.put(result.handleIdentifier, result);

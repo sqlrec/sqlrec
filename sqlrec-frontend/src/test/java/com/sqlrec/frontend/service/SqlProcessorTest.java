@@ -58,6 +58,13 @@ public class SqlProcessorTest {
             SqlProcessResult rowSet = processor.tryExecuteSql(sql);
             System.out.println(rowSet);
             assert rowSet != null;
+            assert rowSet.exception == null;
+            if (rowSet.enumerable != null) {
+                List<Object[]> results = rowSet.enumerable.toList();
+                for (Object[] result : results) {
+                    System.out.println(java.util.Arrays.toString(result));
+                }
+            }
         }
     }
 

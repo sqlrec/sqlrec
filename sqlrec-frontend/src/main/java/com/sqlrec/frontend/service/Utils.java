@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.service;
 
+import com.google.gson.Gson;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -88,7 +89,10 @@ public class Utils {
                     column.setBoolVal(booleanColumn);
                     break;
                 default:
-                    throw new RuntimeException("not support type: " + field.getType().getSqlTypeName());
+                    TStringColumn defaultStringColumn = new TStringColumn();
+                    defaultStringColumn.setValues(getJsonValueList(enumerable, field.getIndex()));
+                    defaultStringColumn.setNulls(new byte[]{});
+                    column.setStringVal(defaultStringColumn);
             }
         }
         tRowSet.setRows(new ArrayList<>());
@@ -106,6 +110,19 @@ public class Utils {
         for (Object[] objects : enumerable) {
             Object object = objects[index];
             list.add(tryCast(object, clazz));
+        }
+        return list;
+    }
+
+    public static List<String> getJsonValueList(Enumerable<Object[]> enumerable, int index) {
+        List<String> list = new ArrayList<>();
+        if (enumerable == null) {
+            return list;
+        }
+
+        for (Object[] objects : enumerable) {
+            Object object = objects[index];
+            list.add(new Gson().toJson(object));
         }
         return list;
     }
@@ -154,7 +171,7 @@ public class Utils {
                     tTypeId = TTypeId.BOOLEAN_TYPE;
                     break;
                 default:
-                    throw new RuntimeException("not support type: " + field.getType().getSqlTypeName());
+                    tTypeId = TTypeId.STRING_TYPE;
             }
 
             TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(tTypeId);
