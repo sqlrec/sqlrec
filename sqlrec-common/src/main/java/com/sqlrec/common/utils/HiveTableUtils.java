@@ -1,4 +1,4 @@
-package com.sqlrec.utils;
+package com.sqlrec.common.utils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataType;

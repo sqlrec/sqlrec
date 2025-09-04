@@ -1,6 +1,6 @@
 package com.sqlrec.connectors.redis.config;
 
-import com.sqlrec.config.ConfigOption;
+import com.sqlrec.common.config.ConfigOption;
 
 import java.util.Map;
 

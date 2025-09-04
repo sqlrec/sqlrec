@@ -1,6 +1,6 @@
 package com.sqlrec.connectors.redis.codec;
 
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import org.junit.jupiter.api.Test;
 
 

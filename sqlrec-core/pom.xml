@@ -12,8 +12,8 @@
     <artifactId>sqlrec-core</artifactId>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -26,7 +26,7 @@
         <dependency>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-metastore</artifactId>
-            <version>3.1.2</version>
+            <version>${hive.version}</version>
         </dependency>
         <dependency>
             <groupId>org.sqlrec</groupId>
@@ -36,7 +36,7 @@
         </dependency>
         <dependency>
             <groupId>org.sqlrec</groupId>
-            <artifactId>sqlrec-config</artifactId>
+            <artifactId>sqlrec-common</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>

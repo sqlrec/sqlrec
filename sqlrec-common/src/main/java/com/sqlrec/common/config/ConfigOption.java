@@ -1,4 +1,4 @@
-package com.sqlrec.config;
+package com.sqlrec.common.config;
 
 public class ConfigOption<T> {
     public final String key;

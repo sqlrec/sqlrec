@@ -1,6 +1,6 @@
 package com.sqlrec.frontend;
 
-import com.sqlrec.config.SqlRecConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.frontend.service.TCLIServiceImpl;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.thrift.TProcessor;

@@ -1,10 +1,10 @@
 package com.sqlrec.connectors.redis.calcite;
 
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
-import com.sqlrec.schema.HmsTableFactory;
-import com.sqlrec.utils.HiveTableUtils;
+import com.sqlrec.common.schema.HmsTableFactory;
+import com.sqlrec.common.utils.HiveTableUtils;
 import org.apache.calcite.plan.RelOptRule;
 
 import java.util.Collections;

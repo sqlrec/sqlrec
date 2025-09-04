@@ -1,6 +1,6 @@
 package com.sqlrec.compiler;
 
-import com.sqlrec.schema.SqlRecTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.sql.parser.*;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;

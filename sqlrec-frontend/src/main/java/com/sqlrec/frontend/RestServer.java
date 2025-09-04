@@ -1,6 +1,6 @@
 package com.sqlrec.frontend;
 
-import com.sqlrec.config.SqlRecConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.frontend.RestService.HttpServerHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;

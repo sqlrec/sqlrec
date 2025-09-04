@@ -2,7 +2,7 @@ package com.sqlrec.connectors.redis.codec;
 
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTableFactory;
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;

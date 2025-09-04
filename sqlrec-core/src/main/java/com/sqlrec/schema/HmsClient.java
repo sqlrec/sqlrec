@@ -1,6 +1,6 @@
 package com.sqlrec.schema;
 
-import com.sqlrec.config.SqlRecConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;

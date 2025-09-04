@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;

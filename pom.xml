@@ -13,7 +13,7 @@
         <module>sqlrec-core</module>
         <module>sqlrec-connectors</module>
         <module>sqlrec-sql-parser</module>
-        <module>sqlrec-config</module>
+        <module>sqlrec-common</module>
     </modules>
 
     <properties>
@@ -22,6 +22,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <calcite.version>1.32.0</calcite.version>
         <flink.version>1.19.0</flink.version>
+        <hive.version>3.1.3</hive.version>
     </properties>
 
 </project>

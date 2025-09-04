@@ -3,7 +3,7 @@ package com.sqlrec.connectors.redis.codec;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;

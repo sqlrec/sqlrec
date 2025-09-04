@@ -2,7 +2,7 @@ package com.sqlrec.connectors.redis.flink;
 
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericRowData;

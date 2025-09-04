@@ -1,4 +1,4 @@
-package com.sqlrec.schema;
+package com.sqlrec.common.schema;
 
 import org.apache.calcite.schema.impl.AbstractTable;
 

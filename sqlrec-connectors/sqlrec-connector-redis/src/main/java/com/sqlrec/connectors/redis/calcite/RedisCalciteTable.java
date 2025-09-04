@@ -1,9 +1,9 @@
 package com.sqlrec.connectors.redis.calcite;
 
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
-import com.sqlrec.schema.SqlRecTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;

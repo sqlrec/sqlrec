@@ -1,6 +1,7 @@
 package com.sqlrec.schema;
 
-import com.sqlrec.utils.HiveTableUtils;
+import com.sqlrec.common.schema.HmsTableFactory;
+import com.sqlrec.common.utils.HiveTableUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;

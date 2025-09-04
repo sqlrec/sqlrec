@@ -62,7 +62,7 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         return options;
     }
 
-    public static <T> ConfigOption<T> toFlinkConfigOption(com.sqlrec.config.ConfigOption<T> configOption) {
+    public static <T> ConfigOption<T> toFlinkConfigOption(com.sqlrec.common.config.ConfigOption<T> configOption) {
         return ConfigOptions.key(configOption.getKey()).defaultValue(configOption.getDefaultValue());
     }
 }

@@ -1,4 +1,4 @@
-package com.sqlrec.config;
+package com.sqlrec.common.config;
 
 public class SqlRecConfigs {
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(

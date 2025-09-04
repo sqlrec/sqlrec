@@ -1,6 +1,6 @@
 package com.sqlrec.frontend.service;
 
-import com.sqlrec.config.SqlRecConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;

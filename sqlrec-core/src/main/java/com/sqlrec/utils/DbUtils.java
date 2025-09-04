@@ -1,6 +1,6 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.config.SqlRecConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;

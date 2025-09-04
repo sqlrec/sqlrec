@@ -5,7 +5,7 @@ import com.sqlrec.connectors.redis.client.RedisClusterWrapper;
 import com.sqlrec.connectors.redis.client.RedisWrapper;
 import com.sqlrec.connectors.redis.codec.AbstractCodec;
 import com.sqlrec.connectors.redis.codec.JsonCodec;
-import com.sqlrec.utils.FieldSchema;
+import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.RedisFuture;
