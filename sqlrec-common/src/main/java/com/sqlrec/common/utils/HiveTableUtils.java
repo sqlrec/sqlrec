@@ -1,9 +1,10 @@
 package com.sqlrec.common.utils;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.type.SqlTypeName;
+
+import java.util.*;
 
 public class HiveTableUtils {
     public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj){
@@ -74,5 +75,13 @@ public class HiveTableUtils {
             return "VARCHAR";
         }
         return hiveType;
+    }
+
+    public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
+        RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
+        for (FieldSchema fieldSchema : fieldSchemas) {
+            builder.add(fieldSchema.name, Objects.requireNonNull(SqlTypeName.get(fieldSchema.type.toUpperCase())));
+        }
+        return builder.build();
     }
 }

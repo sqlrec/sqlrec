@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.redis.calcite;
 
 import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
 import com.sqlrec.common.schema.SqlRecTable;
@@ -27,7 +28,6 @@ import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
@@ -80,11 +80,7 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
 
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
-        RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
-        for (FieldSchema fieldSchema : fieldSchemas) {
-            builder.add(fieldSchema.name, Objects.requireNonNull(SqlTypeName.get(fieldSchema.type.toUpperCase())));
-        }
-        return builder.build();
+        return HiveTableUtils.getRelDataType(typeFactory, fieldSchemas);
     }
 
     @Override

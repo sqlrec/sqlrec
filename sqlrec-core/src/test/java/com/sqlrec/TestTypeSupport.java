@@ -43,7 +43,7 @@ public class TestTypeSupport {
                 "select bigint_type + 1 from myTable",
                 "select double_type + 1 from myTable",
                 "select float_type + 1 from myTable",
-                "select varchar_type + '1' from myTable",
+                "select UPPER(varchar_type) from myTable",
                 "select boolean_type from myTable",
                 "select array_int_type from myTable",
                 "select array_varchar_type from myTable",
@@ -75,9 +75,9 @@ public class TestTypeSupport {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
             return Linq4j.asEnumerable(new Object[][]{
-                    {1, 1L, 1.0d, 1.0d, "1", true, "1", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)},
-                    {2, 2L, 2.0d, 2.0d, "2", false, "2", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d)},
-                    {3, 3L, 3.0d, 3.0d, "3", true, "3", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d)},
+                    {1, 1L, 1.0d, 1.0d, "1", true, "a", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)},
+                    {2, 2L, 2.0d, 2.0d, "2", false, "b", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d)},
+                    {3, 3L, 3.0d, 3.0d, "3", true, "c", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d)},
             });
         }
 
