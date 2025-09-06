@@ -87,6 +87,6 @@ SqlRec的表类型一般有4类，如下所示：
 - 支持create if not exists
 - 支持return为空
 - ~~独立schema模块~~
-- 表函数
+- ~~表函数~~
 - 异步调用
 - 性能优化、HMS访问优化
