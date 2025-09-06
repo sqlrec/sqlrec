@@ -12,6 +12,12 @@ public class HmsClientTest {
                 org.apache.hadoop.hive.metastore.api.Table tableObj = HmsClient.getTableObj(database, table);
                 System.out.println(tableObj);
             }
+            List<String> functions = HmsClient.getAllFunctions(database);
+            for (String function : functions) {
+                System.out.println(function);
+                org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(database, function);
+                System.out.println(functionObj);
+            }
         }
     }
 }

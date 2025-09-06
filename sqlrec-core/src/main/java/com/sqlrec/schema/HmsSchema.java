@@ -1,8 +1,12 @@
 package com.sqlrec.schema;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
@@ -17,6 +21,7 @@ public class HmsSchema extends AbstractSchema {
 
     private String databaseName;
     private Map<String, Table> tableMap = new ConcurrentHashMap<>();
+    private Map<String, Function> functionMap = new ConcurrentHashMap<>();
 
     private static CalciteSchema globalSchema;  // for test
 
@@ -97,5 +102,28 @@ public class HmsSchema extends AbstractSchema {
             }
         }
         return tableFactories;
+    }
+
+    @Override
+    protected Multimap<String, Function> getFunctionMultimap() {
+        try {
+            List<String> functions = HmsClient.getAllFunctions(databaseName);
+            for (String function : functions) {
+                if (functionMap.containsKey(function)) {
+                    continue;
+                }
+                org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(databaseName, function);
+                functionMap.put(function, SchemaUtils.createScalarFunction(functionObj.getClassName()));
+            }
+            functionMap.keySet().removeIf(function -> !functions.contains(function));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        Multimap<String, Function> functionMultimap = ArrayListMultimap.create();
+        functionMap.forEach((k, v) -> {
+            functionMultimap.put(k, v);
+        });
+        return functionMultimap;
     }
 }

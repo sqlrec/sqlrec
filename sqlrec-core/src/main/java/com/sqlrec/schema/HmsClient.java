@@ -45,4 +45,17 @@ public class HmsClient {
     ) throws TException {
         return client.getTable(database, table);
     }
+
+    // get all function of a database
+    public synchronized static List<String> getAllFunctions(String database) throws Exception {
+        return client.getFunctions(database, "*");
+    }
+
+    // get function obj
+    public synchronized static org.apache.hadoop.hive.metastore.api.Function getFunctionObj(
+            String database,
+            String function
+    ) throws TException {
+        return client.getFunction(database, function);
+    }
 }
