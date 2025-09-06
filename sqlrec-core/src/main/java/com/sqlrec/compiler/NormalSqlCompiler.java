@@ -24,21 +24,20 @@ import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Bindable;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
+import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
-import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.prepare.Prepare.THREAD_EXPAND;
@@ -118,12 +117,19 @@ public class NormalSqlCompiler {
     public static SqlValidator createSqlValidate(CalciteSchema schema, String defaultSchema) {
         CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
         SqlValidator validator = SqlValidatorUtil.newValidator(
-                Frameworks.newConfigBuilder().build().getOperatorTable(),
+                getOperatorTable(catalogReader),
                 catalogReader,
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT),
                 SqlValidator.Config.DEFAULT
         );
         return validator;
+    }
+
+    public static SqlOperatorTable getOperatorTable(CalciteCatalogReader catalogReader) {
+        final List<SqlOperatorTable> list = new ArrayList<>();
+        list.add(SqlStdOperatorTable.instance());
+        list.add(catalogReader);
+        return SqlOperatorTables.chain(list);
     }
 
     private static void addSqlRecRules(VolcanoPlanner planner) {
