@@ -1,12 +1,10 @@
 package com.sqlrec.frontend.service;
 
 import com.google.gson.Gson;
+import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
-import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.hive.service.rpc.thrift.*;
 
@@ -216,11 +214,7 @@ public class Utils {
         List<RelDataTypeField> fields = new ArrayList<>();
         int index = 0;
         for (String name : fieldName) {
-            fields.add(new RelDataTypeFieldImpl(
-                    name,
-                    index++,
-                    new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
-            ));
+            fields.add(DataTypeUtils.getRelDataTypeField(name, index++, SqlTypeName.VARCHAR));
         }
         return fields;
     }

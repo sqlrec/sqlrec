@@ -2,15 +2,14 @@ package com.sqlrec.compiler;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.common.schema.TableFunction;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
-import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.CacheTableBindable;
-import com.sqlrec.runtime.CallFunctionBindable;
-import com.sqlrec.runtime.FunctionBindable;
+import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.DbUtils;
+import com.sqlrec.utils.TableFunctionUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -60,11 +59,24 @@ public class CompileManager {
                 .stream()
                 .map(SqlIdentifier::getSimple)
                 .collect(Collectors.toList());
-        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName);
-        if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
-            throw new Exception("function input table not match");
+
+        TableFunction tableFunction = TableFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
+        if (tableFunction != null) {
+            if (inputTableList.size() != 1) {
+                throw new Exception("table function only support one table input for " + functionName);
+            }
+            return new TableFunctionBindable(tableFunction, inputTableList.get(0), schema);
         }
-        return new CallFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
+
+        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName);
+        if (sqlFunctionBindable != null) {
+            if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
+                throw new Exception("function input table not match");
+            }
+            return new CallFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
+        }
+
+        throw new Exception("function not find: " + functionName);
     }
 
     private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
@@ -101,7 +113,7 @@ public class CompileManager {
         }
         SqlFunction sqlFunction = DbUtils.getSqlFunction(functionName);
         if (sqlFunction == null) {
-            throw new RuntimeException("function not found: " + functionName);
+            return null;
         }
         List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
         FunctionBindable functionBindable = compileSqlFunction(functionName, sqlList);

@@ -1,13 +1,11 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.schema.CacheTable;
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
-import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
@@ -41,16 +39,8 @@ public class CacheTableBindable implements BindableInterface {
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return Arrays.asList(
-                new RelDataTypeFieldImpl(
-                        "table_name",
-                        0,
-                        new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR)
-                ),
-                new RelDataTypeFieldImpl(
-                        "count",
-                        1,
-                        new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.BIGINT)
-                )
+                DataTypeUtils.getRelDataTypeField("table_name", 0, SqlTypeName.VARCHAR),
+                DataTypeUtils.getRelDataTypeField("count", 1, SqlTypeName.BIGINT)
         );
     }
 

@@ -7,6 +7,7 @@ import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Function;
+import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
@@ -113,7 +114,10 @@ public class HmsSchema extends AbstractSchema {
                     continue;
                 }
                 org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(databaseName, function);
-                functionMap.put(function, SchemaUtils.createScalarFunction(functionObj.getClassName()));
+                ScalarFunction scalarFunction = SchemaUtils.createScalarFunction(functionObj.getClassName());
+                if (scalarFunction != null){
+                    functionMap.put(function, scalarFunction);
+                }
             }
             functionMap.keySet().removeIf(function -> !functions.contains(function));
         } catch (Exception e) {
@@ -121,9 +125,7 @@ public class HmsSchema extends AbstractSchema {
         }
 
         Multimap<String, Function> functionMultimap = ArrayListMultimap.create();
-        functionMap.forEach((k, v) -> {
-            functionMultimap.put(k, v);
-        });
+        functionMap.forEach(functionMultimap::put);
         return functionMultimap;
     }
 }

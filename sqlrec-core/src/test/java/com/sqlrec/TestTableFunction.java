@@ -1,5 +1,6 @@
 package com.sqlrec;
 
+import com.sqlrec.common.udf.table.ShuffleFunction;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -17,33 +18,24 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class TestSqlCompile {
+public class TestTableFunction {
     @Test
-    public void testSqlCompile() throws Exception {
+    public void testTableFunction() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
-                return Collections.singletonMap("myTable", new TestCalciteSql.MyTable());
+                return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
             }
         });
-
         HmsSchema.setGlobalSchema(schema);
-        TableFunctionUtils.registerTableFunction("default", "fun1", TestSqlCompile.class);  // avoid find function in hms
-
-        testSqlFunctionCompile(schema);
+        TableFunctionUtils.registerTableFunction("default", "shuffle", ShuffleFunction.class);
 
         List<String> sqlList = Arrays.asList(
-                "select * from myTable",
-                "cache table t0 as select 1 as a",
-                "select * from t0",
-                "cache table t1 as SELECT * FROM myTable",
-                "select * from t1",
-                "cache table t2 as SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME",
-                "select * from t2",
-                "call_sql_function fun1(t1)",
-                "cache table t3 as fun1(t1)",
-                "select * from t3"
+                "cache table t1 as select * from myTable",
+                "call_sql_function shuffle(t1)",
+                "cache table t2 as shuffle(t1)",
+                "select * from t2"
         );
 
         for (String sql : sqlList) {
@@ -59,15 +51,5 @@ public class TestSqlCompile {
                 }
             }
         }
-    }
-
-    public static void testSqlFunctionCompile(CalciteSchema schema) throws Exception {
-        List<String> sqlList = Arrays.asList(
-                "create sql function fun1",
-                "define input table input1(id int, name string)",
-                "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
-                "return t1"
-                );
-         CompileManager.compileSqlFunction("fun1", sqlList);
     }
 }

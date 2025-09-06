@@ -10,7 +10,7 @@ import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.schema.CacheTable;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.*;

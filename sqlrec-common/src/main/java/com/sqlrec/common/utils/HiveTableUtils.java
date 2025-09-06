@@ -76,12 +76,4 @@ public class HiveTableUtils {
         }
         return hiveType;
     }
-
-    public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
-        RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
-        for (FieldSchema fieldSchema : fieldSchemas) {
-            builder.add(fieldSchema.name, Objects.requireNonNull(SqlTypeName.get(fieldSchema.type.toUpperCase())));
-        }
-        return builder.build();
-    }
 }

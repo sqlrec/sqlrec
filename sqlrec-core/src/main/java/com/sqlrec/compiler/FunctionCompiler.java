@@ -1,16 +1,16 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
 import com.sqlrec.runtime.FunctionBindable;
-import com.sqlrec.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlReturn;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlTypeNameSpec;
@@ -160,21 +160,7 @@ public class FunctionCompiler {
     }
 
     private List<RelDataTypeField> getTableFieldsTypes(List<SqlIdentifier> columnList, List<SqlTypeNameSpec> columnTypeList) {
-        if (columnList.size() != columnTypeList.size()) {
-            throw new RuntimeException("column list size not equal to column type list size");
-        }
-
         SqlValidator validator = NormalSqlCompiler.createSqlValidate(schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
-        List<RelDataTypeField> relDataTypeFields = new ArrayList<>();
-        for (int i = 0; i < columnList.size(); i++) {
-            relDataTypeFields.add(
-                    new RelDataTypeFieldImpl(
-                            columnList.get(i).getSimple(),
-                            i,
-                            columnTypeList.get(i).deriveType(validator)
-                    )
-            );
-        }
-        return relDataTypeFields;
+        return DataTypeUtils.getRelDataTypeFields(columnList, columnTypeList, validator);
     }
 }

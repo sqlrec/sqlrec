@@ -3,7 +3,7 @@ package com.sqlrec.frontend.RestService;
 import com.google.gson.Gson;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.FunctionBindable;
-import com.sqlrec.schema.CacheTable;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -18,6 +18,9 @@ import java.util.Map;
 public class FunctionExecutor {
     public static String execute(String apiName, String requestData) throws Exception {
         FunctionBindable functionBindable = CompileManager.getApiBindSqlFunction(apiName);
+        if (functionBindable == null) {
+            throw new RuntimeException("cant find function for " + apiName);
+        }
         CalciteSchema schema = HmsSchema.getHmsCalciteSchema();
 
         Map<String, Object> params = new Gson().fromJson(requestData, Map.class);

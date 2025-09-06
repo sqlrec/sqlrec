@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.calcite;
 
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
@@ -80,7 +81,7 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
 
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
-        return HiveTableUtils.getRelDataType(typeFactory, fieldSchemas);
+        return DataTypeUtils.getRelDataType(typeFactory, fieldSchemas);
     }
 
     @Override
