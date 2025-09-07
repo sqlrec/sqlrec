@@ -44,8 +44,8 @@ public class FunctionCompiler {
         this.functionBindable = new FunctionBindable(
                 new ArrayList<>(),
                 new ArrayList<>(),
-                "",
-                new ArrayList<>()
+                null,
+                null
         );
         sqlList = new ArrayList<>();
     }
@@ -126,22 +126,23 @@ public class FunctionCompiler {
     private void compileFunctionBody(SqlNode flinkSqlNode) throws Exception {
         if (flinkSqlNode instanceof SqlReturn) {
             SqlReturn sqlReturn = (SqlReturn) flinkSqlNode;
-            String returnTableName = sqlReturn.getTableName().getSimple();
+            if (sqlReturn.getTableName() != null) {
+                String returnTableName = sqlReturn.getTableName().getSimple();
+                CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
+                if (tableEntry == null) {
+                    throw new Exception("return table not found: " + returnTableName);
+                }
 
-            CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
-            if (tableEntry == null) {
-                throw new Exception("return table not found: " + returnTableName);
+                CacheTable table;
+                if (tableEntry.getTable() instanceof CacheTable) {
+                    table = (CacheTable) tableEntry.getTable();
+                } else {
+                    throw new Exception("return table is not cache table");
+                }
+
+                functionBindable.setReturnTableName(returnTableName);
+                functionBindable.setReturnDataFields(table.getDataFields());
             }
-
-            CacheTable table;
-            if (tableEntry.getTable() instanceof CacheTable) {
-                table = (CacheTable) tableEntry.getTable();
-            } else {
-                throw new Exception("return table is not cache table");
-            }
-
-            functionBindable.setReturnTableName(returnTableName);
-            functionBindable.setReturnDataFields(table.getDataFields());
 
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {

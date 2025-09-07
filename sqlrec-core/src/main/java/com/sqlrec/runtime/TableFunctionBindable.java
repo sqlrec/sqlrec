@@ -31,6 +31,9 @@ public class TableFunctionBindable implements BindableInterface {
                 cacheTable.getDataFields()
         );
         CacheTable outputTable = tableFunction.eval(tmpTable);
+        if (outputTable == null) {
+            return null;
+        }
         return outputTable.getDataFields();
     }
 
@@ -48,6 +51,9 @@ public class TableFunctionBindable implements BindableInterface {
     public Enumerable<Object[]> bind(CalciteSchema schema) {
         CacheTable cacheTable = getCacheTable(inputTableName, schema);
         CacheTable outputTable = tableFunction.eval(cacheTable);
+        if (outputTable == null) {
+            return null;
+        }
         return outputTable.scan(null);
     }
 

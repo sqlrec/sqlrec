@@ -94,6 +94,9 @@ public class SqlProcessor {
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
             BindableInterface bindableInterface = CompileManager.compileSql(sqlNode, schema, defaultSchema);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema);
+            if (enumerable == null) {
+                return Utils.convertMsgToResult("sql run success without output", "msg");
+            }
             List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
             return Utils.convertEnumerableToTRowSet(enumerable, fields);
         }

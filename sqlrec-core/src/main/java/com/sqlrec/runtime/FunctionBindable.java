@@ -29,6 +29,11 @@ public class FunctionBindable implements BindableInterface {
         for (BindableInterface bindable : bindableList) {
             bindable.bind(schema);
         }
+
+        if (returnTableName == null) {
+            return null;
+        }
+
         CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
         if (tableEntry == null) {
             throw new RuntimeException("function return table not exist");

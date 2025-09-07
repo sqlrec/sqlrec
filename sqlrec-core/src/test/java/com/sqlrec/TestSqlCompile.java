@@ -30,6 +30,7 @@ public class TestSqlCompile {
 
         HmsSchema.setGlobalSchema(schema);
         TableFunctionUtils.registerTableFunction("default", "fun1", TestSqlCompile.class);  // avoid find function in hms
+        TableFunctionUtils.registerTableFunction("default", "fun2", TestSqlCompile.class);  // avoid find function in hms
 
         testSqlFunctionCompile(schema);
 
@@ -43,7 +44,8 @@ public class TestSqlCompile {
                 "select * from t2",
                 "call fun1(t1)",
                 "cache table t3 as fun1(t1)",
-                "select * from t3"
+                "select * from t3",
+                "call fun2(t1)"
         );
 
         for (String sql : sqlList) {
@@ -57,6 +59,8 @@ public class TestSqlCompile {
                 for (Object[] result : results) {
                     System.out.println(java.util.Arrays.toString(result));
                 }
+            } else {
+                System.out.println("no result");
             }
         }
     }
@@ -69,5 +73,13 @@ public class TestSqlCompile {
                 "return t1"
                 );
          CompileManager.compileSqlFunction("fun1", sqlList);
+
+        List<String> sqlList2 = Arrays.asList(
+                "create sql function fun2",
+                "define input table input1(id int, name string)",
+                "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
+                "return"
+        );
+        CompileManager.compileSqlFunction("fun2", sqlList2);
     }
 }

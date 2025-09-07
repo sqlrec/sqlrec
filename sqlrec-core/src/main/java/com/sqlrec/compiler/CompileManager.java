@@ -87,6 +87,9 @@ public class CompileManager {
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
         if (callSqlFunction != null) {
             BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
+            if (bindableInterface.getReturnDataFields() == null) {
+                throw new Exception("function without return table is not cacheable: " + callSqlFunction.getFuncName());
+            }
             return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 
