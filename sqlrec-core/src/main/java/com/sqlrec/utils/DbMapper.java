@@ -19,6 +19,9 @@ public interface DbMapper {
     @Insert("INSERT INTO sql_function (name, sql_list) VALUES (#{name}, #{sqlList})")
     void insertSqlFunction(SqlFunction sqlFunction);
 
+    @Insert("INSERT INTO sql_function (name, sql_list) VALUES (#{name}, #{sqlList}) ON DUPLICATE KEY UPDATE sql_list = #{sqlList}")
+    void upsertSqlFunction(SqlFunction sqlFunction);
+
     @Update("UPDATE sql_function SET sql_list = #{sqlList} WHERE name = #{name}")
     void updateSqlFunction(SqlFunction sqlFunction);
 
@@ -33,6 +36,9 @@ public interface DbMapper {
 
     @Insert("INSERT INTO sql_api (name, function_name) VALUES (#{name}, #{functionName})")
     void insertSqlApi(SqlApi sqlApi);
+
+    @Insert("INSERT INTO sql_api (name, function_name) VALUES (#{name}, #{functionName}) ON DUPLICATE KEY UPDATE function_name = #{functionName}")
+    void upsertSqlApi(SqlApi sqlApi);
 
     @Update("UPDATE sql_api SET function_name = #{functionName} WHERE name = #{name}")
     void updateSqlApi(SqlApi sqlApi);

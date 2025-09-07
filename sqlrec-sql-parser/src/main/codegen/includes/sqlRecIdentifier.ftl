@@ -92,7 +92,7 @@ void AddDefineInputTable(List<SqlIdentifier> columnList, List<SqlTypeNameSpec> c
     }
 }
 
-SqlCreateApi SqlCreateApi() :
+SqlCall SqlCreateResource() :
 {
     SqlIdentifier apiName = null;
     SqlIdentifier funcName = null;
@@ -100,30 +100,25 @@ SqlCreateApi SqlCreateApi() :
 }
 {
     <CREATE>
-    orReplace = OrReplaceOpt()
-    <API>
-    apiName = SimpleIdentifier()
-    <WITH>
-    funcName = SimpleIdentifier()
-    {
-        return new SqlCreateApi(getPos(), apiName, funcName, orReplace);
-    }
-}
-
-SqlCreateSqlFunction SqlCreateSqlFunction() :
-{
-    SqlIdentifier funcName = null;
-    boolean orReplace = false;
-}
-{
-    <CREATE>
-    orReplace = OrReplaceOpt()
-    <SQL>
-    <FUNCTION>
-    funcName = SimpleIdentifier()
-    {
-        return new SqlCreateSqlFunction(getPos(), funcName, orReplace);
-    }
+    [
+        <OR> <REPLACE> { orReplace = true; }
+    ]
+    (
+        <API>
+        apiName = SimpleIdentifier()
+        <WITH>
+        funcName = SimpleIdentifier()
+        {
+            return new SqlCreateApi(getPos(), apiName, funcName, orReplace);
+        }
+    |
+        <SQL>
+        <FUNCTION>
+        funcName = SimpleIdentifier()
+        {
+            return new SqlCreateSqlFunction(getPos(), funcName, orReplace);
+        }
+    )
 }
 
 SqlReturn SqlReturn() :
@@ -138,18 +133,6 @@ SqlReturn SqlReturn() :
     {
         return new SqlReturn(getPos(), tableName);
     }
-}
-
-boolean OrReplaceOpt() :
-{
-}
-{
-    (
-        LOOKAHEAD(2)
-        <OR> <REPLACE> { return true; }
-    |
-        { return false; }
-    )
 }
 
 SqlShowSqlFunction SqlShowSqlFunction() :

@@ -76,6 +76,10 @@ public class DbUtils {
         executeVoid(dbMapper -> dbMapper.insertSqlFunction(sqlFunction));
     }
 
+    public static void upsertSqlFunction(SqlFunction sqlFunction) {
+        executeVoid(dbMapper -> dbMapper.upsertSqlFunction(sqlFunction));
+    }
+
     public static void updateSqlFunction(SqlFunction sqlFunction) {
         executeVoid(dbMapper -> dbMapper.updateSqlFunction(sqlFunction));
     }
@@ -94,6 +98,10 @@ public class DbUtils {
 
     public static void insertSqlApi(SqlApi sqlApi) {
         executeVoid(dbMapper -> dbMapper.insertSqlApi(sqlApi));
+    }
+
+    public static void upsertSqlApi(SqlApi sqlApi) {
+        executeVoid(dbMapper -> dbMapper.upsertSqlApi(sqlApi));
     }
 
     public static void updateSqlApi(SqlApi sqlApi) {

@@ -2,6 +2,7 @@ package com.sqlrec.utils;
 
 import com.sqlrec.common.schema.TableFunction;
 import com.sqlrec.schema.HmsClient;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,11 +13,15 @@ public class TableFunctionUtils {
     public static TableFunction getTableFunction(String db, String funName) throws Exception {
         Class<?> clazz = tableFunctionClassMap.get(db + "." + funName);
         if (clazz == null) {
-            org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
-            if (functionObj == null) {
+            try {
+                org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
+                if (functionObj == null) {
+                    return null;
+                }
+                clazz = Class.forName(functionObj.getClassName());
+            } catch (NoSuchObjectException e) {
                 return null;
             }
-            clazz = Class.forName(functionObj.getClassName());
         }
 
         if (!TableFunction.class.isAssignableFrom(clazz)) {

@@ -19,15 +19,17 @@ public class TestCalciteSql {
                 .withParserFactory(FlinkSqlParserImpl.FACTORY);
 
         List<String> sqlList = Arrays.asList(
+                "create sql function fun1",
+                "create or replace sql function fun1",
+                "create api api1 with fun1",
+                "create or replace api api1 with fun1",
                 "show sql functions",
                 "show apis",
                 "desc sql function fun1",
                 "desc api api1",
-                "create api api1 with fun1",
                 "cache table t2 as select * from t1 where id=1",
                 "cache table t2 as fun1(t1)",
                 "call fun1(t1)",
-                "create sql function fun1",
                 "define input table t1(id int, name string)",
                 "return t1",
                 "return"

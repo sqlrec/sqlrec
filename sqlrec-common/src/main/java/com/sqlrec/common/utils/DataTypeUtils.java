@@ -49,4 +49,21 @@ public class DataTypeUtils {
         }
         return relDataTypeFields;
     }
+
+    public static void checkTableSchemaCompatible(
+            List<RelDataTypeField> desiredFields,
+            List<RelDataTypeField> givenFields
+    ) {
+        if (desiredFields.size() > givenFields.size()) {
+            throw new RuntimeException("desired fields size greater than given fields size");
+        }
+
+        for (int i = 0; i < desiredFields.size(); i++) {
+            RelDataTypeField desiredField = desiredFields.get(i);
+            RelDataTypeField givenField = givenFields.get(i);
+            if (!desiredField.getName().equalsIgnoreCase(givenField.getName())) {
+                throw new RuntimeException("desired field name not equal to given field name: " + desiredField.getName() + " != " + givenField.getName());
+            }
+        }
+    }
 }

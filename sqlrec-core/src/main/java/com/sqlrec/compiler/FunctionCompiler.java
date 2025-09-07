@@ -163,4 +163,8 @@ public class FunctionCompiler {
         SqlValidator validator = NormalSqlCompiler.createSqlValidate(schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
         return DataTypeUtils.getRelDataTypeFields(columnList, columnTypeList, validator);
     }
+
+    public boolean isOrReplace() {
+        return isOrReplace;
+    }
 }

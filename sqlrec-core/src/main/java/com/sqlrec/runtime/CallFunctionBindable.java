@@ -1,5 +1,7 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.schema.HmsSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -32,7 +34,13 @@ public class CallFunctionBindable implements BindableInterface {
             }
             Table inputTableObj = inputTableEntry.getTable();
 
-            // todo check table schema
+            if (inputTableObj instanceof CacheTable) {
+                CacheTable cacheTable = (CacheTable) inputTableObj;
+                List<RelDataTypeField> desiredFields = tablePlaceholders.get(i).getValue();
+                List<RelDataTypeField> givenFields = cacheTable.getDataFields();
+                DataTypeUtils.checkTableSchemaCompatible(desiredFields, givenFields);
+            }
+
             String placeholderTableName = tablePlaceholders.get(i).getKey();
             tmpSchema.add(placeholderTableName, inputTableObj);
         }
