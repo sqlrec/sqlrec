@@ -60,6 +60,7 @@ public class CompileManager {
                 .map(SqlIdentifier::getSimple)
                 .collect(Collectors.toList());
 
+        // todo check is function name ambiguous
         TableFunction tableFunction = TableFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
         if (tableFunction != null) {
             if (inputTableList.size() != 1) {

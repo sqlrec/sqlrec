@@ -26,10 +26,10 @@ SqlRec使用的sql语法基于flinksql扩展而来，同时元数据复用HMS，
   cache table t2 as select * from t1 where id=1
   return t2;
   ```
-- sql函数函数调用，支持在cache语句或call_sql_function语句中使用
+- sql函数函数调用，支持在cache语句或call语句中使用
   ```
   cache table t3 as f1(t2);
-  call_sql_function f1(t2);
+  call f1(t2);
   ```
 - API接口绑定，将sql函数绑定到某个http接口
   ```

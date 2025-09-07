@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class SqlCallSqlFunction extends SqlCall {
-    public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CALL_SQL_FUNCTION", SqlKind.OTHER);
+    public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CALL", SqlKind.OTHER);
     private SqlIdentifier funcName;
     private List<SqlIdentifier> inputTableList;
 
@@ -29,7 +29,7 @@ public class SqlCallSqlFunction extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("call_sql_function");
+        writer.keyword("call");
         funcName.unparse(writer, leftPrec, rightPrec);
         writer.literal("(");
         for (int i = 0; i < inputTableList.size(); i++) {

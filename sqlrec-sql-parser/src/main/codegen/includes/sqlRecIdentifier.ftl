@@ -12,6 +12,7 @@ SqlCache SqlCache() :
     (
         select = SqlSelect()
     |
+        [<CALL>]
         callSqlFunction = GetCallSqlFunction()
     )
     {
@@ -24,7 +25,7 @@ SqlCallSqlFunction SqlCallSqlFunction() :
     SqlCallSqlFunction callSqlFunction = null;
 }
 {
-    <CALL_SQL_FUNCTION>
+    <CALL>
     callSqlFunction = GetCallSqlFunction()
     {
         return callSqlFunction;

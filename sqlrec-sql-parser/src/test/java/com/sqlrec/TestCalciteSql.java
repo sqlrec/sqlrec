@@ -26,7 +26,7 @@ public class TestCalciteSql {
                 "create api api1 with fun1",
                 "cache table t2 as select * from t1 where id=1",
                 "cache table t2 as fun1(t1)",
-                "call_sql_function fun1(t1)",
+                "call fun1(t1)",
                 "create sql function fun1",
                 "define input table t1(id int, name string)",
                 "return t1",

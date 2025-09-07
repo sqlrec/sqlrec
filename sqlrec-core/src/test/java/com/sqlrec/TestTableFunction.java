@@ -33,7 +33,7 @@ public class TestTableFunction {
 
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",
-                "call_sql_function shuffle(t1)",
+                "call shuffle(t1)",
                 "cache table t2 as shuffle(t1)",
                 "select * from t2"
         );
