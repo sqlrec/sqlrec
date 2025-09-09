@@ -68,6 +68,10 @@ public class SqlProcessor {
     }
 
     private SqlProcessResult executeSql(String sql) throws Exception {
+        if (isSetStatement(sql)) {
+            return null;
+        }
+
         sql = preProcessSql(sql);
         SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
 
@@ -228,6 +232,10 @@ public class SqlProcessor {
         }
 
         return null;
+    }
+
+    public static boolean isSetStatement(String sql) {
+        return sql.trim().toLowerCase().startsWith("set ");
     }
 
     public static String preProcessSql(String sql) {
