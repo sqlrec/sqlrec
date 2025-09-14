@@ -1,13 +1,14 @@
 package com.sqlrec.common.utils;
 
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.commons.lang3.StringUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class HiveTableUtils {
-    public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj){
+    public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> tableProperties = tableObj.getParameters();
         if (tableProperties == null) {
             return null;
@@ -18,7 +19,7 @@ public class HiveTableUtils {
     public static List<FieldSchema> parse(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         List<FieldSchema> fieldSchemaList = new ArrayList<>();
         List<org.apache.hadoop.hive.metastore.api.FieldSchema> fieldSchemas = tableObj.getSd().getCols();
-        if (fieldSchemas!=null && !fieldSchemas.isEmpty()){
+        if (fieldSchemas != null && !fieldSchemas.isEmpty()) {
             for (org.apache.hadoop.hive.metastore.api.FieldSchema fieldSchema : fieldSchemas) {
                 fieldSchemaList.add(new FieldSchema(fieldSchema.getName(), fieldSchema.getType()));
             }
@@ -28,10 +29,15 @@ public class HiveTableUtils {
                 fieldSchemaList.add(new FieldSchema(entry.getKey(), entry.getValue()));
             }
         }
+
+        if (fieldSchemaList.isEmpty()) {
+            throw new IllegalArgumentException("Table " + tableObj.getTableName() + " has no columns");
+        }
+
         return fieldSchemaList;
     }
 
-    public static Map<String, String> getFlinkTableOptions(org.apache.hadoop.hive.metastore.api.Table tableObj){
+    public static Map<String, String> getFlinkTableOptions(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> flinkTableOptions = new LinkedHashMap<>();
         Map<String, String> tableProperties = tableObj.getParameters();
 
@@ -46,7 +52,7 @@ public class HiveTableUtils {
         return flinkTableOptions;
     }
 
-    public static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj){
+    public static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> flinkTableColumns = new LinkedHashMap<>();
         Map<String, String> tableProperties = tableObj.getParameters();
 
@@ -75,5 +81,26 @@ public class HiveTableUtils {
             return "VARCHAR";
         }
         return hiveType;
+    }
+
+    public static String getTablePrimaryKey(org.apache.hadoop.hive.metastore.api.Table tableObj) {
+        Map<String, String> tableProperties = tableObj.getParameters();
+        String primaryKey = tableProperties.get("flink.schema.primary-key.columns");
+        if (StringUtils.isEmpty(primaryKey)) {
+            throw new IllegalArgumentException("Table " + tableObj.getTableName() + " has no primary key");
+        }
+        if (primaryKey.contains(",")) {
+            throw new IllegalArgumentException("Table " + tableObj.getTableName() + " primary key must be single column");
+        }
+        return primaryKey;
+    }
+
+    public static int getTablePrimaryKeyIndex(List<FieldSchema> fieldSchemas, String primaryKey) {
+        for (int i = 0; i < fieldSchemas.size(); i++) {
+            if (fieldSchemas.get(i).name.equalsIgnoreCase(primaryKey)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("Table primary key " + primaryKey + " not found");
     }
 }

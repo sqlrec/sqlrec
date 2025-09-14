@@ -17,7 +17,6 @@ import java.util.List;
 public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
     private RedisConfig redisConfig;
     private ResolvedSchema tableSchema;
-    private List<FieldSchema> fieldSchemas;
     List<DataType> dataTypes;
 
     private RedisHandler redisHandler;
@@ -26,13 +25,12 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
         this.redisConfig = redisConfig;
         this.tableSchema = tableSchema;
         dataTypes = tableSchema.getColumnDataTypes();
-        fieldSchemas = RedisLookupTableFunction.parse(tableSchema);
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        redisHandler = new RedisHandler(redisConfig, fieldSchemas);
+        redisHandler = new RedisHandler(redisConfig);
         redisHandler.open();
     }
 

@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.redis.flink;
 
+import com.sqlrec.common.utils.FlinkSchemaUtils;
+import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -21,11 +23,8 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         helper.validate();
 
-        Map<String, String> options = context.getCatalogTable().getOptions();
-        ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
-        RedisConfig redisConfig = RedisOptions.getRedisConfig(options);
-
-        return new RedisDynamicTableSink(redisConfig, tableSchema);
+        RedisConfig redisConfig = getRedisConfig(context);
+        return new RedisDynamicTableSink(redisConfig, context.getCatalogTable().getResolvedSchema());
     }
 
     @Override
@@ -33,11 +32,22 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         helper.validate();
 
+        RedisConfig redisConfig = getRedisConfig(context);
+        return new RedisDynamicTableSource(redisConfig, context.getCatalogTable().getResolvedSchema());
+    }
+
+    private RedisConfig getRedisConfig(Context context) {
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         RedisConfig redisConfig = RedisOptions.getRedisConfig(options);
-
-        return new RedisDynamicTableSource(redisConfig, tableSchema);
+        redisConfig.tableName = context.getObjectIdentifier().getObjectName();
+        redisConfig.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(tableSchema);
+        redisConfig.primaryKey = FlinkSchemaUtils.getPrimaryKey(tableSchema);
+        redisConfig.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
+                redisConfig.fieldSchemas,
+                redisConfig.primaryKey
+        );
+        return redisConfig;
     }
 
     @Override

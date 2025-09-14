@@ -12,4 +12,8 @@ public abstract class SqlRecTable extends AbstractTable {
     }
 
     public abstract SqlRecTableType getSqlRecTableType();
+
+    public int getPrimaryKeyIndex() {
+        throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
+    }
 }

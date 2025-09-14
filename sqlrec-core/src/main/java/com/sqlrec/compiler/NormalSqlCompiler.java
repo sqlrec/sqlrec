@@ -1,5 +1,6 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.rules.RuleManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.schema.HmsSchema;
@@ -62,13 +63,7 @@ public class NormalSqlCompiler {
         SqlNode validatedSqlNode = validator.validate(sqlNode);
 
         // Convert the SQL query to a relational expression
-        VolcanoPlanner planner = new VolcanoPlanner();
-        planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-        addSqlRecRules(planner);
-        if (CalciteSystemProperty.ENABLE_COLLATION_TRAIT.value()) {
-            planner.addRelTraitDef(RelCollationTraitDef.INSTANCE);
-        }
-        RelOptUtil.registerDefaultRules(planner, false, true);
+        VolcanoPlanner planner = RuleManager.createPlanner();
         RelOptCluster cluster = RelOptCluster.create(planner, new RexBuilder(new JavaTypeFactoryImpl()));
         final SqlToRelConverter.Config config =
                 SqlToRelConverter.config()
@@ -88,12 +83,12 @@ public class NormalSqlCompiler {
         );
 
         RelRoot root = converter.convertQuery(validatedSqlNode, false, true);
-//        System.out.println(RelOptUtil.toString(root.rel));
+        System.out.println(RelOptUtil.toString(root.rel));
 
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
         Program program = Programs.standard();
         final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
-//        System.out.println(RelOptUtil.toString(bestExp));
+        System.out.println(RelOptUtil.toString(bestExp));
 
         Map<String, Object> parameters = new HashMap<>();
         Bindable bindable = EnumerableInterpretable.toBindable(
@@ -130,12 +125,6 @@ public class NormalSqlCompiler {
         list.add(SqlStdOperatorTable.instance());
         list.add(catalogReader);
         return SqlOperatorTables.chain(list);
-    }
-
-    private static void addSqlRecRules(VolcanoPlanner planner) {
-        HmsSchema.getTableFactorieMap()
-                .values()
-                .forEach(tableFactory -> tableFactory.getRules().forEach(planner::addRule));
     }
 
     private static RelTraitSet getDesiredRootTraitSet(RelRoot root) {

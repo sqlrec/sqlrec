@@ -18,6 +18,7 @@ public class JsonCodecTest {
         List<FieldSchema> fieldSchemas = new ArrayList<>();
         fieldSchemas.add(new FieldSchema("name", "string"));
         fieldSchemas.add(new FieldSchema("age", "int"));
+        fieldSchemas.add(new FieldSchema("score", "double"));
         jsonCodec.init(fieldSchemas);
 
         Object[] objects = new Object[3];

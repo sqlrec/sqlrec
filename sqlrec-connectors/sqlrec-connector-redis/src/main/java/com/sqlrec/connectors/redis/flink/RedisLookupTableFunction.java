@@ -18,20 +18,17 @@ import java.util.concurrent.CompletableFuture;
 public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
     private RedisConfig redisConfig;
     private ResolvedSchema tableSchema;
-    private List<FieldSchema> fieldSchemas;
-
     private RedisHandler redisHandler;
 
     public RedisLookupTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
         this.redisConfig = redisConfig;
         this.tableSchema = tableSchema;
-        fieldSchemas = parse(tableSchema);
     }
 
     @Override
     public void open(FunctionContext context) throws Exception {
         super.open(context);
-        redisHandler = new RedisHandler(redisConfig, fieldSchemas);
+        redisHandler = new RedisHandler(redisConfig);
         redisHandler.open();
     }
 
@@ -49,8 +46,8 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
                 result -> {
                     List<GenericRowData> rows = new ArrayList<>();
                     for (Object[] objects : result) {
-                        GenericRowData rowData = new GenericRowData(fieldSchemas.size());
-                        for (int i = 0; i < fieldSchemas.size(); i++) {
+                        GenericRowData rowData = new GenericRowData(redisConfig.fieldSchemas.size());
+                        for (int i = 0; i < redisConfig.fieldSchemas.size(); i++) {
                             rowData.setField(i, objects[i]);
                         }
                         rows.add(rowData);
@@ -58,13 +55,5 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
                     resultFuture.complete(rows);
                 }
         );
-    }
-
-    public static List<FieldSchema> parse(ResolvedSchema tableSchema) {
-        List<FieldSchema> fieldSchemas = new ArrayList<>();
-        for (Column col : tableSchema.getColumns()) {
-            fieldSchemas.add(new FieldSchema(col.getName(), col.getDataType().getLogicalType().getTypeRoot().name()));
-        }
-        return fieldSchemas;
     }
 }

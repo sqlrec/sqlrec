@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.codec;
 
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTableFactory;
 import com.sqlrec.common.utils.FieldSchema;
@@ -60,10 +61,10 @@ public class TestRedisCalciteSql {
                 .simplify();
     }
 
-    public static class MyTable extends AbstractTable implements FilterableTable {
+    public static class MyTable extends SqlRecTable implements ScannableTable {
 
         @Override
-        public @Nullable Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+        public @Nullable Enumerable<Object[]> scan(DataContext root) {
             return Linq4j.asEnumerable(new Object[][]{
                     {1, "Alice"},
                     {2, "Bob"},
@@ -77,6 +78,11 @@ public class TestRedisCalciteSql {
                     .add("ID", SqlTypeName.INTEGER)
                     .add("NAME", SqlTypeName.VARCHAR, 20)
                     .build();
+        }
+
+        @Override
+        public SqlRecTableType getSqlRecTableType() {
+            return SqlRecTableType.MEMORY;
         }
 
 //        @Override
@@ -112,12 +118,16 @@ public class TestRedisCalciteSql {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url ="redis://127.0.0.1:6379/0";
+        redisConfig.url ="redis://127.0.0.1:32379/0";
         redisConfig.redisMode="single";
         redisConfig.dataStructure="string";
         redisConfig.ttl = 10000;
+        redisConfig.tableName = "t1";
+        redisConfig.fieldSchemas = fieldSchemas;
+        redisConfig.primaryKey = "ID";
+        redisConfig.primaryKeyIndex = 0;
 
-        return new RedisCalciteTable(redisConfig, fieldSchemas);
+        return new RedisCalciteTable(redisConfig);
     }
 
     public static void main(String[] args) throws SqlParseException {
@@ -140,12 +150,12 @@ public class TestRedisCalciteSql {
                 .build();
 
         // SQL query to parse
-//        String sql = "DELETE FROM t1 where ID = 1";
+//        String sql = "DELETE FROM t2 where ID = 1";
 //        String sql = "insert into t1 (ID, NAME, CNT) values (1, 'Alice2', 1)";
-        String sql = "update t1 set NAME = 'Alice3', CNT = CNT + 1 where ID = 1";
+//        String sql = "update t1 set NAME = 'Alice3', CNT = CNT + 1 where ID = 1";
 //        String sql = "update t1 set ID = ID + 1, NAME = 'Alice3' where ID = 1";
 //        String sql = "delete from t1 where ID = 1";
-//        String sql = "select * from t1 where ID = 1";
+        String sql = "select * from (select * from t1 where ID = 1 and NAME = 'Alice2') tt where cnt > 1";
 
         // Parse the SQL query
         SqlParser parser = SqlParser.create(sql, parserConfig);

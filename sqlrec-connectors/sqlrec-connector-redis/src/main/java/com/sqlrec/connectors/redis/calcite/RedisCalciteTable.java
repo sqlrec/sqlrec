@@ -36,13 +36,11 @@ import java.util.*;
 
 public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, FilterableTable {
     private RedisConfig redisConfig;
-    private List<FieldSchema> fieldSchemas;
     private RedisHandler redisHandler;
 
-    public RedisCalciteTable(RedisConfig redisConfig, List<FieldSchema> fieldSchemas) {
+    public RedisCalciteTable(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;
-        this.fieldSchemas = fieldSchemas;
-        redisHandler = new RedisHandler(redisConfig, fieldSchemas);
+        redisHandler = new RedisHandler(redisConfig);
         redisHandler.open();
     }
 
@@ -62,8 +60,8 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
         }
 
         int index = ((RexInputRef) left).getIndex();
-        if (index != 0) {
-            throw new RuntimeException("Redis Calcite Table only support EQUALS filter with index 0");
+        if (index != getPrimaryKeyIndex()) {
+            throw new RuntimeException("Redis Calcite Table only support EQUALS filter with primary key");
         }
 
         final RexNode right = call.getOperands().get(1);
@@ -81,7 +79,7 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
 
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
-        return DataTypeUtils.getRelDataType(typeFactory, fieldSchemas);
+        return DataTypeUtils.getRelDataType(typeFactory, redisConfig.fieldSchemas);
     }
 
     @Override
@@ -114,6 +112,11 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
     @Override
     public SqlRecTableType getSqlRecTableType() {
         return SqlRecTableType.KV;
+    }
+
+    @Override
+    public int getPrimaryKeyIndex() {
+        return redisConfig.primaryKeyIndex;
     }
 
     public static class RedisCollection implements Collection<Object[]> {
@@ -164,7 +167,7 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
         @Override
         public boolean remove(Object o) {
             if (!(o instanceof Object[])) {
-                return false;
+                throw new RuntimeException("Redis Collection only support Object[]");
             }
             size += 1;
             redisHandler.delete((Object[]) o);

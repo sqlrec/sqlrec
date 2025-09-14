@@ -20,12 +20,10 @@ public class RedisHandler {
     AbstractRedisWrapper redisClient;
 
     private RedisConfig redisConfig;
-    private List<FieldSchema> fieldSchemas;
     AbstractCodec codec;
 
-    public RedisHandler(RedisConfig redisConfig, List<FieldSchema> fieldSchemas) {
+    public RedisHandler(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;
-        this.fieldSchemas = fieldSchemas;
     }
 
     public void open() {
@@ -36,7 +34,7 @@ public class RedisHandler {
         }
         redisClient.open(redisConfig.url);
         codec = new JsonCodec();
-        codec.init(fieldSchemas);
+        codec.init(redisConfig.fieldSchemas);
     }
 
     public void close() {
@@ -91,12 +89,11 @@ public class RedisHandler {
     }
 
     private byte[] getKey(Object[] data) {
-        return getKeyBytes(data[0].toString());
+        return getKeyBytes(data[redisConfig.primaryKeyIndex].toString());
     }
 
     private byte[] getKeyBytes(String rowKey) {
-        return rowKey.getBytes(StandardCharsets.UTF_8);
+        String finalRowKey = redisConfig.tableName + ":" + rowKey;
+        return finalRowKey.getBytes(StandardCharsets.UTF_8);
     }
-
-
 }
