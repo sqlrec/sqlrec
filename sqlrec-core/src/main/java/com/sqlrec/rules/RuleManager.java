@@ -1,7 +1,9 @@
 package com.sqlrec.rules;
 
 import com.sqlrec.schema.HmsSchema;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.config.CalciteSystemProperty;
+import org.apache.calcite.interpreter.Bindables;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
@@ -13,6 +15,10 @@ public class RuleManager {
             SqlRecFilterTableScanRule.Config.DEFAULT.toRule();
     public static final SqlRecFilterTableScanRule FILTER_INTERPRETER_SCAN =
             SqlRecFilterTableScanRule.Config.INTERPRETER.toRule();
+    public static final SqlRecFilterIntoJoinRule FILTER_INTO_JOIN =
+            SqlRecFilterIntoJoinRule.SqlRecFilterIntoJoinRuleConfig.DEFAULT.toRule();
+    public static final SqlRecJoinRule SQL_REC_JOIN_RULE =
+            SqlRecJoinRule.DEFAULT_CONFIG.toRule(SqlRecJoinRule.class);
 
     public static VolcanoPlanner createPlanner() {
         VolcanoPlanner planner = new VolcanoPlanner();
@@ -32,6 +38,15 @@ public class RuleManager {
 
         planner.removeRule(CoreRules.FILTER_INTERPRETER_SCAN);
         planner.addRule(FILTER_INTERPRETER_SCAN);
+
+        planner.removeRule(CoreRules.FILTER_INTO_JOIN);
+        planner.addRule(FILTER_INTO_JOIN);
+
+        planner.removeRule(Bindables.BINDABLE_JOIN_RULE);
+        planner.addRule(SQL_REC_JOIN_RULE);
+
+        planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+        planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
 
         HmsSchema.getTableFactorieMap()
                 .values()

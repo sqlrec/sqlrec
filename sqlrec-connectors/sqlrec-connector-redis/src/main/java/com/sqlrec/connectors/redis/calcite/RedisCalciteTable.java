@@ -77,6 +77,15 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
         }
     }
 
+    public List<Object[]> getByPrimaryKey(Object key) {
+        String value = key.toString();
+        try {
+            return redisHandler.scan(value).get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         return DataTypeUtils.getRelDataType(typeFactory, redisConfig.fieldSchemas);

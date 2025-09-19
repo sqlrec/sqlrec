@@ -95,9 +95,6 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
                 finalFilters,
                 sqlRecTable.getPrimaryKeyIndex()
         );
-        if (kvTableFilters == null) {
-            throw new RuntimeException("kv table find filter failed");
-        }
         TableScan kvTableScan = Bindables.BindableTableScan.create(
                 scan.getCluster(), scan.getTable(), kvTableFilters, projects
         );

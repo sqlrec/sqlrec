@@ -29,6 +29,6 @@ public class FilterUtils {
                 }
             }
         }
-        return null;
+        return Collections.emptyList();
     }
 }

@@ -33,23 +33,34 @@ public class TestRedisTable {
                 tableMap.put("t1", getRedisTable());
                 tableMap.put("t2", getListRedisTable());
                 tableMap.put("t3", new MyTable());
+                tableMap.put("t4", new MyTable());
                 return tableMap;
             }
         });
         HmsSchema.setGlobalSchema(schema);
 
         List<String> sqlList = Arrays.asList(
-                "insert into t1 (ID, NAME, CNT) values (1, 'Alice1`', 1)",
+                "delete from t1 where id = 1",
+                "insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)",
+                "select * from t1 where id = 1",
                 "select * from t1 where id = 1 and name = 'a'",
                 "select * from t1 where id = 1 and name = 'Alice1'",
                 "delete from t1 where id = 1",
                 "select * from t1 where id = 1",
+                "delete from t2 where id = 1",
                 "insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)",
                 "insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)",
                 "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
+                "select * from t2 where id = 1",
                 "select * from t2 where id = 1 and name = 'Alice1'",
                 "delete from t2 where id = 1 and name = 'Alice1'",
-                "select * from t2 where id = 1"
+                "select * from t2 where id = 1",
+                "select * from t3 join t3 as t on t3.id = t.id",
+                "select * from t3 join t4 on t3.id = t4.id",
+                "select * from t3 left join t2 on t3.id = t2.id",
+                "select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'",
+                "select * from t3 join t2 on t3.id = t2.id",
+                "select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'"
         );
 
         for (String sql : sqlList) {
