@@ -28,6 +28,7 @@ public class RuleManager {
         }
         RelOptUtil.registerDefaultRules(planner, false, true);
 
+        // todo don't modify the default rules when don't access outside storage
         addSqlRecRules(planner);
         return planner;
     }
@@ -45,6 +46,8 @@ public class RuleManager {
         planner.removeRule(Bindables.BINDABLE_JOIN_RULE);
         planner.addRule(SQL_REC_JOIN_RULE);
 
+        planner.removeRule(CoreRules.JOIN_PUSH_EXPRESSIONS);
+        planner.removeRule(CoreRules.JOIN_COMMUTE);
         planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
         planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
 

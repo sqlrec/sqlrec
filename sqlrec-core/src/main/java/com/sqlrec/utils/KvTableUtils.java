@@ -26,8 +26,8 @@ public class KvTableUtils {
             RelSubset relNode = ((RelSubset) right);
             List<RelNode> inputs = relNode.getRelList();
             for (RelNode input : inputs) {
-                if (input instanceof LogicalTableScan) {
-                    LogicalTableScan tableScan = (LogicalTableScan) input;
+                if (input instanceof TableScan) {
+                    TableScan tableScan = (TableScan) input;
                     SqlRecTable kvTable = getKvTable(tableScan.getTable());
                     if (kvTable != null) {
                         return kvTable;

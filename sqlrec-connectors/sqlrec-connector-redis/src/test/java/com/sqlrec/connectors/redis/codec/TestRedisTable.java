@@ -60,7 +60,22 @@ public class TestRedisTable {
                 "select * from t3 left join t2 on t3.id = t2.id",
                 "select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'",
                 "select * from t3 join t2 on t3.id = t2.id",
-                "select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'"
+                "select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'",
+                "select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice1'",
+                "select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                "select t3.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                "select t3.*, t2.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                "select id1, count(id2) from ( " +
+                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
+                        ") group by id1 order by id1 limit 10",
+                "select * from ( " +
+                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
+                        ") t " +
+                        "union all " +
+                        "select * from ( " +
+                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice3'" +
+                        ") t2 "
         );
 
         for (String sql : sqlList) {

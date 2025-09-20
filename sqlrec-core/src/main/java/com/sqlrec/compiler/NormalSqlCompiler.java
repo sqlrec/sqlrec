@@ -3,24 +3,19 @@ package com.sqlrec.compiler;
 import com.sqlrec.rules.RuleManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
-import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.schema.RootFirstCatalogReader;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
-import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.ConventionTraitDef;
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.plan.*;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
-import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Bindable;
@@ -85,8 +80,9 @@ public class NormalSqlCompiler {
         RelRoot root = converter.convertQuery(validatedSqlNode, false, true);
         System.out.println(RelOptUtil.toString(root.rel));
 
+        // todo use Programs.standard() when don't access outside storage
+        Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
-        Program program = Programs.standard();
         final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
         System.out.println(RelOptUtil.toString(bestExp));
 
@@ -99,6 +95,35 @@ public class NormalSqlCompiler {
         );
 
         return new CalciteBindable(parameters, bindable, bestExp);
+    }
+
+    public static Program getProgram() {
+        final Program program1 =
+                (planner, rel, requiredOutputTraits, materializations, lattices) -> {
+                    for (RelOptMaterialization materialization : materializations) {
+                        planner.addMaterialization(materialization);
+                    }
+                    for (RelOptLattice lattice : lattices) {
+                        planner.addLattice(lattice);
+                    }
+
+                    planner.setRoot(rel);
+                    final RelNode rootRel2 =
+                            rel.getTraitSet().equals(requiredOutputTraits)
+                                    ? rel
+                                    : planner.changeTraits(rel, requiredOutputTraits);
+                    assert rootRel2 != null;
+
+                    planner.setRoot(rootRel2);
+                    final RelOptPlanner planner2 = planner.chooseDelegate();
+                    final RelNode rootRel3 = planner2.findBestExp();
+                    assert rootRel3 != null : "could not implement exp";
+                    return rootRel3;
+                };
+
+        return Programs.sequence(Programs.subQuery(DefaultRelMetadataProvider.INSTANCE),
+                program1,
+                Programs.calc(DefaultRelMetadataProvider.INSTANCE));
     }
 
     public static CalciteCatalogReader getCatalogReader(CalciteSchema schema, String defaultSchema) {
