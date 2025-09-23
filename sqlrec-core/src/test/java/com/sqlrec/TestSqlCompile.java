@@ -24,7 +24,7 @@ public class TestSqlCompile {
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
-                return Collections.singletonMap("myTable", new TestCalciteSql.MyTable());
+                return Collections.singletonMap("myTable", new TestNormalSqlCompiler.MyTable());
             }
         });
 

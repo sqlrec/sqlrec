@@ -20,11 +20,15 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.util.*;
 
+@Tag("integration")
 public class TestRedisTable {
-    public static void main(String[] args) throws Exception {
+    @Test
+    public void testRedisTable() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
@@ -126,9 +130,9 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url ="redis://127.0.0.1:32379/0";
-        redisConfig.redisMode="single";
-        redisConfig.dataStructure="string";
+        redisConfig.url = "redis://127.0.0.1:32379/0";
+        redisConfig.redisMode = "single";
+        redisConfig.dataStructure = "string";
         redisConfig.ttl = 10000;
         redisConfig.tableName = "t1";
         redisConfig.fieldSchemas = fieldSchemas;
@@ -145,9 +149,9 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url ="redis://127.0.0.1:32379/0";
-        redisConfig.redisMode="single";
-        redisConfig.dataStructure="list";
+        redisConfig.url = "redis://127.0.0.1:32379/0";
+        redisConfig.redisMode = "single";
+        redisConfig.dataStructure = "list";
         redisConfig.ttl = 10000;
         redisConfig.tableName = "t2";
         redisConfig.fieldSchemas = fieldSchemas;
