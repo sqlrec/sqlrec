@@ -1,6 +1,7 @@
 package com.sqlrec.rules;
 
 import com.google.common.collect.ImmutableList;
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.FilterUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpreter;
@@ -74,8 +75,8 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
 
         RelOptTable table = scan.getTable();
         SqlRecTable sqlRecTable = table.unwrap(SqlRecTable.class);
-        if (sqlRecTable != null && sqlRecTable.getSqlRecTableType() == SqlRecTable.SqlRecTableType.KV) {
-            RelNode calc = getKvTableScan(sqlRecTable, finalFilters, filter, scan, projects);
+        if (sqlRecTable != null && sqlRecTable instanceof SqlRecKvTable) {
+            RelNode calc = getKvTableScan((SqlRecKvTable) sqlRecTable, finalFilters, filter, scan, projects);
             call.transformTo(calc);
         } else {
             call.transformTo(
@@ -85,7 +86,7 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
     }
 
     private RelNode getKvTableScan(
-            SqlRecTable sqlRecTable,
+            SqlRecKvTable sqlRecTable,
             List<RexNode> finalFilters,
             Filter filter,
             TableScan scan,

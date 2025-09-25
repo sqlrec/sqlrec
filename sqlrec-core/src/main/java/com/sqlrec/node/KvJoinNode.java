@@ -1,6 +1,6 @@
 package com.sqlrec.node;
 
-import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.utils.KvTableUtils;
 import org.apache.calcite.interpreter.*;
 import org.apache.calcite.interpreter.Compiler;
@@ -27,7 +27,7 @@ public class KvJoinNode implements Node {
 
     @Override
     public void run() throws InterruptedException {
-        SqlRecTable rightTable = KvTableUtils.getRightTableKVTable(rel.getRight());
+        SqlRecKvTable rightTable = KvTableUtils.getRightTableKVTable(rel.getRight());
         if (rightTable == null) {
             throw new IllegalArgumentException("right table is not kv table");
         }

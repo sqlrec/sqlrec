@@ -102,16 +102,7 @@ public class SqlTypeChecker {
             return false;
         }
         if (table instanceof SqlRecTable) {
-            SqlRecTable sqlRecTable = (SqlRecTable) table;
-            switch (sqlRecTable.getSqlRecTableType()) {
-                case MEMORY:
-                case KV:
-                case MQ:
-                case VECTOR:
-                    return true;
-                default:
-                    return false;
-            }
+            return true;
         }
         return false;
     }

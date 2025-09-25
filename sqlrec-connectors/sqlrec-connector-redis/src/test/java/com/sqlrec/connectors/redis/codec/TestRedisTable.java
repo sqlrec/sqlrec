@@ -116,11 +116,6 @@ public class TestRedisTable {
                     .add("NAME", SqlTypeName.VARCHAR, 20)
                     .build();
         }
-
-        @Override
-        public SqlRecTableType getSqlRecTableType() {
-            return SqlRecTableType.MEMORY;
-        }
     }
 
     public static Table getRedisTable() {

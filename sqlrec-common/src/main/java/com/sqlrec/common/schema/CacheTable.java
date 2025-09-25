@@ -37,11 +37,6 @@ public class CacheTable extends SqlRecTable implements ScannableTable {
         return dataFields;
     }
 
-    @Override
-    public SqlRecTableType getSqlRecTableType() {
-        return SqlRecTableType.MEMORY;
-    }
-
     public String getTableName() {
         return tableName;
     }

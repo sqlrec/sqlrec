@@ -1,11 +1,9 @@
 package com.sqlrec.connectors.redis.calcite;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.FieldSchema;
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
-import com.sqlrec.common.schema.SqlRecTable;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -24,17 +22,17 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.schema.FilterableTable;
-import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.sql.SqlKind;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
-import java.util.*;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
-public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, FilterableTable {
+public class RedisCalciteTable extends SqlRecKvTable {
     private RedisConfig redisConfig;
     private RedisHandler redisHandler;
 
@@ -116,11 +114,6 @@ public class RedisCalciteTable extends SqlRecTable implements ModifiableTable, F
     public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
         return Schemas.tableExpression(schema, getElementType(),
                 tableName, clazz);
-    }
-
-    @Override
-    public SqlRecTableType getSqlRecTableType() {
-        return SqlRecTableType.KV;
     }
 
     @Override

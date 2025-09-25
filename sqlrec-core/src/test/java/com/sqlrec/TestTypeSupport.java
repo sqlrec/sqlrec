@@ -97,10 +97,5 @@ public class TestTypeSupport {
                     .add("array_double_type", typeFactory.createArrayType(typeFactory.createSqlType(SqlTypeName.DOUBLE), -1))
                     .build();
         }
-
-        @Override
-        public SqlRecTableType getSqlRecTableType() {
-            return SqlRecTableType.MEMORY;
-        }
     }
 }

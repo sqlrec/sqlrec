@@ -1,5 +1,6 @@
 package com.sqlrec.rules;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.node.SqlRecJoin;
 import com.sqlrec.utils.KvTableUtils;
@@ -51,7 +52,7 @@ public class SqlRecJoinRule extends ConverterRule {
         RelNode left = join.getLeft();
         RelNode right = join.getRight();
         SqlRecTable rightKvTable = KvTableUtils.getRightTableKVTable(right);
-        if (rightKvTable == null || rightKvTable.getSqlRecTableType() != SqlRecTable.SqlRecTableType.KV) {
+        if (rightKvTable == null || !(rightKvTable instanceof SqlRecKvTable)) {
             return false;
         }
 
@@ -59,13 +60,14 @@ public class SqlRecJoinRule extends ConverterRule {
             throw new IllegalArgumentException("SqlRecJoinRule only support left join and inner join");
         }
 
+        SqlRecKvTable kvTable = (SqlRecKvTable) rightKvTable;
         RexNode condition = join.getCondition();
         if (condition instanceof RexCall) {
             RexCall call = (RexCall) condition;
             if (call.getOperator().getKind() == SqlKind.EQUALS) {
                 Map.Entry<Integer, Integer> joinKeyColIndex = KvTableUtils.getJoinKeyColIndex(join);
                 int rightJoinFieldIndex = joinKeyColIndex.getValue() - left.getRowType().getFieldCount();
-                if (rightKvTable.getPrimaryKeyIndex() != rightJoinFieldIndex) {
+                if (kvTable.getPrimaryKeyIndex() != rightJoinFieldIndex) {
                     throw new IllegalArgumentException("join key column must be equal to right kv table primary key column");
                 }
             } else {

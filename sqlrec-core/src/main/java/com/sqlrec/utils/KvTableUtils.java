@@ -1,12 +1,12 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
@@ -21,14 +21,14 @@ public class KvTableUtils {
         return getRightTableKVTable(right) != null;
     }
 
-    public static SqlRecTable getRightTableKVTable(RelNode right) {
+    public static SqlRecKvTable getRightTableKVTable(RelNode right) {
         if (right instanceof RelSubset) {
             RelSubset relNode = ((RelSubset) right);
             List<RelNode> inputs = relNode.getRelList();
             for (RelNode input : inputs) {
                 if (input instanceof TableScan) {
                     TableScan tableScan = (TableScan) input;
-                    SqlRecTable kvTable = getKvTable(tableScan.getTable());
+                    SqlRecKvTable kvTable = getKvTable(tableScan.getTable());
                     if (kvTable != null) {
                         return kvTable;
                     }
@@ -38,7 +38,7 @@ public class KvTableUtils {
 
         if (right instanceof TableScan) {
             TableScan tableScan = (TableScan) right;
-            SqlRecTable kvTable = getKvTable(tableScan.getTable());
+            SqlRecKvTable kvTable = getKvTable(tableScan.getTable());
             if (kvTable != null) {
                 return kvTable;
             }
@@ -51,13 +51,13 @@ public class KvTableUtils {
         return getKvTable(table) != null;
     }
 
-    public static SqlRecTable getKvTable(RelOptTable table) {
+    public static SqlRecKvTable getKvTable(RelOptTable table) {
         SqlRecTable sqlRecTable = null;
         if (table != null) {
             sqlRecTable = table.unwrap(SqlRecTable.class);
         }
-        if (sqlRecTable != null && sqlRecTable.getSqlRecTableType() == SqlRecTable.SqlRecTableType.KV) {
-            return sqlRecTable;
+        if (sqlRecTable != null && sqlRecTable instanceof SqlRecKvTable) {
+            return (SqlRecKvTable) sqlRecTable;
         }
         return null;
     }
