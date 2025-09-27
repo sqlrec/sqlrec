@@ -12,6 +12,7 @@ if [ -z "${NODE_IP}" ]; then
 fi
 
 kubectl create namespace "${NAMESPACE}"
+kubectl create namespace "${NAMESPACE}-milvus"
 
 envsubst < ${dir}/pv.yaml > ${dir}/pv.yaml.tmp
 kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
@@ -23,6 +24,7 @@ bash ${dir}/redis/deploy.sh
 bash ${dir}/hms/deploy.sh
 bash ${dir}/flink/deploy.sh
 bash ${dir}/sqlrec/deploy.sh
+bash ${dir}/milvus/deploy.sh
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/

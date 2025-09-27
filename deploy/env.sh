@@ -39,6 +39,7 @@ export REDIS_PORT=32379
 export SQLREC_MYSQL_PORT=30308
 export SQLREC_MYSQL_USER=sqlrec
 export SQLREC_MYSQL_PASSWORD=abc123456
+export MILVUS_PORT=31530
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
