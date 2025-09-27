@@ -2,6 +2,7 @@ package com.sqlrec.frontend.service;
 
 import com.google.gson.Gson;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.frontend.common.SqlProcessResult;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;

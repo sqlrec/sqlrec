@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.RestService;
 
+import com.google.gson.Gson;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -16,24 +17,27 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         String responseContent = "{}";
         HttpResponseStatus status = HttpResponseStatus.OK;
 
-        if (!HttpMethod.POST.equals(method)) {
-            status = HttpResponseStatus.METHOD_NOT_ALLOWED;
-            responseContent = "{\"msg\":\"only support post method\"}";
-        } else {
-            String postData = fullHttpRequest.content().toString(CharsetUtil.UTF_8);
-            String apiName = "";
-            if (!uri.startsWith("/api/v1/")) {
+        try {
+            if (!HttpMethod.POST.equals(method)) {
                 status = HttpResponseStatus.METHOD_NOT_ALLOWED;
-                responseContent = "{\"msg\":\"uri format error\"}";
+                responseContent = "{\"msg\":\"only support post method\"}";
             } else {
-                apiName = uri.substring("/api/v1/".length());
-                try {
-                    responseContent = FunctionExecutor.execute(apiName, postData);
-                } catch (Exception e) {
-                    status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-                    responseContent = "{\"msg\":\"" + e.getMessage() + "\"}";
+                String postData = fullHttpRequest.content().toString(CharsetUtil.UTF_8);
+                if (uri.startsWith("/sql/v1")) {
+                    ExecuteDataList executeDataList = SqlExecutor.execute(postData);
+                    responseContent = new Gson().toJson(executeDataList);
+                } else if (uri.startsWith("/api/v1/")) {
+                    String apiName = uri.substring("/api/v1/".length());
+                    ExecuteData executeData = FunctionExecutor.execute(apiName, postData);
+                    responseContent = new Gson().toJson(executeData);
+                } else {
+                    status = HttpResponseStatus.METHOD_NOT_ALLOWED;
+                    responseContent = "{\"msg\":\"uri format error\"}";
                 }
             }
+        } catch (Exception e) {
+            status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+            responseContent = "{\"msg\":\"" + e.getMessage() + "\"}";
         }
 
         FullHttpResponse response = new DefaultFullHttpResponse(

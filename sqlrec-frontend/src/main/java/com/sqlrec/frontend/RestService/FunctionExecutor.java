@@ -16,33 +16,41 @@ import java.util.List;
 import java.util.Map;
 
 public class FunctionExecutor {
-    public static String execute(String apiName, String requestData) throws Exception {
+    public static ExecuteData execute(String apiName, String requestData) throws Exception {
         FunctionBindable functionBindable = CompileManager.getApiBindSqlFunction(apiName);
         if (functionBindable == null) {
             throw new RuntimeException("cant find function for " + apiName);
         }
         CalciteSchema schema = HmsSchema.getHmsCalciteSchema();
 
-        Map<String, Object> params = new Gson().fromJson(requestData, Map.class);
-        addTableToSchema(schema, functionBindable, params);
+        RequestData requestDataObj = new Gson().fromJson(requestData, RequestData.class);
+        addTableToSchema(schema, functionBindable, requestDataObj.inputs);
 
-        Enumerable<Object[]> enumerable = functionBindable.bind(schema);
-        if (enumerable != null) {
-            List<Object[]> results = enumerable.toList();
-            Map<String, Object> result = new HashMap<>();
-            result.put("data", results);
-            return new Gson().toJson(result);
+        ExecuteData executeData = new ExecuteData();
+        try {
+            Enumerable<Object[]> enumerable = functionBindable.bind(schema);
+            if (enumerable != null) {
+                List<Object[]> results = enumerable.toList();
+                executeData.data = utils.convertToMapList(results, functionBindable.getReturnDataFields());
+            } else {
+                executeData.msg = "function return null";
+            }
+        } catch (Exception e) {
+            executeData.msg = "execute function error: " + e.getMessage();
         }
-        return "{}";
+        return executeData;
     }
 
-    private static void addTableToSchema(CalciteSchema schema, FunctionBindable functionBindable, Map<String, Object> params) throws Exception {
+    private static void addTableToSchema(CalciteSchema schema, FunctionBindable functionBindable, Map<String, List<Map<String, Object>>> params) throws Exception {
         List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = functionBindable.getInputTables();
         for (Map.Entry<String, List<RelDataTypeField>> tablePlaceholder : tablePlaceholders) {
             String tableName = tablePlaceholder.getKey();
             List<RelDataTypeField> dataFields = tablePlaceholder.getValue();
+            if (params == null) {
+                throw new Exception("params is null, need params for table " + tableName);
+            }
             if (!params.containsKey(tableName)) {
-                throw new Exception("table " + tableName + " not found in params");
+                throw new Exception("table " + tableName + " not found in params, need params for table " + tableName);
             }
             Enumerable<Object[]> enumerable = convertDataToEnumerable(params.get(tableName), dataFields);
             CacheTable cacheTable = new CacheTable(tableName, enumerable, dataFields);
@@ -50,17 +58,9 @@ public class FunctionExecutor {
         }
     }
 
-    public static Enumerable<Object[]> convertDataToEnumerable(Object data, List<RelDataTypeField> dataFields) throws Exception {
-        if (!(data instanceof List)) {
-            throw new Exception("data must be list");
-        }
-
+    public static Enumerable<Object[]> convertDataToEnumerable(List<Map<String, Object>> data, List<RelDataTypeField> dataFields) {
         List<Object[]> list = new ArrayList<>();
-        for (Object o : (List) data) {
-            if (!(o instanceof Map)) {
-                throw new Exception("data must be list of map");
-            }
-            Map<String, Object> map = (Map<String, Object>) o;
+        for (Map<String, Object> map : data) {
             Object[] row = new Object[dataFields.size()];
             for (int i = 0; i < dataFields.size(); i++) {
                 RelDataTypeField field = dataFields.get(i);

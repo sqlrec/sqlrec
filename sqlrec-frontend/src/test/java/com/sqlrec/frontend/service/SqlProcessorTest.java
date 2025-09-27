@@ -3,6 +3,8 @@ package com.sqlrec.frontend.service;
 
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
+import com.sqlrec.frontend.common.SqlProcessResult;
+import com.sqlrec.frontend.common.SqlProcessor;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.utils.TableFunctionUtils;

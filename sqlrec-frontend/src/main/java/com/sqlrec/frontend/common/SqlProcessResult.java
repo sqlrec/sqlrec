@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.common;
 
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;

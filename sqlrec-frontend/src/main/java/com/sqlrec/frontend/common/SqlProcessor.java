@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.common;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
@@ -9,6 +9,7 @@ import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsClient;
@@ -59,6 +60,7 @@ public class SqlProcessor {
         } catch (Exception e) {
             String stackTrace = ExceptionUtils.getStackTrace(e);
             result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
+            result.msg = "process sql error: " + e.getMessage();
             result.exception = e;
         }
         if (result != null) {

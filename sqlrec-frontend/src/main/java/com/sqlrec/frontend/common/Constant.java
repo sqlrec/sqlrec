@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.common;
 
 public class Constant {
     public static final String USE_DEFAULT = "use default";
