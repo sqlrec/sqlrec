@@ -1,6 +1,6 @@
 spark.master ${K8S_APISERVER_ADDR}
 spark.submit.deployMode cluster
-spark.kubernetes.file.upload.path /spark/upload
+spark.kubernetes.file.upload.path jfs://myjfs/spark/upload
 spark.executor.instances 3
 spark.dynamicAllocation.enabled false
 spark.shuffle.service.enabled false
