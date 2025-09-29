@@ -20,6 +20,7 @@ export IMAGE_REGISTRY_PORT=5000
 export IMAGE_REGISTRY_URL="host.minikube.internal:${IMAGE_REGISTRY_PORT}"
 if command -v kubectl &> /dev/null; then
     export NODE_IP=`kubectl get node -o wide | awk 'NR==2{print $6}'`
+    export K8S_APISERVER_ADDR=k8s://https://${NODE_IP}:8443
 fi
 
 export SQL_GATEWAY_PORT=30000
@@ -27,6 +28,7 @@ export HMS_MYSQL_PORT=30307
 export HMS_MYSQL_USER=metastore
 export HMS_MYSQL_PASSWORD=abc123456
 export HMS_PORT=32083
+export KYUUBI_PORT=32009
 export JUICEFS_MYSQL_PORT=30306
 export JUICEFS_MYSQL_USER=juicefs
 export JUICEFS_MYSQL_PASSWORD=abc123456
@@ -65,7 +67,9 @@ export FLINK_SQL_CONNECTOR_HIVE_JAR_NAME=flink-sql-connector-hive-2.3.9_2.12-1.1
 export MYSQL_CONNECTOR_JAR_URL=https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.27/mysql-connector-java-8.0.27.jar
 export MYSQL_CONNECTOR_JAR_NAME=mysql-connector-java-8.0.27.jar
 
-
+export SPARK_CLIENT_URL=https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz
+export SPARK_CLIENT_ARCH_NAME=spark-3.5.1-bin-hadoop3.tgz
+export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
 
 
 

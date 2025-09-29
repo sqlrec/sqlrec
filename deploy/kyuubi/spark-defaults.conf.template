@@ -1,16 +1,16 @@
-spark.master k8s://https://K8S-APISERVER-ADDR
+spark.master ${K8S_APISERVER_ADDR}
 spark.submit.deployMode cluster
-spark.kubernetes.file.upload.path jfs://myjfs/spark/upload
+spark.kubernetes.file.upload.path /spark/upload
 spark.executor.instances 3
 spark.dynamicAllocation.enabled false
 spark.shuffle.service.enabled false
 spark.kubernetes.container.image apache/spark:3.5.1
 spark.kubernetes.authenticate.driver.serviceAccountName spark
-spark.kubernetes.namespace NAMESPACE
+spark.kubernetes.namespace ${NAMESPACE}
 
-spark.kubernetes.driver.volumes.hostPath.juicefs.mount.path /opt/spark/jars/juicefs-hadoop.jar
-spark.kubernetes.driver.volumes.hostPath.juicefs.options.type File
-spark.kubernetes.driver.volumes.hostPath.juicefs.options.path JUICEFS_JAR_LOCATION
-spark.kubernetes.executor.volumes.hostPath.juicefs.mount.path /opt/spark/jars/juicefs-hadoop.jar
-spark.kubernetes.executor.volumes.hostPath.juicefs.options.type File
-spark.kubernetes.executor.volumes.hostPath.juicefs.options.path JUICEFS_JAR_LOCATION
+spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.options.claimName ${RESOURCE_PVC_NAME}
+spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.mount.subPath ${JUICEFS_HADOOP_JAR_NAME}
+spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.options.claimName ${RESOURCE_PVC_NAME}
+spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.mount.subPath ${JUICEFS_HADOOP_JAR_NAME}

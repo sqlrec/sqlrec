@@ -1,21 +1,19 @@
 #!/bin/bash
+set -ex
 shopt -s expand_aliases
 source ~/.bash_profile
-
-namespace="${1:-sqlrec}"
-
 dir=$(dirname $(realpath $0))
-juicefs_dir=$(dirname ${dir})"/juicefs/juicefs-hadoop.jar"
 
-kubectl create serviceaccount spark -n "${namespace}"
-kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount="${namespace}":spark --namespace="${namespace}"
+if ! kubectl get serviceaccount spark -n "${NAMESPACE}" >/dev/null 2>&1; then
+  kubectl create serviceaccount spark -n "${NAMESPACE}"
+  kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount="${NAMESPACE}":spark --namespace="${NAMESPACE}"
+fi
 
-node_ip=`kubectl get node -o wide | awk 'NR==2{print $6}'`
-sed "s|K8S-APISERVER-ADDR|${node_ip}:8443|" "${dir}/spark-defaults.conf.template" | \
-  sed "s|NAMESPACE|${namespace}|" | \
-  sed "s|JUICEFS_JAR_LOCATION|${juicefs_dir}|" > "${dir}/spark-defaults.conf"
-kubectl delete configmap spark-defaults -n "${namespace}"
-kubectl create configmap spark-defaults --from-file="${dir}/spark-defaults.conf" -n "${namespace}"
+envsubst < ${dir}/spark-defaults.conf.template > ${CONF_DIR}/spark-defaults.conf
+if kubectl get configmap spark-defaults -n "${NAMESPACE}" >/dev/null 2>&1; then
+  kubectl delete configmap spark-defaults -n "${NAMESPACE}"
+fi
+kubectl create configmap spark-defaults --from-file="${CONF_DIR}/spark-defaults.conf" -n "${NAMESPACE}"
 
-sed "s|JUICEFS_JAR_LOCATION|${juicefs_dir}|" "${dir}/kyuubi.yaml" > "${dir}/kyuubi.yaml.tmp"
-kubectl apply -f "${dir}/kyuubi.yaml.tmp" -n "${namespace}"
+envsubst < ${dir}/kyuubi.yaml > ${dir}/kyuubi.yaml.tmp
+kubectl apply -f "${dir}/kyuubi.yaml.tmp" -n "${NAMESPACE}"

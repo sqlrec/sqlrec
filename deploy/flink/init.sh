@@ -1,3 +1,5 @@
+set -ex
+
 if [ ! -f "${LIB_DIR}/${FLINK_HADOOP_JAR_NAME}" ];then
   wget -P "${LIB_DIR}" "${FLINK_HADOOP_JAR_URL}"
 fi

@@ -14,4 +14,5 @@ helm upgrade --install milvus \
   --set streaming.enabled=true \
   --set service.type=NodePort \
   --set service.nodePort=${MILVUS_PORT} \
+  --set minio.mode=standalone \
   zilliztech/milvus

@@ -39,11 +39,13 @@ minikube start \
   --ports="${SQL_GATEWAY_PORT}:${SQL_GATEWAY_PORT}" \
   --ports="${HMS_MYSQL_PORT}:${HMS_MYSQL_PORT}" \
   --ports="${HMS_PORT}:${HMS_PORT}" \
+  --ports="${KYUUBI_PORT}:${KYUUBI_PORT}" \
   --ports="${JUICEFS_MYSQL_PORT}:${JUICEFS_MYSQL_PORT}" \
   --ports="${MINIO_PORT}:${MINIO_PORT}" \
   --ports="${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_PORT}" \
   --ports="${REDIS_PORT}:${REDIS_PORT}" \
   --ports="${SQLREC_MYSQL_PORT}:${SQLREC_MYSQL_PORT}" \
+  --ports="${MILVUS_PORT}:${MILVUS_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

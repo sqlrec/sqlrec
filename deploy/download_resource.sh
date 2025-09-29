@@ -7,3 +7,4 @@ bash ${dir}/hms/init.sh
 bash ${dir}/flink/init.sh
 bash ${dir}/juicefs/init.sh
 bash ${dir}/milvus/init.sh
+bash ${dir}/kyuubi/init.sh
