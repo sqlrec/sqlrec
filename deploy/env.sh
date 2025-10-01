@@ -24,23 +24,23 @@ if command -v kubectl &> /dev/null; then
 fi
 
 export SQL_GATEWAY_PORT=30000
-export HMS_MYSQL_PORT=30307
-export HMS_MYSQL_USER=metastore
-export HMS_MYSQL_PASSWORD=abc123456
+export HMS_POSTGRESQL_PORT=30307
+export HMS_POSTGRESQL_USER=metastore
+export HMS_POSTGRESQL_PASSWORD=abc123456
 export HMS_PORT=32083
 export KYUUBI_PORT=32009
-export JUICEFS_MYSQL_PORT=30306
-export JUICEFS_MYSQL_USER=juicefs
-export JUICEFS_MYSQL_PASSWORD=abc123456
+export JUICEFS_POSTGRESQL_PORT=30306
+export JUICEFS_POSTGRESQL_USER=juicefs
+export JUICEFS_POSTGRESQL_PASSWORD=abc123456
 export MINIO_PORT=32000
 export MINIO_CONSOLE_PORT=32001
 export MINIO_USER=rootuser
 export MINIO_PASSWORD=rootpass123
 export KAFKA_PORT1=32092
 export REDIS_PORT=32379
-export SQLREC_MYSQL_PORT=30308
-export SQLREC_MYSQL_USER=sqlrec
-export SQLREC_MYSQL_PASSWORD=abc123456
+export SQLREC_POSTGRESQL_PORT=30308
+export SQLREC_POSTGRESQL_USER=sqlrec
+export SQLREC_POSTGRESQL_PASSWORD=abc123456
 export MILVUS_PORT=31530
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
@@ -64,8 +64,8 @@ export FLINK_HADOOP_JAR_NAME=flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
 export FLINK_SQL_CONNECTOR_HIVE_JAR_URL=https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-hive-2.3.9_2.12/1.19.0/flink-sql-connector-hive-2.3.9_2.12-1.19.0.jar
 export FLINK_SQL_CONNECTOR_HIVE_JAR_NAME=flink-sql-connector-hive-2.3.9_2.12-1.19.0.jar
 
-export MYSQL_CONNECTOR_JAR_URL=https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.27/mysql-connector-java-8.0.27.jar
-export MYSQL_CONNECTOR_JAR_NAME=mysql-connector-java-8.0.27.jar
+export POSTGRESQL_CONNECTOR_JAR_URL=https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
+export POSTGRESQL_CONNECTOR_JAR_NAME=postgresql-42.7.8.jar
 
 export SPARK_CLIENT_URL=https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz
 export SPARK_CLIENT_ARCH_NAME=spark-3.5.1-bin-hadoop3.tgz

@@ -12,12 +12,12 @@ spec:
             - name: SERVICE_NAME
               value: metastore
             - name: DB_DRIVER
-              value: mysql
-          command: ["/opt/hive/bin/schematool",  "-dbType", "mysql", "-initSchema"]
+              value: postgres
+          command: ["/opt/hive/bin/schematool",  "-dbType", "postgres", "-initSchema"]
           volumeMounts:
-            - mountPath: /opt/hive/lib/${MYSQL_CONNECTOR_JAR_NAME}
+            - mountPath: /opt/hive/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
               name: ${RESOURCE_PV_NAME}
-              subPath: ${MYSQL_CONNECTOR_JAR_NAME}
+              subPath: ${POSTGRESQL_CONNECTOR_JAR_NAME}
             - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
               name: ${RESOURCE_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}

@@ -13,6 +13,6 @@
     </property>
     <property>
         <name>juicefs.meta</name>
-        <value>mysql://${JUICEFS_MYSQL_USER}:${JUICEFS_MYSQL_PASSWORD}@(${NODE_IP}:${JUICEFS_MYSQL_PORT})/juicefs</value>
+        <value>postgres://${JUICEFS_POSTGRESQL_USER}:${JUICEFS_POSTGRESQL_PASSWORD}@${NODE_IP}:${JUICEFS_POSTGRESQL_PORT}/juicefs?sslmode=disable</value>
     </property>
 </configuration>

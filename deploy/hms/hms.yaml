@@ -21,15 +21,15 @@ spec:
             - name: SERVICE_NAME
               value: metastore
             - name: DB_DRIVER
-              value: mysql
+              value: postgres
             - name: IS_RESUME
               value: "true"
           ports:
             - containerPort: 9083
           volumeMounts:
-            - mountPath: /opt/hive/lib/${MYSQL_CONNECTOR_JAR_NAME}
+            - mountPath: /opt/hive/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
               name: ${RESOURCE_PV_NAME}
-              subPath: ${MYSQL_CONNECTOR_JAR_NAME}
+              subPath: ${POSTGRESQL_CONNECTOR_JAR_NAME}
             - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
               name: ${RESOURCE_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}

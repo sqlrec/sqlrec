@@ -3,7 +3,7 @@ package com.sqlrec.common.config;
 public class SqlRecConfigs {
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
-            "jdbc:mysql://127.0.0.1:30308/sqlrec?allowPublicKeyRetrieval=true&useSSL=false",
+            "jdbc:postgresql://127.0.0.1:30308/sqlrec?sslmode=disable",
             "meta db url"
     );
     public static final ConfigOption<String> DB_USER = new ConfigOption<>(
@@ -18,7 +18,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> DB_DRIVER = new ConfigOption<>(
             "META_DB_DRIVER",
-            "com.mysql.cj.jdbc.Driver",
+            "org.postgresql.Driver",
             "meta db driver"
     );
 

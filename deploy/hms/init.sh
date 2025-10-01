@@ -1,7 +1,7 @@
 set -ex
 
-if [ ! -f ${LIB_DIR}/${MYSQL_CONNECTOR_JAR_NAME} ]; then
-  wget -P ${LIB_DIR} ${MYSQL_CONNECTOR_JAR_URL}
+if [ ! -f ${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME} ]; then
+  wget -P ${LIB_DIR} ${POSTGRESQL_CONNECTOR_JAR_URL}
 fi
 
 if [ ! -f ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} ]; then
