@@ -9,7 +9,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class FilterUtils {
-    public static List<RexNode> getKvTableFilters(List<RexNode> filters, int primaryKeyIndex) {
+    public static List<RexNode> getPrimaryKeyFilters(List<RexNode> filters, int primaryKeyIndex) {
         for (RexNode filter : filters) {
             if (filter.isA(SqlKind.EQUALS)) {
                 RexCall call = (RexCall) filter;
@@ -23,7 +23,7 @@ public class FilterUtils {
                 }
             } else if (filter.isA(SqlKind.AND)) {
                 RexCall call = (RexCall) filter;
-                List<RexNode> kvTableFilters = getKvTableFilters(call.getOperands(), primaryKeyIndex);
+                List<RexNode> kvTableFilters = getPrimaryKeyFilters(call.getOperands(), primaryKeyIndex);
                 if (kvTableFilters != null && !kvTableFilters.isEmpty()) {
                     return kvTableFilters;
                 }

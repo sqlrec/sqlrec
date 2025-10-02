@@ -75,8 +75,10 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
 
         RelOptTable table = scan.getTable();
         SqlRecTable sqlRecTable = table.unwrap(SqlRecTable.class);
-        if (sqlRecTable != null && sqlRecTable instanceof SqlRecKvTable) {
-            RelNode calc = getKvTableScan((SqlRecKvTable) sqlRecTable, finalFilters, filter, scan, projects);
+        if (shouldFilterByPrimaryKey(sqlRecTable)) {
+            RelNode calc = getTableScanWithPrimaryKeyFilter(
+                    (SqlRecKvTable) sqlRecTable, finalFilters, filter, scan, projects
+            );
             call.transformTo(calc);
         } else {
             call.transformTo(
@@ -85,14 +87,25 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
         }
     }
 
-    private RelNode getKvTableScan(
+    private boolean shouldFilterByPrimaryKey(SqlRecTable sqlRecTable) {
+        if (sqlRecTable == null) {
+            return false;
+        }
+        if (!(sqlRecTable instanceof SqlRecKvTable)) {
+            return false;
+        }
+        SqlRecKvTable kvTable = (SqlRecKvTable) sqlRecTable;
+        return kvTable.onlyFilterByPrimaryKey();
+    }
+
+    private RelNode getTableScanWithPrimaryKeyFilter(
             SqlRecKvTable sqlRecTable,
             List<RexNode> finalFilters,
             Filter filter,
             TableScan scan,
             ImmutableIntList projects
     ) {
-        List<RexNode> kvTableFilters = FilterUtils.getKvTableFilters(
+        List<RexNode> kvTableFilters = FilterUtils.getPrimaryKeyFilters(
                 finalFilters,
                 sqlRecTable.getPrimaryKeyIndex()
         );

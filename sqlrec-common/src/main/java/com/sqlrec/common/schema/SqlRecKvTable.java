@@ -13,4 +13,8 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
     public List<Object[]> getByPrimaryKey(Object key) {
         throw new UnsupportedOperationException("getByPrimaryKey not support");
     }
+
+    public boolean onlyFilterByPrimaryKey() {
+        return true;
+    }
 }
