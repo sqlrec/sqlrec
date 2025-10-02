@@ -63,4 +63,10 @@ public class SqlRecConfigs {
             8001,
             "port of rest server"
     );
+
+    public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
+            "DEFAULT_TEST_IP",
+            "127.0.0.1",
+            "default test ip"
+    );
 }

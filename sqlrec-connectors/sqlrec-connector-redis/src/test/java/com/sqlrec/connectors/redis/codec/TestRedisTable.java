@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.codec;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
@@ -125,7 +126,7 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url = "redis://127.0.0.1:32379/0";
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "string";
         redisConfig.ttl = 10000;
@@ -144,7 +145,7 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url = "redis://127.0.0.1:32379/0";
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "list";
         redisConfig.ttl = 10000;
