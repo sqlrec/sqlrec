@@ -1,4 +1,4 @@
-package com.sqlrec.connectors.redis.codec;
+package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecTable;

@@ -13,6 +13,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>sqlrec-connector-redis</module>
+        <module>sqlrec-connector-milvus</module>
     </modules>
 
     <properties>

@@ -9,15 +9,29 @@ import org.apache.calcite.sql.validate.SqlValidator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class DataTypeUtils {
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
         RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (FieldSchema fieldSchema : fieldSchemas) {
-            builder.add(fieldSchema.name, Objects.requireNonNull(SqlTypeName.get(fieldSchema.type.toUpperCase())));
+            builder.add(fieldSchema.name, getSqlTypeName(typeFactory, fieldSchema.type));
         }
         return builder.build();
+    }
+
+    public static RelDataType getSqlTypeName(RelDataTypeFactory typeFactory, String type) {
+        type = type.toUpperCase();
+        if (type.startsWith("ARRAY<") && type.endsWith(">")) {
+            String elementType = type.substring("ARRAY<".length(), type.length() - 1);
+            RelDataType elementTypeName = getSqlTypeName(typeFactory, elementType);
+            return typeFactory.createArrayType(elementTypeName, -1);
+        }
+
+        SqlTypeName sqlTypeName = SqlTypeName.get(type);
+        if (sqlTypeName == null) {
+            throw new RuntimeException("sql type name not found: " + type);
+        }
+        return typeFactory.createSqlType(sqlTypeName);
     }
 
     public static RelDataTypeField getRelDataTypeField(String name, int index, SqlTypeName typeName) {
