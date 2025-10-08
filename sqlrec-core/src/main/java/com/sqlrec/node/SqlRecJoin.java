@@ -15,9 +15,13 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.List;
 import java.util.Set;
 
 public class SqlRecJoin extends Bindables.BindableJoin {
+    private int limit;
+    private List<Integer> projectList;
+
     public SqlRecJoin(RelOptCluster cluster, RelTraitSet traitSet, RelNode left, RelNode right, RexNode condition, Set<CorrelationId> variablesSet, JoinRelType joinType) {
         super(cluster, traitSet, left, right, condition, variablesSet, joinType);
     }
@@ -26,7 +30,10 @@ public class SqlRecJoin extends Bindables.BindableJoin {
     public SqlRecJoin copy(RelTraitSet traitSet, RexNode conditionExpr,
                            RelNode left, RelNode right, JoinRelType joinType,
                            boolean semiJoinDone) {
-        return new SqlRecJoin(getCluster(), traitSet, left, right, condition, variablesSet, joinType);
+        SqlRecJoin join = new SqlRecJoin(getCluster(), traitSet, left, right, condition, variablesSet, joinType);
+        join.limit = limit;
+        join.projectList = projectList;
+        return join;
     }
 
     @Override
@@ -45,5 +52,21 @@ public class SqlRecJoin extends Bindables.BindableJoin {
     @Override
     public Node implement(InterpreterImplementor implementor) {
         return new JoinNode(implementor.compiler, this);
+    }
+
+    public int getLimit() {
+        return limit;
+    }
+
+    public void setLimit(int limit) {
+        this.limit = limit;
+    }
+
+    public List<Integer> getProjectList() {
+        return projectList;
+    }
+
+    public void setProjectList(List<Integer> projectList) {
+        this.projectList = projectList;
     }
 }

@@ -19,6 +19,8 @@ public class RuleManager {
             SqlRecFilterIntoJoinRule.SqlRecFilterIntoJoinRuleConfig.DEFAULT.toRule();
     public static final SqlRecJoinRule SQL_REC_JOIN_RULE =
             SqlRecJoinRule.DEFAULT_CONFIG.toRule(SqlRecJoinRule.class);
+    public static final SqlRecLimitToJoinRule LIMIT_TO_JOIN =
+            SqlRecLimitToJoinRule.Config.DEFAULT.toRule();
 
     public static VolcanoPlanner createPlanner() {
         VolcanoPlanner planner = new VolcanoPlanner();
@@ -44,7 +46,7 @@ public class RuleManager {
         planner.addRule(FILTER_INTO_JOIN);
 
         planner.removeRule(Bindables.BINDABLE_JOIN_RULE);
-        planner.addRule(SQL_REC_JOIN_RULE);
+        planner.addRule(LIMIT_TO_JOIN);
 
         planner.removeRule(CoreRules.JOIN_PUSH_EXPRESSIONS);
         planner.removeRule(CoreRules.JOIN_COMMUTE);

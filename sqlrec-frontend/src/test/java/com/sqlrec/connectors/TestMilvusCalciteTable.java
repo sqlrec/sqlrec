@@ -9,6 +9,7 @@ import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -42,6 +43,12 @@ public class TestMilvusCalciteTable {
         });
         HmsSchema.setGlobalSchema(schema);
 
+        SchemaUtils.addFunction(
+                schema.getSubSchema(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, false),
+                "ip",
+                "com.sqlrec.common.udf.scalar.IpFunction"
+        );
+
         List<String> sqlList = Arrays.asList(
                 "insert into t1 (my_id, my_vector, my_varchar) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice1')",
                 "insert into t1 (my_id, my_vector, my_varchar) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice2')",
@@ -50,7 +57,16 @@ public class TestMilvusCalciteTable {
                 "select * from t1 where my_id = 1 and my_varchar = 'Alice1'",
                 "select * from t2 join t1 on t2.ID = t1.my_id",
                 "delete from t1 where my_id = 3",
-                "select * from t1 where my_varchar like 'Alice%'"
+                "select * from t1 where my_varchar like 'Alice%'",
+                "select * from t2 join (select * from t2) t on ip(t2.embedding, t.embedding) > 0.5 limit 10",
+                "select t2.ID, t1.my_id, t1.my_varchar from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID limit 10",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID limit 10",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 limit 10",
+                "select t2.ID, t1.my_id, t1.my_varchar from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 where t2.ID >= 1",
+                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 where t1.my_id >= 1"
         );
 
         for (String sql : sqlList) {
@@ -74,9 +90,9 @@ public class TestMilvusCalciteTable {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
             return Linq4j.asEnumerable(new Object[][]{
-                    {1, "Alice"},
-                    {2, "Bob"},
-                    {3, "Charlie"}
+                    {1, "Alice", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)},
+                    {2, "Bob", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)},
+                    {3, "Charlie", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)}
             });
         }
 
@@ -85,6 +101,7 @@ public class TestMilvusCalciteTable {
             return typeFactory.builder()
                     .add("ID", SqlTypeName.INTEGER)
                     .add("NAME", SqlTypeName.VARCHAR, 20)
+                    .add("embedding", typeFactory.createArrayType(typeFactory.createSqlType(SqlTypeName.FLOAT), -1))
                     .build();
         }
     }

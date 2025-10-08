@@ -2,6 +2,7 @@ package com.sqlrec.schema;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.sqlrec.common.config.FunctionConfigs;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.utils.SchemaUtils;
@@ -118,6 +119,10 @@ public class HmsSchema extends AbstractSchema {
                 if (scalarFunction != null){
                     functionMap.put(function, scalarFunction);
                 }
+            }
+            for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
+                functionMap.put(entry.getKey(), SchemaUtils.createScalarFunction(entry.getValue()));
+                functions.add(entry.getKey());
             }
             functionMap.keySet().removeIf(function -> !functions.contains(function));
         } catch (Exception e) {

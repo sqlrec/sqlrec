@@ -15,8 +15,11 @@ import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.QueryReq;
+import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
+import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.QueryResp;
+import io.milvus.v2.service.vector.response.SearchResp;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -40,6 +43,7 @@ import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class MilvusCalciteTable extends SqlRecVectorTable {
     private MilvusConfig milvusConfig;
@@ -89,6 +93,59 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         return rows;
     }
 
+    @Override
+    public List<Object[]> searchByEmbedding(String fieldName, List<Float> embedding, int limit, List<Integer> projectColumns) {
+        if (limit == 0){
+            limit = 100;
+        }
+        List<String> outputFields = null;
+        if (projectColumns != null && !projectColumns.isEmpty()) {
+            outputFields = projectColumns.stream()
+                    .map(index -> milvusConfig.fieldSchemas.get(index).name)
+                    .collect(Collectors.toList());
+        } else {
+            outputFields = milvusConfig.fieldSchemas.stream()
+                    .map(f -> f.name)
+                    .collect(Collectors.toList());
+        }
+
+        FloatVec queryVector = new FloatVec(embedding);
+        SearchReq searchReq = SearchReq.builder()
+                .collectionName(milvusConfig.collection)
+                .databaseName(milvusConfig.database)
+                .annsField(fieldName)
+                .data(Collections.singletonList(queryVector))
+                .outputFields(outputFields)
+                .topK(limit)
+                .build();
+        MilvusClientV2 client = getClient(milvusConfig);
+        SearchResp searchResp = null;
+        try {
+            searchResp = client.search(searchReq);
+        } finally {
+            returnClient(client, milvusConfig);
+        }
+
+        List<Object[]> rows = parseSearchResp(searchResp);
+        return rows;
+    }
+
+    private List<Object[]> parseSearchResp(SearchResp searchResp) {
+        if (searchResp == null || searchResp.getSearchResults() == null) {
+            return Collections.emptyList();
+        }
+
+        List<Object[]> rows = new ArrayList<>();
+        for (List<SearchResp.SearchResult> results : searchResp.getSearchResults()) {
+            for (SearchResp.SearchResult result : results) {
+                Map<String, Object> entity = result.getEntity();
+                Object[] row = toRow(entity, milvusConfig.fieldSchemas);
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
     private List<Object[]> parseQueryResp(QueryResp queryResp) {
         if (queryResp == null || queryResp.getQueryResults() == null) {
             return Collections.emptyList();
@@ -98,14 +155,19 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         List<Object[]> rows = new ArrayList<>(results.size());
         for (QueryResp.QueryResult result : results) {
             Map<String, Object> entity = result.getEntity();
-            Object[] row = new Object[milvusConfig.fieldSchemas.size()];
-            for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
-                FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
-                row[i] = entity.get(fieldSchema.name);
-            }
+            Object[] row = toRow(entity, milvusConfig.fieldSchemas);
             rows.add(row);
         }
         return rows;
+    }
+
+    private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
+        Object[] row = new Object[fieldSchemas.size()];
+        for (int i = 0; i < fieldSchemas.size(); i++) {
+            FieldSchema fieldSchema = fieldSchemas.get(i);
+            row[i] = entity.get(fieldSchema.name);
+        }
+        return row;
     }
 
     public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {

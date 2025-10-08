@@ -7,11 +7,15 @@ import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -89,5 +93,90 @@ public class KvTableUtils {
 
         indexList.sort(Integer::compareTo);
         return Map.entry(indexList.get(0), indexList.get(1));
+    }
+
+    public static Map.Entry<Integer, Integer> getJoinIpColIndex(Join join) {
+        RexNode condition = join.getCondition();
+
+        List<Integer> indexList = new ArrayList<>();
+        if (condition instanceof RexCall) {
+            RexCall call = (RexCall) condition;
+            for (RexNode operand : call.getOperands()) {
+                if (operand instanceof RexCall) {
+                    RexCall ipCall = (RexCall) operand;
+                    if (ipCall.getOperator().getName().equalsIgnoreCase("ip")) {
+                        indexList.add(((RexInputRef) ipCall.getOperands().get(0)).getIndex());
+                        indexList.add(((RexInputRef) ipCall.getOperands().get(1)).getIndex());
+                        break;
+                    }
+                }
+            }
+        } else {
+            return null;
+        }
+
+        if (indexList.size() != 2) {
+            return null;
+        }
+
+        indexList.sort(Integer::compareTo);
+        return Map.entry(indexList.get(0), indexList.get(1));
+    }
+
+    public static class JoinPostProcessConfig {
+        public boolean hasFindJoin = false;
+        public int limit = 0;
+        public List<Integer> projectColumns = new ArrayList<>();
+    }
+
+    public static JoinPostProcessConfig findJoinPostProcessConfig(RelNode root, Join join) {
+        JoinPostProcessConfig joinPostProcessConfig = new JoinPostProcessConfig();
+        findJoinPostProcessConfig(root, join, joinPostProcessConfig);
+        if (!joinPostProcessConfig.hasFindJoin) {
+            return null;
+        }
+        return joinPostProcessConfig;
+    }
+
+    public static void findJoinPostProcessConfig(RelNode root, Join join, JoinPostProcessConfig joinPostProcessConfig) {
+        if (root instanceof Join) {
+            //todo check root is match to join param
+            joinPostProcessConfig.hasFindJoin = true;
+            return;
+        }
+
+        int oldLimit = joinPostProcessConfig.limit;
+        List<Integer> oldProjectColumns = joinPostProcessConfig.projectColumns;
+
+        if (root instanceof LogicalSort) {
+            LogicalSort logicalSort = (LogicalSort) root;
+            if (logicalSort.fetch != null && logicalSort.fetch instanceof RexLiteral) {
+                int limit = ((RexLiteral) logicalSort.fetch).getValueAs(BigDecimal.class).intValue();
+                joinPostProcessConfig.limit = limit;
+            }
+        } else if (root instanceof LogicalProject) {
+            LogicalProject logicalProject = (LogicalProject) root;
+            List<Integer> projectColumns = new ArrayList<>();
+            for (RexNode node : logicalProject.getProjects()) {
+                if (node instanceof RexInputRef) {
+                    projectColumns.add(((RexInputRef) node).getIndex());
+                }
+            }
+            joinPostProcessConfig.projectColumns = projectColumns;
+        } else {
+            joinPostProcessConfig.limit = 0;
+            joinPostProcessConfig.projectColumns = new ArrayList<>();
+        }
+
+        List<RelNode> inputs = root.getInputs();
+        for (RelNode input : inputs) {
+            findJoinPostProcessConfig(input, join, joinPostProcessConfig);
+            if (joinPostProcessConfig.hasFindJoin) {
+                return;
+            }
+        }
+
+        joinPostProcessConfig.limit = oldLimit;
+        joinPostProcessConfig.projectColumns = oldProjectColumns;
     }
 }

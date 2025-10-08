@@ -1,12 +1,15 @@
 package com.sqlrec.node;
 
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.utils.JoinUtils;
 import com.sqlrec.utils.KvTableUtils;
 import org.apache.calcite.interpreter.*;
 import org.apache.calcite.interpreter.Compiler;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +35,62 @@ public class KvJoinNode implements Node {
             throw new IllegalArgumentException("right table is not kv table");
         }
 
+        Map.Entry<Integer, Integer> joinIpColIndex = KvTableUtils.getJoinIpColIndex(rel);
+        if (joinIpColIndex != null) {
+            if (rightTable instanceof SqlRecVectorTable) {
+                joinBySearch(joinIpColIndex, (SqlRecVectorTable) rightTable);
+            } else {
+                throw new IllegalArgumentException("right table is not vector table");
+            }
+        } else {
+            joinByPrimaryKey(rightTable);
+        }
+    }
+
+    private void joinBySearch(Map.Entry<Integer, Integer> joinIpColIndex, SqlRecVectorTable rightTable) throws InterruptedException {
+        int limit = 0;
+        List<Integer> projectColumns = null;
+
+        if (rel instanceof SqlRecJoin) {
+            SqlRecJoin sqlRecJoin = (SqlRecJoin) rel;
+            limit = sqlRecJoin.getLimit();
+            projectColumns = new ArrayList<>();
+            for (int index : sqlRecJoin.getProjectList()) {
+                if (index >= leftSize) {
+                    projectColumns.add(index - leftSize);
+                }
+            }
+        }
+        if (projectColumns == null || projectColumns.isEmpty()) {
+            projectColumns = new ArrayList<>();
+            for (int i = 0; i < rightSize; i++) {
+                projectColumns.add(i);
+            }
+        }
+
+        int leftJoinKeyColIndex = joinIpColIndex.getKey();
+        int rightJoinKeyColIndex = joinIpColIndex.getValue() - leftSize;
+        String rightJoinKeyColName = rel.getRight().getRowType().getFieldNames().get(rightJoinKeyColIndex);
+
+        Row leftRow = null;
+        while ((leftRow = leftSource.receive()) != null) {
+            Object[] leftValue = leftRow.copyValues();
+            Object leftJoinIp = leftValue[leftJoinKeyColIndex];
+            List<Float> embedding = JoinUtils.convertToFloat(leftJoinIp);
+            List<Object[]> rightValues = rightTable.searchByEmbedding(rightJoinKeyColName, embedding, limit, projectColumns);
+            if (rightValues == null || rightValues.isEmpty()) {
+                if (rel.getJoinType() == JoinRelType.LEFT) {
+                    send(leftValue, null);
+                }
+            } else {
+                for (Object[] rightValue : rightValues) {
+                    send(leftValue, rightValue);
+                }
+            }
+        }
+    }
+
+    private void joinByPrimaryKey(SqlRecKvTable rightTable) throws InterruptedException {
         Map.Entry<Integer, Integer> joinKeyColIndex = KvTableUtils.getJoinKeyColIndex(rel);
         int leftJoinKeyColIndex = joinKeyColIndex.getKey();
 

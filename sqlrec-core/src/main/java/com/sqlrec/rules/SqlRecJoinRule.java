@@ -71,10 +71,13 @@ public class SqlRecJoinRule extends ConverterRule {
                     throw new IllegalArgumentException("join key column must be equal to right kv table primary key column");
                 }
             } else {
-                throw new IllegalArgumentException("Join condition must be equal operator");
+                Map.Entry<Integer, Integer> ipColIndex = KvTableUtils.getJoinIpColIndex(join);
+                if (ipColIndex == null) {
+                    throw new IllegalArgumentException("Join condition must be RexCall of kind IP");
+                }
             }
         } else {
-            throw new IllegalArgumentException("Join condition must be equal operator");
+            throw new IllegalArgumentException("Join condition must be RexCall");
         }
 
         return true;

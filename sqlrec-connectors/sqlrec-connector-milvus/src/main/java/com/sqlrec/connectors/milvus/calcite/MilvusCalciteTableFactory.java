@@ -22,7 +22,7 @@ public class MilvusCalciteTableFactory implements HmsTableFactory {
                 milvusConfig.fieldSchemas, milvusConfig.primaryKey
         );
 
-        return null;
+        return new MilvusCalciteTable(milvusConfig);
     }
 
     @Override
