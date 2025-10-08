@@ -40,6 +40,7 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         RedisConfig redisConfig = RedisOptions.getRedisConfig(options);
+        redisConfig.database = context.getObjectIdentifier().getDatabaseName();
         redisConfig.tableName = context.getObjectIdentifier().getObjectName();
         redisConfig.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(tableSchema);
         redisConfig.primaryKey = FlinkSchemaUtils.getPrimaryKey(tableSchema);

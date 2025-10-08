@@ -93,7 +93,7 @@ public class RedisHandler {
     }
 
     private byte[] getKeyBytes(String rowKey) {
-        String finalRowKey = redisConfig.tableName + ":" + rowKey;
+        String finalRowKey = redisConfig.database + ":" + redisConfig.tableName + ":" + rowKey;
         return finalRowKey.getBytes(StandardCharsets.UTF_8);
     }
 }

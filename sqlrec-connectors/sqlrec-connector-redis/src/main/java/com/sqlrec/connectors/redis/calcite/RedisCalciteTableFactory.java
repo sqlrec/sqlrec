@@ -16,6 +16,7 @@ public class RedisCalciteTableFactory implements HmsTableFactory {
     public org.apache.calcite.schema.Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> flinkTableOptions = HiveTableUtils.getFlinkTableOptions(tableObj);
         RedisConfig redisConfig = RedisOptions.getRedisConfig(flinkTableOptions);
+        redisConfig.database = tableObj.getDbName();
         redisConfig.tableName = tableObj.getTableName();
         redisConfig.fieldSchemas = HiveTableUtils.parse(tableObj);
         redisConfig.primaryKey = HiveTableUtils.getTablePrimaryKey(tableObj);

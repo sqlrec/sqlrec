@@ -130,6 +130,7 @@ public class TestRedisTable {
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "string";
         redisConfig.ttl = 10000;
+        redisConfig.database = "default";
         redisConfig.tableName = "t1";
         redisConfig.fieldSchemas = fieldSchemas;
         redisConfig.primaryKey = "ID";
@@ -149,6 +150,7 @@ public class TestRedisTable {
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "list";
         redisConfig.ttl = 10000;
+        redisConfig.database = "default";
         redisConfig.tableName = "t2";
         redisConfig.fieldSchemas = fieldSchemas;
         redisConfig.primaryKey = "ID";
