@@ -28,6 +28,18 @@ public class SqlCreateSqlFunction extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("create");
+        if (orReplace) {
+            writer.keyword("or");
+            writer.keyword("replace");
+        }
+        writer.keyword("sql");
+        writer.keyword("function");
+        funcName.unparse(writer, leftPrec, rightPrec);
+    }
+
     public boolean isOrReplace() {
         return orReplace;
     }

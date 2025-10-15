@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -21,11 +22,20 @@ public class CacheTableBindable implements BindableInterface {
         this.tableName = tableName;
         this.bindable = bindable;
         this.createSql = createSql;
+
+        List<RelDataTypeField> bindableFields = bindable.getReturnDataFields();
+        if (bindableFields == null || bindableFields.isEmpty()) {
+            throw new RuntimeException("bindable return data fields is null or empty");
+        }
     }
 
     @Override
-    public Enumerable<Object[]> bind(CalciteSchema schema) {
-        Enumerable<Object[]> enumerable = bindable.bind(schema);
+    public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        Enumerable<Object[]> enumerable = bindable.bind(schema, context);
+        if (enumerable == null) {
+            enumerable = Linq4j.emptyEnumerable();
+        }
+
         CacheTable cacheTable = new CacheTable(tableName, enumerable, bindable.getReturnDataFields());
         cacheTable.setCreateSql(createSql);
         schema.add(tableName, cacheTable);

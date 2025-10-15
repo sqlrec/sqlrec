@@ -9,12 +9,22 @@ import java.util.List;
 public class SqlCallSqlFunction extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CALL", SqlKind.OTHER);
     private SqlIdentifier funcName;
-    private List<SqlIdentifier> inputTableList;
+    private SqlGetVariable funcNameVariable;
+    private List<SqlNode> inputTableList;
+    private SqlIdentifier likeTableName;
 
-    public SqlCallSqlFunction(SqlParserPos pos, SqlIdentifier funcName, List<SqlIdentifier> inputTableList) {
+    public SqlCallSqlFunction(
+            SqlParserPos pos,
+            SqlIdentifier funcName,
+            SqlGetVariable funcNameVariable,
+            List<SqlNode> inputTableList,
+            SqlIdentifier likeTableName
+    ) {
         super(pos);
         this.funcName = funcName;
+        this.funcNameVariable = funcNameVariable;
         this.inputTableList = inputTableList;
+        this.likeTableName = likeTableName;
     }
 
     @Override
@@ -30,7 +40,11 @@ public class SqlCallSqlFunction extends SqlCall {
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
         writer.keyword("call");
-        funcName.unparse(writer, leftPrec, rightPrec);
+        if (funcNameVariable != null) {
+            funcNameVariable.unparse(writer, leftPrec, rightPrec);
+        } else {
+            funcName.unparse(writer, leftPrec, rightPrec);
+        }
         writer.literal("(");
         for (int i = 0; i < inputTableList.size(); i++) {
             if (i > 0) {
@@ -39,13 +53,25 @@ public class SqlCallSqlFunction extends SqlCall {
             inputTableList.get(i).unparse(writer, leftPrec, rightPrec);
         }
         writer.literal(")");
+        if (likeTableName != null) {
+            writer.keyword("like");
+            likeTableName.unparse(writer, leftPrec, rightPrec);
+        }
     }
 
     public SqlIdentifier getFuncName() {
         return funcName;
     }
 
-    public List<SqlIdentifier> getInputTableList() {
+    public List<SqlNode> getInputTableList() {
         return inputTableList;
+    }
+
+    public SqlGetVariable getFuncNameVariable() {
+        return funcNameVariable;
+    }
+
+    public SqlIdentifier getLikeTableName() {
+        return likeTableName;
     }
 }

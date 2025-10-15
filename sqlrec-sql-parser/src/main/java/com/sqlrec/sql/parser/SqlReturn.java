@@ -26,6 +26,14 @@ public class SqlReturn extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("return");
+        if (tableName != null) {
+            tableName.unparse(writer, leftPrec, rightPrec);
+        }
+    }
+
     public SqlIdentifier getTableName() {
         return tableName;
     }

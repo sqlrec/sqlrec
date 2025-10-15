@@ -6,6 +6,7 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.util.SqlBasicVisitor;
+import org.apache.flink.sql.parser.ddl.SqlSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,10 @@ public class SqlTypeChecker {
             if (((SqlCache) flinkSqlNode).getSelect()!=null){
                 return isSqlTableRunable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
             }
+            return true;
+        }
+
+        if (flinkSqlNode instanceof SqlSet) {
             return true;
         }
 

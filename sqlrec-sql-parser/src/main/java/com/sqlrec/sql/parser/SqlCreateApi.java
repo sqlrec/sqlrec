@@ -30,6 +30,19 @@ public class SqlCreateApi extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("create");
+        if (orReplace) {
+            writer.keyword("or");
+            writer.keyword("replace");
+        }
+        writer.keyword("api");
+        apiName.unparse(writer, leftPrec, rightPrec);
+        writer.keyword("with");
+        funcName.unparse(writer, leftPrec, rightPrec);
+    }
+
     public String getApiName() {
         return apiName.getSimple();
     }

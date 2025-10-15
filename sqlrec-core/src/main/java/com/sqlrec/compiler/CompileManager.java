@@ -2,34 +2,35 @@ package com.sqlrec.compiler;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import com.sqlrec.common.schema.TableFunction;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.DbUtils;
-import com.sqlrec.utils.TableFunctionUtils;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 public class CompileManager {
-    private static Map<String, FunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
+    private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
+        sql = SqlPreProcesser.preProcessSql(sql);
+
         SqlParser.Config parserConfig = SqlParser.config()
                 .withConformance(FlinkSqlConformance.DEFAULT)
                 .withParserFactory(FlinkSqlParserImpl.FACTORY)
@@ -44,40 +45,24 @@ public class CompileManager {
         }
 
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
+            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema, false);
         }
         if (flinkSqlNode instanceof SqlCache) {
             return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
+        }
+        if (flinkSqlNode instanceof SqlSet) {
+            return getSetBindable((SqlSet) flinkSqlNode);
         }
 
         return getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
     }
 
-    private static BindableInterface getCallSqlFunctionBindable(SqlCallSqlFunction callSqlFunction, CalciteSchema schema) throws Exception {
-        String functionName = callSqlFunction.getFuncName().getSimple();
-        List<String> inputTableList = callSqlFunction.getInputTableList()
-                .stream()
-                .map(SqlIdentifier::getSimple)
-                .collect(Collectors.toList());
-
-        // todo check is function name ambiguous
-        TableFunction tableFunction = TableFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
-        if (tableFunction != null) {
-            if (inputTableList.size() != 1) {
-                throw new Exception("table function only support one table input for " + functionName);
-            }
-            return new TableFunctionBindable(tableFunction, inputTableList.get(0), schema);
-        }
-
-        FunctionBindable sqlFunctionBindable = compileSqlFunction(functionName);
-        if (sqlFunctionBindable != null) {
-            if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
-                throw new Exception("function input table not match");
-            }
-            return new CallFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
-        }
-
-        throw new Exception("function not find: " + functionName);
+    private static BindableInterface getCallSqlFunctionBindable(
+            SqlCallSqlFunction callSqlFunction,
+            CalciteSchema schema,
+            boolean needReturnSchema
+    ) throws Exception {
+        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, needReturnSchema);
     }
 
     private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
@@ -86,10 +71,7 @@ public class CompileManager {
 
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
         if (callSqlFunction != null) {
-            BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
-            if (bindableInterface.getReturnDataFields() == null) {
-                throw new Exception("function without return table is not cacheable: " + callSqlFunction.getFuncName());
-            }
+            BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema, true);
             return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 
@@ -110,7 +92,7 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName) throws Exception {
+    public static SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
@@ -119,12 +101,13 @@ public class CompileManager {
         if (sqlFunction == null) {
             return null;
         }
-        List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
-        FunctionBindable functionBindable = compileSqlFunction(functionName, sqlList);
-        return functionBindable;
+        List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
+        }.getType());
+        SqlFunctionBindable sqlFunctionBindable = compileSqlFunction(functionName, sqlList);
+        return sqlFunctionBindable;
     }
 
-    public static FunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
+    public static SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
         functionName = functionName.toUpperCase();
         FunctionCompiler functionCompiler = new FunctionCompiler(null);
         functionCompiler.compileAllSql(sqlList);
@@ -138,11 +121,17 @@ public class CompileManager {
         throw new RuntimeException("function compile failed");
     }
 
-    public static FunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
+    public static SqlFunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
         SqlApi sqlApi = DbUtils.getSqlApi(apiName);
         if (sqlApi == null || StringUtils.isAllEmpty(sqlApi.getFunctionName())) {
             throw new Exception("api not fund : " + apiName);
         }
         return compileSqlFunction(sqlApi.getFunctionName());
+    }
+
+    public static SetBindable getSetBindable(SqlSet set) {
+        SqlCharStringLiteral key = (SqlCharStringLiteral) set.getKey();
+        SqlCharStringLiteral value = (SqlCharStringLiteral) set.getValue();
+        return new SetBindable(SchemaUtils.getValueOfStringLiteral(key), SchemaUtils.getValueOfStringLiteral(value));
     }
 }

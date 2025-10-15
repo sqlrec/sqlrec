@@ -35,29 +35,59 @@ SqlCallSqlFunction SqlCallSqlFunction() :
 
 SqlCallSqlFunction GetCallSqlFunction() :
 {
+    SqlGetVariable funcNameVariable = null;
     SqlIdentifier funcName = null;
-    List<SqlIdentifier> inputList = new ArrayList<SqlIdentifier>();
+    List<SqlNode> inputList = new ArrayList<SqlNode>();
+    SqlIdentifier likeTableName = null;
 }
 {
-    funcName = SimpleIdentifier()
+    (
+        funcNameVariable = SqlGetVariable()
+    |
+        funcName = SimpleIdentifier()
+    )
     <LPAREN>
     [
         AddCallSqlFunction(inputList)
         ( <COMMA> AddCallSqlFunction(inputList) )*
     ]
     <RPAREN>
+    [
+        <LIKE>
+        likeTableName = SimpleIdentifier()
+    ]
     {
-        return new SqlCallSqlFunction(getPos(), funcName, inputList);
+        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName);
     }
 }
 
-void AddCallSqlFunction(List<SqlIdentifier> list) :
+void AddCallSqlFunction(List<SqlNode> list) :
 {
-    final SqlIdentifier tableName;
+    final SqlNode input;
 }
 {
-    tableName = SimpleIdentifier()
-    { list.add(tableName); }
+    (
+        input = SimpleIdentifier()
+    |
+        input = SqlGetVariable()
+    |
+        input = StringLiteral()
+    )
+    { list.add(input); }
+}
+
+SqlGetVariable SqlGetVariable() :
+{
+    SqlNode variableName = null;
+}
+{
+    <GET>
+    <LPAREN>
+    variableName = StringLiteral()
+    <RPAREN>
+    {
+        return new SqlGetVariable(getPos(), variableName);
+    }
 }
 
 SqlDefineInputTable SqlDefineInputTable():

@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.schema.ExecuteContext;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -31,7 +32,7 @@ public class CalciteBindable implements BindableInterface {
     }
 
     @Override
-    public Enumerable<Object[]> bind(CalciteSchema schema) {
+    public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         Enumerable rawData = bindable.bind(new DataContext() {
             @Override
             public @Nullable SchemaPlus getRootSchema() {

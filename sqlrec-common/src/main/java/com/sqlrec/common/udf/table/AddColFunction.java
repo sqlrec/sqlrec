@@ -8,28 +8,34 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class ShuffleFunction {
-    public CacheTable eval(CacheTable input) {
+public class AddColFunction {
+    public CacheTable eval(CacheTable input, String colName, String value) {
+        if (colName == null || colName.isEmpty()) {
+            throw new IllegalArgumentException("col name is empty");
+        }
+
         List<RelDataTypeField> dataFields = input.getDataFields();
-        Enumerable<Object[]> enumerable = input.scan(null);
+        for (RelDataTypeField field : dataFields) {
+            if (field.getName().equalsIgnoreCase(colName)) {
+                throw new IllegalArgumentException("col name already exists");
+            }
+        }
 
         List<RelDataTypeField> newDataFields = new ArrayList<>(dataFields);
-        newDataFields.add(DataTypeUtils.getRelDataTypeField("origin_index", dataFields.size(), SqlTypeName.INTEGER));
+        newDataFields.add(DataTypeUtils.getRelDataTypeField(colName, dataFields.size(), SqlTypeName.VARCHAR));
 
+        Enumerable<Object[]> enumerable = input.scan(null);
         List<Object[]> newData = new ArrayList<>();
         if (enumerable != null) {
-            int index = 0;
             for (Object[] data : enumerable) {
                 Object[] newDataRow = new Object[data.length + 1];
                 System.arraycopy(data, 0, newDataRow, 0, data.length);
-                newDataRow[data.length] = index++;
+                newDataRow[data.length] = value;
                 newData.add(newDataRow);
             }
         }
-        Collections.shuffle(newData);
 
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
     }

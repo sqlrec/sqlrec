@@ -1,6 +1,7 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
@@ -88,7 +89,7 @@ public class TestRedisTable {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-            Enumerable enumerable = bindable.bind(schema);
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 for (Object[] result : results) {

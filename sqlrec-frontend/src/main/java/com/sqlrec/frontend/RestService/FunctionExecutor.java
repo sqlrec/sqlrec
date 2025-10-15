@@ -1,8 +1,9 @@
 package com.sqlrec.frontend.RestService;
 
 import com.google.gson.Gson;
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.runtime.FunctionBindable;
+import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -11,27 +12,26 @@ import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class FunctionExecutor {
     public static ExecuteData execute(String apiName, String requestData) throws Exception {
-        FunctionBindable functionBindable = CompileManager.getApiBindSqlFunction(apiName);
-        if (functionBindable == null) {
+        SqlFunctionBindable sqlFunctionBindable = CompileManager.getApiBindSqlFunction(apiName);
+        if (sqlFunctionBindable == null) {
             throw new RuntimeException("cant find function for " + apiName);
         }
         CalciteSchema schema = HmsSchema.getHmsCalciteSchema();
 
         RequestData requestDataObj = new Gson().fromJson(requestData, RequestData.class);
-        addTableToSchema(schema, functionBindable, requestDataObj.inputs);
+        addTableToSchema(schema, sqlFunctionBindable, requestDataObj.inputs);
 
         ExecuteData executeData = new ExecuteData();
         try {
-            Enumerable<Object[]> enumerable = functionBindable.bind(schema);
+            Enumerable<Object[]> enumerable = sqlFunctionBindable.bind(schema, new ExecuteContext());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
-                executeData.data = utils.convertToMapList(results, functionBindable.getReturnDataFields());
+                executeData.data = utils.convertToMapList(results, sqlFunctionBindable.getReturnDataFields());
             } else {
                 executeData.msg = "function return null";
             }
@@ -41,8 +41,8 @@ public class FunctionExecutor {
         return executeData;
     }
 
-    private static void addTableToSchema(CalciteSchema schema, FunctionBindable functionBindable, Map<String, List<Map<String, Object>>> params) throws Exception {
-        List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = functionBindable.getInputTables();
+    private static void addTableToSchema(CalciteSchema schema, SqlFunctionBindable sqlFunctionBindable, Map<String, List<Map<String, Object>>> params) throws Exception {
+        List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         for (Map.Entry<String, List<RelDataTypeField>> tablePlaceholder : tablePlaceholders) {
             String tableName = tablePlaceholder.getKey();
             List<RelDataTypeField> dataFields = tablePlaceholder.getValue();

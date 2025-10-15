@@ -1,5 +1,6 @@
 package com.sqlrec;
 
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -10,7 +11,7 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -64,7 +65,7 @@ public class TestUdfSupport {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-            Enumerable enumerable = bindable.bind(schema);
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 for (Object[] result : results) {

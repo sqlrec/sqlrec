@@ -1,9 +1,9 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.common.schema.TableFunction;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.impl.ScalarFunctionImpl;
+import org.apache.calcite.sql.SqlCharStringLiteral;
 
 import java.util.Objects;
 
@@ -20,9 +20,17 @@ public class SchemaUtils {
 
     public static ScalarFunction createScalarFunction(String className, String methodName) throws Exception {
         Class<?> clazz = Class.forName(className);
-        if (clazz.isAssignableFrom(TableFunction.class)) {
+        return ScalarFunctionImpl.create(clazz, methodName);
+    }
+
+    public static String getValueOfStringLiteral(SqlCharStringLiteral value) {
+        if (value == null) {
             return null;
         }
-        return ScalarFunctionImpl.create(clazz, methodName);
+        String valueStr = value.toString();
+        if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
+            return valueStr.substring(1, valueStr.length() - 1);
+        }
+        return valueStr;
     }
 }

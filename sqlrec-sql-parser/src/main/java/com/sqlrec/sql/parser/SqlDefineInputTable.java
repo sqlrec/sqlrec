@@ -29,6 +29,24 @@ public class SqlDefineInputTable extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("define");
+        writer.keyword("input");
+        writer.keyword("table");
+        tableName.unparse(writer, leftPrec, rightPrec);
+        writer.keyword("(");
+        for (int i = 0; i < columnList.size(); i++) {
+            if (i > 0) {
+                writer.literal(", ");
+            }
+            columnList.get(i).unparse(writer, leftPrec, rightPrec);
+            writer.literal(" ");
+            columnTypeList.get(i).unparse(writer, leftPrec, rightPrec);
+        }
+        writer.keyword(")");
+    }
+
     public SqlIdentifier getTableName() {
         return tableName;
     }

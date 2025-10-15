@@ -19,7 +19,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -38,7 +38,7 @@ public class SqlProcessorTest {
         });
 
         HmsSchema.setGlobalSchema(schema);
-        TableFunctionUtils.registerTableFunction("default", "fun1", SqlProcessorTest.class);  // avoid find function in hms
+        TableFunctionUtils.registerTableFunction("default", "fun1", Integer.TYPE);  // avoid find function in hms
 
         testSqlFunctionCompile(schema);
 

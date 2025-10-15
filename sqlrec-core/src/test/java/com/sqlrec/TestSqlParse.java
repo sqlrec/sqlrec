@@ -1,24 +1,27 @@
 package com.sqlrec;
 
+import com.sqlrec.compiler.CompileManager;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.validate.SqlConformanceEnum;
-import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
-import org.junit.Test;
+import org.apache.calcite.sql.dialect.AnsiSqlDialect;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
-public class TestCalciteSql {
+public class TestSqlParse {
     @Test
-    public void testCalciteSql() throws SqlParseException {
-        // Configure SQL parser
-        SqlParser.Config parserConfig = SqlParser.config()
-                .withConformance(SqlConformanceEnum.DEFAULT)
-                .withParserFactory(FlinkSqlParserImpl.FACTORY);
-
+    public void testCalciteSql() throws Exception {
         List<String> sqlList = Arrays.asList(
+                "set param=test",
+                "use default",
+                "show tables from default",
+                "show tables in default",
+                "call fun1(get('id'), t1, '10')",
+                "call get('fun1')()",
+                "call get('fun1')(get('id'), t1, '10')",
+                "call fun1(get('id'), t1, '10') like t1",
+                "call get('fun1')() like t1",
+                "call get('fun1')(get('id'), t1, '10') like t1",
                 "create sql function fun1",
                 "create or replace sql function fun1",
                 "create api api1 with fun1",
@@ -36,9 +39,9 @@ public class TestCalciteSql {
         );
 
         for (String sql : sqlList) {
-            SqlParser parser = SqlParser.create(sql, parserConfig);
-            SqlNode sqlNode = parser.parseQuery();
+            SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
             System.out.println(sqlNode.getClass());
+            System.out.println(sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql());
         }
     }
 }

@@ -25,6 +25,15 @@ public class SqlShowCreateSqlFunction extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("show");
+        writer.keyword("create");
+        writer.keyword("sql");
+        writer.keyword("function");
+        funcName.unparse(writer, leftPrec, rightPrec);
+    }
+
     public SqlIdentifier getFuncName() {
         return funcName;
     }

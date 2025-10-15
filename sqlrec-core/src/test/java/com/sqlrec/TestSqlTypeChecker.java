@@ -3,7 +3,7 @@ package com.sqlrec;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlTypeChecker;
 import org.apache.calcite.sql.SqlNode;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;

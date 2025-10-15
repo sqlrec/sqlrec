@@ -1,5 +1,6 @@
 package com.sqlrec;
 
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -14,7 +15,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +36,7 @@ public class TestNormalSqlCompiler {
 
         BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(sql, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-        Enumerable enumerable = bindable.bind(schema);
+        Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
         List<Object[]> results = enumerable.toList();
         for (Object[] result : results) {
             System.out.println(java.util.Arrays.toString(result));

@@ -3,7 +3,7 @@ package com.sqlrec.common.config;
 public class SqlRecConfigs {
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
-            "jdbc:postgresql://127.0.0.1:30308/sqlrec?sslmode=disable",
+            "jdbc:postgresql://192.168.1.5:30308/sqlrec?sslmode=disable",
             "meta db url"
     );
     public static final ConfigOption<String> DB_USER = new ConfigOption<>(
@@ -24,7 +24,7 @@ public class SqlRecConfigs {
 
     public static final ConfigOption<String> HIVE_METASTORE_URI = new ConfigOption<>(
             "HIVE_METASTORE_URI",
-            "thrift://127.0.0.1:32083",
+            "thrift://192.168.1.5:32083",
             "hive metastore uri"
     );
 
@@ -36,7 +36,7 @@ public class SqlRecConfigs {
 
     public static final ConfigOption<String> FLINK_SQL_GATEWAY_ADDRESS = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_ADDRESS",
-            "127.0.0.1",
+            "192.168.1.5",
             "flink sql gateway to proxy"
     );
 
@@ -66,7 +66,7 @@ public class SqlRecConfigs {
 
     public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
             "DEFAULT_TEST_IP",
-            "127.0.0.1",
+            "192.168.1.5",
             "default test ip"
     );
 }

@@ -25,6 +25,14 @@ public class SqlShowCreateApi extends SqlCall {
         return Collections.emptyList();
     }
 
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("show");
+        writer.keyword("create");
+        writer.keyword("api");
+        apiName.unparse(writer, leftPrec, rightPrec);
+    }
+
     public SqlIdentifier getApiName() {
         return apiName;
     }

@@ -4,7 +4,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
-import com.sqlrec.runtime.FunctionBindable;
+import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
@@ -30,7 +30,7 @@ public class FunctionCompiler {
     private FunctionCompileStage stage;
     private Boolean isOrReplace;
     private CalciteSchema schema;
-    private FunctionBindable functionBindable;
+    private SqlFunctionBindable sqlFunctionBindable;
     private List<String> sqlList;
 
     public FunctionCompiler(CalciteSchema schema) {
@@ -41,7 +41,7 @@ public class FunctionCompiler {
         } else {
             this.schema = HmsSchema.getHmsCalciteSchema();
         }
-        this.functionBindable = new FunctionBindable(
+        this.sqlFunctionBindable = new SqlFunctionBindable(
                 new ArrayList<>(),
                 new ArrayList<>(),
                 null,
@@ -50,8 +50,8 @@ public class FunctionCompiler {
         sqlList = new ArrayList<>();
     }
 
-    public FunctionBindable getFunctionBindable() {
-        return functionBindable;
+    public SqlFunctionBindable getFunctionBindable() {
+        return sqlFunctionBindable;
     }
 
     public List<String> getSqlList() {
@@ -95,7 +95,7 @@ public class FunctionCompiler {
     private void compileFunctionDefinition(SqlNode flinkSqlNode) {
         if (flinkSqlNode instanceof SqlCreateSqlFunction) {
             SqlCreateSqlFunction sqlCreateFunction = (SqlCreateSqlFunction) flinkSqlNode;
-            functionBindable.setFunName(sqlCreateFunction.getFuncName().getSimple());
+            sqlFunctionBindable.setFunName(sqlCreateFunction.getFuncName().getSimple());
             isOrReplace = sqlCreateFunction.isOrReplace();
             stage = FunctionCompileStage.FUNCTION_PARAM;
         } else {
@@ -110,7 +110,7 @@ public class FunctionCompiler {
                     sqlDefineInputTable.getColumnList(),
                     sqlDefineInputTable.getColumnTypeList()
             );
-            functionBindable.addInputTable(sqlDefineInputTable.getTableName().getSimple(), relDataTypeFields);
+            sqlFunctionBindable.addInputTable(sqlDefineInputTable.getTableName().getSimple(), relDataTypeFields);
             CacheTable tmpTable = new CacheTable(
                     sqlDefineInputTable.getTableName().getSimple(),
                     null,
@@ -140,14 +140,14 @@ public class FunctionCompiler {
                     throw new Exception("return table is not cache table");
                 }
 
-                functionBindable.setReturnTableName(returnTableName);
-                functionBindable.setReturnDataFields(table.getDataFields());
+                sqlFunctionBindable.setReturnTableName(returnTableName);
+                sqlFunctionBindable.setReturnDataFields(table.getDataFields());
             }
 
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
-            functionBindable.getBindableList().add(bindable);
+            sqlFunctionBindable.getBindableList().add(bindable);
             if (bindable instanceof CacheTableBindable) {
                 CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
                 CacheTable tmpTable = new CacheTable(

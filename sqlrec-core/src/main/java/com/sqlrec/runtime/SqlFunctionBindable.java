@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.schema.ExecuteContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -10,14 +11,14 @@ import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 
-public class FunctionBindable implements BindableInterface {
+public class SqlFunctionBindable implements BindableInterface {
     private String funName;
     private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;
     private List<BindableInterface> bindableList;
     private String returnTableName;
     private List<RelDataTypeField> returnDataFields;
 
-    public FunctionBindable(List<Map.Entry<String, List<RelDataTypeField>>> inputTables, List<BindableInterface> bindableList, String returnTableName, List<RelDataTypeField> returnDataFields) {
+    public SqlFunctionBindable(List<Map.Entry<String, List<RelDataTypeField>>> inputTables, List<BindableInterface> bindableList, String returnTableName, List<RelDataTypeField> returnDataFields) {
         this.inputTables = inputTables;
         this.bindableList = bindableList;
         this.returnTableName = returnTableName;
@@ -25,9 +26,9 @@ public class FunctionBindable implements BindableInterface {
     }
 
     @Override
-    public Enumerable<Object[]> bind(CalciteSchema schema) {
+    public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         for (BindableInterface bindable : bindableList) {
-            bindable.bind(schema);
+            bindable.bind(schema, context);
         }
 
         if (returnTableName == null) {

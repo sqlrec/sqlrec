@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
@@ -16,7 +17,7 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -43,7 +44,7 @@ public class CalciteSchemaTest {
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
         BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-        Enumerable enumerable = bindable.bind(schema);
+        Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
         assert enumerable != null;
         List<Object[]> results = enumerable.toList();
         assert results.size() == 1;

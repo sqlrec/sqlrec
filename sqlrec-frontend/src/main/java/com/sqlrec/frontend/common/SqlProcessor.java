@@ -3,6 +3,7 @@ package com.sqlrec.frontend.common;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.NormalSqlCompiler;
@@ -23,6 +24,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
@@ -35,12 +37,14 @@ import java.util.stream.Collectors;
 
 public class SqlProcessor {
     private CalciteSchema schema;
+    private ExecuteContext context;
     private String defaultSchema;
     private FunctionCompiler functionCompiler;
     private Map<THandleIdentifier, SqlProcessResult> sqlProcessorMap;
 
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
+        context = new ExecuteContext();
         defaultSchema = NormalSqlCompiler.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
     }
@@ -70,11 +74,6 @@ public class SqlProcessor {
     }
 
     private SqlProcessResult executeSql(String sql) throws Exception {
-        if (isSetStatement(sql)) {
-            return null;
-        }
-
-        sql = preProcessSql(sql);
         SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
 
         SqlProcessResult result = tryCompileFunction(sqlNode, sql);
@@ -99,7 +98,11 @@ public class SqlProcessor {
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
             BindableInterface bindableInterface = CompileManager.compileSql(sqlNode, schema, defaultSchema);
-            Enumerable<Object[]> enumerable = bindableInterface.bind(schema);
+            Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
+            // set statement should also execute on sql gateway
+            if (sqlNode instanceof SqlSet) {
+                return null;
+            }
             if (enumerable == null) {
                 return Utils.convertMsgToResult("sql run success without output", "msg");
             }
@@ -234,27 +237,6 @@ public class SqlProcessor {
         }
 
         return null;
-    }
-
-    public static boolean isSetStatement(String sql) {
-        return sql.trim().toLowerCase().startsWith("set ");
-    }
-
-    public static String preProcessSql(String sql) {
-        if(StringUtils.isEmpty(sql)) {
-            return sql;
-        }
-
-        if (StringUtils.deleteWhitespace(sql).equals(StringUtils.deleteWhitespace(Constant.USE_DEFAULT))) {
-            return Constant.USE_DEFAULT_FORMATTED;
-        }
-        if (StringUtils.deleteWhitespace(sql).equals(StringUtils.deleteWhitespace(Constant.SHOW_TABLES_FROM_DEFAULT))) {
-            return Constant.SHOW_TABLES_FROM_DEFAULT_FORMATTED;
-        }
-        if (StringUtils.deleteWhitespace(sql).equals(StringUtils.deleteWhitespace(Constant.SHOW_TABLES_IN_DEFAULT))) {
-            return Constant.SHOW_TABLES_IN_DEFAULT_FORMATTED;
-        }
-        return sql;
     }
 
     public static void saveSqlFunction(FunctionCompiler compiler) {
