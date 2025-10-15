@@ -1,7 +1,9 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.sql.parser.*;
+import com.sqlrec.sql.parser.SqlCache;
+import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.*;
@@ -17,7 +19,7 @@ public class SqlTypeChecker {
             return true;
         }
         if (flinkSqlNode instanceof SqlCache) {
-            if (((SqlCache) flinkSqlNode).getSelect()!=null){
+            if (((SqlCache) flinkSqlNode).getSelect() != null) {
                 return isSqlTableRunable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
             }
             return true;
@@ -63,53 +65,63 @@ public class SqlTypeChecker {
         return false;
     }
 
+    public static boolean isSqlContainKvTable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
+        List<String> tableNames = getTableFromSqlNode(flinkSqlNode);
+        for (String tableName : tableNames) {
+            Table table = getTableObj(schema, defaultSchema, tableName);
+            if (table == null) {
+                throw new RuntimeException("table " + tableName + " is not fund");
+            }
+            if (table instanceof SqlRecKvTable) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isSqlTableRunable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         List<String> tableNames = getTableFromSqlNode(flinkSqlNode);
-        if (tableNames.isEmpty()) {
-            return true;
-        }
         for (String tableName : tableNames) {
-            if (tableName.contains(".")) {
-                String[] tableNameParts = tableName.split("\\.");
-                if (tableNameParts.length != 2) {
-                    return false;
-                }
-                String schemaName = tableNameParts[0];
-                String shortTableName = tableNameParts[1];
-                CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
-                if (subSchema == null) {
-                    return false;
-                }
-                if (!checkIsTableRunable(subSchema, shortTableName)) {
-                    return false;
-                }
-            } else {
-                if (!checkIsTableRunable(schema, tableName)) {
-                    CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
-                    return checkIsTableRunable(subSchema, tableName);
-                }
+            Table table = getTableObj(schema, defaultSchema, tableName);
+            if (table == null) {
+                return false;
+            }
+            if (!(table instanceof SqlRecTable)) {
+                return false;
             }
         }
         return true;
     }
 
-    private static boolean checkIsTableRunable(CalciteSchema schema, String tableName) {
-        if (schema == null) {
-            return false;
+    private static Table getTableObj(CalciteSchema schema, String defaultSchema, String tableName) {
+        if (tableName.contains(".")) {
+            String[] tableNameParts = tableName.split("\\.");
+            if (tableNameParts.length != 2) {
+                return null;
+            }
+            String schemaName = tableNameParts[0];
+            String shortTableName = tableNameParts[1];
+            CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
+            return getTableObj(subSchema, shortTableName);
+        } else {
+            Table table = getTableObj(schema, tableName);
+            if (table == null) {
+                CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
+                table = getTableObj(subSchema, tableName);
+            }
+            return table;
         }
+    }
 
-        CalciteSchema.TableEntry tableEntry = schema.getTable(tableName, false);
+    private static Table getTableObj(CalciteSchema schema, String shortTableName) {
+        if (schema == null || shortTableName == null) {
+            return null;
+        }
+        CalciteSchema.TableEntry tableEntry = schema.getTable(shortTableName, false);
         if (tableEntry == null) {
-            return false;
+            return null;
         }
-        Table table = tableEntry.getTable();
-        if (table == null) {
-            return false;
-        }
-        if (table instanceof SqlRecTable) {
-            return true;
-        }
-        return false;
+        return tableEntry.getTable();
     }
 
     public static List<String> getTableFromSqlNode(SqlNode flinkSqlNode) {

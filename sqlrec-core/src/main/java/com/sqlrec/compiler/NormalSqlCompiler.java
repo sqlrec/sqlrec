@@ -57,8 +57,10 @@ public class NormalSqlCompiler {
         SqlValidator validator = createSqlValidate(schema, defaultSchema);
         SqlNode validatedSqlNode = validator.validate(sqlNode);
 
+        boolean containKvTable = SqlTypeChecker.isSqlContainKvTable(validatedSqlNode, schema, defaultSchema);
+
         // Convert the SQL query to a relational expression
-        VolcanoPlanner planner = RuleManager.createPlanner();
+        VolcanoPlanner planner = RuleManager.createPlanner(containKvTable);
         RelOptCluster cluster = RelOptCluster.create(planner, new RexBuilder(new JavaTypeFactoryImpl()));
         final SqlToRelConverter.Config config =
                 SqlToRelConverter.config()

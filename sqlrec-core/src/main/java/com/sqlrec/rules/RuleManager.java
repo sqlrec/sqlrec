@@ -22,7 +22,7 @@ public class RuleManager {
     public static final SqlRecLimitToJoinRule LIMIT_TO_JOIN =
             SqlRecLimitToJoinRule.Config.DEFAULT.toRule();
 
-    public static VolcanoPlanner createPlanner() {
+    public static VolcanoPlanner createPlanner(boolean addKvTableRules) {
         VolcanoPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
         if (CalciteSystemProperty.ENABLE_COLLATION_TRAIT.value()) {
@@ -30,12 +30,15 @@ public class RuleManager {
         }
         RelOptUtil.registerDefaultRules(planner, false, true);
 
-        // todo don't modify the default rules when don't access outside storage
-        addSqlRecRules(planner);
+        if (addKvTableRules) {
+            addKvTableRules(planner);
+        }
+
+        addTableFactoryRules(planner);
         return planner;
     }
 
-    private static void addSqlRecRules(VolcanoPlanner planner) {
+    private static void addKvTableRules(VolcanoPlanner planner) {
         planner.removeRule(CoreRules.FILTER_SCAN);
         planner.addRule(FILTER_SCAN);
 
@@ -52,7 +55,9 @@ public class RuleManager {
         planner.removeRule(CoreRules.JOIN_COMMUTE);
         planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
         planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
+    }
 
+    private static void addTableFactoryRules(VolcanoPlanner planner) {
         HmsSchema.getTableFactorieMap()
                 .values()
                 .forEach(tableFactory -> tableFactory.getRules().forEach(planner::addRule));
