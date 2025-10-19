@@ -96,7 +96,7 @@ public class NormalSqlCompiler {
                 EnumerableRel.Prefer.ARRAY
         );
 
-        return new CalciteBindable(parameters, bindable, bestExp);
+        return new CalciteBindable(parameters, bindable, bestExp, sqlNode);
     }
 
     public static Program getProgram() {

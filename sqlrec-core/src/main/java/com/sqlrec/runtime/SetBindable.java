@@ -6,6 +6,7 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
+import java.util.Set;
 
 public class SetBindable implements BindableInterface {
     private final String key;
@@ -25,5 +26,20 @@ public class SetBindable implements BindableInterface {
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return null;
+    }
+
+    @Override
+    public boolean isParallelizable() {
+        return false;
+    }
+
+    @Override
+    public Set<String> getReadTables() {
+        return Set.of();
+    }
+
+    @Override
+    public Set<String> getWriteTables() {
+        return Set.of();
     }
 }

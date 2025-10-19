@@ -13,8 +13,8 @@ public class TestSqlTypeChecker {
     public void testSqlTypeChecker() throws Exception {
         List<String> sqlList = Arrays.asList(
                 "use `default`",
-                "select * from tt.t1",
-                "select * from ( select * from tt.t1) t",
+                "select * from db1.t1",
+                "select * from ( select * from db1.t1) t",
                 "SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME",
                 "select * from t1 union select * from t2 union select * from t3",
                 "select * from t1 join t2 on t1.id = t2.id",
@@ -22,7 +22,9 @@ public class TestSqlTypeChecker {
                 "update t1 SET column1 = value1 where id in ( select id from t2)",
                 "delete from t1 where id = 1",
                 "delete from t1 where id in ( select id from t2)",
-                "insert into t1 (id, column1) values (1, 'value1')"
+                "insert into t1 (id, column1) values (1, 'value1')",
+                "insert into t1 (id, column1) select id, column1 from t2",
+                "insert into db1.t1 (id, column1) select id, column1 from db1.t2"
         );
 
         for (String sql : sqlList) {
@@ -30,6 +32,8 @@ public class TestSqlTypeChecker {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             List<String> tableNames = SqlTypeChecker.getTableFromSqlNode(flinkSqlNode);
             System.out.println(tableNames);
+            List<String> modifyTableNames = SqlTypeChecker.getModifyTablesFromSqlNode(flinkSqlNode);
+            System.out.println(modifyTableNames);
         }
     }
 }

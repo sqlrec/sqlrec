@@ -116,7 +116,7 @@ public class HmsSchema extends AbstractSchema {
                 }
                 org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(databaseName, function);
                 ScalarFunction scalarFunction = SchemaUtils.createScalarFunction(functionObj.getClassName());
-                if (scalarFunction != null){
+                if (scalarFunction != null) {
                     functionMap.put(function, scalarFunction);
                 }
             }

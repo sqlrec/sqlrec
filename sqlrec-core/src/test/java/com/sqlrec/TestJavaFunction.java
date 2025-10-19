@@ -21,7 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class TestTableFunction {
+public class TestJavaFunction {
     @Test
     public void testTableFunction() throws Exception {
         ExecuteContext executeContext = new ExecuteContext();
@@ -42,16 +42,16 @@ public class TestTableFunction {
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",
                 "call shuffle(t1)",
-                "cache table t2 as shuffle(t1)",
+                "cache table t2 as call shuffle(t1)",
                 "select * from t2",
                 "call add_col(t1, 'new_col', 'new_col_value')",
-                "cache table t3 as add_col(t1, 'new_col', 'new_col_value')",
+                "cache table t3 as call add_col(t1, 'new_col', 'new_col_value')",
                 "select * from t3",
                 "set col_name=new_col_test",
                 "set col_value=new_col_value_test",
                 "set func_name=add_col",
                 "call add_col(t1, 'new_col', get('col_value'))",
-                "cache table t4 as add_col(t1, 'new_col', get('col_value'))",
+                "cache table t4 as call add_col(t1, 'new_col', get('col_value'))",
                 "select * from t4",
                 "call get('func_name')(t1, 'new_col', get('col_value')) like t4",
                 "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",

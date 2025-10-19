@@ -69,4 +69,10 @@ public class SqlRecConfigs {
             "192.168.1.5",
             "default test ip"
     );
+
+    public static final ConfigOption<String> PARALLELISM_EXEC = new ConfigOption<>(
+            "PARALLELISM_EXEC",
+            "true",
+            "is parallelism exec or not"
+    );
 }

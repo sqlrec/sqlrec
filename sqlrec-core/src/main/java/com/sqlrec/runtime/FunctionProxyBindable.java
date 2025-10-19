@@ -16,6 +16,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class FunctionProxyBindable implements BindableInterface {
     private List<SqlNode> inputList;
@@ -116,5 +117,20 @@ public class FunctionProxyBindable implements BindableInterface {
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return returnDataFields;
+    }
+
+    @Override
+    public boolean isParallelizable() {
+        return false;
+    }
+
+    @Override
+    public Set<String> getReadTables() {
+        return Set.of();
+    }
+
+    @Override
+    public Set<String> getWriteTables() {
+        return Set.of();
     }
 }

@@ -52,7 +52,7 @@ public class SqlProcessorTest {
                 "cache table t2 as SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME",
                 "select * from t2",
                 "call fun1(t1)",
-                "cache table t3 as fun1(t1)",
+                "cache table t3 as call fun1(t1)",
                 "select * from t3"
         );
 

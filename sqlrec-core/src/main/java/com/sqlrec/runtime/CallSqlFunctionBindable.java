@@ -9,18 +9,22 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class CallSqlFunctionBindable implements BindableInterface {
     private String funName;
     private List<String> inputTables;
+    private List<String> tablePlaceholders;
     private SqlFunctionBindable sqlFunctionBindable;
 
     public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable) {
         this.funName = funName;
         this.inputTables = inputTables;
         this.sqlFunctionBindable = sqlFunctionBindable;
+        this.tablePlaceholders = new ArrayList<>();
+        for(Map.Entry<String, List<RelDataTypeField>> placeholder : sqlFunctionBindable.getInputTables()) {
+            tablePlaceholders.add(placeholder.getKey());
+        }
     }
 
     @Override
@@ -51,5 +55,25 @@ public class CallSqlFunctionBindable implements BindableInterface {
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return sqlFunctionBindable.getReturnDataFields();
+    }
+
+    @Override
+    public boolean isParallelizable() {
+        return true;
+    }
+
+    @Override
+    public Set<String> getReadTables() {
+        Set<String> readTables = new HashSet<>(sqlFunctionBindable.getReadTables());
+        readTables.addAll(inputTables);
+        readTables.removeAll(tablePlaceholders);
+        return readTables;
+    }
+
+    @Override
+    public Set<String> getWriteTables() {
+        Set<String> writeTables = new HashSet<>(sqlFunctionBindable.getWriteTables());
+        writeTables.removeAll(tablePlaceholders);
+        return writeTables;
     }
 }

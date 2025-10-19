@@ -13,6 +13,7 @@ public class TestSqlParse {
     public void testCalciteSql() throws Exception {
         List<String> sqlList = Arrays.asList(
                 "set param=test",
+                "set 'param'='test'",
                 "use default",
                 "show tables from default",
                 "show tables in default",
@@ -31,7 +32,7 @@ public class TestSqlParse {
                 "desc sql function fun1",
                 "desc api api1",
                 "cache table t2 as select * from t1 where id=1",
-                "cache table t2 as fun1(t1)",
+                "cache table t2 as call fun1(t1)",
                 "call fun1(t1)",
                 "define input table t1(id int, name string)",
                 "return t1",

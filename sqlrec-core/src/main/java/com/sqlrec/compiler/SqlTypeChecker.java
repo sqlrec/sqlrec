@@ -175,4 +175,41 @@ public class SqlTypeChecker {
             tableNames.add(tableName);
         }
     }
+
+    public static List<String> getModifyTablesFromSqlNode(SqlNode flinkSqlNode) {
+        List<String> tableNames = new ArrayList<>();
+        if (flinkSqlNode == null) {
+            return tableNames;
+        }
+
+        class ModifyTableNameVisitor extends SqlBasicVisitor<Void> {
+            @Override
+            public Void visit(SqlCall call) {
+                tryGetModifyTablesFromSqlNode(call, tableNames);
+                return super.visit(call);
+            }
+        }
+
+        ModifyTableNameVisitor visitor = new ModifyTableNameVisitor();
+        flinkSqlNode.accept(visitor);
+
+        return tableNames;
+    }
+
+    public static void tryGetModifyTablesFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
+        if (sqlNode == null) {
+            return;
+        }
+
+        if (sqlNode instanceof SqlInsert) {
+            SqlInsert insertSql = (SqlInsert) sqlNode;
+            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlUpdate) {
+            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
+            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlDelete) {
+            SqlDelete sqlDelete = (SqlDelete) sqlNode;
+            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
+        }
+    }
 }

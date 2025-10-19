@@ -3,17 +3,17 @@ SqlCache SqlCache() :
 {
     SqlIdentifier tableName = null;
     SqlCallSqlFunction callSqlFunction = null;
-    SqlSelect select = null;
+    SqlNode select = null;
 }
 {
     <CACHE> <TABLE>
     tableName = SimpleIdentifier()
     <AS>
     (
-        select = SqlSelect()
-    |
-        [<CALL>]
+        <CALL>
         callSqlFunction = GetCallSqlFunction()
+    |
+        select = SqlQueryEof()
     )
     {
         return new SqlCache(getPos(), tableName, select, callSqlFunction);

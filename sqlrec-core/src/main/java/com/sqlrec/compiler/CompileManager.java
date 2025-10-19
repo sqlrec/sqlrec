@@ -75,7 +75,7 @@ public class CompileManager {
             return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 
-        SqlSelect select = cache.getSelect();
+        SqlNode select = cache.getSelect();
         if (select != null) {
             BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
             return new CacheTableBindable(tableName, bindableInterface, createSql);

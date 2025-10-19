@@ -9,9 +9,7 @@ import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 public class CacheTableBindable implements BindableInterface {
     private String tableName;
@@ -52,6 +50,23 @@ public class CacheTableBindable implements BindableInterface {
                 DataTypeUtils.getRelDataTypeField("table_name", 0, SqlTypeName.VARCHAR),
                 DataTypeUtils.getRelDataTypeField("count", 1, SqlTypeName.BIGINT)
         );
+    }
+
+    @Override
+    public boolean isParallelizable() {
+        return true;
+    }
+
+    @Override
+    public Set<String> getReadTables() {
+        return bindable.getReadTables();
+    }
+
+    @Override
+    public Set<String> getWriteTables() {
+        Set<String> writeTables = new HashSet<>(bindable.getWriteTables());
+        writeTables.add(tableName);
+        return writeTables;
     }
 
     public List<RelDataTypeField> getTableDataFields() {

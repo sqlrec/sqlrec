@@ -14,9 +14,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class JavaFunctionBindable implements BindableInterface {
     private String functionName;
@@ -145,5 +143,32 @@ public class JavaFunctionBindable implements BindableInterface {
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return returnDataFields;
+    }
+
+    @Override
+    public boolean isParallelizable() {
+        Class<?>[] paramTypes = evalMethod.getParameterTypes();
+        for (Class<?> paramType : paramTypes) {
+            if (paramType.equals(ExecuteContext.class)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public Set<String> getReadTables() {
+        Set<String> readTables = new HashSet<>();
+        for (SqlNode input : inputTableList) {
+            if (input instanceof SqlIdentifier) {
+                readTables.add(((SqlIdentifier) input).getSimple());
+            }
+        }
+        return readTables;
+    }
+
+    @Override
+    public Set<String> getWriteTables() {
+        return Set.of();
     }
 }

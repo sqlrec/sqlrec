@@ -51,6 +51,9 @@ public class FunctionCompiler {
     }
 
     public SqlFunctionBindable getFunctionBindable() {
+        if (!isFunctionCompileFinish()) {
+            throw new RuntimeException("function compile not finish");
+        }
         return sqlFunctionBindable;
     }
 
@@ -144,6 +147,7 @@ public class FunctionCompiler {
                 sqlFunctionBindable.setReturnDataFields(table.getDataFields());
             }
 
+            sqlFunctionBindable.init();
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);

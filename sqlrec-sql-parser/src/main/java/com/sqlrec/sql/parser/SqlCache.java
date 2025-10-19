@@ -10,10 +10,10 @@ public class SqlCache extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CACHE", SqlKind.OTHER);
 
     private SqlIdentifier tableName;
-    private SqlSelect select;
+    private SqlNode select;
     private SqlCallSqlFunction callSqlFunction;
 
-    public SqlCache(SqlParserPos pos, SqlIdentifier tableName, SqlSelect select, SqlCallSqlFunction callSqlFunction) {
+    public SqlCache(SqlParserPos pos, SqlIdentifier tableName, SqlNode select, SqlCallSqlFunction callSqlFunction) {
         super(pos);
         this.tableName = tableName;
         this.select = select;
@@ -47,7 +47,7 @@ public class SqlCache extends SqlCall {
         return tableName;
     }
 
-    public SqlSelect getSelect() {
+    public SqlNode getSelect() {
         return select;
     }
 
