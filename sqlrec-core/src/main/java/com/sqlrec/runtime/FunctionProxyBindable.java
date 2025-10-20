@@ -24,13 +24,15 @@ public class FunctionProxyBindable implements BindableInterface {
     private String likeTableName;
     private List<RelDataTypeField> returnDataFields;
     private boolean needReturnSchema;
+    private boolean isAsync;
 
     public FunctionProxyBindable(
             List<SqlNode> inputList,
             SqlGetVariable funcNameVariable,
             String likeTableName,
             CalciteSchema schema,
-            boolean needReturnSchema
+            boolean needReturnSchema,
+            boolean isAsync
     ) {
         if (needReturnSchema) {
             if (StringUtils.isEmpty(likeTableName)) {
@@ -43,6 +45,7 @@ public class FunctionProxyBindable implements BindableInterface {
         this.funcNameVariable = funcNameVariable;
         this.likeTableName = likeTableName;
         this.needReturnSchema = needReturnSchema;
+        this.isAsync = isAsync;
     }
 
     public static BindableInterface getFunctionBindable(
@@ -59,11 +62,15 @@ public class FunctionProxyBindable implements BindableInterface {
         }
 
         if (funcNameVariable != null) {
-            return new FunctionProxyBindable(inputList, funcNameVariable, likeTableName, schema, needReturnSchema);
+            return new FunctionProxyBindable(
+                    inputList, funcNameVariable, likeTableName, schema, needReturnSchema, callSqlFunction.isAsync()
+            );
         }
 
         String functionName = callSqlFunction.getFuncName().getSimple();
-        return getFunctionBindableByName(functionName, schema, inputList, likeTableName, needReturnSchema);
+        return getFunctionBindableByName(
+                functionName, schema, inputList, likeTableName, needReturnSchema, callSqlFunction.isAsync()
+        );
     }
 
     public static BindableInterface getFunctionBindableByName(
@@ -71,12 +78,15 @@ public class FunctionProxyBindable implements BindableInterface {
             CalciteSchema schema,
             List<SqlNode> inputList,
             String likeTableName,
-            boolean needReturnSchema
+            boolean needReturnSchema,
+            boolean isAsync
     ) throws Exception {
         // todo check is function name ambiguous
         Object javaFunctionObj = TableFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
-            return new JavaFunctionBindable(functionName, javaFunctionObj, inputList, likeTableName, schema, needReturnSchema);
+            return new JavaFunctionBindable(
+                    functionName, javaFunctionObj, inputList, likeTableName, schema, needReturnSchema, isAsync
+            );
         }
 
         SqlFunctionBindable sqlFunctionBindable = CompileManager.compileSqlFunction(functionName);
@@ -92,7 +102,7 @@ public class FunctionProxyBindable implements BindableInterface {
             if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
                 throw new Exception("function input table not match");
             }
-            return new CallSqlFunctionBindable(functionName, inputTableList, sqlFunctionBindable);
+            return new CallSqlFunctionBindable(functionName, inputTableList, sqlFunctionBindable, isAsync);
         }
 
         throw new Exception("function not find: " + functionName);
@@ -107,7 +117,9 @@ public class FunctionProxyBindable implements BindableInterface {
         }
         BindableInterface bindableInterface = null;
         try {
-            bindableInterface = getFunctionBindableByName(functionName, schema, inputList, likeTableName, needReturnSchema);
+            bindableInterface = getFunctionBindableByName(
+                    functionName, schema, inputList, likeTableName, needReturnSchema, isAsync
+            );
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

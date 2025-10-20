@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Function;
 
 public class SqlFunctionBindable implements BindableInterface {
-    private static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+    public static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
 
     private String funName;
     private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;

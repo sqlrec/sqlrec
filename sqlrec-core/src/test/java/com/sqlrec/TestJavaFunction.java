@@ -42,20 +42,24 @@ public class TestJavaFunction {
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",
                 "call shuffle(t1)",
+                "call shuffle(t1) async",
                 "cache table t2 as call shuffle(t1)",
                 "select * from t2",
                 "call add_col(t1, 'new_col', 'new_col_value')",
+                "call add_col(t1, 'new_col', 'new_col_value') async",
                 "cache table t3 as call add_col(t1, 'new_col', 'new_col_value')",
                 "select * from t3",
                 "set col_name=new_col_test",
                 "set col_value=new_col_value_test",
                 "set func_name=add_col",
                 "call add_col(t1, 'new_col', get('col_value'))",
+                "call add_col(t1, 'new_col', get('col_value')) async",
                 "cache table t4 as call add_col(t1, 'new_col', get('col_value'))",
                 "select * from t4",
                 "call get('func_name')(t1, 'new_col', get('col_value')) like t4",
                 "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",
                 "call get('func_name')(t1, 'new_col', get('col_value'))",
+                "call get('func_name')(t1, 'new_col', get('col_value')) async",
                 "call empty_fun()",
                 "call string_arg_fun('test_arg')",
                 "call string_arg_fun(get('col_name'))",
@@ -73,6 +77,8 @@ public class TestJavaFunction {
                 for (Object[] result : results) {
                     System.out.println(java.util.Arrays.toString(result));
                 }
+            } else {
+                System.out.println("sql return null");
             }
         }
     }

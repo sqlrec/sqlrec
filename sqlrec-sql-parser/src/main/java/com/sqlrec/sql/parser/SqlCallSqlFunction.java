@@ -12,19 +12,22 @@ public class SqlCallSqlFunction extends SqlCall {
     private SqlGetVariable funcNameVariable;
     private List<SqlNode> inputTableList;
     private SqlIdentifier likeTableName;
+    private boolean isAsync;
 
     public SqlCallSqlFunction(
             SqlParserPos pos,
             SqlIdentifier funcName,
             SqlGetVariable funcNameVariable,
             List<SqlNode> inputTableList,
-            SqlIdentifier likeTableName
+            SqlIdentifier likeTableName,
+            boolean isAsync
     ) {
         super(pos);
         this.funcName = funcName;
         this.funcNameVariable = funcNameVariable;
         this.inputTableList = inputTableList;
         this.likeTableName = likeTableName;
+        this.isAsync = isAsync;
     }
 
     @Override
@@ -73,5 +76,9 @@ public class SqlCallSqlFunction extends SqlCall {
 
     public SqlIdentifier getLikeTableName() {
         return likeTableName;
+    }
+
+    public boolean isAsync() {
+        return isAsync;
     }
 }

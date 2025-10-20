@@ -16,13 +16,15 @@ public class CallSqlFunctionBindable implements BindableInterface {
     private List<String> inputTables;
     private List<String> tablePlaceholders;
     private SqlFunctionBindable sqlFunctionBindable;
+    private boolean isAsync;
 
-    public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable) {
+    public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable, boolean isAsync) {
         this.funName = funName;
         this.inputTables = inputTables;
         this.sqlFunctionBindable = sqlFunctionBindable;
+        this.isAsync = isAsync;
         this.tablePlaceholders = new ArrayList<>();
-        for(Map.Entry<String, List<RelDataTypeField>> placeholder : sqlFunctionBindable.getInputTables()) {
+        for (Map.Entry<String, List<RelDataTypeField>> placeholder : sqlFunctionBindable.getInputTables()) {
             tablePlaceholders.add(placeholder.getKey());
         }
     }
@@ -49,7 +51,13 @@ public class CallSqlFunctionBindable implements BindableInterface {
             String placeholderTableName = tablePlaceholders.get(i).getKey();
             tmpSchema.add(placeholderTableName, inputTableObj);
         }
-        return sqlFunctionBindable.bind(tmpSchema, context);
+
+        if (isAsync) {
+            SqlFunctionBindable.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, context));
+            return null;
+        } else {
+            return sqlFunctionBindable.bind(tmpSchema, context);
+        }
     }
 
     @Override

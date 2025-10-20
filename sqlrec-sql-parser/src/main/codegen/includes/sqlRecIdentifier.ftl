@@ -39,6 +39,7 @@ SqlCallSqlFunction GetCallSqlFunction() :
     SqlIdentifier funcName = null;
     List<SqlNode> inputList = new ArrayList<SqlNode>();
     SqlIdentifier likeTableName = null;
+    boolean isAsync = false;
 }
 {
     (
@@ -56,8 +57,11 @@ SqlCallSqlFunction GetCallSqlFunction() :
         <LIKE>
         likeTableName = SimpleIdentifier()
     ]
+    [
+        <ASYNC> { isAsync = true; }
+    ]
     {
-        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName);
+        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName, isAsync);
     }
 }
 

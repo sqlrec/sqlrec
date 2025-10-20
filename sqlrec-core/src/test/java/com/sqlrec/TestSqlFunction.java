@@ -39,9 +39,11 @@ public class TestSqlFunction {
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as SELECT * FROM myTable",
                 "call fun1(t1)",
+                "call fun1(t1) async",
                 "cache table t3 as call fun1(t1)",
                 "select * from t3",
                 "call fun2(t1)",
+                "call fun2(t1) async",
                 "cache table t4 as call fun3(t1)",
                 "select * from t4"
         );

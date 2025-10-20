@@ -71,6 +71,9 @@ public class CompileManager {
 
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
         if (callSqlFunction != null) {
+            if (callSqlFunction.isAsync()) {
+                throw new Exception("async function not support in cache");
+            }
             BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema, true);
             return new CacheTableBindable(tableName, bindableInterface, createSql);
         }

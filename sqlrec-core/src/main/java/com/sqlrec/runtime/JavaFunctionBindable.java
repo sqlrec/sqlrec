@@ -22,6 +22,7 @@ public class JavaFunctionBindable implements BindableInterface {
     private List<SqlNode> inputTableList;
     private List<RelDataTypeField> returnDataFields;
     private Method evalMethod;
+    private boolean isAsync;
 
     public JavaFunctionBindable(
             String functionName,
@@ -29,12 +30,15 @@ public class JavaFunctionBindable implements BindableInterface {
             List<SqlNode> inputTableList,
             String likeTableName,
             CalciteSchema schema,
-            boolean needReturnSchema
+            boolean needReturnSchema,
+            boolean isAsync
     ) {
         this.functionName = functionName;
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
         this.evalMethod = getEvalMethod(tableFunction);
+        this.isAsync = isAsync;
+
         if (!StringUtils.isEmpty(likeTableName)) {
             returnDataFields = getDataTypeByLikeTableName(likeTableName, schema);
         } else {
@@ -111,7 +115,12 @@ public class JavaFunctionBindable implements BindableInterface {
         }
 
         try {
-            return evalMethod.invoke(tableFunction, paramList.toArray());
+            if (isAsync) {
+                SqlFunctionBindable.executorService.submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
+                return null;
+            } else {
+                return evalMethod.invoke(tableFunction, paramList.toArray());
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
