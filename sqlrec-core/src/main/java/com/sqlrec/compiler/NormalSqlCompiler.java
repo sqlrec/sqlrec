@@ -32,6 +32,8 @@ import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -40,9 +42,11 @@ import static org.apache.calcite.prepare.Prepare.THREAD_EXPAND;
 import static org.apache.calcite.prepare.Prepare.THREAD_INSUBQUERY_THRESHOLD;
 
 public class NormalSqlCompiler {
+    private static final Logger log = LoggerFactory.getLogger(NormalSqlCompiler.class);
     public static String DEFAULT_SCHEMA_NAME = "default";
 
     public static BindableInterface getNormalSqlBindable(String sql, CalciteSchema schema, String defaultSchema) throws Exception {
+        log.info("compile sql: {}", sql);
         SqlParser.Config parserConfig = SqlParser.configBuilder()
                 .setLex(Lex.MYSQL)
                 .setConformance(SqlConformanceEnum.DEFAULT)
@@ -80,13 +84,13 @@ public class NormalSqlCompiler {
         );
 
         RelRoot root = converter.convertQuery(validatedSqlNode, false, true);
-        System.out.println(RelOptUtil.toString(root.rel));
+        log.info("compile rel: {}", RelOptUtil.toString(root.rel));
 
         // todo use Programs.standard() when don't access outside storage
         Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
         final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
-        System.out.println(RelOptUtil.toString(bestExp));
+        log.info("compile bestExp: {}", RelOptUtil.toString(bestExp));
 
         Map<String, Object> parameters = new HashMap<>();
         Bindable bindable = EnumerableInterpretable.toBindable(

@@ -9,11 +9,15 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.util.SqlBasicVisitor;
 import org.apache.flink.sql.parser.ddl.SqlSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class SqlTypeChecker {
+    private static final Logger log = LoggerFactory.getLogger(SqlTypeChecker.class);
+
     public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return true;
@@ -84,6 +88,7 @@ public class SqlTypeChecker {
         for (String tableName : tableNames) {
             Table table = getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
+                log.error("table {} is not fund", tableName);
                 return false;
             }
             if (!(table instanceof SqlRecTable)) {
@@ -97,6 +102,7 @@ public class SqlTypeChecker {
         if (tableName.contains(".")) {
             String[] tableNameParts = tableName.split("\\.");
             if (tableNameParts.length != 2) {
+                log.error("table name {} is not in format schema.table", tableName);
                 return null;
             }
             String schemaName = tableNameParts[0];

@@ -323,7 +323,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         @Override
         public boolean remove(Object o) {
             if (!(o instanceof Object[])) {
-                throw new RuntimeException("Redis Collection only support Object[]");
+                throw new RuntimeException("Milvus Collection only support Object[]");
             }
             size += 1;
 
