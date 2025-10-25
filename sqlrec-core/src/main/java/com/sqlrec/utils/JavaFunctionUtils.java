@@ -1,0 +1,71 @@
+package com.sqlrec.utils;
+
+import com.sqlrec.schema.HmsClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class JavaFunctionUtils {
+    private static final Logger log = LoggerFactory.getLogger(JavaFunctionUtils.class);
+    private static Map<String, Class<?>> javaFunctionClassMap = new ConcurrentHashMap<>();
+    private static Map<String, Long> functionUpdateTime = new ConcurrentHashMap<>();
+
+    public static Object getTableFunction(String db, String funName) throws Exception {
+        String mapKey = getMapKey(db, funName);
+        Class<?> clazz = javaFunctionClassMap.get(mapKey);
+        if (clazz == null) {
+            clazz = getTableFunctionClass(db, funName);
+        }
+        if (clazz == null) {
+            return null;
+        }
+        // for test
+        if (clazz.isPrimitive()) {
+            return null;
+        }
+
+        return clazz.getDeclaredConstructor().newInstance();
+    }
+
+    public static Class<?> getTableFunctionClass(String db, String funName) {
+        String mapKey = getMapKey(db, funName);
+        Class<?> clazz = null;
+        try {
+            org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
+            if (functionObj == null) {
+                return null;
+            }
+            if (!javaFunctionClassMap.containsKey(mapKey) ||
+                    !javaFunctionClassMap.get(mapKey).getName().equals(functionObj.getClassName())) {
+                clazz = Class.forName(functionObj.getClassName());
+                javaFunctionClassMap.put(mapKey, clazz);
+                functionUpdateTime.put(mapKey, System.currentTimeMillis());
+            } else {
+                clazz = javaFunctionClassMap.get(mapKey);
+            }
+        } catch (Exception e) {
+            log.warn("Exception when get table function: db={}, funName={}", db, funName, e);
+            return null;
+        }
+        return clazz;
+    }
+
+    public static void registerTableFunction(String db, String funName, Class<?> clazz) {
+        javaFunctionClassMap.put(getMapKey(db, funName), clazz);
+    }
+
+    public static long getFunctionUpdateTime(String db, String funName) {
+        String mapKey = getMapKey(db, funName);
+        if (functionUpdateTime.containsKey(mapKey)) {
+            return functionUpdateTime.get(mapKey);
+        } else {
+            return 0;
+        }
+    }
+
+    private static String getMapKey(String db, String funName) {
+        return db + "." + funName;
+    }
+}

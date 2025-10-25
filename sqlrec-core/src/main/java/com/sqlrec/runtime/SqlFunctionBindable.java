@@ -15,7 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 
-public class SqlFunctionBindable implements BindableInterface {
+public class SqlFunctionBindable extends BindableInterface {
     public static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
 
     private String funName;
@@ -77,7 +77,7 @@ public class SqlFunctionBindable implements BindableInterface {
 
     private void execInParallel(CalciteSchema schema, ExecuteContext context) {
         List<CompletableFuture<Object>> bindFutures = new ArrayList<>();
-        for(int i : sortedBindableList) {
+        for (int i : sortedBindableList) {
             BindableInterface bindable = bindableList.get(i);
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
@@ -178,5 +178,25 @@ public class SqlFunctionBindable implements BindableInterface {
 
     public void setFunName(String funName) {
         this.funName = funName;
+    }
+
+    public Set<String> getDependencySqlFunctions() {
+        Set<String> dependencySqlFunctions = new HashSet<>();
+        for (BindableInterface bindable : bindableList) {
+            if (bindable instanceof CallSqlFunctionBindable) {
+                dependencySqlFunctions.add(((CallSqlFunctionBindable) bindable).getFunName());
+            }
+        }
+        return dependencySqlFunctions;
+    }
+
+    public Set<String> getDependencyJavaFunctions() {
+        Set<String> dependencyJavaFunctions = new HashSet<>();
+        for (BindableInterface bindable : bindableList) {
+            if (bindable instanceof JavaFunctionBindable) {
+                dependencyJavaFunctions.add(((JavaFunctionBindable) bindable).getFunName());
+            }
+        }
+        return dependencyJavaFunctions;
     }
 }

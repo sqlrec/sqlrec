@@ -8,7 +8,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import java.util.List;
 import java.util.Set;
 
-public class SetBindable implements BindableInterface {
+public class SetBindable extends BindableInterface {
     private final String key;
     private final String value;
 

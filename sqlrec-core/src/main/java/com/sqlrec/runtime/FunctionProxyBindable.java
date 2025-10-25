@@ -6,7 +6,7 @@ import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.SchemaUtils;
-import com.sqlrec.utils.TableFunctionUtils;
+import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class FunctionProxyBindable implements BindableInterface {
+public class FunctionProxyBindable extends BindableInterface {
     private List<SqlNode> inputList;
     private SqlGetVariable funcNameVariable;
     private String likeTableName;
@@ -82,14 +82,14 @@ public class FunctionProxyBindable implements BindableInterface {
             boolean isAsync
     ) throws Exception {
         // todo check is function name ambiguous
-        Object javaFunctionObj = TableFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
+        Object javaFunctionObj = JavaFunctionUtils.getTableFunction(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
             return new JavaFunctionBindable(
                     functionName, javaFunctionObj, inputList, likeTableName, schema, needReturnSchema, isAsync
             );
         }
 
-        SqlFunctionBindable sqlFunctionBindable = CompileManager.compileSqlFunction(functionName);
+        SqlFunctionBindable sqlFunctionBindable = CompileManager.getSqlFunction(functionName);
         if (sqlFunctionBindable != null) {
             List<String> inputTableList = new ArrayList<>();
             for (SqlNode input : inputList) {

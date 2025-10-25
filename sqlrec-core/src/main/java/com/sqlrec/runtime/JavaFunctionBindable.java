@@ -16,7 +16,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.lang.reflect.Method;
 import java.util.*;
 
-public class JavaFunctionBindable implements BindableInterface {
+public class JavaFunctionBindable extends BindableInterface {
     private String functionName;
     private Object tableFunction;
     private List<SqlNode> inputTableList;
@@ -179,5 +179,9 @@ public class JavaFunctionBindable implements BindableInterface {
     @Override
     public Set<String> getWriteTables() {
         return Set.of();
+    }
+
+    public String getFunName() {
+        return functionName;
     }
 }

@@ -11,7 +11,7 @@ import org.apache.calcite.schema.Table;
 
 import java.util.*;
 
-public class CallSqlFunctionBindable implements BindableInterface {
+public class CallSqlFunctionBindable extends BindableInterface {
     private String funName;
     private List<String> inputTables;
     private List<String> tablePlaceholders;
@@ -83,5 +83,9 @@ public class CallSqlFunctionBindable implements BindableInterface {
         Set<String> writeTables = new HashSet<>(sqlFunctionBindable.getWriteTables());
         writeTables.removeAll(tablePlaceholders);
         return writeTables;
+    }
+
+    public String getFunName() {
+        return funName;
     }
 }

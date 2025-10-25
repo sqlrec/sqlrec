@@ -6,15 +6,15 @@ import java.time.LocalDateTime;
 CREATE TABLE sql_api (
     name VARCHAR(255) NOT NULL PRIMARY KEY,
     function_name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
 );
  */
 public class SqlApi {
     private String name;
     private String functionName;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private long createdAt;
+    private long updatedAt;
 
     public String getName() {
         return name;
@@ -32,19 +32,19 @@ public class SqlApi {
         this.functionName = functionName;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public long getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
+    public void setCreatedAt(long createdAt) {
         this.createdAt = createdAt;
     }
 
-    public LocalDateTime getUpdatedAt() {
+    public long getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
+    public void setUpdatedAt(long updatedAt) {
         this.updatedAt = updatedAt;
     }
 }

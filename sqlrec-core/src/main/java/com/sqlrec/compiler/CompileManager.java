@@ -2,15 +2,20 @@ package com.sqlrec.compiler;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
+import com.sqlrec.schema.HmsClient;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.DbUtils;
+import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
@@ -19,12 +24,22 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class CompileManager {
+    private static final int UPDATE_SUCCESS = 1;
+    private static final int UPDATE_FAILED = -1;
+    private static final int NOT_UPDATE = 0;
+
+    private static final Logger log = LoggerFactory.getLogger(CompileManager.class);
+    private static ScheduledExecutorService executor;
     private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
@@ -94,19 +109,23 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
+    public static SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
         }
+        return compileSqlFunction(functionName);
+    }
+
+    public static SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
+        functionName = functionName.toUpperCase();
         SqlFunction sqlFunction = DbUtils.getSqlFunction(functionName);
         if (sqlFunction == null) {
-            return null;
+            throw new Exception("function not fund : " + functionName);
         }
         List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
         }.getType());
-        SqlFunctionBindable sqlFunctionBindable = compileSqlFunction(functionName, sqlList);
-        return sqlFunctionBindable;
+        return compileSqlFunction(functionName, sqlList);
     }
 
     public static SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
@@ -128,12 +147,118 @@ public class CompileManager {
         if (sqlApi == null || StringUtils.isAllEmpty(sqlApi.getFunctionName())) {
             throw new Exception("api not fund : " + apiName);
         }
-        return compileSqlFunction(sqlApi.getFunctionName());
+        return getSqlFunction(sqlApi.getFunctionName());
     }
 
     public static SetBindable getSetBindable(SqlSet set) {
         SqlCharStringLiteral key = (SqlCharStringLiteral) set.getKey();
         SqlCharStringLiteral value = (SqlCharStringLiteral) set.getValue();
         return new SetBindable(SchemaUtils.getValueOfStringLiteral(key), SchemaUtils.getValueOfStringLiteral(value));
+    }
+
+    public static synchronized void initFunctionUpdateService() {
+        if (executor != null) {
+            return;
+        }
+        executor = Executors.newSingleThreadScheduledExecutor();
+        executor.scheduleAtFixedRate(
+                () -> {
+                    try {
+                        updateFunctionBindable();
+                    } catch (Exception e) {
+                        log.error("update function bindable failed", e);
+                    }
+                },
+                SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(),
+                SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(),
+                TimeUnit.SECONDS
+        );
+    }
+
+    public static void updateFunctionBindable() {
+        Map<String, Integer> functionUpdateStatusMap = new HashMap<>();
+        Set<String> functionNames = new HashSet<>(functionBindableMap.keySet());
+        for (String functionName : functionNames) {
+            tryFlushFunctionBindable(functionName, functionUpdateStatusMap);
+        }
+    }
+
+    private static int tryFlushFunctionBindable(String functionName, Map<String, Integer> functionUpdateStatusMap) {
+        if (functionUpdateStatusMap.containsKey(functionName)) {
+            return functionUpdateStatusMap.get(functionName);
+        }
+
+        try {
+            boolean needFlush = false;
+            SqlFunctionBindable functionBindable = functionBindableMap.get(functionName);
+            Set<String> dependencySqlFunctions = functionBindable.getDependencySqlFunctions();
+            for (String dependencySqlFunction : dependencySqlFunctions) {
+                int dependencyStatus = tryFlushFunctionBindable(dependencySqlFunction, functionUpdateStatusMap);
+                if (dependencyStatus == UPDATE_SUCCESS) {
+                    needFlush = true;
+                }
+            }
+
+            SqlFunction sqlFunction = DbUtils.getSqlFunction(functionBindable.getFunName());
+            if (sqlFunction == null) {
+                functionBindableMap.remove(functionName);
+                functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
+                log.info("function bindable {} removed", functionName);
+                return UPDATE_SUCCESS;
+            }
+            if (sqlFunction.getUpdatedAt() > functionBindable.getCreateTime()) {
+                needFlush = true;
+            }
+
+            if (!needFlush) {
+                needFlush = isSqlFunctionDependentResourceUpdate(functionBindable);
+            }
+
+            if (needFlush) {
+                compileSqlFunction(functionName);
+                functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
+                log.info("function bindable {} updated", functionName);
+            } else {
+                functionUpdateStatusMap.put(functionName, NOT_UPDATE);
+            }
+        } catch (Exception e) {
+            log.error("try flush function bindable failed : {}", functionName, e);
+            functionUpdateStatusMap.put(functionName, UPDATE_FAILED);
+        }
+
+        return functionUpdateStatusMap.get(functionName);
+    }
+
+    private static boolean isSqlFunctionDependentResourceUpdate(SqlFunctionBindable functionBindable) throws Exception {
+        List<String> tablePlaceholders = new ArrayList<>();
+        for (Map.Entry<String, List<RelDataTypeField>> placeholder : functionBindable.getInputTables()) {
+            tablePlaceholders.add(placeholder.getKey());
+        }
+        Set<String> accessTables = functionBindable.getAccessTables();
+        accessTables.removeAll(tablePlaceholders);
+
+        for (String accessTable : accessTables) {
+            org.apache.hadoop.hive.metastore.api.Table table = HmsClient.getTableObj(accessTable);
+            if (table == null) {
+                continue;
+            }
+            long lastModifiedTime = HiveTableUtils.getTableModificationTime(table);
+            if (lastModifiedTime > functionBindable.getCreateTime()) {
+                return true;
+            }
+        }
+
+        Set<String> javaFunctions = functionBindable.getDependencyJavaFunctions();
+        for (String javaFunction : javaFunctions) {
+            Object javaFunctionClass = JavaFunctionUtils.getTableFunctionClass(
+                    NormalSqlCompiler.DEFAULT_SCHEMA_NAME, javaFunction);
+            long functionModificationTime = JavaFunctionUtils.getFunctionUpdateTime(
+                    NormalSqlCompiler.DEFAULT_SCHEMA_NAME, javaFunction);
+            if (functionModificationTime > functionBindable.getCreateTime()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

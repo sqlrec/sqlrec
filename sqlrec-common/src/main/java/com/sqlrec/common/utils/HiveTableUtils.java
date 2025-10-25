@@ -1,6 +1,8 @@
 package com.sqlrec.common.utils;
 
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -8,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 public class HiveTableUtils {
+    private static final Logger log = LoggerFactory.getLogger(HiveTableUtils.class);
+
     public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> tableProperties = tableObj.getParameters();
         if (tableProperties == null) {
@@ -106,5 +110,19 @@ public class HiveTableUtils {
             }
         }
         throw new IllegalArgumentException("Table primary key " + primaryKey + " not found");
+    }
+
+    public static long getTableModificationTime(org.apache.hadoop.hive.metastore.api.Table tableObj) {
+        Map<String, String> tableProperties = tableObj.getParameters();
+        if (tableProperties == null) {
+            log.warn("Table {} has no parameters", tableObj.getTableName());
+            return 0;
+        }
+        String lastModificationTime = tableProperties.get("transient_lastDdlTime");;
+        if (StringUtils.isEmpty(lastModificationTime)) {
+            log.warn("Table {} has no last modification time", tableObj.getTableName());
+            return 0;
+        }
+        return Long.parseLong(lastModificationTime) * 1000;
     }
 }

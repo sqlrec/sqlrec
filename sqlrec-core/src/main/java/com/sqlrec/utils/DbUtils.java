@@ -69,23 +69,21 @@ public class DbUtils {
     }
 
     public static SqlFunction getSqlFunction(String name) {
-        return execute(dbMapper -> dbMapper.getSqlFunction(name));
+        return execute(dbMapper -> dbMapper.getSqlFunction(name.toUpperCase()));
     }
 
     public static void insertSqlFunction(SqlFunction sqlFunction) {
+        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.insertSqlFunction(sqlFunction));
     }
 
     public static void upsertSqlFunction(SqlFunction sqlFunction) {
+        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.upsertSqlFunction(sqlFunction));
     }
 
-    public static void updateSqlFunction(SqlFunction sqlFunction) {
-        executeVoid(dbMapper -> dbMapper.updateSqlFunction(sqlFunction));
-    }
-
     public static void deleteSqlFunction(String name) {
-        executeVoid(dbMapper -> dbMapper.deleteSqlFunction(name));
+        executeVoid(dbMapper -> dbMapper.deleteSqlFunction(name.toUpperCase()));
     }
 
     public static List<SqlApi> getSqlApiList() {
@@ -102,10 +100,6 @@ public class DbUtils {
 
     public static void upsertSqlApi(SqlApi sqlApi) {
         executeVoid(dbMapper -> dbMapper.upsertSqlApi(sqlApi));
-    }
-
-    public static void updateSqlApi(SqlApi sqlApi) {
-        executeVoid(dbMapper -> dbMapper.updateSqlApi(sqlApi));
     }
 
     public static void deleteSqlApi(String name) {

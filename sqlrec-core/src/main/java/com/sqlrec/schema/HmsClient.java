@@ -1,6 +1,7 @@
 package com.sqlrec.schema;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.compiler.NormalSqlCompiler;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -44,6 +45,23 @@ public class HmsClient {
             String table
     ) throws TException {
         return client.getTable(database, table);
+    }
+
+    // get table obj
+    public synchronized static org.apache.hadoop.hive.metastore.api.Table getTableObj(
+            String table
+    ) throws TException {
+        if (table.contains(".")) {
+            String[] tableNameParts = table.split("\\.");
+            if (tableNameParts.length != 2) {
+                throw new RuntimeException("table name " + table + " is not in format schema.table");
+            }
+            String schemaName = tableNameParts[0];
+            String shortTableName = tableNameParts[1];
+            return getTableObj(schemaName, shortTableName);
+        } else {
+            return getTableObj(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, table);
+        }
     }
 
     // get all function of a database

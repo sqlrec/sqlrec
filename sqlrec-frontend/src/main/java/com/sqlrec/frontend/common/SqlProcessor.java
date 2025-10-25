@@ -243,6 +243,8 @@ public class SqlProcessor {
         SqlFunction sqlFunction = new SqlFunction();
         sqlFunction.setName(compiler.getFunctionBindable().getFunName());
         sqlFunction.setSqlList(new Gson().toJson(compiler.getSqlList()));
+        sqlFunction.setCreatedAt(System.currentTimeMillis());
+        sqlFunction.setUpdatedAt(System.currentTimeMillis());
         if (compiler.isOrReplace()) {
             DbUtils.upsertSqlFunction(sqlFunction);
         } else {
@@ -254,6 +256,8 @@ public class SqlProcessor {
         SqlApi sqlApi = new SqlApi();
         sqlApi.setName(api.getApiName());
         sqlApi.setFunctionName(api.getFuncName());
+        sqlApi.setCreatedAt(System.currentTimeMillis());
+        sqlApi.setUpdatedAt(System.currentTimeMillis());
         if (api.isOrReplace()) {
             DbUtils.upsertSqlApi(sqlApi);
         } else {

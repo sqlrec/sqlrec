@@ -5,7 +5,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.TableFunctionUtils;
+import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
@@ -30,9 +30,9 @@ public class TestSqlFunction {
         });
 
         HmsSchema.setGlobalSchema(schema);
-        TableFunctionUtils.registerTableFunction("default", "fun1", Integer.TYPE);  // avoid find function in hms
-        TableFunctionUtils.registerTableFunction("default", "fun2", Integer.TYPE);  // avoid find function in hms
-        TableFunctionUtils.registerTableFunction("default", "fun3", Integer.TYPE);  // avoid find function in hms
+        JavaFunctionUtils.registerTableFunction("default", "fun1", Integer.TYPE);  // avoid find function in hms
+        JavaFunctionUtils.registerTableFunction("default", "fun2", Integer.TYPE);  // avoid find function in hms
+        JavaFunctionUtils.registerTableFunction("default", "fun3", Integer.TYPE);  // avoid find function in hms
 
         testSqlFunctionCompile(schema);
 

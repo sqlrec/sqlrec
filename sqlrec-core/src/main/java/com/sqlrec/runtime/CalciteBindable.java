@@ -20,7 +20,7 @@ import java.util.*;
 
 import static org.apache.calcite.linq4j.Linq4j.DEFAULT_PROVIDER;
 
-public class CalciteBindable implements BindableInterface {
+public class CalciteBindable extends BindableInterface {
     private Map<String, Object> parameters;
     private Bindable<Object[]> bindable;
     private RelNode bestExp;

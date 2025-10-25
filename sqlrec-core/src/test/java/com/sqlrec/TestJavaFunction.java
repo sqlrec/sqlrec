@@ -8,7 +8,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.TableFunctionUtils;
+import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
@@ -33,11 +33,11 @@ public class TestJavaFunction {
             }
         });
         HmsSchema.setGlobalSchema(schema);
-        TableFunctionUtils.registerTableFunction("default", "shuffle", ShuffleFunction.class);
-        TableFunctionUtils.registerTableFunction("default", "add_col", AddColFunction.class);
-        TableFunctionUtils.registerTableFunction("default", "empty_fun", TestEmptyFun.class);
-        TableFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
-        TableFunctionUtils.registerTableFunction("default", "context_fun", TestContextFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "shuffle", ShuffleFunction.class);
+        JavaFunctionUtils.registerTableFunction("default", "add_col", AddColFunction.class);
+        JavaFunctionUtils.registerTableFunction("default", "empty_fun", TestEmptyFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "context_fun", TestContextFun.class);
 
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",

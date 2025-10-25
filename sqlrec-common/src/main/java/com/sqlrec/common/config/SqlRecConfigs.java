@@ -75,4 +75,10 @@ public class SqlRecConfigs {
             "true",
             "is parallelism exec or not"
     );
+
+     public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
+            "FUNCTION_UPDATE_INTERVAL",
+            300,
+            "function update interval in seconds"
+    );
 }
