@@ -3,14 +3,18 @@ package com.sqlrec.schema;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.sqlrec.common.config.FunctionConfigs;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.utils.ObjCache;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -18,17 +22,40 @@ import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchema extends AbstractSchema {
+    private static final Logger log = LoggerFactory.getLogger(HmsSchema.class);
+
     private static Map<String, HmsTableFactory> tableFactories;
     private static Map<String, HmsSchema> schemaMap = new ConcurrentHashMap<>();
+    private static ObjCache<List<String>> databaseListCache = new ObjCache<>(
+            SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
+            SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
+            () -> {
+                try {
+                    return HmsClient.getAllDatabases();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+    );
 
     private String databaseName;
-    private Map<String, Table> tableMap = new ConcurrentHashMap<>();
-    private Map<String, Function> functionMap = new ConcurrentHashMap<>();
-
+    private ObjCache<Map<String, Table>> tableMapCache;
+    private ObjCache<Multimap<String, Function>> functionMapCache;
+    private Map<String, Long> tableUpdateTimes = new ConcurrentHashMap<>();
     private static CalciteSchema globalSchema;  // for test
 
     public HmsSchema(String databaseName) {
         this.databaseName = databaseName;
+        tableMapCache = new ObjCache<>(
+                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
+                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
+                this::computeTableMap
+        );
+        functionMapCache = new ObjCache<>(
+                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
+                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
+                this::computeFunctionMap
+        );
     }
 
     public static void setGlobalSchema(CalciteSchema schema) {
@@ -46,7 +73,7 @@ public class HmsSchema extends AbstractSchema {
         }
 
         try {
-            for (String database : HmsClient.getAllDatabases()) {
+            for (String database : databaseListCache.getObj()) {
                 if (!schemaMap.containsKey(database)) {
                     schemaMap.put(database, new HmsSchema(database));
                 }
@@ -60,26 +87,28 @@ public class HmsSchema extends AbstractSchema {
 
     @Override
     protected Map<String, Table> getTableMap() {
+        return tableMapCache.getObj();
+    }
+
+    private Map<String, Table> computeTableMap() {
+        Map<String, Table> tableMap = new ConcurrentHashMap<>();
         try {
             List<String> tables = HmsClient.getAllTables(databaseName);
             for (String table : tables) {
-                if (tableMap.containsKey(table)) {
-                    continue;
-                }
                 org.apache.hadoop.hive.metastore.api.Table tableObj = HmsClient.getTableObj(databaseName, table);
                 Table tableFromHmsTable = getTableFromHmsTable(tableObj);
                 if (tableFromHmsTable != null) {
                     tableMap.put(table, tableFromHmsTable);
+                    tableUpdateTimes.put(table, HiveTableUtils.getTableModificationTime(tableObj));
                 }
             }
-            tableMap.keySet().removeIf(table -> !tables.contains(table));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         return tableMap;
     }
 
-    private Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
+    private static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         String connector = HiveTableUtils.getTableConnector(tableObj);
         if (connector == null) {
             return null;
@@ -92,7 +121,10 @@ public class HmsSchema extends AbstractSchema {
     }
 
     public static HmsTableFactory getTableFactory(String connector) {
-        return getTableFactorieMap().getOrDefault(connector, null);
+        if (tableFactories == null) {
+            getTableFactorieMap();
+        }
+        return tableFactories.getOrDefault(connector, null);
     }
 
     public static synchronized Map<String, HmsTableFactory> getTableFactorieMap() {
@@ -108,12 +140,14 @@ public class HmsSchema extends AbstractSchema {
 
     @Override
     protected Multimap<String, Function> getFunctionMultimap() {
+        return functionMapCache.getObj();
+    }
+
+    private Multimap<String, Function> computeFunctionMap() {
+        Multimap<String, Function> functionMap = ArrayListMultimap.create();
         try {
             List<String> functions = HmsClient.getAllFunctions(databaseName);
             for (String function : functions) {
-                if (functionMap.containsKey(function)) {
-                    continue;
-                }
                 org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(databaseName, function);
                 ScalarFunction scalarFunction = SchemaUtils.createScalarFunction(functionObj.getClassName());
                 if (scalarFunction != null) {
@@ -122,15 +156,18 @@ public class HmsSchema extends AbstractSchema {
             }
             for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
                 functionMap.put(entry.getKey(), SchemaUtils.createScalarFunction(entry.getValue()));
-                functions.add(entry.getKey());
             }
-            functionMap.keySet().removeIf(function -> !functions.contains(function));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return functionMap;
+    }
 
-        Multimap<String, Function> functionMultimap = ArrayListMultimap.create();
-        functionMap.forEach(functionMultimap::put);
-        return functionMultimap;
+    public static long getTableUpdateTime(String db, String table) {
+        HmsSchema schema = schemaMap.get(db);
+        if (schema == null) {
+            return 0L;
+        }
+        return schema.tableUpdateTimes.getOrDefault(table, 0L);
     }
 }

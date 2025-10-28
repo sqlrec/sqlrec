@@ -1,5 +1,7 @@
 package com.sqlrec.compiler;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sqlrec.common.config.SqlRecConfigs;
@@ -7,7 +9,7 @@ import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
-import com.sqlrec.schema.HmsClient;
+import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.DbUtils;
@@ -20,7 +22,6 @@ import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
@@ -41,6 +42,10 @@ public class CompileManager {
     private static final Logger log = LoggerFactory.getLogger(CompileManager.class);
     private static ScheduledExecutorService executor;
     private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
+
+    private static Cache<String, SqlApi> sqlApiCache = Caffeine.newBuilder()
+            .expireAfterWrite(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS)
+            .build();
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
         sql = SqlPreProcesser.preProcessSql(sql);
@@ -143,8 +148,15 @@ public class CompileManager {
     }
 
     public static SqlFunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
-        SqlApi sqlApi = DbUtils.getSqlApi(apiName);
-        if (sqlApi == null || StringUtils.isAllEmpty(sqlApi.getFunctionName())) {
+        SqlApi sqlApi = sqlApiCache.getIfPresent(apiName);
+        if (sqlApi == null) {
+            sqlApi = DbUtils.getSqlApi(apiName);
+            if (sqlApi != null) {
+                sqlApiCache.put(apiName, sqlApi);
+            }
+        }
+
+        if (sqlApi == null) {
             throw new Exception("api not fund : " + apiName);
         }
         return getSqlFunction(sqlApi.getFunctionName());
@@ -238,11 +250,8 @@ public class CompileManager {
         accessTables.removeAll(tablePlaceholders);
 
         for (String accessTable : accessTables) {
-            org.apache.hadoop.hive.metastore.api.Table table = HmsClient.getTableObj(accessTable);
-            if (table == null) {
-                continue;
-            }
-            long lastModifiedTime = HiveTableUtils.getTableModificationTime(table);
+            Map.Entry<String, String> dbAndTable = HiveTableUtils.getDbAndTable(accessTable);
+            long lastModifiedTime = HmsSchema.getTableUpdateTime(dbAndTable.getKey(), dbAndTable.getValue());
             if (lastModifiedTime > functionBindable.getCreateTime()) {
                 return true;
             }

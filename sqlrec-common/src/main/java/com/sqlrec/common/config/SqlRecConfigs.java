@@ -81,4 +81,15 @@ public class SqlRecConfigs {
             300,
             "function update interval in seconds"
     );
+
+    public static final ConfigOption<Integer> SCHEMA_CACHE_EXPIRE = new ConfigOption<>(
+            "SCHEMA_CACHE_EXPIRE",
+            60,
+            "schema cache expire in seconds"
+    );
+    public static final ConfigOption<Boolean> ASYNC_SCHEMA_UPDATE = new ConfigOption<>(
+            "ASYNC_SCHEMA_UPDATE",
+            true,
+            "async schema update or not"
+    );
 }

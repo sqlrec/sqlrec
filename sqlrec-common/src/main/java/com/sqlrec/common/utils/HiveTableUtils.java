@@ -4,10 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class HiveTableUtils {
     private static final Logger log = LoggerFactory.getLogger(HiveTableUtils.class);
@@ -124,5 +121,13 @@ public class HiveTableUtils {
             return 0;
         }
         return Long.parseLong(lastModificationTime) * 1000;
+    }
+
+    public static Map.Entry<String, String> getDbAndTable(String tableName) {
+        int index = tableName.indexOf(".");
+        if (index == -1) {
+            return new AbstractMap.SimpleEntry<>("default", tableName);
+        }
+        return new AbstractMap.SimpleEntry<>(tableName.substring(0, index), tableName.substring(index + 1));
     }
 }
