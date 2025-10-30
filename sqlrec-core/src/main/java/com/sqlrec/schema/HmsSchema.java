@@ -29,7 +29,7 @@ public class HmsSchema extends AbstractSchema {
     private static ObjCache<List<String>> databaseListCache = new ObjCache<>(
             SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
             SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
-            () -> {
+            (oldDatabaseList) -> {
                 try {
                     return HmsClient.getAllDatabases();
                 } catch (Exception e) {
@@ -90,12 +90,18 @@ public class HmsSchema extends AbstractSchema {
         return tableMapCache.getObj();
     }
 
-    private Map<String, Table> computeTableMap() {
+    public Map<String, Table> computeTableMap(Map<String, Table> oldTableMap) {
         Map<String, Table> tableMap = new ConcurrentHashMap<>();
         try {
             List<String> tables = HmsClient.getAllTables(databaseName);
             for (String table : tables) {
                 org.apache.hadoop.hive.metastore.api.Table tableObj = HmsClient.getTableObj(databaseName, table);
+                if (oldTableMap != null && oldTableMap.containsKey(table) && tableUpdateTimes.containsKey(table)) {
+                    if (tableUpdateTimes.get(table) >= HiveTableUtils.getTableModificationTime(tableObj)) {
+                        tableMap.put(table, oldTableMap.get(table));
+                        continue;
+                    }
+                }
                 Table tableFromHmsTable = getTableFromHmsTable(tableObj);
                 if (tableFromHmsTable != null) {
                     tableMap.put(table, tableFromHmsTable);
@@ -143,7 +149,7 @@ public class HmsSchema extends AbstractSchema {
         return functionMapCache.getObj();
     }
 
-    private Multimap<String, Function> computeFunctionMap() {
+    private Multimap<String, Function> computeFunctionMap(Multimap<String, Function> oldFunctionMap) {
         Multimap<String, Function> functionMap = ArrayListMultimap.create();
         try {
             List<String> functions = HmsClient.getAllFunctions(databaseName);

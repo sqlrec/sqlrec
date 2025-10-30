@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
 
 public class ObjCache<T> {
@@ -16,9 +16,9 @@ public class ObjCache<T> {
     private long lastUpdateTimeInMillis;
     private long cacheExpireTimeInMillis;
     private boolean asyncUpdate;
-    private Supplier<T> updateFunction;
+    private Function<T, T> updateFunction;
 
-    public ObjCache(long cacheExpireTimeInMillis, boolean asyncUpdate, Supplier<T> updateFunction) {
+    public ObjCache(long cacheExpireTimeInMillis, boolean asyncUpdate, Function<T, T> updateFunction) {
         this.cacheExpireTimeInMillis = cacheExpireTimeInMillis;
         this.asyncUpdate = asyncUpdate;
         this.updateFunction = updateFunction;
@@ -39,11 +39,11 @@ public class ObjCache<T> {
         lastUpdateTimeInMillis = currentTimeInMillis;
 
         if (obj == null || !asyncUpdate) {
-            obj = updateFunction.get();
+            obj = updateFunction.apply(obj);
         } else {
             executorService.submit(() -> {
                 try {
-                    obj = updateFunction.get();
+                    obj = updateFunction.apply(obj);
                 } catch (Exception e) {
                     log.error("Error while updating object in ObjCache", e);
                 }
