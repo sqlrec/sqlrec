@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.milvus.calcite;
 
+import com.sqlrec.common.connector.CalciteEnumerableTableModify;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -31,7 +32,7 @@ public class MilvusEnumerableTableModifyRule extends ConverterRule {
             return null;
         }
         final RelTraitSet traitSet = modify.getTraitSet().replace(EnumerableConvention.INSTANCE);
-        return new MilvusEnumerableTableModify(
+        return new CalciteEnumerableTableModify(
                 modify.getCluster(), traitSet,
                 modify.getTable(),
                 modify.getCatalogReader(),

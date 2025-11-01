@@ -1,4 +1,4 @@
-package com.sqlrec.connectors.redis.calcite;
+package com.sqlrec.connectors.kafka.calcite;
 
 import com.sqlrec.common.connector.CalciteEnumerableTableModify;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
@@ -13,13 +13,13 @@ import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.schema.ModifiableTable;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public class RedisEnumerableTableModifyRule extends ConverterRule {
+public class KafkaEnumerableTableModifyRule extends ConverterRule {
     public static final Config DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(LogicalTableModify.class, Convention.NONE,
-                    EnumerableConvention.INSTANCE, "RedisEnumerableTableModifyRule")
-            .withRuleFactory(RedisEnumerableTableModifyRule::new);
+                    EnumerableConvention.INSTANCE, "KafkaEnumerableTableModifyRule")
+            .withRuleFactory(KafkaEnumerableTableModifyRule::new);
 
-    protected RedisEnumerableTableModifyRule(Config config) {
+    protected KafkaEnumerableTableModifyRule(Config config) {
         super(config);
     }
 
@@ -46,7 +46,7 @@ public class RedisEnumerableTableModifyRule extends ConverterRule {
     @Override
     public boolean matches(RelOptRuleCall call) {
         RelOptTableImpl table = (RelOptTableImpl) call.rel(0).getTable();
-        if (table != null && table.unwrap(RedisCalciteTable.class) != null) {
+        if (table != null && table.unwrap(KafkaCalciteTable.class) != null) {
             return true;
         }
         return false;

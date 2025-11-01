@@ -46,6 +46,7 @@ minikube start \
   --ports="${REDIS_PORT}:${REDIS_PORT}" \
   --ports="${SQLREC_POSTGRESQL_PORT}:${SQLREC_POSTGRESQL_PORT}" \
   --ports="${MILVUS_PORT}:${MILVUS_PORT}" \
+  --ports="${KAFKA_PORT}:${KAFKA_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 
