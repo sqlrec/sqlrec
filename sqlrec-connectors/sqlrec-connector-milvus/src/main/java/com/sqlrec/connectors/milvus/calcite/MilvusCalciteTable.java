@@ -74,11 +74,11 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         return Linq4j.asEnumerable(rows);
     }
 
-    public List<Object[]> getByPrimaryKey(Object key) {
+    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
         QueryReq queryReq = QueryReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
-                .ids(Collections.singletonList(key))
+                .ids(new ArrayList<>(keySet))
                 .build();
 
         MilvusClientV2 client = getClient(milvusConfig);
@@ -90,7 +90,12 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         }
 
         List<Object[]> rows = parseQueryResp(queryResp);
-        return rows;
+        Map<Object, List<Object[]>> rowsMap = new HashMap<>();
+        for (Object[] row : rows) {
+            Object key = row[milvusConfig.primaryKeyIndex];
+            rowsMap.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+        }
+        return rowsMap;
     }
 
     @Override

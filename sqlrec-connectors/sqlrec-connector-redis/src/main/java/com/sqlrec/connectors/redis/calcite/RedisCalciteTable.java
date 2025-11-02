@@ -28,9 +28,8 @@ import org.apache.calcite.sql.SqlKind;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class RedisCalciteTable extends SqlRecKvTable {
     private RedisConfig redisConfig;
@@ -75,10 +74,17 @@ public class RedisCalciteTable extends SqlRecKvTable {
         }
     }
 
-    public List<Object[]> getByPrimaryKey(Object key) {
-        String value = key.toString();
+    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+        Set<String> keySetStr = keySet.stream()
+                .map(Object::toString)
+                .collect(Collectors.toSet());
         try {
-            return redisHandler.scan(value).get();
+            Map<String, List<Object[]>> scanData = redisHandler.scan(keySetStr).get();
+            Map<Object, List<Object[]>> ret = new HashMap<>();
+            for (Object key : keySet) {
+                ret.put(key, scanData.getOrDefault(key.toString(), new ArrayList<>()));
+            }
+            return ret;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

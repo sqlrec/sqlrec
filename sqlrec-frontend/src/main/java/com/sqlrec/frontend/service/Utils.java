@@ -51,40 +51,46 @@ public class Utils {
                 case VARCHAR:
                 case CHAR:
                     TStringColumn stringColumn = new TStringColumn();
-                    stringColumn.setValues(getValueList(enumerable, field.getIndex(), String.class));
-                    stringColumn.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<String>> charEntry = getValueList(enumerable, field.getIndex(), String.class);
+                    stringColumn.setValues(charEntry.getValue());
+                    stringColumn.setNulls(charEntry.getKey());
                     column.setStringVal(stringColumn);
                     break;
                 case SMALLINT:
                 case TINYINT:
                     TI16Column i16Column = new TI16Column();
-                    i16Column.setValues(getValueList(enumerable, field.getIndex(), Short.class));
-                    i16Column.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<Short>> shortEntry = getValueList(enumerable, field.getIndex(), Short.class);
+                    i16Column.setValues(shortEntry.getValue());
+                    i16Column.setNulls(shortEntry.getKey());
                     column.setI16Val(i16Column);
                     break;
                 case INTEGER:
                     TI32Column i32Column = new TI32Column();
-                    i32Column.setValues(getValueList(enumerable, field.getIndex(), Integer.class));
-                    i32Column.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<Integer>> intEntry = getValueList(enumerable, field.getIndex(), Integer.class);
+                    i32Column.setValues(intEntry.getValue());
+                    i32Column.setNulls(intEntry.getKey());
                     column.setI32Val(i32Column);
                     break;
                 case BIGINT:
                     TI64Column i64Column = new TI64Column();
-                    i64Column.setValues(getValueList(enumerable, field.getIndex(), Long.class));
-                    i64Column.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<Long>> longEntry = getValueList(enumerable, field.getIndex(), Long.class);
+                    i64Column.setValues(longEntry.getValue());
+                    i64Column.setNulls(longEntry.getKey());
                     column.setI64Val(i64Column);
                     break;
                 case FLOAT:
                 case DOUBLE:
                     TDoubleColumn doubleColumn = new TDoubleColumn();
-                    doubleColumn.setValues(getValueList(enumerable, field.getIndex(), Double.class));
-                    doubleColumn.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<Double>> doubleEntry = getValueList(enumerable, field.getIndex(), Double.class);
+                    doubleColumn.setValues(doubleEntry.getValue());
+                    doubleColumn.setNulls(doubleEntry.getKey());
                     column.setDoubleVal(doubleColumn);
                     break;
                 case BOOLEAN:
                     TBoolColumn booleanColumn = new TBoolColumn();
-                    booleanColumn.setValues(getValueList(enumerable, field.getIndex(), Boolean.class));
-                    booleanColumn.setNulls(new byte[]{});
+                    Map.Entry<byte[], List<Boolean>> boolEntry = getValueList(enumerable, field.getIndex(), Boolean.class);
+                    booleanColumn.setValues(boolEntry.getValue());
+                    booleanColumn.setNulls(boolEntry.getKey());
                     column.setBoolVal(booleanColumn);
                     break;
                 default:
@@ -100,17 +106,29 @@ public class Utils {
         return tRowSet;
     }
 
-    public static <T> List<T> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
-        List<T> list = new ArrayList<>();
+    public static <T> Map.Entry<byte[], List<T>> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
         if (enumerable == null) {
-            return list;
+            return Map.entry(new byte[0], new ArrayList<>());
         }
 
+        List<T> allDataList = new ArrayList<>();
         for (Object[] objects : enumerable) {
             Object object = objects[index];
-            list.add(tryCast(object, clazz));
+            allDataList.add(tryCast(object, clazz));
         }
-        return list;
+
+        List<T> retList = new ArrayList<>();
+        byte[] nulls = new byte[(allDataList.size() + 7) / 8];
+        for (int i = 0; i < allDataList.size(); i++) {
+            if (allDataList.get(i) == null) {
+                int byteIndex = i / 8;
+                int bitIndex = i % 8;
+                nulls[byteIndex] |= (1 << bitIndex);
+            } else {
+                retList.add(allDataList.get(i));
+            }
+        }
+        return Map.entry(nulls, retList);
     }
 
     public static List<String> getJsonValueList(Enumerable<Object[]> enumerable, int index) {

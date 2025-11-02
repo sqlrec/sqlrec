@@ -9,9 +9,7 @@ import org.apache.calcite.interpreter.Compiler;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class KvJoinNode implements Node {
     private final Source leftSource;
@@ -95,10 +93,19 @@ public class KvJoinNode implements Node {
         int leftJoinKeyColIndex = joinKeyColIndex.getKey();
 
         Row leftRow = null;
+        Set<Object> joinKeys = new HashSet<>();
+        List<Object[]> leftValues = new ArrayList<>();
         while ((leftRow = leftSource.receive()) != null) {
             Object[] leftValue = leftRow.copyValues();
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
-            List<Object[]> rightValues = rightTable.getByPrimaryKey(leftJoinKey);
+            joinKeys.add(leftJoinKey);
+            leftValues.add(leftValue);
+        }
+
+        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
+        for (Object[] leftValue : leftValues) {
+            Object leftJoinKey = leftValue[leftJoinKeyColIndex];
+            List<Object[]> rightValues = rightValuesMap.getOrDefault(leftJoinKey, new ArrayList<>());
             if (rightValues.isEmpty()) {
                 if (rel.getJoinType() == JoinRelType.LEFT) {
                     send(leftValue, null);

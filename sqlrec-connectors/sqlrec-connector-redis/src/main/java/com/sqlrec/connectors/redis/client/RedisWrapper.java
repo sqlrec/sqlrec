@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.client;
 
+import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -39,6 +40,10 @@ public class RedisWrapper implements AbstractRedisWrapper {
 
     public RedisFuture<byte[]> get(byte[] key) {
         return commands.get(key);
+    }
+
+    public RedisFuture<List<KeyValue<byte[], byte[]>>> mget(byte[]... keys) {
+        return commands.mget(keys);
     }
 
     public RedisFuture<String> set(byte[] key, byte[] value) {

@@ -5,14 +5,13 @@ import com.sqlrec.connectors.redis.client.RedisClusterWrapper;
 import com.sqlrec.connectors.redis.client.RedisWrapper;
 import com.sqlrec.connectors.redis.codec.AbstractCodec;
 import com.sqlrec.connectors.redis.codec.JsonCodec;
-import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
+import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -67,6 +66,51 @@ public class RedisHandler {
         });
     }
 
+    public CompletableFuture<Map<String, List<Object[]>>> scan(Set<String> keySet) {
+        if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+            Map<String, CompletableFuture<List<byte[]>>> futureMap = keySet.stream()
+                    .collect(Collectors.toMap(
+                            key -> key,
+                            key -> redisClient.lrange(getKeyBytes(key), 0, -1).toCompletableFuture()));
+            return CompletableFuture.allOf(futureMap.values().toArray(new CompletableFuture[0]))
+                    .thenApply(x -> {
+                        Map<String, List<Object[]>> result = new HashMap<>();
+                        for (Map.Entry<String, CompletableFuture<List<byte[]>>> entry : futureMap.entrySet()) {
+                            String key = entry.getKey();
+                            List<byte[]> data = entry.getValue().join();
+                            if (data == null) {
+                                result.put(key, new ArrayList<>());
+                            } else {
+                                result.put(key, data.stream()
+                                        .map(bytes -> codec.decode(bytes))
+                                        .collect(Collectors.toList()));
+                            }
+                        }
+                        return result;
+                    });
+        }
+
+        List<byte[]> keys = keySet.stream()
+                .map(this::getKeyBytes)
+                .collect(Collectors.toList());
+        RedisFuture<List<KeyValue<byte[], byte[]>>> future = redisClient.mget(keys.toArray(new byte[0][]));
+        return future.toCompletableFuture().thenApply(list -> {
+            Map<String, List<Object[]>> result = new HashMap<>();
+            if (list == null) {
+                return result;
+            }
+            list.forEach(keyValue -> {
+                if (keyValue.getValue() == null) {
+                    return;
+                }
+                String originKey = getOriginKey(keyValue.getKey());
+                result.computeIfAbsent(originKey, k -> new ArrayList<>())
+                        .add(codec.decode(keyValue.getValue()));
+            });
+            return result;
+        });
+    }
+
     public void delete(Object[] data) {
         if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
             redisClient.lrem(getKey(data), codec.encode(data));
@@ -95,5 +139,10 @@ public class RedisHandler {
     private byte[] getKeyBytes(String rowKey) {
         String finalRowKey = redisConfig.database + ":" + redisConfig.tableName + ":" + rowKey;
         return finalRowKey.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String getOriginKey(byte[] key) {
+        return new String(key, StandardCharsets.UTF_8)
+                .substring(redisConfig.database.length() + redisConfig.tableName.length() + 2);
     }
 }
