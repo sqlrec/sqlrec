@@ -4,15 +4,7 @@ shopt -s expand_aliases
 source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 
-helm upgrade --install postgresql-hms \
-  --namespace "${NAMESPACE}" \
-  --set primary.service.type=NodePort \
-  --set primary.service.nodePorts.postgresql=${HMS_POSTGRESQL_PORT} \
-  --set auth.database=metastore,auth.username=${HMS_POSTGRESQL_USER},auth.password=${HMS_POSTGRESQL_PASSWORD} \
-  --set image.repository=bitnamilegacy/postgresql \
-  --wait \
-  --timeout 3600s \
-  oci://registry-1.docker.io/bitnamicharts/postgresql
+bash ${dir}/../postgresql/deploy.sh metastore ${HMS_POSTGRESQL_PORT} ${HMS_POSTGRESQL_USER} ${HMS_POSTGRESQL_PASSWORD}
 
 envsubst < ${dir}/hms.yaml > ${dir}/hms.yaml.tmp
 envsubst < ${dir}/hms-init.yaml > ${dir}/hms-init.yaml.tmp

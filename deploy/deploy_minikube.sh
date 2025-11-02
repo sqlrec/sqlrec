@@ -47,6 +47,7 @@ minikube start \
   --ports="${SQLREC_POSTGRESQL_PORT}:${SQLREC_POSTGRESQL_PORT}" \
   --ports="${MILVUS_PORT}:${MILVUS_PORT}" \
   --ports="${KAFKA_PORT}:${KAFKA_PORT}" \
+  --ports="${TEST_POSTGRESQL_PORT}:${TEST_POSTGRESQL_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 
@@ -57,4 +58,8 @@ if command -v helm >/dev/null 2>&1; then
   echo 'skip install helm'
 else
   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+fi
+
+if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+  kubectl create namespace "${NAMESPACE}"
 fi

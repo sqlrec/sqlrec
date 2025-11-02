@@ -11,10 +11,6 @@ if [ -z "${NODE_IP}" ]; then
   exit 1
 fi
 
-if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-  kubectl create namespace "${NAMESPACE}"
-fi
-
 if ! kubectl get namespace "${NAMESPACE}-milvus" >/dev/null 2>&1; then
   kubectl create namespace "${NAMESPACE}-milvus"
 fi

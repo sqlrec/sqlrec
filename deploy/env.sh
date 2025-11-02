@@ -42,6 +42,9 @@ export SQLREC_POSTGRESQL_PORT=30308
 export SQLREC_POSTGRESQL_USER=sqlrec
 export SQLREC_POSTGRESQL_PASSWORD=abc123456
 export MILVUS_PORT=31530
+export TEST_POSTGRESQL_PORT=30309
+export TEST_POSTGRESQL_USER=test
+export TEST_POSTGRESQL_PASSWORD=abc123456
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 

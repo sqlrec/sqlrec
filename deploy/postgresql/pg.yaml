@@ -1,0 +1,38 @@
+apiVersion: v1
+data:
+  username: ${POSTGRESQL_OWNER_BASE64}
+  password: ${POSTGRESQL_PASSWORD_BASE64}
+kind: Secret
+metadata:
+  name: ${POSTGRESQL_DB}-postgresql
+type: kubernetes.io/basic-auth
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: ${POSTGRESQL_DB}-postgresql
+spec:
+  instances: 1
+  bootstrap:
+    initdb:
+      database: ${POSTGRESQL_DB}
+      owner: ${POSTGRESQL_OWNER}
+      secret:
+        name: ${POSTGRESQL_DB}-postgresql
+  managed:
+    services:
+      disabledDefaultServices: ["ro", "r"]
+      additional:
+        - selectorType: rw
+          serviceTemplate:
+            metadata:
+              name: ${POSTGRESQL_DB}-postgresql
+            spec:
+              type: NodePort
+              ports:
+                - protocol: TCP
+                  port: 5432
+                  targetPort: 5432
+                  nodePort: ${POSTGRESQL_PORT}
+  storage:
+    size: 16Gi

@@ -4,15 +4,7 @@ shopt -s expand_aliases
 source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 
-helm upgrade --install postgresql-juicefs \
-  --namespace "${NAMESPACE}" \
-  --set primary.service.type=NodePort \
-  --set primary.service.nodePorts.postgresql=${JUICEFS_POSTGRESQL_PORT} \
-  --set auth.database=juicefs,auth.username=${JUICEFS_POSTGRESQL_USER},auth.password=${JUICEFS_POSTGRESQL_PASSWORD} \
-  --set image.repository=bitnamilegacy/postgresql \
-  --wait \
-  --timeout 3600s \
-  oci://registry-1.docker.io/bitnamicharts/postgresql
+bash ${dir}/../postgresql/deploy.sh juicefs ${JUICEFS_POSTGRESQL_PORT} ${JUICEFS_POSTGRESQL_USER} ${JUICEFS_POSTGRESQL_PASSWORD}
 
 if command -v juicefs >/dev/null 2>&1; then
   echo 'juicefs has installed'
