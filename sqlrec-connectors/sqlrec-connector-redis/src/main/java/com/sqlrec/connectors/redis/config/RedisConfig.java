@@ -10,6 +10,7 @@ public class RedisConfig {
     public String dataStructure;
     public Integer ttl;
     public Integer cacheTtl;
+    public Integer maxCacheSize;
     public String database;
     public String tableName;
     public List<FieldSchema> fieldSchemas;

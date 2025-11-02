@@ -39,6 +39,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
         this.redisConfig = redisConfig;
         redisHandler = new RedisHandler(redisConfig);
         redisHandler.open();
+        initCache(redisConfig.maxCacheSize, redisConfig.cacheTtl);
     }
 
     @Override

@@ -31,15 +31,16 @@ import java.util.*;
 public class TestRedisTable {
     @Test
     public void testRedisTable() throws Exception {
+        Map<String, Table> tableMap = new HashMap<>();
+        tableMap.put("t1", getRedisTable());
+        tableMap.put("t2", getListRedisTable());
+        tableMap.put("t3", new MyTable());
+        tableMap.put("t4", new MyTable());
+
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
-                Map<String, Table> tableMap = new HashMap<>();
-                tableMap.put("t1", getRedisTable());
-                tableMap.put("t2", getListRedisTable());
-                tableMap.put("t3", new MyTable());
-                tableMap.put("t4", new MyTable());
                 return tableMap;
             }
         });
@@ -136,6 +137,8 @@ public class TestRedisTable {
         redisConfig.fieldSchemas = fieldSchemas;
         redisConfig.primaryKey = "ID";
         redisConfig.primaryKeyIndex = 0;
+        redisConfig.cacheTtl = 30;
+        redisConfig.maxCacheSize = 100000;
 
         return new RedisCalciteTable(redisConfig);
     }
@@ -156,6 +159,8 @@ public class TestRedisTable {
         redisConfig.fieldSchemas = fieldSchemas;
         redisConfig.primaryKey = "ID";
         redisConfig.primaryKeyIndex = 0;
+        redisConfig.cacheTtl = 30;
+        redisConfig.maxCacheSize = 100000;
 
         return new RedisCalciteTable(redisConfig);
     }

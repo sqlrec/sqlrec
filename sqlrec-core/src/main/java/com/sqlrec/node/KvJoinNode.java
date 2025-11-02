@@ -102,7 +102,7 @@ public class KvJoinNode implements Node {
             leftValues.add(leftValue);
         }
 
-        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
+        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKeyWithCache(joinKeys);
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
             List<Object[]> rightValues = rightValuesMap.getOrDefault(leftJoinKey, new ArrayList<>());

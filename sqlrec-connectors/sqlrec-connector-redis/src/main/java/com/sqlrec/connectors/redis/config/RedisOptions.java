@@ -39,8 +39,14 @@ public class RedisOptions {
 
     public static final ConfigOption<Integer> CACHE_TTL = new ConfigOption<>(
             "cache-ttl",
-            0,
+            30,
             "ttl for local cache(seconds), 0 means no cache"
+    );
+
+    public static final ConfigOption<Integer> MAX_CACHE_SIZE = new ConfigOption<>(
+            "max-cache-size",
+            100000,
+            "max cache size for local cache"
     );
 
     public static RedisConfig getRedisConfig(Map<String, String> options) {
@@ -86,6 +92,13 @@ public class RedisOptions {
             redisConfig.cacheTtl = 0;
         } else {
             redisConfig.cacheTtl = Integer.parseInt(options.get(CACHE_TTL.getKey()));
+        }
+
+        // check max cache size
+        if (!options.containsKey(MAX_CACHE_SIZE.getKey())) {
+            redisConfig.maxCacheSize = MAX_CACHE_SIZE.getDefaultValue();
+        } else {
+            redisConfig.maxCacheSize = Integer.parseInt(options.get(MAX_CACHE_SIZE.getKey()));
         }
 
         return redisConfig;
