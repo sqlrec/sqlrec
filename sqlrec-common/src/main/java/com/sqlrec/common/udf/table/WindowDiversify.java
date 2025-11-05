@@ -8,7 +8,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class CategoryDiversify {
+public class WindowDiversify {
     public CacheTable eval(
             CacheTable input,
             String categoryColumnName,

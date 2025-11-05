@@ -8,9 +8,9 @@ import java.util.Iterator;
 import java.util.List;
 
 public class MergeUtils {
-    public static <TSource> Enumerable<TSource> snakeMerge(Enumerable<TSource>... sources) {
+    public static <TSource> List<TSource> snakeMerge(Iterable<TSource>... sources) {
         List<Iterator<TSource>> iterators = new ArrayList<>();
-        for (Enumerable<TSource> source : sources) {
+        for (Iterable<TSource> source : sources) {
             iterators.add(source.iterator());
         }
 
@@ -28,6 +28,11 @@ public class MergeUtils {
             }
         }
 
+        return merged;
+    }
+
+    public static <TSource> Enumerable<TSource> snakeMergeEnumerable(Iterable<TSource>... sources) {
+        List<TSource> merged = snakeMerge(sources);
         return Linq4j.asEnumerable(merged);
     }
 }

@@ -2,7 +2,7 @@ package com.sqlrec;
 
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.udf.table.CategoryDiversify;
+import com.sqlrec.common.udf.table.WindowDiversify;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -27,7 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class TestCategoryDiversifyFunction {
+public class TestWindowDiversifyFunction {
     @Test
     public void testTableFunction() throws Exception {
         ExecuteContext executeContext = new ExecuteContext();
@@ -39,15 +39,15 @@ public class TestCategoryDiversifyFunction {
             }
         });
         HmsSchema.setGlobalSchema(schema);
-        JavaFunctionUtils.registerTableFunction("default", "category_diversify", CategoryDiversify.class);
+        JavaFunctionUtils.registerTableFunction("default", "window_diversify", WindowDiversify.class);
 
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",
-                "cache table t2 as call category_diversify(t1, 'varchar_type', '2', '1', '10')",
+                "cache table t2 as call window_diversify(t1, 'varchar_type', '2', '1', '10')",
                 "select * from t2",
-                "cache table t3 as call category_diversify(t1, 'array_varchar_type', '2', '1', '10')",
+                "cache table t3 as call window_diversify(t1, 'array_varchar_type', '2', '1', '10')",
                 "select * from t3",
-                "cache table t4 as call category_diversify(t1, 'array_varchar_type', '3', '1', '10')",
+                "cache table t4 as call window_diversify(t1, 'array_varchar_type', '3', '1', '10')",
                 "select * from t4",
                 "select id, UPPER(varchar_type) from t4",
                 "select id, UPPER(array_varchar_type[1]) from t4"

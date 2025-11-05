@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.JoinUtils;
 import com.sqlrec.utils.KvTableUtils;
+import com.sqlrec.utils.MergeUtils;
 import org.apache.calcite.interpreter.*;
 import org.apache.calcite.interpreter.Compiler;
 import org.apache.calcite.rel.core.Join;
@@ -103,28 +104,46 @@ public class KvJoinNode implements Node {
         }
 
         Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKeyWithCache(joinKeys);
+
+        List<List<Object[]>> rowList = new ArrayList<>();
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
             List<Object[]> rightValues = rightValuesMap.getOrDefault(leftJoinKey, new ArrayList<>());
             if (rightValues.isEmpty()) {
                 if (rel.getJoinType() == JoinRelType.LEFT) {
-                    send(leftValue, null);
+                    rowList.add(Collections.singletonList(copyValues(leftValue, null)));
                 }
             } else {
+                List<Object[]> rightRows = new ArrayList<>();
                 for (Object[] rightValue : rightValues) {
-                    send(leftValue, rightValue);
+                    rightRows.add(copyValues(leftValue, rightValue));
                 }
+                rowList.add(rightRows);
             }
+        }
+
+        List<Object[]> merged = MergeUtils.snakeMerge(rowList.toArray(new Iterable[0]));
+        for (Object[] row : merged) {
+            send(row);
         }
     }
 
     private void send(Object[] leftValue, Object[] rightValue) throws InterruptedException {
-        Object[] row = new Object[leftSize + rightSize];
-        System.arraycopy(leftValue, 0, row, 0, leftSize);
-        if (rightValue != null) {
-            System.arraycopy(rightValue, 0, row, leftSize, rightSize);
-        }
+        Object[] row = copyValues(leftValue, rightValue);
+        send(row);
+    }
+
+    private void send(Object[] row) throws InterruptedException {
         sink.send(Row.of(row));
+    }
+
+    private Object[] copyValues(Object[] leftValue, Object[] rightValue) {
+        Object[] copy = new Object[leftSize + rightSize];
+        System.arraycopy(leftValue, 0, copy, 0, leftSize);
+        if (rightValue != null) {
+            System.arraycopy(rightValue, 0, copy, leftSize, rightSize);
+        }
+        return copy;
     }
 
     @Override

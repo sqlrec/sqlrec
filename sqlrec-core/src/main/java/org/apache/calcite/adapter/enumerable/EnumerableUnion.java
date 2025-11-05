@@ -48,7 +48,7 @@ public class EnumerableUnion extends Union implements EnumerableRel {
 
         Expression unionExp = null;
         try {
-            unionExp = Expressions.call(MergeUtils.class.getMethod("snakeMerge", Enumerable[].class), inputExps);
+            unionExp = Expressions.call(MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class), inputExps);
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
