@@ -14,8 +14,11 @@ public class SqlExecutor {
         }
 
         SqlProcessor sqlProcessor = new SqlProcessor();
+        sqlProcessor.setExecuteParams(params.params);
+
         ExecuteDataList executeDataList = new ExecuteDataList();
         executeDataList.data = new ArrayList<>();
+
         for (String sql : params.sqls) {
             SqlProcessResult sqlProcessResult = sqlProcessor.tryExecuteSql(sql);
             ExecuteData executeData = new ExecuteData();

@@ -6,4 +6,5 @@ import java.util.Map;
 public class RequestData {
     public Map<String, List<Map<String, Object>>> inputs;
     public List<String> sqls;
+    public Map<String, String> params;
 }

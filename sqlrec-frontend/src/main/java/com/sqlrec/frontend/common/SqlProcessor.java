@@ -3,6 +3,7 @@ package com.sqlrec.frontend.common;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
@@ -12,7 +13,7 @@ import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.*;
@@ -22,7 +23,6 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
@@ -31,7 +31,8 @@ import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
 import org.apache.flink.sql.parser.dql.SqlShowTables;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -44,9 +45,15 @@ public class SqlProcessor {
 
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
-        context = new ExecuteContext();
+        context = new ExecuteContextImpl();
         defaultSchema = NormalSqlCompiler.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
+    }
+
+    public void setExecuteParams(Map<String, String> params) {
+        if (params != null) {
+            params.forEach(context::setVariable);
+        }
     }
 
     public SqlProcessResult getProcessProcessResult(THandleIdentifier handleIdentifier) {
@@ -151,7 +158,7 @@ public class SqlProcessor {
             }
 
             List<String> tableNames = HmsClient.getAllTables(db);
-            if (defaultSchema.equalsIgnoreCase(db)){
+            if (defaultSchema.equalsIgnoreCase(db)) {
                 tableNames.addAll(schema.getTableNames());
             }
             tableNames = tableNames.stream().distinct().collect(Collectors.toList());
@@ -168,7 +175,7 @@ public class SqlProcessor {
 
             if (defaultSchema.equalsIgnoreCase(db)) {
                 CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
-                if (tableEntry != null && tableEntry.getTable()!=null) {
+                if (tableEntry != null && tableEntry.getTable() != null) {
                     Table tableObj = tableEntry.getTable();
                     if (tableObj instanceof CacheTable) {
                         List<RelDataTypeField> dataFields = ((CacheTable) tableObj).getDataFields();
@@ -188,7 +195,7 @@ public class SqlProcessor {
 
             if (defaultSchema.equalsIgnoreCase(db)) {
                 CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
-                if (tableEntry != null && tableEntry.getTable()!=null) {
+                if (tableEntry != null && tableEntry.getTable() != null) {
                     Table tableObj = tableEntry.getTable();
                     if (tableObj instanceof CacheTable) {
                         return Utils.convertMsgToResult(((CacheTable) tableObj).getCreateSql(), "create sql");
@@ -214,7 +221,8 @@ public class SqlProcessor {
                         "error"
                 );
             }
-            List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {}.getType());
+            List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
+            }.getType());
             return Utils.convertMsgToResult(String.join("\n", sqlList), "create sql");
         }
 

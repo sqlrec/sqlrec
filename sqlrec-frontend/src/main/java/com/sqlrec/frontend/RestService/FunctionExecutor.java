@@ -3,6 +3,7 @@ package com.sqlrec.frontend.RestService;
 import com.google.gson.Gson;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
@@ -26,9 +27,14 @@ public class FunctionExecutor {
         RequestData requestDataObj = new Gson().fromJson(requestData, RequestData.class);
         addTableToSchema(schema, sqlFunctionBindable, requestDataObj.inputs);
 
+        ExecuteContext executeContext = new ExecuteContextImpl();
+        if (requestDataObj.params != null) {
+            requestDataObj.params.forEach(executeContext::setVariable);
+        }
+
         ExecuteData executeData = new ExecuteData();
         try {
-            Enumerable<Object[]> enumerable = sqlFunctionBindable.bind(schema, new ExecuteContext());
+            Enumerable<Object[]> enumerable = sqlFunctionBindable.bind(schema, executeContext);
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 executeData.data = utils.convertToMapList(results, sqlFunctionBindable.getReturnDataFields());

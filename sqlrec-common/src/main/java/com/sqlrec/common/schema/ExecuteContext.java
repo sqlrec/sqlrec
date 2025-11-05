@@ -1,20 +1,7 @@
 package com.sqlrec.common.schema;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+public interface ExecuteContext {
+    String getVariable(String key);
 
-public class ExecuteContext {
-    private Map<String, String> variableMap = new ConcurrentHashMap<>();
-
-    public String getVariable(String key) {
-        return variableMap.get(key);
-    }
-
-    public void setVariable(String key, String value) {
-        if (value == null) {
-            variableMap.remove(key);
-        } else {
-            variableMap.put(key, value);
-        }
-    }
+    void setVariable(String key, String value);
 }

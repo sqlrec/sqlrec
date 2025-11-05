@@ -9,6 +9,7 @@ import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.DataContext;
@@ -75,7 +76,7 @@ public class TestMilvusCalciteTable {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 for (Object[] result : results) {

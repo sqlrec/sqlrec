@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -51,7 +52,7 @@ public class TestNormalSql {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
 
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContext());
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 for (Object[] result : results) {

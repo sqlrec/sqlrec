@@ -43,7 +43,7 @@ public class JavaFunctionBindable extends BindableInterface {
             returnDataFields = getDataTypeByLikeTableName(likeTableName, schema);
         } else {
             if (needReturnSchema && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
-                Object outputTable = callEvalMethod(schema, new ExecuteContext());
+                Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
                 if (outputTable == null) {
                     throw new RuntimeException("table function return null");
                 }
