@@ -1,6 +1,20 @@
 package com.sqlrec.common.config;
 
 public class SqlRecConfigs {
+    public static final ConfigOption<Boolean> ENABLE_REST_SERVER = new ConfigOption<>(
+            "ENABLE_REST_SERVER",
+            true,
+            "enable rest server",
+            null,
+            Boolean.class
+    );
+    public static final ConfigOption<Boolean> ENABLE_THRIFT_SERVER = new ConfigOption<>(
+            "ENABLE_THRIFT_SERVER",
+            true,
+            "enable thrift server",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
             "jdbc:postgresql://192.168.1.5:30308/sqlrec?sslmode=disable",
