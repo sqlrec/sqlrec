@@ -10,34 +10,31 @@ public class KafkaOptions {
     public static final ConfigOption<String> BOOTSTRAP_SERVERS = new ConfigOption<>(
             "properties.bootstrap.servers",
             null,
-            "Kafka bootstrap servers");
+            "Kafka bootstrap servers",
+            null,
+            String.class
+    );
     public static final ConfigOption<String> TOPIC = new ConfigOption<>(
             "topic",
             null,
-            "Kafka topic");
+            "Kafka topic",
+            null,
+            String.class
+    );
     public static final ConfigOption<String> FORMAT = new ConfigOption<>(
             "format",
             "json",
-            "Kafka message format");
+            "Kafka message format",
+            null,
+            String.class
+    );
+
 
     public static KafkaConfig getKafkaConfig(Map<String, String> options) {
         KafkaConfig kafkaConfig = new KafkaConfig();
-
-        if (!options.containsKey(BOOTSTRAP_SERVERS.getKey())) {
-            throw new RuntimeException("Kafka bootstrap servers is not set");
-        }
-        kafkaConfig.bootstrapServers = options.get(BOOTSTRAP_SERVERS.getKey());
-
-        if (!options.containsKey(TOPIC.getKey())) {
-            throw new RuntimeException("Kafka topic is not set");
-        }
-        kafkaConfig.topic = options.get(TOPIC.getKey());
-
-        if (!options.containsKey(FORMAT.getKey())) {
-            kafkaConfig.format = FORMAT.getDefaultValue();
-        } else {
-            kafkaConfig.format = options.get(FORMAT.getKey());
-        }
+        kafkaConfig.bootstrapServers = BOOTSTRAP_SERVERS.getValue(options);
+        kafkaConfig.topic = TOPIC.getValue(options);
+        kafkaConfig.format = FORMAT.getValue(options);
 
         return kafkaConfig;
     }

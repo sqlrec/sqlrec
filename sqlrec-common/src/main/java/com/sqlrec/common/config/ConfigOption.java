@@ -1,14 +1,21 @@
 package com.sqlrec.common.config;
 
+import java.util.List;
+import java.util.Map;
+
 public class ConfigOption<T> {
     public final String key;
     private final T defaultValue;
     private final String description;
+    private final List<T> validValues;
+    private final Class<T> type;
 
-    public ConfigOption(String key, T defaultValue, String description) {
+    public ConfigOption(String key, T defaultValue, String description, List<T> validValues, Class<T> type) {
         this.key = key;
         this.defaultValue = defaultValue;
         this.description = description;
+        this.validValues = validValues;
+        this.type = type;
     }
 
     public T getDefaultValue() {
@@ -24,12 +31,32 @@ public class ConfigOption<T> {
     }
 
     public Class<T> getType() {
-        return (Class<T>) defaultValue.getClass();
+        return type;
+    }
+
+    public T getValue(Map<String, String> options) {
+        String value = options.get(key);
+        return processValue(value);
     }
 
     public T getValue() {
         //get from environment variable
         String value = System.getenv(key);
+        return processValue(value);
+    }
+
+    private T processValue(String value) {
+        T processedValue = getFromStr(value);
+        if (processedValue == null) {
+            throw new IllegalArgumentException(key + " is not set");
+        }
+        if (validValues != null && !validValues.contains(processedValue)) {
+            throw new IllegalArgumentException("Invalid value: " + value);
+        }
+        return processedValue;
+    }
+
+    private T getFromStr(String value) {
         if (value == null) {
             return defaultValue;
         }
