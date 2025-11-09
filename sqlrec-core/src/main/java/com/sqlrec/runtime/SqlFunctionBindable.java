@@ -51,7 +51,7 @@ public class SqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        if (SqlRecConfigs.PARALLELISM_EXEC.getValue().equalsIgnoreCase("true")) {
+        if (SqlRecConfigs.PARALLELISM_EXEC.getValue()) {
             execInParallel(schema, context);
         } else {
             for (BindableInterface bindable : bindableList) {

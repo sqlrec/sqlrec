@@ -33,12 +33,12 @@ public class SqlRecConfigs {
 
 
     // exec config
-    public static final ConfigOption<String> PARALLELISM_EXEC = new ConfigOption<>(
+    public static final ConfigOption<Boolean> PARALLELISM_EXEC = new ConfigOption<>(
             "PARALLELISM_EXEC",
-            "true",
+            true,
             "is parallelism exec or not",
             null,
-            String.class
+            Boolean.class
     );
     public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
             "FUNCTION_UPDATE_INTERVAL",
