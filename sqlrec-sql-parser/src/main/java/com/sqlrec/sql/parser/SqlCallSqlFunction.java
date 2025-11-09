@@ -60,6 +60,9 @@ public class SqlCallSqlFunction extends SqlCall {
             writer.keyword("like");
             likeTableName.unparse(writer, leftPrec, rightPrec);
         }
+        if (isAsync) {
+            writer.keyword("async");
+        }
     }
 
     public SqlIdentifier getFuncName() {

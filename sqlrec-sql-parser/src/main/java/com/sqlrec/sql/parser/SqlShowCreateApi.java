@@ -27,8 +27,7 @@ public class SqlShowCreateApi extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("show");
-        writer.keyword("create");
+        writer.keyword("desc");
         writer.keyword("api");
         apiName.unparse(writer, leftPrec, rightPrec);
     }

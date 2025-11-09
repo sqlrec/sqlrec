@@ -34,7 +34,8 @@ public class TestSqlParse {
                 "cache table t2 as select * from t1 where id=1",
                 "cache table t2 as call fun1(t1)",
                 "call fun1(t1)",
-                "define input table t1(id int, name string)",
+                "call fun1(t1) async",
+                "define input table t1(id integer, name string)",
                 "return t1",
                 "return"
         );
@@ -42,7 +43,18 @@ public class TestSqlParse {
         for (String sql : sqlList) {
             SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
             System.out.println(sqlNode.getClass());
+            System.out.println(sql);
             System.out.println(sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql());
+            assert getPlainSql(sql).equals(getPlainSql(sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql()));
         }
+    }
+
+    public static String getPlainSql(String sql) {
+        return sql.replaceAll("'", "")
+                .replaceAll("`", "")
+                .replaceAll(" ", "")
+                .replaceAll("\n", "")
+                .replaceAll("\r", "")
+                .toUpperCase();
     }
 }
