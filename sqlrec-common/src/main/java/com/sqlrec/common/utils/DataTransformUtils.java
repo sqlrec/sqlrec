@@ -3,8 +3,8 @@ package com.sqlrec.common.utils;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JoinUtils {
-    public static List<Float> convertToFloat(Object obj) {
+public class DataTransformUtils {
+    public static List<Float> convertToFloatVec(Object obj) {
         if (obj instanceof List) {
             List<?> list = (List<?>) obj;
             List<Float> floatList = new ArrayList<>(list.size());

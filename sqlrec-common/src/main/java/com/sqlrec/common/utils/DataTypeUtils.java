@@ -76,7 +76,15 @@ public class DataTypeUtils {
             RelDataTypeField desiredField = desiredFields.get(i);
             RelDataTypeField givenField = givenFields.get(i);
             if (!desiredField.getName().equalsIgnoreCase(givenField.getName())) {
-                throw new RuntimeException("desired field name not equal to given field name: " + desiredField.getName() + " != " + givenField.getName());
+                throw new RuntimeException(
+                        "desired field name not equal to given field name: "
+                                + desiredField.getName() + " != " + givenField.getName());
+            }
+            if (!desiredField.getType().getSqlTypeName().equals(givenField.getType().getSqlTypeName())) {
+                throw new RuntimeException(
+                        "desired field type not equal to given field type: "
+                                + desiredField.getType().getSqlTypeName() + " != "
+                                + givenField.getType().getSqlTypeName());
             }
         }
     }

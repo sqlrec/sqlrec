@@ -2,11 +2,10 @@ package com.sqlrec.node;
 
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecVectorTable;
-import com.sqlrec.common.utils.JoinUtils;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.utils.KvTableUtils;
 import com.sqlrec.utils.MergeUtils;
 import org.apache.calcite.interpreter.*;
-import org.apache.calcite.interpreter.Compiler;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 
@@ -75,7 +74,7 @@ public class KvJoinNode implements Node {
         while ((leftRow = leftSource.receive()) != null) {
             Object[] leftValue = leftRow.copyValues();
             Object leftJoinIp = leftValue[leftJoinKeyColIndex];
-            List<Float> embedding = JoinUtils.convertToFloat(leftJoinIp);
+            List<Float> embedding = DataTransformUtils.convertToFloatVec(leftJoinIp);
             List<Object[]> rightValues = rightTable.searchByEmbedding(rightJoinKeyColName, embedding, limit, projectColumns);
             if (rightValues == null || rightValues.isEmpty()) {
                 if (rel.getJoinType() == JoinRelType.LEFT) {

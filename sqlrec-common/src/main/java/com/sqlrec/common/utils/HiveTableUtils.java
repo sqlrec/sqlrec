@@ -77,9 +77,10 @@ public class HiveTableUtils {
         return flinkTableColumns;
     }
 
+    //todo cover more type case
     public static String convertHiveType(String hiveType) {
         hiveType = hiveType.toUpperCase();
-        if (hiveType.contains("VARCHAR")) {
+        if (hiveType.startsWith("VARCHAR")) {
             return "VARCHAR";
         }
         if (hiveType.contains("NOT NULL")) {
