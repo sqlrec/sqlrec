@@ -124,6 +124,7 @@ public class Utils {
                 int byteIndex = i / 8;
                 int bitIndex = i % 8;
                 nulls[byteIndex] |= (1 << bitIndex);
+                retList.add(getDefaultValue(clazz));
             } else {
                 retList.add(allDataList.get(i));
             }
@@ -150,6 +151,28 @@ public class Utils {
         }
         if (clazz.isInstance(object)) {
             return clazz.cast(object);
+        }
+        return null;
+    }
+
+    public static <T> T getDefaultValue(Class<T> clazz) {
+        if (clazz == Integer.class) {
+            return (T) (Integer) 0;
+        }
+        if (clazz == Long.class) {
+            return (T) (Long) 0L;
+        }
+        if (clazz == Double.class) {
+            return (T) (Double) 0.0;
+        }
+        if (clazz == Float.class) {
+            return (T) (Float) 0.0f;
+        }
+        if (clazz == Boolean.class) {
+            return (T) (Boolean) false;
+        }
+        if (clazz == String.class) {
+            return (T) ("");
         }
         return null;
     }
