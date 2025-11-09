@@ -2,13 +2,11 @@ package com.sqlrec;
 
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.udf.table.WindowDiversify;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -40,7 +38,6 @@ public class TestWindowDiversifyFunction {
             }
         });
         HmsSchema.setGlobalSchema(schema);
-        JavaFunctionUtils.registerTableFunction("default", "window_diversify", WindowDiversify.class);
 
         List<String> sqlList = Arrays.asList(
                 "cache table t1 as select * from myTable",

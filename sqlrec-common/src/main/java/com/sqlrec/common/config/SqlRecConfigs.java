@@ -1,6 +1,7 @@
 package com.sqlrec.common.config;
 
 public class SqlRecConfigs {
+    // service network config
     public static final ConfigOption<Boolean> ENABLE_REST_SERVER = new ConfigOption<>(
             "ENABLE_REST_SERVER",
             true,
@@ -15,9 +16,64 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Integer> THRIFT_SERVER_PORT = new ConfigOption<>(
+            "THRIFT_SERVER_PORT",
+            8000,
+            "port of thrift server",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Integer> REST_SERVER_PORT = new ConfigOption<>(
+            "REST_SERVER_PORT",
+            8001,
+            "port of rest server",
+            null,
+            Integer.class
+    );
+
+
+    // exec config
+    public static final ConfigOption<String> PARALLELISM_EXEC = new ConfigOption<>(
+            "PARALLELISM_EXEC",
+            "true",
+            "is parallelism exec or not",
+            null,
+            String.class
+    );
+    public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
+            "FUNCTION_UPDATE_INTERVAL",
+            300,
+            "function update interval in seconds",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Integer> SCHEMA_CACHE_EXPIRE = new ConfigOption<>(
+            "SCHEMA_CACHE_EXPIRE",
+            60,
+            "schema cache expire in seconds",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Boolean> ASYNC_SCHEMA_UPDATE = new ConfigOption<>(
+            "ASYNC_SCHEMA_UPDATE",
+            true,
+            "async schema update or not",
+            null,
+            Boolean.class
+    );
+
+
+    // dependency service config
+    public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
+            "DEFAULT_TEST_IP",
+            "192.168.1.5",
+            "default test ip",
+            null,
+            String.class
+    );
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
-            "jdbc:postgresql://192.168.1.5:30308/sqlrec?sslmode=disable",
+            "jdbc:postgresql://" + DEFAULT_TEST_IP.getValue() + ":30308/sqlrec?sslmode=disable",
             "meta db url",
             null,
             String.class
@@ -43,15 +99,13 @@ public class SqlRecConfigs {
             null,
             String.class
     );
-
     public static final ConfigOption<String> HIVE_METASTORE_URI = new ConfigOption<>(
             "HIVE_METASTORE_URI",
-            "thrift://192.168.1.5:32083",
+            "thrift://" + DEFAULT_TEST_IP.getValue() + ":32083",
             "hive metastore uri",
             null,
             String.class
     );
-
     public static final ConfigOption<String> EXECUTE_SET_UGI = new ConfigOption<>(
             "EXECUTE_SET_UGI",
             "false",
@@ -59,15 +113,13 @@ public class SqlRecConfigs {
             null,
             String.class
     );
-
     public static final ConfigOption<String> FLINK_SQL_GATEWAY_ADDRESS = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_ADDRESS",
-            "192.168.1.5",
+            DEFAULT_TEST_IP.getDefaultValue(),
             "flink sql gateway to proxy",
             null,
             String.class
     );
-
     public static final ConfigOption<Integer> FLINK_SQL_GATEWAY_PORT = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_PORT",
             30000,
@@ -75,67 +127,11 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
-
     public static final ConfigOption<Integer> FLINK_SQL_GATEWAY_CONNECT_TIMEOUT = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_CONNECT_TIMEOUT",
             600000,
             "flink sql gateway connect timeout",
             null,
             Integer.class
-    );
-
-    public static final ConfigOption<Integer> THRIFT_SERVER_PORT = new ConfigOption<>(
-            "THRIFT_SERVER_PORT",
-            8000,
-            "port of thrift server",
-            null,
-            Integer.class
-    );
-
-    public static final ConfigOption<Integer> REST_SERVER_PORT = new ConfigOption<>(
-            "REST_SERVER_PORT",
-            8001,
-            "port of rest server",
-            null,
-            Integer.class
-    );
-
-    public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
-            "DEFAULT_TEST_IP",
-            "192.168.1.5",
-            "default test ip",
-            null,
-            String.class
-    );
-
-    public static final ConfigOption<String> PARALLELISM_EXEC = new ConfigOption<>(
-            "PARALLELISM_EXEC",
-            "true",
-            "is parallelism exec or not",
-            null,
-            String.class
-    );
-
-    public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
-            "FUNCTION_UPDATE_INTERVAL",
-            300,
-            "function update interval in seconds",
-            null,
-            Integer.class
-    );
-
-    public static final ConfigOption<Integer> SCHEMA_CACHE_EXPIRE = new ConfigOption<>(
-            "SCHEMA_CACHE_EXPIRE",
-            60,
-            "schema cache expire in seconds",
-            null,
-            Integer.class
-    );
-    public static final ConfigOption<Boolean> ASYNC_SCHEMA_UPDATE = new ConfigOption<>(
-            "ASYNC_SCHEMA_UPDATE",
-            true,
-            "async schema update or not",
-            null,
-            Boolean.class
     );
 }

@@ -2,8 +2,6 @@ package com.sqlrec;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
-import com.sqlrec.common.udf.table.AddColFunction;
-import com.sqlrec.common.udf.table.ShuffleFunction;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -34,8 +32,7 @@ public class TestJavaFunction {
             }
         });
         HmsSchema.setGlobalSchema(schema);
-        JavaFunctionUtils.registerTableFunction("default", "shuffle", ShuffleFunction.class);
-        JavaFunctionUtils.registerTableFunction("default", "add_col", AddColFunction.class);
+
         JavaFunctionUtils.registerTableFunction("default", "empty_fun", TestEmptyFun.class);
         JavaFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
         JavaFunctionUtils.registerTableFunction("default", "context_fun", TestContextFun.class);

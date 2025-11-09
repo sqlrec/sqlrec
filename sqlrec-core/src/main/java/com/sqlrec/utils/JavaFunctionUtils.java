@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.config.FunctionConfigs;
 import com.sqlrec.schema.HmsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,13 +34,10 @@ public class JavaFunctionUtils {
         String mapKey = getMapKey(db, funName);
         Class<?> clazz = null;
         try {
-            org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
-            if (functionObj == null) {
-                return null;
-            }
+            String className = getJavaFunctionClassName(db, funName);
             if (!javaFunctionClassMap.containsKey(mapKey) ||
-                    !javaFunctionClassMap.get(mapKey).getName().equals(functionObj.getClassName())) {
-                clazz = Class.forName(functionObj.getClassName());
+                    !javaFunctionClassMap.get(mapKey).getName().equals(className)) {
+                clazz = Class.forName(className);
                 javaFunctionClassMap.put(mapKey, clazz);
                 functionUpdateTime.put(mapKey, System.currentTimeMillis());
             } else {
@@ -50,6 +48,17 @@ public class JavaFunctionUtils {
             return null;
         }
         return clazz;
+    }
+
+    public static String getJavaFunctionClassName(String db, String funName) throws Exception {
+        if (FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.containsKey(funName)) {
+            return FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.get(funName);
+        }
+        org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
+        if (functionObj == null) {
+            throw new Exception("Function not found: " + funName);
+        }
+        return functionObj.getClassName();
     }
 
     public static void registerTableFunction(String db, String funName, Class<?> clazz) {

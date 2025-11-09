@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+// update will perform as insert
 public class CalciteEnumerableTableModify extends EnumerableTableModify {
     public CalciteEnumerableTableModify(
             RelOptCluster cluster,
