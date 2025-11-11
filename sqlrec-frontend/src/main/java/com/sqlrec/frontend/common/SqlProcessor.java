@@ -56,11 +56,11 @@ public class SqlProcessor {
         }
     }
 
-    public SqlProcessResult getProcessProcessResult(THandleIdentifier handleIdentifier) {
+    public SqlProcessResult getProcessResult(THandleIdentifier handleIdentifier) {
         return sqlProcessorMap.getOrDefault(handleIdentifier, null);
     }
 
-    public void closeProcessProcessResult(THandleIdentifier handleIdentifier) {
+    public void closeProcessResult(THandleIdentifier handleIdentifier) {
         sqlProcessorMap.remove(handleIdentifier);
     }
 

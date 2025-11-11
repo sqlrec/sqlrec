@@ -105,7 +105,7 @@ public class SessionManager {
         THandleIdentifier handleIdentifier = tGetOperationStatusReq.getOperationHandle().getOperationId();
         SqlProcessor sqlProcessor = getSqlProcessorByOperationId(handleIdentifier);
         if (sqlProcessor != null) {
-            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessProcessResult(handleIdentifier);
+            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TGetOperationStatusResp resp = new TGetOperationStatusResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 resp.setOperationState(TOperationState.FINISHED_STATE);
@@ -124,7 +124,7 @@ public class SessionManager {
         THandleIdentifier handleIdentifier = tGetResultSetMetadataReq.getOperationHandle().getOperationId();
         SqlProcessor sqlProcessor = getSqlProcessorByOperationId(handleIdentifier);
         if (sqlProcessor != null) {
-            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessProcessResult(handleIdentifier);
+            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 if (sqlProcessResult.fields != null) {
@@ -143,7 +143,7 @@ public class SessionManager {
         THandleIdentifier handleIdentifier = tFetchResultsReq.getOperationHandle().getOperationId();
         SqlProcessor sqlProcessor = getSqlProcessorByOperationId(handleIdentifier);
         if (sqlProcessor != null) {
-            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessProcessResult(handleIdentifier);
+            SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 // 0 means query output
@@ -173,8 +173,8 @@ public class SessionManager {
         operationToSessionMap.remove(operationId);
 
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
-        if (sqlProcessor != null && sqlProcessor.getProcessProcessResult(operationId) != null) {
-            sqlProcessor.closeProcessProcessResult(operationId);
+        if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
+            sqlProcessor.closeProcessResult(operationId);
             return new TCancelOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
         }
 
@@ -191,8 +191,8 @@ public class SessionManager {
         operationToSessionMap.remove(operationId);
 
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
-        if (sqlProcessor != null && sqlProcessor.getProcessProcessResult(operationId) != null) {
-            sqlProcessor.closeProcessProcessResult(operationId);
+        if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
+            sqlProcessor.closeProcessResult(operationId);
             return new TCloseOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
         }
 
@@ -206,8 +206,8 @@ public class SessionManager {
     public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
         THandleIdentifier operationId = tGetQueryIdReq.getOperationHandle().getOperationId();
         SqlProcessor sqlProcessor = getSqlProcessorByOperationId(operationId);
-        if (sqlProcessor != null && sqlProcessor.getProcessProcessResult(operationId) != null) {
-            return new TGetQueryIdResp(sqlProcessor.getProcessProcessResult(operationId).queryId);
+        if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
+            return new TGetQueryIdResp(sqlProcessor.getProcessResult(operationId).queryId);
         }
 
         TCLIService.Client client = getHiveClientByOperationId(operationId);

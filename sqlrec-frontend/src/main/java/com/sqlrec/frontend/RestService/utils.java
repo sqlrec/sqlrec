@@ -1,5 +1,7 @@
 package com.sqlrec.frontend.RestService;
 
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.ArrayList;
@@ -21,5 +23,22 @@ public class utils {
             result.add(map);
         }
         return result;
+    }
+
+    public static Enumerable<Object[]> convertDataToEnumerable(
+            List<Map<String, Object>> data,
+            List<RelDataTypeField> dataFields
+    ) {
+        List<Object[]> list = new ArrayList<>();
+        for (Map<String, Object> map : data) {
+            Object[] row = new Object[dataFields.size()];
+            for (int i = 0; i < dataFields.size(); i++) {
+                RelDataTypeField field = dataFields.get(i);
+                row[i] = map.get(field.getName());
+            }
+            list.add(row);
+        }
+
+        return Linq4j.asEnumerable(list);
     }
 }

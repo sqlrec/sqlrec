@@ -45,7 +45,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                 status,
                 Unpooled.copiedBuffer(responseContent, CharsetUtil.UTF_8)
         );
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
 
         channelHandlerContext.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);

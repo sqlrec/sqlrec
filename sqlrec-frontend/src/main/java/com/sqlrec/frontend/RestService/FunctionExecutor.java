@@ -58,23 +58,9 @@ public class FunctionExecutor {
             if (!params.containsKey(tableName)) {
                 throw new Exception("table " + tableName + " not found in params, need params for table " + tableName);
             }
-            Enumerable<Object[]> enumerable = convertDataToEnumerable(params.get(tableName), dataFields);
+            Enumerable<Object[]> enumerable = utils.convertDataToEnumerable(params.get(tableName), dataFields);
             CacheTable cacheTable = new CacheTable(tableName, enumerable, dataFields);
             schema.add(tableName, cacheTable);
         }
-    }
-
-    public static Enumerable<Object[]> convertDataToEnumerable(List<Map<String, Object>> data, List<RelDataTypeField> dataFields) {
-        List<Object[]> list = new ArrayList<>();
-        for (Map<String, Object> map : data) {
-            Object[] row = new Object[dataFields.size()];
-            for (int i = 0; i < dataFields.size(); i++) {
-                RelDataTypeField field = dataFields.get(i);
-                row[i] = map.get(field.getName());
-            }
-            list.add(row);
-        }
-
-        return Linq4j.asEnumerable(list);
     }
 }

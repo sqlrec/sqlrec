@@ -95,8 +95,10 @@ public class Utils {
                     break;
                 default:
                     TStringColumn defaultStringColumn = new TStringColumn();
-                    defaultStringColumn.setValues(getJsonValueList(enumerable, field.getIndex()));
-                    defaultStringColumn.setNulls(new byte[]{});
+                    Enumerable<Object[]> jsonEnumerable = getJsonValueEnumerable(enumerable, field.getIndex());
+                    Map.Entry<byte[], List<String>> jsonEntry = getValueList(jsonEnumerable, 0, String.class);
+                    defaultStringColumn.setValues(jsonEntry.getValue());
+                    defaultStringColumn.setNulls(jsonEntry.getKey());
                     column.setStringVal(defaultStringColumn);
             }
         }
@@ -132,17 +134,23 @@ public class Utils {
         return Map.entry(nulls, retList);
     }
 
-    public static List<String> getJsonValueList(Enumerable<Object[]> enumerable, int index) {
-        List<String> list = new ArrayList<>();
+    public static Enumerable<Object[]> getJsonValueEnumerable(Enumerable<Object[]> enumerable, int index) {
         if (enumerable == null) {
-            return list;
+            return null;
         }
 
+        List<Object[]> list = new ArrayList<>();
         for (Object[] objects : enumerable) {
             Object object = objects[index];
-            list.add(new Gson().toJson(object));
+            Object[] newObjects = new Object[1];
+            if (object == null) {
+                newObjects[0] = null;
+            } else {
+                newObjects[0] = new Gson().toJson(object);
+            }
+            list.add(newObjects);
         }
-        return list;
+        return Linq4j.asEnumerable(list);
     }
 
     public static <T> T tryCast(Object object, Class<T> clazz) {
