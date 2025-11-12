@@ -5,7 +5,7 @@ source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 source ${dir}/env.sh
 
-# install docker first：https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+# refer to https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
 if command -v docker >/dev/null 2>&1; then
   echo 'skip install docker'
 else

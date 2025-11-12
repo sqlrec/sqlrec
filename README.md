@@ -110,3 +110,4 @@ SqlRec的表类型一般有4类，如下所示：
 - ~~thrift协议null值处理问题~~
 - log4j2配置
 - 支持查询内置函数
+- jupyter lab部署

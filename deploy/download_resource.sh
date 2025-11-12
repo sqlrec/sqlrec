@@ -11,3 +11,4 @@ bash ${dir}/juicefs/init.sh
 bash ${dir}/milvus/init.sh
 bash ${dir}/kyuubi/init.sh
 bash ${dir}/postgresql/init.sh
+bash ${dir}/minio/init.sh

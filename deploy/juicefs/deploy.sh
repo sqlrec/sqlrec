@@ -6,12 +6,6 @@ dir=$(dirname $(realpath $0))
 
 bash ${dir}/../postgresql/deploy.sh juicefs ${JUICEFS_POSTGRESQL_PORT} ${JUICEFS_POSTGRESQL_USER} ${JUICEFS_POSTGRESQL_PASSWORD}
 
-if command -v juicefs >/dev/null 2>&1; then
-  echo 'juicefs has installed'
-else
-  sudo install ${CLIENT_DIR}/juicefs /usr/local/bin
-fi
-
 juicefs format \
     --storage minio \
     --bucket http://${NODE_IP}:${MINIO_PORT}/bucket1 \

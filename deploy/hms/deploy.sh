@@ -22,6 +22,6 @@ fi
 kubectl create configmap hive-site --from-file="${CONF_DIR}/hive-site.xml" -n "${NAMESPACE}"
 
 kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${NAMESPACE}"
-sleep 15
+kubectl wait --for=condition=complete job/hms-init --timeout=3600s -n "${NAMESPACE}"
 
 kubectl apply -f "${dir}/hms.yaml.tmp" -n "${NAMESPACE}"

@@ -4,8 +4,6 @@ shopt -s expand_aliases
 source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 
-# refer to https://github.com/minio/minio/blob/master/helm/minio/README.md
-helm repo add minio https://charts.min.io/
 helm upgrade --install minio \
  --namespace "${NAMESPACE}" \
  --set resources.requests.memory=2Gi \

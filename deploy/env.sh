@@ -74,10 +74,3 @@ export SPARK_CLIENT_URL=https://archive.apache.org/dist/spark/spark-3.5.1/spark-
 export SPARK_CLIENT_ARCH_NAME=spark-3.5.1-bin-hadoop3.tgz
 export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
 
-
-
-
-
-
-
-
