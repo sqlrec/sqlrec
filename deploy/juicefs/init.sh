@@ -24,5 +24,4 @@ fi
 
 if [ ! -e ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME} ]; then
   tar -xzf ${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME} -C ${CLIENT_DIR}
-  cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
 fi

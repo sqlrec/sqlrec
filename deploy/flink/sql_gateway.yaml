@@ -38,13 +38,13 @@ spec:
               value: /opt/hadoop/conf
           volumeMounts:
             - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${FLINK_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
             - mountPath: /opt/hadoop/conf/hive-site.xml
               name: hive-site
@@ -56,9 +56,9 @@ spec:
               name: hdfs-site
               subPath: hdfs-site.xml
       volumes:
-        - name: ${RESOURCE_PV_NAME}
+        - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
-            claimName: ${RESOURCE_PVC_NAME}
+            claimName: ${LIB_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site
@@ -108,13 +108,13 @@ spec:
             - containerPort: 10000
           volumeMounts:
             - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${FLINK_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
             - mountPath: /opt/flink/conf/hive-site.xml
               name: hive-site
@@ -126,9 +126,9 @@ spec:
               name: hdfs-site
               subPath: hdfs-site.xml
       volumes:
-        - name: ${RESOURCE_PV_NAME}
+        - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
-            claimName: ${RESOURCE_PVC_NAME}
+            claimName: ${LIB_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site

@@ -13,9 +13,13 @@ mkdir -p ${CLIENT_DIR}
 mkdir -p ${PV_DIR}
 mkdir -p ${LOCAL_REGISTRY_DIR}
 
+export LIB_PV_NAME=sqlrec-lib-pv
+export LIB_PVC_NAME=sqlrec-lib-pvc
+export CLIENT_PV_NAME=sqlrec-client-pv
+export CLIENT_PVC_NAME=sqlrec-client-pvc
+
 export NAMESPACE=sqlrec
-export RESOURCE_PV_NAME=sqlrec-resource-pv
-export RESOURCE_PVC_NAME=sqlrec-resource-pvc
+
 export IMAGE_REGISTRY_PORT=5000
 export IMAGE_REGISTRY_URL="host.minikube.internal:${IMAGE_REGISTRY_PORT}"
 if command -v kubectl &> /dev/null; then
@@ -45,6 +49,9 @@ export MILVUS_PORT=31530
 export TEST_POSTGRESQL_PORT=30309
 export TEST_POSTGRESQL_USER=test
 export TEST_POSTGRESQL_PASSWORD=abc123456
+export JUPYTERHUB_PORT=30280
+export JUPYTERHUB_USER=sqlrec
+export JUPYTERHUB_PASSWORD=abc123456
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
@@ -74,3 +81,6 @@ export SPARK_CLIENT_URL=https://archive.apache.org/dist/spark/spark-3.5.1/spark-
 export SPARK_CLIENT_ARCH_NAME=spark-3.5.1-bin-hadoop3.tgz
 export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
 
+export JAVA_CLIENT_URL=https://corretto.aws/downloads/resources/8.472.08.1/amazon-corretto-8.472.08.1-linux-x64.tar.gz
+export JAVA_CLIENT_ARCH_NAME=amazon-corretto-8.472.08.1-linux-x64.tar.gz
+export JAVA_CLIENT_DIR_NAME=amazon-corretto-8.472.08.1-linux-x64

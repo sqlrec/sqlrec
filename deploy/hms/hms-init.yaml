@@ -16,10 +16,10 @@ spec:
           command: ["/opt/hive/bin/schematool",  "-dbType", "postgres", "-initSchema"]
           volumeMounts:
             - mountPath: /opt/hive/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${POSTGRESQL_CONNECTOR_JAR_NAME}
             - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/hive/conf/hive-site.xml
               name: hive-site-hms
@@ -31,9 +31,9 @@ spec:
               name: hdfs-site
               subPath: hdfs-site.xml
       volumes:
-        - name: ${RESOURCE_PV_NAME}
+        - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
-            claimName: ${RESOURCE_PVC_NAME}
+            claimName: ${LIB_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site

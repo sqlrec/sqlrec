@@ -1,0 +1,38 @@
+singleuser:
+  serviceAccountName: spark
+  storage:
+    capacity: 256Gi
+    extraVolumeMounts:
+      - mountPath: ${CLIENT_DIR}
+        name: ${CLIENT_PV_NAME}
+    extraVolumes:
+      - name: ${CLIENT_PV_NAME}
+        persistentVolumeClaim:
+          claimName: ${CLIENT_PVC_NAME}
+  extraEnv:
+    SPARK_HOME: "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}"
+    JAVA_HOME: "${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}"
+
+
+hub:
+  config:
+    Authenticator:
+      admin_users:
+        - ${JUPYTERHUB_USER}
+      allowed_users:
+        - ${JUPYTERHUB_USER}
+    DummyAuthenticator:
+      password: ${JUPYTERHUB_PASSWORD}
+    JupyterHub:
+      admin_access: true
+      authenticator_class: dummy
+
+proxy:
+  service:
+    type: NodePort
+    nodePorts:
+      http: ${JUPYTERHUB_PORT}
+
+scheduling:
+  userScheduler:
+    enabled: false

@@ -28,10 +28,10 @@ spec:
             - containerPort: 10009
           volumeMounts:
             - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/jars/juicefs-hadoop.jar
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/kyuubi/jars/juicefs-hadoop.jar
-              name: ${RESOURCE_PV_NAME}
+              name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/kyuubi/externals/spark-3.5.1-bin-hadoop3/conf/hive-site.xml
               name: hive-site
@@ -46,9 +46,9 @@ spec:
               name: spark-defaults
               subPath: spark-defaults.conf
       volumes:
-        - name: ${RESOURCE_PV_NAME}
+        - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
-            claimName: ${RESOURCE_PVC_NAME}
+            claimName: ${LIB_PVC_NAME}
         - name: core-site
           configMap:
             name: core-site
