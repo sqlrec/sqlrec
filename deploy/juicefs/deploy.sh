@@ -6,15 +6,13 @@ dir=$(dirname $(realpath $0))
 
 bash ${dir}/../postgresql/deploy.sh juicefs ${JUICEFS_POSTGRESQL_PORT} ${JUICEFS_POSTGRESQL_USER} ${JUICEFS_POSTGRESQL_PASSWORD}
 
-if [ ! -f ${CONF_DIR}/core-site.xml ]; then
-  juicefs format \
-      --storage minio \
-      --bucket http://${NODE_IP}:${MINIO_PORT}/bucket1 \
-      --access-key ${MINIO_USER} \
-      --secret-key ${MINIO_PASSWORD} \
-      "postgres://${JUICEFS_POSTGRESQL_USER}:${JUICEFS_POSTGRESQL_PASSWORD}@${NODE_IP}:${JUICEFS_POSTGRESQL_PORT}/juicefs?sslmode=disable" \
-      myjfs
-fi
+juicefs format \
+    --storage minio \
+    --bucket http://${NODE_IP}:${MINIO_PORT}/bucket1 \
+    --access-key ${MINIO_USER} \
+    --secret-key ${MINIO_PASSWORD} \
+    "postgres://${JUICEFS_POSTGRESQL_USER}:${JUICEFS_POSTGRESQL_PASSWORD}@${NODE_IP}:${JUICEFS_POSTGRESQL_PORT}/juicefs?sslmode=disable" \
+    myjfs
 
 envsubst < ${dir}/core-site.template > ${CONF_DIR}/core-site.xml
 if kubectl get configmap core-site -n "${NAMESPACE}"; then
