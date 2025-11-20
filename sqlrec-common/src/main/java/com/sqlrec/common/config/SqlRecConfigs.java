@@ -61,6 +61,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Integer> DEFAULT_VECTOR_SEARCH_LIMIT = new ConfigOption<>(
+            "DEFAULT_VECTOR_SEARCH_LIMIT",
+            100,
+            "default vector search limit",
+            null,
+            Integer.class
+    );
 
 
     // dependency service config

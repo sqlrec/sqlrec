@@ -130,6 +130,12 @@ public class KvTableUtils {
     }
 
     public static JoinPostProcessConfig findJoinPostProcessConfig(RelNode root, Join join) {
+        List<Join> joinNodes = new ArrayList<>();
+        findJoinNodes(root, join, joinNodes);
+        if (joinNodes.size() != 1) {
+            return null;
+        }
+
         JoinPostProcessConfig joinPostProcessConfig = new JoinPostProcessConfig();
         findJoinPostProcessConfig(root, join, joinPostProcessConfig);
         if (!joinPostProcessConfig.hasFindJoin) {
@@ -138,9 +144,19 @@ public class KvTableUtils {
         return joinPostProcessConfig;
     }
 
+    public static void findJoinNodes(RelNode root, Join join, List<Join> joinNodes) {
+        if (root instanceof Join) {
+            joinNodes.add((Join) root);
+        }
+
+        List<RelNode> inputs = root.getInputs();
+        for (RelNode input : inputs) {
+            findJoinNodes(input, join, joinNodes);
+        }
+    }
+
     public static void findJoinPostProcessConfig(RelNode root, Join join, JoinPostProcessConfig joinPostProcessConfig) {
         if (root instanceof Join) {
-            //todo check root is match to join param
             joinPostProcessConfig.hasFindJoin = true;
             return;
         }

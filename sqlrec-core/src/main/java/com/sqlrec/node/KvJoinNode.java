@@ -1,5 +1,6 @@
 package com.sqlrec.node;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTransformUtils;
@@ -58,6 +59,10 @@ public class KvJoinNode implements Node {
                     projectColumns.add(index - leftSize);
                 }
             }
+        }
+
+        if (limit <= 0) {
+            limit = SqlRecConfigs.DEFAULT_VECTOR_SEARCH_LIMIT.getValue();
         }
         if (projectColumns == null || projectColumns.isEmpty()) {
             projectColumns = new ArrayList<>();

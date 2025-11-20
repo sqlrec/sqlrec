@@ -41,11 +41,15 @@ public class CallSqlFunctionBindable extends BindableInterface {
             }
             Table inputTableObj = inputTableEntry.getTable();
 
+            // only support cache table can be input table now
             if (inputTableObj instanceof CacheTable) {
                 CacheTable cacheTable = (CacheTable) inputTableObj;
                 List<RelDataTypeField> desiredFields = tablePlaceholders.get(i).getValue();
                 List<RelDataTypeField> givenFields = cacheTable.getDataFields();
                 DataTypeUtils.checkTableSchemaCompatible(desiredFields, givenFields);
+            } else {
+                throw new RuntimeException("only support cache table as function input table now, " +
+                        "but got: " + inputTableObj.getClass().getName() + " for table: " + inputTable);
             }
 
             String placeholderTableName = tablePlaceholders.get(i).getKey();

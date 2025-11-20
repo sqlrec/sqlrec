@@ -95,4 +95,8 @@ public class CalciteBindable extends BindableInterface {
     public Set<String> getWriteTables() {
         return writeTables;
     }
+
+    public RelNode getBestExp() {
+        return bestExp;
+    }
 }

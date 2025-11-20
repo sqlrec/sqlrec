@@ -1,15 +1,5 @@
 package com.sqlrec.entity;
 
-import java.time.LocalDateTime;
-
-/*
-CREATE TABLE sql_api (
-    name VARCHAR(255) NOT NULL PRIMARY KEY,
-    function_name VARCHAR(255) NOT NULL,
-    created_at BIGINT NOT NULL,
-    updated_at BIGINT NOT NULL
-);
- */
 public class SqlApi {
     private String name;
     private String functionName;

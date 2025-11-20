@@ -1,15 +1,5 @@
 package com.sqlrec.entity;
 
-import java.time.LocalDateTime;
-
-/*
-CREATE TABLE sql_function (
-    name VARCHAR(255) NOT NULL PRIMARY KEY,
-    sql_list text NOT NULL,
-    created_at BIGINT NOT NULL,
-    updated_at BIGINT NOT NULL
-);
- */
 public class SqlFunction {
     private String name;
     private String sqlList;

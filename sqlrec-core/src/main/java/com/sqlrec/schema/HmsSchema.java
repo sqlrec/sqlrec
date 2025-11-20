@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchema extends AbstractSchema {
     private static final Logger log = LoggerFactory.getLogger(HmsSchema.class);
+    private static CalciteSchema globalSchema;  // for test
 
     private static Map<String, HmsTableFactory> tableFactories;
     private static Map<String, HmsSchema> schemaMap = new ConcurrentHashMap<>();
@@ -42,7 +43,6 @@ public class HmsSchema extends AbstractSchema {
     private ObjCache<Map<String, Table>> tableMapCache;
     private ObjCache<Multimap<String, Function>> functionMapCache;
     private Map<String, Long> tableUpdateTimes = new ConcurrentHashMap<>();
-    private static CalciteSchema globalSchema;  // for test
 
     public HmsSchema(String databaseName) {
         this.databaseName = databaseName;
@@ -109,6 +109,7 @@ public class HmsSchema extends AbstractSchema {
                 }
             }
         } catch (Exception e) {
+            log.error("Error while computing table map for schema {}", databaseName, e);
             throw new RuntimeException(e);
         }
         return tableMap;
@@ -164,6 +165,7 @@ public class HmsSchema extends AbstractSchema {
                 functionMap.put(entry.getKey(), SchemaUtils.createScalarFunction(entry.getValue()));
             }
         } catch (Exception e) {
+            log.error("Error while computing function map for schema {}", databaseName, e);
             throw new RuntimeException(e);
         }
         return functionMap;
