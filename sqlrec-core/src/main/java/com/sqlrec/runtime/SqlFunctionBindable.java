@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -20,10 +21,13 @@ public class SqlFunctionBindable extends BindableInterface {
     private List<BindableInterface> bindableList;
     private String returnTableName;
     private List<RelDataTypeField> returnDataFields;
+
     private Set<String> readTables;
     private Set<String> writeTables;
     private Map<Integer, Set<Integer>> bindableDependency;
     private List<Integer> sortedBindableList;
+
+    private Map<String, String> allDependSqlFunctionMap; // funName to call trace
 
     public SqlFunctionBindable(
             List<Map.Entry<String, List<RelDataTypeField>>> inputTables,
@@ -37,13 +41,15 @@ public class SqlFunctionBindable extends BindableInterface {
         this.returnDataFields = returnDataFields;
     }
 
-    public void init() {
+    public void init() throws Exception {
         this.readTables = getAccessTables(bindableList, BindableInterface::getReadTables);
         this.writeTables = getAccessTables(bindableList, BindableInterface::getWriteTables);
         Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> topologicalSortIndex = TopologicalSortUtils
                 .topologicalSort(bindableList);
         this.bindableDependency = topologicalSortIndex.getValue();
         this.sortedBindableList = topologicalSortIndex.getKey();
+
+        initAllDependSqlFunctionMap();
     }
 
     @Override
@@ -181,7 +187,7 @@ public class SqlFunctionBindable extends BindableInterface {
         Set<String> dependencySqlFunctions = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
             if (bindable instanceof CallSqlFunctionBindable) {
-                dependencySqlFunctions.add(((CallSqlFunctionBindable) bindable).getFunName());
+                dependencySqlFunctions.add(((CallSqlFunctionBindable) bindable).getFunName().toUpperCase());
             }
         }
         return dependencySqlFunctions;
@@ -195,5 +201,30 @@ public class SqlFunctionBindable extends BindableInterface {
             }
         }
         return dependencyJavaFunctions;
+    }
+
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        return allDependSqlFunctionMap;
+    }
+
+    private void initAllDependSqlFunctionMap() throws Exception {
+        allDependSqlFunctionMap = new HashMap<>();
+
+        Set<String> directDependSqlFunctions = getDependencySqlFunctions();
+        for (String directDependSqlFunction : directDependSqlFunctions) {
+            allDependSqlFunctionMap.put(directDependSqlFunction, directDependSqlFunction);
+            SqlFunctionBindable aSqlFunction = CompileManager.getSqlFunction(directDependSqlFunction);
+            Map<String, String> aSqlFunctionAllDependSqlFunctionMap = aSqlFunction.getAllDependSqlFunctionMap();
+            for (Map.Entry<String, String> entry : aSqlFunctionAllDependSqlFunctionMap.entrySet()) {
+                if (!allDependSqlFunctionMap.containsKey(entry.getKey())) {
+                    allDependSqlFunctionMap.put(entry.getKey(), directDependSqlFunction + "->" + entry.getValue());
+                }
+            }
+        }
+
+        if (allDependSqlFunctionMap.containsKey(funName)) {
+            throw new Exception("Sql function " + funName + " has circular dependency: " +
+                     allDependSqlFunctionMap.get(funName));
+        }
     }
 }

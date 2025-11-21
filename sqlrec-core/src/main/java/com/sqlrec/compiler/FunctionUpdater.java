@@ -133,6 +133,8 @@ public class FunctionUpdater {
             }
         }
 
+        // todo check scala udf update
+
         return false;
     }
 }

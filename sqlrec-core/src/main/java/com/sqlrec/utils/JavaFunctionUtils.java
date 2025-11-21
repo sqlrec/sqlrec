@@ -40,6 +40,7 @@ public class JavaFunctionUtils {
                 clazz = Class.forName(className);
                 javaFunctionClassMap.put(mapKey, clazz);
                 functionUpdateTime.put(mapKey, System.currentTimeMillis());
+                log.info("Register table function: db={}, funName={}, className={}", db, funName, className);
             } else {
                 clazz = javaFunctionClassMap.get(mapKey);
             }

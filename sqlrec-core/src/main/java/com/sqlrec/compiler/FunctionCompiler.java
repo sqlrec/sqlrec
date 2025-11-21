@@ -99,7 +99,7 @@ public class FunctionCompiler {
     private void compileFunctionDefinition(SqlNode flinkSqlNode) {
         if (flinkSqlNode instanceof SqlCreateSqlFunction) {
             SqlCreateSqlFunction sqlCreateFunction = (SqlCreateSqlFunction) flinkSqlNode;
-            sqlFunctionBindable.setFunName(sqlCreateFunction.getFuncName().getSimple());
+            sqlFunctionBindable.setFunName(sqlCreateFunction.getFuncName().getSimple().toUpperCase());
             isOrReplace = sqlCreateFunction.isOrReplace();
             stage = FunctionCompileStage.FUNCTION_PARAM;
         } else {
