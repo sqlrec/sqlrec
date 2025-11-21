@@ -43,7 +43,6 @@ import static org.apache.calcite.prepare.Prepare.THREAD_INSUBQUERY_THRESHOLD;
 
 public class NormalSqlCompiler {
     private static final Logger log = LoggerFactory.getLogger(NormalSqlCompiler.class);
-    public static String DEFAULT_SCHEMA_NAME = "default";
 
     public static BindableInterface getNormalSqlBindable(String sql, CalciteSchema schema, String defaultSchema) throws Exception {
         log.info("compile sql: {}", sql);

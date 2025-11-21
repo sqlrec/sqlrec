@@ -1,16 +1,15 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -34,7 +33,7 @@ public class TestMilvusCalciteTable {
     @Test
     public void testMilvusTable() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 Map<String, Table> tableMap = new HashMap<>();
@@ -46,7 +45,7 @@ public class TestMilvusCalciteTable {
         HmsSchema.setGlobalSchema(schema);
 
         SchemaUtils.addFunction(
-                schema.getSubSchema(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, false),
+                schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "ip",
                 "com.sqlrec.common.udf.scalar.IpFunction"
         );
@@ -74,7 +73,7 @@ public class TestMilvusCalciteTable {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {

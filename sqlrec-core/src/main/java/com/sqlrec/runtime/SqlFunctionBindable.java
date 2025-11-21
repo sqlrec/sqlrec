@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -11,13 +12,9 @@ import org.apache.calcite.schema.Table;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Function;
 
 public class SqlFunctionBindable extends BindableInterface {
-    public static final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
-
     private String funName;
     private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;
     private List<BindableInterface> bindableList;
@@ -82,7 +79,7 @@ public class SqlFunctionBindable extends BindableInterface {
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
                 CompletableFuture<Object> bindFuture = CompletableFuture.supplyAsync(
-                        () -> bindable.bind(schema, context), executorService
+                        () -> bindable.bind(schema, context), Const.executorService
                 );
                 bindFutures.add(bindFuture);
             } else {
@@ -94,7 +91,7 @@ public class SqlFunctionBindable extends BindableInterface {
                         dependentBindFutures.toArray(new CompletableFuture[0])
                 );
                 CompletableFuture<Object> bindFuture = dependentBindFuturesAll.thenApplyAsync(
-                        (v) -> bindable.bind(schema, context), executorService
+                        (v) -> bindable.bind(schema, context), Const.executorService
                 );
                 bindFutures.add(bindFuture);
             }

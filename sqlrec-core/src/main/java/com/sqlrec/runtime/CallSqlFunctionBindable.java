@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.Const;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -57,7 +58,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
         }
 
         if (isAsync) {
-            SqlFunctionBindable.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, context));
+            Const.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, context));
             return null;
         } else {
             return sqlFunctionBindable.bind(tmpSchema, context);

@@ -7,7 +7,6 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
-import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
@@ -17,6 +16,7 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.*;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -46,7 +46,7 @@ public class SqlProcessor {
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
         context = new ExecuteContextImpl();
-        defaultSchema = NormalSqlCompiler.DEFAULT_SCHEMA_NAME;
+        defaultSchema = Const.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
     }
 

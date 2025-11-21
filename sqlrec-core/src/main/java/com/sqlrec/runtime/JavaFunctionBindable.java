@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.sql.parser.SqlGetVariable;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -116,7 +117,7 @@ public class JavaFunctionBindable extends BindableInterface {
 
         try {
             if (isAsync) {
-                SqlFunctionBindable.executorService.submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
+                Const.executorService.submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
                 return null;
             } else {
                 return evalMethod.invoke(tableFunction, paramList.toArray());

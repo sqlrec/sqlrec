@@ -3,10 +3,10 @@ package com.sqlrec;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.Const;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -31,7 +31,7 @@ public class TestWindowDiversifyFunction {
     public void testTableFunction() throws Exception {
         ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new MyTable());
@@ -54,7 +54,7 @@ public class TestWindowDiversifyFunction {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, executeContext);
             if (enumerable != null) {

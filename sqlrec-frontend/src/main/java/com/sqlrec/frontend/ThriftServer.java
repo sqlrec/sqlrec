@@ -2,6 +2,7 @@ package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.service.TCLIServiceImpl;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.thrift.TProcessor;
@@ -12,7 +13,7 @@ import org.apache.thrift.transport.TTransportException;
 
 public class ThriftServer {
     public static void main(String[] args) throws TTransportException {
-        CompileManager.initFunctionUpdateService();
+        FunctionUpdater.initFunctionUpdateService();
 
         TServerSocket serverTransport = new TServerSocket(SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
         TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);

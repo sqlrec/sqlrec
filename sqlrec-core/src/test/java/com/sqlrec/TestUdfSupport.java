@@ -1,11 +1,10 @@
 package com.sqlrec;
 
-import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -23,7 +22,7 @@ public class TestUdfSupport {
     @Test
     public void testUdfSupport() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
@@ -32,12 +31,12 @@ public class TestUdfSupport {
         HmsSchema.setGlobalSchema(schema);
 
         SchemaUtils.addFunction(
-                schema.getSubSchema(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, false),
+                schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "uuid",
                 "com.sqlrec.common.udf.scalar.UuidFunction"
         );
         SchemaUtils.addFunction(
-                schema.getSubSchema(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, false),
+                schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "l2_norm",
                 "com.sqlrec.common.udf.scalar.L2NormFunction"
         );
@@ -64,7 +63,7 @@ public class TestUdfSupport {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {

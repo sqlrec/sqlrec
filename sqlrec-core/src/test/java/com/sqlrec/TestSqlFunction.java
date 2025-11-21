@@ -1,11 +1,10 @@
 package com.sqlrec;
 
-import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -23,7 +22,7 @@ public class TestSqlFunction {
     @Test
     public void testSqlCompile() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(NormalSqlCompiler.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new TestNormalSql.MyTable());
@@ -52,7 +51,7 @@ public class TestSqlFunction {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, NormalSqlCompiler.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {
