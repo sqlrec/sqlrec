@@ -92,7 +92,7 @@ public class FunctionUpdater {
             }
 
             if (needFlush) {
-                CompileManager.compileSqlFunction(functionName);
+                new CompileManager().compileSqlFunction(functionName);
                 functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
                 log.info("function bindable {} updated", functionName);
             } else {

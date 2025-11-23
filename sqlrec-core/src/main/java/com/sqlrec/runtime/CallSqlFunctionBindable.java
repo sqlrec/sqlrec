@@ -93,4 +93,8 @@ public class CallSqlFunctionBindable extends BindableInterface {
     public String getFunName() {
         return funName;
     }
+
+    public SqlFunctionBindable getSqlFunctionBindable() {
+        return sqlFunctionBindable;
+    }
 }

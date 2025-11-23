@@ -20,10 +20,10 @@ class CompileManagerTest {
         sqlFunction.setUpdatedAt(System.currentTimeMillis());
         DbUtils.upsertSqlFunction(sqlFunction);
 
-        SqlFunctionBindable sqlFunctionBindable1 = CompileManager.getSqlFunction("test");
+        SqlFunctionBindable sqlFunctionBindable1 = new CompileManager().getSqlFunction("test");
         Thread.sleep(1);
         FunctionUpdater.updateFunctionBindable();
-        SqlFunctionBindable sqlFunctionBindable2 = CompileManager.getSqlFunction("test");
+        SqlFunctionBindable sqlFunctionBindable2 = new CompileManager().getSqlFunction("test");
         assertEquals(sqlFunctionBindable1, sqlFunctionBindable2);
 
         sqlFunction.setUpdatedAt(System.currentTimeMillis());
@@ -32,12 +32,12 @@ class CompileManagerTest {
         assertEquals(sqlFunction2.getUpdatedAt(), sqlFunction.getUpdatedAt());
 
         FunctionUpdater.updateFunctionBindable();
-        SqlFunctionBindable sqlFunctionBindable3 = CompileManager.getSqlFunction("test");
+        SqlFunctionBindable sqlFunctionBindable3 = new CompileManager().getSqlFunction("test");
         assertNotEquals(sqlFunctionBindable1, sqlFunctionBindable3);
         assertTrue(sqlFunctionBindable3.getCreateTime() > sqlFunctionBindable1.getCreateTime());
 
         DbUtils.deleteSqlFunction("test");
         FunctionUpdater.updateFunctionBindable();
-        assertThrows(Exception.class, () -> CompileManager.getSqlFunction("test"));
+        assertThrows(Exception.class, () -> new CompileManager().getSqlFunction("test"));
     }
 }

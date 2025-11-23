@@ -210,14 +210,15 @@ public class SqlFunctionBindable extends BindableInterface {
     private void initAllDependSqlFunctionMap() throws Exception {
         allDependSqlFunctionMap = new HashMap<>();
 
-        Set<String> directDependSqlFunctions = getDependencySqlFunctions();
-        for (String directDependSqlFunction : directDependSqlFunctions) {
-            allDependSqlFunctionMap.put(directDependSqlFunction, directDependSqlFunction);
-            SqlFunctionBindable aSqlFunction = CompileManager.getSqlFunction(directDependSqlFunction);
-            Map<String, String> aSqlFunctionAllDependSqlFunctionMap = aSqlFunction.getAllDependSqlFunctionMap();
-            for (Map.Entry<String, String> entry : aSqlFunctionAllDependSqlFunctionMap.entrySet()) {
-                if (!allDependSqlFunctionMap.containsKey(entry.getKey())) {
-                    allDependSqlFunctionMap.put(entry.getKey(), directDependSqlFunction + "->" + entry.getValue());
+        for (BindableInterface bindable : bindableList) {
+            if (bindable instanceof CallSqlFunctionBindable) {
+                SqlFunctionBindable aSqlFunction = ((CallSqlFunctionBindable) bindable).getSqlFunctionBindable();
+                allDependSqlFunctionMap.put(aSqlFunction.getFunName(), aSqlFunction.getFunName());
+                Map<String, String> aSqlFunctionAllDependSqlFunctionMap = aSqlFunction.getAllDependSqlFunctionMap();
+                for (Map.Entry<String, String> entry : aSqlFunctionAllDependSqlFunctionMap.entrySet()) {
+                    if (!allDependSqlFunctionMap.containsKey(entry.getKey())) {
+                        allDependSqlFunctionMap.put(entry.getKey(), aSqlFunction.getFunName() + "->" + entry.getValue());
+                    }
                 }
             }
         }

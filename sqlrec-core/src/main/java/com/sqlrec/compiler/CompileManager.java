@@ -5,19 +5,15 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
-import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.DbUtils;
-import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
@@ -30,17 +26,21 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class CompileManager {
     private static final Logger log = LoggerFactory.getLogger(CompileManager.class);
-    private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
 
+    private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
     private static Cache<String, SqlApi> sqlApiCache = Caffeine.newBuilder()
             .expireAfterWrite(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS)
             .build();
+
+    private List<String> compilingSqlFunctions = new ArrayList<>();
+
+    public CompileManager() {
+
+    }
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
         sql = SqlPreProcesser.preProcessSql(sql);
@@ -53,7 +53,7 @@ public class CompileManager {
         return parser.parseQuery();
     }
 
-    public static BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) throws Exception {
+    public BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) throws Exception {
         if (!SqlTypeChecker.isFlinkSqlCompilable(flinkSqlNode, schema, defaultSchema)) {
             throw new Exception("sql is not compilable");
         }
@@ -71,15 +71,15 @@ public class CompileManager {
         return getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
     }
 
-    private static BindableInterface getCallSqlFunctionBindable(
+    private BindableInterface getCallSqlFunctionBindable(
             SqlCallSqlFunction callSqlFunction,
             CalciteSchema schema,
             boolean needReturnSchema
     ) throws Exception {
-        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, needReturnSchema);
+        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, needReturnSchema, this);
     }
 
-    private static BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
+    private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
         String tableName = cache.getTableName().getSimple();
         String createSql = getSqlStr(cache);
 
@@ -109,7 +109,7 @@ public class CompileManager {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
-    public static SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
+    public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
         if (functionBindableMap.containsKey(functionName)) {
             return functionBindableMap.get(functionName);
@@ -117,7 +117,7 @@ public class CompileManager {
         return compileSqlFunction(functionName);
     }
 
-    public static SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
+    public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
         SqlFunction sqlFunction = DbUtils.getSqlFunction(functionName);
         if (sqlFunction == null) {
@@ -128,10 +128,18 @@ public class CompileManager {
         return compileSqlFunction(functionName, sqlList);
     }
 
-    public static SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
+    public SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
         functionName = functionName.toUpperCase();
-        FunctionCompiler functionCompiler = new FunctionCompiler(null);
+        if (compilingSqlFunctions.contains(functionName)) {
+            throw new Exception("circular dependency: " + functionName + " trace: "
+                    + String.join("->", compilingSqlFunctions));
+        }
+
+        compilingSqlFunctions.add(functionName);
+        FunctionCompiler functionCompiler = new FunctionCompiler(null, this);
         functionCompiler.compileAllSql(sqlList);
+        compilingSqlFunctions.removeLast();
+
         if (functionCompiler.isFunctionCompileFinish()) {
             if (!functionName.equalsIgnoreCase(functionCompiler.getFunctionBindable().getFunName())) {
                 throw new RuntimeException("function name not match");
@@ -154,7 +162,7 @@ public class CompileManager {
         if (sqlApi == null) {
             throw new Exception("api not fund : " + apiName);
         }
-        return getSqlFunction(sqlApi.getFunctionName());
+        return new CompileManager().getSqlFunction(sqlApi.getFunctionName());
     }
 
     public static SetBindable getSetBindable(SqlSet set) {

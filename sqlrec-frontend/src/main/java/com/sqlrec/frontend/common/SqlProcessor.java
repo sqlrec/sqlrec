@@ -104,7 +104,7 @@ public class SqlProcessor {
         }
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
-            BindableInterface bindableInterface = CompileManager.compileSql(sqlNode, schema, defaultSchema);
+            BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
             // set statement should also execute on sql gateway
             if (sqlNode instanceof SqlSet) {
@@ -132,7 +132,7 @@ public class SqlProcessor {
                     return Utils.convertMsgToResult("add a sql to function", "msg");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
-                functionCompiler = new FunctionCompiler(null);
+                functionCompiler = new FunctionCompiler(null, null);
                 functionCompiler.compile(sqlNode, sql);
                 return Utils.convertMsgToResult("start compile function", "msg");
             }

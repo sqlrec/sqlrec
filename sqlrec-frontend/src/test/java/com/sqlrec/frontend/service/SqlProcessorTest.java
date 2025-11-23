@@ -79,7 +79,7 @@ public class SqlProcessorTest {
                 "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
                 "return t1"
         );
-        CompileManager.compileSqlFunction("fun1", sqlList);
+        new CompileManager().compileSqlFunction("fun1", sqlList);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {

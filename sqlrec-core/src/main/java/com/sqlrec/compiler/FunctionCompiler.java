@@ -33,8 +33,9 @@ public class FunctionCompiler {
     private CalciteSchema schema;
     private SqlFunctionBindable sqlFunctionBindable;
     private List<String> sqlList;
+    private CompileManager compileManager;
 
-    public FunctionCompiler(CalciteSchema schema) {
+    public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
         this.isOrReplace = false;
         this.stage = FunctionCompileStage.FUNCTION_DEFINITION;
         if (schema != null) {
@@ -49,6 +50,11 @@ public class FunctionCompiler {
                 null
         );
         sqlList = new ArrayList<>();
+        if (compileManager != null) {
+            this.compileManager = compileManager;
+        } else {
+            this.compileManager = new CompileManager();
+        }
     }
 
     public SqlFunctionBindable getFunctionBindable() {
@@ -151,7 +157,7 @@ public class FunctionCompiler {
             sqlFunctionBindable.init();
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
             sqlFunctionBindable.getBindableList().add(bindable);
             if (bindable instanceof CacheTableBindable) {
                 CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;

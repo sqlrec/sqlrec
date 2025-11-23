@@ -51,7 +51,7 @@ public class TestSqlFunction {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = CompileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {
@@ -78,7 +78,7 @@ public class TestSqlFunction {
                 "cache table r as SELECT NAME, count(*) as cnt FROM t7 where ID > 0 group by NAME",
                 "return r"
                 );
-         CompileManager.compileSqlFunction("fun1", sqlList);
+        new CompileManager().compileSqlFunction("fun1", sqlList);
 
         List<String> sqlList2 = Arrays.asList(
                 "create sql function fun2",
@@ -86,7 +86,7 @@ public class TestSqlFunction {
                 "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
                 "return"
         );
-        CompileManager.compileSqlFunction("fun2", sqlList2);
+        new CompileManager().compileSqlFunction("fun2", sqlList2);
 
         List<String> sqlList3 = Arrays.asList(
                 "create sql function fun3",
@@ -99,6 +99,6 @@ public class TestSqlFunction {
                 "cache table r as SELECT * from t2 union all SELECT * from t3 union all SELECT * from t4 union all SELECT * from t5 union all SELECT * from t6",
                 "return r"
         );
-        CompileManager.compileSqlFunction("fun3", sqlList3);
+        new CompileManager().compileSqlFunction("fun3", sqlList3);
     }
 }
