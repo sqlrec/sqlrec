@@ -2,7 +2,13 @@ package com.sqlrec;
 
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -70,5 +76,32 @@ public class TestSqlFunctionCompile {
 
         DbUtils.deleteSqlFunction("test_compile1");
         DbUtils.deleteSqlFunction("test_compile2");
+    }
+
+    @Test
+    public void testSqlCompileInRuntime() throws Exception {
+        List<String> fun1SqlList = Arrays.asList(
+                "create sql function fun1",
+                "call get('func_name')()",
+                "return"
+        );
+        new CompileManager().compileSqlFunction("fun1", fun1SqlList);
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        executeContext.setVariable("func_name", "fun1");
+        SqlNode flinkSqlNode = CompileManager.parseFlinkSql("call fun1()");
+        BindableInterface bindable = new CompileManager().compileSql(
+                flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME
+        );
+
+        Exception e = null;
+        try {
+            Enumerable enumerable = bindable.bind(schema, executeContext);
+        } catch (Exception ex) {
+            e = ex;
+        }
+        assert e != null;
+        assert e.getMessage().contains("Circular dependency detected: FUN1 in stack: FUN1");
     }
 }

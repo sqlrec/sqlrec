@@ -32,6 +32,9 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        ExecuteContext finalContext = context.clone();
+        finalContext.addFunNameToStack(funName);
+
         List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         CalciteSchema tmpSchema = HmsSchema.getHmsCalciteSchema();
         for (int i = 0; i < tablePlaceholders.size(); i++) {
@@ -58,10 +61,10 @@ public class CallSqlFunctionBindable extends BindableInterface {
         }
 
         if (isAsync) {
-            Const.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, context));
+            Const.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, finalContext));
             return null;
         } else {
-            return sqlFunctionBindable.bind(tmpSchema, context);
+            return sqlFunctionBindable.bind(tmpSchema, finalContext);
         }
     }
 
