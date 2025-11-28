@@ -1,5 +1,5 @@
 export SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-export BASE_DIR=${SCRIPT_DIR}
+export BASE_DIR=${BASE_DIR:-${SCRIPT_DIR}}
 export DATA_DIR=${BASE_DIR}/data
 export CONF_DIR=${DATA_DIR}/conf
 export LIB_DIR=${DATA_DIR}/lib
@@ -45,6 +45,8 @@ export REDIS_PORT=32379
 export SQLREC_POSTGRESQL_PORT=30308
 export SQLREC_POSTGRESQL_USER=sqlrec
 export SQLREC_POSTGRESQL_PASSWORD=abc123456
+export SQLREC_THRIFT_PORT=8000
+export SQLREC_REST_PORT=8001
 export MILVUS_PORT=31530
 export TEST_POSTGRESQL_PORT=30309
 export TEST_POSTGRESQL_USER=test
@@ -84,3 +86,10 @@ export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
 export JAVA_CLIENT_URL=https://corretto.aws/downloads/resources/8.472.08.1/amazon-corretto-8.472.08.1-linux-x64.tar.gz
 export JAVA_CLIENT_ARCH_NAME=amazon-corretto-8.472.08.1-linux-x64.tar.gz
 export JAVA_CLIENT_DIR_NAME=amazon-corretto-8.472.08.1-linux-x64
+
+
+export HADOOP_HOME=${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
+export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
+export SPARK_HOME=${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}
+export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}
+export PATH=${PATH}:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${HIVE_HOME}/bin:${JAVA_HOME}/bin

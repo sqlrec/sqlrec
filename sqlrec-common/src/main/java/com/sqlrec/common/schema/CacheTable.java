@@ -2,6 +2,7 @@ package com.sqlrec.common.schema;
 
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -30,6 +31,9 @@ public class CacheTable extends SqlRecTable implements ScannableTable {
 
     @Override
     public Enumerable<@Nullable Object[]> scan(DataContext root) {
+        if (enumerable == null) {
+            return Linq4j.emptyEnumerable();
+        }
         return enumerable;
     }
 

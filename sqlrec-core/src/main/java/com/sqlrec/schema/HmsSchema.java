@@ -116,13 +116,20 @@ public class HmsSchema extends AbstractSchema {
     }
 
     private static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        String connector = HiveTableUtils.getTableConnector(tableObj);
-        if (connector == null) {
-            return null;
-        }
-        HmsTableFactory tableFactory = getTableFactory(connector);
-        if (tableFactory != null) {
-            return tableFactory.getTableFromHmsTable(tableObj);
+        try {
+            String connector = HiveTableUtils.getTableConnector(tableObj);
+            if (connector == null) {
+                log.warn("Table {} connector {} is null, skip", tableObj.getTableName(), connector);
+                return null;
+            }
+            HmsTableFactory tableFactory = getTableFactory(connector);
+            if (tableFactory != null) {
+                return tableFactory.getTableFromHmsTable(tableObj);
+            } else {
+                log.warn("Table {} connector {} factory is null, skip", tableObj.getTableName(), connector);
+            }
+        } catch (Exception e) {
+            log.error("Error while getting table from hms table {}", tableObj.getTableName(), e);
         }
         return null;
     }

@@ -43,7 +43,7 @@ public class SqlProcessorTest {
         testSqlFunctionCompile(schema);
 
         List<String> sqlList = Arrays.asList(
-                "create sql function fun2",
+                "create or replace sql function fun2",
                 "define input table input1(id int, name string)",
                 "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
                 "return t1",
@@ -74,7 +74,7 @@ public class SqlProcessorTest {
 
     public static void testSqlFunctionCompile(CalciteSchema schema) throws Exception {
         List<String> sqlList = Arrays.asList(
-                "create sql function fun1",
+                "create or replace sql function fun1",
                 "define input table input1(id int, name string)",
                 "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
                 "return t1"

@@ -40,12 +40,6 @@ cp ${CONF_DIR}/* ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
 
-export HADOOP_HOME=${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
-export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
-export SPARK_HOME=${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}
-export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}
-export PATH=${PATH}:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${HIVE_HOME}/bin:${JAVA_HOME}/bin
-
 hadoop fs -mkdir -p /spark/upload
 
 echo "deploy components done"

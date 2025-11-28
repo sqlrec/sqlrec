@@ -107,10 +107,17 @@ public class SessionManager {
         if (sqlProcessor != null) {
             SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
+                TOperationState operationState;
+                if (sqlProcessResult.exception != null) {
+                    operationState = TOperationState.ERROR_STATE;
+                } else {
+                    operationState = TOperationState.FINISHED_STATE;
+                }
                 TGetOperationStatusResp resp = new TGetOperationStatusResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-                resp.setOperationState(TOperationState.FINISHED_STATE);
+                resp.setOperationState(operationState);
                 resp.setHasResultSet(true);
                 resp.setOperationCompletedIsSet(true);
+                resp.setErrorMessage(sqlProcessResult.msg);
                 return resp;
             }
         }
@@ -153,9 +160,7 @@ public class SessionManager {
                         sqlProcessResult.enumerable = null;
                     }
                 } else {
-                    Enumerable<Object[]> msgEnumerable = Utils.getMsgEnumerable(sqlProcessResult.msg);
-                    resp.setResults(Utils.convertObjectArrayToTRowSet(msgEnumerable, Utils.getStringTypeField("log")));
-                    sqlProcessResult.msg = null;
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(null, Utils.getStringTypeField("log")));
                 }
                 resp.setHasMoreRows(false);
                 return resp;

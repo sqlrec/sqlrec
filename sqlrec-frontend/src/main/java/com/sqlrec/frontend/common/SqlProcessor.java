@@ -30,6 +30,8 @@ import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
 import org.apache.flink.sql.parser.dql.SqlShowTables;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class SqlProcessor {
+    private static Logger logger = LoggerFactory.getLogger(SqlProcessor.class);
+
     private CalciteSchema schema;
     private ExecuteContext context;
     private String defaultSchema;
@@ -71,7 +75,7 @@ public class SqlProcessor {
         } catch (Exception e) {
             String stackTrace = ExceptionUtils.getStackTrace(e);
             result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
-            result.msg = "process sql error: " + e.getMessage();
+            result.msg = "process sql error: " + e.getMessage() + " stack trace: " + stackTrace;
             result.exception = e;
         }
         if (result != null) {
@@ -120,7 +124,7 @@ public class SqlProcessor {
         return null;
     }
 
-    private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) {
+    private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) throws Exception {
         try {
             if (functionCompiler != null) {
                 functionCompiler.compile(sqlNode, sql);
@@ -138,7 +142,8 @@ public class SqlProcessor {
             }
         } catch (Exception e) {
             functionCompiler = null;
-            return Utils.convertMsgToResult("compile fcuntion error: " + e.getMessage(), "error");
+            logger.error("compile fcuntion error: " + e.getMessage(), e);
+            throw e;
         }
 
         return null;
@@ -223,7 +228,7 @@ public class SqlProcessor {
             }
             List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
             }.getType());
-            return Utils.convertMsgToResult(String.join("\n", sqlList), "create sql");
+            return Utils.convertMsgToResult(String.join(";\n\n", sqlList) + ";", "create sql");
         }
 
         if (sqlNode instanceof SqlShowApi) {
