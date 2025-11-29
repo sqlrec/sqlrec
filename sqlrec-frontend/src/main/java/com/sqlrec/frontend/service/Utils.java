@@ -157,9 +157,28 @@ public class Utils {
         if (object == null) {
             return null;
         }
+
         if (clazz.isInstance(object)) {
             return clazz.cast(object);
         }
+
+        if (Number.class.isAssignableFrom(clazz) && object instanceof Number) {
+            Number num = (Number) object;
+            if (clazz == Integer.class) {
+                return (T) (Integer) num.intValue();
+            } else if (clazz == Long.class) {
+                return (T) (Long) num.longValue();
+            } else if (clazz == Double.class) {
+                return (T) (Double) num.doubleValue();
+            } else if (clazz == Float.class) {
+                return (T) (Float) num.floatValue();
+            } else if (clazz == Short.class) {
+                return (T) (Short) num.shortValue();
+            } else if (clazz == Byte.class) {
+                return (T) (Byte) num.byteValue();
+            }
+        }
+
         return null;
     }
 

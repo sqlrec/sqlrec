@@ -101,10 +101,10 @@ public class FunctionProxyBindable extends BindableInterface {
                     throw new Exception("function input table must be table name");
                 }
             }
-            if (sqlFunctionBindable.getInputTables().size() != inputTableList.size()) {
-                throw new Exception("function input table not match");
-            }
-            return new CallSqlFunctionBindable(functionName, inputTableList, sqlFunctionBindable, isAsync);
+            CallSqlFunctionBindable callSqlFunctionBindable = new CallSqlFunctionBindable(
+                    functionName, inputTableList, sqlFunctionBindable, isAsync);
+            callSqlFunctionBindable.checkInputTable(schema);
+            return callSqlFunctionBindable;
         }
 
         throw new Exception("function not find: " + functionName);

@@ -20,6 +20,10 @@ public class CallSqlFunctionBindable extends BindableInterface {
     private boolean isAsync;
 
     public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable, boolean isAsync) {
+        if (sqlFunctionBindable.getInputTables().size() != inputTables.size()) {
+            throw new RuntimeException("function input table not match when compile call function: " + funName);
+        }
+
         this.funName = funName;
         this.inputTables = inputTables;
         this.sqlFunctionBindable = sqlFunctionBindable;
@@ -32,11 +36,28 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        checkInputTable(schema);
+
         ExecuteContext finalContext = context.clone();
         finalContext.addFunNameToStack(funName);
 
         List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         CalciteSchema tmpSchema = HmsSchema.getHmsCalciteSchema();
+        for (int i = 0; i < tablePlaceholders.size(); i++) {
+            CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTables.get(i), false);
+            tmpSchema.add(tablePlaceholders.get(i).getKey(), inputTableEntry.getTable());
+        }
+
+        if (isAsync) {
+            Const.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, finalContext));
+            return null;
+        } else {
+            return sqlFunctionBindable.bind(tmpSchema, finalContext);
+        }
+    }
+
+    public void checkInputTable(CalciteSchema schema) {
+        List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             String inputTable = inputTables.get(i);
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTable, false);
@@ -55,16 +76,6 @@ public class CallSqlFunctionBindable extends BindableInterface {
                 throw new RuntimeException("only support cache table as function input table now, " +
                         "but got: " + inputTableObj.getClass().getName() + " for table: " + inputTable);
             }
-
-            String placeholderTableName = tablePlaceholders.get(i).getKey();
-            tmpSchema.add(placeholderTableName, inputTableObj);
-        }
-
-        if (isAsync) {
-            Const.executorService.submit(() -> sqlFunctionBindable.bind(tmpSchema, finalContext));
-            return null;
-        } else {
-            return sqlFunctionBindable.bind(tmpSchema, finalContext);
         }
     }
 

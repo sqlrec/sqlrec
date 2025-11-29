@@ -91,11 +91,11 @@ def insert_batch(redis_client, data_list, prefix):
 # Keep original function names for backward compatibility
 def insert_user_batch(redis_client, users):
     """Batch insert user data into Redis as JSON strings"""
-    insert_batch(redis_client, users, "default:user:")
+    insert_batch(redis_client, users, "default:user_table:")
 
 def insert_item_batch(redis_client, items):
     """Batch insert item data into Redis as JSON strings"""
-    insert_batch(redis_client, items, "default:item:")
+    insert_batch(redis_client, items, "default:item_table:")
 
 def generate_user_table(redis_client, max_users=TOTAL_USERS):
     """Generate data for user_table in single thread"""

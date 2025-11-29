@@ -21,6 +21,10 @@ public class DataTypeUtils {
 
     public static RelDataType getSqlTypeName(RelDataTypeFactory typeFactory, String type) {
         type = type.toUpperCase();
+        if (type.equals("INT")) {
+            type = "INTEGER";
+        }
+
         if (type.startsWith("ARRAY<") && type.endsWith(">")) {
             String elementType = type.substring("ARRAY<".length(), type.length() - 1);
             RelDataType elementTypeName = getSqlTypeName(typeFactory, elementType);

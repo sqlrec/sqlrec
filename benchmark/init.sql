@@ -134,7 +134,9 @@ create or replace sql function main_rec;
 
 define input table user_info(id bigint);
 
-cache table recall_item_schema as select 0 as item_id, '' as rec_reason;
+cache table recall_item_schema as select
+ cast(0 as BIGINT) as item_id,
+ cast('' as varchar) as rec_reason;
 
 cache table recall_item as call get('recall_fun')(user_info) like recall_item_schema;
 
@@ -146,7 +148,13 @@ recall_item join item_table on id = item_id;
 cache table diversify_rec_item as call window_diversify(rec_item, 'category1', '3', '1', '10');
 
 cache table final_rec_item as
-select user_info.id as user_id, item_id, diversify_rec_item.name, rec_reason
+select
+user_info.id as user_id,
+item_id,
+diversify_rec_item.name as item_name,
+rec_reason,
+cast(0 as BIGINT) as req_time,
+uuid() as req_id
 from
 user_info join diversify_rec_item on 1=1;
 
