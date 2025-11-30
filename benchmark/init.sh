@@ -68,4 +68,11 @@ pip install -r ${dir}/requirements.txt
 python ${dir}/mock_data.py
 
 
-
+# Check if wrk is installed, install it if not (Debian system)
+if ! which wrk > /dev/null 2>&1; then
+    echo "wrk not found, installing..."
+    sudo apt-get update
+    sudo apt-get install -y wrk
+else
+    echo "wrk is already installed"
+fi
