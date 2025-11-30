@@ -128,8 +128,9 @@ public class JavaFunctionBindable extends BindableInterface {
     }
 
     private CacheTable getCacheTable(String inputTableName, CalciteSchema schema) {
-        Table table = Objects.
-                requireNonNull(schema.getTable(inputTableName, false), "input table not found: " + inputTableName)
+        Table table = Objects.requireNonNull(
+                        schema.getTable(inputTableName, false),
+                        "input table not found: " + inputTableName)
                 .getTable();
         if (!(table instanceof CacheTable)) {
             throw new RuntimeException("input table must be cache table for table function");

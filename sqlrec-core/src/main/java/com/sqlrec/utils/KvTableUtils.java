@@ -1,7 +1,7 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecKvTable;
-import com.sqlrec.common.schema.SqlRecTable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
@@ -21,49 +21,51 @@ import java.util.List;
 import java.util.Map;
 
 public class KvTableUtils {
-    public static boolean isRightTableKVTable(RelNode right) {
-        return getRightTableKVTable(right) != null;
+    public static boolean isScanKVTable(RelNode relNode) {
+        return getScanKVTable(relNode) != null;
     }
 
-    public static SqlRecKvTable getRightTableKVTable(RelNode right) {
-        if (right instanceof RelSubset) {
-            RelSubset relNode = ((RelSubset) right);
+    public static SqlRecKvTable getScanKVTable(RelNode relNode) {
+        RelOptTable table = getScanTable(relNode);
+        if (table == null) {
+            return null;
+        }
+        return table.unwrap(SqlRecKvTable.class);
+    }
+
+    public static CacheTable getScanCacheTable(RelNode relNode) {
+        RelOptTable table = getScanTable(relNode);
+        if (table == null) {
+            return null;
+        }
+        return table.unwrap(CacheTable.class);
+    }
+
+    public static RelOptTable getScanTable(RelNode aNode) {
+        if (aNode instanceof RelSubset) {
+            RelSubset relNode = ((RelSubset) aNode);
             List<RelNode> inputs = relNode.getRelList();
             for (RelNode input : inputs) {
                 if (input instanceof TableScan) {
                     TableScan tableScan = (TableScan) input;
-                    SqlRecKvTable kvTable = getKvTable(tableScan.getTable());
-                    if (kvTable != null) {
-                        return kvTable;
-                    }
+                    return tableScan.getTable();
                 }
             }
         }
 
-        if (right instanceof TableScan) {
-            TableScan tableScan = (TableScan) right;
-            SqlRecKvTable kvTable = getKvTable(tableScan.getTable());
-            if (kvTable != null) {
-                return kvTable;
-            }
+        if (aNode instanceof TableScan) {
+            TableScan tableScan = (TableScan) aNode;
+            return tableScan.getTable();
         }
 
         return null;
     }
 
     public static boolean isKvTable(RelOptTable table) {
-        return getKvTable(table) != null;
-    }
-
-    public static SqlRecKvTable getKvTable(RelOptTable table) {
-        SqlRecTable sqlRecTable = null;
-        if (table != null) {
-            sqlRecTable = table.unwrap(SqlRecTable.class);
+        if (table == null) {
+            return false;
         }
-        if (sqlRecTable != null && sqlRecTable instanceof SqlRecKvTable) {
-            return (SqlRecKvTable) sqlRecTable;
-        }
-        return null;
+        return table.unwrap(SqlRecKvTable.class) != null;
     }
 
     public static Map.Entry<Integer, Integer> getJoinKeyColIndex(Join join) {

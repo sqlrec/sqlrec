@@ -29,7 +29,7 @@ public class SqlRecFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule 
         RelNode left = join.getLeft();
         RelNode right = join.getRight();
 
-        if (KvTableUtils.isRightTableKVTable(right) && !isFilterOnLeftTable(filter, left)) {
+        if (KvTableUtils.isScanKVTable(right) && !isFilterOnLeftTable(filter, left)) {
             return;
         }
 

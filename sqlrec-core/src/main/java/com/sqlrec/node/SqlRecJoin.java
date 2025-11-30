@@ -39,7 +39,7 @@ public class SqlRecJoin extends Bindables.BindableJoin {
     @Override
     public void childrenAccept(RelVisitor visitor) {
         visitor.visit(left, 0, this);
-        if (KvTableUtils.getRightTableKVTable(right) == null) {
+        if (KvTableUtils.getScanKVTable(right) == null) {
             visitor.visit(right, 1, this);
         }
     }

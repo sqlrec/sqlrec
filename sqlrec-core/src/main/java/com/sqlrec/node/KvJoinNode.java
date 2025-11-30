@@ -29,7 +29,7 @@ public class KvJoinNode implements Node {
 
     @Override
     public void run() throws InterruptedException {
-        SqlRecKvTable rightTable = KvTableUtils.getRightTableKVTable(rel.getRight());
+        SqlRecKvTable rightTable = KvTableUtils.getScanKVTable(rel.getRight());
         if (rightTable == null) {
             throw new IllegalArgumentException("right table is not kv table");
         }

@@ -7,9 +7,12 @@ import com.sqlrec.schema.RootFirstCatalogReader;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
+import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.linq4j.tree.ClassDeclaration;
+import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
@@ -91,6 +94,9 @@ public class NormalSqlCompiler {
         final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
         log.info("compile bestExp: {}", RelOptUtil.toString(bestExp));
 
+        String javaExpression = getJavaExpression((EnumerableRel) bestExp, EnumerableRel.Prefer.ARRAY);
+        log.info("compile javaExpression: {}", javaExpression);
+
         Map<String, Object> parameters = new HashMap<>();
         Bindable bindable = EnumerableInterpretable.toBindable(
                 parameters,
@@ -163,5 +169,12 @@ public class NormalSqlCompiler {
                 .replace(EnumerableConvention.INSTANCE)
                 .replace(root.collation)
                 .simplify();
+    }
+
+    public static String getJavaExpression(EnumerableRel rel, EnumerableRel.Prefer prefer) {
+        EnumerableRelImplementor relImplementor =
+                new EnumerableRelImplementor(rel.getCluster().getRexBuilder(), new HashMap<>());
+        final ClassDeclaration expr = relImplementor.implementRoot(rel, prefer);
+        return Expressions.toString(expr.memberDeclarations, "\n", false);
     }
 }
