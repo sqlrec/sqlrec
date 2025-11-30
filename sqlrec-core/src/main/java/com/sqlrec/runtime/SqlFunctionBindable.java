@@ -79,7 +79,7 @@ public class SqlFunctionBindable extends BindableInterface {
     }
 
     private void execInParallel(CalciteSchema schema, ExecuteContext context) {
-        List<CompletableFuture<Object>> bindFutures = new ArrayList<>();
+        Map<Integer, CompletableFuture<Object>> bindFutures = new HashMap<>();
         for (int i : sortedBindableList) {
             BindableInterface bindable = bindableList.get(i);
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
@@ -87,7 +87,7 @@ public class SqlFunctionBindable extends BindableInterface {
                 CompletableFuture<Object> bindFuture = CompletableFuture.supplyAsync(
                         () -> bindable.bind(schema, context), Const.executorService
                 );
-                bindFutures.add(bindFuture);
+                bindFutures.put(i, bindFuture);
             } else {
                 List<CompletableFuture<Object>> dependentBindFutures = new ArrayList<>();
                 for (int dependentBindableIndex : dependentBindableIndices) {
@@ -99,10 +99,12 @@ public class SqlFunctionBindable extends BindableInterface {
                 CompletableFuture<Object> bindFuture = dependentBindFuturesAll.thenApplyAsync(
                         (v) -> bindable.bind(schema, context), Const.executorService
                 );
-                bindFutures.add(bindFuture);
+                bindFutures.put(i, bindFuture);
             }
         }
-        CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(bindFutures.toArray(new CompletableFuture[0]));
+        CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(
+                bindFutures.values().toArray(new CompletableFuture[0])
+        );
         allBindFutures.join();
     }
 

@@ -72,6 +72,17 @@ CREATE TABLE IF NOT EXISTS `user_recent_click_item` (
   'url' = 'redis://${NODE_IP}:${REDIS_PORT}/0'
 );
 
+CREATE TABLE IF NOT EXISTS `user_exposure_item` (
+  `user_id` BIGINT,
+  `item_id` BIGINT,
+  `bhv_time` BIGINT,
+  PRIMARY KEY (user_id)  NOT ENFORCED
+) WITH (
+  'connector' = 'redis',
+  'data-structure' = 'list',
+  'url' = 'redis://${NODE_IP}:${REDIS_PORT}/0'
+);
+
 CREATE TABLE IF NOT EXISTS `itemcf_i2i` (
   `item_id1` BIGINT,
   `item_id2` BIGINT,
@@ -126,6 +137,9 @@ define input table final_recall_item(
 insert into rec_log_kafka
 select * from final_recall_item;
 
+insert into user_exposure_item
+select user_id, item_id, req_time from final_recall_item;
+
 return;
 
 
@@ -147,16 +161,22 @@ recall_item join item_table on id = item_id;
 
 cache table diversify_rec_item as call window_diversify(rec_item, 'category1', '3', '1', '10');
 
+cache table request_meta as select
+user_info.id as user_id,
+cast(0 as BIGINT) as req_time,
+uuid() as req_id
+from user_info;
+
 cache table final_rec_item as
 select
-user_info.id as user_id,
+request_meta.user_id as user_id,
 item_id,
 diversify_rec_item.name as item_name,
 rec_reason,
-cast(0 as BIGINT) as req_time,
-uuid() as req_id
+request_meta.req_time as req_time,
+request_meta.req_id as req_id
 from
-user_info join diversify_rec_item on 1=1;
+request_meta join diversify_rec_item on 1=1;
 
 call save_rec_item(final_rec_item) async;
 
@@ -167,6 +187,11 @@ return final_rec_item;
 create or replace sql function recall_fun;
 
 define input table user_info(id bigint);
+
+cache table exposured_item as
+select item_id
+from
+user_info join user_exposure_item on user_id = user_info.id;
 
 cache table cur_recent_click_item as
 select item_id
@@ -199,12 +224,16 @@ cur_user_interest_category1 join category1_hot_item
 on category1_hot_item.category1 = cur_user_interest_category1.category1
 limit 300;
 
+cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'item_id', 'item_id');
+cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'item_id', 'item_id');
+cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
+
 cache table all_recall_item as
-select * from i2i_recall
+select * from dedup_i2i_recall
 union all
-select * from global_hot_recall
+select * from dedup_global_hot_recall
 union all
-select * from category1_recall;
+select * from dedup_category1_recall;
 
 cache table truncate_recall_item as
 select item_id, rec_reason

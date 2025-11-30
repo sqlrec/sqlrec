@@ -116,7 +116,9 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
         final RelDataType inputRowType = kvTableScan.getRowType();
         final RexProgramBuilder programBuilder = new RexProgramBuilder(inputRowType, rexBuilder);
         programBuilder.addIdentity();
-        programBuilder.addCondition(filter.getCondition());
+        if (!kvTableFilters.isEmpty() && finalFilters.size() > 1) {
+            programBuilder.addCondition(filter.getCondition());
+        }
         final RexProgram program = programBuilder.getProgram();
         return LogicalCalc.create(kvTableScan, program);
     }
