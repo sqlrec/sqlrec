@@ -8,7 +8,7 @@ import java.util.ArrayList;
 
 public class SqlExecutor {
     public static ExecuteDataList execute(String requestData) throws Exception {
-        RequestData params = new Gson().fromJson(requestData, RequestData.class);
+        RequestData params = utils.parseRequestData(requestData);
         if (params.sqls == null || params.sqls.isEmpty()) {
             throw new Exception("sqls is null or empty");
         }

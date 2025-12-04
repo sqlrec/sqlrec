@@ -24,7 +24,7 @@ public class FunctionExecutor {
         }
         CalciteSchema schema = HmsSchema.getHmsCalciteSchema();
 
-        RequestData requestDataObj = new Gson().fromJson(requestData, RequestData.class);
+        RequestData requestDataObj = utils.parseRequestData(requestData);
         addTableToSchema(schema, sqlFunctionBindable, requestDataObj.inputs);
 
         ExecuteContext executeContext = new ExecuteContextImpl();

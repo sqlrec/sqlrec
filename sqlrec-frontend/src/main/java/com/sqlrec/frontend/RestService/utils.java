@@ -1,5 +1,8 @@
 package com.sqlrec.frontend.RestService;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -10,6 +13,18 @@ import java.util.List;
 import java.util.Map;
 
 public class utils {
+    private static Gson gson = new GsonBuilder()
+            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
+            .create();
+
+    public static RequestData parseRequestData(String json) {
+        return gson.fromJson(json, RequestData.class);
+    }
+
+    public static String toJson(Object data) {
+        return gson.toJson(data);
+    }
+
     public static List<Map<String, Object>> convertToMapList(List<Object[]> results, List<RelDataTypeField> fields) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object[] row : results) {
