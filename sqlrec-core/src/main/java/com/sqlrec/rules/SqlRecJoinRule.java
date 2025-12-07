@@ -1,18 +1,18 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.node.SqlRecJoin;
-import com.sqlrec.utils.KvTableUtils;
-import org.apache.calcite.interpreter.BindableConvention;
+import com.sqlrec.node.SqlrecEnumerableJoin;
+import com.sqlrec.utils.JoinUtils;
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
-import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.immutables.value.Value;
 
 import java.util.ArrayList;
+import java.util.List;
 
 @Value.Enclosing
 public class SqlRecJoinRule extends RelRule<SqlRecJoinRule.Config> {
@@ -26,30 +26,40 @@ public class SqlRecJoinRule extends RelRule<SqlRecJoinRule.Config> {
         RelNode originalRoot = getOriginalRoot(planner);
 
         LogicalJoin join = call.rel(0);
-        KvTableUtils.JoinPostProcessConfig joinPostProcessConfig = KvTableUtils.findJoinPostProcessConfig(
+        JoinUtils.JoinPostProcessConfig joinPostProcessConfig = JoinUtils.findJoinPostProcessConfig(
                 originalRoot, join
         );
 
-        final BindableConvention out = BindableConvention.INSTANCE;
-        final RelTraitSet traitSet = join.getTraitSet().replace(out);
-
-        SqlRecJoin newJoin = new SqlRecJoin(join.getCluster(), traitSet,
-                convert(join.getLeft(),
-                        join.getLeft().getTraitSet()
-                                .replace(BindableConvention.INSTANCE)),
-                convert(join.getRight(),
-                        join.getRight().getTraitSet()
-                                .replace(BindableConvention.INSTANCE)),
-                join.getCondition(), join.getVariablesSet(), join.getJoinType());
-
+        int limit = 0;
+        List<Integer> projectList = new ArrayList<>();
         if (joinPostProcessConfig != null) {
-            // for vector search optimization
-            newJoin.setLimit(joinPostProcessConfig.limit);
-            newJoin.setProjectList(joinPostProcessConfig.projectColumns);
-        } else {
-            newJoin.setLimit(0);
-            newJoin.setProjectList(new ArrayList<>());
+            limit = joinPostProcessConfig.limit;
+            projectList = joinPostProcessConfig.projectColumns;
         }
+
+        List<RelNode> newInputs = new ArrayList<>();
+        for (RelNode input : join.getInputs()) {
+            if (!(input.getConvention() instanceof EnumerableConvention)) {
+                input =
+                        convert(
+                                input,
+                                input.getTraitSet()
+                                        .replace(EnumerableConvention.INSTANCE));
+            }
+            newInputs.add(input);
+        }
+        final RelNode left = newInputs.get(0);
+        final RelNode right = newInputs.get(1);
+
+        SqlrecEnumerableJoin newJoin = SqlrecEnumerableJoin.create(
+                left,
+                right,
+                join.getCondition(),
+                join.getVariablesSet(),
+                join.getJoinType(),
+                limit,
+                projectList
+        );
 
         call.transformTo(newJoin);
     }

@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.FilterUtils;
+import com.sqlrec.node.FilterableTableScan;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpreter;
 import org.apache.calcite.interpreter.Bindables;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -59,10 +60,11 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
         final ImmutableIntList projects;
         final ImmutableList.Builder<RexNode> filters = ImmutableList.builder();
         if (scan instanceof Bindables.BindableTableScan) {
-            final Bindables.BindableTableScan bindableScan =
-                    (Bindables.BindableTableScan) scan;
-            filters.addAll(bindableScan.filters);
-            projects = bindableScan.projects;
+//            final Bindables.BindableTableScan bindableScan =
+//                    (Bindables.BindableTableScan) scan;
+//            filters.addAll(bindableScan.filters);
+//            projects = bindableScan.projects;
+            return;
         } else {
             projects = scan.identity();
         }
@@ -82,7 +84,7 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
             call.transformTo(calc);
         } else {
             call.transformTo(
-                    Bindables.BindableTableScan.create(scan.getCluster(), scan.getTable(), finalFilters, projects)
+                    FilterableTableScan.create(scan.getCluster(), scan.getTable(), ImmutableList.copyOf(finalFilters), projects)
             );
         }
     }
@@ -109,16 +111,14 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
                 finalFilters,
                 sqlRecTable.getPrimaryKeyIndex()
         );
-        TableScan kvTableScan = Bindables.BindableTableScan.create(
-                scan.getCluster(), scan.getTable(), kvTableFilters, projects
+        TableScan kvTableScan = FilterableTableScan.create(
+                scan.getCluster(), scan.getTable(), ImmutableList.copyOf(kvTableFilters), projects
         );
         final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
         final RelDataType inputRowType = kvTableScan.getRowType();
         final RexProgramBuilder programBuilder = new RexProgramBuilder(inputRowType, rexBuilder);
         programBuilder.addIdentity();
-        if (!kvTableFilters.isEmpty() && finalFilters.size() > 1) {
-            programBuilder.addCondition(filter.getCondition());
-        }
+        programBuilder.addCondition(filter.getCondition());
         final RexProgram program = programBuilder.getProgram();
         return LogicalCalc.create(kvTableScan, program);
     }

@@ -1,15 +1,15 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.node.SqlRecJoin;
+import com.sqlrec.node.SqlrecEnumerableJoin;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.JavaFunctionUtils;
-import org.apache.calcite.adapter.enumerable.EnumerableInterpreter;
-import org.apache.calcite.interpreter.Bindables;
+import org.apache.calcite.adapter.enumerable.EnumerableCalc;
+import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.RelNode;
@@ -65,14 +65,12 @@ public class TestJoin {
                 assert bindable instanceof CalciteBindable;
                 CalciteBindable calciteBindable = (CalciteBindable) bindable;
                 RelNode bestExp = calciteBindable.getBestExp();
-                assert bestExp instanceof EnumerableInterpreter;
-                RelNode project = ((EnumerableInterpreter) bestExp).getInput();
-                assert project instanceof Bindables.BindableProject;
-                RelNode sort = ((Bindables.BindableProject) project).getInput();
-                assert sort instanceof Bindables.BindableSort;
-                RelNode join = ((Bindables.BindableSort) sort).getInput();
-                assert join instanceof SqlRecJoin;
-                SqlRecJoin sqlRecJoin = (SqlRecJoin) join;
+                assert bestExp instanceof EnumerableCalc;
+                RelNode limit = ((EnumerableCalc) bestExp).getInput();
+                assert limit instanceof EnumerableLimit;
+                RelNode join = ((EnumerableLimit) limit).getInput();
+                assert join instanceof SqlrecEnumerableJoin;
+                SqlrecEnumerableJoin sqlRecJoin = (SqlrecEnumerableJoin) join;
                 assert sqlRecJoin.getLimit() == 2;
                 assert sqlRecJoin.getProjectList().equals(Arrays.asList(0, 2));
             }

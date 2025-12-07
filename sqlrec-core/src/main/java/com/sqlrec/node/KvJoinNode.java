@@ -4,6 +4,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.utils.JoinUtils;
 import com.sqlrec.utils.KvTableUtils;
 import com.sqlrec.utils.MergeUtils;
 import org.apache.calcite.interpreter.*;
@@ -34,7 +35,7 @@ public class KvJoinNode implements Node {
             throw new IllegalArgumentException("right table is not kv table");
         }
 
-        Map.Entry<Integer, Integer> joinIpColIndex = KvTableUtils.getJoinIpColIndex(rel);
+        Map.Entry<Integer, Integer> joinIpColIndex = JoinUtils.getJoinIpColIndex(rel);
         if (joinIpColIndex != null) {
             if (rightTable instanceof SqlRecVectorTable) {
                 joinBySearch(joinIpColIndex, (SqlRecVectorTable) rightTable);
@@ -94,7 +95,7 @@ public class KvJoinNode implements Node {
     }
 
     private void joinByPrimaryKey(SqlRecKvTable rightTable) throws InterruptedException {
-        Map.Entry<Integer, Integer> joinKeyColIndex = KvTableUtils.getJoinKeyColIndex(rel);
+        Map.Entry<Integer, Integer> joinKeyColIndex = JoinUtils.getJoinKeyColIndex(rel);
         int leftJoinKeyColIndex = joinKeyColIndex.getKey();
 
         Row leftRow = null;

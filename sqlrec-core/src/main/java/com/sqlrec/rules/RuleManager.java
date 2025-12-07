@@ -28,6 +28,8 @@ public class RuleManager {
         }
         RelOptUtil.registerDefaultRules(planner, false, true);
 
+        planner.removeRule(EnumerableRules.TO_INTERPRETER);
+
         if (addKvTableRules) {
             addKvTableRules(planner);
         }
