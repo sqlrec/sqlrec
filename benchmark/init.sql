@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS `user_exposure_item` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://${NODE_IP}:${REDIS_PORT}/0'
+  'url' = 'redis://${NODE_IP}:${REDIS_PORT}/0',
+  'cache-ttl' = '0'
 );
 
 CREATE TABLE IF NOT EXISTS `itemcf_i2i` (
@@ -163,7 +164,7 @@ cache table diversify_rec_item as call window_diversify(rec_item, 'category1', '
 
 cache table request_meta as select
 user_info.id as user_id,
-cast(0 as BIGINT) as req_time,
+CURRENT_TIMESTAMP as req_time,
 uuid() as req_id
 from user_info;
 

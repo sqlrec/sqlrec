@@ -43,27 +43,7 @@ public class CalciteBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        Enumerable rawData = bindable.bind(new DataContext() {
-            @Override
-            public @Nullable SchemaPlus getRootSchema() {
-                return schema.plus();
-            }
-
-            @Override
-            public JavaTypeFactory getTypeFactory() {
-                return new JavaTypeFactoryImpl();
-            }
-
-            @Override
-            public QueryProvider getQueryProvider() {
-                return DEFAULT_PROVIDER;
-            }
-
-            @Override
-            public @Nullable Object get(String name) {
-                return parameters.get(name);
-            }
-        });
+        Enumerable rawData = bindable.bind(new DataContextImpl(parameters, schema));
 
         List<Object[]> objArrayList = new ArrayList<>();
         for (Object obj : rawData) {
@@ -98,5 +78,39 @@ public class CalciteBindable extends BindableInterface {
 
     public RelNode getBestExp() {
         return bestExp;
+    }
+
+    public static class DataContextImpl implements DataContext {
+        private Map<String, Object> parameters;
+        private CalciteSchema schema;
+
+        public DataContextImpl(Map<String, Object> parameters, CalciteSchema schema) {
+            this.parameters = parameters;
+            this.schema = schema;
+        }
+
+        @Override
+        public @Nullable SchemaPlus getRootSchema() {
+            return schema.plus();
+        }
+
+        @Override
+        public JavaTypeFactory getTypeFactory() {
+            return new JavaTypeFactoryImpl();
+        }
+
+        @Override
+        public QueryProvider getQueryProvider() {
+            return DEFAULT_PROVIDER;
+        }
+
+        @Override
+        public @Nullable Object get(String name) {
+            switch (name) {
+                case "currentTimestamp":
+                    return System.currentTimeMillis();
+            }
+            return parameters.get(name);
+        }
     }
 }

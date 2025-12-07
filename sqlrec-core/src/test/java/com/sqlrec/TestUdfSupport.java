@@ -57,7 +57,9 @@ public class TestUdfSupport {
                 "select CARDINALITY(array_int_type) from myTable",
                 "select CARDINALITY(array_varchar_type) from myTable",
                 "select CARDINALITY(array_float_type) from myTable",
-                "select CARDINALITY(array_double_type) from myTable"
+                "select CARDINALITY(array_double_type) from myTable",
+                "select CURRENT_TIMESTAMP",
+                "select CURRENT_TIMESTAMP(1)"
         );
 
         for (String sql : sqlList) {

@@ -112,6 +112,6 @@ SqlRec的表类型一般有4类，如下所示：
 - 支持查询内置函数
 - ~~jupyter lab部署~~
 - ~~循环调用检测~~
-- 修复 select CURRENT_TIMESTAMP(1) t
+- ~~修复 select CURRENT_TIMESTAMP(1) t~~
 - 修复join时，过滤和映射可能被下推到kv表的问题
 - ~~json序列时的整数变浮点数类型问题~~
