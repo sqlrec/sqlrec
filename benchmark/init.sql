@@ -164,7 +164,7 @@ cache table diversify_rec_item as call window_diversify(rec_item, 'category1', '
 
 cache table request_meta as select
 user_info.id as user_id,
-CURRENT_TIMESTAMP as req_time,
+cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
 uuid() as req_id
 from user_info;
 
