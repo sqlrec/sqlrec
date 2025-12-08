@@ -81,7 +81,7 @@ SqlRec的表类型一般有4类，如下所示：
 - connector: jdbc、mongodb
 - 模型训练
 - ~~类型测试~~
-- 依赖优化
+- ~~依赖优化~~
 - ~~支持create if not exists~~
 - ~~支持return为空~~
 - ~~独立schema模块~~
