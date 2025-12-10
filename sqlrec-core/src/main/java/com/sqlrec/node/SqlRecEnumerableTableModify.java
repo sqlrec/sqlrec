@@ -1,4 +1,4 @@
-package com.sqlrec.common.connector;
+package com.sqlrec.node;
 
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
@@ -19,8 +19,8 @@ import java.util.Collection;
 import java.util.List;
 
 // update will perform as insert
-public class CalciteEnumerableTableModify extends EnumerableTableModify {
-    public CalciteEnumerableTableModify(
+public class SqlRecEnumerableTableModify extends EnumerableTableModify {
+    public SqlRecEnumerableTableModify(
             RelOptCluster cluster,
             RelTraitSet traits,
             RelOptTable table,
@@ -40,6 +40,19 @@ public class CalciteEnumerableTableModify extends EnumerableTableModify {
                 sourceExpressionList,
                 flattened
         );
+    }
+
+    @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
+        return new SqlRecEnumerableTableModify(
+                getCluster(),
+                traitSet,
+                getTable(),
+                getCatalogReader(),
+                sole(inputs),
+                getOperation(),
+                getUpdateColumnList(),
+                getSourceExpressionList(),
+                isFlattened());
     }
 
     @Override

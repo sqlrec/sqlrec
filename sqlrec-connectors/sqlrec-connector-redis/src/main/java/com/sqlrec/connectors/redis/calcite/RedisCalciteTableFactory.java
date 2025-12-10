@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import org.apache.calcite.plan.RelOptRule;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,6 @@ public class RedisCalciteTableFactory implements HmsTableFactory {
 
     @Override
     public List<RelOptRule> getRules() {
-        return Collections.singletonList(RedisEnumerableTableModifyRule.DEFAULT_CONFIG.toRule(RedisEnumerableTableModifyRule.class));
+        return new ArrayList<>();
     }
 }

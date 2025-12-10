@@ -1,6 +1,6 @@
-package com.sqlrec.connectors.redis.calcite;
+package com.sqlrec.rules;
 
-import com.sqlrec.common.connector.CalciteEnumerableTableModify;
+import com.sqlrec.node.SqlRecEnumerableTableModify;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -13,13 +13,13 @@ import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.schema.ModifiableTable;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public class RedisEnumerableTableModifyRule extends ConverterRule {
+public class SqlRecTableModifyRule extends ConverterRule {
     public static final Config DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(LogicalTableModify.class, Convention.NONE,
-                    EnumerableConvention.INSTANCE, "RedisEnumerableTableModifyRule")
-            .withRuleFactory(RedisEnumerableTableModifyRule::new);
+                    EnumerableConvention.INSTANCE, "SqlRecTableModifyRule")
+            .withRuleFactory(SqlRecTableModifyRule::new);
 
-    protected RedisEnumerableTableModifyRule(Config config) {
+    protected SqlRecTableModifyRule(Config config) {
         super(config);
     }
 
@@ -32,7 +32,7 @@ public class RedisEnumerableTableModifyRule extends ConverterRule {
             return null;
         }
         final RelTraitSet traitSet = modify.getTraitSet().replace(EnumerableConvention.INSTANCE);
-        return new CalciteEnumerableTableModify(
+        return new SqlRecEnumerableTableModify(
                 modify.getCluster(), traitSet,
                 modify.getTable(),
                 modify.getCatalogReader(),
@@ -46,7 +46,7 @@ public class RedisEnumerableTableModifyRule extends ConverterRule {
     @Override
     public boolean matches(RelOptRuleCall call) {
         RelOptTableImpl table = (RelOptTableImpl) call.rel(0).getTable();
-        if (table != null && table.unwrap(RedisCalciteTable.class) != null) {
+        if (table != null && table.unwrap(ModifiableTable.class) != null) {
             return true;
         }
         return false;

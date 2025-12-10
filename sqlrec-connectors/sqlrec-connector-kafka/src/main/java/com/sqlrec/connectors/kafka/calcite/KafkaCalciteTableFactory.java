@@ -7,6 +7,7 @@ import com.sqlrec.connectors.kafka.config.KafkaOptions;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.Table;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -27,8 +28,6 @@ public class KafkaCalciteTableFactory implements HmsTableFactory {
 
     @Override
     public List<RelOptRule> getRules() {
-        return Collections.singletonList(
-                KafkaEnumerableTableModifyRule.DEFAULT_CONFIG.toRule(KafkaEnumerableTableModifyRule.class)
-        );
+        return new ArrayList<>();
     }
 }

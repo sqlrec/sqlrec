@@ -7,6 +7,7 @@ import com.sqlrec.connectors.milvus.config.MilvusOptions;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.Table;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,6 @@ public class MilvusCalciteTableFactory implements HmsTableFactory {
 
     @Override
     public List<RelOptRule> getRules() {
-        return Collections.singletonList(
-                MilvusEnumerableTableModifyRule.DEFAULT_CONFIG.toRule(MilvusEnumerableTableModifyRule.class)
-        );
+        return new ArrayList<>();
     }
 }

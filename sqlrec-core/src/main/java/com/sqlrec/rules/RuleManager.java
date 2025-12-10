@@ -19,6 +19,8 @@ public class RuleManager {
             SqlRecFilterIntoJoinRule.SqlRecFilterIntoJoinRuleConfig.DEFAULT.toRule();
     public static final SqlRecJoinRule SQLREC_JOIN =
             SqlRecJoinRule.Config.DEFAULT.toRule();
+    public static final SqlRecTableModifyRule SQLREC_TABLE_MODIFY =
+            SqlRecTableModifyRule.DEFAULT_CONFIG.toRule(SqlRecTableModifyRule.class);
 
     public static VolcanoPlanner createPlanner(boolean addKvTableRules) {
         VolcanoPlanner planner = new VolcanoPlanner();
@@ -33,6 +35,9 @@ public class RuleManager {
         if (addKvTableRules) {
             addKvTableRules(planner);
         }
+
+        planner.removeRule(EnumerableRules.ENUMERABLE_TABLE_MODIFICATION_RULE);
+        planner.addRule(SQLREC_TABLE_MODIFY);
 
         addTableFactoryRules(planner);
         return planner;
