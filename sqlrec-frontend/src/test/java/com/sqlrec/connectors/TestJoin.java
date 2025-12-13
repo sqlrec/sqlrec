@@ -53,6 +53,9 @@ public class TestJoin {
                 "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
 
                 "cache table t3 as select id from t1 where id = 1",
+                "select * from t3 join t3 t on 1=1",
+                "select * from t3 join t3 t on t3.id = t.id",
+
                 "select t3.id, t2.name from t3 join t2 on t3.id = t2.id limit 2"
         );
 
@@ -61,7 +64,17 @@ public class TestJoin {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
             BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
 
-            if (sql.contains("join")) {
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
+            if (enumerable != null) {
+                List<Object[]> results = enumerable.toList();
+                for (Object[] result : results) {
+                    System.out.println(java.util.Arrays.toString(result));
+                }
+            } else {
+                System.out.println("no result");
+            }
+
+            if (sql.contains("t3 join t2")) {
                 assert bindable instanceof CalciteBindable;
                 CalciteBindable calciteBindable = (CalciteBindable) bindable;
                 RelNode bestExp = calciteBindable.getBestExp();
@@ -73,16 +86,6 @@ public class TestJoin {
                 SqlrecEnumerableJoin sqlRecJoin = (SqlrecEnumerableJoin) join;
                 assert sqlRecJoin.getLimit() == 2;
                 assert sqlRecJoin.getProjectList().equals(Arrays.asList(0, 2));
-            }
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            } else {
-                System.out.println("no result");
             }
         }
     }

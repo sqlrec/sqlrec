@@ -1,25 +1,9 @@
 package com.sqlrec.connectors.milvus.calcite;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.ToNumberPolicy;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.FieldSchema;
-import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
-import io.milvus.pool.MilvusClientV2Pool;
-import io.milvus.pool.PoolConfig;
-import io.milvus.v2.client.ConnectConfig;
-import io.milvus.v2.client.MilvusClientV2;
-import io.milvus.v2.service.vector.request.DeleteReq;
-import io.milvus.v2.service.vector.request.QueryReq;
-import io.milvus.v2.service.vector.request.SearchReq;
-import io.milvus.v2.service.vector.request.UpsertReq;
-import io.milvus.v2.service.vector.request.data.FloatVec;
-import io.milvus.v2.service.vector.response.QueryResp;
-import io.milvus.v2.service.vector.response.SearchResp;
+import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -40,184 +24,35 @@ import org.apache.calcite.schema.Schemas;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
-import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 public class MilvusCalciteTable extends SqlRecVectorTable {
     private MilvusConfig milvusConfig;
-    private static Map<String, MilvusClientV2Pool> clientPools = new ConcurrentHashMap<>();
+    private MilvusHandler milvusHandler;
 
     public MilvusCalciteTable(MilvusConfig milvusConfig) {
         this.milvusConfig = milvusConfig;
+        this.milvusHandler = new MilvusHandler(milvusConfig);
     }
 
     @Override
     public Enumerable<@Nullable Object[]> scan(DataContext root, List<RexNode> filters) {
-        String filterSql = FilterUtils.getMilvusFilterSqlString(filters, milvusConfig.fieldSchemas);
-        QueryReq queryReq = QueryReq.builder()
-                .collectionName(milvusConfig.collection)
-                .databaseName(milvusConfig.database)
-                .filter(filterSql)
-                .build();
-
-        MilvusClientV2 client = getClient(milvusConfig);
-        QueryResp queryResp = null;
-        try {
-            queryResp = client.query(queryReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
-        List<Object[]> rows = parseQueryResp(queryResp);
+        List<Object[]> rows = milvusHandler.scan(root, filters);
         return Linq4j.asEnumerable(rows);
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        QueryReq queryReq = QueryReq.builder()
-                .collectionName(milvusConfig.collection)
-                .databaseName(milvusConfig.database)
-                .ids(new ArrayList<>(keySet))
-                .build();
-
-        MilvusClientV2 client = getClient(milvusConfig);
-        QueryResp queryResp = null;
-        try {
-            queryResp = client.query(queryReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
-        List<Object[]> rows = parseQueryResp(queryResp);
-        Map<Object, List<Object[]>> rowsMap = new HashMap<>();
-        for (Object[] row : rows) {
-            Object key = row[milvusConfig.primaryKeyIndex];
-            rowsMap.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
-        }
-        return rowsMap;
+        return milvusHandler.getByPrimaryKey(keySet);
     }
 
     @Override
     public List<Object[]> searchByEmbedding(String fieldName, List<Float> embedding, int limit, List<Integer> projectColumns) {
-        if (limit == 0){
-            limit = 100;
-        }
-        List<String> outputFields = null;
-        if (projectColumns != null && !projectColumns.isEmpty()) {
-            outputFields = projectColumns.stream()
-                    .map(index -> milvusConfig.fieldSchemas.get(index).name)
-                    .collect(Collectors.toList());
-        } else {
-            outputFields = milvusConfig.fieldSchemas.stream()
-                    .map(f -> f.name)
-                    .collect(Collectors.toList());
-        }
-
-        FloatVec queryVector = new FloatVec(embedding);
-        SearchReq searchReq = SearchReq.builder()
-                .collectionName(milvusConfig.collection)
-                .databaseName(milvusConfig.database)
-                .annsField(fieldName)
-                .data(Collections.singletonList(queryVector))
-                .outputFields(outputFields)
-                .topK(limit)
-                .build();
-        MilvusClientV2 client = getClient(milvusConfig);
-        SearchResp searchResp = null;
-        try {
-            searchResp = client.search(searchReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
-        List<Object[]> rows = parseSearchResp(searchResp);
-        return rows;
-    }
-
-    private List<Object[]> parseSearchResp(SearchResp searchResp) {
-        if (searchResp == null || searchResp.getSearchResults() == null) {
-            return Collections.emptyList();
-        }
-
-        List<Object[]> rows = new ArrayList<>();
-        for (List<SearchResp.SearchResult> results : searchResp.getSearchResults()) {
-            for (SearchResp.SearchResult result : results) {
-                Map<String, Object> entity = result.getEntity();
-                Object[] row = toRow(entity, milvusConfig.fieldSchemas);
-                rows.add(row);
-            }
-        }
-        return rows;
-    }
-
-    private List<Object[]> parseQueryResp(QueryResp queryResp) {
-        if (queryResp == null || queryResp.getQueryResults() == null) {
-            return Collections.emptyList();
-        }
-
-        List<QueryResp.QueryResult> results = queryResp.getQueryResults();
-        List<Object[]> rows = new ArrayList<>(results.size());
-        for (QueryResp.QueryResult result : results) {
-            Map<String, Object> entity = result.getEntity();
-            Object[] row = toRow(entity, milvusConfig.fieldSchemas);
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
-        Object[] row = new Object[fieldSchemas.size()];
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = fieldSchemas.get(i);
-            row[i] = entity.get(fieldSchema.name);
-        }
-        return row;
-    }
-
-    public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {
-        String key = milvusConfig.url + milvusConfig.token;
-        if (clientPools.containsKey(key)) {
-            clientPools.get(key).returnClient(key, client);
-        }
-    }
-
-    public static MilvusClientV2 getClient(MilvusConfig milvusConfig) {
-        String key = milvusConfig.url + milvusConfig.token;
-        if (!clientPools.containsKey(key)) {
-            openClientPool(key, milvusConfig);
-        }
-        return clientPools.get(key).getClient(key);
-    }
-
-    private static synchronized void openClientPool(String key, MilvusConfig milvusConfig) {
-        if (clientPools.containsKey(key)) {
-            return;
-        }
-
-        ConnectConfig connectConfig = ConnectConfig.builder()
-                .uri(milvusConfig.url)
-                .token(milvusConfig.token)
-                .build();
-        PoolConfig poolConfig = PoolConfig.builder()
-                .maxIdlePerKey(10) // max idle clients per key
-                .maxTotalPerKey(100) // max total(idle + active) clients per key
-                .maxTotal(100) // max total clients for all keys
-                .maxBlockWaitDuration(Duration.ofSeconds(5L)) // getClient() will wait 5 seconds if no idle client available
-                .minEvictableIdleDuration(Duration.ofSeconds(10L)) // if number of idle clients is larger than maxIdlePerKey, redundant idle clients will be evicted after 10 seconds
-                .build();
-
-        try {
-            MilvusClientV2Pool pool = new MilvusClientV2Pool(poolConfig, connectConfig);
-            clientPools.put(key, pool);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        return milvusHandler.searchByEmbedding(fieldName, embedding, limit, projectColumns);
     }
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new MilvusCollection(milvusConfig);
+        return new MilvusCollection(milvusHandler);
     }
 
     @Override
@@ -259,14 +94,10 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
 
     public static class MilvusCollection implements Collection<Object[]> {
         private int size = 0;
-        private MilvusConfig milvusConfig;
-        private Gson gson;
+        private MilvusHandler milvusHandler;
 
-        public MilvusCollection(MilvusConfig milvusConfig) {
-            this.milvusConfig = milvusConfig;
-            gson = new GsonBuilder()
-                    .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-                    .create();
+        public MilvusCollection(MilvusHandler milvusHandler) {
+            this.milvusHandler = milvusHandler;
         }
 
         @Override
@@ -302,27 +133,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         @Override
         public boolean add(Object[] objects) {
             size += 1;
-            List<JsonObject> data = new ArrayList<>();
-            JsonObject jsonObject = new JsonObject();
-            for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
-                FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
-                jsonObject.add(fieldSchema.name, gson.toJsonTree(objects[i]));
-            }
-            data.add(jsonObject);
-
-            UpsertReq upsertReq = UpsertReq.builder()
-                    .collectionName(milvusConfig.collection)
-                    .databaseName(milvusConfig.database)
-                    .data(data)
-                    .build();
-
-            MilvusClientV2 client = getClient(milvusConfig);
-            try {
-                client.upsert(upsertReq);
-            } finally {
-                returnClient(client, milvusConfig);
-            }
-            return true;
+            return milvusHandler.add(objects);
         }
 
         @Override
@@ -331,21 +142,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
                 throw new RuntimeException("Milvus Collection only support Object[]");
             }
             size += 1;
-
-            Object[] objects = (Object[]) o;
-            DeleteReq deleteReq = DeleteReq.builder()
-                    .collectionName(milvusConfig.collection)
-                    .databaseName(milvusConfig.database)
-                    .ids(Collections.singletonList(objects[milvusConfig.primaryKeyIndex]))
-                    .build();
-
-            MilvusClientV2 client = getClient(milvusConfig);
-            try {
-                client.delete(deleteReq);
-            } finally {
-                returnClient(client, milvusConfig);
-            }
-            return true;
+            return milvusHandler.remove((Object[]) o);
         }
 
         @Override

@@ -1,42 +1,33 @@
-package com.sqlrec.connectors.redis.flink;
+package com.sqlrec.connectors.milvus.flink;
 
 import com.sqlrec.common.utils.FlinkSchemaUtils;
-import com.sqlrec.connectors.redis.config.RedisConfig;
-import com.sqlrec.connectors.redis.handler.RedisHandler;
+import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.types.DataType;
 import org.apache.flink.types.RowKind;
 
 import java.util.List;
 
-public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
-    private RedisConfig redisConfig;
-    List<DataType> dataTypes;
+public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> {
+    private List<org.apache.flink.table.types.DataType> dataTypes;
+    private MilvusHandler milvusHandler;
 
-    private RedisHandler redisHandler;
-
-    public RedisSinkTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
-        this.redisConfig = redisConfig;
-        dataTypes = tableSchema.getColumnDataTypes();
+    public MilvusSinkFunction(MilvusConfig milvusConfig, ResolvedSchema tableSchema) {
+        this.dataTypes = tableSchema.getColumnDataTypes();
+        this.milvusHandler = new MilvusHandler(milvusConfig);
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        redisHandler = new RedisHandler(redisConfig);
-        redisHandler.open();
     }
 
     @Override
     public void close() throws Exception {
         super.close();
-        if (redisHandler != null) {
-            redisHandler.close();
-            redisHandler = null;
-        }
     }
 
     @Override
@@ -44,17 +35,12 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
         super.invoke(value, context);
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
-        if (kind == RowKind.UPDATE_BEFORE) {
-            return;
-        }
 
-        // rowData to object array
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
-
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            redisHandler.insert(objects);
+            milvusHandler.add(objects);
         } else if (kind == RowKind.DELETE) {
-            redisHandler.delete(objects);
+            milvusHandler.remove(objects);
         }
     }
 }

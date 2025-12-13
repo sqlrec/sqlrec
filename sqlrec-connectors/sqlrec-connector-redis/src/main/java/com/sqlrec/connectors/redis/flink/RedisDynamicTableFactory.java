@@ -59,21 +59,17 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
         final Set<ConfigOption<?>> options = new HashSet<>();
-        options.add(toFlinkConfigOption(RedisOptions.URL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.URL));
         return options;
     }
 
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         final Set<ConfigOption<?>> options = new HashSet<>();
-        options.add(toFlinkConfigOption(RedisOptions.REDIS_MODE));
-        options.add(toFlinkConfigOption(RedisOptions.DATA_STRUCTURE));
-        options.add(toFlinkConfigOption(RedisOptions.TTL));
-        options.add(toFlinkConfigOption(RedisOptions.CACHE_TTL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.REDIS_MODE));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.DATA_STRUCTURE));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.TTL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.CACHE_TTL));
         return options;
-    }
-
-    public static <T> ConfigOption<T> toFlinkConfigOption(com.sqlrec.common.config.ConfigOption<T> configOption) {
-        return ConfigOptions.key(configOption.getKey()).defaultValue(configOption.getDefaultValue());
     }
 }
