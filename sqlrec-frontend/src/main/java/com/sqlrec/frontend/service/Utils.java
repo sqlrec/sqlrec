@@ -1,7 +1,7 @@
 package com.sqlrec.frontend.service;
 
-import com.google.gson.Gson;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -146,7 +146,7 @@ public class Utils {
             if (object == null) {
                 newObjects[0] = null;
             } else {
-                newObjects[0] = new Gson().toJson(object);
+                newObjects[0] = JsonUtils.toJson(object);
             }
             list.add(newObjects);
         }

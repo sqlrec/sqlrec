@@ -1,10 +1,9 @@
 package com.sqlrec.frontend.common;
 
 import com.google.common.collect.ImmutableList;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
@@ -226,8 +225,7 @@ public class SqlProcessor {
                         "error"
                 );
             }
-            List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
-            }.getType());
+            List<String> sqlList = JsonUtils.parseStringList(sqlFunction.getSqlList());
             return Utils.convertMsgToResult(String.join(";\n\n", sqlList) + ";", "create sql");
         }
 
@@ -255,7 +253,7 @@ public class SqlProcessor {
     public static void saveSqlFunction(FunctionCompiler compiler) {
         SqlFunction sqlFunction = new SqlFunction();
         sqlFunction.setName(compiler.getFunctionBindable().getFunName());
-        sqlFunction.setSqlList(new Gson().toJson(compiler.getSqlList()));
+        sqlFunction.setSqlList(JsonUtils.toJson(compiler.getSqlList()));
         sqlFunction.setCreatedAt(System.currentTimeMillis());
         sqlFunction.setUpdatedAt(System.currentTimeMillis());
         if (compiler.isOrReplace()) {

@@ -1,6 +1,5 @@
 package com.sqlrec.frontend.RestService;
 
-import com.google.gson.Gson;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 

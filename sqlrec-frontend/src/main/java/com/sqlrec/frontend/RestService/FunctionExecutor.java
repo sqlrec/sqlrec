@@ -1,18 +1,15 @@
 package com.sqlrec.frontend.RestService;
 
-import com.google.gson.Gson;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
-import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.HmsSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 

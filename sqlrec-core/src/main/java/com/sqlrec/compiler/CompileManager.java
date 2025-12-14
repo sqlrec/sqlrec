@@ -2,9 +2,8 @@ package com.sqlrec.compiler;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
@@ -24,7 +23,9 @@ import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -123,8 +124,7 @@ public class CompileManager {
         if (sqlFunction == null) {
             throw new Exception("function not fund : " + functionName);
         }
-        List<String> sqlList = new Gson().fromJson(sqlFunction.getSqlList(), new TypeToken<List<String>>() {
-        }.getType());
+        List<String> sqlList = JsonUtils.parseStringList(sqlFunction.getSqlList());
         return compileSqlFunction(functionName, sqlList);
     }
 

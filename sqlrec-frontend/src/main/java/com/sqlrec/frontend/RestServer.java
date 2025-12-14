@@ -1,7 +1,6 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.RestService.HttpServerHandler;
 import io.netty.bootstrap.ServerBootstrap;

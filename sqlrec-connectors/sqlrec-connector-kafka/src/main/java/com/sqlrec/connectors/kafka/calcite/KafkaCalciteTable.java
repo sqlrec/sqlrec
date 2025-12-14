@@ -1,12 +1,8 @@
 package com.sqlrec.connectors.kafka.calcite;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.ToNumberPolicy;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
@@ -24,7 +20,6 @@ import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -98,13 +93,9 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     public static class kafkaCollection implements Collection<Object[]> {
         private int size = 0;
         private KafkaConfig kafkaConfig;
-        private Gson gson;
 
         public kafkaCollection(KafkaConfig kafkaConfig) {
             this.kafkaConfig = kafkaConfig;
-            gson = new GsonBuilder()
-                    .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-                    .create();
         }
 
         @Override
@@ -140,14 +131,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         @Override
         public boolean add(Object[] objects) {
             size += 1;
-
-            JsonObject jsonObject = new JsonObject();
-            for (int i = 0; i < kafkaConfig.fieldSchemas.size(); i++) {
-                FieldSchema fieldSchema = kafkaConfig.fieldSchemas.get(i);
-                jsonObject.add(fieldSchema.name, gson.toJsonTree(objects[i]));
-            }
-            String msg = gson.toJson(jsonObject);
-
+            String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
             KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
             producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
             return true;
