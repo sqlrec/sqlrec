@@ -40,6 +40,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Boolean> IGNORE_UNION_EXCEPTION = new ConfigOption<>(
+            "IGNORE_UNION_EXCEPTION",
+            true,
+            "ignore exception if node just used as union source",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
             "FUNCTION_UPDATE_INTERVAL",
             300,

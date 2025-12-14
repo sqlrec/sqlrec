@@ -80,6 +80,10 @@ public class CalciteBindable extends BindableInterface {
         return bestExp;
     }
 
+    public boolean isUnionSql() {
+        return SqlTypeChecker.isUnionSql(sqlNode);
+    }
+
     public static class DataContextImpl implements DataContext {
         private Map<String, Object> parameters;
         private CalciteSchema schema;

@@ -50,6 +50,10 @@ public class SqlFunctionBindable extends BindableInterface {
         this.sortedBindableList = topologicalSortIndex.getKey();
 
         initAllDependSqlFunctionMap();
+
+        if (SqlRecConfigs.IGNORE_UNION_EXCEPTION.getValue()) {
+            initExceptionIgnore();
+        }
     }
 
     @Override
@@ -228,6 +232,23 @@ public class SqlFunctionBindable extends BindableInterface {
         if (allDependSqlFunctionMap.containsKey(funName)) {
             throw new Exception("Sql function " + funName + " has circular dependency: " +
                      allDependSqlFunctionMap.get(funName));
+        }
+    }
+
+    private void initExceptionIgnore() {
+        Map<Integer, Boolean> isUnionSource = TopologicalSortUtils.getIsUnionSource(
+                bindableList,
+                bindableDependency,
+                sortedBindableList,
+                returnTableName);
+        for (int i = 0; i < bindableList.size(); i++) {
+            BindableInterface bindable = bindableList.get(i);
+            if (bindable instanceof CacheTableBindable) {
+                CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
+                if (isUnionSource.containsKey(i) && isUnionSource.get(i)) {
+                    cacheTableBindable.setIgnoreException(true);
+                }
+            }
         }
     }
 }

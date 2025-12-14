@@ -8,18 +8,24 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 public class CacheTableBindable extends BindableInterface {
+    private static final Logger log = LoggerFactory.getLogger(CacheTableBindable.class);
+
     private String tableName;
     private BindableInterface bindable;
     private String createSql;
+    private boolean ignoreException;
 
     public CacheTableBindable(String tableName, BindableInterface bindable, String createSql) {
         this.tableName = tableName;
         this.bindable = bindable;
         this.createSql = createSql;
+        this.ignoreException = false;
 
         List<RelDataTypeField> bindableFields = bindable.getReturnDataFields();
         if (bindableFields == null || bindableFields.isEmpty()) {
@@ -29,7 +35,16 @@ public class CacheTableBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        Enumerable<Object[]> enumerable = bindable.bind(schema, context);
+        Enumerable<Object[]> enumerable = null;
+        try {
+            enumerable = bindable.bind(schema, context);
+        } catch (Exception e) {
+            if (ignoreException) {
+                log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
+            } else {
+                throw e;
+            }
+        }
         if (enumerable == null) {
             enumerable = Linq4j.emptyEnumerable();
         }
@@ -75,5 +90,17 @@ public class CacheTableBindable extends BindableInterface {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public BindableInterface getBindable() {
+        return bindable;
+    }
+
+    public boolean isIgnoreException() {
+        return ignoreException;
+    }
+
+    public void setIgnoreException(boolean ignoreException) {
+        this.ignoreException = ignoreException;
     }
 }

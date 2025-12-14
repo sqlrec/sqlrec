@@ -56,6 +56,14 @@ public class SqlTypeChecker {
             return true;
         }
 
+        if (isUnionSql(flinkSqlNode)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static boolean isUnionSql(SqlNode flinkSqlNode) {
         if (flinkSqlNode instanceof SqlBasicCall) {
             SqlBasicCall sqlBasicCall = (SqlBasicCall) flinkSqlNode;
             if (sqlBasicCall.getOperator() instanceof SqlSetOperator) {
@@ -65,7 +73,6 @@ public class SqlTypeChecker {
                 }
             }
         }
-
         return false;
     }
 

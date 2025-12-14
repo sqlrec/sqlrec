@@ -1,6 +1,8 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.CacheTableBindable;
+import com.sqlrec.runtime.CalciteBindable;
 
 import java.util.*;
 
@@ -84,7 +86,7 @@ public class TopologicalSortUtils {
             }
 
             for (String readTable : bindable.getReadTables()) {
-                if (!readTableToBindableIndex.containsKey(readTable)){
+                if (!readTableToBindableIndex.containsKey(readTable)) {
                     readTableToBindableIndex.put(readTable, new HashSet<>());
                 }
                 readTableToBindableIndex.get(readTable).add(i);
@@ -98,5 +100,85 @@ public class TopologicalSortUtils {
         }
 
         return bindableDependency;
+    }
+
+    /*
+    set true if:
+    1. the bindable is only union source, directly or indirectly
+    2. the bindable is not source of result table, directly or indirectly
+     */
+    public static Map<Integer, Boolean> getIsUnionSource(
+            List<BindableInterface> bindableList,
+            Map<Integer, Set<Integer>> bindableDependency,
+            List<Integer> sortedBindableList,
+            String returnTableName
+    ) {
+        Map<Integer, Boolean> isUnionSource = new HashMap<>();
+        Map<Integer, Boolean> isUnionNode = new HashMap<>();
+
+        Map<Integer, Set<Integer>> reverseBindableDependency = getReverseBindableDependency(bindableDependency);
+
+        for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
+            int bindableIndex = sortedBindableList.get(i);
+            BindableInterface bindable = bindableList.get(bindableIndex);
+
+            CalciteBindable calciteBindable = null;
+            if (bindable instanceof CalciteBindable) {
+                calciteBindable = (CalciteBindable) bindable;
+            } else if (bindable instanceof CacheTableBindable) {
+                BindableInterface innerBindable = ((CacheTableBindable) bindable).getBindable();
+                if (innerBindable instanceof CalciteBindable) {
+                    calciteBindable = (CalciteBindable) innerBindable;
+                }
+            }
+            if (calciteBindable != null) {
+                isUnionNode.put(bindableIndex, calciteBindable.isUnionSql());
+            } else {
+                isUnionNode.put(bindableIndex, false);
+            }
+
+            if (reverseBindableDependency.containsKey(bindableIndex)) {
+                Set<Integer> dependBindableSet = reverseBindableDependency.get(bindableIndex);
+                for (Integer dependBindableIndex : dependBindableSet) {
+                    if (!isUnionNode.getOrDefault(dependBindableIndex, false) &&
+                            !isUnionSource.getOrDefault(dependBindableIndex, false)) {
+                        isUnionSource.put(bindableIndex, false);
+                        break;
+                    }
+                }
+            }
+            if (isUnionSource.containsKey(bindableIndex)) {
+                continue;
+            }
+
+            if (bindable instanceof CacheTableBindable) {
+                String cacheTableName = ((CacheTableBindable) bindable).getTableName();
+                if (cacheTableName.equals(returnTableName)) {
+                    isUnionSource.put(bindableIndex, false);
+                    continue;
+                }
+            }
+
+            isUnionSource.put(bindableIndex, true);
+        }
+
+        return isUnionSource;
+    }
+
+    public static Map<Integer, Set<Integer>> getReverseBindableDependency(
+            Map<Integer, Set<Integer>> bindableDependency
+    ) {
+        Map<Integer, Set<Integer>> reverseBindableDependency = new HashMap<>();
+        for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
+            Integer bindableIndex = entry.getKey();
+            Set<Integer> dependBindableSet = entry.getValue();
+            for (Integer dependBindableIndex : dependBindableSet) {
+                if (!reverseBindableDependency.containsKey(dependBindableIndex)) {
+                    reverseBindableDependency.put(dependBindableIndex, new HashSet<>());
+                }
+                reverseBindableDependency.get(dependBindableIndex).add(bindableIndex);
+            }
+        }
+        return reverseBindableDependency;
     }
 }
