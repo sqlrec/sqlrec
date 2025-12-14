@@ -6,7 +6,7 @@
 
     <groupId>org.sqlrec</groupId>
     <artifactId>sqlrec-parent</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
     <modules>
         <module>sqlrec-frontend</module>
@@ -23,6 +23,7 @@
         <calcite.version>1.32.0</calcite.version>
         <flink.version>1.19.0</flink.version>
         <hive.version>3.1.3</hive.version>
+        <sqlrec.version>0.1.0</sqlrec.version>
     </properties>
 
     <profiles>
