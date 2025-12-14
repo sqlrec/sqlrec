@@ -38,6 +38,14 @@ public class RedisOptions {
             String.class
     );
 
+    public static final ConfigOption<Integer> MAX_LIST_SIZE = new ConfigOption<>(
+            "max-list-size",
+            0,
+            "max list size for redis list, default is 0 means no limit",
+            null,
+            Integer.class
+    );
+
     public static final ConfigOption<Integer> TTL = new ConfigOption<>(
             "ttl",
             3600 * 24 * 30,
@@ -67,6 +75,7 @@ public class RedisOptions {
         redisConfig.url = URL.getValue(options);
         redisConfig.redisMode = REDIS_MODE.getValue(options);
         redisConfig.dataStructure = DATA_STRUCTURE.getValue(options);
+        redisConfig.maxListSize = MAX_LIST_SIZE.getValue(options);
         redisConfig.ttl = TTL.getValue(options);
         redisConfig.cacheTtl = CACHE_TTL.getValue(options);
         redisConfig.maxCacheSize = MAX_CACHE_SIZE.getValue(options);

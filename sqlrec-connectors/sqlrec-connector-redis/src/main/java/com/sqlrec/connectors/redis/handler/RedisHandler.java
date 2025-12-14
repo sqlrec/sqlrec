@@ -16,10 +16,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class RedisHandler {
-    AbstractRedisWrapper redisClient;
-
+    private AbstractRedisWrapper redisClient;
     private RedisConfig redisConfig;
-    AbstractCodec codec;
+    private AbstractCodec codec;
 
     public RedisHandler(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;
@@ -125,6 +124,9 @@ public class RedisHandler {
             redisClient.lpush(key, codec.encode(data)).whenComplete((x, y) -> {
                 redisClient.expire(key, redisConfig.ttl);
             });
+            if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                redisClient.ltrim(key, 0, redisConfig.maxListSize - 1);
+            }
         } else {
             redisClient.set(key, codec.encode(data)).whenComplete((x, y) -> {
                 redisClient.expire(key, redisConfig.ttl);

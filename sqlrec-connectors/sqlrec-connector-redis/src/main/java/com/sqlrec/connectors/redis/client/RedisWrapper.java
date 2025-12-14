@@ -62,6 +62,10 @@ public class RedisWrapper implements AbstractRedisWrapper {
         return commands.lrem(key, 0, value);
     }
 
+    public RedisFuture<String> ltrim(byte[] key, long start, long stop) {
+        return commands.ltrim(key, start, stop);
+    }
+
     public RedisFuture<Boolean> expire(byte[] key, long seconds) {
         return commands.expire(key, seconds);
     }

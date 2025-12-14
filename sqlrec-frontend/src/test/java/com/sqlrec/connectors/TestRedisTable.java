@@ -104,6 +104,58 @@ public class TestRedisTable {
         }
     }
 
+    @Test
+    public void testRedisListTable() throws Exception {
+        Map<String, Table> tableMap = new HashMap<>();
+        tableMap.put("t2", getListRedisTable());
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return tableMap;
+            }
+        });
+        HmsSchema.setGlobalSchema(schema);
+
+        List<String> sqlList = Arrays.asList(
+                "delete from t2 where id = 1",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 4)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 5)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 6)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 7)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 8)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 9)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 10)",
+                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 11)",
+                "select * from t2 where id = 1"
+        );
+
+        for (String sql : sqlList) {
+            System.out.println("\n" + sql);
+            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+
+            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
+            if (enumerable != null) {
+                List<Object[]> results = enumerable.toList();
+                for (Object[] result : results) {
+                    System.out.println(java.util.Arrays.toString(result));
+                }
+                if (sql.startsWith("select")) {
+                    assert results.size() == 10;
+                    assert ((Number) results.get(0)[2]).intValue() == 11;
+                    assert ((Number) results.get(9)[2]).intValue() == 2;
+                }
+            } else {
+                System.out.println("no result");
+            }
+        }
+    }
+
     public static class MyTable extends SqlRecTable implements ScannableTable {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
@@ -163,6 +215,7 @@ public class TestRedisTable {
         redisConfig.primaryKeyIndex = 0;
         redisConfig.cacheTtl = 30;
         redisConfig.maxCacheSize = 100000;
+        redisConfig.maxListSize = 10;
 
         return new RedisCalciteTable(redisConfig);
     }

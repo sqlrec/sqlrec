@@ -8,6 +8,7 @@ public class RedisConfig {
     public String url;
     public String redisMode;
     public String dataStructure;
+    public Integer maxListSize;
     public Integer ttl;
     public Integer cacheTtl;
     public Integer maxCacheSize;

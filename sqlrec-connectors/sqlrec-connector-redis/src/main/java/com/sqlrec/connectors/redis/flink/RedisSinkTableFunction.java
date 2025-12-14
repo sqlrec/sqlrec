@@ -14,8 +14,7 @@ import java.util.List;
 
 public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
     private RedisConfig redisConfig;
-    List<DataType> dataTypes;
-
+    private List<DataType> dataTypes;
     private RedisHandler redisHandler;
 
     public RedisSinkTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
@@ -44,13 +43,8 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
         super.invoke(value, context);
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
-        if (kind == RowKind.UPDATE_BEFORE) {
-            return;
-        }
 
-        // rowData to object array
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
-
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
             redisHandler.insert(objects);
         } else if (kind == RowKind.DELETE) {
