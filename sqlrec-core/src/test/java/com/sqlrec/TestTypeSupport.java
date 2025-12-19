@@ -6,6 +6,7 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.utils.Const;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -57,17 +58,7 @@ public class TestTypeSupport {
         );
 
         for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            }
+            new SqlTestCase(sql).test(schema, new ExecuteContextImpl());
         }
     }
 

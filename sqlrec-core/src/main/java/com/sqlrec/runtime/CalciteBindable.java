@@ -28,11 +28,26 @@ public class CalciteBindable extends BindableInterface {
     private Set<String> readTables;
     private Set<String> writeTables;
 
-    public CalciteBindable(Map<String, Object> parameters, Bindable<Object[]> bindable, RelNode bestExp, SqlNode sqlNode) {
+    private String logicalPlan;
+    private String physicalPlan;
+    private String javaExpression;
+
+    public CalciteBindable(
+            Map<String, Object> parameters,
+            Bindable<Object[]> bindable,
+            RelNode bestExp,
+            SqlNode sqlNode,
+            String logicalPlan,
+            String physicalPlan,
+            String javaExpression
+    ) {
         this.parameters = parameters;
         this.bindable = bindable;
         this.bestExp = bestExp;
         this.sqlNode = sqlNode;
+        this.logicalPlan = logicalPlan;
+        this.physicalPlan = physicalPlan;
+        this.javaExpression = javaExpression;
 
         List<String> readTables = SqlTypeChecker.getTableFromSqlNode(sqlNode);
         this.readTables = new HashSet<>(readTables);
@@ -82,6 +97,18 @@ public class CalciteBindable extends BindableInterface {
 
     public boolean isUnionSql() {
         return SqlTypeChecker.isUnionSql(sqlNode);
+    }
+
+    public String getLogicalPlan() {
+        return logicalPlan;
+    }
+
+    public String getPhysicalPlan() {
+        return physicalPlan;
+    }
+
+    public String getJavaExpression() {
+        return javaExpression;
     }
 
     public static class DataContextImpl implements DataContext {

@@ -86,13 +86,15 @@ public class NormalSqlCompiler {
         );
 
         RelRoot root = converter.convertQuery(validatedSqlNode, false, true);
-        log.info("compile rel: {}", RelOptUtil.toString(root.rel));
+        String logicalPlan = RelOptUtil.toString(root.rel);
+        log.info("compile rel: {}", logicalPlan);
 
         // todo use Programs.standard() when don't access outside storage
         Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
         final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
-        log.info("compile bestExp: {}", RelOptUtil.toString(bestExp));
+        String physicalPlan = RelOptUtil.toString(bestExp);
+        log.info("compile bestExp: {}", physicalPlan);
 
         String javaExpression = getJavaExpression((EnumerableRel) bestExp, EnumerableRel.Prefer.ARRAY);
         log.info("compile javaExpression: {}", javaExpression);
@@ -105,7 +107,7 @@ public class NormalSqlCompiler {
                 EnumerableRel.Prefer.ARRAY
         );
 
-        return new CalciteBindable(parameters, bindable, bestExp, sqlNode);
+        return new CalciteBindable(parameters, bindable, bestExp, sqlNode, logicalPlan, physicalPlan, javaExpression);
     }
 
     public static Program getProgram() {

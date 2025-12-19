@@ -2,17 +2,14 @@ package com.sqlrec;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
-import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.JavaFunctionUtils;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -65,19 +62,7 @@ public class TestJavaFunction {
         );
 
         for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, executeContext);
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            } else {
-                System.out.println("sql return null");
-            }
+            new SqlTestCase(sql).test(schema, executeContext);
         }
     }
 

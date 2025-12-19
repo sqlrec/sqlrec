@@ -1,0 +1,89 @@
+package com.sqlrec.utils;
+
+import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.sql.SqlNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SqlTestCase {
+    private static final Logger log = LoggerFactory.getLogger(SqlTestCase.class);
+
+    public String sql;
+    public List<Object[]> expectedResult;
+    public Exception expectedException;
+
+    public SqlTestCase(String sql) {
+        this.sql = sql;
+    }
+
+    public SqlTestCase(String sql, List<Object[]> expectedResult) {
+        this.sql = sql;
+        this.expectedResult = expectedResult;
+    }
+
+    public SqlTestCase(String sql, List<Object[]> expectedResult, Exception expectedException) {
+        this.sql = sql;
+        this.expectedResult = expectedResult;
+        this.expectedException = expectedException;
+    }
+
+    public void checkResult(List<Object[]> actualResult) {
+        if (expectedResult == null) {
+            return;
+        }
+
+        assert actualResult != null;
+        assert actualResult.size() == expectedResult.size();
+        for (int i = 0; i < actualResult.size(); i++) {
+            Object[] actualRow = actualResult.get(i);
+            Object[] expectedRow = expectedResult.get(i);
+            assert java.util.Arrays.equals(actualRow, expectedRow);
+        }
+    }
+
+    public void test(CalciteSchema schema) throws Exception {
+        test(schema, new ExecuteContextImpl());
+    }
+
+    public void test(CalciteSchema schema, ExecuteContext executeContext) throws Exception {
+        log.info(sql);
+        SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+        BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
+                Const.DEFAULT_SCHEMA_NAME);
+
+        Exception actualException = null;
+        Enumerable enumerable = null;
+        try {
+            enumerable = bindable.bind(schema, executeContext);
+        } catch (Exception e) {
+            actualException = e;
+        }
+
+        if (expectedException != null) {
+            assert actualException != null;
+            assert expectedException.getClass().isAssignableFrom(actualException.getClass());
+        } else {
+            assert actualException == null;
+        }
+
+        List<Object[]> actualResults = new ArrayList<>();
+        if (enumerable != null) {
+            actualResults = enumerable.toList();
+            for (Object[] result : actualResults) {
+                log.info(java.util.Arrays.toString(result));
+            }
+        } else {
+            log.info("no result");
+        }
+
+        checkResult(actualResults);
+    }
+}
