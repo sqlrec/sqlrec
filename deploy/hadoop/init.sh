@@ -1,0 +1,17 @@
+set -ex
+
+if [ ! -f ${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME} ]; then
+  wget -P ${CLIENT_DIR} ${HADOOP_CLIENT_URL}
+fi
+
+if [ ! -e ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME} ]; then
+  tar -xzf ${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME} -C ${CLIENT_DIR}
+fi
+
+if [ ! -f ${CLIENT_DIR}/${JAVA_CLIENT_ARCH_NAME} ]; then
+  wget -P ${CLIENT_DIR} ${JAVA_CLIENT_URL}
+fi
+
+if [ ! -e ${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME} ]; then
+  tar -xzf ${CLIENT_DIR}/${JAVA_CLIENT_ARCH_NAME} -C ${CLIENT_DIR}
+fi

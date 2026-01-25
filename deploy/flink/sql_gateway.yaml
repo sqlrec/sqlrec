@@ -37,9 +37,6 @@ spec:
             - name: HADOOP_CONF_DIR
               value: /opt/hadoop/conf
           volumeMounts:
-            - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${LIB_PV_NAME}
-              subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${FLINK_HADOOP_JAR_NAME}
@@ -107,9 +104,6 @@ spec:
           ports:
             - containerPort: 10000
           volumeMounts:
-            - mountPath: /opt/flink/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${LIB_PV_NAME}
-              subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/flink/lib/${FLINK_HADOOP_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${FLINK_HADOOP_JAR_NAME}

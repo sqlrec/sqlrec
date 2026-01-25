@@ -55,6 +55,17 @@ export JUPYTERHUB_PORT=30280
 export JUPYTERHUB_USER=sqlrec
 export JUPYTERHUB_PASSWORD=abc123456
 
+export HDFS_NAMENODE_PORT=32400
+export HDFS_DATANODE_PORT=32401
+export HDFS_NAMENODE_HTTP_PORT=32402
+export HDFS_DATANODE_HTTP_PORT=32403
+export HDFS_NAMENODE_DATA_DIR=${DATA_DIR}/hdfs/namenode
+export HDFS_DATANODE_DATA_DIR=${DATA_DIR}/hdfs/datanode
+export HDFS_NAMENODE_PV_NAME=sqlrec-hdfs-namenode-pv
+export HDFS_NAMENODE_PVC_NAME=sqlrec-hdfs-namenode-pvc
+export HDFS_DATANODE_PV_NAME=sqlrec-hdfs-datanode-pv
+export HDFS_DATANODE_PVC_NAME=sqlrec-hdfs-datanode-pvc
+
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
 export JFS_LATEST_TAG=1.3.0

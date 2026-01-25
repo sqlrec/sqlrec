@@ -49,6 +49,10 @@ minikube start \
   --ports="${KAFKA_PORT}:${KAFKA_PORT}" \
   --ports="${TEST_POSTGRESQL_PORT}:${TEST_POSTGRESQL_PORT}" \
   --ports="${JUPYTERHUB_PORT}:${JUPYTERHUB_PORT}" \
+  --ports="${HDFS_NAMENODE_PORT}:${HDFS_NAMENODE_PORT}" \
+  --ports="${HDFS_DATANODE_PORT}:${HDFS_DATANODE_PORT}" \
+  --ports="${HDFS_NAMENODE_HTTP_PORT}:${HDFS_NAMENODE_HTTP_PORT}" \
+  --ports="${HDFS_DATANODE_HTTP_PORT}:${HDFS_DATANODE_HTTP_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

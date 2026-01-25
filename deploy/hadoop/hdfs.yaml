@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hadoop-namenode
+  labels:
+    app: hadoop
+    component: namenode
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hadoop
+      component: namenode
+  template:
+    metadata:
+      labels:
+        app: hadoop
+        component: namenode
+    spec:
+      hostNetwork: true
+      containers:
+      - name: namenode
+        image: debian:12-slim
+        command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "namenode"]
+        volumeMounts:
+        - name: client-pv
+          mountPath: ${CLIENT_DIR}
+        - name: namenode-data
+          mountPath: ${HDFS_NAMENODE_DATA_DIR}
+      volumes:
+      - name: client-pv
+        persistentVolumeClaim:
+          claimName: ${CLIENT_PVC_NAME}
+      - name: namenode-data
+        persistentVolumeClaim:
+          claimName: ${HDFS_NAMENODE_PVC_NAME}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hadoop-datanode
+  labels:
+    app: hadoop
+    component: datanode
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hadoop
+      component: datanode
+  template:
+    metadata:
+      labels:
+        app: hadoop
+        component: datanode
+    spec:
+      hostNetwork: true
+      containers:
+      - name: datanode
+        image: debian:12-slim
+        command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "datanode"]
+        volumeMounts:
+        - name: client-pv
+          mountPath: ${CLIENT_DIR}
+        - name: datanode-data
+          mountPath: ${HDFS_DATANODE_DATA_DIR}
+      volumes:
+      - name: client-pv
+        persistentVolumeClaim:
+          claimName: ${CLIENT_PVC_NAME}
+      - name: datanode-data
+        persistentVolumeClaim:
+          claimName: ${HDFS_DATANODE_PVC_NAME}

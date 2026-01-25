@@ -18,9 +18,6 @@ spec:
             - mountPath: /opt/hive/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${POSTGRESQL_CONNECTOR_JAR_NAME}
-            - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
-              name: ${LIB_PV_NAME}
-              subPath: ${JUICEFS_HADOOP_JAR_NAME}
             - mountPath: /opt/hive/conf/hive-site.xml
               name: hive-site-hms
               subPath: hive-site-hms.xml
