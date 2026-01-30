@@ -27,34 +27,9 @@ if command -v kubectl &> /dev/null; then
     export K8S_APISERVER_ADDR=k8s://https://${NODE_IP}:8443
 fi
 
-export SQL_GATEWAY_PORT=30000
-export HMS_POSTGRESQL_PORT=30307
-export HMS_POSTGRESQL_USER=metastore
-export HMS_POSTGRESQL_PASSWORD=abc123456
-export HMS_PORT=32083
-export KYUUBI_PORT=32009
-export JUICEFS_POSTGRESQL_PORT=30306
-export JUICEFS_POSTGRESQL_USER=juicefs
-export JUICEFS_POSTGRESQL_PASSWORD=abc123456
-export MINIO_PORT=32000
-export MINIO_CONSOLE_PORT=32001
-export MINIO_USER=rootuser
-export MINIO_PASSWORD=rootpass123
-export KAFKA_PORT=32092
-export REDIS_PORT=32379
-export SQLREC_POSTGRESQL_PORT=30308
-export SQLREC_POSTGRESQL_USER=sqlrec
-export SQLREC_POSTGRESQL_PASSWORD=abc123456
-export SQLREC_THRIFT_PORT=8000
-export SQLREC_REST_PORT=8001
-export MILVUS_PORT=31530
-export TEST_POSTGRESQL_PORT=30309
-export TEST_POSTGRESQL_USER=test
-export TEST_POSTGRESQL_PASSWORD=abc123456
-export JUPYTERHUB_PORT=30280
-export JUPYTERHUB_USER=sqlrec
-export JUPYTERHUB_PASSWORD=abc123456
+export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
+export DEPLOY_HDFS="${DEPLOY_HDFS:-false}"
 export HDFS_NAMENODE_PORT=32400
 export HDFS_DATANODE_PORT=32401
 export HDFS_NAMENODE_HTTP_PORT=32402
@@ -66,9 +41,37 @@ export HDFS_NAMENODE_PVC_NAME=sqlrec-hdfs-namenode-pvc
 export HDFS_DATANODE_PV_NAME=sqlrec-hdfs-datanode-pv
 export HDFS_DATANODE_PVC_NAME=sqlrec-hdfs-datanode-pvc
 
-export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+export HMS_POSTGRESQL_PORT=30307
+export HMS_POSTGRESQL_USER=metastore
+export HMS_POSTGRESQL_PASSWORD=abc123456
+export HMS_PORT=32083
+export KYUUBI_PORT=32009
+export SQL_GATEWAY_PORT=30000
 
-export JFS_LATEST_TAG=1.3.0
+export JUICEFS_REDIS_PORT=30306
+export MINIO_PORT=32000
+export MINIO_CONSOLE_PORT=32001
+export MINIO_USER=rootuser
+export MINIO_PASSWORD=rootpass123
+
+export KAFKA_PORT=32092
+export REDIS_PORT=32379
+export MILVUS_PORT=31530
+export TEST_POSTGRESQL_PORT=30309
+export TEST_POSTGRESQL_USER=test
+export TEST_POSTGRESQL_PASSWORD=abc123456
+
+export SQLREC_POSTGRESQL_PORT=30308
+export SQLREC_POSTGRESQL_USER=sqlrec
+export SQLREC_POSTGRESQL_PASSWORD=abc123456
+export SQLREC_THRIFT_PORT=8000
+export SQLREC_REST_PORT=8001
+
+export JUPYTERHUB_PORT=30280
+export JUPYTERHUB_USER=sqlrec
+export JUPYTERHUB_PASSWORD=abc123456
+
+export JFS_LATEST_TAG=1.3.1
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz"
 export JUICEFS_ARCH_NAME=juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz
 export JUICEFS_HADOOP_JAR_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-hadoop-${JFS_LATEST_TAG}.jar"
@@ -97,7 +100,6 @@ export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
 export JAVA_CLIENT_URL=https://corretto.aws/downloads/resources/8.472.08.1/amazon-corretto-8.472.08.1-linux-x64.tar.gz
 export JAVA_CLIENT_ARCH_NAME=amazon-corretto-8.472.08.1-linux-x64.tar.gz
 export JAVA_CLIENT_DIR_NAME=amazon-corretto-8.472.08.1-linux-x64
-
 
 export HADOOP_HOME=${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
 export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}

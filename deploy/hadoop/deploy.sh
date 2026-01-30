@@ -24,6 +24,8 @@ if [ ! -e ${HDFS_NAMENODE_DATA_DIR} ]; then
   ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs namenode -format
 fi
 
-envsubst < ${dir}/hdfs.yaml > ${dir}/hdfs.yaml.tmp
-kubectl apply -f ${dir}/hdfs.yaml.tmp -n "${NAMESPACE}"
+if [ "${DEPLOY_HDFS,,}" = "true" ]; then
+  envsubst < ${dir}/hdfs.yaml > ${dir}/hdfs.yaml.tmp
+  kubectl apply -f ${dir}/hdfs.yaml.tmp -n "${NAMESPACE}"
+fi
 

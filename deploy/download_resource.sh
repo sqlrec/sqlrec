@@ -9,8 +9,8 @@ if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
   kubectl create namespace "${NAMESPACE}"
 fi
 
-#bash ${dir}/minio/init.sh
-#bash ${dir}/juicefs/init.sh
+bash ${dir}/minio/init.sh
+bash ${dir}/juicefs/init.sh
 bash ${dir}/hadoop/init.sh
 bash ${dir}/kafka/init.sh
 bash ${dir}/hms/init.sh

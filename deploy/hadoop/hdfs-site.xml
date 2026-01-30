@@ -1,5 +1,14 @@
 <configuration>
     <property>
+        <name>fs.permissions.umask-mode</name>
+        <value>000</value>
+    </property>
+    <property>
+        <name>dfs.permissions.enabled</name>
+        <value>false</value>
+    </property>
+
+    <property>
         <name>dfs.replication</name>
         <value>1</value>
     </property>
@@ -22,9 +31,5 @@
     <property>
         <name>dfs.datanode.http.address</name>
         <value>0.0.0.0:${HDFS_DATANODE_HTTP_PORT}</value>
-    </property>
-    <property>
-        <name>dfs.permissions.enabled</name>
-        <value>false</value>
     </property>
 </configuration>

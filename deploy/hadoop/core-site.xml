@@ -1,7 +1,36 @@
 <configuration>
     <property>
         <name>fs.defaultFS</name>
-        <value>hdfs://${NODE_IP}:${HDFS_NAMENODE_PORT}</value>
+        <value>jfs://myjfs</value>
+    </property>
+    <property>
+        <name>fs.jfs.impl</name>
+        <value>io.juicefs.JuiceFileSystem</value>
+    </property>
+    <property>
+        <name>fs.AbstractFileSystem.jfs.impl</name>
+        <value>io.juicefs.JuiceFS</value>
+    </property>
+    <property>
+        <name>juicefs.meta</name>
+        <value>redis://${NODE_IP}:${JUICEFS_REDIS_PORT}/0</value>
+    </property>
+
+    <property>
+        <name>dfs.nameservices</name>
+        <value>myhdfs</value>
+    </property>
+    <property>
+        <name>dfs.ha.namenodes.myhdfs</name>
+        <value>nn1</value>
+    </property>
+    <property>
+        <name>dfs.namenode.rpc-address.myhdfs.nn1</name>
+        <value>${NODE_IP}:${HDFS_NAMENODE_PORT}</value>
+    </property>
+    <property>
+        <name>dfs.namenode.http-address.myhdfs.nn1</name>
+        <value>${NODE_IP}:${HDFS_NAMENODE_HTTP_PORT}</value>
     </property>
 
     <property>

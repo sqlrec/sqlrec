@@ -40,7 +40,7 @@ minikube start \
   --ports="${HMS_POSTGRESQL_PORT}:${HMS_POSTGRESQL_PORT}" \
   --ports="${HMS_PORT}:${HMS_PORT}" \
   --ports="${KYUUBI_PORT}:${KYUUBI_PORT}" \
-  --ports="${JUICEFS_POSTGRESQL_PORT}:${JUICEFS_POSTGRESQL_PORT}" \
+  --ports="${JUICEFS_REDIS_PORT}:${JUICEFS_REDIS_PORT}" \
   --ports="${MINIO_PORT}:${MINIO_PORT}" \
   --ports="${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_PORT}" \
   --ports="${REDIS_PORT}:${REDIS_PORT}" \
