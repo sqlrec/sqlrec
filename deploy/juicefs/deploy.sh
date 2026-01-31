@@ -4,7 +4,7 @@ shopt -s expand_aliases
 source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 
-helm upgrade --install juicefs_valkey valkey/valkey \
+helm upgrade --install juicefs-valkey valkey/valkey \
   --namespace "${NAMESPACE}" \
   --set service.type=NodePort \
   --set service.nodePort=${JUICEFS_REDIS_PORT} \

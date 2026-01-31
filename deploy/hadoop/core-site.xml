@@ -32,6 +32,10 @@
         <name>dfs.namenode.http-address.myhdfs.nn1</name>
         <value>${NODE_IP}:${HDFS_NAMENODE_HTTP_PORT}</value>
     </property>
+    <property>
+        <name>dfs.client.failover.proxy.provider.myhdfs</name>
+        <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+    </property>
 
     <property>
         <name>hadoop.proxyuser.root.hosts</name>

@@ -21,7 +21,11 @@ if kubectl get configmap hive-site -n "${NAMESPACE}"; then
 fi
 kubectl create configmap hive-site --from-file="${CONF_DIR}/hive-site.xml" -n "${NAMESPACE}"
 
-kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${NAMESPACE}"
-kubectl wait --for=condition=complete job/hms-init --timeout=3600s -n "${NAMESPACE}"
+if kubectl get job hms-init -n "${NAMESPACE}"; then
+  echo "hms-init job already exists, skip"
+else
+  kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${NAMESPACE}"
+  kubectl wait --for=condition=complete job/hms-init --timeout=3600s -n "${NAMESPACE}"
+fi
 
 kubectl apply -f "${dir}/hms.yaml.tmp" -n "${NAMESPACE}"

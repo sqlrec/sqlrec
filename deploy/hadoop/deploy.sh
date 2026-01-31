@@ -17,6 +17,12 @@ fi
 kubectl create configmap hdfs-site --from-file="${CONF_DIR}/hdfs-site.xml" -n "${NAMESPACE}"
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
+
+if [ "${DEPLOY_HDFS,,}" != "true" ]; then
+  echo "HDFS deployment is disabled (DEPLOY_HDFS=${DEPLOY_HDFS}), exiting."
+  exit 0
+fi
+
 if [ ! -e ${HDFS_NAMENODE_DATA_DIR} ]; then
   mkdir -p ${HDFS_NAMENODE_DATA_DIR}
   mkdir -p ${HDFS_DATANODE_DATA_DIR}
@@ -24,8 +30,5 @@ if [ ! -e ${HDFS_NAMENODE_DATA_DIR} ]; then
   ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs namenode -format
 fi
 
-if [ "${DEPLOY_HDFS,,}" = "true" ]; then
-  envsubst < ${dir}/hdfs.yaml > ${dir}/hdfs.yaml.tmp
-  kubectl apply -f ${dir}/hdfs.yaml.tmp -n "${NAMESPACE}"
-fi
-
+envsubst < ${dir}/hdfs.yaml > ${dir}/hdfs.yaml.tmp
+kubectl apply -f ${dir}/hdfs.yaml.tmp -n "${NAMESPACE}"

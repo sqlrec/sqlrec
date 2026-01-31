@@ -7,18 +7,12 @@ export CLIENT_DIR=${DATA_DIR}/client
 export PV_DIR=${DATA_DIR}/pv
 export LOCAL_REGISTRY_DIR=${DATA_DIR}/registry
 
-mkdir -p ${CONF_DIR}
-mkdir -p ${LIB_DIR}
-mkdir -p ${CLIENT_DIR}
-mkdir -p ${PV_DIR}
-mkdir -p ${LOCAL_REGISTRY_DIR}
-
 export LIB_PV_NAME=sqlrec-lib-pv
 export LIB_PVC_NAME=sqlrec-lib-pvc
 export CLIENT_PV_NAME=sqlrec-client-pv
 export CLIENT_PVC_NAME=sqlrec-client-pvc
 
-export NAMESPACE=sqlrec
+export NAMESPACE="${NAMESPACE:-sqlrec}"
 
 export IMAGE_REGISTRY_PORT=5000
 export IMAGE_REGISTRY_URL="host.minikube.internal:${IMAGE_REGISTRY_PORT}"

@@ -5,6 +5,12 @@ source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 source ${dir}/env.sh
 
+mkdir -p ${CONF_DIR}
+mkdir -p ${LIB_DIR}
+mkdir -p ${CLIENT_DIR}
+mkdir -p ${PV_DIR}
+mkdir -p ${LOCAL_REGISTRY_DIR}
+
 # refer to https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
 if command -v docker >/dev/null 2>&1; then
   echo 'skip install docker'
