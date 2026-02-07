@@ -1,0 +1,56 @@
+package com.sqlrec.model.tzrec;
+
+import com.sqlrec.common.config.ConfigOption;
+
+/**
+ * Configuration class for model-related parameters
+ */
+public class Config {
+    public static final String SHELL_DIR = "/data";
+    public static final String PIPELINE_CONFIG_NAME = "pipeline_config.json";
+    public static final String START_SHELL_NAME = "start.sh";
+
+    public static final ConfigOption<String> IMAGE = new ConfigOption<>(
+            "image",
+            "sqlrec/tzrec", "Docker image", null, String.class);
+    public static final ConfigOption<String> VERSION = new ConfigOption<>(
+            "version",
+            "1.0-cpu", "Docker image version", null, String.class);
+
+    // Training configuration
+    public static final ConfigOption<Double> SPARSE_LR = new ConfigOption<>(
+            "sparse_lr",
+            0.001, "Learning rate for sparse features", null, Double.class);
+    public static final ConfigOption<Double> DENSE_LR = new ConfigOption<>(
+            "dense_lr",
+            0.001, "Learning rate for dense features", null, Double.class);
+    public static final ConfigOption<Integer> NUM_EPOCHS = new ConfigOption<>(
+            "num_epochs",
+            1, "Number of training epochs", null, Integer.class);
+
+    // Data configuration
+    public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(
+            "batch_size",
+            8192, "Batch size for training", null, Integer.class);
+    public static final ConfigOption<Integer> NUM_WORKERS = new ConfigOption<>(
+            "num_workers",
+            8, "Number of data loading workers", null, Integer.class);
+
+    // Feature configuration
+    public static final ConfigOption<Integer> EMBEDDING_DIM = new ConfigOption<>(
+            "embedding_dim",
+            16, "Embedding dimension for categorical features", null, Integer.class);
+    public static final ConfigOption<Integer> NUM_BUCKETS = new ConfigOption<>(
+            "num_buckets",
+            40000000, "Number of buckets for categorical features", null, Integer.class);
+
+    // Data configuration
+    public static final ConfigOption<String> LABEL_FIELDS = new ConfigOption<>(
+            "label_fields",
+            "label", "Label fields", null, String.class);
+
+    // Model configuration
+    public static final ConfigOption<String> HIDDEN_UNITS = new ConfigOption<>(
+            "hidden_units",
+            "512,256,128", "Hidden units for deep network", null, String.class);
+}

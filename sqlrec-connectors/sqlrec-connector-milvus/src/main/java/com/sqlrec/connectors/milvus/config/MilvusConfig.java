@@ -1,6 +1,6 @@
 package com.sqlrec.connectors.milvus.config;
 
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.List;
 

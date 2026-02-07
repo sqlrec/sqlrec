@@ -37,7 +37,14 @@ public class TestSqlParse {
                 "call fun1(t1) async",
                 "define input table t1(id integer, name string)",
                 "return t1",
-                "return"
+                "return",
+                "create model `test_model` (id bigint, name string) with ('param'='value')",
+                "create model if not exists `test_model` (id bigint, name string, price float) with ('param1'='value1', 'param2'='value2')",
+                "drop model `test_model`",
+                "drop model if exists `test_model`",
+                "train model test_model checkpoint='checkpoint_path' on data_db.test_table",
+                "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01'",
+                "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01' WITH ( 'param1' = 'value1', 'param2' = 'value2' )"
         );
 
         for (String sql : sqlList) {

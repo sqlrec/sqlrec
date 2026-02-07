@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;

@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -2,6 +2,7 @@ package com.sqlrec.common.utils;
 
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
+import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.List;
 import java.util.Map;

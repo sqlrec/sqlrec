@@ -218,3 +218,100 @@ SqlShowCreateApi SqlShowCreateApi() :
         return new SqlShowCreateApi(getPos(), apiName);
     }
 }
+
+SqlNode SqlCreateModel() : {
+    SqlParserPos startPos;
+    boolean ifNotExists = false;
+    SqlIdentifier modelName;
+    SqlNodeList columnList = SqlNodeList.EMPTY;
+    SqlNodeList propertyList = SqlNodeList.EMPTY;
+    SqlParserPos pos;
+}
+{
+    <CREATE>
+    <MODEL>
+    { startPos = getPos(); }
+
+    ifNotExists = IfNotExistsOpt()
+
+    modelName = CompoundIdentifier()
+    [
+        <LPAREN> { pos = getPos(); TableCreationContext ctx = new TableCreationContext();}
+        TableColumn(ctx)
+        (
+            <COMMA> TableColumn(ctx)
+        )*
+        {
+            pos = pos.plus(getPos());
+            columnList = new SqlNodeList(ctx.columnList, pos);
+        }
+        <RPAREN>
+    ]
+    [
+        <WITH>
+        propertyList = TableProperties()
+    ]
+    {
+        return new com.sqlrec.sql.parser.SqlCreateModel(
+            startPos.plus(getPos()),
+            modelName,
+            columnList,
+            propertyList,
+            ifNotExists);
+    }
+}
+
+SqlNode SqlDropModel() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier modelName = null;
+    boolean ifExists = false;
+}
+{
+    <DROP>
+    <MODEL>
+    { startPos = getPos(); }
+
+    ifExists = IfExistsOpt()
+
+    modelName = CompoundIdentifier()
+    {
+        return new com.sqlrec.sql.parser.SqlDropModel(startPos.plus(getPos()), modelName, ifExists);
+    }
+}
+
+SqlNode SqlTrainModel() : {
+    SqlParserPos pos;
+    SqlIdentifier modelName;
+    SqlNode checkpoint = null;
+    SqlIdentifier dataSource;
+    SqlNode whereCondition = null;
+    SqlNodeList propertyList = null;
+}
+{
+    <TRAIN>
+    <MODEL>
+    pos = getPos()
+    modelName = CompoundIdentifier()
+    <CHECKPOINT> <EQ>
+    checkpoint = StringLiteral()
+    <ON>
+    dataSource = CompoundIdentifier()
+    [
+        <WHERE>
+        whereCondition = Expression(ExprContext.ACCEPT_NON_QUERY)
+    ]
+    [
+        <WITH>
+        propertyList = TableProperties()
+    ]
+    {
+        return new com.sqlrec.sql.parser.SqlTrainModel(
+            pos.plus(getPos()),
+            modelName,
+            checkpoint,
+            dataSource,
+            whereCondition,
+            propertyList);
+    }
+}

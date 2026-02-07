@@ -30,6 +30,7 @@ build/
 
 ### VS Code ###
 .vscode/
+.trae
 
 ### Mac OS ###
 .DS_Store

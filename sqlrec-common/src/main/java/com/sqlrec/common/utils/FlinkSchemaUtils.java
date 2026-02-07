@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.table.catalog.Column;

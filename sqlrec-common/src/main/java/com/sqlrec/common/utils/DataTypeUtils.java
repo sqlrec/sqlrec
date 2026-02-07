@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlTypeNameSpec;

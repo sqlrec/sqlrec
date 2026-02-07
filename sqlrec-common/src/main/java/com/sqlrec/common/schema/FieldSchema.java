@@ -1,4 +1,4 @@
-package com.sqlrec.common.utils;
+package com.sqlrec.common.schema;
 
 public class FieldSchema {
     public String name;

@@ -14,8 +14,9 @@
         <module>sqlrec-connectors</module>
         <module>sqlrec-sql-parser</module>
         <module>sqlrec-common</module>
+        <module>sqlrec-model</module>
     </modules>
-
+    
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>

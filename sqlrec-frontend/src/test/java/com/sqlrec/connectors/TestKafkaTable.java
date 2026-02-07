@@ -1,7 +1,7 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.connectors.kafka.calcite.KafkaCalciteTable;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;

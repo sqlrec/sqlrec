@@ -2,7 +2,7 @@ package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.config.RedisConfig;

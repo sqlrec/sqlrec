@@ -1,6 +1,6 @@
 package com.sqlrec.connectors.redis.codec;
 
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.JsonUtils;
 
 import java.nio.charset.StandardCharsets;

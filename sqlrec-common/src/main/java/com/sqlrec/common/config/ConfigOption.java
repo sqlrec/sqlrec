@@ -35,6 +35,9 @@ public class ConfigOption<T> {
     }
 
     public T getValue(Map<String, String> options) {
+        if (options == null || !options.containsKey(key)) {
+            return processValue(null);
+        }
         String value = options.get(key);
         return processValue(value);
     }

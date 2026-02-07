@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.ToNumberPolicy;
-import com.sqlrec.common.utils.FieldSchema;
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import io.milvus.pool.MilvusClientV2Pool;
