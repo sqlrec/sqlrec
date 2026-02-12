@@ -286,6 +286,7 @@ SqlNode SqlTrainModel() : {
     SqlNode checkpoint = null;
     SqlIdentifier dataSource;
     SqlNode whereCondition = null;
+    SqlNode existingCheckpoint = null;
     SqlNodeList propertyList = null;
 }
 {
@@ -302,6 +303,10 @@ SqlNode SqlTrainModel() : {
         whereCondition = Expression(ExprContext.ACCEPT_NON_QUERY)
     ]
     [
+        <FROM>
+        existingCheckpoint = StringLiteral()
+    ]
+    [
         <WITH>
         propertyList = TableProperties()
     ]
@@ -312,6 +317,7 @@ SqlNode SqlTrainModel() : {
             checkpoint,
             dataSource,
             whereCondition,
+            existingCheckpoint,
             propertyList);
     }
 }

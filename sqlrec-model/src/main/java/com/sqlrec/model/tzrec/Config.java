@@ -53,4 +53,15 @@ public class Config {
     public static final ConfigOption<String> HIDDEN_UNITS = new ConfigOption<>(
             "hidden_units",
             "512,256,128", "Hidden units for deep network", null, String.class);
+
+    // Distributed training configuration
+    public static final ConfigOption<Integer> NNODES = new ConfigOption<>(
+            "nnodes",
+            1, "Number of nodes for distributed training", null, Integer.class);
+    public static final ConfigOption<Integer> NPROC_PER_NODE = new ConfigOption<>(
+            "nproc_per_node",
+            1, "Number of processes per node for distributed training", null, Integer.class);
+    public static final ConfigOption<Integer> MASTER_PORT = new ConfigOption<>(
+            "master_port",
+            29500, "Master port for distributed training", null, Integer.class);
 }

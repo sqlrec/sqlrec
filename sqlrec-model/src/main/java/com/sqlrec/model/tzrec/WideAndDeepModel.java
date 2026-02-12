@@ -24,6 +24,10 @@ public class WideAndDeepModel implements ModelController {
 
         String configMapName = trainConf.name + "-cm";
         String jobName = trainConf.name + "-job";
+        String serviceName = jobName + "-headless";
+        int nnodes = Config.NNODES.getValue(trainConf.params);
+        int nprocPerNode = Config.NPROC_PER_NODE.getValue(trainConf.params);
+        int masterPort = Config.MASTER_PORT.getValue(trainConf.params);
 
         String configMapYaml = K8sYamlUtils.createConfigMapYaml(
                 configMapName,
@@ -32,10 +36,13 @@ public class WideAndDeepModel implements ModelController {
                     put(Config.START_SHELL_NAME, shell);
                 }}
         );
+        
+        String serviceYaml = K8sYamlUtils.createHeadlessServiceYaml(jobName, serviceName, masterPort);
+        
         String jobYaml = K8sYamlUtils.createJobYaml(
-                jobName, configMapName
+                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort
         );
 
-        return K8sYamlUtils.mergeK8sYamls(configMapYaml, jobYaml);
+        return K8sYamlUtils.mergeK8sYamls(configMapYaml, serviceYaml, jobYaml);
     }
 }

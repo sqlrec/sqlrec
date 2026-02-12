@@ -13,6 +13,7 @@ public class SqlTrainModel extends SqlCreate {
     private final SqlNode checkpoint;
     private final SqlIdentifier dataSource;
     private final SqlNode whereCondition;
+    private final SqlNode existingCheckpoint;
     private final SqlNodeList propertyList;
 
     public SqlTrainModel(
@@ -21,12 +22,14 @@ public class SqlTrainModel extends SqlCreate {
             SqlNode checkpoint,
             SqlIdentifier dataSource,
             SqlNode whereCondition,
+            SqlNode existingCheckpoint,
             SqlNodeList propertyList) {
         super(pos, false);
         this.modelName = modelName;
         this.checkpoint = checkpoint;
         this.dataSource = dataSource;
         this.whereCondition = whereCondition;
+        this.existingCheckpoint = existingCheckpoint;
         this.propertyList = propertyList;
     }
 
@@ -44,6 +47,10 @@ public class SqlTrainModel extends SqlCreate {
 
     public SqlNode getWhereCondition() {
         return whereCondition;
+    }
+
+    public SqlNode getExistingCheckpoint() {
+        return existingCheckpoint;
     }
 
     public SqlNodeList getPropertyList() {
@@ -66,6 +73,11 @@ public class SqlTrainModel extends SqlCreate {
             writer.print(" WHERE");
             writer.print(" ");
             whereCondition.unparse(writer, leftPrec, rightPrec);
+        }
+        if (existingCheckpoint != null) {
+            writer.print(" FROM");
+            writer.print(" ");
+            existingCheckpoint.unparse(writer, leftPrec, rightPrec);
         }
         if (propertyList != null && propertyList.size() > 0) {
             writer.print(" WITH (");
@@ -90,6 +102,9 @@ public class SqlTrainModel extends SqlCreate {
         if (whereCondition != null) {
             operands.add(whereCondition);
         }
+        if (existingCheckpoint != null) {
+            operands.add(existingCheckpoint);
+        }
         if (propertyList != null) {
             operands.addAll(propertyList);
         }
@@ -104,6 +119,7 @@ public class SqlTrainModel extends SqlCreate {
                 checkpoint,
                 dataSource,
                 whereCondition,
+                existingCheckpoint,
                 propertyList);
     }
 }
