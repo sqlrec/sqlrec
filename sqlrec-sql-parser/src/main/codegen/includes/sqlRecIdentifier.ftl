@@ -219,6 +219,30 @@ SqlShowCreateApi SqlShowCreateApi() :
     }
 }
 
+SqlShowModel SqlShowModel() :
+{
+}
+{
+    <SHOW>
+    <MODELS>
+    {
+        return new SqlShowModel(getPos());
+    }
+}
+
+SqlShowCreateModel SqlShowCreateModel() :
+{
+    SqlIdentifier modelName = null;
+}
+{
+    ( <DESCRIBE> | <DESC> )
+    <MODEL>
+    modelName = SimpleIdentifier()
+    {
+        return new SqlShowCreateModel(getPos(), modelName);
+    }
+}
+
 SqlNode SqlCreateModel() : {
     SqlParserPos startPos;
     boolean ifNotExists = false;

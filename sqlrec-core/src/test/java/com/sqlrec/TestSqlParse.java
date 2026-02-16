@@ -45,7 +45,10 @@ public class TestSqlParse {
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table",
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table from 'checkpoint_path1'",
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01'",
-                "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01' WITH ( 'param1' = 'value1', 'param2' = 'value2' )"
+                "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01' WITH ( 'param1' = 'value1', 'param2' = 'value2' )",
+                "show models",
+                "desc model test_model",
+                "describe model test_model"
         );
 
         for (String sql : sqlList) {

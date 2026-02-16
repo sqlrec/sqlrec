@@ -9,6 +9,7 @@ import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.entity.Model;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -94,6 +95,13 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlCreateApi) {
             SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
             return Utils.convertMsgToResult("create api success", "msg");
+        }
+
+        if (sqlNode instanceof SqlDropModel) {
+            SqlDropModel dropModel = (SqlDropModel) sqlNode;
+            String modelName = dropModel.getModelName().getSimple();
+            DbUtils.deleteModel(modelName);
+            return Utils.convertMsgToResult("drop model success", "msg");
         }
 
         if (sqlNode instanceof SqlUseDatabase) {
@@ -245,6 +253,26 @@ public class SqlProcessor {
             }
             String sql = "create api " + sqlApi.getName() + " with " + sqlApi.getFunctionName();
             return Utils.convertMsgToResult(sql, "create sql");
+        }
+
+        if (sqlNode instanceof SqlShowModel) {
+            List<Model> models = DbUtils.getModelList();
+            return Utils.convertStringListToResult(
+                    models.stream().map(Model::getName).collect(Collectors.toList()),
+                    "model"
+            );
+        }
+
+        if (sqlNode instanceof SqlShowCreateModel) {
+            SqlShowCreateModel showCreateModel = (SqlShowCreateModel) sqlNode;
+            Model model = DbUtils.getModel(showCreateModel.getModelName().getSimple());
+            if (model == null) {
+                return Utils.convertMsgToResult(
+                        "model not exists: " + showCreateModel.getModelName().getSimple(),
+                        "error"
+                );
+            }
+            return Utils.convertMsgToResult(model.getDdl(), "create sql");
         }
 
         return null;
