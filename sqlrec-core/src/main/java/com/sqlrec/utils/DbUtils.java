@@ -3,6 +3,8 @@ package com.sqlrec.utils;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Checkpoint;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -104,5 +106,45 @@ public class DbUtils {
 
     public static void deleteSqlApi(String name) {
         executeVoid(dbMapper -> dbMapper.deleteSqlApi(name));
+    }
+
+    public static List<Model> getModelList() {
+        return execute(DbMapper::getModelList);
+    }
+
+    public static Model getModel(String name) {
+        return execute(dbMapper -> dbMapper.getModel(name));
+    }
+
+    public static void insertModel(Model model) {
+        executeVoid(dbMapper -> dbMapper.insertModel(model));
+    }
+
+    public static void upsertModel(Model model) {
+        executeVoid(dbMapper -> dbMapper.upsertModel(model));
+    }
+
+    public static void deleteModel(String name) {
+        executeVoid(dbMapper -> dbMapper.deleteModel(name));
+    }
+
+    public static List<Checkpoint> getCheckpointListByModelName(String modelName) {
+        return execute(dbMapper -> dbMapper.getCheckpointListByModelName(modelName));
+    }
+
+    public static Checkpoint getCheckpoint(String modelName, String checkpointName) {
+        return execute(dbMapper -> dbMapper.getCheckpoint(modelName, checkpointName));
+    }
+
+    public static void upsertCheckpoint(Checkpoint checkpoint) {
+        executeVoid(dbMapper -> dbMapper.upsertCheckpoint(checkpoint));
+    }
+
+    public static void deleteCheckpoint(String modelName, String checkpointName) {
+        executeVoid(dbMapper -> dbMapper.deleteCheckpoint(modelName, checkpointName));
+    }
+
+    public static void deleteCheckpointByModelName(String modelName) {
+        executeVoid(dbMapper -> dbMapper.deleteCheckpointByModelName(modelName));
     }
 }

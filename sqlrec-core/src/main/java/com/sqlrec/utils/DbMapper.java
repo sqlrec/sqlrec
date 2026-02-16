@@ -2,6 +2,8 @@ package com.sqlrec.utils;
 
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Checkpoint;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Select;
@@ -48,4 +50,42 @@ public interface DbMapper {
 
     @Delete("DELETE FROM sql_api WHERE name = #{name}")
     void deleteSqlApi(String name);
+
+    @Select("SELECT * FROM model")
+    List<Model> getModelList();
+
+    @Select("SELECT * FROM model WHERE name = #{name}")
+    Model getModel(String name);
+
+    @Insert("INSERT INTO model " +
+            "(name, ddl, created_at, updated_at) " +
+            "VALUES (#{name}, #{ddl}, #{createdAt}, #{updatedAt})")
+    void insertModel(Model model);
+
+    @Insert("INSERT INTO model " +
+            "(name, ddl, created_at, updated_at) " +
+            "VALUES (#{name}, #{ddl}, #{createdAt}, #{updatedAt}) " +
+            "ON CONFLICT (name) DO UPDATE SET ddl = #{ddl}, updated_at = #{updatedAt}")
+    void upsertModel(Model model);
+
+    @Delete("DELETE FROM model WHERE name = #{name}")
+    void deleteModel(String name);
+
+    @Select("SELECT * FROM checkpoint WHERE model_name = #{modelName}")
+    List<Checkpoint> getCheckpointListByModelName(String modelName);
+
+    @Select("SELECT * FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
+    Checkpoint getCheckpoint(String modelName, String checkpointName);
+
+    @Insert("INSERT INTO checkpoint " +
+            "(model_name, checkpoint_name, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +
+            "VALUES (#{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{checkpointType}, #{status}, #{createdAt}, #{updatedAt}) " +
+            "ON CONFLICT (model_name, checkpoint_name) DO UPDATE SET ddl = #{ddl}, yaml = #{yaml}, checkpoint_type = #{checkpointType}, status = #{status}, updated_at = #{updatedAt}")
+    void upsertCheckpoint(Checkpoint checkpoint);
+
+    @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
+    void deleteCheckpoint(String modelName, String checkpointName);
+
+    @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName}")
+    void deleteCheckpointByModelName(String modelName);
 }
