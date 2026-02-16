@@ -243,6 +243,35 @@ SqlShowCreateModel SqlShowCreateModel() :
     }
 }
 
+SqlShowCheckpoint SqlShowCheckpoint() :
+{
+    SqlIdentifier modelName = null;
+}
+{
+    <SHOW>
+    <CHECKPOINTS>
+    modelName = SimpleIdentifier()
+    {
+        return new SqlShowCheckpoint(getPos(), modelName);
+    }
+}
+
+SqlShowCreateCheckpoint SqlShowCreateCheckpoint() :
+{
+    SqlIdentifier modelName = null;
+    SqlIdentifier checkpointName = null;
+}
+{
+    ( <DESCRIBE> | <DESC> )
+    <CHECKPOINT>
+    modelName = SimpleIdentifier()
+    <DOT>
+    checkpointName = SimpleIdentifier()
+    {
+        return new SqlShowCreateCheckpoint(getPos(), modelName, checkpointName);
+    }
+}
+
 SqlNode SqlCreateModel() : {
     SqlParserPos startPos;
     boolean ifNotExists = false;

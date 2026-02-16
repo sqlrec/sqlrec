@@ -10,6 +10,7 @@ import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -273,6 +274,30 @@ public class SqlProcessor {
                 );
             }
             return Utils.convertMsgToResult(model.getDdl(), "create sql");
+        }
+
+        if (sqlNode instanceof SqlShowCheckpoint) {
+            SqlShowCheckpoint showCheckpoint = (SqlShowCheckpoint) sqlNode;
+            List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(showCheckpoint.getModelName().getSimple());
+            return Utils.convertStringListToResult(
+                    checkpoints.stream().map(Checkpoint::getCheckpointName).collect(Collectors.toList()),
+                    "checkpoint"
+            );
+        }
+
+        if (sqlNode instanceof SqlShowCreateCheckpoint) {
+            SqlShowCreateCheckpoint showCreateCheckpoint = (SqlShowCreateCheckpoint) sqlNode;
+            Checkpoint checkpoint = DbUtils.getCheckpoint(
+                    showCreateCheckpoint.getModelName().getSimple(),
+                    showCreateCheckpoint.getCheckpointName().getSimple()
+            );
+            if (checkpoint == null) {
+                return Utils.convertMsgToResult(
+                        "checkpoint not exists: " + showCreateCheckpoint.getCheckpointName().getSimple() + " for model " + showCreateCheckpoint.getModelName().getSimple(),
+                        "error"
+                );
+            }
+            return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
         }
 
         return null;

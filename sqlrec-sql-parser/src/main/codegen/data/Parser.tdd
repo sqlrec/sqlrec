@@ -141,6 +141,7 @@
   # Please keep the keyword in alphabetical order if new keyword is added.
   keywords: [
     "CHECKPOINT"
+    "CHECKPOINTS"
     "TRAIN"
     "MODEL"
     "MODELS"
@@ -566,6 +567,8 @@
     "SqlShowApi()"
     "SqlShowModel()"
     "SqlShowCreateModel()"
+    "SqlShowCheckpoint()"
+    "SqlShowCreateCheckpoint()"
     "SqlDefineInputTable()"
     "SqlCallSqlFunction()"
     "SqlCache()"
