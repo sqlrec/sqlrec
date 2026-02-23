@@ -46,6 +46,12 @@
             <version>${sqlrec.version}</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-model</artifactId>
+            <version>${sqlrec.version}</version>
+            <scope>compile</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.mybatis</groupId>

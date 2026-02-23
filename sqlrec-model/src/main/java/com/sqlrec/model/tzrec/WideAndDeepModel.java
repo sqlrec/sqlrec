@@ -1,6 +1,6 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.model.common.Model;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelController;
 import com.sqlrec.model.common.ModelTrainConf;
 
@@ -13,12 +13,12 @@ public class WideAndDeepModel implements ModelController {
     }
 
     @Override
-    public String checkModel(Model model) {
+    public String checkModel(ModelConfig model) {
         return null;
     }
 
     @Override
-    public String genModelTrainK8sYaml(Model model, ModelTrainConf trainConf) {
+    public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
         String pipelineConfig = PipelineConfigUtils.generateTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
 

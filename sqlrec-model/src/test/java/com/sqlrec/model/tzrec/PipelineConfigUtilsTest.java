@@ -1,7 +1,7 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.model.common.Model;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelTrainConf;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +18,7 @@ public class PipelineConfigUtilsTest {
     @Test
     public void testGenerateWideAndDeepConfig() {
         // Create test model
-        Model model = new Model();
+        ModelConfig model = new ModelConfig();
         model.modelName = "test_model";
 
         // Add test field schemas

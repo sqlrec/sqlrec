@@ -1,7 +1,7 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.model.common.Model;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelTrainConf;
 
 import java.util.List;
@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public class PipelineConfigUtils {
 
-    public static String generateWideAndDeepConfig(Model model, ModelTrainConf trainConf) {
+    public static String generateWideAndDeepConfig(ModelConfig model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         // Add input paths
@@ -51,7 +51,7 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateTrainConfig(Model model, ModelTrainConf trainConf) {
+    public static String generateTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(trainConf.params);
         double denseLr = Config.DENSE_LR.getValue(trainConf.params);
@@ -77,7 +77,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDataConfig(Model model, ModelTrainConf trainConf) {
+    public static String generateDataConfig(ModelConfig model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(trainConf.params);
         int numWorkers = Config.NUM_WORKERS.getValue(trainConf.params);
@@ -93,7 +93,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateFeatureConfigs(Model model) {
+    public static String generateFeatureConfigs(ModelConfig model) {
         StringBuilder config = new StringBuilder();
 
         if (model.fieldSchemas != null) {
@@ -128,7 +128,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateModelConfig(Model model) {
+    public static String generateModelConfig(ModelConfig model) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
@@ -175,7 +175,7 @@ public class PipelineConfigUtils {
         return "float".equalsIgnoreCase(fieldType) || "double".equalsIgnoreCase(fieldType);
     }
 
-    private static List<String> getFeatures(Model model) {
+    private static List<String> getFeatures(ModelConfig model) {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
         if (model.fieldSchemas != null) {
             for (FieldSchema fieldSchema : model.fieldSchemas) {

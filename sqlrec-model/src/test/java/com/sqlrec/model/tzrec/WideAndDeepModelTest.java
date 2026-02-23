@@ -1,6 +1,6 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.model.common.Model;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelTrainConf;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +12,7 @@ public class WideAndDeepModelTest {
     public void testGenModelTrainK8sYaml() {
         WideAndDeepModel modelController = new WideAndDeepModel();
 
-        Model model = new Model();
+        ModelConfig model = new ModelConfig();
         model.modelName = "test-model";
 
         ModelTrainConf trainConf = new ModelTrainConf();

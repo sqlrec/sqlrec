@@ -28,9 +28,16 @@ public class SchemaUtils {
             return null;
         }
         String valueStr = value.toString();
-        if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
-            return valueStr.substring(1, valueStr.length() - 1);
+        return removeQuotes(valueStr);
+    }
+
+    public static String removeQuotes(String value) {
+        if (value == null) {
+            return null;
         }
-        return valueStr;
+        if (value.startsWith("'") && value.endsWith("'")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 }

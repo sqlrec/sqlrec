@@ -1,10 +1,10 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.model.common.Model;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelTrainConf;
 
 public class ShellUtils {
-    public static String genTrainModelShell(Model model, ModelTrainConf trainConf) {
+    public static String genTrainModelShell(ModelConfig model, ModelTrainConf trainConf) {
         String shell = "#!/bin/bash\n" +
                 "set -ex\n" +
                 "\n" +

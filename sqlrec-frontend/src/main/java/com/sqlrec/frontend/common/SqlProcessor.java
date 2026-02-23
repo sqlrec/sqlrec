@@ -7,11 +7,13 @@ import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Model;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
-import com.sqlrec.entity.Model;
-import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.frontend.service.Utils;
+import com.sqlrec.model.ModelManager;
+import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
@@ -96,6 +98,13 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlCreateApi) {
             SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
             return Utils.convertMsgToResult("create api success", "msg");
+        }
+
+        if (sqlNode instanceof SqlCreateModel) {
+            SqlCreateModel createModel = (SqlCreateModel) sqlNode;
+            ModelConfig model = ModelManager.getAndCheckModel(createModel);
+            saveModel(createModel);
+            return Utils.convertMsgToResult("create model success", "msg");
         }
 
         if (sqlNode instanceof SqlDropModel) {
@@ -326,6 +335,19 @@ public class SqlProcessor {
             DbUtils.upsertSqlApi(sqlApi);
         } else {
             DbUtils.insertSqlApi(sqlApi);
+        }
+    }
+
+    public static void saveModel(SqlCreateModel sqlCreateModel) {
+        Model model = new Model();
+        model.setName(sqlCreateModel.getModelName().getSimple());
+        model.setDdl(sqlCreateModel.toString());
+        model.setCreatedAt(System.currentTimeMillis());
+        model.setUpdatedAt(System.currentTimeMillis());
+        if (sqlCreateModel.isIfNotExists()) {
+            DbUtils.insertModel(model);
+        } else {
+            DbUtils.upsertModel(model);
         }
     }
 }
