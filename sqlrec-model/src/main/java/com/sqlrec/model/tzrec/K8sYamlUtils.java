@@ -74,6 +74,9 @@ public class K8sYamlUtils {
                                         add(new EnvVarBuilder().withName("MASTER_PORT").withValue(String.valueOf(masterPort)).build());
                                         add(new EnvVarBuilder().withName("NNODES").withValue(String.valueOf(nnodes)).build());
                                         add(new EnvVarBuilder().withName("NPROC_PER_NODE").withValue(String.valueOf(nprocPerNode)).build());
+                                        add(new EnvVarBuilder().withName("USE_FSSPEC").withValue(Config.USE_FSSPEC.getDefaultValue()).build());
+                                        add(new EnvVarBuilder().withName("USE_SPAWN_MULTI_PROCESS").withValue(Config.USE_SPAWN_MULTI_PROCESS.getDefaultValue()).build());
+                                        add(new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getDefaultValue()).build());
                                     }}
                                 )
                                 .addNewVolumeMount()

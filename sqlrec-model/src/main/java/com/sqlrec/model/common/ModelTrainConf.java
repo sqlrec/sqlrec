@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Map;
 
 public class ModelTrainConf {
-    public String name;
+    public String id;
+    public String modelName;
+    public String checkpointName;
     public String modelDir;
     public String baseModelDir;
     public List<String> trainDataPaths;

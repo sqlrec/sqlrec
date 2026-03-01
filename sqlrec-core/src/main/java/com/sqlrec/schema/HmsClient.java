@@ -9,6 +9,7 @@ import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class HmsClient {
     private static volatile HiveMetaStoreClient client;
@@ -61,5 +62,19 @@ public class HmsClient {
             String function
     ) throws TException {
         return getClient().getFunction(database, function);
+    }
+
+    // get all partition paths by database, table and partition filter
+    public synchronized static List<String> getPartitionPaths(
+            String database,
+            String table,
+            String partitionFilter
+    ) throws Exception {
+        List<org.apache.hadoop.hive.metastore.api.Partition> partitions = getClient().listPartitionsByFilter(
+                database, table, partitionFilter, (short) -1
+        );
+        return partitions.stream()
+                .map(partition -> partition.getSd().getLocation())
+                .collect(Collectors.toList());
     }
 }

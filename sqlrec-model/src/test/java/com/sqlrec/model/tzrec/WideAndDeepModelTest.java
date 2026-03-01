@@ -16,7 +16,7 @@ public class WideAndDeepModelTest {
         model.modelName = "test-model";
 
         ModelTrainConf trainConf = new ModelTrainConf();
-        trainConf.name = "test-train-conf";
+        trainConf.id = "test-train-conf";
         trainConf.params = new java.util.HashMap<>();
 
         String k8sYaml = modelController.genModelTrainK8sYaml(model, trainConf);

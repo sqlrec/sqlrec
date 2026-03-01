@@ -106,7 +106,7 @@ public class CompileManager {
         return NormalSqlCompiler.getNormalSqlBindable(sqlStr, schema, defaultSchema);
     }
 
-    private static String getSqlStr(SqlNode sqlNode) {
+    public static String getSqlStr(SqlNode sqlNode) {
         return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 

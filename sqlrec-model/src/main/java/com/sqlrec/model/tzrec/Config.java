@@ -64,4 +64,16 @@ public class Config {
     public static final ConfigOption<Integer> MASTER_PORT = new ConfigOption<>(
             "master_port",
             29500, "Master port for distributed training", null, Integer.class);
+
+    public static final ConfigOption<String> USE_FSSPEC = new ConfigOption<>(
+            "USE_FSSPEC",
+            "1", "Use fsspec", null, String.class);
+
+    public static final ConfigOption<String> USE_SPAWN_MULTI_PROCESS = new ConfigOption<>(
+            "USE_SPAWN_MULTI_PROCESS",
+            "1", "Use spawn multi process", null, String.class);
+
+    public static final ConfigOption<String> USE_FARM_HASH_TO_BUCKETIZE = new ConfigOption<>(
+            "USE_FARM_HASH_TO_BUCKETIZE",
+            "true", "Use farm hash to bucketize", null, String.class);
 }

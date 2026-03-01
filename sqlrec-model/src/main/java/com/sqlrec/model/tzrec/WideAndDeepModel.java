@@ -22,8 +22,8 @@ public class WideAndDeepModel implements ModelController {
         String pipelineConfig = PipelineConfigUtils.generateTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
 
-        String configMapName = trainConf.name + "-cm";
-        String jobName = trainConf.name + "-job";
+        String configMapName = trainConf.id + "-cm";
+        String jobName = trainConf.id + "-job";
         String serviceName = jobName + "-headless";
         int nnodes = Config.NNODES.getValue(trainConf.params);
         int nprocPerNode = Config.NPROC_PER_NODE.getValue(trainConf.params);

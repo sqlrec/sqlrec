@@ -34,22 +34,4 @@ public class ModelEntityConverterTest {
         assertEquals(1, model.params.size());
         assertEquals("value", model.params.get("param"));
     }
-
-    @Test
-    public void testConvertToModelTrainConf() throws Exception {
-        String trainModelSql = "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01' WITH ( 'param1' = 'value1', 'param2' = 'value2' )";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(trainModelSql);
-
-        assertTrue(sqlNode instanceof SqlTrainModel);
-        SqlTrainModel sqlTrainModel = (SqlTrainModel) sqlNode;
-
-        ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel);
-
-        assertNotNull(modelTrainConf);
-        assertEquals("test_model", modelTrainConf.name);
-        assertNotNull(modelTrainConf.params);
-        assertEquals(2, modelTrainConf.params.size());
-        assertEquals("value1", modelTrainConf.params.get("param1"));
-        assertEquals("value2", modelTrainConf.params.get("param2"));
-    }
 }

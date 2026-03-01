@@ -1,8 +1,11 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.k8s.K8sManager;
+import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.schema.HmsClient;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.SchemaUtils;
@@ -10,13 +13,11 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
+import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class ModelEntityConverter {
     private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
@@ -29,10 +30,35 @@ public class ModelEntityConverter {
         return model;
     }
 
-    public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel) {
+    public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = new ModelTrainConf();
-        modelTrainConf.name = sqlTrainModel.getModelName().toString();
+        modelTrainConf.modelName = sqlTrainModel.getModelName().toString();
+        modelTrainConf.checkpointName = sqlTrainModel.getCheckpoint().toString();
+        modelTrainConf.modelDir = ModelEntityConverter.getModelCheckpointPath(
+                modelTrainConf.modelName, modelTrainConf.checkpointName);
+        if (sqlTrainModel.getExistingCheckpoint() != null) {
+            modelTrainConf.baseModelDir = ModelEntityConverter.getModelCheckpointPath(
+                    modelTrainConf.modelName, sqlTrainModel.getExistingCheckpoint().toString());
+        }
         modelTrainConf.params = convertPropertyList(sqlTrainModel.getPropertyList());
+        modelTrainConf.id = K8sManager.convertToValidK8sName(modelTrainConf.modelName + "-" + modelTrainConf.checkpointName);
+
+        String db = defaultSchema;
+        String table = null;
+        String partitionFilter = "";
+        if (sqlTrainModel.getWhereCondition() != null) {
+            partitionFilter = sqlTrainModel.getWhereCondition().toString();
+        }
+        if (sqlTrainModel.getDataSource().isSimple()) {
+            table = sqlTrainModel.getDataSource().toString();
+        } else {
+            db = sqlTrainModel.getDataSource().getComponent(0).toString();
+            table = sqlTrainModel.getDataSource().getComponent(1).toString();
+        }
+        List<String> partitionPaths = HmsClient.getPartitionPaths(db, table, partitionFilter);
+        partitionPaths = fixPathProtocol(partitionPaths);
+        modelTrainConf.trainDataPaths = partitionPaths;
+
         return modelTrainConf;
     }
 
@@ -81,5 +107,37 @@ public class ModelEntityConverter {
             }
         }
         return params;
+    }
+
+    public static String getModelCheckpointPath(String modelName, String checkpoint) {
+        String modelBasePath = ModelConfigs.MODEL_BASE_PATH.getValue();
+        log.info("MODEL_BASE_PATH: {}", modelBasePath);
+
+        String fullPath = modelBasePath;
+        if (!fullPath.endsWith("/")) {
+            fullPath += "/";
+        }
+        fullPath += modelName + "/" + checkpoint;
+
+        List<String> fixedPaths = fixPathProtocol(Collections.singletonList(fullPath));
+        return fixedPaths.get(0);
+    }
+
+    public static List<String> fixPathProtocol(List<String> partitionPaths) {
+        String defaultFS = null;
+        List<String> r = new ArrayList<>();
+        for (String path : partitionPaths) {
+            if (!path.contains(":")) {
+                if (defaultFS == null) {
+                    Configuration hadoopConf = new Configuration();
+                    defaultFS = hadoopConf.get("fs.defaultFS", "hdfs:///");
+                    log.info("Default filesystem: {}", defaultFS);
+                }
+                r.add(defaultFS + path);
+            } else {
+                r.add(path);
+            }
+        }
+        return r;
     }
 }
