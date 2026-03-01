@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sqlrec
+  labels:
+    app: sqlrec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sqlrec
+  template:
+    metadata:
+      labels:
+        app: sqlrec
+    spec:
+      serviceAccountName: sqlrec
+      containers:
+        - name: sqlrec
+          image: sqlrec/sqlrec:latest
+          env:
+            - name: SERVICE_NAME
+              value: sqlrec
+            - name: ENABLE_REST_SERVER
+              value: "true"
+            - name: ENABLE_THRIFT_SERVER
+              value: "true"
+            - name: MODEL_BASE_PATH
+              value: /user/sqlrec/models
+            - name: JAVA_HOME
+              value: ${JAVA_HOME}
+            - name: HADOOP_HOME
+              value: ${HADOOP_HOME}
+            - name: CLASSPATH
+              value: ${CLASSPATH}
+            - name: HADOOP_CONF_DIR
+              value: ${HADOOP_CONF_DIR}
+            - name: CLIENT_DIR
+              value: ${CLIENT_DIR}
+            - name: CLIENT_PV_NAME
+              value: ${CLIENT_PV_NAME}
+            - name: CLIENT_PVC_NAME
+              value: ${CLIENT_PVC_NAME}
+            - name: SQLREC_DEBUG_PORT
+              value: ${SQLREC_DEBUG_PORT}
+            - name: SQLREC_THRIFT_PORT
+              value: ${SQLREC_THRIFT_PORT}
+            - name: SQLREC_REST_PORT
+              value: ${SQLREC_REST_PORT}
+            - name: JAVA_TOOL_OPTIONS
+              value: "${JAVA_TOOL_OPTIONS}"
+          ports:
+            - containerPort: ${SQLREC_THRIFT_PORT}
+              name: thrift
+            - containerPort: ${SQLREC_REST_PORT}
+              name: rest
+            - containerPort: ${SQLREC_DEBUG_PORT}
+              name: debug
+          volumeMounts:
+            - mountPath: ${CLIENT_DIR}
+              name: client-dir
+      volumes:
+        - name: client-dir
+          persistentVolumeClaim:
+            claimName: ${CLIENT_PVC_NAME}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlrec
+spec:
+  type: NodePort
+  selector:
+    app: sqlrec
+  ports:
+    - protocol: TCP
+      port: ${SQLREC_THRIFT_PORT}
+      targetPort: ${SQLREC_THRIFT_PORT}
+      nodePort: ${SQLREC_THRIFT_PORT}
+      name: thrift
+    - protocol: TCP
+      port: ${SQLREC_REST_PORT}
+      targetPort: ${SQLREC_REST_PORT}
+      nodePort: ${SQLREC_REST_PORT}
+      name: rest
+    - protocol: TCP
+      port: ${SQLREC_DEBUG_PORT}
+      targetPort: ${SQLREC_DEBUG_PORT}
+      nodePort: ${SQLREC_DEBUG_PORT}
+      name: debug

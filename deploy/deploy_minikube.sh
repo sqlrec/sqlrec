@@ -59,6 +59,9 @@ minikube start \
   --ports="${HDFS_DATANODE_PORT}:${HDFS_DATANODE_PORT}" \
   --ports="${HDFS_NAMENODE_HTTP_PORT}:${HDFS_NAMENODE_HTTP_PORT}" \
   --ports="${HDFS_DATANODE_HTTP_PORT}:${HDFS_DATANODE_HTTP_PORT}" \
+  --ports="${SQLREC_DEBUG_PORT}:${SQLREC_DEBUG_PORT}" \
+  --ports="${SQLREC_THRIFT_PORT}:${SQLREC_THRIFT_PORT}" \
+  --ports="${SQLREC_REST_PORT}:${SQLREC_REST_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

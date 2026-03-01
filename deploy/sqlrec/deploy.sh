@@ -13,3 +13,6 @@ bash ${dir}/../postgresql/deploy.sh sqlrec ${SQLREC_POSTGRESQL_PORT} ${SQLREC_PO
 
 export PGPASSWORD=${SQLREC_POSTGRESQL_PASSWORD}
 psql -h localhost -p ${SQLREC_POSTGRESQL_PORT} -U ${SQLREC_POSTGRESQL_USER} -d sqlrec -f ${dir}/../sql/master.sql
+
+envsubst < ${dir}/sqlrec.yaml > ${dir}/sqlrec.yaml.tmp
+kubectl apply -f ${dir}/sqlrec.yaml.tmp -n "${NAMESPACE}"
