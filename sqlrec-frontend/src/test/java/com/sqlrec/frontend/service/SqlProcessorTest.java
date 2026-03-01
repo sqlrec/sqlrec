@@ -1,11 +1,11 @@
 package com.sqlrec.frontend.service;
 
 
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.DataContext;
@@ -19,6 +19,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+@Tag("integration")
 public class SqlProcessorTest {
     @Test
     public void testSqlProcessor() throws Exception {
