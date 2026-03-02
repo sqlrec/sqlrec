@@ -7,4 +7,6 @@ if ! docker inspect registry &> /dev/null; then
                -v ${dir}/config.yml:/etc/docker/registry/config.yml \
                -v ${LOCAL_REGISTRY_DIR}:/var/lib/registry \
                registry:2
+else
+  echo 'skip install docker registry'
 fi

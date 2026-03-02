@@ -15,7 +15,7 @@ public class Config {
             "sqlrec/tzrec", "Docker image", null, String.class);
     public static final ConfigOption<String> VERSION = new ConfigOption<>(
             "version",
-            "1.0-cpu", "Docker image version", null, String.class);
+            "0.1.0-cpu", "Docker image version", null, String.class);
 
     // Training configuration
     public static final ConfigOption<Double> SPARSE_LR = new ConfigOption<>(

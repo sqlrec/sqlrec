@@ -17,7 +17,7 @@ spec:
       serviceAccountName: sqlrec
       containers:
         - name: sqlrec
-          image: sqlrec/sqlrec:latest
+          image: sqlrec/sqlrec:${SQLREC_VERSION}
           env:
             - name: SERVICE_NAME
               value: sqlrec
@@ -32,9 +32,7 @@ spec:
             - name: HADOOP_HOME
               value: ${HADOOP_HOME}
             - name: CLASSPATH
-              value: ${CLASSPATH}
-            - name: HADOOP_CONF_DIR
-              value: ${HADOOP_CONF_DIR}
+              value: "${CLASSPATH}"
             - name: CLIENT_DIR
               value: ${CLIENT_DIR}
             - name: CLIENT_PV_NAME
@@ -42,13 +40,29 @@ spec:
             - name: CLIENT_PVC_NAME
               value: ${CLIENT_PVC_NAME}
             - name: SQLREC_DEBUG_PORT
-              value: ${SQLREC_DEBUG_PORT}
+              value: "${SQLREC_DEBUG_PORT}"
             - name: SQLREC_THRIFT_PORT
-              value: ${SQLREC_THRIFT_PORT}
+              value: "${SQLREC_THRIFT_PORT}"
             - name: SQLREC_REST_PORT
-              value: ${SQLREC_REST_PORT}
+              value: "${SQLREC_REST_PORT}"
             - name: JAVA_TOOL_OPTIONS
               value: "${JAVA_TOOL_OPTIONS}"
+            - name: META_DB_URL
+              value: jdbc:postgresql://${NODE_IP}:${SQLREC_POSTGRESQL_PORT}/sqlrec?sslmode=disable
+            - name: META_DB_USER
+              value: "${SQLREC_POSTGRESQL_USER}"
+            - name: META_DB_PASSWORD
+              value: "${SQLREC_POSTGRESQL_PASSWORD}"
+            - name: META_DB_DRIVER
+              value: org.postgresql.Driver
+            - name: HIVE_METASTORE_URI
+              value: thrift://${NODE_IP}:${HMS_PORT}
+            - name: FLINK_SQL_GATEWAY_ADDRESS
+              value: ${NODE_IP}
+            - name: FLINK_SQL_GATEWAY_PORT
+              value: "${SQL_GATEWAY_PORT}"
+            - name: FLINK_SQL_GATEWAY_CONNECT_TIMEOUT
+              value: "600000"
           ports:
             - containerPort: ${SQLREC_THRIFT_PORT}
               name: thrift

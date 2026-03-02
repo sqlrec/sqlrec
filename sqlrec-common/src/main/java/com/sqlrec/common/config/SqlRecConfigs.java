@@ -18,14 +18,14 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<Integer> THRIFT_SERVER_PORT = new ConfigOption<>(
             "THRIFT_SERVER_PORT",
-            8000,
+            30300,
             "port of thrift server",
             null,
             Integer.class
     );
     public static final ConfigOption<Integer> REST_SERVER_PORT = new ConfigOption<>(
             "REST_SERVER_PORT",
-            8001,
+            30301,
             "port of rest server",
             null,
             Integer.class
@@ -80,7 +80,7 @@ public class SqlRecConfigs {
     // dependency service config
     public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
             "DEFAULT_TEST_IP",
-            "192.168.1.5",
+            "127.0.0.1",
             "default test ip",
             null,
             String.class

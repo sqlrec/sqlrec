@@ -40,6 +40,7 @@ minikube start \
  --driver=docker \
   --cpus='no-limit' \
   --memory='no-limit' \
+  --disk-size='256gb' \
   --mount \
   --mount-string="${DATA_DIR}:${DATA_DIR}" \
   --ports="${SQL_GATEWAY_PORT}:${SQL_GATEWAY_PORT}" \
