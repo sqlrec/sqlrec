@@ -7,14 +7,11 @@ WORKDIR /app
 # Copy source code
 COPY . .
 
-# Download all dependencies
-RUN mvn dependency:go-offline -B
-
 # Build the project (skip tests to speed up build)
-RUN mvn clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2,rw mvn clean package -DskipTests
 
 # Stage 2: Runtime stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre
 
 # Set working directory
 WORKDIR /app
