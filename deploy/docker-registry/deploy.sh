@@ -1,6 +1,7 @@
 #!/bin/bash
 set -ex
 dir=$(dirname $(realpath $0))
+source ${dir}/../env.sh
 
 if ! docker inspect registry &> /dev/null; then
   docker run -d -p ${IMAGE_REGISTRY_PORT}:5000 --restart=always --name registry \

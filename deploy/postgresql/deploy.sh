@@ -3,6 +3,7 @@ set -ex
 shopt -s expand_aliases
 source ~/.bash_profile
 dir=$(dirname $(realpath $0))
+source ${dir}/../env.sh
 
 export POSTGRESQL_DB=$1
 export POSTGRESQL_PORT=$2
