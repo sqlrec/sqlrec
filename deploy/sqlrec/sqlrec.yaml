@@ -25,6 +25,8 @@ spec:
               value: "true"
             - name: ENABLE_THRIFT_SERVER
               value: "true"
+            - name: NAMESPACE
+              value: ${NAMESPACE}
             - name: MODEL_BASE_PATH
               value: /user/sqlrec/models
             - name: JAVA_HOME

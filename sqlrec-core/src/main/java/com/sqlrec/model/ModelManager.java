@@ -75,7 +75,13 @@ public class ModelManager {
     }
 
     public static String injectPodConfig(String k8sYaml, ModelConfig model, ModelTrainConf modelTrainConf) {
-        String namespace = ModelConfigs.NAMESPACE.getValue();
+        String namespace;
+        if (modelTrainConf.params.containsKey(ModelConfigs.NAMESPACE.getKey())) {
+            namespace = modelTrainConf.params.get(ModelConfigs.NAMESPACE.getKey());
+        } else {
+            namespace = ModelConfigs.NAMESPACE.getValue();
+        }
+
         k8sYaml = K8sManager.injectNamespaceIntoYaml(k8sYaml, namespace);
 
         Map<String, String> envVars = new HashMap<>();
