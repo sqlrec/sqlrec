@@ -43,17 +43,17 @@ public class ModelManager {
     public static Checkpoint trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
-        Model model = DbUtils.getModel(modelTrainConf.modelName);
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(model.getDdl());
+        Model modelEntity = DbUtils.getModel(modelTrainConf.modelName);
+        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelEntity.getDdl());
         if (!(modelSqlNode instanceof SqlCreateModel)) {
-            throw new IllegalArgumentException("Invalid model DDL: " + model.getDdl());
+            throw new IllegalArgumentException("Invalid model DDL: " + modelEntity.getDdl());
         }
         ModelConfig modelConfig = ModelEntityConverter.convertToModel((SqlCreateModel) modelSqlNode);
 
-        String modelName = ModelConfigs.MODEL.getValue(modelConfig.params);
-        ModelController modelController = ModelControllerFactory.getModelController(modelName);
+        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
+        ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelAlgorithmName);
         }
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
@@ -61,7 +61,7 @@ public class ModelManager {
         K8sManager.applyYaml(k8sYaml);
 
         Checkpoint checkpoint = new Checkpoint();
-        checkpoint.setModelName(modelName);
+        checkpoint.setModelName(modelTrainConf.modelName);
         checkpoint.setCheckpointName(modelTrainConf.checkpointName);
         checkpoint.setYaml(k8sYaml);
         checkpoint.setDdl(CompileManager.getSqlStr(sqlTrainModel));
@@ -69,8 +69,8 @@ public class ModelManager {
         checkpoint.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
         checkpoint.setCreatedAt(System.currentTimeMillis());
         checkpoint.setUpdatedAt(System.currentTimeMillis());
-        DbUtils.upsertCheckpoint(checkpoint);
 
+        DbUtils.upsertCheckpoint(checkpoint);
         return checkpoint;
     }
 

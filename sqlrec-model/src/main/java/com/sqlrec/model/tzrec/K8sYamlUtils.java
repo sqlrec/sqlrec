@@ -66,7 +66,7 @@ public class K8sYamlUtils {
                             .addNewContainer()
                                 .withName("tzrec-job")
                                 .withImage(image)
-                                .withCommand("sh", "-c", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
+                                .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
                                 .withEnv(
                                     new ArrayList<EnvVar>() {{
                                         add(new EnvVarBuilder().withName("JOB_NAME").withValue(jobName).build());

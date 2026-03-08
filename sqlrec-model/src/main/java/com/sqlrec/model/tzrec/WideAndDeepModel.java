@@ -19,7 +19,7 @@ public class WideAndDeepModel implements ModelController {
 
     @Override
     public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
-        String pipelineConfig = PipelineConfigUtils.generateTrainConfig(model, trainConf);
+        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
 
         String configMapName = trainConf.id + "-cm";

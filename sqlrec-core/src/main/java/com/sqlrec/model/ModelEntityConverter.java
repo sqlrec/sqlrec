@@ -33,12 +33,14 @@ public class ModelEntityConverter {
     public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = new ModelTrainConf();
         modelTrainConf.modelName = sqlTrainModel.getModelName().toString();
-        modelTrainConf.checkpointName = sqlTrainModel.getCheckpoint().toString();
+        modelTrainConf.checkpointName = SchemaUtils.removeQuotes(sqlTrainModel.getCheckpoint().toString());
         modelTrainConf.modelDir = ModelEntityConverter.getModelCheckpointPath(
                 modelTrainConf.modelName, modelTrainConf.checkpointName);
         if (sqlTrainModel.getExistingCheckpoint() != null) {
             modelTrainConf.baseModelDir = ModelEntityConverter.getModelCheckpointPath(
-                    modelTrainConf.modelName, sqlTrainModel.getExistingCheckpoint().toString());
+                    modelTrainConf.modelName,
+                    SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString())
+            );
         }
         modelTrainConf.params = convertPropertyList(sqlTrainModel.getPropertyList());
         modelTrainConf.id = K8sManager.convertToValidK8sName(modelTrainConf.modelName + "-" + modelTrainConf.checkpointName);

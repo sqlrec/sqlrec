@@ -6,6 +6,7 @@ import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Checkpoint;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -75,7 +76,7 @@ public interface DbMapper {
     List<Checkpoint> getCheckpointListByModelName(String modelName);
 
     @Select("SELECT * FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
-    Checkpoint getCheckpoint(String modelName, String checkpointName);
+    Checkpoint getCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);
 
     @Insert("INSERT INTO checkpoint " +
             "(model_name, checkpoint_name, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +
@@ -84,7 +85,7 @@ public interface DbMapper {
     void upsertCheckpoint(Checkpoint checkpoint);
 
     @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
-    void deleteCheckpoint(String modelName, String checkpointName);
+    void deleteCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);
 
     @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName}")
     void deleteCheckpointByModelName(String modelName);
