@@ -7,7 +7,7 @@ import com.sqlrec.common.config.ConfigOption;
  */
 public class Config {
     public static final String SHELL_DIR = "/data";
-    public static final String PIPELINE_CONFIG_NAME = "pipeline_config.json";
+    public static final String PIPELINE_CONFIG_NAME = "pipeline.config";
     public static final String START_SHELL_NAME = "start.sh";
 
     public static final ConfigOption<String> IMAGE = new ConfigOption<>(
