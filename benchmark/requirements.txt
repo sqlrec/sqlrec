@@ -1,2 +1,4 @@
 redis
 pymilvus==2.6.3
+pandas
+pyarrow

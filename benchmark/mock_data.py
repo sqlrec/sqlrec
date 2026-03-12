@@ -3,6 +3,7 @@ import redis
 import random
 import time
 import json
+import pandas as pd
 
 # Redis connection configuration
 REDIS_HOST = os.environ.get('NODE_IP', 'localhost')  # Priority to NODE_IP environment variable
@@ -249,6 +250,50 @@ def generate_itemcf_i2i(redis_client, total_items):
         pipeline.execute()
         print(f"Processed items {start_id}-{end_id} for item similarity")
 
+def generate_behavior_sample_parquet(output_dir, sample_size=1000):
+    """Generate behavior sample data as parquet file"""
+    print(f"\nGenerating {sample_size} behavior sample records as parquet...")
+
+    data = []
+    base_time = int(time.time() * 1000)
+    day_ms = 24 * 60 * 60 * 1000
+
+    for i in range(sample_size):
+        user_id = random.randint(0, TOTAL_USERS - 1)
+        item_id = random.randint(0, TOTAL_ITEMS - 1)
+
+        data.append({
+            'user_id': user_id,
+            'user_name': f"User{user_id}",
+            'user_country': random.choice(COUNTRIES),
+            'user_age': random.randint(18, 80),
+            'user_os': random.choice(OS_LIST),
+            'user_network': random.choice(NETWORK_LIST),
+            'item_id': item_id,
+            'item_name': f"Item{item_id}",
+            'item_price': round(random.uniform(0.99, 9999.99), 2),
+            'item_brand': random.choice(BRANDS),
+            'item_category1': random.choice(CATEGORIES1),
+            'item_category2': random.choice(CATEGORIES2[random.choice(CATEGORIES1)]),
+            'item_category3': f"Sub1",
+            'item_category4': f"Sub2",
+            'bhv_time': base_time - random.randint(0, 30 * day_ms),
+            'is_click': random.randint(0, 1),
+        })
+
+    df = pd.DataFrame(data)
+
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'behavior_sample.parquet')
+    
+    df['item_price'] = df['item_price'].astype('float32')
+    df['is_click'] = df['is_click'].astype('float32')
+    df.to_parquet(output_path, index=False)
+
+    print(f"Behavior sample parquet generated: {output_path}")
+    print(f"Total records: {len(df)}")
+    return output_path
+
 def main():
     print("=== Redis Data Generation for SQLRec Benchmark ===")
     print(f"Configuration: {TOTAL_USERS} users, {TOTAL_ITEMS} items")
@@ -262,6 +307,9 @@ def main():
     generate_category1_hot_items(redis_client, TOTAL_ITEMS)
     generate_user_recent_click(redis_client, TOTAL_USERS, TOTAL_ITEMS)  # Limit to 100k users
     generate_itemcf_i2i(redis_client, TOTAL_ITEMS)
+
+    parquet_output_dir = os.path.dirname(os.path.realpath(__file__))
+    generate_behavior_sample_parquet(parquet_output_dir, 1000)
 
     print("\n=== All Redis tables data generation completed successfully! ===")
 

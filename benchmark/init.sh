@@ -67,6 +67,20 @@ source ${dir}/.venv/bin/activate
 pip install -r ${dir}/requirements.txt
 python ${dir}/mock_data.py
 
+PARQUET_FILE="${dir}/behavior_sample.parquet"
+HDFS_WAREHOUSE_DIR="/user/hive/warehouse"
+TABLE_NAME="behavior_sample"
+PARTITION_DATE="dt=2024-01-01"
+if [ -f "$PARQUET_FILE" ]; then
+    echo "Uploading parquet file to HDFS..."
+    hdfs dfs -mkdir -p ${HDFS_WAREHOUSE_DIR}/${TABLE_NAME}/${PARTITION_DATE}
+    hdfs dfs -put -f ${PARQUET_FILE} ${HDFS_WAREHOUSE_DIR}/${TABLE_NAME}/${PARTITION_DATE}/
+    echo "Parquet file uploaded successfully"
+else
+    echo "Warning: Parquet file not found: ${PARQUET_FILE}"
+    exit 1
+fi
+hive -f ${dir}/init_hive.sql
 
 # Check if wrk is installed, install it if not (Debian system)
 if ! which wrk > /dev/null 2>&1; then
