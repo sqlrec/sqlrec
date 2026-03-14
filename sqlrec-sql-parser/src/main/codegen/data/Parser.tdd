@@ -568,7 +568,6 @@
     "SqlShowModel()"
     "SqlShowCreateModel()"
     "SqlShowCheckpoint()"
-    "SqlShowCreateCheckpoint()"
     "SqlDefineInputTable()"
     "SqlCallSqlFunction()"
     "SqlCache()"

@@ -233,13 +233,18 @@ SqlShowModel SqlShowModel() :
 SqlShowCreateModel SqlShowCreateModel() :
 {
     SqlIdentifier modelName = null;
+    SqlNode checkpoint = null;
 }
 {
     ( <DESCRIBE> | <DESC> )
     <MODEL>
     modelName = SimpleIdentifier()
+    [
+        <CHECKPOINT> <EQ>
+        checkpoint = StringLiteral()
+    ]
     {
-        return new SqlShowCreateModel(getPos(), modelName);
+        return new SqlShowCreateModel(getPos(), modelName, checkpoint);
     }
 }
 
@@ -253,22 +258,6 @@ SqlShowCheckpoint SqlShowCheckpoint() :
     modelName = SimpleIdentifier()
     {
         return new SqlShowCheckpoint(getPos(), modelName);
-    }
-}
-
-SqlShowCreateCheckpoint SqlShowCreateCheckpoint() :
-{
-    SqlIdentifier modelName = null;
-    SqlIdentifier checkpointName = null;
-}
-{
-    ( <DESCRIBE> | <DESC> )
-    <CHECKPOINT>
-    modelName = SimpleIdentifier()
-    <DOT>
-    checkpointName = SimpleIdentifier()
-    {
-        return new SqlShowCreateCheckpoint(getPos(), modelName, checkpointName);
     }
 }
 

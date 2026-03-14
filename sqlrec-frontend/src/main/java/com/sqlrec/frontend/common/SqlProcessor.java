@@ -21,6 +21,7 @@ import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.*;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -281,14 +282,29 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowCreateModel) {
             SqlShowCreateModel showCreateModel = (SqlShowCreateModel) sqlNode;
-            Model model = DbUtils.getModel(showCreateModel.getModelName().getSimple());
-            if (model == null) {
-                return Utils.convertMsgToResult(
-                        "model not exists: " + showCreateModel.getModelName().getSimple(),
-                        "error"
+            if (showCreateModel.hasCheckpoint()) {
+                String checkpointName = SchemaUtils.removeQuotes(showCreateModel.getCheckpoint().toString());
+                Checkpoint checkpoint = DbUtils.getCheckpoint(
+                        showCreateModel.getModelName().getSimple(),
+                        checkpointName
                 );
+                if (checkpoint == null) {
+                    return Utils.convertMsgToResult(
+                            "checkpoint not exists: " + checkpointName + " for model " + showCreateModel.getModelName().getSimple(),
+                            "error"
+                    );
+                }
+                return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
+            } else {
+                Model model = DbUtils.getModel(showCreateModel.getModelName().getSimple());
+                if (model == null) {
+                    return Utils.convertMsgToResult(
+                            "model not exists: " + showCreateModel.getModelName().getSimple(),
+                            "error"
+                    );
+                }
+                return Utils.convertMsgToResult(model.getDdl(), "create sql");
             }
-            return Utils.convertMsgToResult(model.getDdl(), "create sql");
         }
 
         if (sqlNode instanceof SqlShowCheckpoint) {
@@ -298,21 +314,6 @@ public class SqlProcessor {
                     checkpoints.stream().map(Checkpoint::getCheckpointName).collect(Collectors.toList()),
                     "checkpoint"
             );
-        }
-
-        if (sqlNode instanceof SqlShowCreateCheckpoint) {
-            SqlShowCreateCheckpoint showCreateCheckpoint = (SqlShowCreateCheckpoint) sqlNode;
-            Checkpoint checkpoint = DbUtils.getCheckpoint(
-                    showCreateCheckpoint.getModelName().getSimple(),
-                    showCreateCheckpoint.getCheckpointName().getSimple()
-            );
-            if (checkpoint == null) {
-                return Utils.convertMsgToResult(
-                        "checkpoint not exists: " + showCreateCheckpoint.getCheckpointName().getSimple() + " for model " + showCreateCheckpoint.getModelName().getSimple(),
-                        "error"
-                );
-            }
-            return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
         }
 
         return null;
