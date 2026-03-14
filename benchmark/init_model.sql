@@ -1,4 +1,5 @@
-CREATE TABLE IF NOT EXISTS `behavior_sample` (
+create model `test_model`
+(
  `user_id` BIGINT,
  `user_name` STRING,
  `user_country` STRING,
@@ -11,10 +12,15 @@ CREATE TABLE IF NOT EXISTS `behavior_sample` (
  `item_category1` STRING,
  `item_category2` STRING,
  `item_category3` STRING,
- `item_category4` STRING,
- `bhv_time` BIGINT,
- `is_click` FLOAT
-) PARTITIONED BY (`dt` STRING)
-    STORED AS PARQUET;
+ `item_category4` STRING
+)
+with (
+'model'='torch_easy_rec.wide_and_deep',
+'label_fields'='is_click'
+);
 
-ALTER TABLE `behavior_sample` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');
+train model test_model checkpoint='test' on behavior_sample
+with (
+'NAMESPACE'='sqlrec',
+'batch_size'='128'
+);

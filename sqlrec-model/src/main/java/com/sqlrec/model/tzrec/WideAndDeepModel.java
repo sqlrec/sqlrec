@@ -40,7 +40,7 @@ public class WideAndDeepModel implements ModelController {
         String serviceYaml = K8sYamlUtils.createHeadlessServiceYaml(jobName, serviceName, masterPort);
         
         String jobYaml = K8sYamlUtils.createJobYaml(
-                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort
+                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, trainConf.params
         );
 
         return K8sYamlUtils.mergeK8sYamls(configMapYaml, serviceYaml, jobYaml);

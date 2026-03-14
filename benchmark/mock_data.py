@@ -271,7 +271,6 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
             'user_network': random.choice(NETWORK_LIST),
             'item_id': item_id,
             'item_name': f"Item{item_id}",
-            'item_price': round(random.uniform(0.99, 9999.99), 2),
             'item_brand': random.choice(BRANDS),
             'item_category1': random.choice(CATEGORIES1),
             'item_category2': random.choice(CATEGORIES2[random.choice(CATEGORIES1)]),
@@ -285,8 +284,8 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, 'behavior_sample.parquet')
-    
-    df['item_price'] = df['item_price'].astype('float32')
+
+    df['user_age'] = df['user_age'].astype('int32')
     df['is_click'] = df['is_click'].astype('float32')
     df.to_parquet(output_path, index=False)
 
@@ -309,7 +308,7 @@ def main():
     generate_itemcf_i2i(redis_client, TOTAL_ITEMS)
 
     parquet_output_dir = os.path.dirname(os.path.realpath(__file__))
-    generate_behavior_sample_parquet(parquet_output_dir, 1000)
+    generate_behavior_sample_parquet(parquet_output_dir, 10000)
 
     print("\n=== All Redis tables data generation completed successfully! ===")
 

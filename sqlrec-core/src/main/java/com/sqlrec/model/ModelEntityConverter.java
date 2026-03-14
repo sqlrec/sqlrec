@@ -59,7 +59,7 @@ public class ModelEntityConverter {
         }
         List<String> partitionPaths = HmsClient.getPartitionPaths(db, table, partitionFilter);
         partitionPaths = fixPathProtocol(partitionPaths);
-        modelTrainConf.trainDataPaths = partitionPaths;
+        modelTrainConf.trainDataPaths = partitionPaths.stream().map(path -> path + "/*").toList();
 
         return modelTrainConf;
     }

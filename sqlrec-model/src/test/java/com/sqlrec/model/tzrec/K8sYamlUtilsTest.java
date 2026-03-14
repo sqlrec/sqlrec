@@ -35,7 +35,9 @@ public class K8sYamlUtilsTest {
         String jobName = "test-job";
         String configMapName = "test-configmap";
 
-        String yaml = K8sYamlUtils.createJobYaml(jobName, configMapName, "test-service", 1, 1, 29500);
+        String yaml = K8sYamlUtils.createJobYaml(
+                jobName, configMapName, "test-service", 1, 1, 29500, new HashMap<>()
+        );
         System.out.println(yaml);
     }
 
@@ -47,7 +49,9 @@ public class K8sYamlUtilsTest {
         String configMapYaml = K8sYamlUtils.createConfigMapYaml(configMapName, files);
 
         String jobName = "test-job";
-        String jobYaml = K8sYamlUtils.createJobYaml(jobName, configMapName, "test-service", 1, 1, 29500);
+        String jobYaml = K8sYamlUtils.createJobYaml(
+                jobName, configMapName, "test-service", 1, 1, 29500, new HashMap<>()
+        );
 
         String mergedYaml = K8sYamlUtils.mergeK8sYamls(configMapYaml, jobYaml);
         assertNotNull(mergedYaml);

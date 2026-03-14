@@ -81,7 +81,7 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(trainConf.params);
         int numWorkers = Config.NUM_WORKERS.getValue(trainConf.params);
-        String labelFields = Config.LABEL_FIELDS.getValue(trainConf.params);
+        String labelFields = Config.LABEL_FIELDS.getValue(model.params);
 
         config.append("data_config {\n");
         config.append("    batch_size: " + batchSize + "\n");
@@ -112,12 +112,17 @@ public class PipelineConfigUtils {
                 } else {
                     // Generate id_feature for categorical features
                     int numBuckets = Config.NUM_BUCKETS.getValue(model.params);
+                    int hashBucketSize = Config.HASH_BUCKET_SIZE.getValue(model.params);
                     int embeddingDim = Config.EMBEDDING_DIM.getValue(model.params);
                     config.append("feature_configs {\n");
                     config.append("    id_feature {\n");
                     config.append("        feature_name: \"").append(featureName).append("\"\n");
                     config.append("        expression: \"item:").append(featureName).append("\"\n");
-                    config.append("        num_buckets: ").append(numBuckets).append("\n");
+                    if (isIntFeature(fieldType)) {
+                        config.append("        num_buckets: ").append(numBuckets).append("\n");
+                    } else {
+                        config.append("        hash_bucket_size: ").append(hashBucketSize).append("\n");
+                    }
                     config.append("        embedding_dim: ").append(embeddingDim).append("\n");
                     config.append("    }\n");
                     config.append("}\n");
@@ -173,6 +178,11 @@ public class PipelineConfigUtils {
 
     private static boolean isNumericFeature(String fieldType) {
         return "float".equalsIgnoreCase(fieldType) || "double".equalsIgnoreCase(fieldType);
+    }
+
+    private static boolean isIntFeature(String fieldType) {
+        return "int".equalsIgnoreCase(fieldType) || "array<int>".equalsIgnoreCase(fieldType) ||
+                "bigint".equalsIgnoreCase(fieldType) || "array<bigint>".equalsIgnoreCase(fieldType);
     }
 
     private static List<String> getFeatures(ModelConfig model) {

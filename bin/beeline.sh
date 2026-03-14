@@ -7,4 +7,4 @@ dir=$(dirname $(realpath $0))
 export BASE_DIR=$(dirname ${dir})/deploy
 source ${dir}/../deploy/env.sh
 
-beeline -u "jdbc:hive2://127.0.0.1:${SQLREC_THRIFT_PORT}/default;auth=noSasl"
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" "$@"

@@ -1,11 +1,6 @@
 package com.sqlrec.model.tzrec;
 
-import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.EnvVarBuilder;
-import io.fabric8.kubernetes.api.model.Service;
-import io.fabric8.kubernetes.api.model.ServiceBuilder;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
@@ -48,7 +43,15 @@ public class K8sYamlUtils {
         return Serialization.asYaml(service);
     }
 
-    public static String createJobYaml(String jobName, String configMapName, String serviceName, int nnodes, int nprocPerNode, int masterPort) {
+    public static String createJobYaml(
+            String jobName,
+            String configMapName,
+            String serviceName,
+            int nnodes,
+            int nprocPerNode,
+            int masterPort,
+            Map<String, String> params
+    ) {
         String image = Config.IMAGE.getDefaultValue() + ":" + Config.VERSION.getDefaultValue();
 
         Job job = new JobBuilder()
@@ -67,6 +70,14 @@ public class K8sYamlUtils {
                                 .withName("tzrec-job")
                                 .withImage(image)
                                 .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
+                                .withResources(
+                                        new ResourceRequirementsBuilder()
+                                                .addToLimits("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
+                                                .addToLimits("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
+                                                .addToRequests("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
+                                                .addToRequests("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
+                                                .build()
+                                )
                                 .withEnv(
                                     new ArrayList<EnvVar>() {{
                                         add(new EnvVarBuilder().withName("JOB_NAME").withValue(jobName).build());
