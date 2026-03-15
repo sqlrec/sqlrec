@@ -49,7 +49,9 @@ public class TestSqlParse {
                 "show models",
                 "show checkpoints test_model",
                 "describe model test_model",
-                "describe model test_model checkpoint='checkpoint1'"
+                "describe model test_model checkpoint='checkpoint1'",
+                "export model test_model checkpoint='checkpoint_path'",
+                "export model test_model checkpoint='checkpoint_path' WITH ( 'param1' = 'value1', 'param2' = 'value2' )"
         );
 
         for (String sql : sqlList) {

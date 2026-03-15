@@ -276,7 +276,7 @@ SqlNode SqlCreateModel() : {
 
     ifNotExists = IfNotExistsOpt()
 
-    modelName = CompoundIdentifier()
+    modelName = SimpleIdentifier()
     [
         <LPAREN> { pos = getPos(); TableCreationContext ctx = new TableCreationContext();}
         TableColumn(ctx)
@@ -316,7 +316,7 @@ SqlNode SqlDropModel() :
 
     ifExists = IfExistsOpt()
 
-    modelName = CompoundIdentifier()
+    modelName = SimpleIdentifier()
     {
         return new com.sqlrec.sql.parser.SqlDropModel(startPos.plus(getPos()), modelName, ifExists);
     }
@@ -335,7 +335,7 @@ SqlNode SqlTrainModel() : {
     <TRAIN>
     <MODEL>
     pos = getPos()
-    modelName = CompoundIdentifier()
+    modelName = SimpleIdentifier()
     <CHECKPOINT> <EQ>
     checkpoint = StringLiteral()
     <ON>
@@ -360,6 +360,32 @@ SqlNode SqlTrainModel() : {
             dataSource,
             whereCondition,
             existingCheckpoint,
+            propertyList);
+    }
+}
+
+SqlNode SqlExportModel() : {
+    SqlParserPos pos;
+    SqlIdentifier modelName;
+    SqlNode checkpoint = null;
+    SqlNodeList propertyList = null;
+}
+{
+    <EXPORT>
+    <MODEL>
+    pos = getPos()
+    modelName = SimpleIdentifier()
+    <CHECKPOINT> <EQ>
+    checkpoint = StringLiteral()
+    [
+        <WITH>
+        propertyList = TableProperties()
+    ]
+    {
+        return new com.sqlrec.sql.parser.SqlExportModel(
+            pos.plus(getPos()),
+            modelName,
+            checkpoint,
             propertyList);
     }
 }
