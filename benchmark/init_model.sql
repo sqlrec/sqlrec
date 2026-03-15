@@ -24,3 +24,8 @@ with (
 'NAMESPACE'='sqlrec',
 'batch_size'='128'
 );
+
+export model test_model checkpoint='test' on behavior_sample
+with (
+'NAMESPACE'='sqlrec'
+);

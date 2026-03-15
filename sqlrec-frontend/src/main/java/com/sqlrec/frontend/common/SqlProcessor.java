@@ -114,6 +114,12 @@ public class SqlProcessor {
             return Utils.convertMsgToResult("train model success", "msg");
         }
 
+        if (sqlNode instanceof SqlExportModel) {
+            SqlExportModel exportModel = (SqlExportModel) sqlNode;
+            ModelManager.exportModel(exportModel, defaultSchema);
+            return Utils.convertMsgToResult("export model success", "msg");
+        }
+
         if (sqlNode instanceof SqlDropModel) {
             SqlDropModel dropModel = (SqlDropModel) sqlNode;
             String modelName = dropModel.getModelName().getSimple();

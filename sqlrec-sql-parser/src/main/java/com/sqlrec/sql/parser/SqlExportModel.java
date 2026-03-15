@@ -11,21 +11,35 @@ import java.util.ArrayList;
 public class SqlExportModel extends SqlCreate {
     private final SqlIdentifier modelName;
     private final SqlNode checkpoint;
+    private final SqlIdentifier dataSource;
+    private final SqlNode whereCondition;
     private final SqlNodeList propertyList;
 
     public SqlExportModel(
             SqlParserPos pos,
             SqlIdentifier modelName,
             SqlNode checkpoint,
+            SqlIdentifier dataSource,
+            SqlNode whereCondition,
             SqlNodeList propertyList) {
         super(pos, false);
         this.modelName = modelName;
         this.checkpoint = checkpoint;
+        this.dataSource = dataSource;
+        this.whereCondition = whereCondition;
         this.propertyList = propertyList;
     }
 
     public SqlIdentifier getModelName() {
         return modelName;
+    }
+
+    public SqlIdentifier getDataSource() {
+        return dataSource;
+    }
+
+    public SqlNode getWhereCondition() {
+        return whereCondition;
     }
 
     public SqlNode getCheckpoint() {
@@ -44,6 +58,16 @@ public class SqlExportModel extends SqlCreate {
         writer.print(" ");
         writer.print("checkpoint=");
         checkpoint.unparse(writer, leftPrec, rightPrec);
+        if (dataSource != null) {
+            writer.print(" ON");
+            writer.print(" ");
+            dataSource.unparse(writer, leftPrec, rightPrec);
+        }
+        if (whereCondition != null) {
+            writer.print(" WHERE");
+            writer.print(" ");
+            whereCondition.unparse(writer, leftPrec, rightPrec);
+        }
         if (propertyList != null && propertyList.size() > 0) {
             writer.print(" WITH (");
             for (int i = 0; i < propertyList.size(); i++) {
@@ -77,6 +101,8 @@ public class SqlExportModel extends SqlCreate {
                 pos,
                 modelName,
                 checkpoint,
+                dataSource,
+                whereCondition,
                 propertyList);
     }
 }

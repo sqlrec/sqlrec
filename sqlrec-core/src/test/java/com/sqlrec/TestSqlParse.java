@@ -51,6 +51,7 @@ public class TestSqlParse {
                 "describe model test_model",
                 "describe model test_model checkpoint='checkpoint1'",
                 "export model test_model checkpoint='checkpoint_path'",
+                "export model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01'",
                 "export model test_model checkpoint='checkpoint_path' WITH ( 'param1' = 'value1', 'param2' = 'value2' )"
         );
 

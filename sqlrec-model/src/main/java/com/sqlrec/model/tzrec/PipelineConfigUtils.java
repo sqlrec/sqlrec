@@ -2,6 +2,7 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.ModelConfig;
+import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
 
 import java.util.List;
@@ -12,20 +13,20 @@ import java.util.Map;
  */
 public class PipelineConfigUtils {
 
-    public static String generateWideAndDeepConfig(ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateWideAndDeepTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         // Add input paths
-        addInputPaths(config, trainConf);
+        addInputPaths(config, trainConf.trainDataPaths);
 
         // Add model directory
-        addModelDir(config, trainConf);
+        addModelDir(config, trainConf.modelDir);
 
         // Add train config
-        config.append(generateTrainConfig(model, trainConf));
+        config.append(generateTrainConfig(model, trainConf.params));
 
         // Add data config
-        config.append(generateDataConfig(model, trainConf));
+        config.append(generateDataConfig(model, trainConf.params));
 
         // Add feature configs
         config.append(generateFeatureConfigs(model));
@@ -36,8 +37,28 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    private static void addInputPaths(StringBuilder config, ModelTrainConf trainConf) {
-        List<String> trainDataPaths = trainConf.trainDataPaths;
+    public static String generateWideAndDeepExportConfig(ModelConfig model, ModelExportConf exportConf) {
+        StringBuilder config = new StringBuilder();
+
+        // Add input paths
+        addInputPaths(config, exportConf.trainDataPaths);
+
+        // Add model directory
+        addModelDir(config, exportConf.baseModelDir);
+
+        // Add data config
+        config.append(generateDataConfig(model, exportConf.params));
+
+        // Add feature configs
+        config.append(generateFeatureConfigs(model));
+
+        // Add model config
+        config.append(generateModelConfig(model));
+
+        return config.toString();
+    }
+
+    private static void addInputPaths(StringBuilder config, List<String> trainDataPaths) {
         if (trainDataPaths != null && !trainDataPaths.isEmpty()) {
             // Add train input path as comma-separated string
             String trainInputPath = String.join(",", trainDataPaths);
@@ -45,17 +66,17 @@ public class PipelineConfigUtils {
         }
     }
 
-    private static void addModelDir(StringBuilder config, ModelTrainConf trainConf) {
-        if (trainConf.modelDir != null) {
-            config.append("model_dir: \"").append(trainConf.modelDir).append("\"\n");
+    private static void addModelDir(StringBuilder config, String modelDir) {
+        if (modelDir != null) {
+            config.append("model_dir: \"").append(modelDir).append("\"\n");
         }
     }
 
-    public static String generateTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateTrainConfig(ModelConfig model, Map<String, String> params) {
         StringBuilder config = new StringBuilder();
-        double sparseLr = Config.SPARSE_LR.getValue(trainConf.params);
-        double denseLr = Config.DENSE_LR.getValue(trainConf.params);
-        int numEpochs = Config.NUM_EPOCHS.getValue(trainConf.params);
+        double sparseLr = Config.SPARSE_LR.getValue(params);
+        double denseLr = Config.DENSE_LR.getValue(params);
+        int numEpochs = Config.NUM_EPOCHS.getValue(params);
 
         config.append("train_config {\n");
         config.append("    sparse_optimizer {\n");
@@ -77,10 +98,10 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDataConfig(ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateDataConfig(ModelConfig model, Map<String, String> params) {
         StringBuilder config = new StringBuilder();
-        int batchSize = Config.BATCH_SIZE.getValue(trainConf.params);
-        int numWorkers = Config.NUM_WORKERS.getValue(trainConf.params);
+        int batchSize = Config.BATCH_SIZE.getValue(params);
+        int numWorkers = Config.NUM_WORKERS.getValue(params);
         String labelFields = Config.LABEL_FIELDS.getValue(model.params);
 
         config.append("data_config {\n");

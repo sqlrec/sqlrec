@@ -2,9 +2,13 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelController;
+import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class WideAndDeepModel implements ModelController {
     @Override
@@ -19,15 +23,34 @@ public class WideAndDeepModel implements ModelController {
 
     @Override
     public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
-        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepConfig(model, trainConf);
+        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
+        return genJobYaml(model, pipelineConfig, shell, trainConf.id, trainConf.params);
+    }
 
-        String configMapName = trainConf.id + "-cm";
-        String jobName = trainConf.id + "-job";
+    @Override
+    public List<String> getExportCheckpoints(ModelExportConf exportConf) {
+        List<String> exportCheckpointNames = new ArrayList<>();
+        String exportBaseName = exportConf.checkpointName + "_export";
+        exportCheckpointNames.add(exportBaseName);
+        return exportCheckpointNames;
+    }
+
+    @Override
+    public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
+        String exportDir = exportConf.baseModelDir + "_export";
+        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
+        String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
+        return genJobYaml(model, pipelineConfig, shell, exportConf.id, exportConf.params);
+    }
+
+    private String genJobYaml(ModelConfig model, String pipelineConfig, String shell, String id, Map<String, String> params) {
+        String configMapName = id + "-cm";
+        String jobName = id + "-job";
         String serviceName = jobName + "-headless";
-        int nnodes = Config.NNODES.getValue(trainConf.params);
-        int nprocPerNode = Config.NPROC_PER_NODE.getValue(trainConf.params);
-        int masterPort = Config.MASTER_PORT.getValue(trainConf.params);
+        int nnodes = Config.NNODES.getValue(params);
+        int nprocPerNode = Config.NPROC_PER_NODE.getValue(params);
+        int masterPort = Config.MASTER_PORT.getValue(params);
 
         String configMapYaml = K8sYamlUtils.createConfigMapYaml(
                 configMapName,
@@ -36,11 +59,11 @@ public class WideAndDeepModel implements ModelController {
                     put(Config.START_SHELL_NAME, shell);
                 }}
         );
-        
+
         String serviceYaml = K8sYamlUtils.createHeadlessServiceYaml(jobName, serviceName, masterPort);
-        
+
         String jobYaml = K8sYamlUtils.createJobYaml(
-                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, trainConf.params
+                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
         );
 
         return K8sYamlUtils.mergeK8sYamls(configMapYaml, serviceYaml, jobYaml);

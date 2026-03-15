@@ -368,6 +368,8 @@ SqlNode SqlExportModel() : {
     SqlParserPos pos;
     SqlIdentifier modelName;
     SqlNode checkpoint = null;
+    SqlIdentifier dataSource = null;
+    SqlNode whereCondition = null;
     SqlNodeList propertyList = null;
 }
 {
@@ -378,6 +380,14 @@ SqlNode SqlExportModel() : {
     <CHECKPOINT> <EQ>
     checkpoint = StringLiteral()
     [
+        <ON>
+        dataSource = CompoundIdentifier()
+    ]
+    [
+        <WHERE>
+        whereCondition = Expression(ExprContext.ACCEPT_NON_QUERY)
+    ]
+    [
         <WITH>
         propertyList = TableProperties()
     ]
@@ -386,6 +396,8 @@ SqlNode SqlExportModel() : {
             pos.plus(getPos()),
             modelName,
             checkpoint,
+            dataSource,
+            whereCondition,
             propertyList);
     }
 }

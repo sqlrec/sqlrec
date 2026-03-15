@@ -4,11 +4,14 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.model.common.ModelConfig;
+import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.sql.parser.SqlCreateModel;
+import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.SchemaUtils;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
@@ -44,24 +47,39 @@ public class ModelEntityConverter {
         }
         modelTrainConf.params = convertPropertyList(sqlTrainModel.getPropertyList());
         modelTrainConf.id = K8sManager.convertToValidK8sName(modelTrainConf.modelName + "-" + modelTrainConf.checkpointName);
+        modelTrainConf.trainDataPaths = getHivePartitionPaths(sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema);
 
+        return modelTrainConf;
+    }
+
+    public static ModelExportConf convertToModelExportConf(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
+        ModelExportConf modelExportConf = new ModelExportConf();
+        modelExportConf.modelName = sqlExportModel.getModelName().toString();
+        modelExportConf.checkpointName = SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString());
+        modelExportConf.baseModelDir = ModelEntityConverter.getModelCheckpointPath(
+                modelExportConf.modelName, modelExportConf.checkpointName);
+        modelExportConf.params = convertPropertyList(sqlExportModel.getPropertyList());
+        modelExportConf.id = K8sManager.convertToValidK8sName(modelExportConf.modelName + "-" + modelExportConf.checkpointName + "-export");
+        modelExportConf.trainDataPaths = getHivePartitionPaths(sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema);
+        return modelExportConf;
+    }
+
+    public static List<String> getHivePartitionPaths(SqlIdentifier dataSource, SqlNode whereCondition, String defaultSchema) throws Exception {
         String db = defaultSchema;
         String table = null;
         String partitionFilter = "";
-        if (sqlTrainModel.getWhereCondition() != null) {
-            partitionFilter = sqlTrainModel.getWhereCondition().toString();
+        if (whereCondition != null) {
+            partitionFilter = whereCondition.toString();
         }
-        if (sqlTrainModel.getDataSource().isSimple()) {
-            table = sqlTrainModel.getDataSource().toString();
+        if (dataSource.isSimple()) {
+            table = dataSource.toString();
         } else {
-            db = sqlTrainModel.getDataSource().getComponent(0).toString();
-            table = sqlTrainModel.getDataSource().getComponent(1).toString();
+            db = dataSource.getComponent(0).toString();
+            table = dataSource.getComponent(1).toString();
         }
         List<String> partitionPaths = HmsClient.getPartitionPaths(db, table, partitionFilter);
         partitionPaths = fixPathProtocol(partitionPaths);
-        modelTrainConf.trainDataPaths = partitionPaths.stream().map(path -> path + "/*").toList();
-
-        return modelTrainConf;
+        return partitionPaths.stream().map(path -> path + "/*").toList();
     }
 
     public static List<FieldSchema> convertFieldList(SqlNodeList fieldList) {
