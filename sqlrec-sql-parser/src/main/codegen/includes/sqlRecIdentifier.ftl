@@ -401,3 +401,82 @@ SqlNode SqlExportModel() : {
             propertyList);
     }
 }
+
+SqlNode SqlCreateService() : {
+    SqlParserPos pos;
+    boolean ifNotExists = false;
+    SqlIdentifier serviceName;
+    SqlIdentifier modelName;
+    SqlNode checkpoint = null;
+    SqlNodeList propertyList = null;
+}
+{
+    <CREATE>
+    <SERVICE>
+    pos = getPos()
+    ifNotExists = IfNotExistsOpt()
+    serviceName = SimpleIdentifier()
+    <ON>
+    <MODEL>
+    modelName = SimpleIdentifier()
+    [
+        <CHECKPOINT> <EQ>
+        checkpoint = StringLiteral()
+    ]
+    [
+        <WITH>
+        propertyList = TableProperties()
+    ]
+    {
+        return new com.sqlrec.sql.parser.SqlCreateService(
+            pos.plus(getPos()),
+            serviceName,
+            modelName,
+            checkpoint,
+            propertyList,
+            ifNotExists);
+    }
+}
+
+SqlShowService SqlShowService() :
+{
+}
+{
+    <SHOW>
+    <SERVICES>
+    {
+        return new SqlShowService(getPos());
+    }
+}
+
+SqlShowCreateService SqlShowCreateService() :
+{
+    SqlIdentifier serviceName = null;
+}
+{
+    ( <DESCRIBE> | <DESC> )
+    <SERVICE>
+    serviceName = SimpleIdentifier()
+    {
+        return new SqlShowCreateService(getPos(), serviceName);
+    }
+}
+
+SqlDropService SqlDropService() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier serviceName = null;
+    boolean ifExists = false;
+}
+{
+    <DROP>
+    <SERVICE>
+    { startPos = getPos(); }
+
+    ifExists = IfExistsOpt()
+
+    serviceName = SimpleIdentifier()
+    {
+        return new SqlDropService(startPos.plus(getPos()), serviceName, ifExists);
+    }
+}

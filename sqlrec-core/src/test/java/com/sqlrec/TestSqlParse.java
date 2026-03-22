@@ -52,7 +52,17 @@ public class TestSqlParse {
                 "describe model test_model checkpoint='checkpoint1'",
                 "export model test_model checkpoint='checkpoint_path'",
                 "export model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01'",
-                "export model test_model checkpoint='checkpoint_path' WITH ( 'param1' = 'value1', 'param2' = 'value2' )"
+                "export model test_model checkpoint='checkpoint_path' WITH ( 'param1' = 'value1', 'param2' = 'value2' )",
+                "create service my_service on model test_model",
+                "create service my_service on model test_model checkpoint='checkpoint_path'",
+                "create service my_service on model test_model with ('param1'='value1')",
+                "create service my_service on model test_model checkpoint='checkpoint_path' with ('param1'='value1', 'param2'='value2')",
+                "create service if not exists my_service on model test_model",
+                "create service if not exists my_service on model test_model checkpoint='checkpoint_path'",
+                "show services",
+                "describe service my_service",
+                "drop service my_service",
+                "drop service if exists my_service"
         );
 
         for (String sql : sqlList) {
