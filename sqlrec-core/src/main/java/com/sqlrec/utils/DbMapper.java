@@ -4,6 +4,7 @@ import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Service;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -89,4 +90,24 @@ public interface DbMapper {
 
     @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName}")
     void deleteCheckpointByModelName(String modelName);
+
+    @Select("SELECT * FROM service")
+    List<Service> getServiceList();
+
+    @Select("SELECT * FROM service WHERE name = #{name}")
+    Service getService(String name);
+
+    @Insert("INSERT INTO service " +
+            "(name, model_name, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
+            "VALUES (#{name}, #{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt})")
+    void insertService(Service service);
+
+    @Insert("INSERT INTO service " +
+            "(name, model_name, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
+            "VALUES (#{name}, #{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt}) " +
+            "ON CONFLICT (name) DO UPDATE SET model_name = #{modelName}, checkpoint_name = #{checkpointName}, ddl = #{ddl}, yaml = #{yaml}, url = #{url}, updated_at = #{updatedAt}")
+    void upsertService(Service service);
+
+    @Delete("DELETE FROM service WHERE name = #{name}")
+    void deleteService(String name);
 }

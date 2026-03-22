@@ -5,6 +5,7 @@ import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Service;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -146,5 +147,25 @@ public class DbUtils {
 
     public static void deleteCheckpointByModelName(String modelName) {
         executeVoid(dbMapper -> dbMapper.deleteCheckpointByModelName(modelName));
+    }
+
+    public static List<Service> getServiceList() {
+        return execute(DbMapper::getServiceList);
+    }
+
+    public static Service getService(String name) {
+        return execute(dbMapper -> dbMapper.getService(name));
+    }
+
+    public static void insertService(Service service) {
+        executeVoid(dbMapper -> dbMapper.insertService(service));
+    }
+
+    public static void upsertService(Service service) {
+        executeVoid(dbMapper -> dbMapper.upsertService(service));
+    }
+
+    public static void deleteService(String name) {
+        executeVoid(dbMapper -> dbMapper.deleteService(name));
     }
 }

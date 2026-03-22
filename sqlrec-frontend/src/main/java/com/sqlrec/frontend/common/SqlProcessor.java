@@ -11,6 +11,7 @@ import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.entity.Service;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.common.ModelConfig;
@@ -125,6 +126,18 @@ public class SqlProcessor {
             String modelName = dropModel.getModelName().getSimple();
             DbUtils.deleteModel(modelName);
             return Utils.convertMsgToResult("drop model success", "msg");
+        }
+
+        if (sqlNode instanceof SqlCreateService) {
+            SqlCreateService createService = (SqlCreateService) sqlNode;
+            saveService(createService);
+            return Utils.convertMsgToResult("create service success", "msg");
+        }
+
+        if (sqlNode instanceof SqlDropService) {
+            SqlDropService dropService = (SqlDropService) sqlNode;
+            DbUtils.deleteService(dropService.getServiceName().getSimple());
+            return Utils.convertMsgToResult("drop service success", "msg");
         }
 
         if (sqlNode instanceof SqlUseDatabase) {
@@ -322,6 +335,26 @@ public class SqlProcessor {
             );
         }
 
+        if (sqlNode instanceof SqlShowService) {
+            List<Service> services = DbUtils.getServiceList();
+            return Utils.convertStringListToResult(
+                    services.stream().map(Service::getName).collect(Collectors.toList()),
+                    "service"
+            );
+        }
+
+        if (sqlNode instanceof SqlShowCreateService) {
+            SqlShowCreateService showCreateService = (SqlShowCreateService) sqlNode;
+            Service service = DbUtils.getService(showCreateService.getServiceName().getSimple());
+            if (service == null) {
+                return Utils.convertMsgToResult(
+                        "service not exists: " + showCreateService.getServiceName().getSimple(),
+                        "error"
+                );
+            }
+            return Utils.convertMsgToResult(service.getDdl(), "create sql");
+        }
+
         return null;
     }
 
@@ -361,6 +394,26 @@ public class SqlProcessor {
             DbUtils.insertModel(model);
         } else {
             DbUtils.upsertModel(model);
+        }
+    }
+
+    public static void saveService(SqlCreateService sqlCreateService) {
+        Service service = new Service();
+        service.setName(sqlCreateService.getServiceName().getSimple());
+        service.setModelName(sqlCreateService.getModelName().getSimple());
+        if (sqlCreateService.getCheckpoint() != null) {
+            service.setCheckpointName(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString()));
+        }
+        service.setDdl(sqlCreateService.toString());
+        service.setYaml("");
+        service.setUrl("");
+        service.setCreatedAt(System.currentTimeMillis());
+        service.setUpdatedAt(System.currentTimeMillis());
+        service.setIfNotExists(sqlCreateService.isIfNotExists());
+        if (sqlCreateService.isIfNotExists()) {
+            DbUtils.insertService(service);
+        } else {
+            DbUtils.upsertService(service);
         }
     }
 }

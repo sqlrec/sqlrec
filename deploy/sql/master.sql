@@ -30,3 +30,14 @@ CREATE TABLE if not exists checkpoint (
     updated_at BIGINT NOT NULL,
     PRIMARY KEY (model_name, checkpoint_name)
 );
+
+CREATE TABLE if not exists service (
+    name VARCHAR(255) NOT NULL PRIMARY KEY,
+    model_name VARCHAR(255) NOT NULL,
+    checkpoint_name VARCHAR(255),
+    ddl text NOT NULL,
+    yaml text NOT NULL,
+    url VARCHAR(512) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
