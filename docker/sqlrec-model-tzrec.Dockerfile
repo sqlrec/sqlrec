@@ -6,7 +6,11 @@ COPY juicefs-1.3.0-py3-none-any.whl /data/
 COPY tzrec-1.0.1-py2.py3-none-any.whl /data/
 
 RUN pip install /data/juicefs-1.3.0-py3-none-any.whl \
-    && pip install /data/tzrec-1.0.1-py2.py3-none-any.whl
+    && pip install /data/tzrec-1.0.1-py2.py3-none-any.whl \
+    && pip install flask
 
 RUN rm -rf /data/*.whl \
-    && rm -rf /root/.cache/pip
+    && rm -rf /root/.cache/pip \
+    && mkdir -p /app
+
+COPY ./sqlrec-model/src/main/python/* /app/
