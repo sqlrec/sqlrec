@@ -58,4 +58,18 @@ public class K8sYamlUtilsTest {
         System.out.println(mergedYaml);
         assert mergedYaml.contains("---");
     }
+
+    @Test
+    public void testCreateDeploymentYaml() {
+        String deployName = "test-deployment";
+        String modelCheckpointDir = "/model/checkpoint/v1";
+
+        String yaml = K8sYamlUtils.createDeploymentYaml(
+                deployName, modelCheckpointDir, new HashMap<>()
+        );
+        assertNotNull(yaml);
+        System.out.println(yaml);
+        assert yaml.contains("Deployment");
+        assert yaml.contains(deployName);
+    }
 } 

@@ -5,12 +5,15 @@ import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelController;
 import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.model.common.ServiceConfig;
 import com.sqlrec.sql.parser.SqlCreateModel;
+import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.DbUtils;
@@ -172,5 +175,55 @@ public class ModelManager {
         k8sYaml = K8sManager.injectVolumeMountIntoYaml(k8sYaml, pvcName, pvName, clientDirValue, null);
 
         return k8sYaml;
+    }
+
+    public static Service createService(SqlCreateService sqlCreateService) throws Exception {
+        ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
+
+        Model modelEntity = DbUtils.getModel(serviceConfig.modelName);
+        if (modelEntity == null) {
+            throw new IllegalArgumentException("model not exists: " + serviceConfig.modelName);
+        }
+
+        Checkpoint checkpoint = DbUtils.getCheckpoint(serviceConfig.modelName, serviceConfig.checkpointName);
+        if (checkpoint == null) {
+            throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
+        }
+
+        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelEntity.getDdl());
+        if (!(modelSqlNode instanceof SqlCreateModel)) {
+            throw new IllegalArgumentException("Invalid model DDL: " + modelEntity.getDdl());
+        }
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel((SqlCreateModel) modelSqlNode);
+
+        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
+        ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
+        if (modelController == null) {
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelAlgorithmName);
+        }
+
+        String serviceUrl = modelController.getServiceUrl(modelConfig, serviceConfig);
+        String k8sYaml = modelController.getServiceK8sYaml(modelConfig, serviceConfig);
+        k8sYaml = injectPodConfig(k8sYaml, modelConfig, serviceConfig.params);
+        K8sManager.applyYaml(k8sYaml);
+
+        Service service = new Service();
+        service.setName(serviceConfig.serviceName);
+        service.setModelName(serviceConfig.modelName);
+        service.setCheckpointName(serviceConfig.checkpointName);
+        service.setDdl(CompileManager.getSqlStr(sqlCreateService));
+        service.setYaml(k8sYaml);
+        service.setUrl(serviceUrl);
+        service.setCreatedAt(System.currentTimeMillis());
+        service.setUpdatedAt(System.currentTimeMillis());
+        service.setIfNotExists(sqlCreateService.isIfNotExists());
+
+        if (sqlCreateService.isIfNotExists()) {
+            DbUtils.insertService(service);
+        } else {
+            DbUtils.upsertService(service);
+        }
+
+        return service;
     }
 }

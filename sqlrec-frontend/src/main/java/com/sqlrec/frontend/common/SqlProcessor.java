@@ -130,7 +130,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlCreateService) {
             SqlCreateService createService = (SqlCreateService) sqlNode;
-            saveService(createService);
+            ModelManager.createService(createService);
             return Utils.convertMsgToResult("create service success", "msg");
         }
 

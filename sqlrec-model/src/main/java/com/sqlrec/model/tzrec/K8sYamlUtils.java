@@ -1,6 +1,8 @@
 package com.sqlrec.model.tzrec;
 
 import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
@@ -37,6 +39,27 @@ public class K8sYamlUtils {
                         .withPort(masterPort)
                         .withNewTargetPort(masterPort)
                     .endPort()
+                .endSpec()
+                .build();
+
+        return Serialization.asYaml(service);
+    }
+
+    public static String createServiceYaml(String serviceName, int port, String selectKey, String selectValue) {
+        HashMap<String, String> selector = new HashMap<>();
+        selector.put(selectKey, selectValue);
+
+        Service service = new ServiceBuilder()
+                .withNewMetadata()
+                .withName(serviceName)
+                .endMetadata()
+                .withNewSpec()
+                .withSelector(selector)
+                .addNewPort()
+                .withName("server")
+                .withPort(port)
+                .withNewTargetPort(port)
+                .endPort()
                 .endSpec()
                 .build();
 
@@ -109,6 +132,67 @@ public class K8sYamlUtils {
 
         return Serialization.asYaml(job);
     }
+
+    public static String createDeploymentYaml(
+            String deployName,
+            String modelCheckpointDir,
+            Map<String, String> params
+    ) {
+        String image = Config.IMAGE.getDefaultValue() + ":" + Config.VERSION.getDefaultValue();
+
+        Deployment deployment = new DeploymentBuilder()
+                .withNewMetadata()
+                    .withName(deployName)
+                .endMetadata()
+                .withNewSpec()
+                    .withReplicas(1)
+                    .withNewSelector()
+                        .withMatchLabels(new HashMap<String, String>() {{
+                            put("app", deployName);
+                        }})
+                    .endSelector()
+                    .withNewTemplate()
+                        .withNewMetadata()
+                            .withLabels(new HashMap<String, String>() {{
+                                put("app", deployName);
+                            }})
+                        .endMetadata()
+                        .withNewSpec()
+                            .addNewContainer()
+                                .withName("tzrec-service")
+                                .withImage(image)
+                                .withCommand("bash", Config.SERVICE_SHELL_PATH, "--scripted_model_dir", modelCheckpointDir)
+                                .withPorts(
+                                        new ContainerPortBuilder()
+                                                .withName("http")
+                                                .withContainerPort(80)
+                                                .build()
+                                )
+                                .withEnv(
+                                        new ArrayList<EnvVar>() {{
+                                            add(new EnvVarBuilder().withName("USE_FSSPEC").withValue(Config.USE_FSSPEC.getDefaultValue()).build());
+                                            add(new EnvVarBuilder().withName("USE_SPAWN_MULTI_PROCESS").withValue(Config.USE_SPAWN_MULTI_PROCESS.getDefaultValue()).build());
+                                            add(new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getDefaultValue()).build());
+                                        }}
+                                )
+                                .withResources(
+                                        new ResourceRequirementsBuilder()
+                                                .addToLimits("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
+                                                .addToLimits("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
+                                                .addToRequests("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
+                                                .addToRequests("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
+                                                .build()
+                                )
+                            .endContainer()
+                        .endSpec()
+                    .endTemplate()
+                .endSpec()
+                .build();
+
+        return Serialization.asYaml(deployment);
+    }
+
+    
 
     public static String mergeK8sYamls(String... yamls) {
         StringBuilder mergedYaml = new StringBuilder();

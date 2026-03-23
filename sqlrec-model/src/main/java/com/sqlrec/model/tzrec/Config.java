@@ -9,6 +9,7 @@ public class Config {
     public static final String SHELL_DIR = "/data";
     public static final String PIPELINE_CONFIG_NAME = "pipeline.config";
     public static final String START_SHELL_NAME = "start.sh";
+    public static final String SERVICE_SHELL_PATH = "/app/server.sh";
 
     public static final ConfigOption<String> IMAGE = new ConfigOption<>(
             "image",

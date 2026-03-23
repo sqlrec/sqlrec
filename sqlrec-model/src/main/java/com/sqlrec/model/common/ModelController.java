@@ -16,4 +16,10 @@ public interface ModelController {
 
     // return model export k8s yaml
     String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf);
+
+    // return service url
+    String getServiceUrl(ModelConfig model, ServiceConfig serviceConf);
+
+    // return service k8s yaml
+    String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf);
 }

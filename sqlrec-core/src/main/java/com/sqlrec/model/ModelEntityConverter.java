@@ -6,8 +6,10 @@ import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.model.common.ServiceConfig;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.sql.parser.SqlCreateModel;
+import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.SchemaUtils;
@@ -62,6 +64,17 @@ public class ModelEntityConverter {
         modelExportConf.id = K8sManager.convertToValidK8sName(modelExportConf.modelName + "-" + modelExportConf.checkpointName + "-export");
         modelExportConf.trainDataPaths = getHivePartitionPaths(sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema);
         return modelExportConf;
+    }
+
+    public static ServiceConfig convertToServiceConf(SqlCreateService sqlCreateService) {
+        ServiceConfig serviceConfig = new ServiceConfig();
+        serviceConfig.id = K8sManager.convertToValidK8sName(sqlCreateService.getServiceName().toString());
+        serviceConfig.serviceName = sqlCreateService.getServiceName().toString();
+        serviceConfig.modelName = sqlCreateService.getModelName().toString();
+        serviceConfig.checkpointName = SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString());
+        serviceConfig.modelCheckpointDir = getModelCheckpointPath(serviceConfig.modelName, serviceConfig.checkpointName);
+        serviceConfig.params = convertPropertyList(sqlCreateService.getPropertyList());
+        return serviceConfig;
     }
 
     public static List<String> getHivePartitionPaths(SqlIdentifier dataSource, SqlNode whereCondition, String defaultSchema) throws Exception {
@@ -130,10 +143,7 @@ public class ModelEntityConverter {
     }
 
     public static String getModelCheckpointPath(String modelName, String checkpoint) {
-        String modelBasePath = ModelConfigs.MODEL_BASE_PATH.getValue();
-        log.info("MODEL_BASE_PATH: {}", modelBasePath);
-
-        String fullPath = modelBasePath;
+        String fullPath = ModelConfigs.MODEL_BASE_PATH.getValue();
         if (!fullPath.endsWith("/")) {
             fullPath += "/";
         }

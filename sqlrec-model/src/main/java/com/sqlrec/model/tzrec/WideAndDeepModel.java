@@ -1,9 +1,7 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.model.common.ModelConfig;
-import com.sqlrec.model.common.ModelController;
-import com.sqlrec.model.common.ModelExportConf;
-import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.common.config.ModelConfigs;
+import com.sqlrec.model.common.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,6 +40,25 @@ public class WideAndDeepModel implements ModelController {
         String pipelineConfig = PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
         String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
         return genJobYaml(model, pipelineConfig, shell, exportConf.id, exportConf.params);
+    }
+
+    @Override
+    public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
+        String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.params);
+        return "http://" + serviceConf.serviceName + "." + namespace + ".svc.cluster.local:80/predict";
+    }
+
+    @Override
+    public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
+        String deploymentName = serviceConf.id;
+        String serviceName = serviceConf.id;
+
+        String serviceYaml = K8sYamlUtils.createServiceYaml(serviceName, 80, "app", deploymentName);
+        String deploymentYaml = K8sYamlUtils.createDeploymentYaml(
+                deploymentName, serviceConf.modelCheckpointDir, serviceConf.params
+        );
+
+        return K8sYamlUtils.mergeK8sYamls(deploymentYaml, serviceYaml);
     }
 
     private String genJobYaml(ModelConfig model, String pipelineConfig, String shell, String id, Map<String, String> params) {

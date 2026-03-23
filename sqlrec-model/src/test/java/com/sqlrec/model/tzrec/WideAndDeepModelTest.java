@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.ModelConfig;
 import com.sqlrec.model.common.ModelExportConf;
 import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.model.common.ServiceConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -98,5 +99,29 @@ public class WideAndDeepModelTest {
         String k8sYaml = modelController.genModelExportK8sYaml(model, exportConf);
         System.out.println(k8sYaml);
         assertNotNull(k8sYaml);
+    }
+
+    @Test
+    public void testGetServiceK8sYaml() {
+        ModelConfig model = new ModelConfig();
+        model.modelName = "test_model";
+
+        ServiceConfig serviceConf = new ServiceConfig();
+        serviceConf.serviceName = "test-service";
+        serviceConf.modelName = "test_model";
+        serviceConf.checkpointName = "v1";
+        serviceConf.modelCheckpointDir = "/model/checkpoint/v1";
+
+        Map<String, String> params = new HashMap<>();
+        params.put("pod_cpu_cores", "4");
+        params.put("pod_memory", "16Gi");
+        serviceConf.params = params;
+
+        WideAndDeepModel modelController = new WideAndDeepModel();
+        String k8sYaml = modelController.getServiceK8sYaml(model, serviceConf);
+        System.out.println(k8sYaml);
+        assertNotNull(k8sYaml);
+        assert k8sYaml.contains("Deployment");
+        assert k8sYaml.contains("Service");
     }
 }
