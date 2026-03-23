@@ -136,7 +136,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlDropService) {
             SqlDropService dropService = (SqlDropService) sqlNode;
-            DbUtils.deleteService(dropService.getServiceName().getSimple());
+            ModelManager.deleteService(dropService.getServiceName().getSimple());
             return Utils.convertMsgToResult("drop service success", "msg");
         }
 

@@ -18,6 +18,7 @@ import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -225,5 +226,16 @@ public class ModelManager {
         }
 
         return service;
+    }
+
+    public static void deleteService(String serviceName) {
+        Service service = DbUtils.getService(serviceName);
+        if (service == null) {
+            throw new IllegalArgumentException("service not exists: " + serviceName);
+        }
+        if (!StringUtils.isEmpty(service.getYaml())) {
+            K8sManager.deleteYaml(service.getYaml());
+        }
+        DbUtils.deleteService(serviceName);
     }
 }

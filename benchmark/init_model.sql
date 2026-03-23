@@ -29,3 +29,8 @@ export model test_model checkpoint='test' on behavior_sample
 with (
 'NAMESPACE'='sqlrec'
 );
+
+create service test_service on model test_model checkpoint='test_export'
+with (
+'NAMESPACE'='sqlrec'
+);
