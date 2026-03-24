@@ -1,9 +1,9 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.model.common.ModelConfig;
-import com.sqlrec.model.common.ModelExportConf;
-import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelExportConf;
+import com.sqlrec.common.model.ModelTrainConf;
 
 import java.util.List;
 import java.util.Map;

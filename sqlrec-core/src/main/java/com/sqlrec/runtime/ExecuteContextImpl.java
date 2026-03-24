@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.common.schema.ExecuteContext;
 
 import java.util.List;
@@ -50,6 +51,11 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public List<String> getFunNameStack() {
         return funNameStack;
+    }
+
+    @Override
+    public ServiceConfig getServiceConfig(String serviceName) {
+        return null;
     }
 
     @Override

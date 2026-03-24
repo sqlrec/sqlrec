@@ -1,8 +1,8 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.model.common.ModelConfig;
-import com.sqlrec.model.common.ModelExportConf;
-import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelExportConf;
+import com.sqlrec.common.model.ModelTrainConf;
 
 public class ShellUtils {
     public static String genTrainModelShell(ModelConfig model, ModelTrainConf trainConf) {

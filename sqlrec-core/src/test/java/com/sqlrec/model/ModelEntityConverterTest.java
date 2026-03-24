@@ -1,10 +1,8 @@
 package com.sqlrec.model;
 
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.model.common.ModelConfig;
-import com.sqlrec.model.common.ModelTrainConf;
+import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.sql.parser.SqlCreateModel;
-import com.sqlrec.sql.parser.SqlTrainModel;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 

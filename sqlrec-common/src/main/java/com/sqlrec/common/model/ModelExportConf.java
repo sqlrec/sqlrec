@@ -1,4 +1,4 @@
-package com.sqlrec.model.common;
+package com.sqlrec.common.model;
 
 import java.util.List;
 import java.util.Map;

@@ -1,5 +1,8 @@
 package com.sqlrec.common.schema;
 
+
+import com.sqlrec.common.model.ServiceConfig;
+
 import java.util.List;
 
 public interface ExecuteContext {
@@ -12,6 +15,8 @@ public interface ExecuteContext {
     void popFunNameFromStack();
 
     List<String> getFunNameStack();
+
+    ServiceConfig getServiceConfig(String serviceName);
 
     ExecuteContext clone();
 }

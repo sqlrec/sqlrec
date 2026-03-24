@@ -1,4 +1,4 @@
-package com.sqlrec.model.common;
+package com.sqlrec.common.model;
 
 import com.sqlrec.common.schema.FieldSchema;
 

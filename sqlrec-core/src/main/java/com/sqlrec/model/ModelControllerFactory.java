@@ -1,6 +1,6 @@
 package com.sqlrec.model;
 
-import com.sqlrec.model.common.ModelController;
+import com.sqlrec.common.model.ModelController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

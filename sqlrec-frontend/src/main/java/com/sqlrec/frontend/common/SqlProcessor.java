@@ -14,7 +14,7 @@ import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.entity.Service;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
-import com.sqlrec.model.common.ModelConfig;
+import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;

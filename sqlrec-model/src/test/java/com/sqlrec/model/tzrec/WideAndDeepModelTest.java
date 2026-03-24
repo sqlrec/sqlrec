@@ -1,10 +1,10 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.model.common.ModelConfig;
-import com.sqlrec.model.common.ModelExportConf;
-import com.sqlrec.model.common.ModelTrainConf;
-import com.sqlrec.model.common.ServiceConfig;
+import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelExportConf;
+import com.sqlrec.common.model.ModelTrainConf;
+import com.sqlrec.common.model.ServiceConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

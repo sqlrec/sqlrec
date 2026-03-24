@@ -1,7 +1,7 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.model.common.*;
+import com.sqlrec.common.model.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
