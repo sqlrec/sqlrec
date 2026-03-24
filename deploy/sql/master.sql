@@ -22,6 +22,7 @@ CREATE TABLE if not exists model (
 CREATE TABLE if not exists checkpoint (
     model_name VARCHAR(255) NOT NULL,
     checkpoint_name VARCHAR(255) NOT NULL,
+    model_ddl text NOT NULL,
     ddl text NOT NULL,
     yaml text NOT NULL,
     checkpoint_type VARCHAR(255) NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE if not exists checkpoint (
 CREATE TABLE if not exists service (
     name VARCHAR(255) NOT NULL PRIMARY KEY,
     model_name VARCHAR(255) NOT NULL,
+    model_ddl text NOT NULL,
     checkpoint_name VARCHAR(255),
     ddl text NOT NULL,
     yaml text NOT NULL,

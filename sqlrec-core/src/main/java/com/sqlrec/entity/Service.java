@@ -3,6 +3,7 @@ package com.sqlrec.entity;
 public class Service {
     private String name;
     private String modelName;
+    private String modelDdl;
     private String checkpointName;
     private String ddl;
     private String yaml;
@@ -10,6 +11,14 @@ public class Service {
     private long createdAt;
     private long updatedAt;
     private boolean ifNotExists;
+
+    public String getModelDdl() {
+        return modelDdl;
+    }
+
+    public void setModelDdl(String modelDdl) {
+        this.modelDdl = modelDdl;
+    }
 
     public boolean isIfNotExists() {
         return ifNotExists;

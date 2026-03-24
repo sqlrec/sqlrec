@@ -396,24 +396,4 @@ public class SqlProcessor {
             DbUtils.upsertModel(model);
         }
     }
-
-    public static void saveService(SqlCreateService sqlCreateService) {
-        Service service = new Service();
-        service.setName(sqlCreateService.getServiceName().getSimple());
-        service.setModelName(sqlCreateService.getModelName().getSimple());
-        if (sqlCreateService.getCheckpoint() != null) {
-            service.setCheckpointName(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString()));
-        }
-        service.setDdl(sqlCreateService.toString());
-        service.setYaml("");
-        service.setUrl("");
-        service.setCreatedAt(System.currentTimeMillis());
-        service.setUpdatedAt(System.currentTimeMillis());
-        service.setIfNotExists(sqlCreateService.isIfNotExists());
-        if (sqlCreateService.isIfNotExists()) {
-            DbUtils.insertService(service);
-        } else {
-            DbUtils.upsertService(service);
-        }
-    }
 }

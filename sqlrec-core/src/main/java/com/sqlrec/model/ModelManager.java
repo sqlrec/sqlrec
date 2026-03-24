@@ -70,6 +70,7 @@ public class ModelManager {
         Checkpoint checkpoint = new Checkpoint();
         checkpoint.setModelName(modelTrainConf.modelName);
         checkpoint.setCheckpointName(modelTrainConf.checkpointName);
+        checkpoint.setModelDdl(modelEntity.getDdl());
         checkpoint.setYaml(k8sYaml);
         checkpoint.setDdl(CompileManager.getSqlStr(sqlTrainModel));
         checkpoint.setCheckpointType(Consts.CHECKPOINT_TYPE_ORIGIN);
@@ -122,6 +123,7 @@ public class ModelManager {
             Checkpoint checkpoint = new Checkpoint();
             checkpoint.setModelName(modelExportConf.modelName);
             checkpoint.setCheckpointName(exportCheckpointName);
+            checkpoint.setModelDdl(modelEntity.getDdl());
             checkpoint.setYaml(k8sYaml);
             checkpoint.setDdl(CompileManager.getSqlStr(sqlExportModel));
             checkpoint.setCheckpointType(Consts.CHECKPOINT_TYPE_EXPORT);
@@ -211,6 +213,7 @@ public class ModelManager {
         Service service = new Service();
         service.setName(serviceConfig.serviceName);
         service.setModelName(serviceConfig.modelName);
+        service.setModelDdl(checkpoint.getModelDdl());
         service.setCheckpointName(serviceConfig.checkpointName);
         service.setDdl(CompileManager.getSqlStr(sqlCreateService));
         service.setYaml(k8sYaml);

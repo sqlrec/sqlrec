@@ -3,12 +3,21 @@ package com.sqlrec.entity;
 public class Checkpoint {
     private String modelName;
     private String checkpointName;
+    private String modelDdl;
     private String ddl;
     private String yaml;
     private String checkpointType;
     private String status;
     private long createdAt;
     private long updatedAt;
+
+    public String getModelDdl() {
+        return modelDdl;
+    }
+
+    public void setModelDdl(String modelDdl) {
+        this.modelDdl = modelDdl;
+    }
 
     public String getModelName() {
         return modelName;

@@ -80,9 +80,9 @@ public interface DbMapper {
     Checkpoint getCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);
 
     @Insert("INSERT INTO checkpoint " +
-            "(model_name, checkpoint_name, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +
-            "VALUES (#{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{checkpointType}, #{status}, #{createdAt}, #{updatedAt}) " +
-            "ON CONFLICT (model_name, checkpoint_name) DO UPDATE SET ddl = #{ddl}, yaml = #{yaml}, checkpoint_type = #{checkpointType}, status = #{status}, updated_at = #{updatedAt}")
+            "(model_name, checkpoint_name, model_ddl, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +
+            "VALUES (#{modelName}, #{checkpointName}, #{modelDdl}, #{ddl}, #{yaml}, #{checkpointType}, #{status}, #{createdAt}, #{updatedAt}) " +
+            "ON CONFLICT (model_name, checkpoint_name) DO UPDATE SET model_ddl = #{modelDdl}, ddl = #{ddl}, yaml = #{yaml}, checkpoint_type = #{checkpointType}, status = #{status}, updated_at = #{updatedAt}")
     void upsertCheckpoint(Checkpoint checkpoint);
 
     @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
@@ -98,14 +98,14 @@ public interface DbMapper {
     Service getService(String name);
 
     @Insert("INSERT INTO service " +
-            "(name, model_name, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
-            "VALUES (#{name}, #{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt})")
+            "(name, model_name, model_ddl, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
+            "VALUES (#{name}, #{modelName}, #{modelDdl}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt})")
     void insertService(Service service);
 
     @Insert("INSERT INTO service " +
-            "(name, model_name, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
-            "VALUES (#{name}, #{modelName}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt}) " +
-            "ON CONFLICT (name) DO UPDATE SET model_name = #{modelName}, checkpoint_name = #{checkpointName}, ddl = #{ddl}, yaml = #{yaml}, url = #{url}, updated_at = #{updatedAt}")
+            "(name, model_name, model_ddl, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
+            "VALUES (#{name}, #{modelName}, #{modelDdl}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt}) " +
+            "ON CONFLICT (name) DO UPDATE SET model_name = #{modelName}, model_ddl = #{modelDdl}, checkpoint_name = #{checkpointName}, ddl = #{ddl}, yaml = #{yaml}, url = #{url}, updated_at = #{updatedAt}")
     void upsertService(Service service);
 
     @Delete("DELETE FROM service WHERE name = #{name}")
