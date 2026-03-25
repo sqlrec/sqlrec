@@ -2,6 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.model.ServiceManager;
 
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,7 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     @Override
     public ServiceConfig getServiceConfig(String serviceName) {
-        return null;
+        return ServiceManager.getServiceConfig(serviceName);
     }
 
     @Override

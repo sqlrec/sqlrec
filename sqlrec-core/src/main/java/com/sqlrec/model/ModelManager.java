@@ -51,11 +51,7 @@ public class ModelManager {
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
         Model modelEntity = DbUtils.getModel(modelTrainConf.modelName);
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelEntity.getDdl());
-        if (!(modelSqlNode instanceof SqlCreateModel)) {
-            throw new IllegalArgumentException("Invalid model DDL: " + modelEntity.getDdl());
-        }
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel((SqlCreateModel) modelSqlNode);
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
 
         String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
         ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
@@ -95,12 +91,7 @@ public class ModelManager {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.checkpointName + " for model " + modelExportConf.modelName);
         }
 
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelEntity.getDdl());
-        if (!(modelSqlNode instanceof SqlCreateModel)) {
-            throw new IllegalArgumentException("Invalid model DDL: " + modelEntity.getDdl());
-        }
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel((SqlCreateModel) modelSqlNode);
-
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
         ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
         if (modelController == null) {
@@ -193,12 +184,7 @@ public class ModelManager {
             throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
         }
 
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelEntity.getDdl());
-        if (!(modelSqlNode instanceof SqlCreateModel)) {
-            throw new IllegalArgumentException("Invalid model DDL: " + modelEntity.getDdl());
-        }
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel((SqlCreateModel) modelSqlNode);
-
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
         ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
         if (modelController == null) {

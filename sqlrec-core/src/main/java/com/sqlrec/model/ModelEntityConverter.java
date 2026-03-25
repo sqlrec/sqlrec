@@ -1,6 +1,8 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.ModelConfig;
@@ -26,6 +28,14 @@ import java.util.*;
 
 public class ModelEntityConverter {
     private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
+
+    public static ModelConfig convertToModel(String modelDdl) throws Exception {
+        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelDdl);
+        if (!(modelSqlNode instanceof SqlCreateModel)) {
+            throw new IllegalArgumentException("Invalid model DDL: " + modelDdl);
+        }
+        return convertToModel((SqlCreateModel) modelSqlNode);
+    }
 
     public static ModelConfig convertToModel(SqlCreateModel sqlCreateModel) {
         ModelConfig model = new ModelConfig();
@@ -74,6 +84,17 @@ public class ModelEntityConverter {
         serviceConfig.checkpointName = SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString());
         serviceConfig.modelCheckpointDir = getModelCheckpointPath(serviceConfig.modelName, serviceConfig.checkpointName);
         serviceConfig.params = convertPropertyList(sqlCreateService.getPropertyList());
+        return serviceConfig;
+    }
+
+    public static ServiceConfig convertToServiceConfig(Service service) throws Exception {
+        SqlNode modelSqlNode = CompileManager.parseFlinkSql(service.getDdl());
+        if (!(modelSqlNode instanceof SqlCreateService)) {
+            throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
+        }
+        ServiceConfig serviceConfig = convertToServiceConf((SqlCreateService)modelSqlNode);
+        serviceConfig.url = service.getUrl();
+        serviceConfig.modelConfig = convertToModel(service.getModelDdl());
         return serviceConfig;
     }
 
