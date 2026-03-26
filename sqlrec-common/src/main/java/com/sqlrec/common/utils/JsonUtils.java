@@ -3,6 +3,7 @@ package com.sqlrec.common.utils;
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import com.sqlrec.common.schema.FieldSchema;
+import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
 import java.util.Map;
@@ -41,5 +42,39 @@ public class JsonUtils {
     public static List<String> parseStringList(String json) {
         return gson.fromJson(json, new TypeToken<List<String>>() {
         }.getType());
+    }
+
+    public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
+        JsonArray jsonArray = new JsonArray();
+        
+        for (Object[] row : data) {
+            JsonObject jsonObject = new JsonObject();
+            for (int i = 0; i < inputFields.size(); i++) {
+                FieldSchema field = inputFields.get(i);
+                int fieldIndex = findFieldIndex(dataFields, field.name);
+                if (fieldIndex >= 0 && fieldIndex < row.length) {
+                    Object value = row[fieldIndex];
+                    if (value != null) {
+                        jsonObject.addProperty(field.name, value.toString());
+                    }
+                }
+            }
+            jsonArray.add(jsonObject);
+        }
+        
+        return gson.toJson(jsonArray);
+    }
+
+    private static int findFieldIndex(List<RelDataTypeField> dataFields, String fieldName) {
+        for (int i = 0; i < dataFields.size(); i++) {
+            if (dataFields.get(i).getName().equalsIgnoreCase(fieldName)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static Map<String, Object> parseJsonToMap(String json) {
+        return gson.fromJson(json, Map.class);
     }
 }

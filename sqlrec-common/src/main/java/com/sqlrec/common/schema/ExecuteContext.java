@@ -1,6 +1,8 @@
 package com.sqlrec.common.schema;
 
 
+import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
 
 import java.util.List;
@@ -17,6 +19,8 @@ public interface ExecuteContext {
     List<String> getFunNameStack();
 
     ServiceConfig getServiceConfig(String serviceName);
+
+    ModelController getModelController(ModelConfig modelConfig);
 
     ExecuteContext clone();
 }

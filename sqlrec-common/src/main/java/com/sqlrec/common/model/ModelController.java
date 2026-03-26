@@ -1,9 +1,12 @@
 package com.sqlrec.common.model;
 
+import com.sqlrec.common.schema.FieldSchema;
 import java.util.List;
 
 public interface ModelController {
     String getModelName();
+
+    List<FieldSchema> getOutputFields(ModelConfig model);
 
     // return null when model is valid
     String checkModel(ModelConfig model);

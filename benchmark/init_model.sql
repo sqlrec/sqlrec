@@ -34,3 +34,21 @@ create service test_service on model test_model checkpoint='test_export'
 with (
 'NAMESPACE'='sqlrec'
 );
+
+CACHE TABLE t1 AS
+SELECT
+    1 AS user_id,
+    'Zhang' AS user_name,
+    'China' AS user_country,
+    28 AS user_age,
+    'Android 14' AS user_os,
+    '5G' AS user_network,
+    2 AS item_id,
+    'Smart Watch' AS item_name,
+    'xm' AS item_brand,
+    'Digital Products' AS item_category1,
+    'Smart Wearables' AS item_category2,
+    'Watch' AS item_category3,
+    'Smart Watch' AS item_category4;
+
+call call_service('test_service', t1);

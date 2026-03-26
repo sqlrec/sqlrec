@@ -2,16 +2,19 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.*;
+import com.sqlrec.common.schema.FieldSchema;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class WideAndDeepModel implements ModelController {
     @Override
     public String getModelName() {
         return "torch_easy_rec.wide_and_deep";
+    }
+
+    @Override
+    public List<FieldSchema> getOutputFields(ModelConfig model) {
+        return Collections.singletonList(new FieldSchema("probs", "FLOAT"));
     }
 
     @Override
@@ -45,7 +48,7 @@ public class WideAndDeepModel implements ModelController {
     @Override
     public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
         String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.params);
-        return "http://" + serviceConf.serviceName + "." + namespace + ".svc.cluster.local:80/predict";
+        return "http://" + serviceConf.id + "." + namespace + ".svc.cluster.local:80/predict";
     }
 
     @Override

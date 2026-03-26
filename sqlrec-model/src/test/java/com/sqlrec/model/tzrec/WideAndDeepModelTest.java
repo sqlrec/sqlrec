@@ -27,7 +27,7 @@ public class WideAndDeepModelTest {
         fieldSchemas.add(new FieldSchema("feature1", "float")); // Numeric feature
         fieldSchemas.add(new FieldSchema("feature2", "int"));    // Categorical feature
         fieldSchemas.add(new FieldSchema("feature3", "string")); // Categorical feature
-        model.fieldSchemas = fieldSchemas;
+        model.inputFields = fieldSchemas;
 
         // Add test params
         Map<String, String> modelParams = new HashMap<>();
@@ -75,7 +75,7 @@ public class WideAndDeepModelTest {
         fieldSchemas.add(new FieldSchema("feature1", "float")); // Numeric feature
         fieldSchemas.add(new FieldSchema("feature2", "int"));    // Categorical feature
         fieldSchemas.add(new FieldSchema("feature3", "string")); // Categorical feature
-        model.fieldSchemas = fieldSchemas;
+        model.inputFields = fieldSchemas;
 
         // Add test params
         Map<String, String> modelParams = new HashMap<>();

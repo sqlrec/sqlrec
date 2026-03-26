@@ -38,11 +38,11 @@ public class ModelEntityConverter {
     }
 
     public static ModelConfig convertToModel(SqlCreateModel sqlCreateModel) {
-        ModelConfig model = new ModelConfig();
-        model.modelName = sqlCreateModel.getModelName().toString();
-        model.fieldSchemas = convertFieldList(sqlCreateModel.getFieldList());
-        model.params = convertPropertyList(sqlCreateModel.getPropertyList());
-        return model;
+        ModelConfig modelConfig = new ModelConfig();
+        modelConfig.modelName = sqlCreateModel.getModelName().toString();
+        modelConfig.inputFields = convertFieldList(sqlCreateModel.getFieldList());
+        modelConfig.params = convertPropertyList(sqlCreateModel.getPropertyList());
+        return modelConfig;
     }
 
     public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {

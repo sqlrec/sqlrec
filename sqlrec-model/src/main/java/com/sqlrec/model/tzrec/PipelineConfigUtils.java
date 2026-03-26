@@ -117,8 +117,8 @@ public class PipelineConfigUtils {
     public static String generateFeatureConfigs(ModelConfig model) {
         StringBuilder config = new StringBuilder();
 
-        if (model.fieldSchemas != null) {
-            for (FieldSchema fieldSchema : model.fieldSchemas) {
+        if (model.inputFields != null) {
+            for (FieldSchema fieldSchema : model.inputFields) {
                 String featureName = fieldSchema.name;
                 String fieldType = fieldSchema.type;
 
@@ -208,8 +208,8 @@ public class PipelineConfigUtils {
 
     private static List<String> getFeatures(ModelConfig model) {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
-        if (model.fieldSchemas != null) {
-            for (FieldSchema fieldSchema : model.fieldSchemas) {
+        if (model.inputFields != null) {
+            for (FieldSchema fieldSchema : model.inputFields) {
                 categoricalFeatures.add(fieldSchema.name);
             }
         }

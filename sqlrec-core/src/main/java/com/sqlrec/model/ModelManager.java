@@ -32,10 +32,9 @@ public class ModelManager {
     public static ModelConfig getAndCheckModel(SqlCreateModel sqlCreateModel) {
         try {
             ModelConfig model = ModelEntityConverter.convertToModel(sqlCreateModel);
-            String modelName = ModelConfigs.MODEL.getValue(model.params);
-            ModelController modelController = ModelControllerFactory.getModelController(modelName);
+            ModelController modelController = ModelControllerFactory.getModelController(model);
             if (modelController == null) {
-                throw new IllegalArgumentException("Model controller not found for model name: " + modelName);
+                throw new IllegalArgumentException("Model controller not found for model name: " + model.modelName);
             }
             String errorMessage = modelController.checkModel(model);
             if (errorMessage != null) {
@@ -52,11 +51,9 @@ public class ModelManager {
 
         Model modelEntity = DbUtils.getModel(modelTrainConf.modelName);
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-
-        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
-        ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
+        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelAlgorithmName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
         }
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
@@ -92,10 +89,9 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
-        ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
+        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelAlgorithmName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
         }
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
@@ -185,10 +181,9 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
-        ModelController modelController = ModelControllerFactory.getModelController(modelAlgorithmName);
+        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelAlgorithmName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
         }
 
         String serviceUrl = modelController.getServiceUrl(modelConfig, serviceConfig);

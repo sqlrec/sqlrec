@@ -7,6 +7,6 @@ import java.util.Map;
 
 public class ModelConfig {
     public String modelName;
-    public List<FieldSchema> fieldSchemas;
+    public List<FieldSchema> inputFields;
     public Map<String, String> params;
 }

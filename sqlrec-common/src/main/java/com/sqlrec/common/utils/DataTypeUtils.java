@@ -5,6 +5,7 @@ import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlTypeNameSpec;
 import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 
@@ -15,12 +16,12 @@ public class DataTypeUtils {
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
         RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (FieldSchema fieldSchema : fieldSchemas) {
-            builder.add(fieldSchema.name, getSqlTypeName(typeFactory, fieldSchema.type));
+            builder.add(fieldSchema.name, getRelDataType(typeFactory, fieldSchema.type));
         }
         return builder.build();
     }
 
-    public static RelDataType getSqlTypeName(RelDataTypeFactory typeFactory, String type) {
+    public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, String type) {
         type = type.toUpperCase();
         if (type.equals("INT")) {
             type = "INTEGER";
@@ -28,7 +29,7 @@ public class DataTypeUtils {
 
         if (type.startsWith("ARRAY<") && type.endsWith(">")) {
             String elementType = type.substring("ARRAY<".length(), type.length() - 1);
-            RelDataType elementTypeName = getSqlTypeName(typeFactory, elementType);
+            RelDataType elementTypeName = getRelDataType(typeFactory, elementType);
             return typeFactory.createArrayType(elementTypeName, -1);
         }
 
@@ -45,6 +46,21 @@ public class DataTypeUtils {
                 index,
                 new BasicSqlType(RelDataTypeSystem.DEFAULT, typeName)
         );
+    }
+
+    public static List<RelDataTypeField> addTypeFields(List<RelDataTypeField> origin, List<FieldSchema> fieldsToAdd) {
+        List<RelDataTypeField> newFields = new ArrayList<>(origin);
+        RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+        for (FieldSchema fieldSchema : fieldsToAdd) {
+            newFields.add(
+                    getRelDataTypeField(
+                            fieldSchema.name,
+                            newFields.size(),
+                            getRelDataType(typeFactory, fieldSchema.type).getSqlTypeName()
+                    )
+            );
+        }
+        return newFields;
     }
 
     public static List<RelDataTypeField> getRelDataTypeFields(

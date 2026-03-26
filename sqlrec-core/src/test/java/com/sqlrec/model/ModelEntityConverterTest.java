@@ -22,12 +22,12 @@ public class ModelEntityConverterTest {
 
         assertNotNull(model);
         assertEquals("test_model", model.modelName);
-        assertNotNull(model.fieldSchemas);
-        assertEquals(2, model.fieldSchemas.size());
-        assertEquals("id", model.fieldSchemas.get(0).name);
-        assertEquals("BIGINT", model.fieldSchemas.get(0).type);
-        assertEquals("name", model.fieldSchemas.get(1).name);
-        assertEquals("STRING", model.fieldSchemas.get(1).type);
+        assertNotNull(model.inputFields);
+        assertEquals(2, model.inputFields.size());
+        assertEquals("id", model.inputFields.get(0).name);
+        assertEquals("BIGINT", model.inputFields.get(0).type);
+        assertEquals("name", model.inputFields.get(1).name);
+        assertEquals("STRING", model.inputFields.get(1).type);
         assertNotNull(model.params);
         assertEquals(1, model.params.size());
         assertEquals("value", model.params.get("param"));
