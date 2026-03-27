@@ -60,7 +60,7 @@ public class CompileManager {
         }
 
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema, false);
+            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema, true);
         }
         if (flinkSqlNode instanceof SqlCache) {
             return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
