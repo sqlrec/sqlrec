@@ -15,6 +15,12 @@
         <name>juicefs.meta</name>
         <value>redis://${NODE_IP}:${JUICEFS_REDIS_PORT}/0</value>
     </property>
+    <!--
+    <property>
+        <name>juicefs.groups</name>
+        <value>/etc/groups</value>
+    </property>
+    -->
 
     <property>
         <name>dfs.nameservices</name>
