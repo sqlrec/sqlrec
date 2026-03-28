@@ -39,7 +39,7 @@ CREATE TABLE if not exists service (
     checkpoint_name VARCHAR(255),
     ddl text NOT NULL,
     yaml text NOT NULL,
-    url VARCHAR(512) NOT NULL,
+    url VARCHAR(1024) NOT NULL,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL
 );

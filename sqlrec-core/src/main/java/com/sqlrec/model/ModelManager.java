@@ -203,8 +203,10 @@ public class ModelManager {
 
         String serviceUrl = modelController.getServiceUrl(modelConfig, serviceConfig);
         String k8sYaml = modelController.getServiceK8sYaml(modelConfig, serviceConfig);
-        k8sYaml = injectPodConfig(k8sYaml, modelConfig, serviceConfig.params);
-        K8sManager.applyYaml(k8sYaml);
+        if (!StringUtils.isEmpty(k8sYaml)) {
+            k8sYaml = injectPodConfig(k8sYaml, modelConfig, serviceConfig.params);
+            K8sManager.applyYaml(k8sYaml);
+        }
 
         Service service = new Service();
         service.setName(serviceConfig.serviceName);
