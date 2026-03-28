@@ -254,6 +254,9 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
     """Generate behavior sample data as parquet file"""
     print(f"\nGenerating {sample_size} behavior sample records as parquet...")
 
+    # Define some tags for item_tags
+    TAGS = ['hot', 'new', 'sale', 'limited', 'premium', 'classic', 'trending', 'popular', 'bestseller', 'recommended']
+
     data = []
     base_time = int(time.time() * 1000)
     day_ms = 24 * 60 * 60 * 1000
@@ -262,6 +265,14 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
         user_id = random.randint(0, TOTAL_USERS - 1)
         item_id = random.randint(0, TOTAL_ITEMS - 1)
 
+        # Generate user_clicked_items (3-5 random item IDs)
+        clicked_count = random.randint(3, 5)
+        user_clicked_items = random.sample(range(TOTAL_ITEMS), clicked_count)
+        
+        # Generate item_tags (3-5 random tags)
+        tag_count = random.randint(3, 5)
+        item_tags = random.sample(TAGS, tag_count)
+
         data.append({
             'user_id': user_id,
             'user_name': f"User{user_id}",
@@ -269,6 +280,7 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
             'user_age': random.randint(18, 80),
             'user_os': random.choice(OS_LIST),
             'user_network': random.choice(NETWORK_LIST),
+            'user_clicked_items': user_clicked_items,
             'item_id': item_id,
             'item_name': f"Item{item_id}",
             'item_brand': random.choice(BRANDS),
@@ -276,6 +288,7 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
             'item_category2': random.choice(CATEGORIES2[random.choice(CATEGORIES1)]),
             'item_category3': f"Sub1",
             'item_category4': f"Sub2",
+            'item_tags': item_tags,
             'bhv_time': base_time - random.randint(0, 30 * day_ms),
             'is_click': random.randint(0, 1),
         })
