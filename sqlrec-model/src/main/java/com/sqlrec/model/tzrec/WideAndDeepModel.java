@@ -9,7 +9,7 @@ import java.util.*;
 public class WideAndDeepModel implements ModelController {
     @Override
     public String getModelName() {
-        return "torch_easy_rec.wide_and_deep";
+        return "tzrec.wide_and_deep";
     }
 
     @Override

@@ -15,7 +15,7 @@ create model `test_model`
  `item_category4` STRING
 )
 with (
-'model'='torch_easy_rec.wide_and_deep',
+'model'='tzrec.wide_and_deep',
 'label_fields'='is_click'
 );
 

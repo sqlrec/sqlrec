@@ -2,6 +2,7 @@ package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.ModelConfigs;
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
@@ -40,6 +41,20 @@ public class ModelManager {
             if (errorMessage != null) {
                 throw new IllegalArgumentException(errorMessage);
             }
+            
+            List<FieldSchema> inputFields = model.inputFields;
+            List<FieldSchema> outputFields = modelController.getOutputFields(model);
+            
+            if (inputFields != null && outputFields != null) {
+                for (FieldSchema inputField : inputFields) {
+                    for (FieldSchema outputField : outputFields) {
+                        if (inputField.name.equalsIgnoreCase(outputField.name)) {
+                            throw new IllegalArgumentException("Field '" + inputField.name + "' exists in both input fields and output fields");
+                        }
+                    }
+                }
+            }
+            
             return model;
         } catch (Exception e) {
             throw new RuntimeException("Error while checking model: " + e.getMessage(), e);
