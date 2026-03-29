@@ -73,6 +73,23 @@ public class ModelManager {
             throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
         }
 
+        Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelTrainConf.modelName, modelTrainConf.checkpointName);
+        if (existingCheckpoint != null) {
+            String status = existingCheckpoint.getStatus();
+            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
+                log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info", 
+                    modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                List<CheckpointInfo> checkpointInfos = new ArrayList<>();
+                checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
+                return checkpointInfos;
+            }
+            if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
+                log.info("Model {} has failed checkpoint {}, deleting it first", 
+                    modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                deleteCheckpoint(modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+            }
+        }
+
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelTrainConf.params);
         K8sManager.applyYaml(k8sYaml);
@@ -115,6 +132,26 @@ public class ModelManager {
         }
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
+        
+        for (String exportCheckpointName : exportCheckpointNames) {
+            Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
+            if (existingCheckpoint != null) {
+                String status = existingCheckpoint.getStatus();
+                if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
+                    log.info("Model {} has export checkpoint {} in progress, returning existing checkpoint info", 
+                        modelExportConf.modelName, exportCheckpointName);
+                    List<CheckpointInfo> checkpointInfos = new ArrayList<>();
+                    checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
+                    return checkpointInfos;
+                }
+                if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
+                    log.info("Model {} has failed export checkpoint {}, deleting it first", 
+                        modelExportConf.modelName, exportCheckpointName);
+                    deleteCheckpoint(modelExportConf.modelName, exportCheckpointName);
+                }
+            }
+        }
+        
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
             if (existingCheckpoint != null) {
