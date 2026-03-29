@@ -240,17 +240,22 @@ public class ModelManager {
         if (checkpoint == null) {
             throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
         }
-
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
-        if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
+        if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
+            throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
+        }
+        if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
+            throw new IllegalArgumentException("service only supports export checkpoint");
         }
 
-        String serviceUrl = modelController.getServiceUrl(modelConfig, serviceConfig);
-        String k8sYaml = modelController.getServiceK8sYaml(modelConfig, serviceConfig);
+        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.modelConfig);
+        if (modelController == null) {
+            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.modelConfig.modelName);
+        }
+
+        String serviceUrl = modelController.getServiceUrl(serviceConfig.modelConfig, serviceConfig);
+        String k8sYaml = modelController.getServiceK8sYaml(serviceConfig.modelConfig, serviceConfig);
         if (!StringUtils.isEmpty(k8sYaml)) {
-            k8sYaml = injectPodConfig(k8sYaml, modelConfig, serviceConfig.params);
+            k8sYaml = injectPodConfig(k8sYaml, serviceConfig.modelConfig, serviceConfig.params);
             K8sManager.applyYaml(k8sYaml);
         }
 
