@@ -19,20 +19,33 @@ _data_parser: DataParser = None
 _device: torch.device = None
 
 
-def cartesian_product(data: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+def columnar_to_row(data: dict[str, list[Any]]) -> list[dict[str, Any]]:
     keys = list(data.keys())
-    values = [data[k] for k in keys]
+    if not keys:
+        return []
+    
+    lengths = [len(v) for v in data.values()]
+    unique_lengths = set(lengths)
+    
+    if len(unique_lengths) == 1:
+        n = lengths[0]
+    else:
+        if 1 not in unique_lengths:
+            raise ValueError("All lists in columnar format must have the same length or some can have length 1")
+        non_1_lengths = [l for l in unique_lengths if l != 1]
+        if len(non_1_lengths) != 1:
+            raise ValueError("All non-length-1 lists in columnar format must have the same length")
+        n = non_1_lengths[0]
+    
     result = []
-    for combo in values[0]:
-        result.append(dict(combo))
-    for vals in values[1:]:
-        new_result = []
-        for item in result:
-            for v in vals:
-                new_item = dict(item)
-                new_item.update(v)
-                new_result.append(new_item)
-        result = new_result
+    for i in range(n):
+        row = {}
+        for key in keys:
+            if len(data[key]) == 1:
+                row[key] = data[key][0]
+            else:
+                row[key] = data[key][i]
+        result.append(row)
     return result
 
 
@@ -43,10 +56,7 @@ def parse_request_data(request_data: Any) -> list[dict[str, Any]]:
         for key, value in request_data.items():
             if not isinstance(value, list):
                 raise ValueError("Map values must be lists")
-            for item in value:
-                if not isinstance(item, dict):
-                    raise ValueError("Map values must be list of dicts")
-        return cartesian_product(request_data)
+        return columnar_to_row(request_data)
     raise ValueError("Input data must be a list of JSON objects or a map with string keys and list values")
 
 

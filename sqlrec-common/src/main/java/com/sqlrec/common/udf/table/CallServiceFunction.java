@@ -61,7 +61,7 @@ public class CallServiceFunction {
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
     }
 
-    private Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
+    public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
         try {
             RequestBody body = RequestBody.create(
                     jsonData, 
@@ -87,7 +87,7 @@ public class CallServiceFunction {
         }
     }
 
-    private List<Object[]> mergePredictions(List<Object[]> inputData, Map<String, Object> predictions, List<FieldSchema> outputFields) {
+    public static List<Object[]> mergePredictions(List<Object[]> inputData, Map<String, Object> predictions, List<FieldSchema> outputFields) {
         List<Object[]> newData = new ArrayList<>();
         
         for (int i = 0; i < inputData.size(); i++) {

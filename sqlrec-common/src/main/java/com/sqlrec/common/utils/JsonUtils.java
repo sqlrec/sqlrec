@@ -77,4 +77,42 @@ public class JsonUtils {
     public static Map<String, Object> parseJsonToMap(String json) {
         return gson.fromJson(json, Map.class);
     }
+
+    public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData, 
+                                          List<FieldSchema> queryFields, List<FieldSchema> valueFields,
+                                          List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
+        JsonObject jsonObject = new JsonObject();
+
+        for (int i = 0; i < queryFields.size(); i++) {
+            FieldSchema field = queryFields.get(i);
+            int fieldIndex = findFieldIndex(queryDataFields, field.name);
+            if (fieldIndex >= 0 && queryData.size() > 0) {
+                Object value = queryData.get(0)[fieldIndex];
+                JsonArray jsonArray = new JsonArray();
+                if (value != null) {
+                    jsonArray.add(value.toString());
+                }
+                jsonObject.add(field.name, jsonArray);
+            }
+        }
+
+        for (int i = 0; i < valueFields.size(); i++) {
+            FieldSchema field = valueFields.get(i);
+            int fieldIndex = findFieldIndex(valueDataFields, field.name);
+            if (fieldIndex >= 0) {
+                JsonArray jsonArray = new JsonArray();
+                for (Object[] row : valueData) {
+                    Object value = row[fieldIndex];
+                    if (value != null) {
+                        jsonArray.add(value.toString());
+                    } else {
+                        jsonArray.add(JsonNull.INSTANCE);
+                    }
+                }
+                jsonObject.add(field.name, jsonArray);
+            }
+        }
+        
+        return gson.toJson(jsonObject);
+    }
 }

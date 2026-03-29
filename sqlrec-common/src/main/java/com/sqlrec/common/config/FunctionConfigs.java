@@ -21,5 +21,6 @@ public class FunctionConfigs {
         put("window_diversify", WindowDiversify.class.getName());
         put("dedup", DedupFunction.class.getName());
         put("call_service", CallServiceFunction.class.getName());
+        put("call_service_with_qv", CallServiceWithQVFunction.class.getName());
     }};
 }
