@@ -55,7 +55,7 @@ public class JsonUtils {
                 if (fieldIndex >= 0 && fieldIndex < row.length) {
                     Object value = row[fieldIndex];
                     if (value != null) {
-                        jsonObject.addProperty(field.name, value.toString());
+                        jsonObject.add(field.name, gson.toJsonTree(value));
                     }
                 }
             }
@@ -90,7 +90,9 @@ public class JsonUtils {
                 Object value = queryData.get(0)[fieldIndex];
                 JsonArray jsonArray = new JsonArray();
                 if (value != null) {
-                    jsonArray.add(value.toString());
+                    jsonArray.add(gson.toJsonTree(value));
+                } else {
+                    jsonArray.add(JsonNull.INSTANCE);
                 }
                 jsonObject.add(field.name, jsonArray);
             }
@@ -104,7 +106,7 @@ public class JsonUtils {
                 for (Object[] row : valueData) {
                     Object value = row[fieldIndex];
                     if (value != null) {
-                        jsonArray.add(value.toString());
+                        jsonArray.add(gson.toJsonTree(value));
                     } else {
                         jsonArray.add(JsonNull.INSTANCE);
                     }
