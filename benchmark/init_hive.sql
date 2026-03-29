@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `behavior_sample` (
  `user_age` INT,
  `user_os` STRING,
  `user_network` STRING,
+ `user_clicked_items` ARRAY<BIGINT>,
  `item_id` BIGINT,
  `item_name` STRING,
  `item_brand` STRING,
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `behavior_sample` (
  `item_category2` STRING,
  `item_category3` STRING,
  `item_category4` STRING,
+ `item_tags` ARRAY<STRING>,
  `bhv_time` BIGINT,
  `is_click` FLOAT
 ) PARTITIONED BY (`dt` STRING)

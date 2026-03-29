@@ -60,7 +60,7 @@ curl --request POST \
 
 
 envsubst < ${dir}/init.sql > ${dir}/init.sql.tmp
-beeline -u "jdbc:hive2://127.0.0.1:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init.sql.tmp
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init.sql.tmp
 
 python3 -m venv ${dir}/.venv
 source ${dir}/.venv/bin/activate

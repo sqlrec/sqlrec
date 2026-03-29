@@ -358,4 +358,121 @@ public class K8sManager {
         }
     }
 
+    private static String checkJobStatus(String jobName, String namespace) {
+        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+            io.fabric8.kubernetes.api.model.batch.v1.Job job = client.batch().v1().jobs()
+                    .inNamespace(namespace != null ? namespace : "default")
+                    .withName(jobName)
+                    .get();
+            
+            if (job == null) {
+                log.warn("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
+                return "running";
+            }
+            
+            if (job.getStatus() != null) {
+                if (job.getStatus().getSucceeded() != null && job.getStatus().getSucceeded() > 0) {
+                    log.info("Job completed successfully: {}/{}", namespace != null ? namespace : "default", jobName);
+                    return "succeeded";
+                }
+                if (job.getStatus().getFailed() != null && job.getStatus().getFailed() > 0) {
+                    log.error("Job failed: {}/{}", namespace != null ? namespace : "default", jobName);
+                    return "failed";
+                }
+            }
+            
+            return "running";
+        } catch (Exception e) {
+            log.error("Failed to check job status: {}", e.getMessage(), e);
+            return "running";
+        }
+    }
+
+    private static boolean isDeploymentReady(String deploymentName, String namespace) {
+        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+            Deployment deployment = client.apps().deployments()
+                    .inNamespace(namespace != null ? namespace : "default")
+                    .withName(deploymentName)
+                    .get();
+            
+            if (deployment == null) {
+                log.warn("Deployment not found: {}/{}", namespace != null ? namespace : "default", deploymentName);
+                return false;
+            }
+            
+            if (deployment.getStatus() != null) {
+                Integer readyReplicas = deployment.getStatus().getReadyReplicas();
+                if (readyReplicas != null && readyReplicas >= 1) {
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (Exception e) {
+            log.error("Failed to check deployment status: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    public static String checkJobStatus(String k8sYaml) {
+        if (k8sYaml == null || k8sYaml.isEmpty()) {
+            return "succeeded";
+        }
+        
+        List<Job> jobs = parseK8sYamlAndGetJobs(k8sYaml);
+        
+        if (jobs.isEmpty()) {
+            return "succeeded";
+        }
+        
+        boolean anyFailed = false;
+        boolean anyRunning = false;
+        
+        for (Job job : jobs) {
+            String namespace = job.getMetadata() != null ? job.getMetadata().getNamespace() : null;
+            String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
+            if (name != null) {
+                String status = checkJobStatus(name, namespace);
+                if ("failed".equals(status)) {
+                    anyFailed = true;
+                } else if ("running".equals(status)) {
+                    anyRunning = true;
+                }
+            }
+        }
+        
+        if (anyFailed) {
+            return "failed";
+        }
+        if (anyRunning) {
+            return "running";
+        }
+        return "succeeded";
+    }
+
+    public static boolean isDeploymentReady(String k8sYaml) {
+        if (k8sYaml == null || k8sYaml.isEmpty()) {
+            return true;
+        }
+        
+        List<Deployment> deployments = parseK8sYamlAndGetDeployments(k8sYaml);
+        
+        if (deployments.isEmpty()) {
+            return true;
+        }
+        
+        boolean allReady = true;
+        
+        for (Deployment deployment : deployments) {
+            String namespace = deployment.getMetadata() != null ? deployment.getMetadata().getNamespace() : null;
+            String name = deployment.getMetadata() != null ? deployment.getMetadata().getName() : null;
+            if (name != null) {
+                if (!isDeploymentReady(name, namespace)) {
+                    allReady = false;
+                }
+            }
+        }
+        
+        return allReady;
+    }
 }

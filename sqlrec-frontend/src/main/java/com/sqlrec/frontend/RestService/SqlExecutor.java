@@ -24,10 +24,10 @@ public class SqlExecutor {
             if (sqlProcessResult == null) {
                 executeData.msg = "cannot execute sql: " + sql;
             } else {
-                executeData.msg = sqlProcessResult.msg;
+                executeData.msg = sqlProcessResult.getMsg();
                 executeData.data = utils.convertToMapList(
-                        sqlProcessResult.enumerable.toList(),
-                        sqlProcessResult.fields
+                        sqlProcessResult.getEnumerable() != null ? sqlProcessResult.getEnumerable().toList() : null,
+                        sqlProcessResult.getFields()
                 );
             }
             executeDataList.data.add(executeData);

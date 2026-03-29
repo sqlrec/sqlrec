@@ -2,6 +2,7 @@ package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.ModelConfigs;
+import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +63,7 @@ public class ModelManager {
         }
     }
 
-    public static Checkpoint trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
+    public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
         Model modelEntity = DbUtils.getModel(modelTrainConf.modelName);
@@ -87,10 +89,13 @@ public class ModelManager {
         checkpoint.setUpdatedAt(System.currentTimeMillis());
 
         DbUtils.upsertCheckpoint(checkpoint);
-        return checkpoint;
+        
+        List<CheckpointInfo> checkpointInfos = new ArrayList<>();
+        checkpointInfos.add(new CheckpointInfo(modelTrainConf.modelName, modelTrainConf.checkpointName));
+        return checkpointInfos;
     }
 
-    public static void exportModel(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
+    public static List<CheckpointInfo> exportModel(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
         ModelExportConf modelExportConf = ModelEntityConverter.convertToModelExportConf(sqlExportModel, defaultSchema);
 
         Model modelEntity = DbUtils.getModel(modelExportConf.modelName);
@@ -121,6 +126,7 @@ public class ModelManager {
         k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.params);
         K8sManager.applyYaml(k8sYaml);
 
+        List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint checkpoint = new Checkpoint();
             checkpoint.setModelName(modelExportConf.modelName);
@@ -134,7 +140,10 @@ public class ModelManager {
             checkpoint.setUpdatedAt(System.currentTimeMillis());
 
             DbUtils.upsertCheckpoint(checkpoint);
+            checkpointInfos.add(new CheckpointInfo(modelExportConf.modelName, exportCheckpointName));
         }
+        
+        return checkpointInfos;
     }
 
     public static String injectPodConfig(String k8sYaml, ModelConfig model, Map<String, String> params) {
@@ -182,7 +191,7 @@ public class ModelManager {
         return k8sYaml;
     }
 
-    public static Service createService(SqlCreateService sqlCreateService) throws Exception {
+    public static String createService(SqlCreateService sqlCreateService) throws Exception {
         ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
         Model modelEntity = DbUtils.getModel(serviceConfig.modelName);
@@ -226,7 +235,7 @@ public class ModelManager {
             DbUtils.upsertService(service);
         }
 
-        return service;
+        return serviceConfig.serviceName;
     }
 
     public static void deleteService(String serviceName) {
@@ -238,5 +247,44 @@ public class ModelManager {
             K8sManager.deleteYaml(service.getYaml());
         }
         DbUtils.deleteService(serviceName);
+    }
+
+    public static boolean isCheckpointOperationCompleted(String modelName, String checkpointName) {
+        Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+        if (checkpoint == null) {
+            throw new IllegalArgumentException("Checkpoint not found: " + checkpointName + " for model " + modelName);
+        }
+        
+        String status = checkpoint.getStatus();
+        
+        if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
+            return true;
+        }
+        if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
+            throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
+        }
+        
+        if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
+            String k8sYaml = checkpoint.getYaml();
+            if (StringUtils.isEmpty(k8sYaml)) {
+                return false;
+            }
+            
+            String jobStatus = K8sManager.checkJobStatus(k8sYaml);
+            if ("succeeded".equals(jobStatus)) {
+                checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
+                checkpoint.setUpdatedAt(System.currentTimeMillis());
+                DbUtils.upsertCheckpoint(checkpoint);
+                return true;
+            }
+            if ("failed".equals(jobStatus)) {
+                checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
+                checkpoint.setUpdatedAt(System.currentTimeMillis());
+                DbUtils.upsertCheckpoint(checkpoint);
+                throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
+            }
+        }
+        
+        return false;
     }
 }

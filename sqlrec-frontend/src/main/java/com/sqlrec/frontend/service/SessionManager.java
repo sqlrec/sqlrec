@@ -82,7 +82,7 @@ public class SessionManager {
             SqlProcessResult sqlProcessResult = sqlProcessor.tryExecuteSql(tExecuteStatementReq.getStatement());
             if (sqlProcessResult != null) {
                 TOperationHandle operationHandle = new TOperationHandle(
-                        sqlProcessResult.handleIdentifier, TOperationType.EXECUTE_STATEMENT, true
+                        sqlProcessResult.getHandleIdentifier(), TOperationType.EXECUTE_STATEMENT, true
                 );
                 resp = new TExecuteStatementResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 resp.setOperationHandle(operationHandle);
@@ -107,16 +107,27 @@ public class SessionManager {
             SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TOperationState operationState;
-                if (sqlProcessResult.exception != null) {
+                if (sqlProcessResult.getException() != null) {
                     operationState = TOperationState.ERROR_STATE;
                 } else {
-                    operationState = TOperationState.FINISHED_STATE;
+                    try {
+                        if (sqlProcessResult.isCompleted()) {
+                            operationState = TOperationState.FINISHED_STATE;
+                        } else {
+                            operationState = TOperationState.RUNNING_STATE;
+                        }
+                    } catch (Exception e) {
+                        sqlProcessResult.setException(e);
+                        operationState = TOperationState.ERROR_STATE;
+                    }
                 }
                 TGetOperationStatusResp resp = new TGetOperationStatusResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 resp.setOperationState(operationState);
                 resp.setHasResultSet(true);
-                resp.setOperationCompletedIsSet(true);
-                resp.setErrorMessage(sqlProcessResult.msg);
+                if (operationState == TOperationState.FINISHED_STATE || operationState == TOperationState.ERROR_STATE) {
+                    resp.setOperationCompletedIsSet(true);
+                }
+                resp.setErrorMessage(sqlProcessResult.getMsg());
                 return resp;
             }
         }
@@ -133,8 +144,8 @@ public class SessionManager {
             SqlProcessResult sqlProcessResult = sqlProcessor.getProcessResult(handleIdentifier);
             if (sqlProcessResult != null) {
                 TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-                if (sqlProcessResult.fields != null) {
-                    resp.setSchema(Utils.convertFieldsToTTableSchema(sqlProcessResult.fields));
+                if (sqlProcessResult.getFields() != null) {
+                    resp.setSchema(Utils.convertFieldsToTTableSchema(sqlProcessResult.getFields()));
                 } else {
                     resp.setSchema(Utils.convertFieldsToTTableSchema(Utils.getStringTypeField("sys_warn")));
                 }
@@ -156,15 +167,17 @@ public class SessionManager {
                 TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 // 0 means query output
                 if (tFetchResultsReq.getFetchType() == 0) {
-                    if (sqlProcessResult.fields != null) {
-                        resp.setResults(Utils.convertObjectArrayToTRowSet(sqlProcessResult.enumerable, sqlProcessResult.fields));
-                        sqlProcessResult.enumerable = null;
+                    if (sqlProcessResult.getFields() != null) {
+                        resp.setResults(Utils.convertObjectArrayToTRowSet(sqlProcessResult.getEnumerable(), sqlProcessResult.getFields()));
+                        sqlProcessResult.setEnumerable(null);
+                    } else {
+                        resp.setResults(Utils.convertObjectArrayToTRowSet(
+                                Utils.getMsgEnumerable("no output"),
+                                Utils.getStringTypeField("sys_warn"))
+                        );
                     }
                 } else {
-                    resp.setResults(Utils.convertObjectArrayToTRowSet(
-                            Utils.getMsgEnumerable("no output"),
-                            Utils.getStringTypeField("sys_warn"))
-                    );
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(null, Utils.getStringTypeField("log")));
                 }
                 resp.setHasMoreRows(false);
                 return resp;
@@ -216,7 +229,7 @@ public class SessionManager {
         THandleIdentifier operationId = tGetQueryIdReq.getOperationHandle().getOperationId();
         SqlProcessor sqlProcessor = getSqlProcessorByOperationId(operationId);
         if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
-            return new TGetQueryIdResp(sqlProcessor.getProcessResult(operationId).queryId);
+            return new TGetQueryIdResp(sqlProcessor.getProcessResult(operationId).getQueryId());
         }
 
         TCLIService.Client client = getHiveClientByOperationId(operationId);

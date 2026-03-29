@@ -59,11 +59,11 @@ public class TestTypeSupport {
             SqlProcessResult rowSet = processor.tryExecuteSql(sql);
             System.out.println(rowSet);
             assert rowSet != null;
-            assert rowSet.exception == null;
-            Utils.convertFieldsToTTableSchema(rowSet.fields);
-            Utils.convertObjectArrayToTRowSet(rowSet.enumerable, rowSet.fields);
-            if (rowSet.enumerable != null) {
-                List<Object[]> results = rowSet.enumerable.toList();
+            assert rowSet.getException() == null;
+            Utils.convertFieldsToTTableSchema(rowSet.getFields());
+            Utils.convertObjectArrayToTRowSet(rowSet.getEnumerable(), rowSet.getFields());
+            if (rowSet.getEnumerable() != null) {
+                List<Object[]> results = rowSet.getEnumerable().toList();
                 for (Object[] result : results) {
                     System.out.println(java.util.Arrays.toString(result));
                 }

@@ -1,7 +1,10 @@
 package com.sqlrec.frontend.service;
 
+import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.frontend.common.ModelSqlProcessResult;
+import com.sqlrec.frontend.common.ServiceSqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -18,6 +21,19 @@ public class Utils {
         Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
         List<RelDataTypeField> fields = getStringTypeField(fieldName);
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
+    }
+
+
+    public static ModelSqlProcessResult convertModelMsgToResult(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
+        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
+        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        return new ModelSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, checkpointInfos);
+    }
+
+    public static ServiceSqlProcessResult convertServiceMsgToResult(String msg, String fieldName, String serviceName) {
+        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
+        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        return new ServiceSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, serviceName);
     }
 
     public static SqlProcessResult convertStringListToResult(List<String> list, String fieldName) {

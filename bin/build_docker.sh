@@ -1,7 +1,6 @@
 #!/bin/bash
 shopt -s expand_aliases
 source ~/.bash_profile
-set -ex
 dir=$(dirname $(realpath $0))
 
 source ${dir}/../deploy/env.sh

@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.common;
 
 import com.google.common.collect.ImmutableList;
+import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.utils.JsonUtils;
@@ -80,11 +81,11 @@ public class SqlProcessor {
         } catch (Exception e) {
             String stackTrace = ExceptionUtils.getStackTrace(e);
             result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
-            result.msg = "process sql error: " + e.getMessage() + " stack trace: " + stackTrace;
-            result.exception = e;
+            result.setMsg("process sql error: " + e.getMessage() + " stack trace: " + stackTrace);
+            result.setException(e);
         }
         if (result != null) {
-            sqlProcessorMap.put(result.handleIdentifier, result);
+            sqlProcessorMap.put(result.getHandleIdentifier(), result);
         }
         return result;
     }
@@ -111,14 +112,14 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlTrainModel) {
             SqlTrainModel trainModel = (SqlTrainModel) sqlNode;
-            ModelManager.trainModel(trainModel, defaultSchema);
-            return Utils.convertMsgToResult("train model success", "msg");
+            List<CheckpointInfo> checkpointInfos = ModelManager.trainModel(trainModel, defaultSchema);
+            return Utils.convertModelMsgToResult("train model success", "msg", checkpointInfos);
         }
 
         if (sqlNode instanceof SqlExportModel) {
             SqlExportModel exportModel = (SqlExportModel) sqlNode;
-            ModelManager.exportModel(exportModel, defaultSchema);
-            return Utils.convertMsgToResult("export model success", "msg");
+            List<CheckpointInfo> checkpointInfos = ModelManager.exportModel(exportModel, defaultSchema);
+            return Utils.convertModelMsgToResult("export model success", "msg", checkpointInfos);
         }
 
         if (sqlNode instanceof SqlDropModel) {
@@ -130,8 +131,8 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlCreateService) {
             SqlCreateService createService = (SqlCreateService) sqlNode;
-            ModelManager.createService(createService);
-            return Utils.convertMsgToResult("create service success", "msg");
+            String serviceName = ModelManager.createService(createService);
+            return Utils.convertServiceMsgToResult("create service success", "msg", serviceName);
         }
 
         if (sqlNode instanceof SqlDropService) {
