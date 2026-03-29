@@ -103,7 +103,3 @@ export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
 export SPARK_HOME=${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}
 export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}
 export PATH=${PATH}:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${HIVE_HOME}/bin:${JAVA_HOME}/bin
-
-if [ "${DEBUG_MODE}" = "true" ]; then
-    export JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${SQLREC_DEBUG_PORT}"
-fi

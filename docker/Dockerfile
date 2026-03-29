@@ -11,7 +11,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.m2,rw mvn clean package -DskipTests
 
 # Stage 2: Runtime stage
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 # Set working directory
 WORKDIR /app
