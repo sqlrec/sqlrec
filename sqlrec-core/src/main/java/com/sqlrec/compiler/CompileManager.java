@@ -60,7 +60,7 @@ public class CompileManager {
         }
 
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema, true);
+            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
         }
         if (flinkSqlNode instanceof SqlCache) {
             return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
@@ -74,10 +74,9 @@ public class CompileManager {
 
     private BindableInterface getCallSqlFunctionBindable(
             SqlCallSqlFunction callSqlFunction,
-            CalciteSchema schema,
-            boolean needReturnSchema
+            CalciteSchema schema
     ) throws Exception {
-        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, needReturnSchema, this);
+        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
     }
 
     private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
@@ -89,7 +88,7 @@ public class CompileManager {
             if (callSqlFunction.isAsync()) {
                 throw new Exception("async function not support in cache");
             }
-            BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema, true);
+            BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
             return new CacheTableBindable(tableName, bindableInterface, createSql);
         }
 

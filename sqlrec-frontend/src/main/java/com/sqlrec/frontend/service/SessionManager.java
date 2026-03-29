@@ -135,6 +135,8 @@ public class SessionManager {
                 TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 if (sqlProcessResult.fields != null) {
                     resp.setSchema(Utils.convertFieldsToTTableSchema(sqlProcessResult.fields));
+                } else {
+                    resp.setSchema(Utils.convertFieldsToTTableSchema(Utils.getStringTypeField("sys_warn")));
                 }
                 return resp;
             }
@@ -159,7 +161,10 @@ public class SessionManager {
                         sqlProcessResult.enumerable = null;
                     }
                 } else {
-                    resp.setResults(Utils.convertObjectArrayToTRowSet(null, Utils.getStringTypeField("log")));
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(
+                            Utils.getMsgEnumerable("no output"),
+                            Utils.getStringTypeField("sys_warn"))
+                    );
                 }
                 resp.setHasMoreRows(false);
                 return resp;

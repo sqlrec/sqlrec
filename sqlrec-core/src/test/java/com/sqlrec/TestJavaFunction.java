@@ -52,9 +52,8 @@ public class TestJavaFunction {
                 "cache table t4 as call add_col(t1, 'new_col', get('col_value'))",
                 "select * from t4",
                 "call get('func_name')(t1, 'new_col', get('col_value')) like t4",
+                "call get('func_name')(t1, 'new_col', get('col_value')) like t4 async",
                 "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",
-                "call get('func_name')(t1, 'new_col', get('col_value'))",
-                "call get('func_name')(t1, 'new_col', get('col_value')) async",
                 "call empty_fun()",
                 "call string_arg_fun('test_arg')",
                 "call string_arg_fun(get('col_name'))",
@@ -79,14 +78,11 @@ public class TestJavaFunction {
     }
 
     public static class TestContextFun {
-        public CacheTable eval(ExecuteContext context, String argName) {
+        public void eval(ExecuteContext context, String argName) {
             String argValue = context.getVariable(argName);
             if (argValue != null) {
                 System.out.println(argValue);
-            } else {
-                throw new RuntimeException("argName not found in context");
             }
-            return null;
         }
     }
 }

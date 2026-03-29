@@ -23,7 +23,6 @@ public class FunctionProxyBindable extends BindableInterface {
     private SqlGetVariable funcNameVariable;
     private String likeTableName;
     private List<RelDataTypeField> returnDataFields;
-    private boolean needReturnSchema;
     private boolean isAsync;
 
     public FunctionProxyBindable(
@@ -31,27 +30,22 @@ public class FunctionProxyBindable extends BindableInterface {
             SqlGetVariable funcNameVariable,
             String likeTableName,
             CalciteSchema schema,
-            boolean needReturnSchema,
             boolean isAsync
     ) {
-        if (needReturnSchema) {
-            if (StringUtils.isEmpty(likeTableName)) {
-                throw new RuntimeException("like table name is empty");
-            }
-            returnDataFields = JavaFunctionBindable.getDataTypeByLikeTableName(likeTableName, schema);
+        if (StringUtils.isEmpty(likeTableName)) {
+            throw new RuntimeException("like table name is empty");
         }
+        returnDataFields = JavaFunctionBindable.getDataTypeByLikeTableName(likeTableName, schema);
 
         this.inputList = inputList;
         this.funcNameVariable = funcNameVariable;
         this.likeTableName = likeTableName;
-        this.needReturnSchema = needReturnSchema;
         this.isAsync = isAsync;
     }
 
     public static BindableInterface getFunctionBindable(
             SqlCallSqlFunction callSqlFunction,
             CalciteSchema schema,
-            boolean needReturnSchema,
             CompileManager compileManager
     ) throws Exception {
         List<SqlNode> inputList = callSqlFunction.getInputTableList();
@@ -64,13 +58,13 @@ public class FunctionProxyBindable extends BindableInterface {
 
         if (funcNameVariable != null) {
             return new FunctionProxyBindable(
-                    inputList, funcNameVariable, likeTableName, schema, needReturnSchema, callSqlFunction.isAsync()
+                    inputList, funcNameVariable, likeTableName, schema, callSqlFunction.isAsync()
             );
         }
 
         String functionName = callSqlFunction.getFuncName().getSimple();
         return getFunctionBindableByName(
-                functionName, schema, inputList, likeTableName, needReturnSchema, callSqlFunction.isAsync(), compileManager
+                functionName, schema, inputList, likeTableName, callSqlFunction.isAsync(), compileManager
         );
     }
 
@@ -79,7 +73,6 @@ public class FunctionProxyBindable extends BindableInterface {
             CalciteSchema schema,
             List<SqlNode> inputList,
             String likeTableName,
-            boolean needReturnSchema,
             boolean isAsync,
             CompileManager compileManager
     ) throws Exception {
@@ -87,7 +80,7 @@ public class FunctionProxyBindable extends BindableInterface {
         Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Const.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
             return new JavaFunctionBindable(
-                    functionName, javaFunctionObj, inputList, likeTableName, schema, needReturnSchema, isAsync
+                    functionName, javaFunctionObj, inputList, likeTableName, schema, isAsync
             );
         }
 
@@ -120,7 +113,7 @@ public class FunctionProxyBindable extends BindableInterface {
         BindableInterface bindableInterface = null;
         try {
             bindableInterface = getFunctionBindableByName(
-                    functionName, schema, inputList, likeTableName, needReturnSchema, isAsync, new CompileManager()
+                    functionName, schema, inputList, likeTableName, isAsync, new CompileManager()
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
