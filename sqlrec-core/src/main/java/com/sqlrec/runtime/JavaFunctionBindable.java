@@ -42,8 +42,8 @@ public class JavaFunctionBindable extends BindableInterface {
         if (!StringUtils.isEmpty(likeTableName)) {
             returnDataFields = getDataTypeByLikeTableName(likeTableName, schema);
         } else {
-            if (CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
-                Object outputTable = callEvalMethod(schema, new ExecuteContextImpl(), false);
+            if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
+                Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
                 if (outputTable == null) {
                     throw new RuntimeException("table function return null");
                 }
@@ -80,7 +80,7 @@ public class JavaFunctionBindable extends BindableInterface {
         return ((CacheTable) table).getDataFields();
     }
 
-    private Object callEvalMethod(CalciteSchema schema, ExecuteContext context, boolean isAsync) {
+    private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         List<Object> paramList = new ArrayList<>();
         int inputParamIndex = 0;
@@ -139,7 +139,7 @@ public class JavaFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        Object outputTable = callEvalMethod(schema, context, isAsync);
+        Object outputTable = callEvalMethod(schema, context);
         if (outputTable == null) {
             return null;
         }
