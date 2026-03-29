@@ -42,6 +42,8 @@ public class TestSqlParse {
                 "create model if not exists `test_model` (id bigint, name string, price float) with ('param1'='value1', 'param2'='value2')",
                 "drop model `test_model`",
                 "drop model if exists `test_model`",
+                "alter model test_model drop checkpoint='checkpoint1'",
+                "alter model test_model drop if exists checkpoint='checkpoint1'",
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table",
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table from 'checkpoint_path1'",
                 "train model test_model checkpoint='checkpoint_path' on data_db.test_table where dt>='2023-01-01' and dt < '2023-02-01'",

@@ -480,3 +480,26 @@ SqlDropService SqlDropService() :
         return new SqlDropService(startPos.plus(getPos()), serviceName, ifExists);
     }
 }
+
+SqlAlterModelDropCheckpoint SqlAlterModelDropCheckpoint() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier modelName = null;
+    SqlNode checkpointName = null;
+    boolean ifExists = false;
+}
+{
+    <ALTER>
+    <MODEL>
+    { startPos = getPos(); }
+
+    modelName = SimpleIdentifier()
+    <DROP>
+    ifExists = IfExistsOpt()
+    <CHECKPOINT>
+    <EQ>
+    checkpointName = StringLiteral()
+    {
+        return new SqlAlterModelDropCheckpoint(startPos.plus(getPos()), modelName, checkpointName, ifExists);
+    }
+}

@@ -249,6 +249,32 @@ public class ModelManager {
         DbUtils.deleteService(serviceName);
     }
 
+    public static void deleteCheckpoint(String modelName, String checkpointName) {
+        Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+        if (checkpoint == null) {
+            return;
+        }
+        
+        String status = checkpoint.getStatus();
+        if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
+            String k8sYaml = checkpoint.getYaml();
+            if (!StringUtils.isEmpty(k8sYaml)) {
+                K8sManager.deleteYaml(k8sYaml);
+            }
+        }
+        
+        DbUtils.deleteCheckpoint(modelName, checkpointName);
+    }
+
+    public static void deleteModel(String modelName) {
+        List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(modelName);
+        for (Checkpoint checkpoint : checkpoints) {
+            deleteCheckpoint(modelName, checkpoint.getCheckpointName());
+        }
+        
+        DbUtils.deleteModel(modelName);
+    }
+
     public static boolean isCheckpointOperationCompleted(String modelName, String checkpointName) {
         Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
         if (checkpoint == null) {
@@ -275,6 +301,11 @@ public class ModelManager {
                 checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
                 checkpoint.setUpdatedAt(System.currentTimeMillis());
                 DbUtils.upsertCheckpoint(checkpoint);
+                
+                if (!StringUtils.isEmpty(k8sYaml)) {
+                    K8sManager.deleteYaml(k8sYaml);
+                }
+                
                 return true;
             }
             if ("failed".equals(jobStatus)) {

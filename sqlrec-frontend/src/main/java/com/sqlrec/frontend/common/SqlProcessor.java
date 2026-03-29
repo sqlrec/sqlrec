@@ -125,8 +125,23 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlDropModel) {
             SqlDropModel dropModel = (SqlDropModel) sqlNode;
             String modelName = dropModel.getModelName().getSimple();
-            DbUtils.deleteModel(modelName);
+            ModelManager.deleteModel(modelName);
             return Utils.convertMsgToResult("drop model success", "msg");
+        }
+
+        if (sqlNode instanceof SqlAlterModelDropCheckpoint) {
+            SqlAlterModelDropCheckpoint alterModelDropCheckpoint = (SqlAlterModelDropCheckpoint) sqlNode;
+            String modelName = alterModelDropCheckpoint.getModelName().getSimple();
+            String checkpointName = SchemaUtils.removeQuotes(alterModelDropCheckpoint.getCheckpointName().toString());
+            Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+            if (checkpoint == null) {
+                if (alterModelDropCheckpoint.isIfExists()) {
+                    return Utils.convertMsgToResult("drop checkpoint success", "msg");
+                }
+                throw new RuntimeException("checkpoint not exists: " + checkpointName + " for model " + modelName);
+            }
+            ModelManager.deleteCheckpoint(modelName, checkpointName);
+            return Utils.convertMsgToResult("drop checkpoint success", "msg");
         }
 
         if (sqlNode instanceof SqlCreateService) {
