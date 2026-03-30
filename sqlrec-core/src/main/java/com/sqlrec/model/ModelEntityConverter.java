@@ -18,6 +18,7 @@ import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.apache.hadoop.conf.Configuration;
@@ -163,15 +164,26 @@ public class ModelEntityConverter {
         return params;
     }
 
-    public static String getModelCheckpointPath(String modelName, String checkpoint) {
+    public static String getModelPath(String modelName) {
+        if (StringUtils.isEmpty(modelName)) {
+            throw new RuntimeException("modelName is empty");
+        }
+
         String fullPath = ModelConfigs.MODEL_BASE_PATH.getValue();
         if (!fullPath.endsWith("/")) {
             fullPath += "/";
         }
-        fullPath += modelName + "/" + checkpoint;
+        fullPath += modelName;
 
         List<String> fixedPaths = fixPathProtocol(Collections.singletonList(fullPath));
         return fixedPaths.get(0);
+    }
+
+    public static String getModelCheckpointPath(String modelName, String checkpoint) {
+        if (StringUtils.isEmpty(checkpoint)) {
+            throw new RuntimeException("checkpoint is empty");
+        }
+        return getModelPath(modelName) + "/" + checkpoint;
     }
 
     public static List<String> fixPathProtocol(List<String> partitionPaths) {

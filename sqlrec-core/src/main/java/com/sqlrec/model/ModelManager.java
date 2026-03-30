@@ -19,6 +19,7 @@ import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.DbUtils;
+import com.sqlrec.utils.HadoopUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -60,6 +61,41 @@ public class ModelManager {
             return model;
         } catch (Exception e) {
             throw new RuntimeException("Error while checking model: " + e.getMessage(), e);
+        }
+    }
+
+    public static ModelConfig createModel(SqlCreateModel sqlCreateModel) {
+        String modelName = sqlCreateModel.getModelName().getSimple();
+        boolean ifNotExists = sqlCreateModel.isIfNotExists();
+        
+        Model existingModel = DbUtils.getModel(modelName);
+        if (existingModel != null) {
+            if (ifNotExists) {
+                return null;
+            }
+            throw new IllegalArgumentException("Model already exists: " + modelName);
+        }
+
+        String modelPath = ModelEntityConverter.getModelPath(modelName);
+        if (HadoopUtils.pathExists(modelPath)) {
+            throw new IllegalArgumentException("Model path already exists: " + modelPath);
+        }
+        
+        ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
+        saveModel(sqlCreateModel);
+        return modelConfig;
+    }
+
+    public static void saveModel(SqlCreateModel sqlCreateModel) {
+        Model model = new Model();
+        model.setName(sqlCreateModel.getModelName().getSimple());
+        model.setDdl(sqlCreateModel.toString());
+        model.setCreatedAt(System.currentTimeMillis());
+        model.setUpdatedAt(System.currentTimeMillis());
+        if (sqlCreateModel.isIfNotExists()) {
+            DbUtils.insertModel(model);
+        } else {
+            DbUtils.upsertModel(model);
         }
     }
 
@@ -304,6 +340,9 @@ public class ModelManager {
                 K8sManager.deleteYaml(k8sYaml);
             }
         }
+
+        String checkpointPath = ModelEntityConverter.getModelCheckpointPath(modelName, checkpointName);
+        HadoopUtils.deletePath(checkpointPath);
         
         DbUtils.deleteCheckpoint(modelName, checkpointName);
     }
@@ -313,6 +352,9 @@ public class ModelManager {
         for (Checkpoint checkpoint : checkpoints) {
             deleteCheckpoint(modelName, checkpoint.getCheckpointName());
         }
+
+        String modelPath = ModelEntityConverter.getModelPath(modelName);
+        HadoopUtils.deletePath(modelPath);
         
         DbUtils.deleteModel(modelName);
     }

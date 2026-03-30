@@ -105,8 +105,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlCreateModel) {
             SqlCreateModel createModel = (SqlCreateModel) sqlNode;
-            ModelConfig model = ModelManager.getAndCheckModel(createModel);
-            saveModel(createModel);
+            ModelManager.createModel(createModel);
             return Utils.convertMsgToResult("create model success", "msg");
         }
 
@@ -400,16 +399,5 @@ public class SqlProcessor {
         }
     }
 
-    public static void saveModel(SqlCreateModel sqlCreateModel) {
-        Model model = new Model();
-        model.setName(sqlCreateModel.getModelName().getSimple());
-        model.setDdl(sqlCreateModel.toString());
-        model.setCreatedAt(System.currentTimeMillis());
-        model.setUpdatedAt(System.currentTimeMillis());
-        if (sqlCreateModel.isIfNotExists()) {
-            DbUtils.insertModel(model);
-        } else {
-            DbUtils.upsertModel(model);
-        }
-    }
+
 }
