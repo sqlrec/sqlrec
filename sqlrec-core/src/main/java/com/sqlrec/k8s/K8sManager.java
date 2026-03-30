@@ -369,9 +369,11 @@ public class K8sManager {
                 log.warn("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
                 return "running";
             }
-            
+
             if (job.getStatus() != null) {
-                if (job.getStatus().getSucceeded() != null && job.getStatus().getSucceeded() > 0) {
+                Integer succeeded = job.getStatus().getSucceeded();
+                Integer completions = job.getSpec().getCompletions();
+                if (succeeded != null && succeeded >= completions) {
                     log.info("Job completed successfully: {}/{}", namespace != null ? namespace : "default", jobName);
                     return "succeeded";
                 }
