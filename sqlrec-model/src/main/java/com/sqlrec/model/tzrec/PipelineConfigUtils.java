@@ -1,9 +1,9 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
+import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.List;
 import java.util.Map;
@@ -134,21 +134,21 @@ public class PipelineConfigUtils {
                     // Generate id_feature for categorical features
                     int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.params);
                     int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.params);
-                    
+
                     // Check field-specific bucket size
                     int numBuckets = defaultNumBuckets;
                     String bucketSizeKey = "column." + featureName + ".bucket_size";
                     if (model.params != null && model.params.containsKey(bucketSizeKey)) {
                         numBuckets = Integer.parseInt(model.params.get(bucketSizeKey));
                     }
-                    
+
                     // Check field-specific embedding dim
                     int embeddingDim = defaultEmbeddingDim;
                     String embeddingDimKey = "column." + featureName + ".embedding_dim";
                     if (model.params != null && model.params.containsKey(embeddingDimKey)) {
                         embeddingDim = Integer.parseInt(model.params.get(embeddingDimKey));
                     }
-                    
+
                     config.append("feature_configs {\n");
                     config.append("    id_feature {\n");
                     config.append("        feature_name: \"").append(featureName).append("\"\n");
@@ -189,8 +189,7 @@ public class PipelineConfigUtils {
         config.append("    }\n");
 
         // Add deepfm configuration
-        Map<String, String> params = model.params != null ? model.params : new java.util.HashMap<>();
-        String hiddenUnits = Config.HIDDEN_UNITS.getValue(params);
+        String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.params);
         config.append("    deepfm {\n");
         config.append("        deep {\n");
         config.append("            hidden_units: [" + hiddenUnits + "]\n");

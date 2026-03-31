@@ -18,6 +18,7 @@ public class ShellUtils {
                 "    --pipeline_config_path " + Config.SHELL_DIR + "/" + Config.PIPELINE_CONFIG_NAME;
         return shell;
     }
+
     public static String genExportModelShell(ModelConfig model, ModelExportConf exportConf, String exportDir) {
         String shell = "#!/bin/bash\n" +
                 "set -ex\n" +

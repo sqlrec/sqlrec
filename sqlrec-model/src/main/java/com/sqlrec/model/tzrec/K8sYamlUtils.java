@@ -87,7 +87,7 @@ public class K8sYamlUtils {
             int masterPort,
             Map<String, String> params
     ) {
-        String image = Config.IMAGE.getDefaultValue() + ":" + Config.VERSION.getDefaultValue();
+        String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
         Map<String, String> nodeSelectors = parseNodeSelectors(params);
 
         Job job = new JobBuilder()
@@ -152,7 +152,7 @@ public class K8sYamlUtils {
             String modelCheckpointDir,
             Map<String, String> params
     ) {
-        String image = Config.IMAGE.getDefaultValue() + ":" + Config.VERSION.getDefaultValue();
+        String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
         Map<String, String> nodeSelectors = parseNodeSelectors(params);
 
         Deployment deployment = new DeploymentBuilder()
@@ -160,7 +160,7 @@ public class K8sYamlUtils {
                     .withName(deployName)
                 .endMetadata()
                 .withNewSpec()
-                    .withReplicas(1)
+                    .withReplicas(Config.REPLICAS.getValue(params))
                     .withNewSelector()
                         .withMatchLabels(new HashMap<String, String>() {{
                             put("app", deployName);

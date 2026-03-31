@@ -4,7 +4,8 @@ import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ExternalModel implements ModelController {
     @Override
@@ -15,7 +16,7 @@ public class ExternalModel implements ModelController {
     @Override
     public List<FieldSchema> getOutputFields(ModelConfig model) {
         List<FieldSchema> outputFields = new ArrayList<>();
-        String outputFieldsStr = Config.OUTPUT_FIELDS.getValue(model.params);
+        String outputFieldsStr = Config.OUTPUT_COLUMNS.getValue(model.params);
         if (StringUtils.isNotEmpty(outputFieldsStr)) {
             String[] fieldParts = outputFieldsStr.split(",");
             for (String fieldPart : fieldParts) {

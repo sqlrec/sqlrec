@@ -85,4 +85,8 @@ public class Config {
     public static final ConfigOption<String> POD_MEMORY = new ConfigOption<>(
             "pod_memory",
             "8Gi", "Memory for pod", null, String.class);
+
+    public static final ConfigOption<Integer> REPLICAS = new ConfigOption<>(
+            "replicas",
+            1, "Number of replicas for deployment", null, Integer.class);
 }

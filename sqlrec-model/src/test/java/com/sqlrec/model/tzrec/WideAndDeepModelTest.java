@@ -1,10 +1,10 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class WideAndDeepModelTest {
 
@@ -34,7 +34,7 @@ public class WideAndDeepModelTest {
         modelParams.put("hidden_units", "256,128,64");
         modelParams.put("embedding_dim", "32");
         modelParams.put("num_buckets", "10000000");
-        modelParams.put("label_fields", "label");
+        modelParams.put("label_columns", "label");
         model.params = modelParams;
 
         // Create test train config
@@ -82,7 +82,7 @@ public class WideAndDeepModelTest {
         modelParams.put("hidden_units", "256,128,64");
         modelParams.put("embedding_dim", "32");
         modelParams.put("num_buckets", "10000000");
-        modelParams.put("label_fields", "label");
+        modelParams.put("label_columns", "label");
         model.params = modelParams;
 
         // Create test export config
