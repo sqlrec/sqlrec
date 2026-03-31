@@ -102,7 +102,7 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
         int numWorkers = Config.NUM_WORKERS.getValue(params);
-        String labelFields = Config.LABEL_FIELDS.getValue(model.params);
+        String labelFields = Config.LABEL_COLUMNS.getValue(model.params);
 
         config.append("data_config {\n");
         config.append("    batch_size: " + batchSize + "\n");
@@ -132,9 +132,23 @@ public class PipelineConfigUtils {
                     config.append("}\n");
                 } else {
                     // Generate id_feature for categorical features
-                    int numBuckets = Config.NUM_BUCKETS.getValue(model.params);
-                    int hashBucketSize = Config.HASH_BUCKET_SIZE.getValue(model.params);
-                    int embeddingDim = Config.EMBEDDING_DIM.getValue(model.params);
+                    int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.params);
+                    int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.params);
+                    
+                    // Check field-specific bucket size
+                    int numBuckets = defaultNumBuckets;
+                    String bucketSizeKey = "column." + featureName + ".bucket_size";
+                    if (model.params != null && model.params.containsKey(bucketSizeKey)) {
+                        numBuckets = Integer.parseInt(model.params.get(bucketSizeKey));
+                    }
+                    
+                    // Check field-specific embedding dim
+                    int embeddingDim = defaultEmbeddingDim;
+                    String embeddingDimKey = "column." + featureName + ".embedding_dim";
+                    if (model.params != null && model.params.containsKey(embeddingDimKey)) {
+                        embeddingDim = Integer.parseInt(model.params.get(embeddingDimKey));
+                    }
+                    
                     config.append("feature_configs {\n");
                     config.append("    id_feature {\n");
                     config.append("        feature_name: \"").append(featureName).append("\"\n");
@@ -142,7 +156,7 @@ public class PipelineConfigUtils {
                     if (isIntFeature(fieldType)) {
                         config.append("        num_buckets: ").append(numBuckets).append("\n");
                     } else {
-                        config.append("        hash_bucket_size: ").append(hashBucketSize).append("\n");
+                        config.append("        hash_bucket_size: ").append(numBuckets).append("\n");
                     }
                     config.append("        embedding_dim: ").append(embeddingDim).append("\n");
                     config.append("    }\n");

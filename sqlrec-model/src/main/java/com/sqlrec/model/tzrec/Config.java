@@ -44,14 +44,11 @@ public class Config {
     public static final ConfigOption<Integer> NUM_BUCKETS = new ConfigOption<>(
             "num_buckets",
             1000000, "Number of buckets for int features", null, Integer.class);
-    public static final ConfigOption<Integer> HASH_BUCKET_SIZE = new ConfigOption<>(
-            "hash_bucket_size",
-            1000000, "Hash bucket size for categorical features", null, Integer.class);
 
     // Data configuration
-    public static final ConfigOption<String> LABEL_FIELDS = new ConfigOption<>(
-            "label_fields",
-            null, "Label fields", null, String.class);
+    public static final ConfigOption<String> LABEL_COLUMNS = new ConfigOption<>(
+            "label_columns",
+            null, "Label columns", null, String.class);
 
     // Model configuration
     public static final ConfigOption<String> HIDDEN_UNITS = new ConfigOption<>(

@@ -18,7 +18,7 @@ create model `test_model`
 )
 with (
 'model'='tzrec.wide_and_deep',
-'label_fields'='is_click'
+'label_columns'='is_click'
 );
 
 train model test_model checkpoint='test' on behavior_sample
