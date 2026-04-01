@@ -43,12 +43,12 @@ public class ServiceManager {
         if (service == null) {
             throw new IllegalArgumentException("Service not found: " + serviceName);
         }
-        
+
         String k8sYaml = service.getYaml();
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return true;
         }
-        
+
         return K8sManager.isDeploymentReady(k8sYaml);
     }
 }

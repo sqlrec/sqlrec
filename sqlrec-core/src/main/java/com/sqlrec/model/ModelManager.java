@@ -2,25 +2,19 @@ package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.common.model.CheckpointInfo;
+import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
-import com.sqlrec.common.model.ModelConfig;
-import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ModelExportConf;
-import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.HadoopUtils;
-import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,10 +38,10 @@ public class ModelManager {
             if (errorMessage != null) {
                 throw new IllegalArgumentException(errorMessage);
             }
-            
+
             List<FieldSchema> inputFields = model.inputFields;
             List<FieldSchema> outputFields = modelController.getOutputFields(model);
-            
+
             if (inputFields != null && outputFields != null) {
                 for (FieldSchema inputField : inputFields) {
                     for (FieldSchema outputField : outputFields) {
@@ -57,7 +51,7 @@ public class ModelManager {
                     }
                 }
             }
-            
+
             return model;
         } catch (Exception e) {
             throw new RuntimeException("Error while checking model: " + e.getMessage(), e);
@@ -67,7 +61,7 @@ public class ModelManager {
     public static ModelConfig createModel(SqlCreateModel sqlCreateModel) {
         String modelName = sqlCreateModel.getModelName().getSimple();
         boolean ifNotExists = sqlCreateModel.isIfNotExists();
-        
+
         Model existingModel = DbUtils.getModel(modelName);
         if (existingModel != null) {
             if (ifNotExists) {
@@ -80,7 +74,7 @@ public class ModelManager {
         if (HadoopUtils.pathExists(modelPath)) {
             throw new IllegalArgumentException("Model path already exists: " + modelPath);
         }
-        
+
         ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
         saveModel(sqlCreateModel);
         return modelConfig;
@@ -113,15 +107,15 @@ public class ModelManager {
         if (existingCheckpoint != null) {
             String status = existingCheckpoint.getStatus();
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
-                log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info", 
-                    modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info",
+                        modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
                 List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
             }
             if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-                log.info("Model {} has failed checkpoint {}, deleting it first", 
-                    modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                log.info("Model {} has failed checkpoint {}, deleting it first",
+                        modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
                 deleteCheckpoint(modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
             }
         }
@@ -142,7 +136,7 @@ public class ModelManager {
         checkpoint.setUpdatedAt(System.currentTimeMillis());
 
         DbUtils.upsertCheckpoint(checkpoint);
-        
+
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         checkpointInfos.add(new CheckpointInfo(modelTrainConf.modelName, modelTrainConf.checkpointName));
         return checkpointInfos;
@@ -168,26 +162,26 @@ public class ModelManager {
         }
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
-        
+
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
             if (existingCheckpoint != null) {
                 String status = existingCheckpoint.getStatus();
                 if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
-                    log.info("Model {} has export checkpoint {} in progress, returning existing checkpoint info", 
-                        modelExportConf.modelName, exportCheckpointName);
+                    log.info("Model {} has export checkpoint {} in progress, returning existing checkpoint info",
+                            modelExportConf.modelName, exportCheckpointName);
                     List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                     checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                     return checkpointInfos;
                 }
                 if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-                    log.info("Model {} has failed export checkpoint {}, deleting it first", 
-                        modelExportConf.modelName, exportCheckpointName);
+                    log.info("Model {} has failed export checkpoint {}, deleting it first",
+                            modelExportConf.modelName, exportCheckpointName);
                     deleteCheckpoint(modelExportConf.modelName, exportCheckpointName);
                 }
             }
         }
-        
+
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
             if (existingCheckpoint != null) {
@@ -215,7 +209,7 @@ public class ModelManager {
             DbUtils.upsertCheckpoint(checkpoint);
             checkpointInfos.add(new CheckpointInfo(modelExportConf.modelName, exportCheckpointName));
         }
-        
+
         return checkpointInfos;
     }
 
@@ -332,7 +326,7 @@ public class ModelManager {
         if (checkpoint == null) {
             return;
         }
-        
+
         String status = checkpoint.getStatus();
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
             String k8sYaml = checkpoint.getYaml();
@@ -343,7 +337,7 @@ public class ModelManager {
 
         String checkpointPath = ModelEntityConverter.getModelCheckpointPath(modelName, checkpointName);
         HadoopUtils.deletePath(checkpointPath);
-        
+
         DbUtils.deleteCheckpoint(modelName, checkpointName);
     }
 
@@ -355,7 +349,7 @@ public class ModelManager {
 
         String modelPath = ModelEntityConverter.getModelPath(modelName);
         HadoopUtils.deletePath(modelPath);
-        
+
         DbUtils.deleteModel(modelName);
     }
 
@@ -364,32 +358,32 @@ public class ModelManager {
         if (checkpoint == null) {
             throw new IllegalArgumentException("Checkpoint not found: " + checkpointName + " for model " + modelName);
         }
-        
+
         String status = checkpoint.getStatus();
-        
+
         if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
             return true;
         }
         if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
             throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
         }
-        
+
         if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
             String k8sYaml = checkpoint.getYaml();
             if (StringUtils.isEmpty(k8sYaml)) {
                 return false;
             }
-            
+
             String jobStatus = K8sManager.checkJobStatus(k8sYaml);
             if ("succeeded".equals(jobStatus)) {
                 checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
                 checkpoint.setUpdatedAt(System.currentTimeMillis());
                 DbUtils.upsertCheckpoint(checkpoint);
-                
+
                 if (!StringUtils.isEmpty(k8sYaml)) {
                     K8sManager.deleteYaml(k8sYaml);
                 }
-                
+
                 return true;
             }
             if ("failed".equals(jobStatus)) {
@@ -399,7 +393,7 @@ public class ModelManager {
                 throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
             }
         }
-        
+
         return false;
     }
 }

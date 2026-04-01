@@ -8,14 +8,9 @@ import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
-import com.sqlrec.entity.Checkpoint;
-import com.sqlrec.entity.Model;
-import com.sqlrec.entity.SqlApi;
-import com.sqlrec.entity.SqlFunction;
-import com.sqlrec.entity.Service;
+import com.sqlrec.entity.*;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
-import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
@@ -398,6 +393,4 @@ public class SqlProcessor {
             DbUtils.insertSqlApi(sqlApi);
         }
     }
-
-
 }

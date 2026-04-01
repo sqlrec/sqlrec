@@ -1,14 +1,14 @@
 package com.sqlrec.model;
 
-import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.entity.Service;
-import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.entity.Service;
+import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
@@ -93,7 +93,7 @@ public class ModelEntityConverter {
         if (!(modelSqlNode instanceof SqlCreateService)) {
             throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
         }
-        ServiceConfig serviceConfig = convertToServiceConf((SqlCreateService)modelSqlNode);
+        ServiceConfig serviceConfig = convertToServiceConf((SqlCreateService) modelSqlNode);
         serviceConfig.url = service.getUrl();
         serviceConfig.modelConfig = convertToModel(service.getModelDdl());
         return serviceConfig;
