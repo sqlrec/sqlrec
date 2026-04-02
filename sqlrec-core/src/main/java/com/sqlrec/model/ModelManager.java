@@ -157,22 +157,30 @@ public class ModelManager {
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
 
+        List<CheckpointInfo> createdCheckpointInfos = new ArrayList<>();
+        List<Checkpoint> existingCheckpoints = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
             if (existingCheckpoint != null) {
-                String status = existingCheckpoint.getStatus();
-                if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
-                    log.info("Model {} has export checkpoint {} in progress, returning existing checkpoint info",
+                existingCheckpoints.add(existingCheckpoint);
+                if (Consts.CHECKPOINT_STATUS_CREATED.equals(existingCheckpoint.getStatus())) {
+                    log.info("Model {} has export checkpoint {} in progress",
                             modelExportConf.modelName, exportCheckpointName);
-                    List<CheckpointInfo> checkpointInfos = new ArrayList<>();
-                    checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
-                    return checkpointInfos;
-                } else {
-                    log.info("Model {} re train checkpoint {}, deleting old first",
-                            modelExportConf.modelName, exportCheckpointName);
-                    deleteCheckpoint(modelExportConf.modelName, exportCheckpointName);
+                    createdCheckpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 }
             }
+        }
+
+        if (!createdCheckpointInfos.isEmpty()) {
+            log.info("Model {} has {} export checkpoints in progress, returning existing checkpoint infos",
+                    modelExportConf.modelName, createdCheckpointInfos.size());
+            return createdCheckpointInfos;
+        }
+
+        for (Checkpoint existingCheckpoint : existingCheckpoints) {
+            log.info("Model {} re export checkpoint {}, deleting old first",
+                    modelExportConf.modelName, existingCheckpoint.getCheckpointName());
+            deleteCheckpoint(modelExportConf.modelName, existingCheckpoint.getCheckpointName());
         }
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
