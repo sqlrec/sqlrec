@@ -5,7 +5,6 @@ import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConfig;
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
@@ -19,13 +18,8 @@ import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.flink.sql.parser.ddl.SqlTableColumn;
-import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,14 +40,14 @@ public class ModelEntityConverter {
     public static ModelConfig convertToModel(SqlCreateModel sqlCreateModel) {
         ModelConfig modelConfig = new ModelConfig();
         modelConfig.modelName = sqlCreateModel.getModelName().toString();
-        modelConfig.inputFields = convertFieldList(sqlCreateModel.getFieldList());
-        modelConfig.params = convertPropertyList(sqlCreateModel.getPropertyList());
+        modelConfig.inputFields = SchemaUtils.convertFieldList(sqlCreateModel.getFieldList());
+        modelConfig.params = SchemaUtils.convertPropertyList(sqlCreateModel.getPropertyList());
         modelConfig.path = getModelPath(modelConfig);
 
         if (!modelConfig.params.containsKey(ModelConfigs.MODEL_PATH.getKey())) {
             modelConfig.params.put(ModelConfigs.MODEL_PATH.getKey(), modelConfig.path);
             sqlCreateModel.setPropertyList(
-                    addConfigToPropertyList(
+                    SchemaUtils.addConfigToPropertyList(
                             sqlCreateModel.getPropertyList(),
                             ModelConfigs.MODEL_PATH.getKey(),
                             modelConfig.path
@@ -77,7 +71,7 @@ public class ModelEntityConverter {
                     SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString())
             );
         }
-        modelTrainConf.params = convertPropertyList(sqlTrainModel.getPropertyList());
+        modelTrainConf.params = SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList());
         modelTrainConf.id = K8sManager.convertToValidK8sName(modelTrainConf.modelName + "-" + modelTrainConf.checkpointName);
         modelTrainConf.trainDataPaths = getHivePartitionPaths(sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema);
 
@@ -90,7 +84,7 @@ public class ModelEntityConverter {
         modelExportConf.checkpointName = SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString());
         modelExportConf.baseModelDir = ModelEntityConverter.getModelCheckpointPath(
                 modelExportConf.modelName, modelExportConf.checkpointName);
-        modelExportConf.params = convertPropertyList(sqlExportModel.getPropertyList());
+        modelExportConf.params = SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList());
         modelExportConf.id = K8sManager.convertToValidK8sName(modelExportConf.modelName + "-" + modelExportConf.checkpointName + "-export");
         modelExportConf.trainDataPaths = getHivePartitionPaths(sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema);
         return modelExportConf;
@@ -103,7 +97,7 @@ public class ModelEntityConverter {
         serviceConfig.modelName = sqlCreateService.getModelName().toString();
         serviceConfig.checkpointName = SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString());
         serviceConfig.modelCheckpointDir = getModelCheckpointPath(serviceConfig.modelName, serviceConfig.checkpointName);
-        serviceConfig.params = convertPropertyList(sqlCreateService.getPropertyList());
+        serviceConfig.params = SchemaUtils.convertPropertyList(sqlCreateService.getPropertyList());
         return serviceConfig;
     }
 
@@ -134,63 +128,6 @@ public class ModelEntityConverter {
         List<String> partitionPaths = HmsClient.getPartitionPaths(db, table, partitionFilter);
         partitionPaths = fixPathProtocol(partitionPaths);
         return partitionPaths.stream().map(path -> path + "/*").toList();
-    }
-
-    public static List<FieldSchema> convertFieldList(SqlNodeList fieldList) {
-        List<FieldSchema> fieldSchemas = new ArrayList<>();
-        if (fieldList != null && fieldList.size() > 0) {
-            for (SqlNode field : fieldList) {
-                FieldSchema fieldSchema = convertField(field);
-                if (fieldSchema != null) {
-                    fieldSchemas.add(fieldSchema);
-                }
-            }
-        }
-        return fieldSchemas;
-    }
-
-    public static FieldSchema convertField(SqlNode field) {
-        if (field == null) {
-            return null;
-        }
-
-        if (field instanceof SqlTableColumn.SqlRegularColumn) {
-            SqlTableColumn.SqlRegularColumn regularColumn = (SqlTableColumn.SqlRegularColumn) field;
-            String name = regularColumn.getName().toString();
-            String type = regularColumn.getType().toString();
-            return new FieldSchema(name, type);
-        } else {
-            log.warn("Unsupported field type: {}", field);
-            throw new IllegalArgumentException("Unsupported field type: " + field);
-        }
-    }
-
-    public static Map<String, String> convertPropertyList(SqlNodeList propertyList) {
-        Map<String, String> params = new HashMap<>();
-        if (propertyList != null && propertyList.size() > 0) {
-            for (SqlNode property : propertyList) {
-                if (property instanceof SqlTableOption) {
-                    SqlTableOption option = (SqlTableOption) property;
-                    String key = SchemaUtils.removeQuotes(option.getKey().toString());
-                    String value = SchemaUtils.removeQuotes(option.getValue().toString());
-                    params.put(key, value);
-                } else {
-                    log.warn("Unsupported property type: {}", property);
-                    throw new IllegalArgumentException("Unsupported property type: " + property);
-                }
-            }
-        }
-        return params;
-    }
-
-    public static SqlNodeList addConfigToPropertyList(SqlNodeList propertyList, String key, String value) {
-        SqlTableOption option = new SqlTableOption(
-                SqlLiteral.createCharString(key, SqlParserPos.ZERO),
-                SqlLiteral.createCharString(value, SqlParserPos.ZERO),
-                SqlParserPos.ZERO
-        );
-        propertyList.add(option);
-        return propertyList;
     }
 
     public static String getModelPath(ModelConfig modelConfig) {

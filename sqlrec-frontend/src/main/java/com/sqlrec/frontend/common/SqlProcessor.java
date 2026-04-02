@@ -11,6 +11,7 @@ import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.entity.*;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
+import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
@@ -140,13 +141,13 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlCreateService) {
             SqlCreateService createService = (SqlCreateService) sqlNode;
-            String serviceName = ModelManager.createService(createService);
+            String serviceName = ServiceManager.createService(createService);
             return Utils.convertServiceMsgToResult("create service success", "msg", serviceName);
         }
 
         if (sqlNode instanceof SqlDropService) {
             SqlDropService dropService = (SqlDropService) sqlNode;
-            ModelManager.deleteService(dropService.getServiceName().getSimple());
+            ServiceManager.deleteService(dropService.getServiceName().getSimple());
             return Utils.convertMsgToResult("drop service success", "msg");
         }
 

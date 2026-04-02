@@ -1,13 +1,24 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.impl.ScalarFunctionImpl;
 import org.apache.calcite.sql.SqlCharStringLiteral;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.flink.sql.parser.ddl.SqlTableColumn;
+import org.apache.flink.sql.parser.ddl.SqlTableOption;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
+import java.util.*;
 
 public class SchemaUtils {
+    private static final Logger log = LoggerFactory.getLogger(SchemaUtils.class);
+
     public static void addFunction(CalciteSchema schema, String functionName, String className) throws Exception {
         schema.plus().add(
                 functionName, Objects.requireNonNull(createScalarFunction(className))
@@ -39,5 +50,62 @@ public class SchemaUtils {
             return value.substring(1, value.length() - 1);
         }
         return value;
+    }
+
+    public static List<FieldSchema> convertFieldList(SqlNodeList fieldList) {
+        List<FieldSchema> fieldSchemas = new ArrayList<>();
+        if (fieldList != null && fieldList.size() > 0) {
+            for (SqlNode field : fieldList) {
+                FieldSchema fieldSchema = convertField(field);
+                if (fieldSchema != null) {
+                    fieldSchemas.add(fieldSchema);
+                }
+            }
+        }
+        return fieldSchemas;
+    }
+
+    public static FieldSchema convertField(SqlNode field) {
+        if (field == null) {
+            return null;
+        }
+
+        if (field instanceof SqlTableColumn.SqlRegularColumn) {
+            SqlTableColumn.SqlRegularColumn regularColumn = (SqlTableColumn.SqlRegularColumn) field;
+            String name = regularColumn.getName().toString();
+            String type = regularColumn.getType().toString();
+            return new FieldSchema(name, type);
+        } else {
+            log.warn("Unsupported field type: {}", field);
+            throw new IllegalArgumentException("Unsupported field type: " + field);
+        }
+    }
+
+    public static Map<String, String> convertPropertyList(SqlNodeList propertyList) {
+        Map<String, String> params = new HashMap<>();
+        if (propertyList != null && propertyList.size() > 0) {
+            for (SqlNode property : propertyList) {
+                if (property instanceof SqlTableOption) {
+                    SqlTableOption option = (SqlTableOption) property;
+                    String key = removeQuotes(option.getKey().toString());
+                    String value = removeQuotes(option.getValue().toString());
+                    params.put(key, value);
+                } else {
+                    log.warn("Unsupported property type: {}", property);
+                    throw new IllegalArgumentException("Unsupported property type: " + property);
+                }
+            }
+        }
+        return params;
+    }
+
+    public static SqlNodeList addConfigToPropertyList(SqlNodeList propertyList, String key, String value) {
+        SqlTableOption option = new SqlTableOption(
+                SqlLiteral.createCharString(key, SqlParserPos.ZERO),
+                SqlLiteral.createCharString(value, SqlParserPos.ZERO),
+                SqlParserPos.ZERO
+        );
+        propertyList.add(option);
+        return propertyList;
     }
 }

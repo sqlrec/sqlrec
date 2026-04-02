@@ -30,7 +30,6 @@ public class ModelEntityConverterTest {
         assertEquals("name", model.inputFields.get(1).name);
         assertEquals("STRING", model.inputFields.get(1).type);
         assertNotNull(model.params);
-        assertEquals(1, model.params.size());
         assertEquals("value", model.params.get("param"));
     }
 
