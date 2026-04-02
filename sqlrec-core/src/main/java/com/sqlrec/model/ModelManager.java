@@ -239,6 +239,9 @@ public class ModelManager {
             envVars.put("CLIENT_DIR", clientDir);
         }
 
+        Map<String, String> userEnvVars = parseEnvVars(params);
+        envVars.putAll(userEnvVars);
+
         if (!envVars.isEmpty()) {
             k8sYaml = K8sManager.injectEnvVarsIntoYaml(k8sYaml, envVars);
         }
@@ -266,6 +269,18 @@ public class ModelManager {
             }
         }
         return nodeSelectors;
+    }
+
+    private static Map<String, String> parseEnvVars(Map<String, String> params) {
+        Map<String, String> envVars = new HashMap<>();
+        String prefix = "kubernetes.env.";
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                String envKey = entry.getKey().substring(prefix.length());
+                envVars.put(envKey, entry.getValue());
+            }
+        }
+        return envVars;
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
