@@ -13,17 +13,6 @@ import java.util.Map;
 
 public class K8sYamlUtils {
 
-    private static Map<String, String> parseNodeSelectors(Map<String, String> params) {
-        Map<String, String> nodeSelectors = new HashMap<>();
-        String prefix = "kubernetes.node.selector.";
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getKey().startsWith(prefix)) {
-                String labelKey = entry.getKey().substring(prefix.length());
-                nodeSelectors.put(labelKey, entry.getValue());
-            }
-        }
-        return nodeSelectors;
-    }
     public static String createConfigMapYaml(String name, Map<String, String> files) {
         ConfigMap configMap = new ConfigMapBuilder()
                 .withNewMetadata()
@@ -88,7 +77,6 @@ public class K8sYamlUtils {
             Map<String, String> params
     ) {
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
-        Map<String, String> nodeSelectors = parseNodeSelectors(params);
 
         Job job = new JobBuilder()
                 .withNewMetadata()
@@ -101,7 +89,6 @@ public class K8sYamlUtils {
                     .withBackoffLimit(1)
                     .withNewTemplate()
                         .withNewSpec()
-                            .withNodeSelector(nodeSelectors)
                             .withSubdomain(serviceName)
                             .addNewContainer()
                                 .withName("tzrec-job")
@@ -153,7 +140,6 @@ public class K8sYamlUtils {
             Map<String, String> params
     ) {
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
-        Map<String, String> nodeSelectors = parseNodeSelectors(params);
 
         Deployment deployment = new DeploymentBuilder()
                 .withNewMetadata()
@@ -173,7 +159,6 @@ public class K8sYamlUtils {
                             }})
                         .endMetadata()
                         .withNewSpec()
-                            .withNodeSelector(nodeSelectors)
                             .addNewContainer()
                                 .withName("tzrec-service")
                                 .withImage(image)

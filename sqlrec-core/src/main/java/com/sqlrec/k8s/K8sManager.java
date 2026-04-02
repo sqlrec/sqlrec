@@ -3,6 +3,7 @@ package com.sqlrec.k8s;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
+import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -213,6 +214,51 @@ public class K8sManager {
             log.error("Failed to inject volume mount into YAML: {}", e.getMessage(), e);
             return yamlContent;
         }
+    }
+
+    public static String injectNodeSelectorIntoYaml(String yamlContent, Map<String, String> nodeSelectors) {
+        if (yamlContent == null || yamlContent.isEmpty() || nodeSelectors == null || nodeSelectors.isEmpty()) {
+            return yamlContent;
+        }
+
+        try {
+            List<HasMetadata> resources = parseK8sYaml(yamlContent);
+
+            for (HasMetadata resource : resources) {
+                if ("Job".equals(resource.getKind())) {
+                    Job job = (Job) resource;
+                    if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
+                            job.getSpec().getTemplate().getSpec() != null) {
+                        injectNodeSelector(job.getSpec().getTemplate().getSpec(), nodeSelectors);
+                    }
+                } else if ("Deployment".equals(resource.getKind())) {
+                    Deployment deployment = (Deployment) resource;
+                    if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
+                            deployment.getSpec().getTemplate().getSpec() != null) {
+                        injectNodeSelector(deployment.getSpec().getTemplate().getSpec(), nodeSelectors);
+                    }
+                }
+            }
+
+            return mergeYamlResources(resources);
+        } catch (Exception e) {
+            log.error("Failed to inject node selector into YAML: {}", e.getMessage(), e);
+            return yamlContent;
+        }
+    }
+
+    private static void injectNodeSelector(PodSpec podSpec, Map<String, String> nodeSelectors) {
+        if (podSpec == null || nodeSelectors == null || nodeSelectors.isEmpty()) {
+            return;
+        }
+
+        Map<String, String> existingNodeSelector = podSpec.getNodeSelector();
+        if (existingNodeSelector == null) {
+            existingNodeSelector = new java.util.HashMap<>();
+        }
+
+        existingNodeSelector.putAll(nodeSelectors);
+        podSpec.setNodeSelector(existingNodeSelector);
     }
 
     public static void applyYaml(String yamlContent) {

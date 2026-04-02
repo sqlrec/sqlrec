@@ -460,4 +460,132 @@ spec:
         assertEquals("test", K8sManager.injectNamespaceIntoYaml("test", null));
         assertEquals("test", K8sManager.injectNamespaceIntoYaml("test", ""));
     }
+
+    @Test
+    public void testInjectNodeSelectorIntoYaml() {
+        String yamlContent = """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: test-container
+        image: busybox
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      containers:
+      - name: test-container
+        image: nginx
+""";
+
+        Map<String, String> nodeSelectors = new HashMap<>();
+        nodeSelectors.put("disk-type", "ssd");
+        nodeSelectors.put("zone", "us-west-1");
+
+        String result = K8sManager.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
+
+        String expectedYaml = """
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "test-job"
+spec:
+  template:
+    spec:
+      containers:
+      - image: "busybox"
+        name: "test-container"
+      nodeSelector:
+        disk-type: "ssd"
+        zone: "us-west-1"
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "test-deployment"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "test"
+  template:
+    metadata:
+      labels:
+        app: "test"
+    spec:
+      containers:
+      - image: "nginx"
+        name: "test-container"
+      nodeSelector:
+        disk-type: "ssd"
+        zone: "us-west-1"
+""";
+        assertEquals(expectedYaml, result);
+    }
+
+    @Test
+    public void testInjectNodeSelectorIntoYamlWithEmptyInput() {
+        assertNull(K8sManager.injectNodeSelectorIntoYaml(null, new HashMap<>()));
+        assertEquals("", K8sManager.injectNodeSelectorIntoYaml("", new HashMap<>()));
+        assertEquals("test", K8sManager.injectNodeSelectorIntoYaml("test", null));
+        assertEquals("test", K8sManager.injectNodeSelectorIntoYaml("test", new HashMap<>()));
+    }
+
+    @Test
+    public void testInjectNodeSelectorIntoYamlWithExistingNodeSelector() {
+        String yamlContent = """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+spec:
+  template:
+    spec:
+      nodeSelector:
+        existing-key: existing-value
+      containers:
+      - name: test-container
+        image: busybox
+""";
+
+        Map<String, String> nodeSelectors = new HashMap<>();
+        nodeSelectors.put("new-key", "new-value");
+
+        String result = K8sManager.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
+
+        String expectedYaml = """
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "test-job"
+spec:
+  template:
+    spec:
+      containers:
+      - image: "busybox"
+        name: "test-container"
+      nodeSelector:
+        existing-key: "existing-value"
+        new-key: "new-value"
+""";
+        assertEquals(expectedYaml, result);
+    }
 }

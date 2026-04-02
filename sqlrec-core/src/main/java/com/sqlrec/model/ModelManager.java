@@ -248,7 +248,24 @@ public class ModelManager {
         String clientDirValue = ModelConfigs.CLIENT_DIR.getValue();
         k8sYaml = K8sManager.injectVolumeMountIntoYaml(k8sYaml, pvcName, pvName, clientDirValue, null);
 
+        Map<String, String> nodeSelectors = parseNodeSelectors(params);
+        if (!nodeSelectors.isEmpty()) {
+            k8sYaml = K8sManager.injectNodeSelectorIntoYaml(k8sYaml, nodeSelectors);
+        }
+
         return k8sYaml;
+    }
+
+    private static Map<String, String> parseNodeSelectors(Map<String, String> params) {
+        Map<String, String> nodeSelectors = new HashMap<>();
+        String prefix = "kubernetes.node.selector.";
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                String labelKey = entry.getKey().substring(prefix.length());
+                nodeSelectors.put(labelKey, entry.getValue());
+            }
+        }
+        return nodeSelectors;
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
