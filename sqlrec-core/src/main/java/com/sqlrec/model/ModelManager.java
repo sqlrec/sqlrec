@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlExportModel;
@@ -256,6 +257,13 @@ public class ModelManager {
             return;
         }
 
+        List<Service> services = DbUtils.getServiceListByCheckpoint(modelName, checkpointName);
+        if (!services.isEmpty()) {
+            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName + 
+                    " because it is being used by " + services.size() + " service(s): " + 
+                    String.join(", ", services.stream().map(Service::getName).toList()));
+        }
+
         String status = checkpoint.getStatus();
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
             String k8sYaml = checkpoint.getYaml();
@@ -274,6 +282,13 @@ public class ModelManager {
         Model model = DbUtils.getModel(modelName);
         if (model == null) {
             throw new IllegalArgumentException("model not exists: " + modelName);
+        }
+
+        List<Service> services = DbUtils.getServiceListByModelName(modelName);
+        if (!services.isEmpty()) {
+            throw new IllegalArgumentException("Cannot delete model " + modelName + 
+                    " because it is being used by " + services.size() + " service(s): " + 
+                    String.join(", ", services.stream().map(Service::getName).toList()));
         }
 
         List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(modelName);

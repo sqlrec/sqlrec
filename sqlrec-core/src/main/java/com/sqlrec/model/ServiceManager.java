@@ -62,6 +62,15 @@ public class ServiceManager {
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
         ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
+        Service existingService = DbUtils.getService(serviceConfig.serviceName);
+        if (existingService != null) {
+            if (sqlCreateService.isIfNotExists()) {
+                return serviceConfig.serviceName;
+            } else {
+                throw new IllegalArgumentException("service already exists: " + serviceConfig.serviceName);
+            }
+        }
+
         Model modelEntity = DbUtils.getModel(serviceConfig.modelName);
         if (modelEntity == null) {
             throw new IllegalArgumentException("model not exists: " + serviceConfig.modelName);
@@ -102,11 +111,7 @@ public class ServiceManager {
         service.setUpdatedAt(System.currentTimeMillis());
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
-        if (sqlCreateService.isIfNotExists()) {
-            DbUtils.insertService(service);
-        } else {
-            DbUtils.upsertService(service);
-        }
+        DbUtils.insertService(service);
 
         return serviceConfig.serviceName;
     }

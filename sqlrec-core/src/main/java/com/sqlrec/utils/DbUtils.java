@@ -157,6 +157,14 @@ public class DbUtils {
         return execute(dbMapper -> dbMapper.getService(name));
     }
 
+    public static List<Service> getServiceListByModelName(String modelName) {
+        return execute(dbMapper -> dbMapper.getServiceListByModelName(modelName));
+    }
+
+    public static List<Service> getServiceListByCheckpoint(String modelName, String checkpointName) {
+        return execute(dbMapper -> dbMapper.getServiceListByCheckpoint(modelName, checkpointName));
+    }
+
     public static void insertService(Service service) {
         executeVoid(dbMapper -> dbMapper.insertService(service));
     }

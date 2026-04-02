@@ -97,6 +97,12 @@ public interface DbMapper {
     @Select("SELECT * FROM service WHERE name = #{name}")
     Service getService(String name);
 
+    @Select("SELECT * FROM service WHERE model_name = #{modelName}")
+    List<Service> getServiceListByModelName(String modelName);
+
+    @Select("SELECT * FROM service WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
+    List<Service> getServiceListByCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);
+
     @Insert("INSERT INTO service " +
             "(name, model_name, model_ddl, checkpoint_name, ddl, yaml, url, created_at, updated_at) " +
             "VALUES (#{name}, #{modelName}, #{modelDdl}, #{checkpointName}, #{ddl}, #{yaml}, #{url}, #{createdAt}, #{updatedAt})")
