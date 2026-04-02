@@ -9,6 +9,10 @@ public class ModelConfigs {
             "MODEL_BASE_PATH",
             "/user/sqlrec/models", "Model base path", null, String.class);
 
+    public static final ConfigOption<String> MODEL_PATH = new ConfigOption<>(
+            "MODEL_PATH",
+            null, "Model path", null, String.class);
+
     public static final ConfigOption<String> JAVA_HOME = new ConfigOption<>(
             "JAVA_HOME",
             null, "Java home directory", null, String.class);

@@ -9,10 +9,10 @@ import java.util.List;
 import java.util.Collections;
 
 public class SqlCreateModel extends SqlCreate {
-    private final SqlIdentifier modelName;
-    private final SqlNodeList fieldList;
-    private final SqlNodeList propertyList;
-    private final boolean ifNotExists;
+    private SqlIdentifier modelName;
+    private SqlNodeList fieldList;
+    private SqlNodeList propertyList;
+    private boolean ifNotExists;
 
     public SqlCreateModel(
             SqlParserPos pos,
@@ -37,6 +37,10 @@ public class SqlCreateModel extends SqlCreate {
 
     public SqlNodeList getPropertyList() {
         return propertyList;
+    }
+
+    public void setPropertyList(SqlNodeList propertyList) {
+        this.propertyList = propertyList;
     }
 
     public boolean isIfNotExists() {

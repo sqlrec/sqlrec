@@ -1,5 +1,6 @@
 package com.sqlrec.model;
 
+import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.sql.parser.SqlCreateModel;
@@ -31,5 +32,17 @@ public class ModelEntityConverterTest {
         assertNotNull(model.params);
         assertEquals(1, model.params.size());
         assertEquals("value", model.params.get("param"));
+    }
+
+    @Test
+    public void testConvertToModelAddsModelPath() throws Exception {
+        String createModelSql = "create model `test_model` (id bigint, name string) with ('param'='value')";
+        ModelConfig model = ModelEntityConverter.convertToModel(createModelSql);
+
+        assertNotNull(model);
+        assertTrue(model.params.containsKey(ModelConfigs.MODEL_PATH.getKey()), "model_path should be added to params");
+        assertNotNull(model.params.get(ModelConfigs.MODEL_PATH.getKey()), "model_path value should not be null");
+        assertTrue(model.params.size() == 2, "params should contain original param and model_path");
+        assertTrue(model.ddl.contains(ModelConfigs.MODEL_PATH.getKey()), "DDL should contain model_path parameter");
     }
 }

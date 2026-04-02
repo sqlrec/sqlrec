@@ -7,6 +7,8 @@ import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.schema.HmsClient;
@@ -14,10 +16,13 @@ import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
+import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
@@ -43,6 +48,20 @@ public class ModelEntityConverter {
         modelConfig.modelName = sqlCreateModel.getModelName().toString();
         modelConfig.inputFields = convertFieldList(sqlCreateModel.getFieldList());
         modelConfig.params = convertPropertyList(sqlCreateModel.getPropertyList());
+        modelConfig.path = getModelPath(modelConfig);
+
+        if (!modelConfig.params.containsKey(ModelConfigs.MODEL_PATH.getKey())) {
+            modelConfig.params.put(ModelConfigs.MODEL_PATH.getKey(), modelConfig.path);
+            sqlCreateModel.setPropertyList(
+                    addConfigToPropertyList(
+                            sqlCreateModel.getPropertyList(),
+                            ModelConfigs.MODEL_PATH.getKey(),
+                            modelConfig.path
+                    )
+            );
+        }
+
+        modelConfig.ddl = sqlCreateModel.toString();
         return modelConfig;
     }
 
@@ -77,7 +96,7 @@ public class ModelEntityConverter {
         return modelExportConf;
     }
 
-    public static ServiceConfig convertToServiceConf(SqlCreateService sqlCreateService) {
+    public static ServiceConfig convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
         ServiceConfig serviceConfig = new ServiceConfig();
         serviceConfig.id = K8sManager.convertToValidK8sName(sqlCreateService.getServiceName().toString());
         serviceConfig.serviceName = sqlCreateService.getServiceName().toString();
@@ -164,26 +183,55 @@ public class ModelEntityConverter {
         return params;
     }
 
-    public static String getModelPath(String modelName) {
-        if (StringUtils.isEmpty(modelName)) {
+    public static SqlNodeList addConfigToPropertyList(SqlNodeList propertyList, String key, String value) {
+        SqlTableOption option = new SqlTableOption(
+                SqlLiteral.createCharString(key, SqlParserPos.ZERO),
+                SqlLiteral.createCharString(value, SqlParserPos.ZERO),
+                SqlParserPos.ZERO
+        );
+        propertyList.add(option);
+        return propertyList;
+    }
+
+    public static String getModelPath(ModelConfig modelConfig) {
+        if (StringUtils.isEmpty(modelConfig.modelName)) {
             throw new RuntimeException("modelName is empty");
+        }
+
+        if (modelConfig.params.containsKey(ModelConfigs.MODEL_PATH.getKey())) {
+            return modelConfig.params.get(ModelConfigs.MODEL_PATH.getKey());
         }
 
         String fullPath = ModelConfigs.MODEL_BASE_PATH.getValue();
         if (!fullPath.endsWith("/")) {
             fullPath += "/";
         }
-        fullPath += modelName;
+        fullPath += modelConfig.modelName;
 
         List<String> fixedPaths = fixPathProtocol(Collections.singletonList(fullPath));
         return fixedPaths.get(0);
     }
 
-    public static String getModelCheckpointPath(String modelName, String checkpoint) {
-        if (StringUtils.isEmpty(checkpoint)) {
-            throw new RuntimeException("checkpoint is empty");
+    public static String getModelCheckpointPath(String modelName, String checkpoint) throws Exception {
+        String modelDdl = null;
+        Checkpoint checkpointEntity = DbUtils.getCheckpoint(modelName, checkpoint);
+        if (checkpointEntity != null) {
+            modelDdl = checkpointEntity.getModelDdl();
+        } else {
+            Model model = DbUtils.getModel(modelName);
+            if (model == null) {
+                throw new IllegalArgumentException("model not exists: " + modelName);
+            }
+            modelDdl = model.getDdl();
         }
-        return getModelPath(modelName) + "/" + checkpoint;
+
+        ModelConfig modelConfig = convertToModel(modelDdl);
+        return modelConfig.path + "/" + checkpoint;
+    }
+
+    public static String getModelCheckpointPath(Checkpoint checkpointEntity) throws Exception {
+        ModelConfig modelConfig = convertToModel(checkpointEntity.getModelDdl());
+        return modelConfig.path + "/" + checkpointEntity.getCheckpointName();
     }
 
     public static List<String> fixPathProtocol(List<String> partitionPaths) {

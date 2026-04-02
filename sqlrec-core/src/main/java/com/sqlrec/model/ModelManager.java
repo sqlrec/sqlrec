@@ -70,27 +70,22 @@ public class ModelManager {
             throw new IllegalArgumentException("Model already exists: " + modelName);
         }
 
-        String modelPath = ModelEntityConverter.getModelPath(modelName);
-        if (HadoopUtils.pathExists(modelPath)) {
-            throw new IllegalArgumentException("Model path already exists: " + modelPath);
+        ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
+        if (HadoopUtils.pathExists(modelConfig.path)) {
+            throw new IllegalArgumentException("Model path already exists: " + modelConfig.path);
         }
 
-        ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
-        saveModel(sqlCreateModel);
+        saveModel(modelConfig);
         return modelConfig;
     }
 
-    public static void saveModel(SqlCreateModel sqlCreateModel) {
+    public static void saveModel(ModelConfig modelConfig) {
         Model model = new Model();
-        model.setName(sqlCreateModel.getModelName().getSimple());
-        model.setDdl(sqlCreateModel.toString());
+        model.setName(modelConfig.modelName);
+        model.setDdl(modelConfig.ddl);
         model.setCreatedAt(System.currentTimeMillis());
         model.setUpdatedAt(System.currentTimeMillis());
-        if (sqlCreateModel.isIfNotExists()) {
-            DbUtils.insertModel(model);
-        } else {
-            DbUtils.upsertModel(model);
-        }
+        DbUtils.insertModel(model);
     }
 
     public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
@@ -112,9 +107,8 @@ public class ModelManager {
                 List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
-            }
-            if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-                log.info("Model {} has failed checkpoint {}, deleting it first",
+            } else {
+                log.info("Model {} re train checkpoint {}, deleting old first",
                         modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
                 deleteCheckpoint(modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
             }
@@ -173,19 +167,11 @@ public class ModelManager {
                     List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                     checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                     return checkpointInfos;
-                }
-                if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-                    log.info("Model {} has failed export checkpoint {}, deleting it first",
+                } else {
+                    log.info("Model {} re train checkpoint {}, deleting old first",
                             modelExportConf.modelName, exportCheckpointName);
                     deleteCheckpoint(modelExportConf.modelName, exportCheckpointName);
                 }
-            }
-        }
-
-        for (String exportCheckpointName : exportCheckpointNames) {
-            Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
-            if (existingCheckpoint != null) {
-                throw new IllegalArgumentException("checkpoint already exists: " + exportCheckpointName + " for model " + modelExportConf.modelName);
             }
         }
 
@@ -321,7 +307,7 @@ public class ModelManager {
         DbUtils.deleteService(serviceName);
     }
 
-    public static void deleteCheckpoint(String modelName, String checkpointName) {
+    public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
         Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
         if (checkpoint == null) {
             return;
@@ -335,20 +321,25 @@ public class ModelManager {
             }
         }
 
-        String checkpointPath = ModelEntityConverter.getModelCheckpointPath(modelName, checkpointName);
+        String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
         HadoopUtils.deletePath(checkpointPath);
 
         DbUtils.deleteCheckpoint(modelName, checkpointName);
     }
 
-    public static void deleteModel(String modelName) {
+    public static void deleteModel(String modelName) throws Exception {
+        Model model = DbUtils.getModel(modelName);
+        if (model == null) {
+            throw new IllegalArgumentException("model not exists: " + modelName);
+        }
+
         List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(modelName);
         for (Checkpoint checkpoint : checkpoints) {
             deleteCheckpoint(modelName, checkpoint.getCheckpointName());
         }
 
-        String modelPath = ModelEntityConverter.getModelPath(modelName);
-        HadoopUtils.deletePath(modelPath);
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
+        HadoopUtils.deletePath(modelConfig.path);
 
         DbUtils.deleteModel(modelName);
     }
