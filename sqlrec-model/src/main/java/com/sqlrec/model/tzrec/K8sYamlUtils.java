@@ -193,8 +193,6 @@ public class K8sYamlUtils {
         return Serialization.asYaml(deployment);
     }
 
-    
-
     public static String mergeK8sYamls(String... yamls) {
         StringBuilder mergedYaml = new StringBuilder();
         for (int i = 0; i < yamls.length; i++) {

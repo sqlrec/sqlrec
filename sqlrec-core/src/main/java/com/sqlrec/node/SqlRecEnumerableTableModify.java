@@ -42,7 +42,8 @@ public class SqlRecEnumerableTableModify extends EnumerableTableModify {
         );
     }
 
-    @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
+    @Override
+    public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
         return new SqlRecEnumerableTableModify(
                 getCluster(),
                 traitSet,

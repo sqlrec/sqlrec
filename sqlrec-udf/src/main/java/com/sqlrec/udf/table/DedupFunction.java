@@ -5,7 +5,10 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class DedupFunction {
     public CacheTable eval(CacheTable input, CacheTable dedupTable, String col1, String col2) {
@@ -56,7 +59,7 @@ public class DedupFunction {
 
         Enumerable<Object[]> inputEnumerable = input.scan(null);
         List<Object[]> newData = new ArrayList<>();
-        
+
         if (inputEnumerable != null) {
             for (Object[] row : inputEnumerable) {
                 Object value = row[inputColIndex];

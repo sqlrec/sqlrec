@@ -1,4 +1,3 @@
-
 SqlCache SqlCache() :
 {
     SqlIdentifier tableName = null;

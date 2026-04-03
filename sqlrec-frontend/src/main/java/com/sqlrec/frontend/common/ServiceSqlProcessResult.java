@@ -44,7 +44,7 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
                 return cachedCompleted;
             }
             lastCheckTime = currentTime;
-            
+
             boolean completed = ServiceManager.isServiceOperationCompleted(serviceName);
             cachedCompleted = completed;
             return completed;

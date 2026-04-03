@@ -1,15 +1,10 @@
 package com.sqlrec.k8s;
 
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSource;
-import io.fabric8.kubernetes.api.model.PodSpec;
-import io.fabric8.kubernetes.api.model.Volume;
-import io.fabric8.kubernetes.api.model.VolumeMount;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
-import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -410,7 +405,7 @@ public class K8sManager {
                     .inNamespace(namespace != null ? namespace : "default")
                     .withName(jobName)
                     .get();
-            
+
             if (job == null) {
                 log.warn("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
                 return "running";
@@ -428,7 +423,7 @@ public class K8sManager {
                     return "failed";
                 }
             }
-            
+
             return "running";
         } catch (Exception e) {
             log.error("Failed to check job status: {}", e.getMessage(), e);
@@ -442,19 +437,19 @@ public class K8sManager {
                     .inNamespace(namespace != null ? namespace : "default")
                     .withName(deploymentName)
                     .get();
-            
+
             if (deployment == null) {
                 log.warn("Deployment not found: {}/{}", namespace != null ? namespace : "default", deploymentName);
                 return false;
             }
-            
+
             if (deployment.getStatus() != null) {
                 Integer readyReplicas = deployment.getStatus().getReadyReplicas();
                 if (readyReplicas != null && readyReplicas >= 1) {
                     return true;
                 }
             }
-            
+
             return false;
         } catch (Exception e) {
             log.error("Failed to check deployment status: {}", e.getMessage(), e);
@@ -466,16 +461,16 @@ public class K8sManager {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return "succeeded";
         }
-        
+
         List<Job> jobs = parseK8sYamlAndGetJobs(k8sYaml);
-        
+
         if (jobs.isEmpty()) {
             return "succeeded";
         }
-        
+
         boolean anyFailed = false;
         boolean anyRunning = false;
-        
+
         for (Job job : jobs) {
             String namespace = job.getMetadata() != null ? job.getMetadata().getNamespace() : null;
             String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
@@ -488,7 +483,7 @@ public class K8sManager {
                 }
             }
         }
-        
+
         if (anyFailed) {
             return "failed";
         }
@@ -502,15 +497,15 @@ public class K8sManager {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return true;
         }
-        
+
         List<Deployment> deployments = parseK8sYamlAndGetDeployments(k8sYaml);
-        
+
         if (deployments.isEmpty()) {
             return true;
         }
-        
+
         boolean allReady = true;
-        
+
         for (Deployment deployment : deployments) {
             String namespace = deployment.getMetadata() != null ? deployment.getMetadata().getNamespace() : null;
             String name = deployment.getMetadata() != null ? deployment.getMetadata().getName() : null;
@@ -520,7 +515,7 @@ public class K8sManager {
                 }
             }
         }
-        
+
         return allReady;
     }
 }
