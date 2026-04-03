@@ -18,10 +18,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class ModelManager {
     private static final Logger log = LoggerFactory.getLogger(ModelManager.class);
@@ -291,8 +288,8 @@ public class ModelManager {
 
         List<Service> services = DbUtils.getServiceListByCheckpoint(modelName, checkpointName);
         if (!services.isEmpty()) {
-            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName + 
-                    " because it is being used by " + services.size() + " service(s): " + 
+            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName +
+                    " because it is being used by " + services.size() + " service(s): " +
                     String.join(", ", services.stream().map(Service::getName).toList()));
         }
 
@@ -318,8 +315,8 @@ public class ModelManager {
 
         List<Service> services = DbUtils.getServiceListByModelName(modelName);
         if (!services.isEmpty()) {
-            throw new IllegalArgumentException("Cannot delete model " + modelName + 
-                    " because it is being used by " + services.size() + " service(s): " + 
+            throw new IllegalArgumentException("Cannot delete model " + modelName +
+                    " because it is being used by " + services.size() + " service(s): " +
                     String.join(", ", services.stream().map(Service::getName).toList()));
         }
 
@@ -334,47 +331,67 @@ public class ModelManager {
         DbUtils.deleteModel(modelName);
     }
 
-    public static boolean isCheckpointOperationCompleted(String modelName, String checkpointName) {
-        Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
-        if (checkpoint == null) {
-            throw new IllegalArgumentException("Checkpoint not found: " + checkpointName + " for model " + modelName);
-        }
-
-        String status = checkpoint.getStatus();
-
-        if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
+    public static boolean isCheckpointOperationCompleted(List<CheckpointInfo> checkpointInfos) {
+        if (checkpointInfos == null || checkpointInfos.isEmpty()) {
             return true;
         }
-        if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-            throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
-        }
 
-        if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
-            String k8sYaml = checkpoint.getYaml();
-            if (StringUtils.isEmpty(k8sYaml)) {
-                return false;
+        boolean allCompleted = true;
+        Set<String> yamlsToDelete = new HashSet<>();
+        List<String> failedCheckpoints = new ArrayList<>();
+
+        for (CheckpointInfo info : checkpointInfos) {
+            Checkpoint checkpoint = DbUtils.getCheckpoint(info.getModelName(), info.getCheckpointName());
+            if (checkpoint == null) {
+                throw new IllegalArgumentException("Checkpoint not found: " + info.getCheckpointName() + " for model " + info.getModelName());
             }
 
-            String jobStatus = K8sManager.checkJobStatus(k8sYaml);
-            if ("succeeded".equals(jobStatus)) {
-                checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
-                checkpoint.setUpdatedAt(System.currentTimeMillis());
-                DbUtils.upsertCheckpoint(checkpoint);
+            String status = checkpoint.getStatus();
+            if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
+                continue;
+            }
+            if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
+                failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
+                continue;
+            }
 
-                if (!StringUtils.isEmpty(k8sYaml)) {
-                    K8sManager.deleteYaml(k8sYaml);
+            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
+                String k8sYaml = checkpoint.getYaml();
+                if (StringUtils.isEmpty(k8sYaml)) {
+                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
+                    checkpoint.setUpdatedAt(System.currentTimeMillis());
+                    DbUtils.upsertCheckpoint(checkpoint);
+                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName() + " (k8sYaml is empty)");
+                    continue;
                 }
 
-                return true;
-            }
-            if ("failed".equals(jobStatus)) {
-                checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
-                checkpoint.setUpdatedAt(System.currentTimeMillis());
-                DbUtils.upsertCheckpoint(checkpoint);
-                throw new RuntimeException("Checkpoint " + checkpointName + " for model " + modelName + " failed");
+                String jobStatus = K8sManager.checkJobStatus(k8sYaml);
+                if ("succeeded".equals(jobStatus)) {
+                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
+                    checkpoint.setUpdatedAt(System.currentTimeMillis());
+                    DbUtils.upsertCheckpoint(checkpoint);
+                    yamlsToDelete.add(k8sYaml);
+                } else if ("failed".equals(jobStatus)) {
+                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
+                    checkpoint.setUpdatedAt(System.currentTimeMillis());
+                    DbUtils.upsertCheckpoint(checkpoint);
+                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
+                } else {
+                    allCompleted = false;
+                }
             }
         }
 
-        return false;
+        for (String yaml : yamlsToDelete) {
+            if (!StringUtils.isEmpty(yaml)) {
+                K8sManager.deleteYaml(yaml);
+            }
+        }
+
+        if (!failedCheckpoints.isEmpty()) {
+            throw new RuntimeException("Checkpoints failed: " + String.join(", ", failedCheckpoints));
+        }
+
+        return allCompleted;
     }
 }

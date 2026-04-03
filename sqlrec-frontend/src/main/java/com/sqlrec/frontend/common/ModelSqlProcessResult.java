@@ -51,14 +51,8 @@ public class ModelSqlProcessResult extends SqlProcessResult {
                 return cachedCompleted;
             }
             lastCheckTime = currentTime;
-            
-            boolean allCompleted = true;
-            for (CheckpointInfo info : checkpointInfos) {
-                if (!ModelManager.isCheckpointOperationCompleted(info.getModelName(), info.getCheckpointName())) {
-                    allCompleted = false;
-                }
-            }
-            
+
+            boolean allCompleted = ModelManager.isCheckpointOperationCompleted(checkpointInfos);
             cachedCompleted = allCompleted;
             return allCompleted;
         } catch (Exception e) {
