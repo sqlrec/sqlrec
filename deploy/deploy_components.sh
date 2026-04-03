@@ -30,8 +30,11 @@ bash ${dir}/redis/deploy.sh
 bash ${dir}/hms/deploy.sh
 bash ${dir}/flink/deploy.sh
 bash ${dir}/milvus/deploy.sh
-bash ${dir}/kyuubi/deploy.sh
-bash ${dir}/jupyter/deploy.sh
+bash ${dir}/spark/deploy.sh
+
+# extra components, deploy them if needed
+#bash ${dir}/kyuubi/deploy.sh
+#bash ${dir}/jupyter/deploy.sh
 
 bash ${dir}/sqlrec/deploy.sh
 
