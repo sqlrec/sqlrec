@@ -51,23 +51,23 @@ public class TestMilvusCalciteTable {
         );
 
         List<String> sqlList = Arrays.asList(
-                "insert into t1 (my_id, my_vector, my_varchar) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice1')",
-                "insert into t1 (my_id, my_vector, my_varchar) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice2')",
-                "insert into t1 (my_id, my_vector, my_varchar) values (3, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice3')",
-                "select * from t1 where my_id = 1",
-                "select * from t1 where my_id = 1 and my_varchar = 'Alice1'",
-                "select * from t2 join t1 on t2.ID = t1.my_id",
-                "delete from t1 where my_id = 3",
-                "select * from t1 where my_varchar like 'Alice%'",
+                "insert into t1 (id, embedding, name) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice1')",
+                "insert into t1 (id, embedding, name) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice2')",
+                "insert into t1 (id, embedding, name) values (3, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice3')",
+                "select * from t1 where id = 1",
+                "select * from t1 where id = 1 and name = 'Alice1'",
+                "select * from t2 join t1 on t2.ID = t1.id",
+                "delete from t1 where id = 3",
+                "select * from t1 where name like 'Alice%'",
                 "select * from t2 join (select * from t2) t on ip(t2.embedding, t.embedding) > 0.5 limit 10",
-                "select t2.ID, t1.my_id, t1.my_varchar from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID limit 10",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID limit 10",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 order by t2.ID",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 limit 10",
-                "select t2.ID, t1.my_id, t1.my_varchar from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 where t2.ID >= 1",
-                "select * from t2 join t1 on ip(t2.embedding, t1.my_vector) > 0.5 where t1.my_id >= 1"
+                "select t2.ID, t1.id, t1.name from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID limit 10",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID limit 10",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 limit 10",
+                "select t2.ID, t1.id, t1.name from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 where t2.ID >= 1",
+                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 where t1.id >= 1"
         );
 
         for (String sql : sqlList) {
@@ -109,17 +109,17 @@ public class TestMilvusCalciteTable {
 
     public static Table getMilvusTable() {
         List<FieldSchema> fieldSchemas = new ArrayList<>();
-        fieldSchemas.add(new FieldSchema("my_id", "INTEGER"));
-        fieldSchemas.add(new FieldSchema("my_vector", "ARRAY<FLOAT>"));
-        fieldSchemas.add(new FieldSchema("my_varchar", "VARCHAR"));
+        fieldSchemas.add(new FieldSchema("id", "INTEGER"));
+        fieldSchemas.add(new FieldSchema("embedding", "ARRAY<FLOAT>"));
+        fieldSchemas.add(new FieldSchema("name", "VARCHAR"));
 
         MilvusConfig milvusConfig = new MilvusConfig();
         milvusConfig.url = "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":31530";
         milvusConfig.token = "root:Milvus";
         milvusConfig.database = "default";
-        milvusConfig.collection = "test";
+        milvusConfig.collection = "item_embedding";
         milvusConfig.fieldSchemas = fieldSchemas;
-        milvusConfig.primaryKey = "my_id";
+        milvusConfig.primaryKey = "id";
         milvusConfig.primaryKeyIndex = 0;
 
         return new MilvusCalciteTable(milvusConfig);
