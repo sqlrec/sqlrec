@@ -14,6 +14,7 @@
         <module>sqlrec-connectors</module>
         <module>sqlrec-sql-parser</module>
         <module>sqlrec-common</module>
+        <module>sqlrec-udf</module>
         <module>sqlrec-model</module>
     </modules>
     

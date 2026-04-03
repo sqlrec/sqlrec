@@ -1,4 +1,4 @@
-package com.sqlrec.common.udf.table;
+package com.sqlrec.udf.table;
 
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;

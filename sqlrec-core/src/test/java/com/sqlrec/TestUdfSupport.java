@@ -30,12 +30,12 @@ public class TestUdfSupport {
         SchemaUtils.addFunction(
                 schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "uuid",
-                "com.sqlrec.common.udf.scalar.UuidFunction"
+                "com.sqlrec.udf.scalar.UuidFunction"
         );
         SchemaUtils.addFunction(
                 schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "l2_norm",
-                "com.sqlrec.common.udf.scalar.L2NormFunction"
+                "com.sqlrec.udf.scalar.L2NormFunction"
         );
 
         List<String> sqlList = Arrays.asList(

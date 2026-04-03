@@ -47,7 +47,7 @@ public class TestMilvusCalciteTable {
         SchemaUtils.addFunction(
                 schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
                 "ip",
-                "com.sqlrec.common.udf.scalar.IpFunction"
+                "com.sqlrec.udf.scalar.IpFunction"
         );
 
         List<String> sqlList = Arrays.asList(

@@ -2,10 +2,10 @@ package com.sqlrec.schema;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.sqlrec.common.config.FunctionConfigs;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.ObjCache;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;

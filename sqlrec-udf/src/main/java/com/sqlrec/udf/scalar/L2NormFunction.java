@@ -1,4 +1,4 @@
-package com.sqlrec.common.udf.scalar;
+package com.sqlrec.udf.scalar;
 
 import org.apache.flink.table.functions.ScalarFunction;
 

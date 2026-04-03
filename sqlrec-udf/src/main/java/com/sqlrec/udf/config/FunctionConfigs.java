@@ -1,9 +1,9 @@
-package com.sqlrec.common.config;
+package com.sqlrec.udf.config;
 
-import com.sqlrec.common.udf.scalar.IpFunction;
-import com.sqlrec.common.udf.scalar.L2NormFunction;
-import com.sqlrec.common.udf.scalar.UuidFunction;
-import com.sqlrec.common.udf.table.*;
+import com.sqlrec.udf.scalar.IpFunction;
+import com.sqlrec.udf.scalar.L2NormFunction;
+import com.sqlrec.udf.scalar.UuidFunction;
+import com.sqlrec.udf.table.*;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.sqlrec.common.udf.table;
+package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
 import org.apache.calcite.linq4j.Enumerable;
