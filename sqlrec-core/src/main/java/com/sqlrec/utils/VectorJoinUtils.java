@@ -3,7 +3,6 @@ package com.sqlrec.utils;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTransformUtils;
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.RelCollation;
@@ -49,10 +48,6 @@ public class VectorJoinUtils {
             return Linq4j.emptyEnumerable();
         }
 
-        int leftSize = leftValues.get(0).length;
-        RelDataType rightRowType = rightTable.getRowType(new JavaTypeFactoryImpl());
-        List<String> rightFieldNames = rightRowType.getFieldNames();
-
         return doVectorJoin(
                 leftValues,
                 rightTable,
@@ -60,9 +55,7 @@ public class VectorJoinUtils {
                 leftEmbeddingColIndex,
                 rightEmbeddingColName,
                 limit,
-                projectColumns,
-                leftSize,
-                rightFieldNames
+                projectColumns
         );
     }
 
@@ -73,11 +66,11 @@ public class VectorJoinUtils {
             int leftEmbeddingColIndex,
             String rightEmbeddingColName,
             int limit,
-            List<Integer> projectColumns,
-            int leftSize,
-            List<String> rightFieldNames
+            List<Integer> projectColumns
     ) {
-        int rightSize = rightFieldNames.size() + 1;  // 右表模式多一个相似度分数列
+        int leftSize = leftValues.get(0).length;
+        List<String> rightFieldNames = rightTable.getFieldNames();
+        int rightSize = rightFieldNames.size() + 1;
         int projectSize = projectColumns != null ? projectColumns.size() : (leftSize + rightSize);
 
         if (limit <= 0) {
@@ -102,24 +95,16 @@ public class VectorJoinUtils {
             Object leftEmbedding = leftValue[leftEmbeddingColIndex];
             List<Float> embedding = DataTransformUtils.convertToFloatVec(leftEmbedding);
 
-            String filterExpression = buildFilterExpression(
-                    filterCondition,
-                    leftValue,
-                    leftSize,
-                    rightFieldNames
-            );
-
             List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
-                    rightEmbeddingColName,
+                    leftValue,
                     embedding,
-                    filterExpression,
+                    rightEmbeddingColName,
+                    filterCondition,
                     limit,
                     vectorProjectColumns
             );
 
             if (rightValues == null || rightValues.isEmpty()) {
-                // 对于INNER JOIN，不添加结果；对于LEFT JOIN，添加null行
-                // 这里暂时按INNER JOIN处理，如果需要LEFT JOIN可以调整
             } else {
                 for (Object[] rightValue : rightValues) {
                     Object[] joinRow = copyValues(leftValue, rightValue, leftSize, rightSize);
@@ -152,150 +137,6 @@ public class VectorJoinUtils {
             System.arraycopy(rightValue, 0, copy, leftSize, rightSize);
         }
         return copy;
-    }
-
-    public static String buildFilterExpression(
-            RexNode filterCondition,
-            Object[] leftValue,
-            int leftSize,
-            List<String> rightFieldNames) {
-
-        if (filterCondition == null) {
-            return null;
-        }
-
-        return buildFilterExpressionRecursive(
-                filterCondition,
-                leftValue,
-                leftSize,
-                rightFieldNames
-        );
-    }
-
-    private static String buildFilterExpressionRecursive(
-            RexNode node,
-            Object[] leftValue,
-            int leftSize,
-            List<String> rightFieldNames) {
-
-        if (node instanceof RexCall) {
-            RexCall call = (RexCall) node;
-            String opName = call.getOperator().getName();
-
-            if (opName.equalsIgnoreCase("AND")) {
-                StringBuilder sb = new StringBuilder("(");
-                for (int i = 0; i < call.getOperands().size(); i++) {
-                    if (i > 0) sb.append(" and ");
-                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
-                }
-                sb.append(")");
-                return sb.toString();
-            }
-            if (opName.equalsIgnoreCase("OR")) {
-                StringBuilder sb = new StringBuilder("(");
-                for (int i = 0; i < call.getOperands().size(); i++) {
-                    if (i > 0) sb.append(" or ");
-                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
-                }
-                sb.append(")");
-                return sb.toString();
-            }
-
-            if (call.getOperands().size() == 2) {
-                RexNode leftOperand = call.getOperands().get(0);
-                RexNode rightOperand = call.getOperands().get(1);
-
-                if (leftOperand instanceof RexInputRef && rightOperand instanceof RexInputRef) {
-                    int leftIdx = ((RexInputRef) leftOperand).getIndex();
-                    int rightIdx = ((RexInputRef) rightOperand).getIndex();
-
-                    String fieldName;
-                    Object value;
-                    String op;
-
-                    if (leftIdx < leftSize && rightIdx >= leftSize) {
-                        fieldName = rightFieldNames.get(rightIdx - leftSize);
-                        value = leftValue[leftIdx];
-                        op = getOperator(opName);
-                    } else if (rightIdx < leftSize && leftIdx >= leftSize) {
-                        fieldName = rightFieldNames.get(leftIdx - leftSize);
-                        value = leftValue[rightIdx];
-                        op = reverseOperator(getOperator(opName));
-                    } else if (leftIdx >= leftSize && rightIdx >= leftSize) {
-                        String leftFieldName = rightFieldNames.get(leftIdx - leftSize);
-                        String rightFieldName = rightFieldNames.get(rightIdx - leftSize);
-                        return leftFieldName + " " + getOperator(opName) + " " + rightFieldName;
-                    } else {
-                        return null;
-                    }
-
-                    return fieldName + " " + op + " " + formatValue(value);
-                }
-
-                if (leftOperand instanceof RexInputRef && rightOperand instanceof RexLiteral) {
-                    int idx = ((RexInputRef) leftOperand).getIndex();
-                    if (idx >= leftSize) {
-                        String fieldName = rightFieldNames.get(idx - leftSize);
-                        Object value = ((RexLiteral) rightOperand).getValue();
-                        return fieldName + " " + getOperator(opName) + " " + formatValue(value);
-                    }
-                }
-                if (leftOperand instanceof RexLiteral && rightOperand instanceof RexInputRef) {
-                    int idx = ((RexInputRef) rightOperand).getIndex();
-                    if (idx >= leftSize) {
-                        String fieldName = rightFieldNames.get(idx - leftSize);
-                        Object value = ((RexLiteral) leftOperand).getValue();
-                        return formatValue(value) + " " + getOperator(opName) + " " + fieldName;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static String formatValue(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof String) {
-            return "\"" + value + "\"";
-        }
-        return value.toString();
-    }
-
-    private static String getOperator(String opName) {
-        switch (opName.toUpperCase()) {
-            case "=":
-                return "==";
-            case ">":
-                return ">";
-            case "<":
-                return "<";
-            case ">=":
-                return ">=";
-            case "<=":
-                return "<=";
-            case "!=":
-                return "!=";
-            default:
-                return opName;
-        }
-    }
-
-    private static String reverseOperator(String op) {
-        switch (op) {
-            case ">":
-                return "<";
-            case "<":
-                return ">";
-            case ">=":
-                return "<=";
-            case "<=":
-                return ">=";
-            default:
-                return op;
-        }
     }
 
     public static VectorJoinConfig extractVectorJoinConfig(

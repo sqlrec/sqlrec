@@ -85,12 +85,23 @@ public class MilvusHandler {
     public List<Object[]> searchByEmbeddingWithScore(
             String fieldName,
             List<Float> embedding,
-            String filterExpression,
+            RexNode filterCondition,
+            Object[] leftValue,
             int limit,
             List<Integer> projectColumns) {
         if (limit == 0) {
             limit = 100;
         }
+
+        List<String> rightFieldNames = milvusConfig.fieldSchemas.stream()
+                .map(f -> f.name)
+                .collect(Collectors.toList());
+
+        String filterExpression = FilterUtils.buildMilvusFilterExpression(
+                filterCondition,
+                leftValue,
+                rightFieldNames
+        );
 
         List<String> outputFields = getOutputFields(projectColumns);
 

@@ -87,4 +87,139 @@ public class FilterUtils {
         }
         throw new IllegalArgumentException("Unsupported operand kind: " + operand.getKind());
     }
+
+    public static String buildMilvusFilterExpression(
+            RexNode filterCondition,
+            Object[] leftValue,
+            List<String> rightFieldNames) {
+
+        if (filterCondition == null) {
+            return null;
+        }
+
+        int leftSize = leftValue != null ? leftValue.length : 0;
+
+        return buildFilterExpressionRecursive(
+                filterCondition,
+                leftValue,
+                leftSize,
+                rightFieldNames
+        );
+    }
+
+    private static String buildFilterExpressionRecursive(
+            RexNode node,
+            Object[] leftValue,
+            int leftSize,
+            List<String> rightFieldNames) {
+
+        if (node instanceof RexCall) {
+            RexCall call = (RexCall) node;
+            String opName = call.getOperator().getName();
+
+            if (opName.equalsIgnoreCase("AND")) {
+                StringBuilder sb = new StringBuilder("(");
+                for (int i = 0; i < call.getOperands().size(); i++) {
+                    if (i > 0) sb.append(" and ");
+                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
+                }
+                sb.append(")");
+                return sb.toString();
+            }
+            if (opName.equalsIgnoreCase("OR")) {
+                StringBuilder sb = new StringBuilder("(");
+                for (int i = 0; i < call.getOperands().size(); i++) {
+                    if (i > 0) sb.append(" or ");
+                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
+                }
+                sb.append(")");
+                return sb.toString();
+            }
+
+            if (call.getOperands().size() == 2) {
+                RexNode leftOperand = call.getOperands().get(0);
+                RexNode rightOperand = call.getOperands().get(1);
+
+                if (leftOperand instanceof RexInputRef && rightOperand instanceof RexInputRef) {
+                    int leftIdx = ((RexInputRef) leftOperand).getIndex();
+                    int rightIdx = ((RexInputRef) rightOperand).getIndex();
+
+                    String fieldName;
+                    Object value;
+                    String op;
+
+                    if (leftIdx < leftSize && rightIdx >= leftSize) {
+                        fieldName = rightFieldNames.get(rightIdx - leftSize);
+                        value = leftValue[leftIdx];
+                        op = getOperator(opName);
+                    } else if (rightIdx < leftSize && leftIdx >= leftSize) {
+                        fieldName = rightFieldNames.get(leftIdx - leftSize);
+                        value = leftValue[rightIdx];
+                        op = reverseOperator(getOperator(opName));
+                    } else if (leftIdx >= leftSize && rightIdx >= leftSize) {
+                        String leftFieldName = rightFieldNames.get(leftIdx - leftSize);
+                        String rightFieldName = rightFieldNames.get(rightIdx - leftSize);
+                        return leftFieldName + " " + getOperator(opName) + " " + rightFieldName;
+                    } else {
+                        return null;
+                    }
+
+                    return fieldName + " " + op + " " + formatValue(value);
+                }
+
+                if (leftOperand instanceof RexInputRef && rightOperand instanceof RexLiteral) {
+                    int idx = ((RexInputRef) leftOperand).getIndex();
+                    if (idx >= leftSize) {
+                        String fieldName = rightFieldNames.get(idx - leftSize);
+                        Object value = ((RexLiteral) rightOperand).getValue();
+                        return fieldName + " " + getOperator(opName) + " " + formatValue(value);
+                    }
+                }
+                if (leftOperand instanceof RexLiteral && rightOperand instanceof RexInputRef) {
+                    int idx = ((RexInputRef) rightOperand).getIndex();
+                    if (idx >= leftSize) {
+                        String fieldName = rightFieldNames.get(idx - leftSize);
+                        Object value = ((RexLiteral) leftOperand).getValue();
+                        return formatValue(value) + " " + getOperator(opName) + " " + fieldName;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static String formatValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String) {
+            return "\"" + value + "\"";
+        }
+        return value.toString();
+    }
+
+    private static String getOperator(String op) {
+        switch (op) {
+            case "=":
+                return "==";
+            default:
+                return op;
+        }
+    }
+
+    private static String reverseOperator(String op) {
+        switch (op) {
+            case ">":
+                return "<";
+            case "<":
+                return ">";
+            case ">=":
+                return "<=";
+            case "<=":
+                return ">=";
+            default:
+                return op;
+        }
+    }
 }

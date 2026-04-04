@@ -8,8 +8,6 @@ import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelRule;
-import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
@@ -69,10 +67,6 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
         }
         final RelNode left = newInputs.get(0);
         final RelNode right = newInputs.get(1);
-
-        RelTraitSet traitSet = left.getTraitSet()
-                .replace(EnumerableConvention.INSTANCE)
-                .replaceIf(RelCollationTraitDef.INSTANCE, () -> joinConfig.collation);
 
         SqlrecEnumerableVectorJoin newJoin = SqlrecEnumerableVectorJoin.create(
                 left,

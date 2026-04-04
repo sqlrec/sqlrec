@@ -82,7 +82,8 @@ public class TestSqlFunctionCompile {
     public void testSqlCompileInRuntime() throws Exception {
         List<String> fun1SqlList = Arrays.asList(
                 "create sql function fun1",
-                "call get('func_name')()",
+                "cache table t1 as select 1 as id",
+                "call get('func_name')() like t1",
                 "return"
         );
         new CompileManager().compileSqlFunction("fun1", fun1SqlList);
