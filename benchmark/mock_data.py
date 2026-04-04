@@ -4,11 +4,20 @@ import random
 import time
 import json
 import pandas as pd
+from pymilvus import MilvusClient
 
 # Redis connection configuration
 REDIS_HOST = os.environ.get('NODE_IP', 'localhost')  # Priority to NODE_IP environment variable
 REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))  # Priority to REDIS_PORT environment variable
 REDIS_DB = 0
+
+# Milvus connection configuration
+MILVUS_HOST = os.environ.get('NODE_IP', 'localhost')
+MILVUS_PORT = int(os.environ.get('MILVUS_PORT', 31530))
+MILVUS_TOKEN = "root:Milvus"
+MILVUS_DATABASE = "default"
+MILVUS_COLLECTION = "item_embedding"
+EMBEDDING_DIM = 5
 
 # Data generation configuration
 TOTAL_USERS = 100000
@@ -306,6 +315,43 @@ def generate_behavior_sample_parquet(output_dir, sample_size=1000):
     print(f"Total records: {len(df)}")
     return output_path
 
+def generate_item_embeddings(total_items):
+    """Generate item embeddings for Milvus"""
+    print(f"\n=== Milvus Data Generation ===")
+    print(f"Configuration: {total_items} items with {EMBEDDING_DIM}-dim embeddings")
+
+    client = MilvusClient(
+        uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}",
+        token=MILVUS_TOKEN,
+        db_name=MILVUS_DATABASE
+    )
+
+    print(f"Generating {total_items} item embeddings for Milvus...")
+
+    for i in range(0, total_items, BATCH_SIZE):
+        batch_start = i
+        batch_end = min(batch_start + BATCH_SIZE, total_items)
+
+        data = []
+        for item_id in range(batch_start, batch_end):
+            embedding = [round(random.uniform(0.0, 1.0), 4) for _ in range(EMBEDDING_DIM)]
+            item_data = {
+                "id": item_id,
+                "embedding": embedding,
+                "name": f"Item{item_id}"
+            }
+            data.append(item_data)
+
+        res = client.insert(
+            collection_name=MILVUS_COLLECTION,
+            data=data
+        )
+
+        progress = ((i + BATCH_SIZE) / total_items) * 100
+        print(f"Processing items {batch_start}-{batch_end-1}: {progress:.1f}% completed, insert count: {res['insert_count']}")
+
+    print("Item embeddings generation completed!")
+
 def main():
     print("=== Redis Data Generation for SQLRec Benchmark ===")
     print(f"Configuration: {TOTAL_USERS} users, {TOTAL_ITEMS} items")
@@ -319,11 +365,12 @@ def main():
     generate_category1_hot_items(redis_client, TOTAL_ITEMS)
     generate_user_recent_click(redis_client, TOTAL_USERS, TOTAL_ITEMS)  # Limit to 100k users
     generate_itemcf_i2i(redis_client, TOTAL_ITEMS)
+    generate_item_embeddings(TOTAL_ITEMS)
 
     parquet_output_dir = os.path.dirname(os.path.realpath(__file__))
     generate_behavior_sample_parquet(parquet_output_dir, 10000)
 
-    print("\n=== All Redis tables data generation completed successfully! ===")
+    print("\n=== All data generation completed successfully! ===")
 
 if __name__ == "__main__":
     main()

@@ -189,6 +189,20 @@ create or replace sql function recall_fun;
 
 define input table user_info(id bigint);
 
+cache table user_embedding as
+select ARRAY[0.1, 0.2, 0.3, 0.4, 0.5] as embedding;
+
+cache table vector_recall as
+select item_embedding.id as item_id
+from
+user_embedding join item_embedding on 1=1
+order by ip(user_embedding.embedding, item_embedding.embedding)
+limit 300;
+
+cache table vector_recall as
+select item_id, 'vector_recall' as rec_reason
+from vector_recall;
+
 cache table exposured_item as
 select item_id
 from
@@ -228,13 +242,16 @@ limit 300;
 cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'item_id', 'item_id');
 cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'item_id', 'item_id');
 cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
+cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'item_id', 'item_id');
 
 cache table all_recall_item as
 select * from dedup_i2i_recall
 union all
 select * from dedup_global_hot_recall
 union all
-select * from dedup_category1_recall;
+select * from dedup_category1_recall
+union all
+select * from dedup_vector_recall;
 
 cache table truncate_recall_item as
 select item_id, rec_reason

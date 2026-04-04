@@ -8,9 +8,9 @@ export BASE_DIR=$(dirname ${dir})/deploy
 source ${dir}/../deploy/env.sh
 
 CONCURRENCY=10
-DURATION=60
+DURATION=30
 WARMUP_DURATION=10
-URL="http://127.0.0.1:${SQLREC_REST_PORT}/api/v1/main_rec"
+URL="http://${NODE_IP}:${SQLREC_REST_PORT}/api/v1/main_rec"
 
 echo "Warming up the system..."
 # Warm up the system
