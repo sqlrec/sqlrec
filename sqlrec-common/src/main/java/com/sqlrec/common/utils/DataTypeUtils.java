@@ -16,7 +16,7 @@ public class DataTypeUtils {
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
         RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (FieldSchema fieldSchema : fieldSchemas) {
-            builder.add(fieldSchema.name, getRelDataType(typeFactory, fieldSchema.type));
+            builder.add(fieldSchema.getName(), getRelDataType(typeFactory, fieldSchema.getType()));
         }
         return builder.build();
     }
@@ -54,9 +54,9 @@ public class DataTypeUtils {
         for (FieldSchema fieldSchema : fieldsToAdd) {
             newFields.add(
                     getRelDataTypeField(
-                            fieldSchema.name,
+                            fieldSchema.getName(),
                             newFields.size(),
-                            getRelDataType(typeFactory, fieldSchema.type).getSqlTypeName()
+                            getRelDataType(typeFactory, fieldSchema.getType()).getSqlTypeName()
                     )
             );
         }

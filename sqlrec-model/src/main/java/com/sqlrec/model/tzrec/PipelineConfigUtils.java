@@ -8,30 +8,21 @@ import com.sqlrec.common.schema.FieldSchema;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Utility class for generating Torch Easy Rec configuration files
- */
 public class PipelineConfigUtils {
 
     public static String generateWideAndDeepTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
-        // Add input paths
-        addInputPaths(config, trainConf.trainDataPaths);
+        addInputPaths(config, trainConf.getTrainDataPaths());
 
-        // Add model directory
-        addModelDir(config, trainConf.modelDir);
+        addModelDir(config, trainConf.getModelDir());
 
-        // Add train config
-        config.append(generateTrainConfig(model, trainConf.params));
+        config.append(generateTrainConfig(model, trainConf.getParams()));
 
-        // Add data config
-        config.append(generateDataConfig(model, trainConf.params));
+        config.append(generateDataConfig(model, trainConf.getParams()));
 
-        // Add feature configs
         config.append(generateFeatureConfigs(model));
 
-        // Add model config
         config.append(generateModelConfig(model));
 
         return config.toString();
@@ -40,19 +31,14 @@ public class PipelineConfigUtils {
     public static String generateWideAndDeepExportConfig(ModelConfig model, ModelExportConf exportConf) {
         StringBuilder config = new StringBuilder();
 
-        // Add input paths
-        addInputPaths(config, exportConf.trainDataPaths);
+        addInputPaths(config, exportConf.getTrainDataPaths());
 
-        // Add model directory
-        addModelDir(config, exportConf.baseModelDir);
+        addModelDir(config, exportConf.getBaseModelDir());
 
-        // Add data config
-        config.append(generateDataConfig(model, exportConf.params));
+        config.append(generateDataConfig(model, exportConf.getParams()));
 
-        // Add feature configs
         config.append(generateFeatureConfigs(model));
 
-        // Add model config
         config.append(generateModelConfig(model));
 
         return config.toString();
@@ -60,7 +46,6 @@ public class PipelineConfigUtils {
 
     private static void addInputPaths(StringBuilder config, List<String> trainDataPaths) {
         if (trainDataPaths != null && !trainDataPaths.isEmpty()) {
-            // Add train input path as comma-separated string
             String trainInputPath = String.join(",", trainDataPaths);
             config.append("train_input_path: \"").append(trainInputPath).append("\"\n");
         }
@@ -102,7 +87,7 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
         int numWorkers = Config.NUM_WORKERS.getValue(params);
-        String labelFields = Config.LABEL_COLUMNS.getValue(model.params);
+        String labelFields = Config.LABEL_COLUMNS.getValue(model.getParams());
 
         config.append("data_config {\n");
         config.append("    batch_size: " + batchSize + "\n");
@@ -117,13 +102,12 @@ public class PipelineConfigUtils {
     public static String generateFeatureConfigs(ModelConfig model) {
         StringBuilder config = new StringBuilder();
 
-        if (model.inputFields != null) {
-            for (FieldSchema fieldSchema : model.inputFields) {
-                String featureName = fieldSchema.name;
-                String fieldType = fieldSchema.type;
+        if (model.getInputFields() != null) {
+            for (FieldSchema fieldSchema : model.getInputFields()) {
+                String featureName = fieldSchema.getName();
+                String fieldType = fieldSchema.getType();
 
                 if (isNumericFeature(fieldType)) {
-                    // Generate raw_feature for numeric features
                     config.append("feature_configs {\n");
                     config.append("    raw_feature {\n");
                     config.append("        feature_name: \"").append(featureName).append("\"\n");
@@ -131,22 +115,19 @@ public class PipelineConfigUtils {
                     config.append("    }\n");
                     config.append("}\n");
                 } else {
-                    // Generate id_feature for categorical features
-                    int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.params);
-                    int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.params);
+                    int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
+                    int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.getParams());
 
-                    // Check field-specific bucket size
                     int numBuckets = defaultNumBuckets;
                     String bucketSizeKey = "column." + featureName + ".bucket_size";
-                    if (model.params != null && model.params.containsKey(bucketSizeKey)) {
-                        numBuckets = Integer.parseInt(model.params.get(bucketSizeKey));
+                    if (model.getParams() != null && model.getParams().containsKey(bucketSizeKey)) {
+                        numBuckets = Integer.parseInt(model.getParams().get(bucketSizeKey));
                     }
 
-                    // Check field-specific embedding dim
                     int embeddingDim = defaultEmbeddingDim;
                     String embeddingDimKey = "column." + featureName + ".embedding_dim";
-                    if (model.params != null && model.params.containsKey(embeddingDimKey)) {
-                        embeddingDim = Integer.parseInt(model.params.get(embeddingDimKey));
+                    if (model.getParams() != null && model.getParams().containsKey(embeddingDimKey)) {
+                        embeddingDim = Integer.parseInt(model.getParams().get(embeddingDimKey));
                     }
 
                     config.append("feature_configs {\n");
@@ -172,36 +153,29 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
-        // Add wide feature group
         config.append("    feature_groups {\n");
         config.append("        group_name: \"wide\"\n");
-        // Add feature names for wide group
         addFeatureNames(config, getFeatures(model));
         config.append("        group_type: WIDE\n");
         config.append("    }\n");
 
-        // Add deep feature group
         config.append("    feature_groups {\n");
         config.append("        group_name: \"deep\"\n");
-        // Add feature names for deep group
         addFeatureNames(config, getFeatures(model));
         config.append("        group_type: DEEP\n");
         config.append("    }\n");
 
-        // Add deepfm configuration
-        String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.params);
+        String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.getParams());
         config.append("    deepfm {\n");
         config.append("        deep {\n");
         config.append("            hidden_units: [" + hiddenUnits + "]\n");
         config.append("        }\n");
         config.append("    }\n");
 
-        // Add metrics
         config.append("    metrics {\n");
         config.append("        auc {}\n");
         config.append("    }\n");
 
-        // Add losses
         config.append("    losses {\n");
         config.append("        binary_cross_entropy {}\n");
         config.append("    }\n");
@@ -221,9 +195,9 @@ public class PipelineConfigUtils {
 
     private static List<String> getFeatures(ModelConfig model) {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
-        if (model.inputFields != null) {
-            for (FieldSchema fieldSchema : model.inputFields) {
-                categoricalFeatures.add(fieldSchema.name);
+        if (model.getInputFields() != null) {
+            for (FieldSchema fieldSchema : model.getInputFields()) {
+                categoricalFeatures.add(fieldSchema.getName());
             }
         }
         return categoricalFeatures;

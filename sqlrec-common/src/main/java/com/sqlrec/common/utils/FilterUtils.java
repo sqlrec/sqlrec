@@ -75,7 +75,7 @@ public class FilterUtils {
     public static String convertOperand(RexNode operand, List<FieldSchema> fieldSchemas) {
         if (operand instanceof RexInputRef) {
             RexInputRef inputRef = (RexInputRef) operand;
-            return fieldSchemas.get(inputRef.getIndex()).name;
+            return fieldSchemas.get(inputRef.getIndex()).getName();
         }
         if (operand instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) operand;

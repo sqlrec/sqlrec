@@ -26,39 +26,39 @@ public class WideAndDeepModel implements ModelController {
     public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
         String pipelineConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
-        return genJobYaml(model, pipelineConfig, shell, trainConf.id, trainConf.params);
+        return genJobYaml(model, pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
     }
 
     @Override
     public List<String> getExportCheckpoints(ModelExportConf exportConf) {
         List<String> exportCheckpointNames = new ArrayList<>();
-        String exportBaseName = exportConf.checkpointName + "_export";
+        String exportBaseName = exportConf.getCheckpointName() + "_export";
         exportCheckpointNames.add(exportBaseName);
         return exportCheckpointNames;
     }
 
     @Override
     public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
-        String exportDir = exportConf.baseModelDir + "_export";
+        String exportDir = exportConf.getBaseModelDir() + "_export";
         String pipelineConfig = PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
         String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
-        return genJobYaml(model, pipelineConfig, shell, exportConf.id, exportConf.params);
+        return genJobYaml(model, pipelineConfig, shell, exportConf.getId(), exportConf.getParams());
     }
 
     @Override
     public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
-        String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.params);
-        return "http://" + serviceConf.id + "." + namespace + ".svc.cluster.local:80/predict";
+        String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.getParams());
+        return "http://" + serviceConf.getId() + "." + namespace + ".svc.cluster.local:80/predict";
     }
 
     @Override
     public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
-        String deploymentName = serviceConf.id;
-        String serviceName = serviceConf.id;
+        String deploymentName = serviceConf.getId();
+        String serviceName = serviceConf.getId();
 
         String serviceYaml = K8sYamlUtils.createServiceYaml(serviceName, 80, "app", deploymentName);
         String deploymentYaml = K8sYamlUtils.createDeploymentYaml(
-                deploymentName, serviceConf.modelCheckpointDir, serviceConf.params
+                deploymentName, serviceConf.getModelCheckpointDir(), serviceConf.getParams()
         );
 
         return K8sYamlUtils.mergeK8sYamls(deploymentYaml, serviceYaml);

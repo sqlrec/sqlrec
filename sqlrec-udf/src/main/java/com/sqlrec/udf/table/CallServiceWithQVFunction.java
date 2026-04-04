@@ -22,17 +22,16 @@ public class CallServiceWithQVFunction {
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");
         }
-        if (StringUtils.isEmpty(serviceConfig.url)) {
+        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
             throw new RuntimeException("Service " + serviceName + " url is empty");
         }
-        ModelController controller = context.getModelController(serviceConfig.modelConfig);
+        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
         if (controller == null){
             throw new RuntimeException("model controller not exist for " +serviceName);
         }
         
-        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.modelConfig);
+        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
         
-        // query should only one row
         Enumerable<Object[]> queryEnumerable = query.scan(null);
         List<Object[]> queryData = new ArrayList<>();
         if (queryEnumerable != null) {
@@ -55,14 +54,14 @@ public class CallServiceWithQVFunction {
             valueData.add(row);
         }
 
-        List<FieldSchema> allInputFields = serviceConfig.modelConfig.inputFields;
+        List<FieldSchema> allInputFields = serviceConfig.getModelConfig().getInputFields();
 
         List<FieldSchema> queryFields = new ArrayList<>();
         List<FieldSchema> valueFields = new ArrayList<>();
         for (FieldSchema field : allInputFields) {
             boolean foundInQuery = false;
             for (RelDataTypeField dataField : query.getDataFields()) {
-                if (dataField.getName().equalsIgnoreCase(field.name)) {
+                if (dataField.getName().equalsIgnoreCase(field.getName())) {
                     foundInQuery = true;
                     break;
                 }
@@ -77,7 +76,7 @@ public class CallServiceWithQVFunction {
         String jsonData = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields, 
                                                     query.getDataFields(), value.getDataFields());
         
-        Map<String, Object> predictions = CallServiceFunction.callPredictionService(serviceConfig.url, jsonData);
+        Map<String, Object> predictions = CallServiceFunction.callPredictionService(serviceConfig.getUrl(), jsonData);
         
         List<Object[]> newData = CallServiceFunction.mergePredictions(valueData, predictions, modelOutputFields);
         

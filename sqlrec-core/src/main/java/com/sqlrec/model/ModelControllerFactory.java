@@ -37,7 +37,7 @@ public class ModelControllerFactory {
     }
 
     public static ModelController getModelController(ModelConfig modelConfig) {
-        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.params);
+        String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.getParams());
         return ModelControllerFactory.getModelController(modelAlgorithmName);
     }
 }

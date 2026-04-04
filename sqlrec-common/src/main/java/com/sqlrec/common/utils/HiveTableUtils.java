@@ -104,7 +104,7 @@ public class HiveTableUtils {
 
     public static int getTablePrimaryKeyIndex(List<FieldSchema> fieldSchemas, String primaryKey) {
         for (int i = 0; i < fieldSchemas.size(); i++) {
-            if (fieldSchemas.get(i).name.equalsIgnoreCase(primaryKey)) {
+            if (fieldSchemas.get(i).getName().equalsIgnoreCase(primaryKey)) {
                 return i;
             }
         }

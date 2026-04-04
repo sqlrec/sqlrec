@@ -16,7 +16,7 @@ public class ExternalModel implements ModelController {
     @Override
     public List<FieldSchema> getOutputFields(ModelConfig model) {
         List<FieldSchema> outputFields = new ArrayList<>();
-        String outputFieldsStr = Config.OUTPUT_COLUMNS.getValue(model.params);
+        String outputFieldsStr = Config.OUTPUT_COLUMNS.getValue(model.getParams());
         if (StringUtils.isNotEmpty(outputFieldsStr)) {
             String[] fieldParts = outputFieldsStr.split(",");
             for (String fieldPart : fieldParts) {
@@ -51,7 +51,7 @@ public class ExternalModel implements ModelController {
 
     @Override
     public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
-        return Config.URL.getValue(serviceConf.params);
+        return Config.URL.getValue(serviceConf.getParams());
     }
 
     @Override

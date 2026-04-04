@@ -62,48 +62,48 @@ public class ServiceManager {
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
         ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
-        Service existingService = DbUtils.getService(serviceConfig.serviceName);
+        Service existingService = DbUtils.getService(serviceConfig.getServiceName());
         if (existingService != null) {
             if (sqlCreateService.isIfNotExists()) {
-                return serviceConfig.serviceName;
+                return serviceConfig.getServiceName();
             } else {
-                throw new IllegalArgumentException("service already exists: " + serviceConfig.serviceName);
+                throw new IllegalArgumentException("service already exists: " + serviceConfig.getServiceName());
             }
         }
 
-        Model modelEntity = DbUtils.getModel(serviceConfig.modelName);
+        Model modelEntity = DbUtils.getModel(serviceConfig.getModelName());
         if (modelEntity == null) {
-            throw new IllegalArgumentException("model not exists: " + serviceConfig.modelName);
+            throw new IllegalArgumentException("model not exists: " + serviceConfig.getModelName());
         }
 
-        Checkpoint checkpoint = DbUtils.getCheckpoint(serviceConfig.modelName, serviceConfig.checkpointName);
+        Checkpoint checkpoint = DbUtils.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
         if (checkpoint == null) {
-            throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
+            throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
         }
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
-            throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.checkpointName + " for model " + serviceConfig.modelName);
+            throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
         }
         if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
             throw new IllegalArgumentException("service only supports export checkpoint");
         }
 
-        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.modelConfig);
+        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.getModelConfig());
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.modelConfig.modelName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.getModelConfig().getModelName());
         }
 
-        String serviceUrl = modelController.getServiceUrl(serviceConfig.modelConfig, serviceConfig);
-        String k8sYaml = modelController.getServiceK8sYaml(serviceConfig.modelConfig, serviceConfig);
+        String serviceUrl = modelController.getServiceUrl(serviceConfig.getModelConfig(), serviceConfig);
+        String k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
         if (!StringUtils.isEmpty(k8sYaml)) {
-            k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.modelConfig, serviceConfig.params);
+            k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
             K8sManager.applyYaml(k8sYaml);
         }
 
         Service service = new Service();
-        service.setName(serviceConfig.serviceName);
-        service.setModelName(serviceConfig.modelName);
+        service.setName(serviceConfig.getServiceName());
+        service.setModelName(serviceConfig.getModelName());
         service.setModelDdl(checkpoint.getModelDdl());
-        service.setCheckpointName(serviceConfig.checkpointName);
+        service.setCheckpointName(serviceConfig.getCheckpointName());
         service.setDdl(CompileManager.getSqlStr(sqlCreateService));
         service.setYaml(k8sYaml);
         service.setUrl(serviceUrl);
@@ -113,7 +113,7 @@ public class ServiceManager {
 
         DbUtils.insertService(service);
 
-        return serviceConfig.serviceName;
+        return serviceConfig.getServiceName();
     }
 
     public static void deleteService(String serviceName) {

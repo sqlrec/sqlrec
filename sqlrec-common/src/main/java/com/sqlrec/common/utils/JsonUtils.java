@@ -21,7 +21,7 @@ public class JsonUtils {
         JsonObject jsonObject = new JsonObject();
         for (int i = 0; i < fieldSchemas.size(); i++) {
             FieldSchema fieldSchema = fieldSchemas.get(i);
-            jsonObject.add(fieldSchema.name, gson.toJsonTree(objects[i]));
+            jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
         }
         return gson.toJson(jsonObject);
     }
@@ -34,7 +34,7 @@ public class JsonUtils {
         Map<String, Object> dataMap = gson.fromJson(json, Map.class);
         Object[] objects = new Object[fieldSchemas.size()];
         for (int i = 0; i < fieldSchemas.size(); i++) {
-            objects[i] = dataMap.get(fieldSchemas.get(i).name);
+            objects[i] = dataMap.get(fieldSchemas.get(i).getName());
         }
         return objects;
     }
@@ -51,11 +51,11 @@ public class JsonUtils {
             JsonObject jsonObject = new JsonObject();
             for (int i = 0; i < inputFields.size(); i++) {
                 FieldSchema field = inputFields.get(i);
-                int fieldIndex = findFieldIndex(dataFields, field.name);
+                int fieldIndex = findFieldIndex(dataFields, field.getName());
                 if (fieldIndex >= 0 && fieldIndex < row.length) {
                     Object value = row[fieldIndex];
                     if (value != null) {
-                        jsonObject.add(field.name, gson.toJsonTree(value));
+                        jsonObject.add(field.getName(), gson.toJsonTree(value));
                     }
                 }
             }
@@ -85,7 +85,7 @@ public class JsonUtils {
 
         for (int i = 0; i < queryFields.size(); i++) {
             FieldSchema field = queryFields.get(i);
-            int fieldIndex = findFieldIndex(queryDataFields, field.name);
+            int fieldIndex = findFieldIndex(queryDataFields, field.getName());
             if (fieldIndex >= 0 && queryData.size() > 0) {
                 Object value = queryData.get(0)[fieldIndex];
                 JsonArray jsonArray = new JsonArray();
@@ -94,13 +94,13 @@ public class JsonUtils {
                 } else {
                     jsonArray.add(JsonNull.INSTANCE);
                 }
-                jsonObject.add(field.name, jsonArray);
+                jsonObject.add(field.getName(), jsonArray);
             }
         }
 
         for (int i = 0; i < valueFields.size(); i++) {
             FieldSchema field = valueFields.get(i);
-            int fieldIndex = findFieldIndex(valueDataFields, field.name);
+            int fieldIndex = findFieldIndex(valueDataFields, field.getName());
             if (fieldIndex >= 0) {
                 JsonArray jsonArray = new JsonArray();
                 for (Object[] row : valueData) {
@@ -111,7 +111,7 @@ public class JsonUtils {
                         jsonArray.add(JsonNull.INSTANCE);
                     }
                 }
-                jsonObject.add(field.name, jsonArray);
+                jsonObject.add(field.getName(), jsonArray);
             }
         }
         

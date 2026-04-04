@@ -94,7 +94,7 @@ public class MilvusHandler {
         }
 
         List<String> rightFieldNames = milvusConfig.fieldSchemas.stream()
-                .map(f -> f.name)
+                .map(f -> f.getName())
                 .collect(Collectors.toList());
 
         String filterExpression = FilterUtils.buildMilvusFilterExpression(
@@ -135,13 +135,13 @@ public class MilvusHandler {
             List<String> outputFields = new ArrayList<>();
             for (Integer projectColumn : projectColumns) {
                 if (projectColumn >= 0 && projectColumn < milvusConfig.fieldSchemas.size()) {
-                    outputFields.add(milvusConfig.fieldSchemas.get(projectColumn).name);
+                    outputFields.add(milvusConfig.fieldSchemas.get(projectColumn).getName());
                 }
             }
             return outputFields;
         } else {
             return milvusConfig.fieldSchemas.stream()
-                    .map(f -> f.name)
+                    .map(f -> f.getName())
                     .collect(Collectors.toList());
         }
     }
@@ -168,7 +168,7 @@ public class MilvusHandler {
         JsonObject jsonObject = new JsonObject();
         for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
             FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
-            jsonObject.add(fieldSchema.name, gson.toJsonTree(objects[i]));
+            jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
         }
         data.add(jsonObject);
 
@@ -221,7 +221,7 @@ public class MilvusHandler {
     private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
         Object[] row = new Object[fieldSchemas.size()];
         for (int i = 0; i < fieldSchemas.size(); i++) {
-            row[i] = entity.get(fieldSchemas.get(i).name);
+            row[i] = entity.get(fieldSchemas.get(i).getName());
         }
         return row;
     }
@@ -229,7 +229,7 @@ public class MilvusHandler {
     private Object[] toRowWithScore(Map<String, Object> entity, List<FieldSchema> fieldSchemas, float score) {
         Object[] row = new Object[fieldSchemas.size() + 1];
         for (int i = 0; i < fieldSchemas.size(); i++) {
-            row[i] = entity.get(fieldSchemas.get(i).name);
+            row[i] = entity.get(fieldSchemas.get(i).getName());
         }
         row[fieldSchemas.size()] = score;
         return row;

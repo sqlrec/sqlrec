@@ -22,15 +22,15 @@ public class ModelEntityConverterTest {
         ModelConfig model = ModelEntityConverter.convertToModel(sqlCreateModel);
 
         assertNotNull(model);
-        assertEquals("test_model", model.modelName);
-        assertNotNull(model.inputFields);
-        assertEquals(2, model.inputFields.size());
-        assertEquals("id", model.inputFields.get(0).name);
-        assertEquals("BIGINT", model.inputFields.get(0).type);
-        assertEquals("name", model.inputFields.get(1).name);
-        assertEquals("STRING", model.inputFields.get(1).type);
-        assertNotNull(model.params);
-        assertEquals("value", model.params.get("param"));
+        assertEquals("test_model", model.getModelName());
+        assertNotNull(model.getInputFields());
+        assertEquals(2, model.getInputFields().size());
+        assertEquals("id", model.getInputFields().get(0).getName());
+        assertEquals("BIGINT", model.getInputFields().get(0).getType());
+        assertEquals("name", model.getInputFields().get(1).getName());
+        assertEquals("STRING", model.getInputFields().get(1).getType());
+        assertNotNull(model.getParams());
+        assertEquals("value", model.getParams().get("param"));
     }
 
     @Test
@@ -39,9 +39,9 @@ public class ModelEntityConverterTest {
         ModelConfig model = ModelEntityConverter.convertToModel(createModelSql);
 
         assertNotNull(model);
-        assertTrue(model.params.containsKey(ModelConfigs.MODEL_PATH.getKey()), "model_path should be added to params");
-        assertNotNull(model.params.get(ModelConfigs.MODEL_PATH.getKey()), "model_path value should not be null");
-        assertTrue(model.params.size() == 2, "params should contain original param and model_path");
-        assertTrue(model.ddl.contains(ModelConfigs.MODEL_PATH.getKey()), "DDL should contain model_path parameter");
+        assertTrue(model.getParams().containsKey(ModelConfigs.MODEL_PATH.getKey()), "model_path should be added to params");
+        assertNotNull(model.getParams().get(ModelConfigs.MODEL_PATH.getKey()), "model_path value should not be null");
+        assertTrue(model.getParams().size() == 2, "params should contain original param and model_path");
+        assertTrue(model.getDdl().contains(ModelConfigs.MODEL_PATH.getKey()), "DDL should contain model_path parameter");
     }
 }

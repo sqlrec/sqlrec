@@ -28,21 +28,21 @@ public class ModelManager {
             ModelConfig model = ModelEntityConverter.convertToModel(sqlCreateModel);
             ModelController modelController = ModelControllerFactory.getModelController(model);
             if (modelController == null) {
-                throw new IllegalArgumentException("Model controller not found for model name: " + model.modelName);
+                throw new IllegalArgumentException("Model controller not found for model name: " + model.getModelName());
             }
             String errorMessage = modelController.checkModel(model);
             if (errorMessage != null) {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            List<FieldSchema> inputFields = model.inputFields;
+            List<FieldSchema> inputFields = model.getInputFields();
             List<FieldSchema> outputFields = modelController.getOutputFields(model);
 
             if (inputFields != null && outputFields != null) {
                 for (FieldSchema inputField : inputFields) {
                     for (FieldSchema outputField : outputFields) {
-                        if (inputField.name.equalsIgnoreCase(outputField.name)) {
-                            throw new IllegalArgumentException("Field '" + inputField.name + "' exists in both input fields and output fields");
+                        if (inputField.getName().equalsIgnoreCase(outputField.getName())) {
+                            throw new IllegalArgumentException("Field '" + inputField.getName() + "' exists in both input fields and output fields");
                         }
                     }
                 }
@@ -67,8 +67,8 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
-        if (HadoopUtils.pathExists(modelConfig.path)) {
-            throw new IllegalArgumentException("Model path already exists: " + modelConfig.path);
+        if (HadoopUtils.pathExists(modelConfig.getPath())) {
+            throw new IllegalArgumentException("Model path already exists: " + modelConfig.getPath());
         }
 
         saveModel(modelConfig);
@@ -77,8 +77,8 @@ public class ModelManager {
 
     public static void saveModel(ModelConfig modelConfig) {
         Model model = new Model();
-        model.setName(modelConfig.modelName);
-        model.setDdl(modelConfig.ddl);
+        model.setName(modelConfig.getModelName());
+        model.setDdl(modelConfig.getDdl());
         model.setCreatedAt(System.currentTimeMillis());
         model.setUpdatedAt(System.currentTimeMillis());
         DbUtils.insertModel(model);
@@ -87,36 +87,36 @@ public class ModelManager {
     public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
-        Model modelEntity = DbUtils.getModel(modelTrainConf.modelName);
+        Model modelEntity = DbUtils.getModel(modelTrainConf.getModelName());
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
         }
 
-        Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelTrainConf.modelName, modelTrainConf.checkpointName);
+        Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
             String status = existingCheckpoint.getStatus();
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
                 log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info",
-                        modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                        modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
                 List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
             } else {
                 log.info("Model {} re train checkpoint {}, deleting old first",
-                        modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
-                deleteCheckpoint(modelTrainConf.modelName, existingCheckpoint.getCheckpointName());
+                        modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
+                deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
             }
         }
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
-        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelTrainConf.params);
+        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
         K8sManager.applyYaml(k8sYaml);
 
         Checkpoint checkpoint = new Checkpoint();
-        checkpoint.setModelName(modelTrainConf.modelName);
-        checkpoint.setCheckpointName(modelTrainConf.checkpointName);
+        checkpoint.setModelName(modelTrainConf.getModelName());
+        checkpoint.setCheckpointName(modelTrainConf.getCheckpointName());
         checkpoint.setModelDdl(modelEntity.getDdl());
         checkpoint.setYaml(k8sYaml);
         checkpoint.setDdl(CompileManager.getSqlStr(sqlTrainModel));
@@ -128,27 +128,27 @@ public class ModelManager {
         DbUtils.upsertCheckpoint(checkpoint);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
-        checkpointInfos.add(new CheckpointInfo(modelTrainConf.modelName, modelTrainConf.checkpointName));
+        checkpointInfos.add(new CheckpointInfo(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         return checkpointInfos;
     }
 
     public static List<CheckpointInfo> exportModel(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
         ModelExportConf modelExportConf = ModelEntityConverter.convertToModelExportConf(sqlExportModel, defaultSchema);
 
-        Model modelEntity = DbUtils.getModel(modelExportConf.modelName);
+        Model modelEntity = DbUtils.getModel(modelExportConf.getModelName());
         if (modelEntity == null) {
-            throw new IllegalArgumentException("model not exists: " + modelExportConf.modelName);
+            throw new IllegalArgumentException("model not exists: " + modelExportConf.getModelName());
         }
 
-        Checkpoint sourceCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, modelExportConf.checkpointName);
+        Checkpoint sourceCheckpoint = DbUtils.getCheckpoint(modelExportConf.getModelName(), modelExportConf.getCheckpointName());
         if (sourceCheckpoint == null) {
-            throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.checkpointName + " for model " + modelExportConf.modelName);
+            throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.modelName);
+            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
         }
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
@@ -156,12 +156,12 @@ public class ModelManager {
         List<CheckpointInfo> createdCheckpointInfos = new ArrayList<>();
         List<Checkpoint> existingCheckpoints = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
-            Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.modelName, exportCheckpointName);
+            Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.getModelName(), exportCheckpointName);
             if (existingCheckpoint != null) {
                 existingCheckpoints.add(existingCheckpoint);
                 if (Consts.CHECKPOINT_STATUS_CREATED.equals(existingCheckpoint.getStatus())) {
                     log.info("Model {} has export checkpoint {} in progress",
-                            modelExportConf.modelName, exportCheckpointName);
+                            modelExportConf.getModelName(), exportCheckpointName);
                     createdCheckpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 }
             }
@@ -169,24 +169,24 @@ public class ModelManager {
 
         if (!createdCheckpointInfos.isEmpty()) {
             log.info("Model {} has {} export checkpoints in progress, returning existing checkpoint infos",
-                    modelExportConf.modelName, createdCheckpointInfos.size());
+                    modelExportConf.getModelName(), createdCheckpointInfos.size());
             return createdCheckpointInfos;
         }
 
         for (Checkpoint existingCheckpoint : existingCheckpoints) {
             log.info("Model {} re export checkpoint {}, deleting old first",
-                    modelExportConf.modelName, existingCheckpoint.getCheckpointName());
-            deleteCheckpoint(modelExportConf.modelName, existingCheckpoint.getCheckpointName());
+                    modelExportConf.getModelName(), existingCheckpoint.getCheckpointName());
+            deleteCheckpoint(modelExportConf.getModelName(), existingCheckpoint.getCheckpointName());
         }
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
-        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.params);
+        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
         K8sManager.applyYaml(k8sYaml);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint checkpoint = new Checkpoint();
-            checkpoint.setModelName(modelExportConf.modelName);
+            checkpoint.setModelName(modelExportConf.getModelName());
             checkpoint.setCheckpointName(exportCheckpointName);
             checkpoint.setModelDdl(modelEntity.getDdl());
             checkpoint.setYaml(k8sYaml);
@@ -197,7 +197,7 @@ public class ModelManager {
             checkpoint.setUpdatedAt(System.currentTimeMillis());
 
             DbUtils.upsertCheckpoint(checkpoint);
-            checkpointInfos.add(new CheckpointInfo(modelExportConf.modelName, exportCheckpointName));
+            checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
         }
 
         return checkpointInfos;
@@ -326,7 +326,7 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
-        HadoopUtils.deletePath(modelConfig.path);
+        HadoopUtils.deletePath(modelConfig.getPath());
 
         DbUtils.deleteModel(modelName);
     }

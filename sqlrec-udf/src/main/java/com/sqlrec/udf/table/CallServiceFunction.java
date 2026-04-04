@@ -31,14 +31,14 @@ public class CallServiceFunction {
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");
         }
-        if (StringUtils.isEmpty(serviceConfig.url)) {
+        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
             throw new RuntimeException("Service " + serviceName + " url is empty");
         }
-        ModelController controller = context.getModelController(serviceConfig.modelConfig);
+        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
         if (controller == null){
             throw new RuntimeException("model controller not exist for " +serviceName);
         }
-        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.modelConfig);
+        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(input.getDataFields(), modelOutputFields);
 
         Enumerable<Object[]> enumerable = input.scan(null);
@@ -51,10 +51,10 @@ public class CallServiceFunction {
             inputData.add(row);
         }
 
-        List<FieldSchema> inputFields = serviceConfig.modelConfig.inputFields;
+        List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
         String jsonData = JsonUtils.toJsonArray(inputData, inputFields, input.getDataFields());
         
-        Map<String, Object> predictions = callPredictionService(serviceConfig.url, jsonData);
+        Map<String, Object> predictions = callPredictionService(serviceConfig.getUrl(), jsonData);
         
         List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
 
@@ -97,7 +97,7 @@ public class CallServiceFunction {
             
             for (int j = 0; j < outputFields.size(); j++) {
                 FieldSchema field = outputFields.get(j);
-                Object prediction = predictions.get(field.name);
+                Object prediction = predictions.get(field.getName());
                 if (prediction instanceof List) {
                     List<?> predictionList = (List<?>) prediction;
                     if (i < predictionList.size()) {
