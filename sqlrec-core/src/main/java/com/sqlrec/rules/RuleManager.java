@@ -17,8 +17,12 @@ public class RuleManager {
             SqlRecFilterTableScanRule.Config.INTERPRETER.toRule();
     public static final SqlRecFilterIntoJoinRule FILTER_INTO_JOIN =
             SqlRecFilterIntoJoinRule.SqlRecFilterIntoJoinRuleConfig.DEFAULT.toRule();
-    public static final SqlRecJoinRule SQLREC_JOIN =
-            SqlRecJoinRule.Config.DEFAULT.toRule();
+    public static final SqlRecKvJoinRule KV_JOIN =
+            SqlRecKvJoinRule.Config.DEFAULT.toRule();
+    public static final SqlRecVectorJoinRule VECTOR_JOIN_WITH_FILTER =
+            SqlRecVectorJoinRule.Config.WITH_FILTER.toRule();
+    public static final SqlRecVectorJoinRule VECTOR_JOIN_NO_FILTER =
+            SqlRecVectorJoinRule.Config.NO_FILTER.toRule();
     public static final SqlRecTableModifyRule SQLREC_TABLE_MODIFY =
             SqlRecTableModifyRule.DEFAULT_CONFIG.toRule(SqlRecTableModifyRule.class);
 
@@ -54,7 +58,9 @@ public class RuleManager {
         planner.addRule(FILTER_INTO_JOIN);
 
         planner.removeRule(Bindables.BINDABLE_JOIN_RULE);
-        planner.addRule(SQLREC_JOIN);
+        planner.addRule(KV_JOIN);
+        planner.addRule(VECTOR_JOIN_WITH_FILTER);
+        planner.addRule(VECTOR_JOIN_NO_FILTER);
 
         planner.removeRule(CoreRules.JOIN_PUSH_EXPRESSIONS);
         planner.removeRule(CoreRules.JOIN_COMMUTE);

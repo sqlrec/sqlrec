@@ -82,30 +82,31 @@ public class MilvusHandler {
         return rowsMap;
     }
 
-    public List<Object[]> searchByEmbedding(String fieldName, List<Float> embedding, int limit, List<Integer> projectColumns) {
+    public List<Object[]> searchByEmbeddingWithScore(
+            String fieldName,
+            List<Float> embedding,
+            String filterExpression,
+            int limit,
+            List<Integer> projectColumns) {
         if (limit == 0) {
             limit = 100;
         }
-        List<String> outputFields = null;
-        if (projectColumns != null && !projectColumns.isEmpty()) {
-            outputFields = projectColumns.stream()
-                    .map(index -> milvusConfig.fieldSchemas.get(index).name)
-                    .collect(Collectors.toList());
-        } else {
-            outputFields = milvusConfig.fieldSchemas.stream()
-                    .map(f -> f.name)
-                    .collect(Collectors.toList());
-        }
+
+        List<String> outputFields = getOutputFields(projectColumns);
 
         FloatVec queryVector = new FloatVec(embedding);
-        SearchReq searchReq = SearchReq.builder()
+        SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
                 .annsField(fieldName)
                 .data(Collections.singletonList(queryVector))
                 .outputFields(outputFields)
-                .topK(limit)
-                .build();
+                .topK(limit);
+        if (filterExpression != null && !filterExpression.isEmpty()) {
+            builder.filter(filterExpression);
+        }
+
+        SearchReq searchReq = builder.build();
         MilvusClientV2 client = getClient(milvusConfig);
         SearchResp searchResp = null;
         try {
@@ -114,7 +115,40 @@ public class MilvusHandler {
             returnClient(client, milvusConfig);
         }
 
-        List<Object[]> rows = parseSearchResp(searchResp);
+        List<Object[]> rows = parseSearchRespWithScore(searchResp);
+        return rows;
+    }
+
+    private List<String> getOutputFields(List<Integer> projectColumns) {
+        if (projectColumns != null && !projectColumns.isEmpty()) {
+            List<String> outputFields = new ArrayList<>();
+            for (Integer projectColumn : projectColumns) {
+                if (projectColumn >= 0 && projectColumn < milvusConfig.fieldSchemas.size()) {
+                    outputFields.add(milvusConfig.fieldSchemas.get(projectColumn).name);
+                }
+            }
+            return outputFields;
+        } else {
+            return milvusConfig.fieldSchemas.stream()
+                    .map(f -> f.name)
+                    .collect(Collectors.toList());
+        }
+    }
+
+    private List<Object[]> parseSearchRespWithScore(SearchResp searchResp) {
+        if (searchResp == null || searchResp.getSearchResults() == null) {
+            return Collections.emptyList();
+        }
+
+        List<Object[]> rows = new ArrayList<>();
+        for (List<SearchResp.SearchResult> results : searchResp.getSearchResults()) {
+            for (SearchResp.SearchResult result : results) {
+                Map<String, Object> entity = result.getEntity();
+                float score = result.getScore();
+                Object[] row = toRowWithScore(entity, milvusConfig.fieldSchemas, score);
+                rows.add(row);
+            }
+        }
         return rows;
     }
 
@@ -158,22 +192,6 @@ public class MilvusHandler {
         return true;
     }
 
-    private List<Object[]> parseSearchResp(SearchResp searchResp) {
-        if (searchResp == null || searchResp.getSearchResults() == null) {
-            return Collections.emptyList();
-        }
-
-        List<Object[]> rows = new ArrayList<>();
-        for (List<SearchResp.SearchResult> results : searchResp.getSearchResults()) {
-            for (SearchResp.SearchResult result : results) {
-                Map<String, Object> entity = result.getEntity();
-                Object[] row = toRow(entity, milvusConfig.fieldSchemas);
-                rows.add(row);
-            }
-        }
-        return rows;
-    }
-
     private List<Object[]> parseQueryResp(QueryResp queryResp) {
         if (queryResp == null || queryResp.getQueryResults() == null) {
             return Collections.emptyList();
@@ -192,9 +210,17 @@ public class MilvusHandler {
     private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
         Object[] row = new Object[fieldSchemas.size()];
         for (int i = 0; i < fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = fieldSchemas.get(i);
-            row[i] = entity.get(fieldSchema.name);
+            row[i] = entity.get(fieldSchemas.get(i).name);
         }
+        return row;
+    }
+
+    private Object[] toRowWithScore(Map<String, Object> entity, List<FieldSchema> fieldSchemas, float score) {
+        Object[] row = new Object[fieldSchemas.size() + 1];
+        for (int i = 0; i < fieldSchemas.size(); i++) {
+            row[i] = entity.get(fieldSchemas.get(i).name);
+        }
+        row[fieldSchemas.size()] = score;
         return row;
     }
 
@@ -223,11 +249,11 @@ public class MilvusHandler {
                 .token(milvusConfig.token)
                 .build();
         PoolConfig poolConfig = PoolConfig.builder()
-                .maxIdlePerKey(10) // max idle clients per key
-                .maxTotalPerKey(100) // max total(idle + active) clients per key
-                .maxTotal(100) // max total clients for all keys
-                .maxBlockWaitDuration(Duration.ofSeconds(5L)) // getClient() will wait 5 seconds if no idle client available
-                .minEvictableIdleDuration(Duration.ofSeconds(10L)) // if number of idle clients is larger than maxIdlePerKey, redundant idle clients will be evicted after 10 seconds
+                .maxIdlePerKey(10)
+                .maxTotalPerKey(100)
+                .maxTotal(100)
+                .maxBlockWaitDuration(Duration.ofSeconds(5L))
+                .minEvictableIdleDuration(Duration.ofSeconds(10L))
                 .build();
 
         try {

@@ -1,8 +1,8 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
@@ -51,6 +51,7 @@ public class TestMilvusCalciteTable {
         );
 
         List<String> sqlList = Arrays.asList(
+                "insert into t1 (id, embedding, name) values (0, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice')",
                 "insert into t1 (id, embedding, name) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice1')",
                 "insert into t1 (id, embedding, name) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice2')",
                 "insert into t1 (id, embedding, name) values (3, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice3')",
@@ -59,16 +60,16 @@ public class TestMilvusCalciteTable {
                 "select * from t2 join t1 on t2.ID = t1.id",
                 "delete from t1 where id = 3",
                 "select * from t1 where name like 'Alice%'",
-                "select * from t2 join (select * from t2) t on ip(t2.embedding, t.embedding) > 0.5 limit 10",
-                "select t2.ID, t1.id, t1.name from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID limit 10",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID limit 10",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 order by t2.ID",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 limit 10",
-                "select t2.ID, t1.id, t1.name from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 where t2.ID >= 1",
-                "select * from t2 join t1 on ip(t2.embedding, t1.embedding) > 0.5 where t1.id >= 1"
-        );
+                "select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
+                "cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
+                "select * from tmp",
+                "select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
+                "select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
+                "select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
+                "select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
+                "select * from t2 join t1 on 1=1 where t2.name = t1.name order by ip(t2.embedding, t1.embedding) limit 10",
+                "select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10"
+                );
 
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
@@ -101,7 +102,7 @@ public class TestMilvusCalciteTable {
         public RelDataType getRowType(RelDataTypeFactory typeFactory) {
             return typeFactory.builder()
                     .add("ID", SqlTypeName.INTEGER)
-                    .add("NAME", SqlTypeName.VARCHAR, 20)
+                    .add("NAME", SqlTypeName.VARCHAR)
                     .add("embedding", typeFactory.createArrayType(typeFactory.createSqlType(SqlTypeName.FLOAT), -1))
                     .build();
         }

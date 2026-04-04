@@ -1,7 +1,7 @@
 package com.sqlrec.node;
 
-import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.utils.JoinUtils;
+import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.utils.KvJoinUtils;
 import com.sqlrec.utils.KvTableUtils;
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -23,61 +23,49 @@ import org.apache.calcite.util.BuiltInMethod;
 import java.util.List;
 import java.util.Set;
 
-public class SqlrecEnumerableJoin extends EnumerableNestedLoopJoin {
-    private int limit;
-    private List<Integer> projectList;
+public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
 
-    protected SqlrecEnumerableJoin(
+    protected SqlrecEnumerableKvJoin(
             RelOptCluster cluster,
             RelTraitSet traits,
             RelNode left,
             RelNode right,
             RexNode condition,
             Set<CorrelationId> variablesSet,
-            JoinRelType joinType,
-            int limit,
-            List<Integer> projectList
+            JoinRelType joinType
     ) {
         super(cluster, traits, left, right, condition, variablesSet, joinType);
-        this.limit = limit;
-        this.projectList = projectList;
     }
 
-    public static SqlrecEnumerableJoin create(
+    public static SqlrecEnumerableKvJoin create(
             RelNode left,
             RelNode right,
             RexNode condition,
             Set<CorrelationId> variablesSet,
-            JoinRelType joinType,
-            int limit,
-            List<Integer> projectList
+            JoinRelType joinType
     ) {
-        return new SqlrecEnumerableJoin(
+        return new SqlrecEnumerableKvJoin(
                 left.getCluster(),
                 left.getTraitSet(),
                 left,
                 right,
                 condition,
                 variablesSet,
-                joinType,
-                limit,
-                projectList
+                joinType
         );
     }
 
     @Override
-    public SqlrecEnumerableJoin copy(RelTraitSet traitSet,
-                                     RexNode condition, RelNode left, RelNode right, JoinRelType joinType,
-                                     boolean semiJoinDone) {
-        return new SqlrecEnumerableJoin(getCluster(), traitSet, left, right,
-                condition, variablesSet, joinType, limit, projectList);
+    public SqlrecEnumerableKvJoin copy(RelTraitSet traitSet,
+                                       RexNode condition, RelNode left, RelNode right, JoinRelType joinType,
+                                       boolean semiJoinDone) {
+        return new SqlrecEnumerableKvJoin(getCluster(), traitSet, left, right,
+                condition, variablesSet, joinType);
     }
 
     @Override
     public RelWriter explainTerms(RelWriter pw) {
-        return super.explainTerms(pw)
-                .itemIf("projects", projectList, !projectList.isEmpty())
-                .itemIf("limit", limit, limit > 0);
+        return super.explainTerms(pw);
     }
 
     @Override
@@ -88,13 +76,13 @@ public class SqlrecEnumerableJoin extends EnumerableNestedLoopJoin {
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
         RelOptTable rightTable = KvTableUtils.getScanTable(right);
-        if (rightTable == null || rightTable.unwrap(SqlRecTable.class) == null) {
+        if (rightTable == null || rightTable.unwrap(SqlRecKvTable.class) == null) {
             return super.implement(implementor, pref);
         }
 
         RelOptSchema relOptSchema = rightTable.getRelOptSchema();
         if (!(relOptSchema instanceof CalciteCatalogReader)) {
-            throw new IllegalArgumentException("FilterableTableScan only support CalciteCatalogReader");
+            throw new IllegalArgumentException("SqlrecEnumerableKvJoin only support CalciteCatalogReader");
         }
 
         CalciteCatalogReader catalogReader = (CalciteCatalogReader) relOptSchema;
@@ -108,14 +96,13 @@ public class SqlrecEnumerableJoin extends EnumerableNestedLoopJoin {
                 Schemas.expression(tableEntry.schema.plus()),
                 BuiltInMethod.SCHEMA_GET_TABLE.method,
                 Expressions.constant(tableEntry.name));
-        rightExpression = Expressions.convert_(rightExpression, SqlRecTable.class);
+        rightExpression = Expressions.convert_(rightExpression, SqlRecKvTable.class);
 
         final BlockBuilder builder = new BlockBuilder();
         final Result leftResult =
                 implementor.visitChild(this, 0, (EnumerableRel) left, pref);
         Expression leftExpression =
                 builder.append("left", leftResult.block);
-
 
         final Expression stashedCondition = implementor.stash(condition, RexNode.class);
 
@@ -124,34 +111,15 @@ public class SqlrecEnumerableJoin extends EnumerableNestedLoopJoin {
                         getRowType(),
                         pref.preferArray());
 
-
         return implementor.result(
                 physType,
                 builder.append(
-                                Expressions.call(JoinUtils.class,
-                                        "join",
+                                Expressions.call(KvJoinUtils.class,
+                                        "kvJoin",
                                         leftExpression,
                                         rightExpression,
                                         stashedCondition,
-                                        Expressions.constant(joinType),
-                                        Expressions.constant(limit),
-                                        Expressions.constant(projectList)))
+                                        Expressions.constant(joinType)))
                         .toBlock());
-    }
-
-    public int getLimit() {
-        return limit;
-    }
-
-    public void setLimit(int limit) {
-        this.limit = limit;
-    }
-
-    public List<Integer> getProjectList() {
-        return projectList;
-    }
-
-    public void setProjectList(List<Integer> projectList) {
-        this.projectList = projectList;
     }
 }

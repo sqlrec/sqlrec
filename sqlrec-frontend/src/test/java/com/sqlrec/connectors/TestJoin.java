@@ -1,7 +1,6 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.node.SqlrecEnumerableJoin;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -82,10 +81,6 @@ public class TestJoin {
                 RelNode limit = ((EnumerableCalc) bestExp).getInput();
                 assert limit instanceof EnumerableLimit;
                 RelNode join = ((EnumerableLimit) limit).getInput();
-                assert join instanceof SqlrecEnumerableJoin;
-                SqlrecEnumerableJoin sqlRecJoin = (SqlrecEnumerableJoin) join;
-                assert sqlRecJoin.getLimit() == 2;
-                assert sqlRecJoin.getProjectList().equals(Arrays.asList(0, 2));
             }
         }
     }

@@ -80,7 +80,7 @@ public class SqlRecConfigs {
     // dependency service config
     public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
             "DEFAULT_TEST_IP",
-            "127.0.0.1",
+            "192.168.1.5",
             "default test ip",
             null,
             String.class

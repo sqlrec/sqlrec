@@ -46,8 +46,8 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
     }
 
     @Override
-    public List<Object[]> searchByEmbedding(String fieldName, List<Float> embedding, int limit, List<Integer> projectColumns) {
-        return milvusHandler.searchByEmbedding(fieldName, embedding, limit, projectColumns);
+    public List<Object[]> searchByEmbeddingWithScore(String fieldName, List<Float> embedding, String filterExpression, int limit, List<Integer> projectColumns) {
+        return milvusHandler.searchByEmbeddingWithScore(fieldName, embedding, filterExpression, limit, projectColumns);
     }
 
     @Override
