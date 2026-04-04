@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 public class ConfigOption<T> {
-    public final String key;
+    private final String key;
     private final T defaultValue;
     private final String description;
     private final List<T> validValues;
