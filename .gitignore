@@ -38,3 +38,7 @@ build/
 deploy/data
 *.yaml.tmp
 dependency-reduced-pom.xml
+
+node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/

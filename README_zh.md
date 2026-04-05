@@ -1,7 +1,7 @@
 # SqlRec
 一个支持使用SQL进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SqlRec将底层的组件访问、模型训练、推理等流程使用SQL封装，上层推荐业务逻辑仅使用SQL进行描述即可。
 
-![system_architecture](system_architecture.png)
+![system_architecture](docs/public/sqlrec_arch.png)
 
 sqlRec有以下特点：
 - 云原生，自带基于minikube的部署脚本，可以一键部署SqlRec系统和相关的依赖服务
@@ -252,18 +252,19 @@ return final_rec_data;
 2 rows selected (0.003 seconds)
 ```
 可以发现，召回、推荐理由、去重都已经生效。
-### 推荐测试
-参考下述SQL将SQL函数暴露为API接口：
+4. 创建API接口
+   参考下述SQL将SQL函数暴露为API接口：
 ```sql
 create or replace api test_rec with test_rec;
 ```
+### 推荐测试
 使用下述命令进行推荐测试：
 ```bash
 yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -H "Content-Type: application/json" \
 -d '{"inputs":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
-`````
+```
 
 ## 性能测试
 benchmark目录下有测试脚本，可以参考如下命令进行测试：

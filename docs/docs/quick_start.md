@@ -1,58 +1,11 @@
-# SqlRec
-A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SqlRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
+# 快速开始
+这里使用个简单Demo介绍SqlRec的使用，部署可以参考[服务部署](/docs/deployment)。
 
-![system_architecture](docs/public/sqlrec_arch.png)
+## SQL开发
+执行`bash ./bin/beeline.sh`命令连接SqlRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
 
-SqlRec has the following features:
-- Cloud-native, comes with minikube-based deployment scripts for one-click deployment of the SqlRec system and related dependency services
-- Extended SQL syntax, making it possible to describe recommendation system business logic using SQL
-- Implemented an efficient SQL execution engine based on Calcite, meeting the real-time requirements of recommendation systems
-- Built on existing big data ecosystem, easy to integrate
-- Easy to extend, supports custom UDFs, Table types, and Model types
-
-For detailed information, refer to the [SqlRec User Manual](https://sqlrec.github.io/sqlrec).
-
-## Quick Start
-
-### Service Deployment
-SqlRec currently supports AMD64 Linux systems, with MacOS support coming later. Note that deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
-
-Deploy the SqlRec system with the following commands:
-```bash
-# clone sqlrec repository
-git clone https://github.com/antgroup/sqlrec.git
-cd ./sqlrec/deploy
-
-# deploy minikube
-./deploy_minikube.sh
-
-# verify pod status, wait all pod ready
-alias kubectl="minikube kubectl --"
-kubectl get pod --ALL
-
-# download resource
-./download_resource.sh
-
-# deploy sqlrec and dependencies services
-./deploy_components.sh
-
-# verify pod status, wait all pod ready
-kubectl get pod --ALL
-
-# verify sqlrec service
-cd ..
-bash ./bin/beeline.sh
-```
-Notes:
-- The minikube-based deployment solution above is for testing only. For production environments, you need to deploy reliable big data infrastructure first, then refer to the scripts under deploy to initialize the database and deploy SqlRec deployment
-- If you need to redeploy, you can delete the cluster first via minikube delete
-- Some components are not deployed by default, such as kyuubi, jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory, such as `bash ./kyuubi/deploy.sh`
-- You can customize passwords, network ports, and other parameters in env.sh
-
-### SQL Development
-Execute the `bash ./bin/beeline.sh` command to connect to the SqlRec service, and refer to the following process to develop data tables, SQL functions, API interfaces, etc. needed for recommendations:
-
-1. Initialize data tables. Note that you can get the IP address of the minikube node via the `kubectl get node -o wide` command, you may need to replace the node IP address below
+### 初始化数据表
+参考下述SQL，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述节点的ip地址
 ```sql
 SET table.sql-dialect = default;
 
@@ -104,7 +57,8 @@ CREATE TABLE IF NOT EXISTS `rec_log_kafka` (
   'format' = 'json'
 );
 ```
-2. Write test data
+
+### 写入测试数据
 ```sql
 INSERT INTO `user_interest_category1` VALUES
 (1000001, 'pc', 100),
@@ -126,7 +80,8 @@ select * from `user_interest_category1` where `user_id` = 1000001;
 
 select * from `category1_hot_item` where `category1` = 'pc';
 ```
-3. Develop SQL functions
+
+### 开发sql函数
 ```sql
 -- define function save rec data to kafka and redis
 create or replace sql function save_rec_item;
@@ -210,15 +165,15 @@ call save_rec_item(final_rec_data) async;
 
 return final_rec_data;
 ```
-The SQL above defines the recommendation function test_rec. You can see the SQL function definition syntax is:
-- Start with `create or replace sql function` followed by the function name
-- `define input table` defines input parameters, which can be empty or define multiple
-- `cache table` caches intermediate calculation results, can cache execution results of SELECT statements and SQL function calls
-- `call` calls other functions, can call asynchronously via the async keyword
-- `return` returns calculation results, can be empty
+上面SQL定义了推荐函数test_rec，可以发现SQL函数定义语法是：
+- `create or replace sql function`加函数名开头
+- `define input table`定义输入参数，可以为空或者定义多个
+- `cache table`缓存中间计算结果，可以缓存SELECT语句、SQL函数调用的执行结果
+- `call`调用其他函数, 可以通过async关键字异步调用
+- `return`返回计算结果，可以为空
 
 
-You can test the function directly in the beeline command line as shown below
+可以直接在beeline命令行测试函数，如下所示
 ```sql
 0: jdbc:hive2://192.168.49.2:30300/default> cache table t1 as select cast(1000001 as bigint) as id;
 +-------------+--------+
@@ -251,58 +206,19 @@ You can test the function directly in the beeline command line as shown below
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 2 rows selected (0.003 seconds)
 ```
-You can see that recall, recommendation reasons, and deduplication are all working.
-4. Create API Interface
-Refer to the following SQL to expose the SQL function as an API interface:
+可以发现，召回、推荐理由、去重都已经生效。
+
+### 创建API接口
+参考下述SQL将SQL函数暴露为API接口：
 ```sql
 create or replace api test_rec with test_rec;
 ```
-### Recommendation Testing
-Use the following command for recommendation testing:
+
+## 推荐测试
+使用下述命令进行推荐测试：
 ```bash
 yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -H "Content-Type: application/json" \
 -d '{"inputs":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
-````
-
-## Performance Testing
-There are test scripts in the benchmark directory. You can refer to the following commands for testing:
-```bash
-bash init.sh
-bash benchmark.sh
-```
-The default test configuration is as follows:
-- 100K users, 100K items data
-- The recommendation process includes 4 recall paths: global hot items, user interest category hot items, itemcf, vector retrieval (8 dimensions, user embedding fixed), as well as exposure deduplication and category diversification
-- Test a single SqlRec instance with 10 concurrent connections
-
-Test results on AMD Ryzen 5600H, 32GB DDR4 memory machine:
-```
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    10.80ms    4.81ms  53.85ms   92.68%
-    Req/Sec    95.12     17.61   121.00     82.63%
-  28464 requests in 30.02s, 49.80MB read
-  Socket errors: connect 0, read 28463, write 0, timeout 0
-Requests/sec:    948.09
-Transfer/sec:      1.66MB
-```
-
-## Roadmap
-### When will version 1.0 be released
-Versions before 1.0 are beta versions, not recommended for production use, and interface compatibility is not guaranteed. There is no planned release date yet. It will be released after the following features are completed:
-- Comprehensive unit test and integration test coverage
-- Complete version management method, easy to roll back to previous versions
-- Code quality optimization, many details still need to be polished
-- Metric monitoring system improvement
-- C++ model serving
-- Validate model training effectiveness on public datasets
-
-### Future Feature Planning
-- Frontend UI for viewing current execution DAG, SQL code, statistics, etc.
-- Further optimize SQL syntax compatibility and runtime performance
-- More ready-to-use UDFs, models, etc.
-- Support for more external data sources, such as JDBC, MongoDB, etc.
-- Tensorboard visualization of model training process
-- GPU training and inference support
-- Best practice tutorials, including search, recommendation, etc.
+`````
