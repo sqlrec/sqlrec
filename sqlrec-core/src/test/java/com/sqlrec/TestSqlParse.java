@@ -64,7 +64,11 @@ public class TestSqlParse {
                 "show services",
                 "describe service my_service",
                 "drop service my_service",
-                "drop service if exists my_service"
+                "drop service if exists my_service",
+                "drop sql function fun1",
+                "drop sql function if exists fun1",
+                "drop api api1",
+                "drop api if exists api1"
         );
 
         for (String sql : sqlList) {

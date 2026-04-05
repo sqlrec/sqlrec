@@ -151,6 +151,41 @@ public class SqlProcessor {
             return Utils.convertMsgToResult("drop service success", "msg");
         }
 
+        if (sqlNode instanceof SqlDropSqlFunction) {
+            SqlDropSqlFunction dropSqlFunction = (SqlDropSqlFunction) sqlNode;
+            String funcName = dropSqlFunction.getFuncName().getSimple();
+            SqlFunction sqlFunction = DbUtils.getSqlFunction(funcName);
+            if (sqlFunction == null) {
+                if (dropSqlFunction.isIfExists()) {
+                    return Utils.convertMsgToResult("drop sql function success", "msg");
+                }
+                throw new RuntimeException("sql function not exists: " + funcName);
+            }
+            List<SqlApi> sqlApis = DbUtils.getSqlApiListByFunctionName(funcName);
+            if (!sqlApis.isEmpty()) {
+                List<String> usingApis = sqlApis.stream()
+                        .map(SqlApi::getName)
+                        .collect(Collectors.toList());
+                throw new RuntimeException("sql function " + funcName + " is used by api: " + String.join(", ", usingApis));
+            }
+            DbUtils.deleteSqlFunction(funcName);
+            return Utils.convertMsgToResult("drop sql function success", "msg");
+        }
+
+        if (sqlNode instanceof SqlDropApi) {
+            SqlDropApi dropApi = (SqlDropApi) sqlNode;
+            String apiName = dropApi.getApiName().getSimple();
+            SqlApi sqlApi = DbUtils.getSqlApi(apiName);
+            if (sqlApi == null) {
+                if (dropApi.isIfExists()) {
+                    return Utils.convertMsgToResult("drop api success", "msg");
+                }
+                throw new RuntimeException("api not exists: " + apiName);
+            }
+            DbUtils.deleteSqlApi(apiName);
+            return Utils.convertMsgToResult("drop api success", "msg");
+        }
+
         if (sqlNode instanceof SqlUseDatabase) {
             defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
             return null;

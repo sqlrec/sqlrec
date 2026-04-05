@@ -480,6 +480,45 @@ SqlDropService SqlDropService() :
     }
 }
 
+SqlDropSqlFunction SqlDropSqlFunction() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier funcName = null;
+    boolean ifExists = false;
+}
+{
+    <DROP>
+    <SQL>
+    <FUNCTION>
+    { startPos = getPos(); }
+
+    ifExists = IfExistsOpt()
+
+    funcName = SimpleIdentifier()
+    {
+        return new SqlDropSqlFunction(startPos.plus(getPos()), funcName, ifExists);
+    }
+}
+
+SqlDropApi SqlDropApi() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier apiName = null;
+    boolean ifExists = false;
+}
+{
+    <DROP>
+    <API>
+    { startPos = getPos(); }
+
+    ifExists = IfExistsOpt()
+
+    apiName = SimpleIdentifier()
+    {
+        return new SqlDropApi(startPos.plus(getPos()), apiName, ifExists);
+    }
+}
+
 SqlAlterModelDropCheckpoint SqlAlterModelDropCheckpoint() :
 {
     SqlParserPos startPos;

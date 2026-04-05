@@ -561,6 +561,8 @@
   # Return type of method implementation should be 'SqlNode'.
   # Example: SqlShowDatabases(), SqlShowTables().
   statementParserMethods: [
+    "SqlDropSqlFunction()"
+    "SqlDropApi()"
     "SqlCreateModel()"
     "SqlDropModel()"
     "SqlTrainModel()"

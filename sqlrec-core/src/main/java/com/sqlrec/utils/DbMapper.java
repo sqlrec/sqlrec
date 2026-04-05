@@ -53,6 +53,9 @@ public interface DbMapper {
     @Delete("DELETE FROM sql_api WHERE name = #{name}")
     void deleteSqlApi(String name);
 
+    @Select("SELECT * FROM sql_api WHERE function_name = #{functionName}")
+    List<SqlApi> getSqlApiListByFunctionName(String functionName);
+
     @Select("SELECT * FROM model")
     List<Model> getModelList();
 

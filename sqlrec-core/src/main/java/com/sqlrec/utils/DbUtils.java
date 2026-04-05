@@ -109,6 +109,10 @@ public class DbUtils {
         executeVoid(dbMapper -> dbMapper.deleteSqlApi(name));
     }
 
+    public static List<SqlApi> getSqlApiListByFunctionName(String functionName) {
+        return execute(dbMapper -> dbMapper.getSqlApiListByFunctionName(functionName.toUpperCase()));
+    }
+
     public static List<Model> getModelList() {
         return execute(DbMapper::getModelList);
     }
