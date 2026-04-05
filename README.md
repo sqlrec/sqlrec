@@ -20,7 +20,7 @@ SqlRec currently supports AMD64 Linux systems, with MacOS support coming later. 
 Deploy the SqlRec system with the following commands:
 ```bash
 # clone sqlrec repository
-git clone https://github.com/antgroup/sqlrec.git
+git clone https://github.com/sqlrec/sqlrec.git
 cd ./sqlrec/deploy
 
 # deploy minikube
