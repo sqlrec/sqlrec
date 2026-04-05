@@ -17,7 +17,7 @@ MILVUS_PORT = int(os.environ.get('MILVUS_PORT', 31530))
 MILVUS_TOKEN = "root:Milvus"
 MILVUS_DATABASE = "default"
 MILVUS_COLLECTION = "item_embedding"
-EMBEDDING_DIM = 5
+EMBEDDING_DIM = 8
 
 # Data generation configuration
 TOTAL_USERS = 100000

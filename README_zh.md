@@ -266,7 +266,26 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 `````
 
 ## 性能测试
+benchmark目录下有测试脚本，可以参考如下命令进行测试：
+```bash
+bash init.sh
+bash benchmark.sh
+```
+默认的测试配置如下：
+- 10W用户、10W物品数据
+- 推荐流程包含4路召回：全局高热、用户兴趣类目高热、itemcf、向量检索（8维，user embedding固定），以及曝光去重、类目打散
+- 使用10并发测试单个SqlRec实例
 
+在AMD Ryzen 5600H、32GB DDR4内存机器上测试结果如下：
+```
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    10.80ms    4.81ms  53.85ms   92.68%
+    Req/Sec    95.12     17.61   121.00     82.63%
+  28464 requests in 30.02s, 49.80MB read
+  Socket errors: connect 0, read 28463, write 0, timeout 0
+Requests/sec:    948.09
+Transfer/sec:      1.66MB
+```
 
 ## 路线图
 

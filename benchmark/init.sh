@@ -21,7 +21,7 @@ export schema='{
                 "fieldName": "embedding",
                 "dataType": "FloatVector",
                 "elementTypeParams": {
-                    "dim": "5"
+                    "dim": "8"
                 }
             },
             {
