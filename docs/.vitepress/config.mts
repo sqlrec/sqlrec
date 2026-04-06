@@ -17,9 +17,11 @@ export default defineConfig({
         { text: '介绍', link: '/docs/intro' },
         { text: '部署', link: '/docs/deployment' },
         { text: '快速开始', link: '/docs/quick_start' },
+        { text: '性能测试', link: '/docs/benchmark' },
         { text: '编程模型', link: '/docs/program_model' },
         { text: 'SQL语法', link: '/docs/sql_reference' },
         { text: '模型', link: '/docs/models' },
+        { text: '内置UDF', link: '/docs/udf' },
         {
             text: '教程',
             collapsed: true,
