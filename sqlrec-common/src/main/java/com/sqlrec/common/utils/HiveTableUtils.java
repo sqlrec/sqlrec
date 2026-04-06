@@ -117,12 +117,17 @@ public class HiveTableUtils {
             log.warn("Table {} has no parameters", tableObj.getTableName());
             return 0;
         }
-        String lastModificationTime = tableProperties.get("transient_lastDdlTime");;
+        String lastModificationTime = tableProperties.get("transient_lastDdlTime");
         if (StringUtils.isEmpty(lastModificationTime)) {
             log.warn("Table {} has no last modification time", tableObj.getTableName());
             return 0;
         }
-        return Long.parseLong(lastModificationTime) * 1000;
+        try {
+            return Long.parseLong(lastModificationTime) * 1000;
+        } catch (NumberFormatException e) {
+            log.warn("Table {} last modification time {} is not a valid long", tableObj.getTableName(), lastModificationTime);
+            return 0;
+        }
     }
 
     public static Map.Entry<String, String> getDbAndTable(String tableName) {

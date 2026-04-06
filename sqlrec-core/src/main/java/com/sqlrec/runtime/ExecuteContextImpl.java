@@ -3,7 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.model.ModelControllerFactory;
 import com.sqlrec.model.ServiceManager;
 
@@ -37,7 +37,6 @@ public class ExecuteContextImpl implements ExecuteContext {
         }
     }
 
-    @Override
     public void addFunNameToStack(String funName) {
         funName = funName.toUpperCase();
         if (funNameStack.contains(funName)) {
@@ -47,12 +46,10 @@ public class ExecuteContextImpl implements ExecuteContext {
         funNameStack.add(funName);
     }
 
-    @Override
     public void popFunNameFromStack() {
         funNameStack.removeLast();
     }
 
-    @Override
     public List<String> getFunNameStack() {
         return funNameStack;
     }

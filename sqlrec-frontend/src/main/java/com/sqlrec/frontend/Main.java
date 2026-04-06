@@ -1,10 +1,13 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CountDownLatch;
 
 public class Main {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
     private static final CountDownLatch latch = new CountDownLatch(1);
 
     public static void main(String[] args) {
@@ -17,6 +20,7 @@ public class Main {
                 try {
                     RestServer.main(args);
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 }
             });
@@ -35,7 +39,11 @@ public class Main {
         try {
             latch.await();
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        } finally {
+            logger.info("servers exited");
+            System.exit(1);
         }
     }
 
@@ -44,6 +52,7 @@ public class Main {
             try {
                 server.run();
             } catch (Exception e) {
+                logger.error("Error in server", e);
                 throw new RuntimeException(e);
             } finally {
                 latch.countDown();

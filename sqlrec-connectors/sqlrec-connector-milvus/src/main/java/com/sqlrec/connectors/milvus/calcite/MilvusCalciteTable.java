@@ -46,13 +46,6 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
     }
 
     @Override
-    public List<String> getFieldNames() {
-        return milvusConfig.fieldSchemas.stream()
-                .map(f -> f.getName())
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    @Override
     public List<Object[]> searchByEmbeddingWithScore(
             Object[] leftValue,
             List<Float> embedding,

@@ -1,26 +1,15 @@
-package com.sqlrec.common.schema;
-
+package com.sqlrec.common.runtime;
 
 import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
-
-import java.util.List;
 
 public interface ExecuteContext {
     String getVariable(String key);
 
     void setVariable(String key, String value);
 
-    void addFunNameToStack(String funName);
-
-    void popFunNameFromStack();
-
-    List<String> getFunNameStack();
-
     ServiceConfig getServiceConfig(String serviceName);
 
     ModelController getModelController(ModelConfig modelConfig);
-
-    ExecuteContext clone();
 }

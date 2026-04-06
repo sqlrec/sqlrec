@@ -2,8 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
-import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;

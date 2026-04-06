@@ -15,9 +15,13 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class RestServer {
+    private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
+
     public static void main(String[] args) throws InterruptedException {
         FunctionUpdater.initFunctionUpdateService();
 
@@ -25,6 +29,7 @@ public class RestServer {
         EventLoopGroup workerGroup = new NioEventLoopGroup();
 
         try {
+            logger.info("RestServer is running on port {}", SqlRecConfigs.REST_SERVER_PORT.getValue());
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)

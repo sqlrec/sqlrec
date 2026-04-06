@@ -11,12 +11,15 @@ import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.hive.service.rpc.thrift.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class Utils {
+    private static final Logger logger = LoggerFactory.getLogger(Utils.class);
     public static SqlProcessResult convertMsgToResult(String msg, String fieldName) {
         Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
         List<RelDataTypeField> fields = getStringTypeField(fieldName);
@@ -195,6 +198,7 @@ public class Utils {
             }
         }
 
+        logger.warn("Failed to cast {} to {}", object.getClass().getName(), clazz.getName());
         return null;
     }
 

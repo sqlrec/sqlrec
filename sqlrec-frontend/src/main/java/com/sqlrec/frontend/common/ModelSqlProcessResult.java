@@ -11,8 +11,8 @@ import java.util.List;
 
 public class ModelSqlProcessResult extends SqlProcessResult {
     private List<CheckpointInfo> checkpointInfos;
-    private long lastCheckTime = 0;
-    private boolean cachedCompleted = false;
+    private volatile long lastCheckTime = 0;
+    private volatile boolean cachedCompleted = false;
 
     public ModelSqlProcessResult() {
         super();

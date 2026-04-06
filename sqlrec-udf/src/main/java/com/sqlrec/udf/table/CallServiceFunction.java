@@ -3,7 +3,7 @@ package com.sqlrec.udf.table;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;

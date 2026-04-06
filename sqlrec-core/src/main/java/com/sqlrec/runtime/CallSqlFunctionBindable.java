@@ -1,7 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.Const;
@@ -38,7 +38,10 @@ public class CallSqlFunctionBindable extends BindableInterface {
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         checkInputTable(schema);
 
-        ExecuteContext finalContext = context.clone();
+        if (!(context instanceof ExecuteContextImpl)) {
+            throw new RuntimeException("function call context must be ExecuteContextImpl");
+        }
+        ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone();
         finalContext.addFunNameToStack(funName);
 
         List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();

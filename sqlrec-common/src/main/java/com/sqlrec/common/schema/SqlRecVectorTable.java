@@ -5,8 +5,6 @@ import org.apache.calcite.rex.RexNode;
 import java.util.List;
 
 public abstract class SqlRecVectorTable extends SqlRecKvTable {
-    
-    public abstract List<String> getFieldNames();
 
     public List<Object[]> searchByEmbeddingWithScore(
             Object[] leftValue,

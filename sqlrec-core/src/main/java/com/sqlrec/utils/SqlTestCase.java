@@ -1,6 +1,6 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;

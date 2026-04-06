@@ -85,9 +85,6 @@ public class ConfigOption<T> {
         if (getType() == Byte.class) {
             return (T) Byte.valueOf(value);
         }
-        if (getType() == Character.class) {
-            return (T) Character.valueOf(value.charAt(0));
-        }
         if (getType() == Boolean.class) {
             return (T) Boolean.valueOf(value);
         }

@@ -1,7 +1,6 @@
 package com.sqlrec;
 
-import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.Const;

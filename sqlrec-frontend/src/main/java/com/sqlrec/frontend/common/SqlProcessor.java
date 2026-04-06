@@ -2,8 +2,8 @@ package com.sqlrec.frontend.common;
 
 import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.model.CheckpointInfo;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class SqlProcessor {
-    private static Logger logger = LoggerFactory.getLogger(SqlProcessor.class);
+    private static final Logger logger = LoggerFactory.getLogger(SqlProcessor.class);
 
     private CalciteSchema schema;
     private ExecuteContext context;
@@ -63,7 +63,7 @@ public class SqlProcessor {
     }
 
     public SqlProcessResult getProcessResult(THandleIdentifier handleIdentifier) {
-        return sqlProcessorMap.getOrDefault(handleIdentifier, null);
+        return sqlProcessorMap.get(handleIdentifier);
     }
 
     public void closeProcessResult(THandleIdentifier handleIdentifier) {
@@ -231,7 +231,7 @@ public class SqlProcessor {
             }
         } catch (Exception e) {
             functionCompiler = null;
-            logger.error("compile fcuntion error: " + e.getMessage(), e);
+            logger.error("compile function error: " + e.getMessage(), e);
             throw e;
         }
 

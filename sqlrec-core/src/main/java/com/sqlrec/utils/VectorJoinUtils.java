@@ -3,6 +3,7 @@ package com.sqlrec.utils;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.RelCollation;
@@ -69,7 +70,7 @@ public class VectorJoinUtils {
             List<Integer> projectColumns
     ) {
         int leftSize = leftValues.get(0).length;
-        List<String> rightFieldNames = rightTable.getFieldNames();
+        List<String> rightFieldNames = DataTypeUtils.getTableFieldNames(rightTable);
         int rightSize = rightFieldNames.size() + 1;
         int projectSize = projectColumns != null ? projectColumns.size() : (leftSize + rightSize);
 

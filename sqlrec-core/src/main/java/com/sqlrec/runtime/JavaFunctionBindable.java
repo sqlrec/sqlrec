@@ -1,7 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;

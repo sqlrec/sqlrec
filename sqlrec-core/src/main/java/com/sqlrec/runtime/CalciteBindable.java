@@ -1,6 +1,6 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.schema.ExecuteContext;
+import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.SqlTypeChecker;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.java.JavaTypeFactory;

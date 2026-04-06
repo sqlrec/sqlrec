@@ -9,19 +9,31 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ThriftServer {
+    private static final Logger logger = LoggerFactory.getLogger(ThriftServer.class);
+
     public static void main(String[] args) throws TTransportException {
         FunctionUpdater.initFunctionUpdateService();
 
         TServerSocket serverTransport = new TServerSocket(SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
-        TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
-        tArgs.protocolFactory(new TBinaryProtocol.Factory());
+        try {
+            logger.info("Thrift server is running on port {}", SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
+            TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
+            tArgs.protocolFactory(new TBinaryProtocol.Factory());
 
-        TProcessor tprocessor = new TCLIService.Processor<TCLIService.Iface>(new TCLIServiceImpl());
-        tArgs.processor(tprocessor);
+            TProcessor tprocessor = new TCLIService.Processor<TCLIService.Iface>(new TCLIServiceImpl());
+            tArgs.processor(tprocessor);
 
-        TThreadPoolServer server = new TThreadPoolServer(tArgs);
-        server.serve();
+            TThreadPoolServer server = new TThreadPoolServer(tArgs);
+            server.serve();
+        } finally {
+            if (serverTransport != null) {
+                serverTransport.close();
+            }
+            logger.info("ThriftServer stopped");
+        }
     }
 }

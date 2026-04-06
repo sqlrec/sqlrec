@@ -26,6 +26,10 @@ public class CacheProxyTable extends CacheTable {
             return Linq4j.emptyEnumerable();
         }
         Table cacheTable = root.getRootSchema().getTable(getTableName());
+        if (cacheTable == null) {
+            logger.warn("cache table {} is not found", getTableName());
+            return Linq4j.emptyEnumerable();
+        }
         if (!(cacheTable instanceof CacheTable)) {
             logger.error("cache table {} is not CacheTable", getTableName());
             throw new RuntimeException("cache table " + getTableName() + " is not CacheTable");

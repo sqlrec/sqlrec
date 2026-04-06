@@ -46,7 +46,7 @@ public class JsonUtils {
 
     public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
         JsonArray jsonArray = new JsonArray();
-        
+
         for (Object[] row : data) {
             JsonObject jsonObject = new JsonObject();
             for (int i = 0; i < inputFields.size(); i++) {
@@ -61,7 +61,7 @@ public class JsonUtils {
             }
             jsonArray.add(jsonObject);
         }
-        
+
         return gson.toJson(jsonArray);
     }
 
@@ -78,9 +78,9 @@ public class JsonUtils {
         return gson.fromJson(json, Map.class);
     }
 
-    public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData, 
-                                          List<FieldSchema> queryFields, List<FieldSchema> valueFields,
-                                          List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
+    public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData,
+                                        List<FieldSchema> queryFields, List<FieldSchema> valueFields,
+                                        List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
         JsonObject jsonObject = new JsonObject();
 
         for (int i = 0; i < queryFields.size(); i++) {
@@ -114,7 +114,7 @@ public class JsonUtils {
                 jsonObject.add(field.getName(), jsonArray);
             }
         }
-        
+
         return gson.toJson(jsonObject);
     }
 }

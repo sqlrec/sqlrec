@@ -2,6 +2,7 @@ package com.sqlrec.common.utils;
 
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rel.type.*;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlTypeNameSpec;
 import org.apache.calcite.sql.type.BasicSqlType;
@@ -108,5 +109,9 @@ public class DataTypeUtils {
                                 + givenField.getType().getSqlTypeName());
             }
         }
+    }
+
+    public static List<String> getTableFieldNames(Table calciteTable) {
+        return calciteTable.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldNames();
     }
 }
