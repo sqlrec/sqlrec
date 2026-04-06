@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
@@ -57,7 +58,7 @@ public class SqlTestCase {
         log.info(sql);
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
         BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
-                Const.DEFAULT_SCHEMA_NAME);
+                Consts.DEFAULT_SCHEMA_NAME);
 
         Exception actualException = null;
         Enumerable enumerable = null;

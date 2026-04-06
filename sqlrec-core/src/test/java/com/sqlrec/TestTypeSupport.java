@@ -1,11 +1,9 @@
 package com.sqlrec;
 
-import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -16,7 +14,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Test;
@@ -30,7 +27,7 @@ public class TestTypeSupport {
     @Test
     public void testTypeSupport() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new MyTable());

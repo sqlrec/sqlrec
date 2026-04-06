@@ -4,10 +4,8 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class DataTransformUtils {
     public static List<Float> convertToFloatVec(Object obj) {
@@ -56,5 +54,45 @@ public class DataTransformUtils {
         }
 
         return Linq4j.asEnumerable(list);
+    }
+
+    public static Enumerable<Object[]> getJsonValueEnumerable(Enumerable<Object[]> enumerable, int index) {
+        if (enumerable == null) {
+            return null;
+        }
+
+        List<Object[]> list = new ArrayList<>();
+        for (Object[] objects : enumerable) {
+            Object object = objects[index];
+            Object[] newObjects = new Object[1];
+            if (object == null) {
+                newObjects[0] = null;
+            } else {
+                newObjects[0] = JsonUtils.toJson(object);
+            }
+            list.add(newObjects);
+        }
+        return Linq4j.asEnumerable(list);
+    }
+
+    public static Enumerable<Object[]> getMsgEnumerable(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(Collections.singletonList(new String[]{msg}));
+    }
+
+    public static Enumerable<Object[]> convertListToEnumerable(List<String> list) {
+        if (list == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(list.stream().map(o -> new String[]{o}).collect(Collectors.toList()));
+    }
+
+    public static <T> Enumerable<Object[]> convertListToArrayToEnumerable(List<List<T>> list) {
+        if (list == null) {
+            return null;
+        }
+        return Linq4j.asEnumerable(list.stream().map(List::toArray).collect(Collectors.toList()));
     }
 }

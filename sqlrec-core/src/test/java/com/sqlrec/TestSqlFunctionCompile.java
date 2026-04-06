@@ -1,10 +1,10 @@
 package com.sqlrec;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -93,7 +93,7 @@ public class TestSqlFunctionCompile {
         executeContext.setVariable("func_name", "fun1");
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql("call fun1()");
         BindableInterface bindable = new CompileManager().compileSql(
-                flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME
+                flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME
         );
 
         Exception e = null;

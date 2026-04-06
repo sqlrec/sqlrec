@@ -1,10 +1,10 @@
 package com.sqlrec.frontend.service;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.utils.Const;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -27,7 +27,7 @@ public class TestTypeSupport {
     @Test
     public void testTypeSupport() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new MyTable());

@@ -1,9 +1,9 @@
 package com.sqlrec;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -21,7 +21,7 @@ public class TestJavaFunction {
     public void testTableFunction() throws Exception {
         ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());

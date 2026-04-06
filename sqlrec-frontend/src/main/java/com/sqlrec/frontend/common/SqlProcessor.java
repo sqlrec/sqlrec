@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.common;
 
 import com.google.common.collect.ImmutableList;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
@@ -17,7 +18,6 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.*;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -52,7 +52,7 @@ public class SqlProcessor {
     public SqlProcessor() {
         schema = HmsSchema.getHmsCalciteSchema();
         context = new ExecuteContextImpl();
-        defaultSchema = Const.DEFAULT_SCHEMA_NAME;
+        defaultSchema = Consts.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
     }
 
@@ -94,6 +94,64 @@ public class SqlProcessor {
             return result;
         }
 
+        if (sqlNode instanceof SqlUseDatabase) {
+            defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
+            return null;
+        }
+
+        result = processResourceEdit(sqlNode);
+        if (result != null) {
+            return result;
+        }
+
+        result = processResourceQuery(sqlNode);
+        if (result != null) {
+            return result;
+        }
+
+        if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
+            BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema);
+            Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
+            // set statement should also execute on sql gateway
+            if (sqlNode instanceof SqlSet) {
+                return null;
+            }
+            if (enumerable == null) {
+                return Utils.convertMsgToResult("sql run success without output", "msg");
+            }
+            List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
+            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+        }
+
+        return null;
+    }
+
+    private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) throws Exception {
+        try {
+            if (functionCompiler != null) {
+                functionCompiler.compile(sqlNode, sql);
+                if (functionCompiler.isFunctionCompileFinish()) {
+                    SqlProcessor.saveSqlFunction(functionCompiler);
+                    functionCompiler = null;
+                    return Utils.convertMsgToResult("function compile success", "msg");
+                } else {
+                    return Utils.convertMsgToResult("add a sql to function", "msg");
+                }
+            } else if (sqlNode instanceof SqlCreateSqlFunction) {
+                functionCompiler = new FunctionCompiler(null, null);
+                functionCompiler.compile(sqlNode, sql);
+                return Utils.convertMsgToResult("start compile function", "msg");
+            }
+        } catch (Exception e) {
+            functionCompiler = null;
+            logger.error("compile function error: " + e.getMessage(), e);
+            throw e;
+        }
+
+        return null;
+    }
+
+    private SqlProcessResult processResourceEdit(SqlNode sqlNode) throws Exception {
         if (sqlNode instanceof SqlCreateApi) {
             SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
             return Utils.convertMsgToResult("create api success", "msg");
@@ -186,59 +244,10 @@ public class SqlProcessor {
             return Utils.convertMsgToResult("drop api success", "msg");
         }
 
-        if (sqlNode instanceof SqlUseDatabase) {
-            defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
-            return null;
-        }
-
-        result = processTableSchemaQuery(sqlNode);
-        if (result != null) {
-            return result;
-        }
-
-        if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
-            BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema);
-            Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
-            // set statement should also execute on sql gateway
-            if (sqlNode instanceof SqlSet) {
-                return null;
-            }
-            if (enumerable == null) {
-                return Utils.convertMsgToResult("sql run success without output", "msg");
-            }
-            List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
-            return Utils.convertEnumerableToTRowSet(enumerable, fields);
-        }
-
         return null;
     }
 
-    private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) throws Exception {
-        try {
-            if (functionCompiler != null) {
-                functionCompiler.compile(sqlNode, sql);
-                if (functionCompiler.isFunctionCompileFinish()) {
-                    SqlProcessor.saveSqlFunction(functionCompiler);
-                    functionCompiler = null;
-                    return Utils.convertMsgToResult("function compile success", "msg");
-                } else {
-                    return Utils.convertMsgToResult("add a sql to function", "msg");
-                }
-            } else if (sqlNode instanceof SqlCreateSqlFunction) {
-                functionCompiler = new FunctionCompiler(null, null);
-                functionCompiler.compile(sqlNode, sql);
-                return Utils.convertMsgToResult("start compile function", "msg");
-            }
-        } catch (Exception e) {
-            functionCompiler = null;
-            logger.error("compile function error: " + e.getMessage(), e);
-            throw e;
-        }
-
-        return null;
-    }
-
-    private SqlProcessResult processTableSchemaQuery(SqlNode sqlNode) throws Exception {
+    private SqlProcessResult processResourceQuery(SqlNode sqlNode) throws Exception {
         if (sqlNode instanceof SqlShowTables) {
             String db = defaultSchema;
             String[] dbInSql = ((SqlShowTables) sqlNode).fullDatabaseName();

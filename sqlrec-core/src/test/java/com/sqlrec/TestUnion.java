@@ -1,9 +1,9 @@
 package com.sqlrec;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.utils.Const;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
@@ -28,7 +28,7 @@ public class TestUnion {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {

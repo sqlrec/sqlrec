@@ -1,8 +1,8 @@
 package com.sqlrec;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -19,7 +19,7 @@ public class TestUdfSupport {
     @Test
     public void testUdfSupport() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
@@ -28,12 +28,12 @@ public class TestUdfSupport {
         HmsSchema.setGlobalSchema(schema);
 
         SchemaUtils.addFunction(
-                schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
                 "uuid",
                 "com.sqlrec.udf.scalar.UuidFunction"
         );
         SchemaUtils.addFunction(
-                schema.getSubSchema(Const.DEFAULT_SCHEMA_NAME, false),
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
                 "l2_norm",
                 "com.sqlrec.udf.scalar.L2NormFunction"
         );

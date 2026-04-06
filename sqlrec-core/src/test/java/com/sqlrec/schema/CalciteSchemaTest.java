@@ -1,10 +1,10 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.utils.Const;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -28,7 +28,7 @@ public class CalciteSchemaTest {
     @Test
     public void testTablePriority() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("t0", new MyTable("t0", new Object[][]{{1, "Alice"}}));
@@ -42,7 +42,7 @@ public class CalciteSchemaTest {
 
         System.out.println("\n" + sql);
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-        BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+        BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
 
         Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
         assert enumerable != null;

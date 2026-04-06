@@ -1,6 +1,8 @@
 package com.sqlrec.frontend.service;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 import org.apache.hive.service.rpc.thrift.*;
@@ -205,7 +207,7 @@ public class SessionManager {
                 if (sqlProcessResult.getFields() != null) {
                     resp.setSchema(Utils.convertFieldsToTTableSchema(sqlProcessResult.getFields()));
                 } else {
-                    resp.setSchema(Utils.convertFieldsToTTableSchema(Utils.getStringTypeField("sys_warn")));
+                    resp.setSchema(Utils.convertFieldsToTTableSchema(DataTypeUtils.getStringTypeField("sys_warn")));
                 }
                 return resp;
             }
@@ -231,12 +233,12 @@ public class SessionManager {
                         sqlProcessResult.setEnumerable(null);
                     } else {
                         resp.setResults(Utils.convertObjectArrayToTRowSet(
-                                Utils.getMsgEnumerable("no output"),
-                                Utils.getStringTypeField("sys_warn"))
+                                DataTransformUtils.getMsgEnumerable("no output"),
+                                DataTypeUtils.getStringTypeField("sys_warn"))
                         );
                     }
                 } else {
-                    resp.setResults(Utils.convertObjectArrayToTRowSet(null, Utils.getStringTypeField("log")));
+                    resp.setResults(Utils.convertObjectArrayToTRowSet(null, DataTypeUtils.getStringTypeField("log")));
                 }
                 resp.setHasMoreRows(false);
                 return resp;

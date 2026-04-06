@@ -11,6 +11,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class DataTypeUtils {
@@ -84,6 +85,19 @@ public class DataTypeUtils {
             );
         }
         return relDataTypeFields;
+    }
+
+    public static List<RelDataTypeField> getStringTypeField(String fieldName) {
+        return getStringTypeFieldList(Collections.singletonList(fieldName));
+    }
+
+    public static List<RelDataTypeField> getStringTypeFieldList(List<String> fieldName) {
+        List<RelDataTypeField> fields = new ArrayList<>();
+        int index = 0;
+        for (String name : fieldName) {
+            fields.add(getRelDataTypeField(name, index++, SqlTypeName.VARCHAR));
+        }
+        return fields;
     }
 
     public static void checkTableSchemaCompatible(

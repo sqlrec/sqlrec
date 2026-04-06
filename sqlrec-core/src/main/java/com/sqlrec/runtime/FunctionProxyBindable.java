@@ -1,10 +1,10 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -77,7 +77,7 @@ public class FunctionProxyBindable extends BindableInterface {
             CompileManager compileManager
     ) throws Exception {
         // todo check is function name ambiguous
-        Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Const.DEFAULT_SCHEMA_NAME, functionName);
+        Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
             return new JavaFunctionBindable(
                     functionName, javaFunctionObj, inputList, likeTableName, schema, isAsync

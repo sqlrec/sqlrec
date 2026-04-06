@@ -1,15 +1,13 @@
 package com.sqlrec.frontend.service;
 
 import com.sqlrec.common.model.CheckpointInfo;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.frontend.common.ModelSqlProcessResult;
 import com.sqlrec.frontend.common.ServiceSqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.hive.service.rpc.thrift.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,28 +18,28 @@ import java.util.stream.Collectors;
 
 public class Utils {
     private static final Logger logger = LoggerFactory.getLogger(Utils.class);
+
     public static SqlProcessResult convertMsgToResult(String msg, String fieldName) {
-        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
+        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
-
     public static ModelSqlProcessResult convertModelMsgToResult(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
-        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
+        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
         return new ModelSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, checkpointInfos);
     }
 
     public static ServiceSqlProcessResult convertServiceMsgToResult(String msg, String fieldName, String serviceName) {
-        Enumerable<Object[]> enumerable = getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
+        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
         return new ServiceSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, serviceName);
     }
 
     public static SqlProcessResult convertStringListToResult(List<String> list, String fieldName) {
-        Enumerable<Object[]> enumerable = convertListToEnumerable(list);
-        List<RelDataTypeField> fields = getStringTypeField(fieldName);
+        Enumerable<Object[]> enumerable = DataTransformUtils.convertListToEnumerable(list);
+        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
         return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
     }
 
@@ -53,8 +51,8 @@ public class Utils {
         List<List<String>> fieldNameAndType = dataFields.stream().map(
                 f -> Arrays.asList(f.getName(), f.getType().toString())
         ).collect(Collectors.toList());
-        Enumerable<Object[]> enumerable = convertListToArrayToEnumerable(fieldNameAndType);
-        List<RelDataTypeField> resultFields = getStringTypeFieldList(
+        Enumerable<Object[]> enumerable = DataTransformUtils.convertListToArrayToEnumerable(fieldNameAndType);
+        List<RelDataTypeField> resultFields = DataTypeUtils.getStringTypeFieldList(
                 Arrays.asList("name", "type")
         );
         return new SqlProcessResult(enumerable, resultFields, getHandleIdentifier(), getQueryId(), null);
@@ -114,7 +112,7 @@ public class Utils {
                     break;
                 default:
                     TStringColumn defaultStringColumn = new TStringColumn();
-                    Enumerable<Object[]> jsonEnumerable = getJsonValueEnumerable(enumerable, field.getIndex());
+                    Enumerable<Object[]> jsonEnumerable = DataTransformUtils.getJsonValueEnumerable(enumerable, field.getIndex());
                     Map.Entry<byte[], List<String>> jsonEntry = getValueList(jsonEnumerable, 0, String.class);
                     defaultStringColumn.setValues(jsonEntry.getValue());
                     defaultStringColumn.setNulls(jsonEntry.getKey());
@@ -151,25 +149,6 @@ public class Utils {
             }
         }
         return Map.entry(nulls, retList);
-    }
-
-    public static Enumerable<Object[]> getJsonValueEnumerable(Enumerable<Object[]> enumerable, int index) {
-        if (enumerable == null) {
-            return null;
-        }
-
-        List<Object[]> list = new ArrayList<>();
-        for (Object[] objects : enumerable) {
-            Object object = objects[index];
-            Object[] newObjects = new Object[1];
-            if (object == null) {
-                newObjects[0] = null;
-            } else {
-                newObjects[0] = JsonUtils.toJson(object);
-            }
-            list.add(newObjects);
-        }
-        return Linq4j.asEnumerable(list);
     }
 
     public static <T> T tryCast(Object object, Class<T> clazz) {
@@ -293,39 +272,5 @@ public class Utils {
 
     public static String getQueryId() {
         return UUID.randomUUID().toString();
-    }
-
-    public static List<RelDataTypeField> getStringTypeField(String fieldName) {
-        return getStringTypeFieldList(Collections.singletonList(fieldName));
-    }
-
-    public static List<RelDataTypeField> getStringTypeFieldList(List<String> fieldName) {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        int index = 0;
-        for (String name : fieldName) {
-            fields.add(DataTypeUtils.getRelDataTypeField(name, index++, SqlTypeName.VARCHAR));
-        }
-        return fields;
-    }
-
-    public static Enumerable<Object[]> getMsgEnumerable(String msg) {
-        if (msg == null) {
-            return null;
-        }
-        return Linq4j.asEnumerable(Collections.singletonList(new String[]{msg}));
-    }
-
-    public static Enumerable<Object[]> convertListToEnumerable(List<String> list) {
-        if (list == null) {
-            return null;
-        }
-        return Linq4j.asEnumerable(list.stream().map(o -> new String[]{o}).collect(Collectors.toList()));
-    }
-
-    public static <T> Enumerable<Object[]> convertListToArrayToEnumerable(List<List<T>> list) {
-        if (list == null) {
-            return null;
-        }
-        return Linq4j.asEnumerable(list.stream().map(List::toArray).collect(Collectors.toList()));
     }
 }

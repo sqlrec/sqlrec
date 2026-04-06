@@ -1,10 +1,10 @@
 package com.sqlrec.connectors;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.Const;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
@@ -30,7 +30,7 @@ public class TestJoinRedis {
         tableMap.put("t2", getListRedisTable());
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return tableMap;
@@ -59,7 +59,7 @@ public class TestJoinRedis {
         for (String sql : sqlList) {
             System.out.println("\n" + sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
 
             Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
             if (enumerable != null) {

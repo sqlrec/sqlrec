@@ -1,7 +1,7 @@
 package com.sqlrec;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -25,7 +25,7 @@ public class TestNormalSql {
     @Test
     public void testNormalSqlCompiler() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        schema.add(Const.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
                 return Collections.singletonMap("myTable", new MyTable());

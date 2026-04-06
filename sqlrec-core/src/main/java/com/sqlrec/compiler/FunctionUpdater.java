@@ -1,11 +1,11 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.Const;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -125,9 +125,9 @@ public class FunctionUpdater {
         Set<String> javaFunctions = functionBindable.getDependencyJavaFunctions();
         for (String javaFunction : javaFunctions) {
             Object javaFunctionClass = JavaFunctionUtils.getTableFunctionClass(
-                    Const.DEFAULT_SCHEMA_NAME, javaFunction);
+                    Consts.DEFAULT_SCHEMA_NAME, javaFunction);
             long functionModificationTime = JavaFunctionUtils.getFunctionUpdateTime(
-                    Const.DEFAULT_SCHEMA_NAME, javaFunction);
+                    Consts.DEFAULT_SCHEMA_NAME, javaFunction);
             if (functionModificationTime > functionBindable.getCreateTime()) {
                 return true;
             }

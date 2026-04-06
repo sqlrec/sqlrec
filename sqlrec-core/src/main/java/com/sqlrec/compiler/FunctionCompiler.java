@@ -1,5 +1,6 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheProxyTable;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -10,7 +11,6 @@ import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlReturn;
-import com.sqlrec.utils.Const;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -158,7 +158,7 @@ public class FunctionCompiler {
             sqlFunctionBindable.init();
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
-            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Const.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
             sqlFunctionBindable.getBindableList().add(bindable);
             if (bindable instanceof CacheTableBindable) {
                 CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
@@ -173,7 +173,7 @@ public class FunctionCompiler {
     }
 
     private List<RelDataTypeField> getTableFieldsTypes(List<SqlIdentifier> columnList, List<SqlTypeNameSpec> columnTypeList) {
-        SqlValidator validator = NormalSqlCompiler.createSqlValidate(schema, Const.DEFAULT_SCHEMA_NAME);
+        SqlValidator validator = NormalSqlCompiler.createSqlValidate(schema, Consts.DEFAULT_SCHEMA_NAME);
         return DataTypeUtils.getRelDataTypeFields(columnList, columnTypeList, validator);
     }
 
