@@ -1,23 +1,23 @@
-# SqlRec
-A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SqlRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
+# SQLRec
+A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SQLRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
 
 ![system_architecture](docs/public/sqlrec_arch.png)
 
-SqlRec has the following features:
-- Cloud-native, comes with minikube-based deployment scripts for one-click deployment of the SqlRec system and related dependency services
+SQLRec has the following features:
+- Cloud-native, comes with minikube-based deployment scripts for one-click deployment of the SQLRec system and related dependency services
 - Extended SQL syntax, making it possible to describe recommendation system business logic using SQL
 - Implemented an efficient SQL execution engine based on Calcite, meeting the real-time requirements of recommendation systems
 - Built on existing big data ecosystem, easy to integrate
 - Easy to extend, supports custom UDFs, Table types, and Model types
 
-For detailed information, refer to the [SqlRec User Manual](https://sqlrec.github.io/sqlrec).
+For detailed information, refer to the [SQLRec User Manual](https://sqlrec.github.io/sqlrec).
 
 ## Quick Start
 
 ### Service Deployment
-SqlRec currently supports AMD64 Linux systems, with MacOS support coming later. Note that deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
+SQLRec currently supports AMD64 Linux systems, with MacOS support coming later. Note that deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
 
-Deploy the SqlRec system with the following commands:
+Deploy the SQLRec system with the following commands:
 ```bash
 # clone sqlrec repository
 git clone https://github.com/sqlrec/sqlrec.git
@@ -44,15 +44,50 @@ cd ..
 bash ./bin/beeline.sh
 ```
 Notes:
-- The minikube-based deployment solution above is for testing only. For production environments, you need to deploy reliable big data infrastructure first, then refer to the scripts under deploy to initialize the database and deploy SqlRec deployment
+- The minikube-based deployment solution above is for testing only. For production environments, you need to deploy reliable big data infrastructure first, then refer to the scripts under deploy to initialize the database and deploy SQLRec deployment
 - If you need to redeploy, you can delete the cluster first via minikube delete
 - Some components are not deployed by default, such as kyuubi, jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory, such as `bash ./kyuubi/deploy.sh`
 - You can customize passwords, network ports, and other parameters in env.sh
 
-### SQL Development
-Execute the `bash ./bin/beeline.sh` command to connect to the SqlRec service, and refer to the following process to develop data tables, SQL functions, API interfaces, etc. needed for recommendations:
+### Connecting to SQLRec Service
 
-1. Initialize data tables. Note that you can get the IP address of the minikube node via the `kubectl get node -o wide` command, you may need to replace the node IP address below
+#### Using beeline
+SQLRec implements the hive thrift interface, you can use beeline to connect to the SQLRec service and use it like hive.
+```bash
+bash ./bin/beeline.sh
+```
+
+#### Using python
+You can use python in Jupyter Notebook to connect to the SQLRec service and use python tools to analyze recommendation data, refer to the following code:
+- Use the scripts in the deploy directory to deploy Jupyter
+```bash
+cd deploy
+bash ./jupyter/deploy.sh
+# wait pod ready
+```
+- Open Jupyter Notebook in browser, e.g. `http://127.0.0.1:30280`, and use the account and password in env.sh to login
+- Create a new python3 notebook
+- Install dependencies
+```bash
+!pip install pandas --user
+!pip install pyhive --user
+!pip install sasl --user
+!pip install thrift --user
+!pip install thrift-sasl --user
+```
+- Connect to SQLRec service and run sql statements
+```python
+from pyhive import hive
+import pandas as pd
+
+conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
+pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
+```
+
+### SQL Development
+Execute the `bash ./bin/beeline.sh` command to connect to the SQLRec service, and refer to the following process to develop data tables, SQL functions, API interfaces, etc. needed for recommendations:
+
+1. Initialize data tables. Note that you can get the IP address of the minikube node via the `kubectl get node -o wide` command, you may need to replace IP address below
 ```sql
 SET table.sql-dialect = default;
 
@@ -275,7 +310,7 @@ bash benchmark.sh
 The default test configuration is as follows:
 - 100K users, 100K items data
 - The recommendation process includes 4 recall paths: global hot items, user interest category hot items, itemcf, vector retrieval (8 dimensions, user embedding fixed), as well as exposure deduplication and category diversification
-- Test a single SqlRec instance with 10 concurrent connections
+- Test a single SQLRec instance with 10 concurrent connections
 
 Test results on AMD Ryzen 5600H, 32GB DDR4 memory machine:
 ```

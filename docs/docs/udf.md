@@ -288,4 +288,4 @@ LIMIT 300;
 
 ## 自定义 UDF
 
-可以参考 [编程模型](program_model.md#udf用户定义函数) 文档了解如何开发自定义 UDF。
+可以参考 [编程模型](program_model.md#udf) 文档了解如何开发自定义 UDF。

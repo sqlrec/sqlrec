@@ -1,11 +1,46 @@
 # 快速开始
-这里使用个简单Demo介绍SqlRec的使用，部署可以参考[服务部署](/docs/deployment)。
+这里通过个简单Demo介绍SQLRec的使用，部署可以参考[服务部署](/docs/deployment)。
+
+## 连接SQLRec服务
+
+### 使用beeline
+SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
+```bash
+bash ./bin/beeline.sh
+```
+
+### 使用python
+可以在Jupyter Notebook中使用python连接SQLRec服务，并使用python工具分析推荐数据，参考下述代码：
+- 使用deploy目录的脚本部署Jupyter
+```bash
+cd deploy
+bash ./jupyter/deploy.sh
+# wait pod ready
+```
+- 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30280`，使用env.sh中的账号密码登录
+- 新建python3 notebook
+- 安装依赖
+```bash
+!pip install pandas --user
+!pip install pyhive --user
+!pip install sasl --user
+!pip install thrift --user
+!pip install thrift-sasl --user
+```
+- 连接SQLRec服务，运行sql语句
+```python
+from pyhive import hive
+import pandas as pd
+
+conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
+pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
+```
 
 ## SQL开发
-执行`bash ./bin/beeline.sh`命令连接SqlRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
+使用beeline连接SQLRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
 
 ### 初始化数据表
-参考下述SQL，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述节点的ip地址
+参考下述SQL，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述代码的ip地址
 ```sql
 SET table.sql-dialect = default;
 

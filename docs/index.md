@@ -3,7 +3,7 @@
 layout: home
 
 hero:
-  name: "SqlRec"
+  name: "SQLRec"
   text: "支持使用SQL进行开发的推荐引擎"
   actions:
     - theme: brand

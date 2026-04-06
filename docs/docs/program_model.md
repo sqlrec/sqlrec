@@ -197,33 +197,45 @@ public static boolean isUnionSql(SqlNode sqlNode) {
 ```
 
 
-## 核心概念
+## SQL 执行逻辑
 
-### 1. Cache Table（缓存表）
+SQLRec 根据表类型的不同，支持不同的 SQL 查询能力。本节介绍各类表支持的查询操作及其实现原理。
 
-Cache Table 是 SQLRec 中最核心的概念，它是内存中的数据表，类似于编程语言中的变量。
+### 表类型与查询能力矩阵
 
-#### 定义缓存表
+| 表类型 | 过滤查询 | 主键查询 | KV Join | 向量搜索 |
+|--------|----------|----------|---------|----------|
+| CacheTable | ✅ | ❌ | ❌ | ❌ |
+| SqlRecKvTable | ✅ | ✅ | ✅ | ❌ |
+| SqlRecVectorTable | ✅ | ✅ | ✅ | ✅ |
 
-使用 `CACHE TABLE` 语句创建缓存表：
+> **写入操作支持**：表是否支持写入（INSERT/UPDATE/DELETE）取决于是否实现 `ModifiableTable` 接口，而非表类型本身。例如 `SqlRecKvTable` 和 `KafkaCalciteTable` 都实现了 `ModifiableTable`，因此支持写入操作。
+
+### CACHE TABLE 语句
+
+`CACHE TABLE` 是 SQLRec 中最核心的语句，用于创建内存缓存表，类似于编程语言中的变量赋值。
+
+#### 基本语法
 
 ```sql
-CACHE TABLE result AS
-SELECT * FROM source_table WHERE status = 'active';
+CACHE TABLE table_name AS
+SELECT * FROM source_table WHERE condition;
 ```
 
 这行代码的含义是：
 1. 执行 `SELECT` 查询
-2. 将结果存储在名为 `result` 的内存表中
-3. 后续 SQL 可以引用 `result` 表
+2. 将结果存储在名为 `table_name` 的内存表中
+3. 后续 SQL 可以引用该表
 
-#### 缓存表作为变量
+#### 缓存表特性
 
-缓存表可以被视为"表变量"，它具有以下特性：
+缓存表可以被视为"表变量"，具有以下特性：
 
 - **作用域**：在当前会话中全局可见
 - **生命周期**：会话结束时自动销毁
 - **类型**：表类型，包含列定义和数据行
+
+#### 链式处理
 
 ```sql
 CACHE TABLE step1 AS
@@ -236,7 +248,7 @@ CACHE TABLE final_result AS
 SELECT * FROM step2 ORDER BY cnt DESC;
 ```
 
-#### 缓存表与函数调用
+#### 通过函数调用创建
 
 缓存表可以通过函数调用创建：
 
@@ -245,12 +257,265 @@ CACHE TABLE processed_data AS
 CALL process_function(raw_data, config_table);
 ```
 
+### 过滤查询
 
-### 2. 函数定义
+所有 SqlRecTable 子类都支持过滤查询。系统通过 `FilterableTableScan` 节点实现过滤条件下推。
 
-SQLRec 支持自定义 SQL 函数，函数是一组 SQL 语句的封装。
+#### 过滤条件下推规则
 
-#### 函数结构
+```java
+// SqlRecFilterTableScanRule
+public static boolean test(TableScan scan) {
+    final RelOptTable table = scan.getTable();
+    return table.unwrap(FilterableTable.class) != null
+            || table.unwrap(ProjectableFilterableTable.class) != null;
+}
+```
+
+#### KV 表的主键过滤优化
+
+对于 `SqlRecKvTable`，如果设置了 `onlyFilterByPrimaryKey()` 为 true，则只支持主键过滤：
+
+```java
+private boolean shouldFilterByPrimaryKey(SqlRecTable sqlRecTable) {
+    if (sqlRecTable == null) return false;
+    if (!(sqlRecTable instanceof SqlRecKvTable)) return false;
+    SqlRecKvTable kvTable = (SqlRecKvTable) sqlRecTable;
+    return kvTable.onlyFilterByPrimaryKey();
+}
+```
+
+**示例：**
+
+```sql
+-- 对于 onlyFilterByPrimaryKey=true 的 KV 表，以下查询有效
+SELECT * FROM kv_table WHERE primary_key = 'key123';
+
+-- 以下查询无效（非主键过滤）
+SELECT * FROM kv_table WHERE other_column = 'value';
+```
+
+### KV Join
+
+KV Join 是 SqlRecKvTable 特有的连接方式，通过主键批量查询实现高效关联。
+
+#### 触发条件
+
+1. **左表必须是 CacheTable**（内存中的数据，可被遍历）
+2. Join 条件必须是**等值条件**（`=`）
+3. 右表必须是 `SqlRecKvTable`
+
+```java
+// SqlRecKvJoinRule 检查条件
+RexNode condition = join.getCondition();
+try {
+    KvJoinUtils.getJoinKeyColIndex(condition);
+} catch (Exception e) {
+    return; // 非等值条件，不应用此规则
+}
+```
+
+#### 实现原理
+
+KV Join 的核心是通过主键批量查询右表数据：
+
+```java
+// KvJoinUtils.kvJoin
+public static Enumerable kvJoin(
+        Enumerable left,
+        SqlRecKvTable rightTable,
+        RexNode condition,
+        JoinRelType joinType
+) {
+    // 1. 提取左表的所有 Join Key
+    Set<Object> joinKeys = new HashSet<>();
+    for (Object[] leftValue : leftValues) {
+        Object leftJoinKey = leftValue[leftJoinKeyColIndex];
+        joinKeys.add(leftJoinKey);
+    }
+    
+    // 2. 批量查询右表数据（利用缓存）
+    Map<Object, List<Object[]>> rightValuesMap = 
+        rightTable.getByPrimaryKeyWithCache(joinKeys);
+    
+    // 3. 关联左右表数据
+    // ...
+}
+```
+
+#### 支持的 Join 类型
+
+| Join 类型 | 说明 |
+|-----------|------|
+| INNER JOIN | 只返回匹配的行 |
+| LEFT JOIN | 左表全部返回，右表无匹配时填充 NULL |
+
+**示例：**
+
+```sql
+-- KV Join 示例
+SELECT o.*, u.user_name
+FROM orders o
+LEFT JOIN user_kv_table u ON o.user_id = u.user_id;
+```
+
+### 向量搜索 Join
+
+向量搜索 Join 是 SqlRecVectorTable 特有的连接方式，通过向量相似度进行关联。
+
+#### 触发条件
+
+1. **左表必须是 CacheTable**（内存中的数据，可被遍历）
+2. Project 中必须包含 **`ip()` 函数**（向量内积）
+3. Join 条件必须为 **true**（无条件连接）
+4. 右表必须是 `SqlRecVectorTable`
+5. 必须有 **ORDER BY ... LIMIT** 子句
+
+```java
+// SqlRecVectorJoinRule 检查条件
+if (!VectorJoinUtils.hasIpFunction(project)) {
+    return; // 必须有 ip 函数
+}
+if (!VectorJoinUtils.isTrueCondition(join)) {
+    return; // Join 条件必须为 true
+}
+if (rightTable.unwrap(SqlRecVectorTable.class) == null) {
+    return; // 右表必须是向量表
+}
+```
+
+#### 查询模式
+
+向量搜索 Join 的典型查询模式：
+
+```sql
+SELECT 
+    left.*,
+    ip(left.embedding, right.embedding) as score
+FROM left_table left
+JOIN vector_table right ON true
+WHERE right.category = 'electronics'  -- 可选的过滤条件
+ORDER BY score DESC
+LIMIT 10;
+```
+
+#### 实现原理
+
+```java
+// VectorJoinUtils.vectorJoin
+public static Enumerable vectorJoin(
+        Enumerable left,
+        SqlRecVectorTable rightTable,
+        RexNode filterCondition,      // 右表过滤条件
+        int leftEmbeddingColIndex,    // 左表向量列索引
+        String rightEmbeddingColName, // 右表向量列名
+        int limit,                    // 返回数量
+        List<Integer> projectColumns  // 投影列
+) {
+    for (Object[] leftValue : leftValues) {
+        // 1. 提取左表的查询向量
+        List<Float> embedding = DataTransformUtils.convertToFloatVec(
+            leftValue[leftEmbeddingColIndex]
+        );
+        
+        // 2. 向量相似度搜索
+        List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
+            leftValue,
+            embedding,
+            rightEmbeddingColName,
+            filterCondition,
+            limit,
+            vectorProjectColumns
+        );
+        
+        // 3. 关联结果
+        // ...
+    }
+}
+```
+
+#### 配置参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `DEFAULT_VECTOR_SEARCH_LIMIT` | 默认返回数量 | 配置项 |
+
+### UNION 操作
+
+UNION 操作通过 `EnumerableUnion` 实现，使用蛇形合并算法。
+
+#### 实现方式
+
+```java
+// EnumerableUnion.implement
+Expression unionExp = Expressions.call(
+    MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class), 
+    inputExps
+);
+```
+
+#### 蛇形合并算法
+
+蛇形合并是一种高效的流式合并算法，适用于多数据源的合并场景：
+
+```java
+// MergeUtils.snakeMergeEnumerable
+public static List<Object[]> snakeMergeEnumerable(Iterable<Object[]>... iterables) {
+    // 蛇形遍历所有输入源，交替输出
+}
+```
+
+## 变量系统
+
+SQLRec 通过 `ExecuteContext` 管理运行时变量，提供类似编程语言中变量的能力。
+
+### 变量设置
+
+使用 `SET` 语句或 API 设置变量：
+
+```sql
+SET 'my_var' = 'my_value';
+```
+
+```java
+context.setVariable("my_var", "my_value");
+```
+
+### 变量获取
+
+使用 `GET()` 表达式获取变量：
+
+```sql
+-- 在函数调用中使用
+CALL my_function(GET('table_name'));
+```
+
+### 变量作用域
+
+| 特性 | 说明 |
+|------|------|
+| **存储** | `ConcurrentHashMap`（线程安全） |
+| **可见性** | 当前会话全局可见 |
+| **隔离性** | 不同会话之间变量隔离 |
+
+### 函数调用时的变量
+
+函数调用时会创建新的执行上下文：
+
+```java
+ExecuteContext finalContext = context.clone();
+finalContext.addFunNameToStack(funName);
+```
+
+- **变量共享**：克隆的上下文共享变量映射
+- **调用栈隔离**：每个函数调用有独立的调用栈
+
+
+## 函数系统
+
+SQLRec 支持自定义 SQL 函数，函数是一组 SQL 语句的封装，类似于编程语言中的函数定义。
+
+### 函数定义
 
 一个完整的函数定义包含以下部分：
 
@@ -280,29 +545,9 @@ SELECT id, name, score FROM filtered ORDER BY score DESC;
 RETURN result;
 ```
 
-#### 函数编译阶段
+### 函数传参
 
-函数定义经历四个编译阶段：
-
-| 阶段 | 说明 | 允许的语句 |
-|------|------|-----------|
-| `FUNCTION_DEFINITION` | 函数声明 | `CREATE SQL FUNCTION` |
-| `FUNCTION_PARAM` | 参数定义 | `DEFINE INPUT TABLE` |
-| `FUNCTION_BODY` | 函数体 | 任意 SQL 语句 |
-| `FUNCTION_RETURN` | 返回 | `RETURN`（结束编译） |
-
-#### 函数替换
-
-使用 `OR REPLACE` 可以覆盖已存在的函数：
-
-```sql
-CREATE OR REPLACE SQL FUNCTION my_function;
-```
-
-
-### 3. 函数传参
-
-SQLRec 函数采用**按值传递**的方式，参数是表（CacheTable）。
+SQLRec 函数采用**按值传递**的方式，参数是表（CacheTable）或变量。
 
 #### 基本调用
 
@@ -331,21 +576,10 @@ CALL process_data(my_table);
 
 ```sql
 -- 从变量获取函数名
-CALL GET('function_name')(table1, table2);
-
--- 嵌套使用 GET
-CALL GET(GET('func_key'))(GET('table_var'));
+CALL GET('function_name')(table1, table2) LIKE template_table;
 ```
 
-#### LIKE 子句
-
-`LIKE` 子句用于指定结果表的模板：
-
-```sql
-CALL my_function(input_table) LIKE template_table;
-```
-
-模板表定义了返回结果的结构，当函数返回的表结构与模板不匹配时会报错。
+动态调用函数时，需要使用 `LIKE` 子句指定结果表的模式，因为编译期无法知道调用的哪个函数，无法推断类型。
 
 #### 异步调用
 
@@ -357,8 +591,7 @@ CALL my_function(input_table) ASYNC;
 
 异步调用会立即返回，函数在后台线程执行。适用于不需要立即获取结果的场景。
 
-
-### 4. 函数返回结果
+### 函数返回结果
 
 函数通过 `RETURN` 语句返回结果。
 
@@ -391,16 +624,13 @@ CALL my_function(input_table);
 ```
 
 
-### 5. 并发模型
+## 并发模型
 
-SQLRec 内置了自动并行执行能力。
-
-#### 自动依赖分析
-
-系统自动分析 SQL 语句之间的依赖关系：
+SQLRec 内置了自动并行执行能力，能够自动分析 SQL 语句之间的依赖关系并并行执行。
 
 - **读依赖**：语句读取某个表
 - **写依赖**：语句写入某个表（如 CACHE TABLE）
+- **变量依赖**：SET 语句、使用了ExecuteContext的UDF、使用了变量的函数调用之间存在变量依赖
 
 ```sql
 -- 这两个语句可以并行执行（无依赖）
@@ -411,113 +641,18 @@ CACHE TABLE b AS SELECT * FROM source2;
 CACHE TABLE c AS SELECT * FROM a UNION ALL SELECT * FROM b;
 ```
 
-#### 拓扑排序执行
+## 循环依赖检测
 
-系统使用拓扑排序确定执行顺序：
+系统通过调用栈检测函数之间的循环依赖，防止无限递归。 
 
-1. 分析所有语句的读写依赖
-2. 构建依赖图
-3. 按拓扑序执行
-4. 无依赖的语句并行执行
-
-#### 并行执行配置
-
-```java
-// 启用并行执行
-SqlRecConfigs.PARALLELISM_EXEC.setValue(true);
-```
-
-#### 虚拟线程
-
-SQLRec 使用 Java 虚拟线程实现并行执行：
-
-```java
-ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
-```
-
-虚拟线程具有以下优势：
-- 轻量级，可以创建大量线程
-- 自动调度，无需手动管理线程池
-- 适合 I/O 密集型任务
-
-#### 并行执行示例
-
-```sql
--- 假设 source1, source2, source3 是独立的 Hive 表
-
--- 以下三个语句会并行执行
-CACHE TABLE part1 AS SELECT * FROM source1 WHERE region = 'north';
-CACHE TABLE part2 AS SELECT * FROM source2 WHERE region = 'south';
-CACHE TABLE part3 AS SELECT * FROM source3 WHERE region = 'east';
-
--- 这个语句等待前三个完成
-CACHE TABLE all_parts AS
-SELECT * FROM part1
-UNION ALL SELECT * FROM part2
-UNION ALL SELECT * FROM part3;
-```
-
-
-### 6. 变量可见性
-
-SQLRec 通过 `ExecuteContext` 管理运行时变量。
-
-#### 变量设置
-
-使用 `SET` 语句或 API 设置变量：
-
-```sql
-SET 'my_var' = 'my_value';
-```
-
-```java
-context.setVariable("my_var", "my_value");
-```
-
-#### 变量获取
-
-使用 `GET()` 表达式获取变量：
-
-```sql
--- 获取变量值
-GET('my_var')
-
--- 在函数调用中使用
-CALL my_function(GET('table_name'));
-
--- 在 CACHE TABLE 中使用
-CACHE TABLE dynamic_table AS
-SELECT * FROM GET('source_table');
-```
-
-#### 变量作用域
-
-| 特性 | 说明 |
-|------|------|
-| **存储** | `ConcurrentHashMap`（线程安全） |
-| **可见性** | 当前会话全局可见 |
-| **隔离性** | 不同会话之间变量隔离 |
-
-#### 函数调用时的变量
-
-函数调用时会创建新的执行上下文：
+函数调用时会将函数名压入调用栈：
 
 ```java
 ExecuteContext finalContext = context.clone();
 finalContext.addFunNameToStack(funName);
 ```
 
-- **变量共享**：克隆的上下文共享变量映射
-- **调用栈隔离**：每个函数调用有独立的调用栈
-
-#### 循环依赖检测
-
-系统通过调用栈检测循环依赖：
-
-```sql
--- 如果 function_a 调用 function_b，function_b 又调用 function_a
--- 会抛出异常：Circular dependency detected
-```
+在调用新函数前，检查调用栈中是否已存在该函数：
 
 ```java
 if (funNameStack.contains(funName)) {
@@ -525,8 +660,7 @@ if (funNameStack.contains(funName)) {
 }
 ```
 
-
-## UDF（用户定义函数）
+## UDF
 
 SQLRec 支持通过 Java 实现用户定义函数（UDF），可以在 SQL 中直接调用。
 
@@ -559,7 +693,7 @@ SQLRec 会根据 `eval` 方法的参数类型自动注入相应的值：
 | `String` | 字符串字面量或变量 | `'value'` 或 `GET('var')` |
 | `ExecuteContext` | 执行上下文 | 自动注入，无需在 SQL 中指定 |
 
-#### 参数注入示例
+参数注入示例
 
 ```java
 public class MyFunction {
@@ -581,41 +715,6 @@ CALL my_function(table1, table2, 'config_value');
 
 -- 使用 GET 获取字符串参数
 CALL my_function(table1, table2, GET('config_var'));
-```
-
-#### 参数注入流程
-
-```java
-private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
-    Class<?>[] paramTypes = evalMethod.getParameterTypes();
-    List<Object> paramList = new ArrayList<>();
-    int inputParamIndex = 0;
-
-    for (Class<?> paramType : paramTypes) {
-        SqlNode input = inputTableList.get(inputParamIndex);
-        
-        if (paramType.equals(CacheTable.class)) {
-            // 从 schema 获取缓存表
-            paramList.add(getCacheTable(tableName, schema));
-            inputParamIndex++;
-            
-        } else if (paramType.equals(String.class)) {
-            // 从字面量或变量获取字符串
-            if (input instanceof SqlCharStringLiteral) {
-                paramList.add(getStringValue(input));
-            } else if (input instanceof SqlGetVariable) {
-                paramList.add(context.getVariable(varName));
-            }
-            inputParamIndex++;
-            
-        } else if (paramType.equals(ExecuteContext.class)) {
-            // 自动注入执行上下文
-            paramList.add(context);
-        }
-    }
-    
-    return evalMethod.invoke(tableFunction, paramList.toArray());
-}
 ```
 
 ### 编译期返回数据模式解析
@@ -649,78 +748,23 @@ if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
 
 **注意**：这种方式要求 UDF 在编译期能够正常执行，且不能是异步调用。
 
-### 是否可并发判断
-
-UDF 是否可以并发执行取决于是否使用 `ExecuteContext` 参数：
-
-```java
-@Override
-public boolean isParallelizable() {
-    Class<?>[] paramTypes = evalMethod.getParameterTypes();
-    for (Class<?> paramType : paramTypes) {
-        if (paramType.equals(ExecuteContext.class)) {
-            return false;  // 使用 ExecuteContext 则不可并发
-        }
-    }
-    return true;  // 否则可以并发
-}
-```
-
-**设计原因：**
-- `ExecuteContext` 包含调用栈信息，用于循环依赖检测
-- 并发执行时，调用栈可能不一致
-- 因此使用 `ExecuteContext` 的 UDF 必须串行执行
-
-### 动态函数调用
-
-SQLRec 支持在运行时动态确定要调用的函数，通过 `GET()` 表达式实现：
-
-```sql
--- 从变量获取函数名
-CALL GET('function_name')(input_table);
-
--- 配合 LIKE 子句使用
-CALL GET('func_var')(input_table) LIKE template_table;
-
--- 异步调用动态函数
-CALL GET('func_var')(input_table) ASYNC;
-```
-
-#### 实现原理
-
-动态函数调用使用 `FunctionProxyBindable` 实现：
-
-```java
-public class FunctionProxyBindable extends BindableInterface {
-    private SqlGetVariable funcNameVariable;  // 函数名变量
-    
-    @Override
-    public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        // 运行时从变量获取函数名
-        String functionName = context.getVariable(variableName);
-        
-        // 根据函数名获取实际的 Bindable
-        BindableInterface bindable = getFunctionBindableByName(
-            functionName, schema, inputList, likeTableName, isAsync, compileManager
-        );
-        
-        return bindable.bind(schema, context);
-    }
-}
-```
-
-**特点：**
-- 编译期必须指定 `LIKE` 子句（用于确定返回模式）
-- 运行时解析函数名
-- 不支持并发执行（`isParallelizable()` 返回 `false`）
-
 ### UDF 注册
 
-UDF 需要注册到系统中才能被调用：
+UDF 需要在 Hive Metastore（HMS）中注册才能被调用。注册时需要指定函数名和对应的 Java 类全限定名：
+
+```sql
+-- 在 HMS 中注册 UDF
+CREATE FUNCTION my_function AS 'com.example.MyFunction';
+```
+
+系统在调用函数时会通过 HMS 获取函数的类名，然后动态加载：
 
 ```java
-// 通过 JavaFunctionUtils 注册
-JavaFunctionUtils.registerTableFunction(schemaName, functionName, functionInstance);
+// 从 HMS 获取函数对象
+org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
+// 获取类名并加载
+String className = functionObj.getClassName();
+Class<?> clazz = Class.forName(className);
 ```
 
 ### 函数查找优先级
@@ -730,155 +774,6 @@ JavaFunctionUtils.registerTableFunction(schemaName, functionName, functionInstan
 1. **Java UDF**：通过 `JavaFunctionUtils.getTableFunction()` 查找
 2. **SQL 函数**：通过 `CompileManager.getSqlFunction()` 查找
 3. **未找到**：抛出异常
-
-```java
-public static BindableInterface getFunctionBindableByName(String functionName, ...) {
-    // 1. 查找 Java UDF
-    Object javaFunctionObj = JavaFunctionUtils.getTableFunction(schema, functionName);
-    if (javaFunctionObj != null) {
-        return new JavaFunctionBindable(functionName, javaFunctionObj, ...);
-    }
-    
-    // 2. 查找 SQL 函数
-    SqlFunctionBindable sqlFunction = compileManager.getSqlFunction(functionName);
-    if (sqlFunction != null) {
-        return new CallSqlFunctionBindable(functionName, inputTables, sqlFunction, isAsync);
-    }
-    
-    // 3. 未找到
-    throw new Exception("function not find: " + functionName);
-}
-```
-
-### UDF 完整示例
-
-```java
-public class DataProcessor {
-    
-    public CacheTable eval(
-        CacheTable inputTable,
-        String filterCondition,
-        ExecuteContext context
-    ) {
-        // 获取变量
-        String threshold = context.getVariable("threshold");
-        
-        // 处理数据
-        List<Object[]> results = new ArrayList<>();
-        for (Object[] row : inputTable.scan(null)) {
-            if (matchesCondition(row, filterCondition, threshold)) {
-                results.add(processRow(row));
-            }
-        }
-        
-        // 返回结果
-        return new CacheTable("output", 
-            Linq4j.asEnumerable(results), 
-            inputTable.getDataFields()
-        );
-    }
-}
-```
-
-```sql
--- 设置变量
-SET 'threshold' = '100';
-
--- 调用 UDF
-CACHE TABLE result AS
-CALL data_processor(input_data, 'value > 10') LIKE input_data;
-```
-
-
-## 完整示例
-
-### 数据处理流水线
-
-```sql
--- 定义一个完整的数据处理函数
-CREATE SQL FUNCTION etl_pipeline;
-
--- 定义输入参数
-DEFINE INPUT TABLE raw_events (
-    event_id VARCHAR(100),
-    user_id VARCHAR(100),
-    event_type VARCHAR(50),
-    event_time TIMESTAMP,
-    payload VARCHAR(1000)
-);
-
-DEFINE INPUT TABLE user_profiles (
-    user_id VARCHAR(100),
-    user_name VARCHAR(200),
-    region VARCHAR(50)
-);
-
--- 数据清洗
-CACHE TABLE cleaned_events AS
-SELECT 
-    event_id,
-    user_id,
-    event_type,
-    event_time,
-    JSON_EXTRACT(payload, '$.value') as value
-FROM raw_events
-WHERE event_id IS NOT NULL AND user_id IS NOT NULL;
-
--- 数据关联
-CACHE TABLE enriched_events AS
-SELECT 
-    e.*,
-    p.user_name,
-    p.region
-FROM cleaned_events e
-LEFT JOIN user_profiles p ON e.user_id = p.user_id;
-
--- 数据聚合
-CACHE TABLE daily_summary AS
-SELECT 
-    region,
-    event_type,
-    DATE(event_time) as event_date,
-    COUNT(*) as event_count,
-    AVG(value) as avg_value
-FROM enriched_events
-GROUP BY region, event_type, DATE(event_time);
-
--- 返回结果
-RETURN daily_summary;
-```
-
-### 调用示例
-
-```sql
--- 准备输入数据
-CACHE TABLE events AS
-SELECT * FROM hive_db.raw_events WHERE dt = '2024-01-01';
-
-CACHE TABLE profiles AS
-SELECT * FROM hive_db.user_profiles;
-
--- 调用函数
-CACHE TABLE summary AS
-CALL etl_pipeline(events, profiles);
-
--- 使用结果
-SELECT * FROM summary WHERE event_count > 100;
-```
-
-### 异步处理
-
-```sql
--- 异步调用多个处理任务
-CALL process_region('north_data') ASYNC;
-CALL process_region('south_data') ASYNC;
-CALL process_region('east_data') ASYNC;
-
--- 主流程继续执行
-CACHE TABLE other_result AS
-SELECT * FROM other_source;
-```
-
 
 ## 编程模型总结
 
@@ -896,5 +791,9 @@ SELECT * FROM other_source;
 | UDF | 外部库/插件 | Java 类 + `eval` 方法 |
 | 表类型 | 数据结构 | `SqlRecTable` 层次结构 |
 | 执行路由 | 编译目标选择 | 本地执行 / 转发 Flink |
+| 过滤查询 | 条件筛选 | `FilterableTableScan` + 规则优化 |
+| KV Join | 主键关联查询 | `SqlRecKvJoinRule` + 主键批量查询 |
+| 向量搜索 | 相似度匹配 | `SqlRecVectorJoinRule` + `ip()` 函数 |
+| UNION | 数据合并 | `EnumerableUnion` + 蛇形合并算法 |
 
 SQLRec 将 SQL 从声明式查询语言扩展为具备完整编程能力的语言，同时保持了 SQL 的简洁性和声明式特性。

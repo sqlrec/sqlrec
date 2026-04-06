@@ -1,23 +1,23 @@
-# SqlRec
-一个支持使用SQL进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SqlRec将底层的组件访问、模型训练、推理等流程使用SQL封装，上层推荐业务逻辑仅使用SQL进行描述即可。
+# SQLRec
+一个支持使用SQL进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SQLRec将底层的组件访问、模型训练、推理等流程使用SQL封装，上层推荐业务逻辑仅使用SQL进行描述即可。
 
 ![system_architecture](docs/public/sqlrec_arch.png)
 
 sqlRec有以下特点：
-- 云原生，自带基于minikube的部署脚本，可以一键部署SqlRec系统和相关的依赖服务
+- 云原生，自带基于minikube的部署脚本，可以一键部署SQLRec系统和相关的依赖服务
 - 扩展了SQL语法，让使用SQL描述推荐系统业务逻辑变得可能
 - 基于calcite实现了一个高效的SQL执行引擎，可以满足推荐系统的实时性要求
 - 基于已有的大数据生态，接入简单
 - 易于扩展，可以自定义UDF、Table类型、Model类型
 
-详细的资料参考[SqlRec用户手册](https://sqlrec.github.io/sqlrec)。
+详细的资料参考[SQLRec用户手册](https://sqlrec.github.io/sqlrec)。
 
 ## 快速开始
 
 ### 服务部署
-SqlRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
+SQLRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
 
-按下述命令部署SqlRec系统：
+按下述命令部署SQLRec系统：
 ```bash
 # clone sqlrec repository
 git clone https://github.com/sqlrec/sqlrec.git
@@ -44,15 +44,50 @@ cd ..
 bash ./bin/beeline.sh
 ```
 注意：
-- 上述基于minikube的部署方案仅用于测试，生产环境需要先部署可靠的大数据基础设施，然后参考deploy下的脚本初始化数据库、部署SqlRec deployment
+- 上述基于minikube的部署方案仅用于测试，生产环境需要先部署可靠的大数据基础设施，然后参考deploy下的脚本初始化数据库、部署SQLRec deployment
 - 如果需要重新部署，可以先通过minikube delete删除集群
 - 有一些组件没有默认部署，比如kyuubi、jupyter等，如果需要，可以在deploy目录执行对应的部署脚本，比如`bash ./kyuubi/deploy.sh`
 - 可以在env.sh自定义密码、网络端口等参数
 
-### SQL开发
-执行`bash ./bin/beeline.sh`命令连接SqlRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
+### 连接SQLRec服务
 
-1.初始化数据表，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述节点的ip地址
+#### 使用beeline
+SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
+```bash
+bash ./bin/beeline.sh
+```
+
+#### 使用python
+可以在Jupyter Notebook中使用python连接SQLRec服务，并使用python工具分析推荐数据，参考下述代码：
+- 使用deploy目录的脚本部署Jupyter
+```bash
+cd deploy
+bash ./jupyter/deploy.sh
+# wait pod ready
+```
+- 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30280`，使用env.sh中的账号密码登录
+- 新建python3 notebook
+- 安装依赖
+```bash
+!pip install pandas --user
+!pip install pyhive --user
+!pip install sasl --user
+!pip install thrift --user
+!pip install thrift-sasl --user
+```
+- 连接SQLRec服务，运行sql语句
+```python
+from pyhive import hive
+import pandas as pd
+
+conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
+pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
+```
+
+### SQL开发
+执行`bash ./bin/beeline.sh`命令连接SQLRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
+
+1.初始化数据表，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述代码的ip地址
 ```sql
 SET table.sql-dialect = default;
 
@@ -275,7 +310,7 @@ bash benchmark.sh
 默认的测试配置如下：
 - 10W用户、10W物品数据
 - 推荐流程包含4路召回：全局高热、用户兴趣类目高热、itemcf、向量检索（8维，user embedding固定），以及曝光去重、类目打散
-- 使用10并发测试单个SqlRec实例
+- 使用10并发测试单个SQLRec实例
 
 在AMD Ryzen 5600H、32GB DDR4内存机器上测试结果如下：
 ```

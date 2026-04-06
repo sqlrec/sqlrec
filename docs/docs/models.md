@@ -651,10 +651,12 @@ public class MyModel implements ModelController {
 }
 ```
 
-3. **注册模型控制器**
+3. **注册模型控制器（SPI方式）**
 
-```java
-ModelControllerRegistry.register(new MyModel());
+在 `src/main/resources/META-INF/services/` 目录下创建文件 `com.sqlrec.common.model.ModelController`，文件内容为实现类的全限定名：
+
+```
+com.example.MyModel
 ```
 
 ### 使用自定义模型
