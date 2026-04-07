@@ -1,6 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.utils.MergeUtils;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;

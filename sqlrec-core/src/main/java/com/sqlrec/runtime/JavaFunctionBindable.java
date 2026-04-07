@@ -1,9 +1,10 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.runtime.ConfigContext;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.Const;
+import com.sqlrec.utils.Executor;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -105,6 +106,8 @@ public class JavaFunctionBindable extends BindableInterface {
                 inputParamIndex++;
             } else if (paramType.equals(ExecuteContext.class)) {
                 paramList.add(context);
+            } else if (paramType.equals(ConfigContext.class)) {
+                paramList.add(new ConfigContextImpl());
             } else {
                 throw new RuntimeException("input " + inputParamIndex + " must be cache table, char string literal or variable");
             }
@@ -116,7 +119,7 @@ public class JavaFunctionBindable extends BindableInterface {
 
         try {
             if (isAsync) {
-                Const.executorService.submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
+                Executor.getExecutorService().submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
                 return null;
             } else {
                 return evalMethod.invoke(tableFunction, paramList.toArray());

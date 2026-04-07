@@ -1,11 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.entity.SqlApi;
-import com.sqlrec.entity.SqlFunction;
-import com.sqlrec.entity.Model;
-import com.sqlrec.entity.Checkpoint;
-import com.sqlrec.entity.Service;
+import com.sqlrec.entity.*;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -54,7 +50,7 @@ public class DbUtils {
         return new SqlSessionFactoryBuilder().build(configuration);
     }
 
-    private static  <T> T execute(Function<DbMapper, T> operation) {
+    private static <T> T execute(Function<DbMapper, T> operation) {
         try (SqlSession sqlSession = getSqlSessionFactory().openSession()) {
             return operation.apply(sqlSession.getMapper(DbMapper.class));
         }

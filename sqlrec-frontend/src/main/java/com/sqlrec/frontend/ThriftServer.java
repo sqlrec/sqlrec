@@ -19,15 +19,24 @@ public class ThriftServer {
         FunctionUpdater.initFunctionUpdateService();
 
         TServerSocket serverTransport = new TServerSocket(SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
+        TCLIServiceImpl serviceImpl = new TCLIServiceImpl();
+        
         try {
             logger.info("Thrift server is running on port {}", SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
             TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
             tArgs.protocolFactory(new TBinaryProtocol.Factory());
 
-            TProcessor tprocessor = new TCLIService.Processor<TCLIService.Iface>(new TCLIServiceImpl());
+            TProcessor tprocessor = new TCLIService.Processor<TCLIService.Iface>(serviceImpl);
             tArgs.processor(tprocessor);
 
             TThreadPoolServer server = new TThreadPoolServer(tArgs);
+            
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                logger.info("Shutting down ThriftServer...");
+                server.stop();
+                serviceImpl.stop();
+            }));
+
             server.serve();
         } finally {
             if (serverTransport != null) {

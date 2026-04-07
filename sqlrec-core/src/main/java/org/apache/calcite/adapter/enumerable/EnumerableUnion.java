@@ -16,8 +16,7 @@
  */
 package org.apache.calcite.adapter.enumerable;
 
-import com.sqlrec.utils.MergeUtils;
-import org.apache.calcite.linq4j.Enumerable;
+import com.sqlrec.common.utils.MergeUtils;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;

@@ -2,8 +2,8 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.runtime.ConfigContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CallServiceWithQVFunction {
-    public CacheTable eval(ExecuteContext context, String serviceName, CacheTable query, CacheTable value) {
+    public CacheTable eval(ConfigContext context, String serviceName, CacheTable query, CacheTable value) {
         ServiceConfig serviceConfig = context.getServiceConfig(serviceName);
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");
@@ -26,12 +26,12 @@ public class CallServiceWithQVFunction {
             throw new RuntimeException("Service " + serviceName + " url is empty");
         }
         ModelController controller = context.getModelController(serviceConfig.getModelConfig());
-        if (controller == null){
-            throw new RuntimeException("model controller not exist for " +serviceName);
+        if (controller == null) {
+            throw new RuntimeException("model controller not exist for " + serviceName);
         }
-        
+
         List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
-        
+
         Enumerable<Object[]> queryEnumerable = query.scan(null);
         List<Object[]> queryData = new ArrayList<>();
         if (queryEnumerable != null) {
@@ -44,7 +44,7 @@ public class CallServiceWithQVFunction {
         }
 
         Enumerable<Object[]> valueEnumerable = value.scan(null);
-        if (valueEnumerable == null || valueEnumerable.count() == 0 ) {
+        if (valueEnumerable == null || valueEnumerable.count() == 0) {
             List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(value.getDataFields(), modelOutputFields);
             return new CacheTable("output", Linq4j.asEnumerable(new ArrayList<>()), newDataFields);
         }
@@ -72,14 +72,14 @@ public class CallServiceWithQVFunction {
                 valueFields.add(field);
             }
         }
-        
-        String jsonData = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields, 
-                                                    query.getDataFields(), value.getDataFields());
-        
+
+        String jsonData = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields,
+                query.getDataFields(), value.getDataFields());
+
         Map<String, Object> predictions = CallServiceFunction.callPredictionService(serviceConfig.getUrl(), jsonData);
-        
+
         List<Object[]> newData = CallServiceFunction.mergePredictions(valueData, predictions, modelOutputFields);
-        
+
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(value.getDataFields(), modelOutputFields);
 
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);

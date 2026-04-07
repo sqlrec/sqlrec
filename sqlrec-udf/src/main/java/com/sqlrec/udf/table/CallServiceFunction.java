@@ -2,8 +2,8 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.runtime.ConfigContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
@@ -26,7 +26,7 @@ public class CallServiceFunction {
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
 
-    public CacheTable eval(ExecuteContext context, String serviceName, CacheTable input) {
+    public CacheTable eval(ConfigContext context, String serviceName, CacheTable input) {
         ServiceConfig serviceConfig = context.getServiceConfig(serviceName);
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");
@@ -35,14 +35,14 @@ public class CallServiceFunction {
             throw new RuntimeException("Service " + serviceName + " url is empty");
         }
         ModelController controller = context.getModelController(serviceConfig.getModelConfig());
-        if (controller == null){
-            throw new RuntimeException("model controller not exist for " +serviceName);
+        if (controller == null) {
+            throw new RuntimeException("model controller not exist for " + serviceName);
         }
         List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(input.getDataFields(), modelOutputFields);
 
         Enumerable<Object[]> enumerable = input.scan(null);
-        if (enumerable == null || enumerable.count() == 0 ) {
+        if (enumerable == null || enumerable.count() == 0) {
             return new CacheTable("output", Linq4j.asEnumerable(new ArrayList<>()), newDataFields);
         }
 
@@ -53,9 +53,9 @@ public class CallServiceFunction {
 
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
         String jsonData = JsonUtils.toJsonArray(inputData, inputFields, input.getDataFields());
-        
+
         Map<String, Object> predictions = callPredictionService(serviceConfig.getUrl(), jsonData);
-        
+
         List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
 
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
@@ -64,10 +64,10 @@ public class CallServiceFunction {
     public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
         try {
             RequestBody body = RequestBody.create(
-                    jsonData, 
+                    jsonData,
                     MediaType.parse("application/json; charset=utf-8")
             );
-            
+
             Request request = new Request.Builder()
                     .url(serviceUrl)
                     .post(body)
@@ -89,12 +89,12 @@ public class CallServiceFunction {
 
     public static List<Object[]> mergePredictions(List<Object[]> inputData, Map<String, Object> predictions, List<FieldSchema> outputFields) {
         List<Object[]> newData = new ArrayList<>();
-        
+
         for (int i = 0; i < inputData.size(); i++) {
             Object[] inputRow = inputData.get(i);
             Object[] newRow = new Object[inputRow.length + outputFields.size()];
             System.arraycopy(inputRow, 0, newRow, 0, inputRow.length);
-            
+
             for (int j = 0; j < outputFields.size(); j++) {
                 FieldSchema field = outputFields.get(j);
                 Object prediction = predictions.get(field.getName());
@@ -107,10 +107,10 @@ public class CallServiceFunction {
                     newRow[inputRow.length + j] = prediction;
                 }
             }
-            
+
             newData.add(newRow);
         }
-        
+
         return newData;
     }
 }

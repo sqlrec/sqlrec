@@ -148,4 +148,20 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
+
+    public static final ConfigOption<Long> SESSION_CHECK_INTERVAL = new ConfigOption<>(
+            "SESSION_CHECK_INTERVAL",
+            300000L,
+            "session check interval in milliseconds",
+            null,
+            Long.class
+    );
+
+    public static final ConfigOption<Long> SESSION_IDLE_TIMEOUT = new ConfigOption<>(
+            "SESSION_IDLE_TIMEOUT",
+            1800000L,
+            "session idle timeout in milliseconds",
+            null,
+            Long.class
+    );
 }

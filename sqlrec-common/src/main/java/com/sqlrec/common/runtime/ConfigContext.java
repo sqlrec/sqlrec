@@ -4,8 +4,8 @@ import com.sqlrec.common.model.ModelConfig;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
 
-public interface ExecuteContext {
-    String getVariable(String key);
+public interface ConfigContext {
+    ServiceConfig getServiceConfig(String serviceName);
 
-    void setVariable(String key, String value);
+    ModelController getModelController(ModelConfig modelConfig);
 }

@@ -29,7 +29,7 @@ public class HadoopUtils {
     }
 
     public static void deletePath(String hdfsPath) {
-        if (hdfsPath == null || StringUtils.containsWhitespace(hdfsPath)) {
+        if (StringUtils.isEmpty(hdfsPath) || StringUtils.containsWhitespace(hdfsPath)) {
             throw new IllegalArgumentException("hdfsPath cannot be blank");
         }
 

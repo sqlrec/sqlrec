@@ -1,10 +1,6 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.entity.SqlApi;
-import com.sqlrec.entity.SqlFunction;
-import com.sqlrec.entity.Model;
-import com.sqlrec.entity.Checkpoint;
-import com.sqlrec.entity.Service;
+import com.sqlrec.entity.*;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;

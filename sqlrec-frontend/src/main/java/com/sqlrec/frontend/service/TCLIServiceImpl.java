@@ -4,7 +4,15 @@ import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 
 public class TCLIServiceImpl implements TCLIService.Iface {
-    private SessionManager sessionManager = new SessionManager();
+    private final SessionManager sessionManager = new SessionManager();
+
+    public TCLIServiceImpl() {
+        sessionManager.startTimeoutChecker();
+    }
+
+    public void stop() {
+        sessionManager.stopTimeoutChecker();
+    }
 
     @Override
     public TOpenSessionResp OpenSession(TOpenSessionReq tOpenSessionReq) throws TException {

@@ -1,4 +1,4 @@
-package com.sqlrec.utils;
+package com.sqlrec.common.utils;
 
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -8,16 +8,16 @@ import java.util.Iterator;
 import java.util.List;
 
 public class MergeUtils {
-    public static <TSource> List<TSource> snakeMerge(Iterable<TSource>... sources) {
-        List<Iterator<TSource>> iterators = new ArrayList<>();
-        for (Iterable<TSource> source : sources) {
+    public static <T> List<T> snakeMerge(Iterable<T>... sources) {
+        List<Iterator<T>> iterators = new ArrayList<>();
+        for (Iterable<T> source : sources) {
             iterators.add(source.iterator());
         }
 
-        List<TSource> merged = new ArrayList<>();
+        List<T> merged = new ArrayList<>();
         while (true) {
             boolean allEmpty = true;
-            for (Iterator<TSource> iterator : iterators) {
+            for (Iterator<T> iterator : iterators) {
                 if (iterator.hasNext()) {
                     merged.add(iterator.next());
                     allEmpty = false;
@@ -31,8 +31,8 @@ public class MergeUtils {
         return merged;
     }
 
-    public static <TSource> Enumerable<TSource> snakeMergeEnumerable(Iterable<TSource>... sources) {
-        List<TSource> merged = snakeMerge(sources);
+    public static <T> Enumerable<T> snakeMergeEnumerable(Iterable<T>... sources) {
+        List<T> merged = snakeMerge(sources);
         return Linq4j.asEnumerable(merged);
     }
 }

@@ -1,9 +1,9 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.utils.Const;
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.utils.Executor;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -88,7 +88,7 @@ public class SqlFunctionBindable extends BindableInterface {
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
                 CompletableFuture<Object> bindFuture = CompletableFuture.supplyAsync(
-                        () -> bindable.bind(schema, context), Const.executorService
+                        () -> bindable.bind(schema, context), Executor.getExecutorService()
                 );
                 bindFutures.put(i, bindFuture);
             } else {
@@ -100,7 +100,7 @@ public class SqlFunctionBindable extends BindableInterface {
                         dependentBindFutures.toArray(new CompletableFuture[0])
                 );
                 CompletableFuture<Object> bindFuture = dependentBindFuturesAll.thenApplyAsync(
-                        (v) -> bindable.bind(schema, context), Const.executorService
+                        (v) -> bindable.bind(schema, context), Executor.getExecutorService()
                 );
                 bindFutures.put(i, bindFuture);
             }
@@ -230,7 +230,7 @@ public class SqlFunctionBindable extends BindableInterface {
 
         if (allDependSqlFunctionMap.containsKey(funName)) {
             throw new Exception("Sql function " + funName + " has circular dependency: " +
-                     allDependSqlFunctionMap.get(funName));
+                    allDependSqlFunctionMap.get(funName));
         }
     }
 

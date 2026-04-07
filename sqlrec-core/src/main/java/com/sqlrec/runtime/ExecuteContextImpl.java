@@ -1,11 +1,6 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.model.ModelConfig;
-import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.model.ModelControllerFactory;
-import com.sqlrec.model.ServiceManager;
 
 import java.util.List;
 import java.util.Map;
@@ -52,16 +47,6 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     public List<String> getFunNameStack() {
         return funNameStack;
-    }
-
-    @Override
-    public ServiceConfig getServiceConfig(String serviceName) {
-        return ServiceManager.getServiceConfig(serviceName);
-    }
-
-    @Override
-    public ModelController getModelController(ModelConfig modelConfig) {
-        return ModelControllerFactory.getModelController(modelConfig);
     }
 
     @Override
