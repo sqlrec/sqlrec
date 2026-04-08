@@ -40,7 +40,7 @@ public class SqlProcessorTest {
         });
 
         HmsSchema.setGlobalSchema(schema);
-        JavaFunctionUtils.registerTableFunction("default", "fun1", Integer.TYPE);  // avoid find function in hms
+        JavaFunctionUtils.setSkipHmsQuery(true);
 
         testSqlFunctionCompile(schema);
 

@@ -15,11 +15,20 @@ import java.util.concurrent.TimeUnit;
 
 public class JavaFunctionUtils {
     private static final Logger log = LoggerFactory.getLogger(JavaFunctionUtils.class);
+    private static volatile boolean skipHmsQuery = false;
     private static Map<String, Class<?>> javaFunctionClassMap = new ConcurrentHashMap<>();
     private static Map<String, Long> functionUpdateTime = new ConcurrentHashMap<>();
     private static Cache<String, String> notExistCache = Caffeine.newBuilder()
             .expireAfterWrite(SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(), TimeUnit.SECONDS)
             .build();
+
+    public static void setSkipHmsQuery(boolean skip) {
+        skipHmsQuery = skip;
+    }
+
+    public static boolean isSkipHmsQuery() {
+        return skipHmsQuery;
+    }
 
     public static Object getTableFunction(String db, String funName) throws Exception {
         String mapKey = getMapKey(db, funName);
@@ -30,11 +39,6 @@ public class JavaFunctionUtils {
         if (clazz == null) {
             return null;
         }
-        // for test
-        if (clazz.isPrimitive()) {
-            return null;
-        }
-
         return clazz.getDeclaredConstructor().newInstance();
     }
 
@@ -70,6 +74,9 @@ public class JavaFunctionUtils {
     public static String getJavaFunctionClassName(String db, String funName) throws Exception {
         if (FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.containsKey(funName)) {
             return FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.get(funName);
+        }
+        if (skipHmsQuery) {
+            return null;
         }
         org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
         if (functionObj == null) {

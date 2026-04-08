@@ -5,7 +5,6 @@ import com.sqlrec.common.utils.MergeUtils;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
-import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
@@ -86,18 +85,13 @@ public class KvJoinUtils {
         return Linq4j.asEnumerable(merged);
     }
 
-    private static Object[] copyValues(Object[] leftValue, Object[] rightValue, int leftSize, int rightSize) {
+    public static Object[] copyValues(Object[] leftValue, Object[] rightValue, int leftSize, int rightSize) {
         Object[] copy = new Object[leftSize + rightSize];
         System.arraycopy(leftValue, 0, copy, 0, leftSize);
         if (rightValue != null) {
             System.arraycopy(rightValue, 0, copy, leftSize, rightSize);
         }
         return copy;
-    }
-
-    public static Map.Entry<Integer, Integer> getJoinKeyColIndex(Join join) {
-        RexNode condition = join.getCondition();
-        return getJoinKeyColIndex(condition);
     }
 
     public static Map.Entry<Integer, Integer> getJoinKeyColIndex(RexNode condition) {

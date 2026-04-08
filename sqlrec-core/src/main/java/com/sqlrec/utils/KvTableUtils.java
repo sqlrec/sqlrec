@@ -30,6 +30,13 @@ public class KvTableUtils {
         return table.unwrap(CacheTable.class);
     }
 
+    public static boolean isKvTable(RelOptTable table) {
+        if (table == null) {
+            return false;
+        }
+        return table.unwrap(SqlRecKvTable.class) != null;
+    }
+
     public static RelOptTable getScanTable(RelNode aNode) {
         if (aNode instanceof RelSubset) {
             RelSubset relNode = ((RelSubset) aNode);
@@ -49,12 +56,4 @@ public class KvTableUtils {
 
         return null;
     }
-
-    public static boolean isKvTable(RelOptTable table) {
-        if (table == null) {
-            return false;
-        }
-        return table.unwrap(SqlRecKvTable.class) != null;
-    }
-
 }

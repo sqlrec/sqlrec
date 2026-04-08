@@ -18,9 +18,7 @@ public class TestExceptionIgnore {
         HmsSchema.setGlobalSchema(schema);
 
         JavaFunctionUtils.registerTableFunction("default", "test_fun", TestExceptionIgnore.TestFunction.class);
-        JavaFunctionUtils.registerTableFunction("default", "sql_fun1", Integer.TYPE); // avoid find function in hms
-        JavaFunctionUtils.registerTableFunction("default", "sql_fun2", Integer.TYPE); // avoid find function in hms
-        JavaFunctionUtils.registerTableFunction("default", "sql_fun3", Integer.TYPE); // avoid find function in hms
+        JavaFunctionUtils.setSkipHmsQuery(true);
 
         List<String> sqlFun1 = Arrays.asList(
                 "create sql function sql_fun1",

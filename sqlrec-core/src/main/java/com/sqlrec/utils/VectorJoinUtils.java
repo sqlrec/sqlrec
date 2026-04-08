@@ -95,7 +95,6 @@ public class VectorJoinUtils {
         for (Object[] leftValue : leftValues) {
             Object leftEmbedding = leftValue[leftEmbeddingColIndex];
             List<Float> embedding = DataTransformUtils.convertToFloatVec(leftEmbedding);
-
             List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
                     leftValue,
                     embedding,
@@ -104,11 +103,9 @@ public class VectorJoinUtils {
                     limit,
                     vectorProjectColumns
             );
-
-            if (rightValues == null || rightValues.isEmpty()) {
-            } else {
+            if (rightValues != null) {
                 for (Object[] rightValue : rightValues) {
-                    Object[] joinRow = copyValues(leftValue, rightValue, leftSize, rightSize);
+                    Object[] joinRow = KvJoinUtils.copyValues(leftValue, rightValue, leftSize, rightSize);
                     Object[] projectRow = buildProjectRow(joinRow, projectColumns, projectSize);
                     result.add(projectRow);
                 }
@@ -131,21 +128,12 @@ public class VectorJoinUtils {
         return projectRow;
     }
 
-    private static Object[] copyValues(Object[] leftValue, Object[] rightValue, int leftSize, int rightSize) {
-        Object[] copy = new Object[leftSize + rightSize];
-        System.arraycopy(leftValue, 0, copy, 0, leftSize);
-        if (rightValue != null) {
-            System.arraycopy(rightValue, 0, copy, leftSize, rightSize);
-        }
-        return copy;
-    }
-
     public static VectorJoinConfig extractVectorJoinConfig(
             LogicalSort sort,
             LogicalProject project,
             LogicalFilter filter,
-            LogicalJoin join) {
-
+            LogicalJoin join
+    ) {
         VectorJoinConfig config = new VectorJoinConfig();
 
         if (sort != null && sort.fetch != null && sort.fetch instanceof RexLiteral) {

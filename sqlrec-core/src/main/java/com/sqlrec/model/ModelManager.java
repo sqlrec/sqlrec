@@ -112,7 +112,6 @@ public class ModelManager {
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
-        K8sManager.applyYaml(k8sYaml);
 
         Checkpoint checkpoint = new Checkpoint();
         checkpoint.setModelName(modelTrainConf.getModelName());
@@ -125,7 +124,8 @@ public class ModelManager {
         checkpoint.setCreatedAt(System.currentTimeMillis());
         checkpoint.setUpdatedAt(System.currentTimeMillis());
 
-        DbUtils.upsertCheckpoint(checkpoint);
+        DbUtils.insertCheckpoint(checkpoint);
+        K8sManager.applyYaml(k8sYaml);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         checkpointInfos.add(new CheckpointInfo(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
@@ -181,7 +181,6 @@ public class ModelManager {
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
-        K8sManager.applyYaml(k8sYaml);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
@@ -196,9 +195,11 @@ public class ModelManager {
             checkpoint.setCreatedAt(System.currentTimeMillis());
             checkpoint.setUpdatedAt(System.currentTimeMillis());
 
-            DbUtils.upsertCheckpoint(checkpoint);
+            DbUtils.insertCheckpoint(checkpoint);
             checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
         }
+
+        K8sManager.applyYaml(k8sYaml);
 
         return checkpointInfos;
     }

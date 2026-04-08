@@ -84,6 +84,11 @@ public interface DbMapper {
             "ON CONFLICT (model_name, checkpoint_name) DO UPDATE SET model_ddl = #{modelDdl}, ddl = #{ddl}, yaml = #{yaml}, checkpoint_type = #{checkpointType}, status = #{status}, updated_at = #{updatedAt}")
     void upsertCheckpoint(Checkpoint checkpoint);
 
+    @Insert("INSERT INTO checkpoint " +
+            "(model_name, checkpoint_name, model_ddl, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +
+            "VALUES (#{modelName}, #{checkpointName}, #{modelDdl}, #{ddl}, #{yaml}, #{checkpointType}, #{status}, #{createdAt}, #{updatedAt})")
+    void insertCheckpoint(Checkpoint checkpoint);
+
     @Delete("DELETE FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
     void deleteCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);
 

@@ -28,9 +28,7 @@ public class TestSqlFunction {
         });
 
         HmsSchema.setGlobalSchema(schema);
-        JavaFunctionUtils.registerTableFunction("default", "fun1", Integer.TYPE); // avoid find function in hms
-        JavaFunctionUtils.registerTableFunction("default", "fun2", Integer.TYPE); // avoid find function in hms
-        JavaFunctionUtils.registerTableFunction("default", "fun3", Integer.TYPE); // avoid find function in hms
+        JavaFunctionUtils.setSkipHmsQuery(true);
 
         testSqlFunctionCompile(schema);
 

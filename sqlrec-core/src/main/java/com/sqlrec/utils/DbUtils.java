@@ -141,6 +141,10 @@ public class DbUtils {
         executeVoid(dbMapper -> dbMapper.upsertCheckpoint(checkpoint));
     }
 
+    public static void insertCheckpoint(Checkpoint checkpoint) {
+        executeVoid(dbMapper -> dbMapper.insertCheckpoint(checkpoint));
+    }
+
     public static void deleteCheckpoint(String modelName, String checkpointName) {
         executeVoid(dbMapper -> dbMapper.deleteCheckpoint(modelName, checkpointName));
     }

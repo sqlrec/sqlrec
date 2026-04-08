@@ -100,7 +100,7 @@ public class TestJoin {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        JavaFunctionUtils.registerTableFunction("default", "test_join", Integer.TYPE);  // avoid find function in hms
+        JavaFunctionUtils.setSkipHmsQuery(true);
         List<String> joinFuncSqlList = Arrays.asList(
                 "create or replace sql function test_join",
                 "define input table user_info(id integer)",
