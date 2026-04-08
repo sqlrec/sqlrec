@@ -91,11 +91,7 @@ public class JavaFunctionUtils {
 
     public static long getFunctionUpdateTime(String db, String funName) {
         String mapKey = getMapKey(db, funName);
-        if (functionUpdateTime.containsKey(mapKey)) {
-            return functionUpdateTime.get(mapKey);
-        } else {
-            return 0;
-        }
+        return functionUpdateTime.getOrDefault(mapKey, 0L);
     }
 
     private static String getMapKey(String db, String funName) {

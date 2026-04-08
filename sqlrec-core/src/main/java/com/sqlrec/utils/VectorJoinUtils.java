@@ -93,7 +93,14 @@ public class VectorJoinUtils {
 
         List<Object[]> result = new ArrayList<>();
         for (Object[] leftValue : leftValues) {
-            Object leftEmbedding = leftValue[leftEmbeddingColIndex];
+            if (leftValue == null) {
+                continue;
+            }
+            Object leftEmbedding = leftEmbeddingColIndex >= 0 && leftEmbeddingColIndex < leftValue.length ? 
+                leftValue[leftEmbeddingColIndex] : null;
+            if (leftEmbedding == null) {
+                continue;
+            }
             List<Float> embedding = DataTransformUtils.convertToFloatVec(leftEmbedding);
             List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
                     leftValue,
@@ -137,7 +144,8 @@ public class VectorJoinUtils {
         VectorJoinConfig config = new VectorJoinConfig();
 
         if (sort != null && sort.fetch != null && sort.fetch instanceof RexLiteral) {
-            config.limit = ((RexLiteral) sort.fetch).getValueAs(Integer.class);
+            Integer limitValue = ((RexLiteral) sort.fetch).getValueAs(Integer.class);
+            config.limit = limitValue != null ? limitValue : 0;
         }
 
         RelDataType leftRowType = join.getLeft().getRowType();

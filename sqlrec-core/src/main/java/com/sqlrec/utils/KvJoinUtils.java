@@ -55,6 +55,9 @@ public class KvJoinUtils {
         Set<Object> joinKeys = new HashSet<>();
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
+            if (leftJoinKey == null) {
+                continue;
+            }
             joinKeys.add(leftJoinKey);
         }
 
@@ -67,6 +70,9 @@ public class KvJoinUtils {
         List<List<Object[]>> rowList = new ArrayList<>();
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
+            if (leftJoinKey == null) {
+                continue;
+            }
             List<Object[]> rightValues = stringKeyMap.getOrDefault(leftJoinKey.toString(), new ArrayList<>());
             if (rightValues.isEmpty()) {
                 if (joinType == JoinRelType.LEFT) {

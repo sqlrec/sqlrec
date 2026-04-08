@@ -7,21 +7,26 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class HadoopUtils {
     private static final Logger log = LoggerFactory.getLogger(HadoopUtils.class);
+    private static final long DEFAULT_TIMEOUT_SECONDS = 300;
 
     public static boolean pathExists(String hdfsPath) {
-        if (hdfsPath == null || StringUtils.containsWhitespace(hdfsPath)) {
-            throw new IllegalArgumentException("hdfsPath cannot be blank");
-        }
+        validatePath(hdfsPath);
 
         try {
             ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-test", "-e", hdfsPath);
             pb.redirectErrorStream(true);
             clearJavaToolOptions(pb.environment());
             Process process = pb.start();
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("Check hdfs path exists timeout: path=" + hdfsPath);
+            }
+            int exitCode = process.exitValue();
             return exitCode == 0;
         } catch (Exception e) {
             throw new RuntimeException("Check hdfs path exists failed: path=" + hdfsPath, e);
@@ -29,9 +34,7 @@ public class HadoopUtils {
     }
 
     public static void deletePath(String hdfsPath) {
-        if (StringUtils.isEmpty(hdfsPath) || StringUtils.containsWhitespace(hdfsPath)) {
-            throw new IllegalArgumentException("hdfsPath cannot be blank");
-        }
+        validatePath(hdfsPath);
 
         try {
             ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-rm", "-r", "-f", hdfsPath);
@@ -47,7 +50,12 @@ public class HadoopUtils {
                 }
             }
 
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("Delete hdfs path timeout: path=" + hdfsPath);
+            }
+            int exitCode = process.exitValue();
             if (exitCode != 0) {
                 log.warn("Delete hdfs path failed: path={}, exitCode={}, output={}", hdfsPath, exitCode, output);
                 throw new RuntimeException("Delete hdfs path failed: path=" + hdfsPath + " output=" + output);
@@ -55,6 +63,18 @@ public class HadoopUtils {
             log.info("Delete hdfs path success: path={}", hdfsPath);
         } catch (Exception e) {
             throw new RuntimeException("Delete hdfs path failed: path=" + hdfsPath, e);
+        }
+    }
+
+    private static void validatePath(String hdfsPath) {
+        if (hdfsPath == null || StringUtils.containsWhitespace(hdfsPath)) {
+            throw new IllegalArgumentException("hdfsPath cannot be blank");
+        }
+
+        if (hdfsPath.contains(";") || hdfsPath.contains("|") || hdfsPath.contains("&") ||
+                hdfsPath.contains("`") || hdfsPath.contains("$") || hdfsPath.contains("(") ||
+                hdfsPath.contains(")") || hdfsPath.contains("<") || hdfsPath.contains(">")) {
+            throw new IllegalArgumentException("hdfsPath contains invalid characters: " + hdfsPath);
         }
     }
 

@@ -35,6 +35,13 @@ public class DbUtils {
         dataSource.setUrl(SqlRecConfigs.DB_URL.getValue());
         dataSource.setUsername(SqlRecConfigs.DB_USER.getValue());
         dataSource.setPassword(SqlRecConfigs.DB_PASSWORD.getValue());
+        dataSource.setPoolMaximumActiveConnections(20);
+        dataSource.setPoolMaximumIdleConnections(10);
+        dataSource.setPoolMaximumCheckoutTime(20000);
+        dataSource.setPoolTimeToWait(20000);
+        dataSource.setPoolPingEnabled(true);
+        dataSource.setPoolPingQuery("SELECT 1");
+        dataSource.setPoolPingConnectionsNotUsedFor(3600000);
 
         TransactionFactory transactionFactory = new JdbcTransactionFactory();
         Environment environment = new Environment(
