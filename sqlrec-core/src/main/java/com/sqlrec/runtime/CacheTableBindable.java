@@ -69,7 +69,7 @@ public class CacheTableBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        return true;
+        return bindable.isParallelizable();
     }
 
     @Override

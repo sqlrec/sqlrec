@@ -118,6 +118,11 @@ public class SqlFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
+        for (BindableInterface bindable : bindableList) {
+            if (!bindable.isParallelizable()) {
+                return false;
+            }
+        }
         return true;
     }
 

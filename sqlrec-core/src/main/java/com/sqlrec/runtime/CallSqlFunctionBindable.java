@@ -89,7 +89,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        return true;
+        return sqlFunctionBindable.isParallelizable();
     }
 
     @Override
