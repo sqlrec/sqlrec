@@ -2,7 +2,7 @@ package com.sqlrec.node;
 
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.utils.KvJoinUtils;
-import com.sqlrec.utils.KvTableUtils;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
@@ -75,7 +75,7 @@ public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
 
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
-        RelOptTable rightTable = KvTableUtils.getScanTable(right);
+        RelOptTable rightTable = NodeUtils.getScanTable(right);
         if (rightTable == null || rightTable.unwrap(SqlRecKvTable.class) == null) {
             return super.implement(implementor, pref);
         }

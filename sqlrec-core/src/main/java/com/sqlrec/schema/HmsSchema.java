@@ -3,7 +3,6 @@ package com.sqlrec.schema;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.ObjCache;
@@ -18,14 +17,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchema extends AbstractSchema {
     private static final Logger log = LoggerFactory.getLogger(HmsSchema.class);
     private static CalciteSchema globalSchema;  // for test
 
-    private static Map<String, HmsTableFactory> tableFactories;
     private static Map<String, HmsSchema> schemaMap = new ConcurrentHashMap<>();
     private static ObjCache<List<String>> databaseListCache = new ObjCache<>(
             SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
@@ -102,7 +99,7 @@ public class HmsSchema extends AbstractSchema {
                         continue;
                     }
                 }
-                Table tableFromHmsTable = getTableFromHmsTable(tableObj);
+                Table tableFromHmsTable = TableFactoryUtils.getTableFromHmsTable(tableObj);
                 if (tableFromHmsTable != null) {
                     tableMap.put(table, tableFromHmsTable);
                     tableUpdateTimes.put(table, HiveTableUtils.getTableModificationTime(tableObj));
@@ -113,43 +110,6 @@ public class HmsSchema extends AbstractSchema {
             throw new RuntimeException(e);
         }
         return tableMap;
-    }
-
-    private static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        try {
-            String connector = HiveTableUtils.getTableConnector(tableObj);
-            if (connector == null) {
-                log.warn("Table {} connector {} is null, skip", tableObj.getTableName(), connector);
-                return null;
-            }
-            HmsTableFactory tableFactory = getTableFactory(connector);
-            if (tableFactory != null) {
-                return tableFactory.getTableFromHmsTable(tableObj);
-            } else {
-                log.warn("Table {} connector {} factory is null, skip", tableObj.getTableName(), connector);
-            }
-        } catch (Exception e) {
-            log.error("Error while getting table from hms table {}", tableObj.getTableName(), e);
-        }
-        return null;
-    }
-
-    public static HmsTableFactory getTableFactory(String connector) {
-        if (tableFactories == null) {
-            getTableFactorieMap();
-        }
-        return tableFactories.getOrDefault(connector, null);
-    }
-
-    public static synchronized Map<String, HmsTableFactory> getTableFactorieMap() {
-        if (tableFactories == null) {
-            tableFactories = new ConcurrentHashMap<>();
-            ServiceLoader<HmsTableFactory> serviceLoader = ServiceLoader.load(HmsTableFactory.class);
-            for (HmsTableFactory tableFactory : serviceLoader) {
-                tableFactories.put(tableFactory.getConnectorName(), tableFactory);
-            }
-        }
-        return tableFactories;
     }
 
     @Override
@@ -173,7 +133,7 @@ public class HmsSchema extends AbstractSchema {
             }
         } catch (Exception e) {
             log.error("Error while computing function map for schema {}", databaseName, e);
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to compute function map for schema: " + databaseName, e);
         }
         return functionMap;
     }

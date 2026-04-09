@@ -2,7 +2,7 @@ package com.sqlrec.rules;
 
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.node.SqlrecEnumerableVectorJoin;
-import com.sqlrec.utils.KvTableUtils;
+import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.VectorJoinUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -41,15 +41,15 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
             join = call.rel(2);
         }
 
-        if (!VectorJoinUtils.hasIpFunction(project)) {
+        if (!NodeUtils.hasIpFunction(project)) {
             return;
         }
 
-        if (!VectorJoinUtils.isTrueCondition(join)) {
+        if (!NodeUtils.isTrueCondition(join)) {
             return;
         }
 
-        RelOptTable rightTable = KvTableUtils.getScanTable(join.getRight());
+        RelOptTable rightTable = NodeUtils.getScanTable(join.getRight());
         if (rightTable == null || rightTable.unwrap(SqlRecVectorTable.class) == null) {
             return;
         }

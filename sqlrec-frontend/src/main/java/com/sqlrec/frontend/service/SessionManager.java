@@ -14,13 +14,8 @@ import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class SessionManager {
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
@@ -30,53 +25,18 @@ public class SessionManager {
     private final Map<THandleIdentifier, SqlProcessor> sqlProcessorMap = new ConcurrentHashMap<>();
 
     private final Map<THandleIdentifier, Long> sessionLastAccessTime = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService timeoutChecker = Executors.newScheduledThreadPool(1);
+    private final SessionTimeoutChecker timeoutChecker;
+
+    public SessionManager() {
+        this.timeoutChecker = new SessionTimeoutChecker(sessionLastAccessTime, this::cleanupSession);
+    }
 
     public void startTimeoutChecker() {
-        long checkInterval = SqlRecConfigs.SESSION_CHECK_INTERVAL.getValue();
-        long sessionTimeout = SqlRecConfigs.SESSION_IDLE_TIMEOUT.getValue();
-
-        logger.info("Starting session timeout checker, checkInterval: {}ms, sessionTimeout: {}ms",
-                checkInterval, sessionTimeout);
-        if (checkInterval <= 0) {
-            logger.info("Session timeout checker is disabled (check interval <= 0)");
-            return;
-        }
-        if (sessionTimeout <= 0) {
-            logger.info("Session timeout checker is disabled (session timeout <= 0)");
-            return;
-        }
-
-        timeoutChecker.scheduleAtFixedRate(() -> {
-            try {
-                long now = System.currentTimeMillis();
-                List<THandleIdentifier> expiredSessions = new ArrayList<>();
-                sessionLastAccessTime.forEach((sessionId, lastAccess) -> {
-                    if (now - lastAccess > sessionTimeout) {
-                        expiredSessions.add(sessionId);
-                    }
-                });
-                for (THandleIdentifier sessionId : expiredSessions) {
-                    logger.warn("Session timeout, cleaning up: {}", sessionId);
-                    cleanupSession(sessionId);
-                }
-            } catch (Exception e) {
-                logger.error("Error in timeout checker", e);
-            }
-        }, checkInterval, checkInterval, TimeUnit.MILLISECONDS);
+        timeoutChecker.start();
     }
 
     public void stopTimeoutChecker() {
-        logger.info("Stopping session timeout checker");
-        timeoutChecker.shutdown();
-        try {
-            if (!timeoutChecker.awaitTermination(5, TimeUnit.SECONDS)) {
-                timeoutChecker.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            timeoutChecker.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+        timeoutChecker.stop();
     }
 
     private void cleanupSession(THandleIdentifier sessionId) {

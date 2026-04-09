@@ -1,6 +1,6 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.utils.KvTableUtils;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
@@ -29,7 +29,7 @@ public class SqlRecFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule 
         RelNode left = join.getLeft();
         RelNode right = join.getRight();
 
-        if (KvTableUtils.isScanKVTable(right) && !isFilterOnLeftTable(filter, left)) {
+        if (NodeUtils.isScanKVTable(right) && !isFilterOnLeftTable(filter, left)) {
             return;
         }
 

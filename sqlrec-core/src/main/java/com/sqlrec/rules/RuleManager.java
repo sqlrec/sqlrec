@@ -1,6 +1,6 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.TableFactoryUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.interpreter.Bindables;
@@ -69,7 +69,7 @@ public class RuleManager {
     }
 
     private static void addTableFactoryRules(VolcanoPlanner planner) {
-        HmsSchema.getTableFactorieMap()
+        TableFactoryUtils.getTableFactoryMap()
                 .values()
                 .forEach(tableFactory -> tableFactory.getRules().forEach(planner::addRule));
     }

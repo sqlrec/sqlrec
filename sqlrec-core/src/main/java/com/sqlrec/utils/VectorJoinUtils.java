@@ -16,14 +16,11 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlKind;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 public class VectorJoinUtils {
-
     public static Enumerable vectorJoin(
             Enumerable left,
             SqlRecVectorTable rightTable,
@@ -96,8 +93,8 @@ public class VectorJoinUtils {
             if (leftValue == null) {
                 continue;
             }
-            Object leftEmbedding = leftEmbeddingColIndex >= 0 && leftEmbeddingColIndex < leftValue.length ? 
-                leftValue[leftEmbeddingColIndex] : null;
+            Object leftEmbedding = leftEmbeddingColIndex >= 0 && leftEmbeddingColIndex < leftValue.length ?
+                    leftValue[leftEmbeddingColIndex] : null;
             if (leftEmbedding == null) {
                 continue;
             }
@@ -203,42 +200,6 @@ public class VectorJoinUtils {
         }
 
         return config;
-    }
-
-    public static boolean hasIpFunction(LogicalProject project) {
-        for (RexNode node : project.getProjects()) {
-            if (node instanceof RexCall) {
-                RexCall call = (RexCall) node;
-                if (call.getOperator().getName().equalsIgnoreCase("ip")) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public static boolean isTrueCondition(LogicalJoin join) {
-        RexNode condition = join.getCondition();
-        if (condition instanceof RexLiteral) {
-            RexLiteral literal = (RexLiteral) condition;
-            if (literal.getValue() instanceof Boolean) {
-                return (Boolean) literal.getValue();
-            }
-            if (literal.getValue() instanceof BigDecimal) {
-                return ((BigDecimal) literal.getValue()).compareTo(BigDecimal.ONE) == 0;
-            }
-        }
-        if (condition instanceof RexCall) {
-            RexCall call = (RexCall) condition;
-            if (call.getOperator().getKind() == SqlKind.EQUALS) {
-                RexNode left = call.getOperands().get(0);
-                RexNode right = call.getOperands().get(1);
-                if (left instanceof RexLiteral && right instanceof RexLiteral) {
-                    return left.equals(right);
-                }
-            }
-        }
-        return false;
     }
 
     public static class VectorJoinConfig {

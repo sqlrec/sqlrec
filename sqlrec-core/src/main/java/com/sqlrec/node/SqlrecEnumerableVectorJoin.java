@@ -2,7 +2,7 @@ package com.sqlrec.node;
 
 import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.schema.SqlRecVectorTable;
-import com.sqlrec.utils.KvTableUtils;
+import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.VectorJoinUtils;
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -166,7 +166,7 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
 
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
-        RelOptTable rightTable = KvTableUtils.getScanTable(right);
+        RelOptTable rightTable = NodeUtils.getScanTable(right);
         if (rightTable == null || rightTable.unwrap(SqlRecVectorTable.class) == null) {
             throw new IllegalArgumentException("Right table must be SqlRecVectorTable");
         }

@@ -1,9 +1,7 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.common.schema.SqlRecKvTable;
-import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.node.SqlrecEnumerableKvJoin;
-import com.sqlrec.utils.KvJoinUtils;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
@@ -28,7 +26,7 @@ public class SqlRecKvJoinRule extends RelRule<SqlRecKvJoinRule.Config> {
 
         RexNode condition = join.getCondition();
         try {
-            KvJoinUtils.getJoinKeyColIndex(condition);
+            NodeUtils.getJoinKeyColIndex(condition);
         } catch (Exception e) {
             return;
         }

@@ -2,6 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.runtime.ExecuteContext;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,12 +13,12 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
-        funNameStack = new java.util.ArrayList<>();
+        funNameStack = new ArrayList<>();
     }
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
         variableMap = parentContext.variableMap;
-        funNameStack = new java.util.ArrayList<>(parentContext.funNameStack);
+        funNameStack = new ArrayList<>(parentContext.funNameStack);
     }
 
     public String getVariable(String key) {

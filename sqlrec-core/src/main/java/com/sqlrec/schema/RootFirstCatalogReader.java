@@ -10,6 +10,7 @@ import org.apache.calcite.sql.validate.SqlNameMatchers;
 import java.util.List;
 import java.util.Objects;
 
+// make cache table has higher priority than table in hms
 public class RootFirstCatalogReader extends CalciteCatalogReader {
     public RootFirstCatalogReader(CalciteSchema rootSchema,
                                 List<String> defaultSchema, RelDataTypeFactory typeFactory, CalciteConnectionConfig config) {
