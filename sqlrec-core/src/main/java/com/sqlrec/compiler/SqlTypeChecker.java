@@ -81,7 +81,7 @@ public class SqlTypeChecker {
         for (String tableName : tableNames) {
             Table table = getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
-                throw new RuntimeException("table " + tableName + " is not fund");
+                throw new RuntimeException("table " + tableName + " is not found");
             }
             if (table instanceof SqlRecKvTable) {
                 return true;
@@ -95,7 +95,7 @@ public class SqlTypeChecker {
         for (String tableName : tableNames) {
             Table table = getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
-                log.error("table {} is not fund", tableName);
+                log.error("table {} is not found", tableName);
                 return false;
             }
             if (!(table instanceof SqlRecTable)) {

@@ -76,7 +76,6 @@ public class ModelEntityConverter {
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
         modelTrainConf.setId(K8sManager.convertToValidK8sName(modelTrainConf.getModelName() + "-" + modelTrainConf.getCheckpointName()));
         modelTrainConf.setTrainDataPaths(getHivePartitionPaths(sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
-
         return modelTrainConf;
     }
 

@@ -1,8 +1,11 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.ScalarFunction;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.ScalarFunctionImpl;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlLiteral;
@@ -47,7 +50,7 @@ public class SchemaUtils {
             return null;
         }
         if ((value.startsWith("'") && value.endsWith("'")) ||
-            (value.startsWith("\"") && value.endsWith("\""))) {
+                (value.startsWith("\"") && value.endsWith("\""))) {
             return value.substring(1, value.length() - 1);
         }
         return value;
@@ -108,5 +111,30 @@ public class SchemaUtils {
         );
         propertyList.add(option);
         return propertyList;
+    }
+
+    public static List<RelDataTypeField> getDataTypeByLikeTableName(
+            String likeTableName,
+            CalciteSchema schema) {
+        CalciteSchema.TableEntry tableEntry = schema.getTable(likeTableName, false);
+        if (tableEntry == null) {
+            throw new RuntimeException("like table not found: " + likeTableName);
+        }
+        Table table = tableEntry.getTable();
+        if (!(table instanceof CacheTable)) {
+            throw new RuntimeException("like table must be cache table for table function");
+        }
+        return ((CacheTable) table).getDataFields();
+    }
+
+    public static CacheTable getCacheTable(String inputTableName, CalciteSchema schema) {
+        Table table = Objects.requireNonNull(
+                schema.getTable(inputTableName, false),
+                "input table not found: " + inputTableName
+        ).getTable();
+        if (!(table instanceof CacheTable)) {
+            throw new RuntimeException("input table must be cache table for table function");
+        }
+        return (CacheTable) table;
     }
 }

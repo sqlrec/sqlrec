@@ -9,14 +9,16 @@ import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class JavaFunctionBindable extends BindableInterface {
     private String functionName;
@@ -41,7 +43,7 @@ public class JavaFunctionBindable extends BindableInterface {
         this.isAsync = isAsync;
 
         if (!StringUtils.isEmpty(likeTableName)) {
-            returnDataFields = getDataTypeByLikeTableName(likeTableName, schema);
+            returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
         } else {
             if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
                 Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
@@ -53,7 +55,7 @@ public class JavaFunctionBindable extends BindableInterface {
         }
     }
 
-    public Method getEvalMethod(Object tableFunction) {
+    public static Method getEvalMethod(Object tableFunction) {
         Method[] allMethods = tableFunction.getClass().getMethods();
         List<Method> evalMethods = new ArrayList<>();
         for (Method method : allMethods) {
@@ -67,20 +69,6 @@ public class JavaFunctionBindable extends BindableInterface {
         return evalMethods.get(0);
     }
 
-    public static List<RelDataTypeField> getDataTypeByLikeTableName(
-            String likeTableName,
-            CalciteSchema schema) {
-        CalciteSchema.TableEntry tableEntry = schema.getTable(likeTableName, false);
-        if (tableEntry == null) {
-            throw new RuntimeException("like table not found: " + likeTableName);
-        }
-        Table table = tableEntry.getTable();
-        if (!(table instanceof CacheTable)) {
-            throw new RuntimeException("like table must be cache table for table function");
-        }
-        return ((CacheTable) table).getDataFields();
-    }
-
     private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         List<Object> paramList = new ArrayList<>();
@@ -92,7 +80,7 @@ public class JavaFunctionBindable extends BindableInterface {
                 if (!(input instanceof SqlIdentifier)) {
                     throw new RuntimeException("should use cache table as input for " + inputParamIndex);
                 }
-                paramList.add(getCacheTable(((SqlIdentifier) inputTableList.get(inputParamIndex)).getSimple(), schema));
+                paramList.add(SchemaUtils.getCacheTable(((SqlIdentifier) inputTableList.get(inputParamIndex)).getSimple(), schema));
                 inputParamIndex++;
             } else if (paramType.equals(String.class)) {
                 if (input instanceof SqlCharStringLiteral) {
@@ -127,17 +115,6 @@ public class JavaFunctionBindable extends BindableInterface {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private CacheTable getCacheTable(String inputTableName, CalciteSchema schema) {
-        Table table = Objects.requireNonNull(
-                        schema.getTable(inputTableName, false),
-                        "input table not found: " + inputTableName)
-                .getTable();
-        if (!(table instanceof CacheTable)) {
-            throw new RuntimeException("input table must be cache table for table function");
-        }
-        return (CacheTable) table;
     }
 
     @Override

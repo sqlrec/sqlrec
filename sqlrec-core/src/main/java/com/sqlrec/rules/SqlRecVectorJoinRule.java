@@ -44,11 +44,9 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
         if (!NodeUtils.hasIpFunction(project)) {
             return;
         }
-
         if (!NodeUtils.isTrueCondition(join)) {
             return;
         }
-
         RelOptTable rightTable = NodeUtils.getScanTable(join.getRight());
         if (rightTable == null || rightTable.unwrap(SqlRecVectorTable.class) == null) {
             return;

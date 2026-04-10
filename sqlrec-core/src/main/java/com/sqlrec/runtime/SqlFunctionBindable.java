@@ -4,11 +4,11 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.utils.Executor;
+import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.schema.Table;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -68,17 +68,8 @@ public class SqlFunctionBindable extends BindableInterface {
         if (returnTableName == null) {
             return null;
         }
-
-        CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
-        if (tableEntry == null) {
-            throw new RuntimeException("function return table not exist");
-        }
-        Table table = tableEntry.getTable();
-        if (table instanceof CacheTable) {
-            return ((CacheTable) table).scan(null);
-        } else {
-            throw new RuntimeException("function not return cache table");
-        }
+        CacheTable cacheTable = SchemaUtils.getCacheTable(returnTableName, schema);
+        return cacheTable.scan(null);
     }
 
     private void execInParallel(CalciteSchema schema, ExecuteContext context) {
@@ -244,7 +235,8 @@ public class SqlFunctionBindable extends BindableInterface {
                 bindableList,
                 bindableDependency,
                 sortedBindableList,
-                returnTableName);
+                returnTableName
+        );
         for (int i = 0; i < bindableList.size(); i++) {
             BindableInterface bindable = bindableList.get(i);
             if (bindable instanceof CacheTableBindable) {

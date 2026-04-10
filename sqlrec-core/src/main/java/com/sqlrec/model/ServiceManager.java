@@ -36,8 +36,7 @@ public class ServiceManager {
                                 }
                                 return ModelEntityConverter.convertToServiceConfig(service);
                             } catch (Exception e) {
-                                log.error("Failed to get service config for service: {}", name, e);
-                                return null;
+                                throw new RuntimeException("Failed to get service config for service: " + name, e);
                             }
                         }
                 )
@@ -55,8 +54,7 @@ public class ServiceManager {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return true;
         }
-
-        return K8sManager.isDeploymentReady(k8sYaml);
+        return K8sManager.isDeploymentReadyFromYaml(k8sYaml);
     }
 
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
@@ -66,8 +64,6 @@ public class ServiceManager {
         if (existingService != null) {
             if (sqlCreateService.isIfNotExists()) {
                 return serviceConfig.getServiceName();
-            } else {
-                throw new IllegalArgumentException("service already exists: " + serviceConfig.getServiceName());
             }
         }
 
@@ -96,7 +92,6 @@ public class ServiceManager {
         String k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
         if (!StringUtils.isEmpty(k8sYaml)) {
             k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
-            K8sManager.applyYaml(k8sYaml);
         }
 
         Service service = new Service();
@@ -111,7 +106,8 @@ public class ServiceManager {
         service.setUpdatedAt(System.currentTimeMillis());
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
-        DbUtils.insertService(service);
+        DbUtils.upsertService(service);
+        K8sManager.applyYaml(k8sYaml);
 
         return serviceConfig.getServiceName();
     }

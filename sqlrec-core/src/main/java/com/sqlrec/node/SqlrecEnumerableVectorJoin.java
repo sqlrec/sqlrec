@@ -11,11 +11,7 @@ import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.prepare.CalciteCatalogReader;
-import org.apache.calcite.rel.AbstractRelNode;
-import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelCollationTraitDef;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelWriter;
+import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -92,7 +88,7 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
         RelTraitSet traitSet = left.getTraitSet()
                 .replace(EnumerableConvention.INSTANCE)
                 .replaceIf(RelCollationTraitDef.INSTANCE, () -> collation);
-        
+
         return new SqlrecEnumerableVectorJoin(
                 left.getCluster(),
                 traitSet,
@@ -207,16 +203,18 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
         return implementor.result(
                 physType,
                 builder.append(
-                                Expressions.call(VectorJoinUtils.class,
-                                        "vectorJoin",
-                                        leftExpression,
-                                        rightExpression,
-                                        stashedFilterCondition,
-                                        Expressions.constant(leftEmbeddingColIndex),
-                                        Expressions.constant(rightEmbeddingColName),
-                                        Expressions.constant(limit),
-                                        Expressions.constant(projectList)))
-                        .toBlock());
+                        Expressions.call(
+                                VectorJoinUtils.class,
+                                "vectorJoin",
+                                leftExpression,
+                                rightExpression,
+                                stashedFilterCondition,
+                                Expressions.constant(leftEmbeddingColIndex),
+                                Expressions.constant(rightEmbeddingColName),
+                                Expressions.constant(limit),
+                                Expressions.constant(projectList))
+                ).toBlock()
+        );
     }
 
     public RelNode getLeft() {

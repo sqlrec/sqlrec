@@ -27,16 +27,6 @@ public class FilterableTableScan extends EnumerableTableScan {
     public final ImmutableList<RexNode> filters;
     public final ImmutableIntList projects;
 
-    /**
-     * Creates an EnumerableTableScan.
-     *
-     * <p>Use {@link #create} unless you know what you are doing.
-     *
-     * @param cluster
-     * @param traitSet
-     * @param table
-     * @param elementType
-     */
     public FilterableTableScan(
             RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, Class elementType,
             ImmutableList<RexNode> filters, ImmutableIntList projects) {

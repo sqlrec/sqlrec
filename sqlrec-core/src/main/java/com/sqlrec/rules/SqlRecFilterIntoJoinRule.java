@@ -32,7 +32,6 @@ public class SqlRecFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule 
         if (NodeUtils.isScanKVTable(right) && !isFilterOnLeftTable(filter, left)) {
             return;
         }
-
         super.onMatch(call);
     }
 

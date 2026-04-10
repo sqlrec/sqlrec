@@ -37,7 +37,6 @@ public class ModelManager {
 
             List<FieldSchema> inputFields = model.getInputFields();
             List<FieldSchema> outputFields = modelController.getOutputFields(model);
-
             if (inputFields != null && outputFields != null) {
                 for (FieldSchema inputField : inputFields) {
                     for (FieldSchema outputField : outputFields) {
@@ -56,11 +55,9 @@ public class ModelManager {
 
     public static ModelConfig createModel(SqlCreateModel sqlCreateModel) {
         String modelName = sqlCreateModel.getModelName().getSimple();
-        boolean ifNotExists = sqlCreateModel.isIfNotExists();
-
         Model existingModel = DbUtils.getModel(modelName);
         if (existingModel != null) {
-            if (ifNotExists) {
+            if (sqlCreateModel.isIfNotExists()) {
                 return null;
             }
             throw new IllegalArgumentException("Model already exists: " + modelName);
@@ -215,7 +212,6 @@ public class ModelManager {
         k8sYaml = K8sManager.injectNamespaceIntoYaml(k8sYaml, namespace);
 
         Map<String, String> envVars = new HashMap<>();
-
         String javaHome = ModelConfigs.JAVA_HOME.getValue();
         if (javaHome != null) {
             envVars.put("JAVA_HOME", javaHome);
@@ -236,9 +232,7 @@ public class ModelManager {
         if (clientDir != null) {
             envVars.put("CLIENT_DIR", clientDir);
         }
-
-        Map<String, String> userEnvVars = parseEnvVars(params);
-        envVars.putAll(userEnvVars);
+        envVars.putAll(parseEnvVars(params));
 
         if (!envVars.isEmpty()) {
             k8sYaml = K8sManager.injectEnvVarsIntoYaml(k8sYaml, envVars);
@@ -366,7 +360,7 @@ public class ModelManager {
                     continue;
                 }
 
-                String jobStatus = K8sManager.checkJobStatus(k8sYaml);
+                String jobStatus = K8sManager.checkJobsStatusFromYaml(k8sYaml);
                 if ("succeeded".equals(jobStatus)) {
                     checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     checkpoint.setUpdatedAt(System.currentTimeMillis());

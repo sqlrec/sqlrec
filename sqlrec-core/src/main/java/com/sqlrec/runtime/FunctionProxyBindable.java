@@ -35,8 +35,7 @@ public class FunctionProxyBindable extends BindableInterface {
         if (StringUtils.isEmpty(likeTableName)) {
             throw new RuntimeException("like table name is empty");
         }
-        returnDataFields = JavaFunctionBindable.getDataTypeByLikeTableName(likeTableName, schema);
-
+        this.returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
         this.inputList = inputList;
         this.funcNameVariable = funcNameVariable;
         this.likeTableName = likeTableName;

@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TableFactoryUtils {
     private static final Logger log = LoggerFactory.getLogger(TableFactoryUtils.class);
-    
+
     private static Map<String, HmsTableFactory> tableFactories;
 
     public static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
@@ -35,7 +35,10 @@ public class TableFactoryUtils {
     }
 
     public static HmsTableFactory getTableFactory(String connector) {
-        return getTableFactoryMap().getOrDefault(connector, null);
+        if (tableFactories == null) {
+            getTableFactoryMap();
+        }
+        return tableFactories.getOrDefault(connector, null);
     }
 
     public static synchronized Map<String, HmsTableFactory> getTableFactoryMap() {

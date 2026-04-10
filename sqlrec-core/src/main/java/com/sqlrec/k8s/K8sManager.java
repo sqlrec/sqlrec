@@ -17,6 +17,18 @@ import java.util.Map;
 
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
+    private static volatile KubernetesClient kubernetesClient;
+
+    private static KubernetesClient getKubernetesClient() {
+        if (kubernetesClient == null) {
+            synchronized (K8sManager.class) {
+                if (kubernetesClient == null) {
+                    kubernetesClient = new KubernetesClientBuilder().build();
+                }
+            }
+        }
+        return kubernetesClient;
+    }
 
     public static String convertToValidK8sName(String name) {
         if (name == null || name.isEmpty()) {
@@ -29,6 +41,11 @@ public class K8sManager {
         validName = validName.trim().replaceAll("^[.-]+|[.-]+$", "");
         validName = validName.replaceAll("[.-]+", "-");
 
+        if (validName.length() > 63) {
+            validName = validName.substring(0, 63);
+            validName = validName.replaceAll("[.-]+$", "");
+        }
+
         return validName;
     }
 
@@ -39,9 +56,9 @@ public class K8sManager {
             return resources;
         }
 
-        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+        try {
             InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes());
-            resources = client.load(inputStream).items();
+            resources = getKubernetesClient().load(inputStream).items();
         } catch (Exception e) {
             log.error("Failed to parse YAML: {}", e.getMessage(), e);
         }
@@ -49,30 +66,25 @@ public class K8sManager {
         return resources;
     }
 
-    public static List<Job> parseK8sYamlAndGetJobs(String yamlContent) {
-        List<Job> jobs = new ArrayList<>();
+    private static <T extends HasMetadata> List<T> parseK8sYamlAndGetResources(String yamlContent, Class<T> resourceType) {
+        List<T> result = new ArrayList<>();
         List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
         for (HasMetadata resource : resources) {
-            if ("Job".equals(resource.getKind())) {
-                jobs.add((Job) resource);
+            if (resourceType.isInstance(resource)) {
+                result.add(resourceType.cast(resource));
             }
         }
 
-        return jobs;
+        return result;
+    }
+
+    public static List<Job> parseK8sYamlAndGetJobs(String yamlContent) {
+        return parseK8sYamlAndGetResources(yamlContent, Job.class);
     }
 
     public static List<Deployment> parseK8sYamlAndGetDeployments(String yamlContent) {
-        List<Deployment> deployments = new ArrayList<>();
-        List<HasMetadata> resources = parseK8sYaml(yamlContent);
-
-        for (HasMetadata resource : resources) {
-            if ("Deployment".equals(resource.getKind())) {
-                deployments.add((Deployment) resource);
-            }
-        }
-
-        return deployments;
+        return parseK8sYamlAndGetResources(yamlContent, Deployment.class);
     }
 
     public static String injectEnvVarsIntoYaml(String yamlContent, Map<String, String> envVars) {
@@ -84,13 +96,13 @@ public class K8sManager {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if ("Job".equals(resource.getKind())) {
+                if (resource instanceof Job) {
                     Job job = (Job) resource;
                     if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
                             job.getSpec().getTemplate().getSpec() != null) {
                         injectEnvVarsIntoContainers(job.getSpec().getTemplate().getSpec().getContainers(), envVars);
                     }
-                } else if ("Deployment".equals(resource.getKind())) {
+                } else if (resource instanceof Deployment) {
                     Deployment deployment = (Deployment) resource;
                     if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
                             deployment.getSpec().getTemplate().getSpec() != null) {
@@ -126,29 +138,33 @@ public class K8sManager {
         return yamlBuilder.toString();
     }
 
-    private static void injectEnvVarsIntoContainers(List<?> containers, Map<String, String> envVars) {
+    private static void injectEnvVarsIntoContainers(List<Container> containers, Map<String, String> envVars) {
         if (containers == null || containers.isEmpty()) {
             return;
         }
 
-        for (Object container : containers) {
+        for (Container container : containers) {
             try {
-                java.lang.reflect.Method getEnvMethod = container.getClass().getMethod("getEnv");
-                List<EnvVar> existingEnvVars = (List<EnvVar>) getEnvMethod.invoke(container);
-
+                List<EnvVar> existingEnvVars = container.getEnv();
                 if (existingEnvVars == null) {
                     existingEnvVars = new ArrayList<>();
                 }
 
-                for (Map.Entry<String, String> entry : envVars.entrySet()) {
+                java.util.Map<String, String> envMap = new java.util.LinkedHashMap<>();
+                for (EnvVar envVar : existingEnvVars) {
+                    envMap.put(envVar.getName(), envVar.getValue());
+                }
+                envMap.putAll(envVars);
+
+                List<EnvVar> newEnvVars = new ArrayList<>();
+                for (java.util.Map.Entry<String, String> entry : envMap.entrySet()) {
                     EnvVar envVar = new EnvVar();
                     envVar.setName(entry.getKey());
                     envVar.setValue(entry.getValue());
-                    existingEnvVars.add(envVar);
+                    newEnvVars.add(envVar);
                 }
 
-                java.lang.reflect.Method setEnvMethod = container.getClass().getMethod("setEnv", List.class);
-                setEnvMethod.invoke(container, existingEnvVars);
+                container.setEnv(newEnvVars);
             } catch (Exception e) {
                 log.error("Failed to inject env vars into container: {}", e.getMessage(), e);
             }
@@ -165,13 +181,13 @@ public class K8sManager {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if ("Job".equals(resource.getKind())) {
+                if (resource instanceof Job) {
                     Job job = (Job) resource;
                     if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
                             job.getSpec().getTemplate().getSpec() != null) {
                         injectVolumeMount(job.getSpec().getTemplate().getSpec(), pvcName, volumeName, mountPath, subPath);
                     }
-                } else if ("Deployment".equals(resource.getKind())) {
+                } else if (resource instanceof Deployment) {
                     Deployment deployment = (Deployment) resource;
                     if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
                             deployment.getSpec().getTemplate().getSpec() != null) {
@@ -182,7 +198,7 @@ public class K8sManager {
 
             return mergeYamlResources(resources);
         } catch (Exception e) {
-            log.error("Failed to inject namespace into YAML: {}", e.getMessage(), e);
+            log.error("Failed to inject volume mount into YAML: {}", e.getMessage(), e);
             return yamlContent;
         }
     }
@@ -206,7 +222,7 @@ public class K8sManager {
 
             return mergeYamlResources(resources);
         } catch (Exception e) {
-            log.error("Failed to inject volume mount into YAML: {}", e.getMessage(), e);
+            log.error("Failed to inject namespace into YAML: {}", e.getMessage(), e);
             return yamlContent;
         }
     }
@@ -220,13 +236,13 @@ public class K8sManager {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if ("Job".equals(resource.getKind())) {
+                if (resource instanceof Job) {
                     Job job = (Job) resource;
                     if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
                             job.getSpec().getTemplate().getSpec() != null) {
                         injectNodeSelector(job.getSpec().getTemplate().getSpec(), nodeSelectors);
                     }
-                } else if ("Deployment".equals(resource.getKind())) {
+                } else if (resource instanceof Deployment) {
                     Deployment deployment = (Deployment) resource;
                     if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
                             deployment.getSpec().getTemplate().getSpec() != null) {
@@ -260,9 +276,9 @@ public class K8sManager {
         if (yamlContent == null || yamlContent.isEmpty()) {
             return;
         }
-        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+        try {
             InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes());
-            client.load(inputStream).create();
+            getKubernetesClient().load(inputStream).serverSideApply();
         } catch (Exception e) {
             log.error("Failed to apply YAML: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to apply YAML: " + e.getMessage(), e);
@@ -274,7 +290,8 @@ public class K8sManager {
             return;
         }
 
-        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
+        try {
+            KubernetesClient client = getKubernetesClient();
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
@@ -326,14 +343,13 @@ public class K8sManager {
     }
 
 
-    private static void injectVolumeMount(Object podSpec, String pvcName, String volumeName, String mountPath, String subPath) {
+    private static void injectVolumeMount(PodSpec podSpec, String pvcName, String volumeName, String mountPath, String subPath) {
         if (podSpec == null) {
             return;
         }
 
         try {
-            java.lang.reflect.Method getVolumesMethod = podSpec.getClass().getMethod("getVolumes");
-            List<Volume> volumes = (List<Volume>) getVolumesMethod.invoke(podSpec);
+            List<Volume> volumes = podSpec.getVolumes();
 
             if (volumes == null) {
                 volumes = new ArrayList<>();
@@ -357,16 +373,13 @@ public class K8sManager {
 
                 volumes.add(volume);
 
-                java.lang.reflect.Method setVolumesMethod = podSpec.getClass().getMethod("setVolumes", List.class);
-                setVolumesMethod.invoke(podSpec, volumes);
+                podSpec.setVolumes(volumes);
             }
 
-            java.lang.reflect.Method getContainersMethod = podSpec.getClass().getMethod("getContainers");
-            List<?> containers = (List<?>) getContainersMethod.invoke(podSpec);
+            List<Container> containers = podSpec.getContainers();
 
-            for (Object container : containers) {
-                java.lang.reflect.Method getVolumeMountsMethod = container.getClass().getMethod("getVolumeMounts");
-                List<VolumeMount> volumeMounts = (List<VolumeMount>) getVolumeMountsMethod.invoke(container);
+            for (Container container : containers) {
+                List<VolumeMount> volumeMounts = container.getVolumeMounts();
 
                 if (volumeMounts == null) {
                     volumeMounts = new ArrayList<>();
@@ -390,8 +403,7 @@ public class K8sManager {
 
                     volumeMounts.add(volumeMount);
 
-                    java.lang.reflect.Method setVolumeMountsMethod = container.getClass().getMethod("setVolumeMounts", List.class);
-                    setVolumeMountsMethod.invoke(container, volumeMounts);
+                    container.setVolumeMounts(volumeMounts);
                 }
             }
         } catch (Exception e) {
@@ -399,9 +411,9 @@ public class K8sManager {
         }
     }
 
-    private static String checkJobStatus(String jobName, String namespace) {
-        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
-            io.fabric8.kubernetes.api.model.batch.v1.Job job = client.batch().v1().jobs()
+    private static String checkJobStatusByName(String jobName, String namespace) {
+        try {
+            io.fabric8.kubernetes.api.model.batch.v1.Job job = getKubernetesClient().batch().v1().jobs()
                     .inNamespace(namespace != null ? namespace : "default")
                     .withName(jobName)
                     .get();
@@ -413,8 +425,8 @@ public class K8sManager {
 
             if (job.getStatus() != null) {
                 Integer succeeded = job.getStatus().getSucceeded();
-                Integer completions = job.getSpec().getCompletions();
-                if (succeeded != null && succeeded >= completions) {
+                Integer completions = job.getSpec() != null ? job.getSpec().getCompletions() : null;
+                if (succeeded != null && completions != null && succeeded >= completions) {
                     log.info("Job completed successfully: {}/{}", namespace != null ? namespace : "default", jobName);
                     return "succeeded";
                 }
@@ -431,9 +443,9 @@ public class K8sManager {
         }
     }
 
-    private static boolean isDeploymentReady(String deploymentName, String namespace) {
-        try (KubernetesClient client = new KubernetesClientBuilder().build()) {
-            Deployment deployment = client.apps().deployments()
+    private static boolean isDeploymentReadyByName(String deploymentName, String namespace) {
+        try {
+            Deployment deployment = getKubernetesClient().apps().deployments()
                     .inNamespace(namespace != null ? namespace : "default")
                     .withName(deploymentName)
                     .get();
@@ -457,7 +469,7 @@ public class K8sManager {
         }
     }
 
-    public static String checkJobStatus(String k8sYaml) {
+    public static String checkJobsStatusFromYaml(String k8sYaml) {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return "succeeded";
         }
@@ -475,7 +487,7 @@ public class K8sManager {
             String namespace = job.getMetadata() != null ? job.getMetadata().getNamespace() : null;
             String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
             if (name != null) {
-                String status = checkJobStatus(name, namespace);
+                String status = checkJobStatusByName(name, namespace);
                 if ("failed".equals(status)) {
                     anyFailed = true;
                 } else if ("running".equals(status)) {
@@ -493,7 +505,7 @@ public class K8sManager {
         return "succeeded";
     }
 
-    public static boolean isDeploymentReady(String k8sYaml) {
+    public static boolean isDeploymentReadyFromYaml(String k8sYaml) {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return true;
         }
@@ -510,7 +522,7 @@ public class K8sManager {
             String namespace = deployment.getMetadata() != null ? deployment.getMetadata().getNamespace() : null;
             String name = deployment.getMetadata() != null ? deployment.getMetadata().getName() : null;
             if (name != null) {
-                if (!isDeploymentReady(name, namespace)) {
+                if (!isDeploymentReadyByName(name, namespace)) {
                     allReady = false;
                 }
             }
