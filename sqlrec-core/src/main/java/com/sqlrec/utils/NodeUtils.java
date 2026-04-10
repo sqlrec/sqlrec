@@ -12,7 +12,8 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.util.SqlBasicVisitor;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -128,5 +129,94 @@ public class NodeUtils {
             }
         }
         return false;
+    }
+
+    public static List<String> getTableFromSqlNode(SqlNode flinkSqlNode) {
+        List<String> tableNames = new ArrayList<>();
+        if (flinkSqlNode == null) {
+            return tableNames;
+        }
+
+        class TableNameVisitor extends SqlBasicVisitor<Void> {
+            @Override
+            public Void visit(SqlCall call) {
+                tryGetTable(call, tableNames);
+                return super.visit(call);
+            }
+        }
+
+        TableNameVisitor visitor = new TableNameVisitor();
+        flinkSqlNode.accept(visitor);
+
+        return tableNames;
+    }
+
+    public static void tryGetTable(SqlNode sqlNode, List<String> tableNames) {
+        if (sqlNode == null) {
+            return;
+        }
+
+        if (sqlNode instanceof SqlInsert) {
+            SqlInsert insertSql = (SqlInsert) sqlNode;
+            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlSelect) {
+            SqlSelect sqlSelect = (SqlSelect) sqlNode;
+            tryGetTableNameFromSqlNode(sqlSelect.getFrom(), tableNames);
+        } else if (sqlNode instanceof SqlUpdate) {
+            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
+            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlDelete) {
+            SqlDelete sqlDelete = (SqlDelete) sqlNode;
+            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlJoin) {
+            SqlJoin sqlKind = (SqlJoin) sqlNode;
+            tryGetTableNameFromSqlNode(sqlKind.getLeft(), tableNames);
+            tryGetTableNameFromSqlNode(sqlKind.getRight(), tableNames);
+        }
+    }
+
+    private static void tryGetTableNameFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
+        if (sqlNode instanceof SqlIdentifier) {
+            SqlIdentifier sqlIdentifier = (SqlIdentifier) sqlNode;
+            String tableName = sqlIdentifier.toString();
+            tableNames.add(tableName);
+        }
+    }
+
+    public static List<String> getModifyTablesFromSqlNode(SqlNode flinkSqlNode) {
+        List<String> tableNames = new ArrayList<>();
+        if (flinkSqlNode == null) {
+            return tableNames;
+        }
+
+        class ModifyTableNameVisitor extends SqlBasicVisitor<Void> {
+            @Override
+            public Void visit(SqlCall call) {
+                tryGetModifyTablesFromSqlNode(call, tableNames);
+                return super.visit(call);
+            }
+        }
+
+        ModifyTableNameVisitor visitor = new ModifyTableNameVisitor();
+        flinkSqlNode.accept(visitor);
+
+        return tableNames;
+    }
+
+    public static void tryGetModifyTablesFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
+        if (sqlNode == null) {
+            return;
+        }
+
+        if (sqlNode instanceof SqlInsert) {
+            SqlInsert insertSql = (SqlInsert) sqlNode;
+            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlUpdate) {
+            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
+            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
+        } else if (sqlNode instanceof SqlDelete) {
+            SqlDelete sqlDelete = (SqlDelete) sqlNode;
+            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
+        }
     }
 }

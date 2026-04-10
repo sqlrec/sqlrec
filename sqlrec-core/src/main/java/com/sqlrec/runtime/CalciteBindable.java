@@ -2,6 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -49,10 +50,10 @@ public class CalciteBindable extends BindableInterface {
         this.physicalPlan = physicalPlan;
         this.javaExpression = javaExpression;
 
-        List<String> readTables = SqlTypeChecker.getTableFromSqlNode(sqlNode);
+        List<String> readTables = NodeUtils.getTableFromSqlNode(sqlNode);
         this.readTables = new HashSet<>(readTables);
 
-        List<String> writeTables = SqlTypeChecker.getModifyTablesFromSqlNode(sqlNode);
+        List<String> writeTables = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
         this.writeTables = new HashSet<>(writeTables);
     }
 

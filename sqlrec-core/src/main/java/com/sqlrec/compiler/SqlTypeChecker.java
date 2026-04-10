@@ -4,15 +4,15 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
+import com.sqlrec.utils.NodeUtils;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.util.SqlBasicVisitor;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class SqlTypeChecker {
@@ -24,19 +24,17 @@ public class SqlTypeChecker {
         }
         if (flinkSqlNode instanceof SqlCache) {
             if (((SqlCache) flinkSqlNode).getSelect() != null) {
-                return isSqlTableRunable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
+                return isSqlTableRunnable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
             }
             return true;
         }
-
         if (flinkSqlNode instanceof SqlSet) {
             return true;
         }
-
         if (!isCrudSql(flinkSqlNode)) {
             return false;
         }
-        return isSqlTableRunable(flinkSqlNode, schema, defaultSchema);
+        return isSqlTableRunnable(flinkSqlNode, schema, defaultSchema);
     }
 
     private static boolean isCrudSql(SqlNode flinkSqlNode) {
@@ -77,7 +75,7 @@ public class SqlTypeChecker {
     }
 
     public static boolean isSqlContainKvTable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
-        List<String> tableNames = getTableFromSqlNode(flinkSqlNode);
+        List<String> tableNames = NodeUtils.getTableFromSqlNode(flinkSqlNode);
         for (String tableName : tableNames) {
             Table table = getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
@@ -90,8 +88,8 @@ public class SqlTypeChecker {
         return false;
     }
 
-    public static boolean isSqlTableRunable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
-        List<String> tableNames = getTableFromSqlNode(flinkSqlNode);
+    public static boolean isSqlTableRunnable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
+        List<String> tableNames = NodeUtils.getTableFromSqlNode(flinkSqlNode);
         for (String tableName : tableNames) {
             Table table = getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
@@ -115,114 +113,14 @@ public class SqlTypeChecker {
             String schemaName = tableNameParts[0];
             String shortTableName = tableNameParts[1];
             CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
-            return getTableObj(subSchema, shortTableName);
+            return SchemaUtils.getTableObj(subSchema, shortTableName);
         } else {
-            Table table = getTableObj(schema, tableName);
+            Table table = SchemaUtils.getTableObj(schema, tableName);
             if (table == null) {
                 CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
-                table = getTableObj(subSchema, tableName);
+                table = SchemaUtils.getTableObj(subSchema, tableName);
             }
             return table;
-        }
-    }
-
-    private static Table getTableObj(CalciteSchema schema, String shortTableName) {
-        if (schema == null || shortTableName == null) {
-            return null;
-        }
-        CalciteSchema.TableEntry tableEntry = schema.getTable(shortTableName, false);
-        if (tableEntry == null) {
-            return null;
-        }
-        return tableEntry.getTable();
-    }
-
-    public static List<String> getTableFromSqlNode(SqlNode flinkSqlNode) {
-        List<String> tableNames = new ArrayList<>();
-        if (flinkSqlNode == null) {
-            return tableNames;
-        }
-
-        class TableNameVisitor extends SqlBasicVisitor<Void> {
-            @Override
-            public Void visit(SqlCall call) {
-                tryGetTable(call, tableNames);
-                return super.visit(call);
-            }
-        }
-
-        TableNameVisitor visitor = new TableNameVisitor();
-        flinkSqlNode.accept(visitor);
-
-        return tableNames;
-    }
-
-    public static void tryGetTable(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode == null) {
-            return;
-        }
-
-        if (sqlNode instanceof SqlInsert) {
-            SqlInsert insertSql = (SqlInsert) sqlNode;
-            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlSelect) {
-            SqlSelect sqlSelect = (SqlSelect) sqlNode;
-            tryGetTableNameFromSqlNode(sqlSelect.getFrom(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate) {
-            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
-            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete) {
-            SqlDelete sqlDelete = (SqlDelete) sqlNode;
-            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlJoin) {
-            SqlJoin sqlKind = (SqlJoin) sqlNode;
-            tryGetTableNameFromSqlNode(sqlKind.getLeft(), tableNames);
-            tryGetTableNameFromSqlNode(sqlKind.getRight(), tableNames);
-        }
-    }
-
-    private static void tryGetTableNameFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode instanceof SqlIdentifier) {
-            SqlIdentifier sqlIdentifier = (SqlIdentifier) sqlNode;
-            String tableName = sqlIdentifier.toString();
-            tableNames.add(tableName);
-        }
-    }
-
-    public static List<String> getModifyTablesFromSqlNode(SqlNode flinkSqlNode) {
-        List<String> tableNames = new ArrayList<>();
-        if (flinkSqlNode == null) {
-            return tableNames;
-        }
-
-        class ModifyTableNameVisitor extends SqlBasicVisitor<Void> {
-            @Override
-            public Void visit(SqlCall call) {
-                tryGetModifyTablesFromSqlNode(call, tableNames);
-                return super.visit(call);
-            }
-        }
-
-        ModifyTableNameVisitor visitor = new ModifyTableNameVisitor();
-        flinkSqlNode.accept(visitor);
-
-        return tableNames;
-    }
-
-    public static void tryGetModifyTablesFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode == null) {
-            return;
-        }
-
-        if (sqlNode instanceof SqlInsert) {
-            SqlInsert insertSql = (SqlInsert) sqlNode;
-            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate) {
-            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
-            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete) {
-            SqlDelete sqlDelete = (SqlDelete) sqlNode;
-            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
         }
     }
 }

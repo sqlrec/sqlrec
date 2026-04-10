@@ -45,7 +45,6 @@ public class CompileManager {
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
         sql = SqlPreProcesser.preProcessSql(sql);
-
         SqlParser.Config parserConfig = SqlParser.config()
                 .withConformance(FlinkSqlConformance.DEFAULT)
                 .withParserFactory(FlinkSqlParserImpl.FACTORY)

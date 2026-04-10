@@ -137,4 +137,15 @@ public class SchemaUtils {
         }
         return (CacheTable) table;
     }
+
+    public static Table getTableObj(CalciteSchema schema, String shortTableName) {
+        if (schema == null || shortTableName == null) {
+            return null;
+        }
+        CalciteSchema.TableEntry tableEntry = schema.getTable(shortTableName, false);
+        if (tableEntry == null) {
+            return null;
+        }
+        return tableEntry.getTable();
+    }
 }

@@ -1,7 +1,7 @@
 package com.sqlrec;
 
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 
@@ -46,12 +46,12 @@ public class TestSqlTypeChecker {
             System.out.println("\nTesting: " + testCase.sql);
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(testCase.sql);
 
-            List<String> actualTables = SqlTypeChecker.getTableFromSqlNode(flinkSqlNode);
+            List<String> actualTables = NodeUtils.getTableFromSqlNode(flinkSqlNode);
             System.out.println("Expected tables: " + testCase.expectedTables);
             System.out.println("Actual tables: " + actualTables);
             assertEquals(testCase.expectedTables, actualTables, "Tables mismatch for SQL: " + testCase.sql);
 
-            List<String> actualModifyTables = SqlTypeChecker.getModifyTablesFromSqlNode(flinkSqlNode);
+            List<String> actualModifyTables = NodeUtils.getModifyTablesFromSqlNode(flinkSqlNode);
             System.out.println("Expected modify tables: " + testCase.expectedModifyTables);
             System.out.println("Actual modify tables: " + actualModifyTables);
             assertEquals(testCase.expectedModifyTables, actualModifyTables, "Modify tables mismatch for SQL: " + testCase.sql);

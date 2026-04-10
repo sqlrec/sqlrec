@@ -25,7 +25,6 @@ public class FunctionUpdater {
     private static final Logger log = LoggerFactory.getLogger(FunctionUpdater.class);
     private static ScheduledExecutorService executor;
 
-
     public static synchronized void initFunctionUpdateService() {
         if (executor != null) {
             return;
@@ -46,12 +45,16 @@ public class FunctionUpdater {
     }
 
     public static void updateFunctionBindable() {
+        log.info("starting function bindable update check");
         Map<String, Integer> functionUpdateStatusMap = new HashMap<>();
         Map<String, SqlFunctionBindable> functionBindableMap = CompileManager.getFunctionBindableMap();
         Set<String> functionNames = new HashSet<>(functionBindableMap.keySet());
+
+        log.info("total functions to check: {}", functionNames.size());
         for (String functionName : functionNames) {
             tryFlushFunctionBindable(functionName, functionUpdateStatusMap, functionBindableMap);
         }
+        log.info("function update check completed");
     }
 
     private static int tryFlushFunctionBindable(
@@ -63,6 +66,7 @@ public class FunctionUpdater {
             return functionUpdateStatusMap.get(functionName);
         }
 
+        log.info("checking function: {}", functionName);
         try {
             boolean needFlush = false;
             SqlFunctionBindable functionBindable = functionBindableMap.get(functionName);
@@ -72,6 +76,7 @@ public class FunctionUpdater {
                         dependencySqlFunction, functionUpdateStatusMap, functionBindableMap
                 );
                 if (dependencyStatus == UPDATE_SUCCESS) {
+                    log.info("dependency function {} updated, marking {} for flush", dependencySqlFunction, functionName);
                     needFlush = true;
                 }
             }
@@ -80,10 +85,12 @@ public class FunctionUpdater {
             if (sqlFunction == null) {
                 functionBindableMap.remove(functionName);
                 functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
-                log.info("function bindable {} removed", functionName);
+                log.info("function bindable {} removed (not found in database)", functionName);
                 return UPDATE_SUCCESS;
             }
             if (sqlFunction.getUpdatedAt() > functionBindable.getCreateTime()) {
+                log.info("function {} updated in database (db: {}, cached: {}), marking for flush",
+                        functionName, sqlFunction.getUpdatedAt(), functionBindable.getCreateTime());
                 needFlush = true;
             }
 
@@ -97,6 +104,7 @@ public class FunctionUpdater {
                 log.info("function bindable {} updated", functionName);
             } else {
                 functionUpdateStatusMap.put(functionName, NOT_UPDATE);
+                log.info("function {} does not need update", functionName);
             }
         } catch (Exception e) {
             log.error("try flush function bindable failed : {}", functionName, e);
@@ -107,34 +115,35 @@ public class FunctionUpdater {
     }
 
     private static boolean isSqlFunctionDependentResourceUpdate(SqlFunctionBindable functionBindable) throws Exception {
-        List<String> tablePlaceholders = new ArrayList<>();
-        for (Map.Entry<String, List<RelDataTypeField>> placeholder : functionBindable.getInputTables()) {
-            tablePlaceholders.add(placeholder.getKey());
-        }
         Set<String> accessTables = functionBindable.getAccessTables();
-        accessTables.removeAll(tablePlaceholders);
+        for (Map.Entry<String, List<RelDataTypeField>> placeholder : functionBindable.getInputTables()) {
+            accessTables.remove(placeholder.getKey());
+        }
 
         for (String accessTable : accessTables) {
             Map.Entry<String, String> dbAndTable = HiveTableUtils.getDbAndTable(accessTable);
             long lastModifiedTime = HmsSchema.getTableUpdateTime(dbAndTable.getKey(), dbAndTable.getValue());
             if (lastModifiedTime > functionBindable.getCreateTime()) {
+                log.info("table {}.{} has been modified, need to flush function",
+                        dbAndTable.getKey(), dbAndTable.getValue());
                 return true;
             }
         }
 
         Set<String> javaFunctions = functionBindable.getDependencyJavaFunctions();
         for (String javaFunction : javaFunctions) {
+            // todo optimize java function update check
             Object javaFunctionClass = JavaFunctionUtils.getTableFunctionClass(
                     Consts.DEFAULT_SCHEMA_NAME, javaFunction);
             long functionModificationTime = JavaFunctionUtils.getFunctionUpdateTime(
                     Consts.DEFAULT_SCHEMA_NAME, javaFunction);
             if (functionModificationTime > functionBindable.getCreateTime()) {
+                log.info("java function {} has been modified, need to flush function", javaFunction);
                 return true;
             }
         }
 
         // todo check scala udf update
-
         return false;
     }
 }
