@@ -41,12 +41,18 @@ public class SqlTestCase {
             return;
         }
 
-        assert actualResult != null;
-        assert actualResult.size() == expectedResult.size();
+        assert actualResult != null : "actualResult is null";
+        assert actualResult.size() == expectedResult.size() : 
+            "size mismatch: expected " + expectedResult.size() + ", actual " + actualResult.size();
         for (int i = 0; i < actualResult.size(); i++) {
             Object[] actualRow = actualResult.get(i);
             Object[] expectedRow = expectedResult.get(i);
-            assert java.util.Arrays.equals(actualRow, expectedRow);
+            if (!java.util.Arrays.deepEquals(actualRow, expectedRow)) {
+                log.error("Row {} mismatch:", i);
+                log.error("  Expected: {}", java.util.Arrays.deepToString(expectedRow));
+                log.error("  Actual:   {}", java.util.Arrays.deepToString(actualRow));
+                assert false : "Row " + i + " mismatch";
+            }
         }
     }
 

@@ -33,34 +33,73 @@ public class TestJavaFunction {
         JavaFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
         JavaFunctionUtils.registerTableFunction("default", "context_fun", TestContextFun.class);
 
-        List<String> sqlList = Arrays.asList(
-                "cache table t1 as select * from myTable",
-                "call shuffle(t1)",
-                "call shuffle(t1) async",
-                "cache table t2 as call shuffle(t1)",
-                "select * from t2",
-                "call add_col(t1, 'new_col', 'new_col_value')",
-                "call add_col(t1, 'new_col', 'new_col_value') async",
-                "cache table t3 as call add_col(t1, 'new_col', 'new_col_value')",
-                "select * from t3",
-                "set col_name=new_col_test",
-                "set col_value=new_col_value_test",
-                "set func_name=add_col",
-                "call add_col(t1, 'new_col', get('col_value'))",
-                "call add_col(t1, 'new_col', get('col_value')) async",
-                "cache table t4 as call add_col(t1, 'new_col', get('col_value'))",
-                "select * from t4",
-                "call get('func_name')(t1, 'new_col', get('col_value')) like t4",
-                "call get('func_name')(t1, 'new_col', get('col_value')) like t4 async",
-                "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",
-                "call empty_fun()",
-                "call string_arg_fun('test_arg')",
-                "call string_arg_fun(get('col_name'))",
-                "call context_fun('col_name')"
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase(
+                        "cache table t1 as select * from myTable",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t1", 3L}
+                        )
+                ),
+                new SqlTestCase("call shuffle(t1)"),
+                new SqlTestCase("call shuffle(t1) async"),
+                new SqlTestCase(
+                        "cache table t2 as call shuffle(t1)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t2", 3L}
+                        )
+                ),
+                new SqlTestCase("select * from t2"),
+                new SqlTestCase("call add_col(t1, 'new_col', 'new_col_value')"),
+                new SqlTestCase("call add_col(t1, 'new_col', 'new_col_value') async"),
+                new SqlTestCase(
+                        "cache table t3 as call add_col(t1, 'new_col', 'new_col_value')",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t3", 3L}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from t3",
+                        Arrays.asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value"},
+                                new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value"},
+                                new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value"}
+                        )
+                ),
+                new SqlTestCase("set col_name=new_col_test"),
+                new SqlTestCase("set col_value=new_col_value_test"),
+                new SqlTestCase("set func_name=add_col"),
+                new SqlTestCase("call add_col(t1, 'new_col', get('col_value'))"),
+                new SqlTestCase("call add_col(t1, 'new_col', get('col_value')) async"),
+                new SqlTestCase(
+                        "cache table t4 as call add_col(t1, 'new_col', get('col_value'))",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t4", 3L}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from t4",
+                        Arrays.asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
+                                new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
+                                new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
+                        )
+                ),
+                new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4"),
+                new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4 async"),
+                new SqlTestCase(
+                        "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t5", 3L}
+                        )
+                ),
+                new SqlTestCase("call empty_fun()"),
+                new SqlTestCase("call string_arg_fun('test_arg')"),
+                new SqlTestCase("call string_arg_fun(get('col_name'))"),
+                new SqlTestCase("call context_fun('col_name')")
         );
 
-        for (String sql : sqlList) {
-            new SqlTestCase(sql).test(schema, executeContext);
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema, executeContext);
         }
     }
 

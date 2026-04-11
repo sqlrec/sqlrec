@@ -38,30 +38,125 @@ public class TestUdfSupport {
                 "com.sqlrec.udf.scalar.L2NormFunction"
         );
 
-        List<String> sqlList = Arrays.asList(
-                "select uuid()",
-                "select l2_norm(array_float_type) from myTable",
-                "select l2_norm(array_double_type) from myTable",
-                "select SIN(0.1)",
-                "select count(1) from myTable",
-                "select sum(int_type) from myTable",
-                "select min(int_type) from myTable",
-                "select max(int_type) from myTable",
-                "select UPPER(varchar_type) from myTable",
-                "select CHAR_LENGTH(varchar_type) from myTable",
-                "select SUBSTRING(varchar_type from 1 for 2) from myTable",
-                "select varchar_type || '1' from myTable",
-                "select CARDINALITY(array_int_type) from myTable",
-                "select CARDINALITY(array_varchar_type) from myTable",
-                "select CARDINALITY(array_float_type) from myTable",
-                "select CARDINALITY(array_double_type) from myTable",
-                "select CURRENT_TIMESTAMP",
-                "select CURRENT_TIMESTAMP(1)",
-                "select cast(CURRENT_TIMESTAMP as BIGINT) as req_time"
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase("select uuid()"),
+                new SqlTestCase(
+                        "select l2_norm(array_float_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{Arrays.asList(1.0/Math.sqrt(14.0d), 2.0/Math.sqrt(14.0d), 3.0/Math.sqrt(14.0d))},
+                                new Object[]{Arrays.asList(4.0/Math.sqrt(77.0d), 5.0/Math.sqrt(77.0d), 6.0/Math.sqrt(77.0d))},
+                                new Object[]{Arrays.asList(7.0/Math.sqrt(194.0d), 8.0/Math.sqrt(194.0d), 9.0/Math.sqrt(194.0d))}
+                        )
+                ),
+                new SqlTestCase(
+                        "select l2_norm(array_double_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{Arrays.asList(1.0/Math.sqrt(14.0d), 2.0/Math.sqrt(14.0d), 3.0/Math.sqrt(14.0d))},
+                                new Object[]{Arrays.asList(4.0/Math.sqrt(77.0d), 5.0/Math.sqrt(77.0d), 6.0/Math.sqrt(77.0d))},
+                                new Object[]{Arrays.asList(7.0/Math.sqrt(194.0d), 8.0/Math.sqrt(194.0d), 9.0/Math.sqrt(194.0d))}
+                        )
+                ),
+                new SqlTestCase(
+                        "select SIN(0.1)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{Math.sin(0.1)}
+                        )
+                ),
+                new SqlTestCase(
+                        "select count(1) from myTable",
+                        Arrays.<Object[]>asList(
+                                new Object[]{3L}
+                        )
+                ),
+                new SqlTestCase(
+                        "select sum(int_type) from myTable",
+                        Arrays.<Object[]>asList(
+                                new Object[]{6}
+                        )
+                ),
+                new SqlTestCase(
+                        "select min(int_type) from myTable",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1}
+                        )
+                ),
+                new SqlTestCase(
+                        "select max(int_type) from myTable",
+                        Arrays.<Object[]>asList(
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase(
+                        "select UPPER(varchar_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{"ABC"},
+                                new Object[]{"BCD"},
+                                new Object[]{"CDE"}
+                        )
+                ),
+                new SqlTestCase(
+                        "select CHAR_LENGTH(varchar_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{3},
+                                new Object[]{3},
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase(
+                        "select SUBSTRING(varchar_type from 1 for 2) from myTable",
+                        Arrays.asList(
+                                new Object[]{"ab"},
+                                new Object[]{"bc"},
+                                new Object[]{"cd"}
+                        )
+                ),
+                new SqlTestCase(
+                        "select varchar_type || '1' from myTable",
+                        Arrays.asList(
+                                new Object[]{"abc1"},
+                                new Object[]{"bcd1"},
+                                new Object[]{"cde1"}
+                        )
+                ),
+                new SqlTestCase(
+                        "select CARDINALITY(array_int_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{3},
+                                new Object[]{3},
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase(
+                        "select CARDINALITY(array_varchar_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{3},
+                                new Object[]{3},
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase(
+                        "select CARDINALITY(array_float_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{3},
+                                new Object[]{3},
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase(
+                        "select CARDINALITY(array_double_type) from myTable",
+                        Arrays.asList(
+                                new Object[]{3},
+                                new Object[]{3},
+                                new Object[]{3}
+                        )
+                ),
+                new SqlTestCase("select CURRENT_TIMESTAMP"),
+                new SqlTestCase("select CURRENT_TIMESTAMP(1)"),
+                new SqlTestCase("select cast(CURRENT_TIMESTAMP as BIGINT) as req_time")
         );
 
-        for (String sql : sqlList) {
-            new SqlTestCase(sql).test(schema, new ExecuteContextImpl());
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema, new ExecuteContextImpl());
         }
     }
 }
