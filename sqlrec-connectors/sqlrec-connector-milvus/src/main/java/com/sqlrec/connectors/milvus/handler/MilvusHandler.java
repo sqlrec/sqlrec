@@ -20,6 +20,8 @@ import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.rex.RexNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
@@ -27,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class MilvusHandler {
+    private static final Logger logger = LoggerFactory.getLogger(MilvusHandler.class);
     private static Map<String, MilvusClientV2Pool> clientPools = new ConcurrentHashMap<>();
     private static Gson gson = new GsonBuilder()
             .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
@@ -236,18 +239,25 @@ public class MilvusHandler {
     }
 
     public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {
-        String key = milvusConfig.url + milvusConfig.token;
+        String key = getClientPoolKey(milvusConfig);
         if (clientPools.containsKey(key)) {
             clientPools.get(key).returnClient(key, client);
+        } else {
+            logger.warn("client pool {} is not found", key);
+            client.close();
         }
     }
 
     public static MilvusClientV2 getClient(MilvusConfig milvusConfig) {
-        String key = milvusConfig.url + milvusConfig.token;
+        String key = getClientPoolKey(milvusConfig);
         if (!clientPools.containsKey(key)) {
             openClientPool(key, milvusConfig);
         }
         return clientPools.get(key).getClient(key);
+    }
+
+    private static String getClientPoolKey(MilvusConfig milvusConfig) {
+        return milvusConfig.url + "|" + milvusConfig.token;
     }
 
     private static synchronized void openClientPool(String key, MilvusConfig milvusConfig) {

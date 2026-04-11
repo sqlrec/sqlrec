@@ -8,7 +8,6 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.Table;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 

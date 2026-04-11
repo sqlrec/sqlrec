@@ -28,7 +28,6 @@ public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         MilvusConfig milvusConfig = MilvusOptions.getMilvusConfig(options);
-        milvusConfig.database = context.getObjectIdentifier().getDatabaseName();
         milvusConfig.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(tableSchema);
         milvusConfig.primaryKey = FlinkSchemaUtils.getPrimaryKey(tableSchema);
         milvusConfig.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
