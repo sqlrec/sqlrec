@@ -71,7 +71,8 @@ public class RedisCalciteTable extends SqlRecKvTable {
         try {
             return Linq4j.asEnumerable(redisHandler.scan(value).get());
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException(
+                    String.format("Failed to scan Redis table with key '%s': %s", value, e.getMessage()), e);
         }
     }
 

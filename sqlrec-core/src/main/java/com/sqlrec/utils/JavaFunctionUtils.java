@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.schema.HmsClient;
 import com.sqlrec.udf.config.FunctionConfigs;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,9 @@ public class JavaFunctionUtils {
         Class<?> clazz = null;
         try {
             String className = getJavaFunctionClassName(db, funName);
+            if (StringUtils.isEmpty(className)) {
+                return null;
+            }
             if (!javaFunctionClassMap.containsKey(mapKey) ||
                     !javaFunctionClassMap.get(mapKey).getName().equals(className)) {
                 clazz = Class.forName(className);

@@ -41,6 +41,9 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
     @Override
     public void invoke(IN value, Context context) throws Exception {
         super.invoke(value, context);
+        if (!(value instanceof RowData)) {
+            throw new IllegalArgumentException("Expected RowData but got: " + value.getClass().getName());
+        }
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
 

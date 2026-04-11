@@ -51,6 +51,9 @@ public class TestKafkaTable {
         kafkaConfig.format = "json";
         kafkaConfig.topic = "t1";
         kafkaConfig.fieldSchemas = fieldSchemas;
+        kafkaConfig.keySerializer = "org.apache.kafka.common.serialization.StringSerializer";
+        kafkaConfig.valueSerializer = "org.apache.kafka.common.serialization.StringSerializer";
+        kafkaConfig.lingerMs = 5000;
 
         return new KafkaCalciteTable(kafkaConfig);
     }

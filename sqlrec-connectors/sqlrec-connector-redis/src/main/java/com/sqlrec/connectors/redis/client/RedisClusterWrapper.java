@@ -8,65 +8,76 @@ import io.lettuce.core.cluster.api.async.RedisAdvancedClusterAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisClusterWrapper implements AbstractRedisWrapper {
-    RedisClusterClient redisClient;
-    StatefulRedisClusterConnection<byte[], byte[]> connection;
-    RedisAdvancedClusterAsyncCommands<byte[], byte[]> commands;
+    private static Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
+    private static Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+
+    private String url;
 
     @Override
     public void open(String url) {
-        redisClient = RedisClusterClient.create(url);
-        connection = redisClient.connect(new ByteArrayCodec());
-        commands = connection.async();
+        this.url = url;
+    }
+
+    private static synchronized void openRedisClusterClient(String url) {
+        if (connectionMap.containsKey(url)) {
+            return;
+        }
+
+        RedisClusterClient redisClient = RedisClusterClient.create(url);
+        StatefulRedisClusterConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
+
+        redisClientMap.put(url, redisClient);
+        connectionMap.put(url, connection);
+    }
+
+    private RedisAdvancedClusterAsyncCommands<byte[], byte[]> getCommands() {
+        if (!connectionMap.containsKey(url)) {
+            openRedisClusterClient(url);
+        }
+        return connectionMap.get(url).async();
     }
 
     @Override
     public void close() {
-        if (connection != null) {
-            connection.close();
-        }
-        if (redisClient != null) {
-            redisClient.close();
-        }
-        redisClient = null;
-        connection = null;
-        commands = null;
     }
 
     public RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end) {
-        return commands.lrange(key, start, end);
+        return getCommands().lrange(key, start, end);
     }
 
     public RedisFuture<byte[]> get(byte[] key) {
-        return commands.get(key);
+        return getCommands().get(key);
     }
 
     public RedisFuture<List<KeyValue<byte[], byte[]>>> mget(byte[]... keys) {
-        return commands.mget(keys);
+        return getCommands().mget(keys);
     }
 
     public RedisFuture<String> set(byte[] key, byte[] value) {
-        return commands.set(key, value);
+        return getCommands().set(key, value);
     }
 
     public RedisFuture<Long> del(byte[] key) {
-        return commands.del(key);
+        return getCommands().del(key);
     }
 
     public RedisFuture<Long> lpush(byte[] key, byte[] value) {
-        return commands.lpush(key, value);
+        return getCommands().lpush(key, value);
     }
 
     public RedisFuture<Long> lrem(byte[] key, byte[] value) {
-        return commands.lrem(key, 0, value);
+        return getCommands().lrem(key, 0, value);
     }
 
     public RedisFuture<String> ltrim(byte[] key, long start, long stop) {
-        return commands.ltrim(key, start, stop);
+        return getCommands().ltrim(key, start, stop);
     }
 
     public RedisFuture<Boolean> expire(byte[] key, long seconds) {
-        return commands.expire(key, seconds);
+        return getCommands().expire(key, seconds);
     }
 }

@@ -45,14 +45,7 @@ public class RedisHandler {
     public CompletableFuture<List<Object[]>> scan(String rowKey) {
         if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
             RedisFuture<List<byte[]>> future = redisClient.lrange(getKeyBytes(rowKey), 0, -1);
-            return future.toCompletableFuture().thenApply(list -> {
-                if (list == null) {
-                    return new ArrayList<>();
-                }
-                return list.stream()
-                        .map(bytes -> codec.decode(bytes))
-                        .collect(Collectors.toList());
-            });
+            return future.toCompletableFuture().thenApply(this::decodeDatas);
         }
 
         RedisFuture<byte[]> future = redisClient.get(getKeyBytes(rowKey));
@@ -77,13 +70,7 @@ public class RedisHandler {
                         for (Map.Entry<String, CompletableFuture<List<byte[]>>> entry : futureMap.entrySet()) {
                             String key = entry.getKey();
                             List<byte[]> data = entry.getValue().join();
-                            if (data == null) {
-                                result.put(key, new ArrayList<>());
-                            } else {
-                                result.put(key, data.stream()
-                                        .map(bytes -> codec.decode(bytes))
-                                        .collect(Collectors.toList()));
-                            }
+                            result.put(key, decodeDatas(data));
                         }
                         return result;
                     });
@@ -108,6 +95,22 @@ public class RedisHandler {
             });
             return result;
         });
+    }
+
+    public List<Object[]> decodeDatas(List<byte[]> datas) {
+        if (datas == null) {
+            return Collections.emptyList();
+        }
+        return datas.stream()
+                .map(bytes -> {
+                    try {
+                        return codec.decode(bytes);
+                    } catch (Exception e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     public void delete(Object[] data) {
