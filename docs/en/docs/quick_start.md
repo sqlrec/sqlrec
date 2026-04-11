@@ -29,11 +29,11 @@ bash ./jupyter/deploy.sh
 - Install dependencies
 
 ```bash
-!pip install pandas --user
-!pip install pyhive --user
-!pip install sasl --user
-!pip install thrift --user
-!pip install thrift-sasl --user
+%pip install pandas
+%pip install pyhive
+%pip install sasl
+%pip install thrift
+%pip install thrift-sasl
 ```
 
 - Connect to SQLRec service and run SQL statements

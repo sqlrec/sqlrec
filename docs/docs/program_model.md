@@ -692,6 +692,7 @@ SQLRec 会根据 `eval` 方法的参数类型自动注入相应的值：
 | `CacheTable` | 传入的缓存表 | 标识符（如 `table_name`） |
 | `String` | 字符串字面量或变量 | `'value'` 或 `GET('var')` |
 | `ExecuteContext` | 执行上下文 | 自动注入，无需在 SQL 中指定 |
+| `ConfigContext` | 配置上下文 | 自动注入，无需在 SQL 中指定 |
 
 参数注入示例
 

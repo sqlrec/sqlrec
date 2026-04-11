@@ -692,6 +692,7 @@ SQLRec automatically injects corresponding values based on the `eval` method par
 | `CacheTable` | Passed cache table | Identifier (like `table_name`) |
 | `String` | String literal or variable | `'value'` or `GET('var')` |
 | `ExecuteContext` | Execution context | Auto-injected, no need to specify in SQL |
+| `ConfigContext` | Configuration context | Auto-injected, no need to specify in SQL |
 
 Parameter injection example
 

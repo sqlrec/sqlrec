@@ -131,22 +131,22 @@ Test results on AMD Ryzen 5600H, 32GB DDR4 memory machine:
 Running 30s test @ http://192.168.49.2:30301/api/v1/main_rec
   10 threads and 10 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    10.80ms    4.81ms  53.85ms   92.68%
-    Req/Sec    95.12     17.61   121.00     82.63%
-  28464 requests in 30.02s, 49.80MB read
-  Socket errors: connect 0, read 28463, write 0, timeout 0
-Requests/sec:    948.09
-Transfer/sec:      1.66MB
+    Latency     9.23ms    5.04ms  48.96ms   90.50%
+    Req/Sec   111.59     17.07   151.00     59.47%
+  33370 requests in 30.02s, 57.91MB read
+  Socket errors: connect 0, read 33369, write 0, timeout 0
+Requests/sec:   1111.47
+Transfer/sec:      1.93MB
 ```
 
 **Performance Metrics**:
 
 | Metric | Value |
 |--------|-------|
-| Average Latency | 10.80ms |
-| Latency Standard Deviation | 4.81ms |
-| Max Latency | 53.85ms |
-| Average QPS | 95.12 |
-| Total Requests | 28,464 |
-| Total QPS | 948.09 |
-| Throughput | 1.66MB/s |
+| Average Latency | 9.23ms |
+| Latency Standard Deviation | 5.04ms |
+| Max Latency | 48.96ms |
+| Average QPS | 111.59 |
+| Total Requests | 33,370 |
+| Total QPS | 1111.47 |
+| Throughput | 1.93MB/s |

@@ -21,11 +21,11 @@ bash ./jupyter/deploy.sh
 - 新建python3 notebook
 - 安装依赖
 ```bash
-!pip install pandas --user
-!pip install pyhive --user
-!pip install sasl --user
-!pip install thrift --user
-!pip install thrift-sasl --user
+%pip install pandas
+%pip install pyhive
+%pip install sasl
+%pip install thrift
+%pip install thrift-sasl
 ```
 - 连接SQLRec服务，运行sql语句
 ```python

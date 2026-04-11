@@ -21,8 +21,24 @@ export default defineConfig({
           { text: '性能测试', link: '/docs/benchmark' },
           { text: '编程模型', link: '/docs/program_model' },
           { text: 'SQL语法', link: '/docs/sql_reference' },
-          { text: '模型', link: '/docs/models' },
           { text: '内置UDF', link: '/docs/udf' },
+          {
+            text: 'Connectors',
+            collapsed: true,
+            items: [
+              { text: '内置Connectors', link: '/docs/connectors/builtin_connectors' },
+              { text: '自定义Connectors', link: '/docs/connectors/custom_connectors' }
+            ]
+          },
+          {
+            text: '模型',
+            collapsed: true,
+            items: [
+              { text: '基础概念', link: '/docs/model/basic_concepts' },
+              { text: '内置模型', link: '/docs/model/builtin_models' },
+              { text: '自定义模型', link: '/docs/model/custom_models' }
+            ]
+          },
           {
             text: '教程',
             collapsed: true,
@@ -53,8 +69,24 @@ export default defineConfig({
           { text: 'Benchmark', link: '/en/docs/benchmark' },
           { text: 'Programming Model', link: '/en/docs/program_model' },
           { text: 'SQL Reference', link: '/en/docs/sql_reference' },
-          { text: 'Models', link: '/en/docs/models' },
           { text: 'Built-in UDF', link: '/en/docs/udf' },
+          {
+            text: 'Connectors',
+            collapsed: true,
+            items: [
+              { text: 'Built-in Connectors', link: '/en/docs/connectors/builtin_connectors' },
+              { text: 'Custom Connectors', link: '/en/docs/connectors/custom_connectors' }
+            ]
+          },
+          {
+            text: 'Models',
+            collapsed: true,
+            items: [
+              { text: 'Basic Concepts', link: '/en/docs/model/basic_concepts' },
+              { text: 'Built-in Models', link: '/en/docs/model/builtin_models' },
+              { text: 'Custom Models', link: '/en/docs/model/custom_models' }
+            ]
+          },
           {
             text: 'Tutorials',
             collapsed: true,
