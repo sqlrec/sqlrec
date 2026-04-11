@@ -9,4 +9,7 @@ public class KafkaConfig {
     public String topic;
     public String format;
     public List<FieldSchema> fieldSchemas;
+    public String keySerializer;
+    public String valueSerializer;
+    public int lingerMs;
 }

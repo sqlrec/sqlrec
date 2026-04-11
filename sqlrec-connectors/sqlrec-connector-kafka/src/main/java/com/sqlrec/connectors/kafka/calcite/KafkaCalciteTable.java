@@ -81,9 +81,9 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
         Properties props = new Properties();
         props.put("bootstrap.servers", kafkaConfig.bootstrapServers);
-        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("linger.ms", 5000);   //todo read table config
+        props.put("key.serializer", kafkaConfig.keySerializer);
+        props.put("value.serializer", kafkaConfig.valueSerializer);
+        props.put("linger.ms", kafkaConfig.lingerMs);
 
         KafkaProducer<String, String> producer = new KafkaProducer<>(props);
         kafkaProducerMap.put(kafkaConfig.bootstrapServers, producer);
