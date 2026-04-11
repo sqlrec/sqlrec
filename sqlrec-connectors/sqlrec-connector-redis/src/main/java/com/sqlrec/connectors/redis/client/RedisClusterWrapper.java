@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.redis.client;
 
+import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.SharePool;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.cluster.RedisClusterClient;
@@ -13,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisClusterWrapper implements AbstractRedisWrapper {
     private static Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+    private static Map<String, SharePool<StatefulRedisClusterConnection<byte[], byte[]>>> poolMap = new ConcurrentHashMap<>();
 
     private String url;
 
@@ -23,22 +25,28 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
     }
 
     private static synchronized void openRedisClusterClient(String url) {
-        if (connectionMap.containsKey(url)) {
+        if (poolMap.containsKey(url)) {
             return;
         }
 
         RedisClusterClient redisClient = RedisClusterClient.create(url);
-        StatefulRedisClusterConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
+
+        SharePool<StatefulRedisClusterConnection<byte[], byte[]>> pool = new SharePool<>(
+                SqlRecConfigs.REDIS_POOL_SIZE.getValue(),
+                () -> redisClient.connect(new ByteArrayCodec())
+        );
 
         redisClientMap.put(url, redisClient);
-        connectionMap.put(url, connection);
+        poolMap.put(url, pool);
     }
 
     private RedisAdvancedClusterAsyncCommands<byte[], byte[]> getCommands() {
-        if (!connectionMap.containsKey(url)) {
+        if (!poolMap.containsKey(url)) {
             openRedisClusterClient(url);
         }
-        return connectionMap.get(url).async();
+        SharePool<StatefulRedisClusterConnection<byte[], byte[]>> pool = poolMap.get(url);
+        StatefulRedisClusterConnection<byte[], byte[]> connection = pool.getObject();
+        return connection.async();
     }
 
     @Override

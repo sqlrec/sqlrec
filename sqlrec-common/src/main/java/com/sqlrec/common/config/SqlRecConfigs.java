@@ -164,4 +164,12 @@ public class SqlRecConfigs {
             null,
             Long.class
     );
+
+    public static final ConfigOption<Integer> REDIS_POOL_SIZE = new ConfigOption<>(
+            "REDIS_POOL_SIZE",
+            16,
+            "redis connection pool size",
+            null,
+            Integer.class
+    );
 }

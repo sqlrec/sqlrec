@@ -1,8 +1,11 @@
 package com.sqlrec.connectors.redis.client;
 
+import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.SharePool;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
@@ -13,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisWrapper implements AbstractRedisWrapper {
     private static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+    private static Map<String, SharePool<StatefulRedisConnection<byte[], byte[]>>> poolMap = new ConcurrentHashMap<>();
 
     private String url;
 
@@ -23,22 +26,29 @@ public class RedisWrapper implements AbstractRedisWrapper {
     }
 
     private static synchronized void openRedisClient(String url) {
-        if (connectionMap.containsKey(url)) {
+        if (poolMap.containsKey(url)) {
             return;
         }
 
-        RedisClient redisClient = RedisClient.create(url);
-        StatefulRedisConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
+        RedisURI redisURI = RedisURI.create(url);
+        RedisClient redisClient = RedisClient.create(redisURI);
+
+        SharePool<StatefulRedisConnection<byte[], byte[]>> pool = new SharePool<>(
+                SqlRecConfigs.REDIS_POOL_SIZE.getValue(),
+                () -> redisClient.connect(new ByteArrayCodec())
+        );
 
         redisClientMap.put(url, redisClient);
-        connectionMap.put(url, connection);
+        poolMap.put(url, pool);
     }
 
     private RedisAsyncCommands<byte[], byte[]> getCommands() {
-        if (!connectionMap.containsKey(url)) {
+        if (!poolMap.containsKey(url)) {
             openRedisClient(url);
         }
-        return connectionMap.get(url).async();
+        SharePool<StatefulRedisConnection<byte[], byte[]>> pool = poolMap.get(url);
+        StatefulRedisConnection<byte[], byte[]> connection = pool.getObject();
+        return connection.async();
     }
 
     @Override
