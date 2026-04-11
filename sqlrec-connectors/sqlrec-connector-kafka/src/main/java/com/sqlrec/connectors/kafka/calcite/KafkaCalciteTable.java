@@ -67,16 +67,22 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
                 tableName, clazz);
     }
 
+    private static String getProducerConfigKey(KafkaConfig config) {
+        return config.bootstrapServers + "|" + config.keySerializer + "|" + config.valueSerializer + "|" + config.lingerMs;
+    }
+
     public static KafkaProducer<String, String> getKafkaProducer(KafkaConfig kafkaConfig) {
-        if (kafkaProducerMap.containsKey(kafkaConfig.bootstrapServers)) {
-            return kafkaProducerMap.get(kafkaConfig.bootstrapServers);
+        String configKey = getProducerConfigKey(kafkaConfig);
+        if (kafkaProducerMap.containsKey(configKey)) {
+            return kafkaProducerMap.get(configKey);
         }
         return openKafkaProducer(kafkaConfig);
     }
 
     private static synchronized KafkaProducer<String, String> openKafkaProducer(KafkaConfig kafkaConfig) {
-        if (kafkaProducerMap.containsKey(kafkaConfig.bootstrapServers)) {
-            return kafkaProducerMap.get(kafkaConfig.bootstrapServers);
+        String configKey = getProducerConfigKey(kafkaConfig);
+        if (kafkaProducerMap.containsKey(configKey)) {
+            return kafkaProducerMap.get(configKey);
         }
 
         Properties props = new Properties();
@@ -86,7 +92,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         props.put("linger.ms", kafkaConfig.lingerMs);
 
         KafkaProducer<String, String> producer = new KafkaProducer<>(props);
-        kafkaProducerMap.put(kafkaConfig.bootstrapServers, producer);
+        kafkaProducerMap.put(configKey, producer);
         return producer;
     }
 
