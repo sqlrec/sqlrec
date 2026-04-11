@@ -2,14 +2,12 @@ package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.config.RedisConfig;
-import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -19,13 +17,15 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Tag("integration")
 public class TestRedisTable {
@@ -46,62 +46,65 @@ public class TestRedisTable {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        List<String> sqlList = Arrays.asList(
-                "delete from t1 where id = 1",
-                "insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)",
-                "select * from t1 where id = 1",
-                "update t1 set name = 'a' where id = 1",
-                "select * from t1 where id = 1 and name = 'a'",
-                "update t1 set name = 'Alice1' where id = 1",
-                "select * from t1 where id = 1 and name = 'Alice1'",
-                "delete from t1 where id = 1",
-                "select * from t1 where id = 1",
-                "delete from t2 where id = 1",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
-                "select * from t2 where id = 1",
-                "select * from t2 where id = 1 and name = 'Alice1'",
-                "delete from t2 where id = 1 and name = 'Alice1'",
-                "select * from t2 where id = 1",
-                "select * from t3 join t3 as t on t3.id = t.id",
-                "select * from t3 join t4 on t3.id = t4.id",
-                "select * from t3 left join t2 on t3.id = t2.id",
-                "select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'",
-                "select * from t3 join t2 on t3.id = t2.id",
-                "select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'",
-                "select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice1'",
-                "select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
-                "select t3.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
-                "select t3.*, t2.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
-                "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
-                "select id1, count(id2) from ( " +
-                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
-                        ") group by id1 order by id1 limit 10",
+        new SqlTestCase("delete from t1 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1", null).test(schema);
+        new SqlTestCase("update t1 set name = 'a' where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and name = 'a'", null).test(schema);
+        new SqlTestCase("update t1 set name = 'Alice1' where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("delete from t1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
+
+        new SqlTestCase("select * from t3 join t3 as t on t3.id = t.id", null, """
+                LogicalProject(ID=[$0], NAME=[$1], ID0=[$2], NAME0=[$3])
+                  LogicalJoin(condition=[=($0, $2)], joinType=[inner])
+                    LogicalTableScan(table=[[default, t3]])
+                    LogicalTableScan(table=[[default, t3]])""", """
+                EnumerableMergeJoin(condition=[=($0, $2)], joinType=[inner])
+                  EnumerableSort(sort0=[$0], dir0=[ASC])
+                    EnumerableTableScan(table=[[default, t3]])
+                  EnumerableSort(sort0=[$0], dir0=[ASC])
+                    EnumerableTableScan(table=[[default, t3]])""", null).test(schema);
+
+        new SqlTestCase("select * from t3 join t4 on t3.id = t4.id", null, """
+                LogicalProject(ID=[$0], NAME=[$1], ID0=[$2], NAME0=[$3])
+                  LogicalJoin(condition=[=($0, $2)], joinType=[inner])
+                    LogicalTableScan(table=[[default, t3]])
+                    LogicalTableScan(table=[[default, t4]])""", """
+                EnumerableMergeJoin(condition=[=($0, $2)], joinType=[inner])
+                  EnumerableSort(sort0=[$0], dir0=[ASC])
+                    EnumerableTableScan(table=[[default, t3]])
+                  EnumerableSort(sort0=[$0], dir0=[ASC])
+                    EnumerableTableScan(table=[[default, t4]])""", null).test(schema);
+
+        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id", null).test(schema);
+        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'", null).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id", null).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'", null).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select t3.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select t3.*, t2.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select id1, count(id2) from ( " +
+                "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
+                ") group by id1 order by id1 limit 10", null).test(schema);
+        new SqlTestCase("select * from ( " +
+                "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
+                ") t " +
+                "union all " +
                 "select * from ( " +
-                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
-                        ") t " +
-                        "union all " +
-                        "select * from ( " +
-                        "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice3'" +
-                        ") t2 "
-        );
-
-        for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            } else {
-                System.out.println("no result");
-            }
-        }
+                "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice3'" +
+                ") t2 ", null).test(schema);
     }
 
     @Test
@@ -118,42 +121,19 @@ public class TestRedisTable {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        List<String> sqlList = Arrays.asList(
-                "delete from t2 where id = 1",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 4)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 5)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 6)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 7)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 8)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 9)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 10)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 11)",
-                "select * from t2 where id = 1"
-        );
-
-        for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-                if (sql.startsWith("select")) {
-                    assert results.size() == 10;
-                    assert ((Number) results.get(0)[2]).intValue() == 11;
-                    assert ((Number) results.get(9)[2]).intValue() == 2;
-                }
-            } else {
-                System.out.println("no result");
-            }
-        }
+        new SqlTestCase("delete from t2 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 4)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 5)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 6)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 7)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 8)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 9)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 10)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 11)", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {

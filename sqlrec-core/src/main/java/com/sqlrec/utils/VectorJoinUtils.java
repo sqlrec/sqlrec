@@ -118,7 +118,7 @@ public class VectorJoinUtils {
         return Linq4j.asEnumerable(result);
     }
 
-    private static Object[] buildProjectRow(Object[] joinRow, List<Integer> projectColumns, int projectSize) {
+    public static Object[] buildProjectRow(Object[] joinRow, List<Integer> projectColumns, int projectSize) {
         if (projectColumns == null || projectColumns.isEmpty()) {
             return joinRow;
         }

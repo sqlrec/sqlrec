@@ -1,21 +1,16 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.sqlrec.connectors.TestRedisTable.getListRedisTable;
@@ -38,47 +33,42 @@ public class TestJoinRedis {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        List<String> sqlList = Arrays.asList(
-                "delete from t2 where id = 1",
-                "delete from t2 where id = 2",
-                "delete from t2 where id = 3",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)",
-                "insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)",
-                "insert into t2 (ID, NAME, CNT) values (2, 'Alice1', 1)",
-                "insert into t2 (ID, NAME, CNT) values (2, 'Alice2', 2)",
-                "insert into t2 (ID, NAME, CNT) values (2, 'Alice3', 3)",
-                "insert into t2 (ID, NAME, CNT) values (3, 'Alice1', 1)",
-                "insert into t2 (ID, NAME, CNT) values (3, 'Alice2', 2)",
-                "insert into t2 (ID, NAME, CNT) values (3, 'Alice3', 3)",
-                "cache table t3 as select cnt id from t2 where id = 1 order by id",
-                "select * from t3",
-                "select * from t3 join t2 on t3.id = t2.id"
-        );
+        new SqlTestCase("delete from t2 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 2", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 3", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (2, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (2, 'Alice2', 2)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (2, 'Alice3', 3)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (3, 'Alice1', 1)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (3, 'Alice2', 2)", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (3, 'Alice3', 3)", null).test(schema);
 
-        for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
+        new SqlTestCase("cache table t3 as select cnt id from t2 where id = 1 order by id", null).test(schema);
 
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-                if (sql.contains("join")) {
-                    assert results.size() == 9;
-                    assert results.get(0)[0].equals(1);
-                    assert results.get(1)[0].equals(2);
-                    assert results.get(2)[0].equals(3);
-                    assert results.get(0)[3].equals(3L);
-                    assert results.get(1)[3].equals(3L);
-                    assert results.get(2)[3].equals(3L);
-                }
-            } else {
-                System.out.println("no result");
-            }
-        }
+        new SqlTestCase("select * from t3", Arrays.<Object[]>asList(new Object[]{1}, new Object[]{2}, new Object[]{3}), """
+                LogicalProject(id=[$0])
+                  LogicalTableScan(table=[[t3]])""", """
+                EnumerableTableScan(table=[[t3]])""", null).test(schema);
+
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id", Arrays.<Object[]>asList(
+                new Object[]{1, 1L, "Alice3", 3L},
+                new Object[]{2, 2L, "Alice3", 3L},
+                new Object[]{3, 3L, "Alice3", 3L},
+                new Object[]{1, 1L, "Alice2", 2L},
+                new Object[]{2, 2L, "Alice2", 2L},
+                new Object[]{3, 3L, "Alice2", 2L},
+                new Object[]{1, 1L, "Alice1", 1L},
+                new Object[]{2, 2L, "Alice1", 1L},
+                new Object[]{3, 3L, "Alice1", 1L}), """
+                LogicalProject(id=[$0], ID0=[$1], NAME=[$2], CNT=[$3])
+                  LogicalJoin(condition=[=($0, $1)], joinType=[inner])
+                    LogicalTableScan(table=[[t3]])
+                    LogicalTableScan(table=[[default, t2]])""", """
+                SqlrecEnumerableKvJoin(condition=[=($0, $1)], joinType=[inner])
+                  EnumerableTableScan(table=[[t3]])
+                  EnumerableTableScan(table=[[default, t2]])""", null).test(schema);
     }
 }

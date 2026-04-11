@@ -3,21 +3,20 @@ package com.sqlrec.connectors;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.connectors.kafka.calcite.KafkaCalciteTable;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
-import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Tag("integration")
 public class TestKafkaTable {
@@ -34,25 +33,11 @@ public class TestKafkaTable {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        List<String> sqlList = Arrays.asList(
-                "insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)"
-        );
-
-        for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            } else {
-                System.out.println("no result");
-            }
-        }
+        new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null, """
+                LogicalTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])
+                  LogicalValues(tuples=[[{ 1, 'Alice1', 1 }]])""", """
+                SqlRecEnumerableTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])
+                  EnumerableValues(tuples=[[{ 1, 'Alice1', 1 }]])""", null).test(schema);
     }
 
     public static Table getKafkaTable() {

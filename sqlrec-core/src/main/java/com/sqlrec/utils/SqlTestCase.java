@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -20,6 +21,10 @@ public class SqlTestCase {
     public String sql;
     public List<Object[]> expectedResult;
     public Exception expectedException;
+    public String expectedLogicalPlan;
+    public String expectedPhysicalPlan;
+    public String expectedJavaExpression;
+    public boolean debugOutput = true;
 
     public SqlTestCase(String sql) {
         this.sql = sql;
@@ -36,14 +41,28 @@ public class SqlTestCase {
         this.expectedException = expectedException;
     }
 
+    public SqlTestCase(String sql, List<Object[]> expectedResult,
+                       String expectedLogicalPlan, String expectedPhysicalPlan, String expectedJavaExpression) {
+        this.sql = sql;
+        this.expectedResult = expectedResult;
+        this.expectedLogicalPlan = expectedLogicalPlan;
+        this.expectedPhysicalPlan = expectedPhysicalPlan;
+        this.expectedJavaExpression = expectedJavaExpression;
+    }
+
+    public SqlTestCase setDebugOutput(boolean debugOutput) {
+        this.debugOutput = debugOutput;
+        return this;
+    }
+
     public void checkResult(List<Object[]> actualResult) {
         if (expectedResult == null) {
             return;
         }
 
         assert actualResult != null : "actualResult is null";
-        assert actualResult.size() == expectedResult.size() : 
-            "size mismatch: expected " + expectedResult.size() + ", actual " + actualResult.size();
+        assert actualResult.size() == expectedResult.size() :
+                "size mismatch: expected " + expectedResult.size() + ", actual " + actualResult.size();
         for (int i = 0; i < actualResult.size(); i++) {
             Object[] actualRow = actualResult.get(i);
             Object[] expectedRow = expectedResult.get(i);
@@ -56,6 +75,43 @@ public class SqlTestCase {
         }
     }
 
+    public void checkBindable(CalciteBindable bindable) {
+        if (expectedLogicalPlan != null) {
+            String actualLogicalPlan = bindable.getLogicalPlan();
+            if (!normalizeString(expectedLogicalPlan).equals(normalizeString(actualLogicalPlan))) {
+                log.error("Logical plan mismatch:");
+                log.error("  Expected (length={}):\n{}", expectedLogicalPlan.length(), expectedLogicalPlan);
+                log.error("  Actual (length={}):\n{}", actualLogicalPlan.length(), actualLogicalPlan);
+                assert false : "Logical plan mismatch";
+            }
+        }
+        if (expectedPhysicalPlan != null) {
+            String actualPhysicalPlan = bindable.getPhysicalPlan();
+            if (!normalizeString(expectedPhysicalPlan).equals(normalizeString(actualPhysicalPlan))) {
+                log.error("Physical plan mismatch:");
+                log.error("  Expected (length={}):\n{}", expectedPhysicalPlan.length(), expectedPhysicalPlan);
+                log.error("  Actual (length={}):\n{}", actualPhysicalPlan.length(), actualPhysicalPlan);
+                assert false : "Physical plan mismatch";
+            }
+        }
+        if (expectedJavaExpression != null) {
+            String actualJavaExpression = bindable.getJavaExpression();
+            if (!normalizeString(expectedJavaExpression).equals(normalizeString(actualJavaExpression))) {
+                log.error("Java expression mismatch:");
+                log.error("  Expected (length={}):\n{}", expectedJavaExpression.length(), expectedJavaExpression);
+                log.error("  Actual (length={}):\n{}", actualJavaExpression.length(), actualJavaExpression);
+                assert false : "Java expression mismatch";
+            }
+        }
+    }
+
+    private String normalizeString(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replaceAll("\\s+", "");
+    }
+
     public void test(CalciteSchema schema) throws Exception {
         test(schema, new ExecuteContextImpl());
     }
@@ -65,6 +121,19 @@ public class SqlTestCase {
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
         BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
                 Consts.DEFAULT_SCHEMA_NAME);
+
+        if (bindable instanceof CalciteBindable) {
+            CalciteBindable calciteBindable = (CalciteBindable) bindable;
+            if (debugOutput) {
+                log.info("=== Logical Plan ===");
+                log.info(calciteBindable.getLogicalPlan());
+                log.info("=== Physical Plan ===");
+                log.info(calciteBindable.getPhysicalPlan());
+                log.info("=== Java Expression ===");
+                log.info(calciteBindable.getJavaExpression());
+            }
+            checkBindable(calciteBindable);
+        }
 
         Exception actualException = null;
         Enumerable enumerable = null;
@@ -78,6 +147,9 @@ public class SqlTestCase {
             assert actualException != null;
             assert expectedException.getClass().isAssignableFrom(actualException.getClass());
         } else {
+            if (actualException != null) {
+                log.error("Exception during execution:", actualException);
+            }
             assert actualException == null;
         }
 

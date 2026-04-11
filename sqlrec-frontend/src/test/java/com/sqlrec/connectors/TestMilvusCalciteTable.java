@@ -4,13 +4,11 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
-import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.SchemaUtils;
+import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -20,7 +18,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
-import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
@@ -50,51 +47,33 @@ public class TestMilvusCalciteTable {
                 "com.sqlrec.udf.scalar.IpFunction"
         );
 
-        List<String> sqlList = Arrays.asList(
-                "insert into t1 (id, embedding, name) values (0, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice')",
-                "insert into t1 (id, embedding, name) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice1')",
-                "insert into t1 (id, embedding, name) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice2')",
-                "insert into t1 (id, embedding, name) values (3, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0], 'Alice3')",
-                "select * from t1 where id = 1",
-                "select * from t1 where id = 1 and name = 'Alice1'",
-                "select * from t2 join t1 on t2.ID = t1.id",
-                "delete from t1 where id = 3",
-                "select * from t1 where name like 'Alice%'",
-                "select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
-                "cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
-                "select * from tmp",
-                "select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
-                "select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
-                "select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)",
-                "select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10",
-                "select * from t2 join t1 on 1=1 where t2.name = t1.name order by ip(t2.embedding, t1.embedding) limit 10",
-                "select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10"
-                );
-
-        for (String sql : sqlList) {
-            System.out.println("\n" + sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-
-            Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
-            if (enumerable != null) {
-                List<Object[]> results = enumerable.toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
-                }
-            } else {
-                System.out.println("no result");
-            }
-        }
+        new SqlTestCase("insert into t1 (id, embedding, name) values (0, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 'Alice')", null).test(schema);
+        new SqlTestCase("insert into t1 (id, embedding, name) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 'Alice1')", null).test(schema);
+        new SqlTestCase("insert into t1 (id, embedding, name) values (2, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 'Alice2')", null).test(schema);
+        new SqlTestCase("insert into t1 (id, embedding, name) values (3, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 'Alice3')", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on t2.ID = t1.id", null).test(schema);
+        new SqlTestCase("delete from t1 where id = 3", null).test(schema);
+        new SqlTestCase("select * from t1 where name like 'Alice%'", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
+        new SqlTestCase("cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
+        new SqlTestCase("select * from tmp", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t2.name = t1.name order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
             return Linq4j.asEnumerable(new Object[][]{
-                    {1, "Alice", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)},
-                    {2, "Bob", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)},
-                    {3, "Charlie", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f)}
+                    {1, "Alice", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f)},
+                    {2, "Bob", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f)},
+                    {3, "Charlie", Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f)}
             });
         }
 
