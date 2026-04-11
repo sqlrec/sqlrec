@@ -59,12 +59,80 @@ public class TestMilvusCalciteTable {
         new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
         new SqlTestCase("cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
         new SqlTestCase("select * from tmp", null).test(schema);
-        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
-        new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
-        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
-        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
-        new SqlTestCase("select * from t2 join t1 on 1=1 where t2.name = t1.name order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
-        new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$6], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], NAME=[$1], embedding=[$2], id0=[$3], embedding0=[$4], name0=[$5], EXPR$6=[ip($2, $4)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$3], dir0=[ASC], fetch=[10])
+                          LogicalProject(id=[$3], embedding=[$4], name=[$5], EXPR$3=[ip($2, $4)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], limit=[10], projects=[[3, 4, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null,
+                """
+                        LogicalSort(sort0=[$3], dir0=[ASC])
+                          LogicalProject(ID=[$0], id0=[$3], name=[$5], EXPR$3=[ip($2, $4)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], projects=[[0, 3, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.name from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$3], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], id0=[$3], name=[$5], EXPR$3=[ip($2, $4)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 3, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t2.name = t1.name order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$6], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], NAME=[$1], embedding=[$2], id0=[$3], embedding0=[$4], name0=[$5], EXPR$6=[ip($2, $4)])
+                            LogicalFilter(condition=[=($1, $5)])
+                              LogicalJoin(condition=[true], joinType=[inner])
+                                LogicalTableScan(table=[[default, t2]])
+                                LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], filterCondition=[=($1, $5)], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$6], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], NAME=[$1], embedding=[$2], id0=[$3], embedding0=[$4], name0=[$5], EXPR$6=[ip($2, $4)])
+                            LogicalFilter(condition=[>=($3, 1)])
+                              LogicalJoin(condition=[true], joinType=[inner])
+                                LogicalTableScan(table=[[default, t2]])
+                                LogicalTableScan(table=[[default, t1]])""",
+                """
+                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], filterCondition=[>=($3, 1)], leftEmbeddingColIndex=[2], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6]])
+                          EnumerableTableScan(table=[[default, t2]])
+                          EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {
