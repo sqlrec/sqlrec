@@ -19,12 +19,12 @@ SQLRec has the following features:
 
 Versions before 1.0 are beta versions, not recommended for production use, and do not guarantee interface compatibility. There is no planned release date yet; it will be released after the following features are completed:
 
-- Comprehensive unit test and integration test coverage
+- Comprehensive unit test, integration test, and effectiveness test coverage
+- Code quality optimization, many details still need refinement
+- Support for degradation and timeout configuration
 - Complete version management methods for easy rollback to previous versions
-- Optimize code quality, many details still need refinement
-- Improve metric monitoring system
+- Optimize metric monitoring system
 - C++ model serving
-- Validate model training effectiveness on public datasets
 
 ### Future Feature Plans
 
@@ -34,4 +34,5 @@ Versions before 1.0 are beta versions, not recommended for production use, and d
 - Support for more external data sources, such as JDBC, MongoDB, etc.
 - Tensorboard visualization of model training process
 - GPU training and inference support
+- Support for authentication and authorization
 - Best practice tutorials, including search, recommendation, etc.

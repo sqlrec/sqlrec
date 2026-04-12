@@ -326,12 +326,12 @@ Transfer/sec:      1.93MB
 ## Roadmap
 ### When will version 1.0 be released
 Versions before 1.0 are beta versions, not recommended for production use, and interface compatibility is not guaranteed. There is no planned release date yet. It will be released after the following features are completed:
-- Comprehensive unit test and integration test coverage
-- Complete version management method, easy to roll back to previous versions
+- Comprehensive unit test, integration test, and effectiveness test coverage
 - Code quality optimization, many details still need to be polished
+- Support for degradation and timeout configuration
+- Complete version management method, easy to roll back to previous versions
 - Metric monitoring system improvement
 - C++ model serving
-- Validate model training effectiveness on public datasets
 
 ### Future Feature Planning
 - Frontend UI for viewing current execution DAG, SQL code, statistics, etc.
@@ -340,4 +340,5 @@ Versions before 1.0 are beta versions, not recommended for production use, and i
 - Support for more external data sources, such as JDBC, MongoDB, etc.
 - Tensorboard visualization of model training process
 - GPU training and inference support
+- Support for authentication and authorization
 - Best practice tutorials, including search, recommendation, etc.
