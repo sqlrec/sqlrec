@@ -1,4 +1,24 @@
-# SQLRec
+<h1 align="center">SQLRec</h1>
+
+<p align="center">
+  English | <a href="README_zh.md">中文</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/sqlrec/sqlrec/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/sqlrec/sqlrec" alt="License">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/stargazers">
+    <img src="https://img.shields.io/github/stars/sqlrec/sqlrec" alt="Stars">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/network/members">
+    <img src="https://img.shields.io/github/forks/sqlrec/sqlrec" alt="Forks">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/commits">
+    <img src="https://img.shields.io/github/last-commit/sqlrec/sqlrec" alt="Last Commit">
+  </a>
+</p>
+
 A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SQLRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
 
 ![system_architecture](docs/public/sqlrec_arch.png)

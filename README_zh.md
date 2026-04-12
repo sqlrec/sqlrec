@@ -1,4 +1,23 @@
-# SQLRec
+<h1 align="center">SQLRec</h1>
+
+<p align="center">
+  <a href="README.md">English</a> | 中文
+</p>
+
+<p align="center">
+  <a href="https://github.com/sqlrec/sqlrec/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/sqlrec/sqlrec" alt="License">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/stargazers">
+    <img src="https://img.shields.io/github/stars/sqlrec/sqlrec" alt="Stars">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/network/members">
+    <img src="https://img.shields.io/github/forks/sqlrec/sqlrec" alt="Forks">
+  </a>
+  <a href="https://github.com/sqlrec/sqlrec/commits">
+    <img src="https://img.shields.io/github/last-commit/sqlrec/sqlrec" alt="Last Commit">
+  </a>
+</p>
 
 一个支持使用SQL进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SQLRec将底层的组件访问、模型训练、推理等流程使用SQL封装，上层推荐业务逻辑仅使用SQL进行描述即可。
 
