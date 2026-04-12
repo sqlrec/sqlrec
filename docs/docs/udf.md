@@ -172,13 +172,13 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 ### call_service
 
-模型服务调用函数，用于调用已部署的模型服务进行推理。详见 [模型文档](models.md#内置模型调用-udf)。
+模型服务调用函数，用于调用已部署的模型服务进行推理。详见 [模型文档](./model/basic_concepts.md#call_service)。
 
 ---
 
 ### call_service_with_qv
 
-带 Query-Value 模式的模型服务调用函数。详见 [模型文档](models.md#内置模型调用-udf)。
+带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。
 
 ## 标量函数（Scalar Function）
 

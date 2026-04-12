@@ -172,13 +172,13 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 ### call_service
 
-Model service call function used to call deployed model services for inference. See [Models documentation](models.md#built-in-model-call-udf) for details.
+Model service call function used to call deployed model services for inference. See [Models documentation](./model/basic_concepts.md#call_service) for details.
 
 ---
 
 ### call_service_with_qv
 
-Model service call function with Query-Value mode. See [Models documentation](models.md#built-in-model-call-udf) for details.
+Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.
 
 ## Scalar Functions
 
