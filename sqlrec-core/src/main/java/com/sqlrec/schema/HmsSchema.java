@@ -4,9 +4,9 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.udf.UdfManager;
 import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.ObjCache;
-import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.ScalarFunction;
@@ -123,13 +123,13 @@ public class HmsSchema extends AbstractSchema {
             List<String> functions = HmsClient.getAllFunctions(databaseName);
             for (String function : functions) {
                 org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(databaseName, function);
-                ScalarFunction scalarFunction = SchemaUtils.createScalarFunction(functionObj.getClassName());
+                ScalarFunction scalarFunction = UdfManager.createScalarFunction(functionObj.getClassName());
                 if (scalarFunction != null) {
                     functionMap.put(function, scalarFunction);
                 }
             }
             for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
-                functionMap.put(entry.getKey(), SchemaUtils.createScalarFunction(entry.getValue()));
+                functionMap.put(entry.getKey(), UdfManager.createScalarFunction(entry.getValue()));
             }
         } catch (Exception e) {
             log.error("Error while computing function map for schema {}", databaseName, e);

@@ -3,7 +3,7 @@ package com.sqlrec;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.SchemaUtils;
+import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
@@ -27,33 +27,41 @@ public class TestUdfSupport {
         });
         HmsSchema.setGlobalSchema(schema);
 
-        SchemaUtils.addFunction(
+        UdfManager.addFunction(
                 schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
                 "uuid",
                 "com.sqlrec.udf.scalar.UuidFunction"
         );
-        SchemaUtils.addFunction(
+        UdfManager.addFunction(
                 schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
                 "l2_norm",
                 "com.sqlrec.udf.scalar.L2NormFunction"
         );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "get",
+                "com.sqlrec.udf.scalar.GetFunction"
+        );
+
+        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        executeContext.setVariable("test_var", "hello_world");
 
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase("select uuid()"),
                 new SqlTestCase(
                         "select l2_norm(array_float_type) from myTable",
                         Arrays.asList(
-                                new Object[]{Arrays.asList(1.0/Math.sqrt(14.0d), 2.0/Math.sqrt(14.0d), 3.0/Math.sqrt(14.0d))},
-                                new Object[]{Arrays.asList(4.0/Math.sqrt(77.0d), 5.0/Math.sqrt(77.0d), 6.0/Math.sqrt(77.0d))},
-                                new Object[]{Arrays.asList(7.0/Math.sqrt(194.0d), 8.0/Math.sqrt(194.0d), 9.0/Math.sqrt(194.0d))}
+                                new Object[]{Arrays.asList(1.0 / Math.sqrt(14.0d), 2.0 / Math.sqrt(14.0d), 3.0 / Math.sqrt(14.0d))},
+                                new Object[]{Arrays.asList(4.0 / Math.sqrt(77.0d), 5.0 / Math.sqrt(77.0d), 6.0 / Math.sqrt(77.0d))},
+                                new Object[]{Arrays.asList(7.0 / Math.sqrt(194.0d), 8.0 / Math.sqrt(194.0d), 9.0 / Math.sqrt(194.0d))}
                         )
                 ),
                 new SqlTestCase(
                         "select l2_norm(array_double_type) from myTable",
                         Arrays.asList(
-                                new Object[]{Arrays.asList(1.0/Math.sqrt(14.0d), 2.0/Math.sqrt(14.0d), 3.0/Math.sqrt(14.0d))},
-                                new Object[]{Arrays.asList(4.0/Math.sqrt(77.0d), 5.0/Math.sqrt(77.0d), 6.0/Math.sqrt(77.0d))},
-                                new Object[]{Arrays.asList(7.0/Math.sqrt(194.0d), 8.0/Math.sqrt(194.0d), 9.0/Math.sqrt(194.0d))}
+                                new Object[]{Arrays.asList(1.0 / Math.sqrt(14.0d), 2.0 / Math.sqrt(14.0d), 3.0 / Math.sqrt(14.0d))},
+                                new Object[]{Arrays.asList(4.0 / Math.sqrt(77.0d), 5.0 / Math.sqrt(77.0d), 6.0 / Math.sqrt(77.0d))},
+                                new Object[]{Arrays.asList(7.0 / Math.sqrt(194.0d), 8.0 / Math.sqrt(194.0d), 9.0 / Math.sqrt(194.0d))}
                         )
                 ),
                 new SqlTestCase(
@@ -152,11 +160,49 @@ public class TestUdfSupport {
                 ),
                 new SqlTestCase("select CURRENT_TIMESTAMP"),
                 new SqlTestCase("select CURRENT_TIMESTAMP(1)"),
-                new SqlTestCase("select cast(CURRENT_TIMESTAMP as BIGINT) as req_time")
+                new SqlTestCase("select cast(CURRENT_TIMESTAMP as BIGINT) as req_time"),
+                new SqlTestCase(
+                        "select `get`('test_var')",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"hello_world"}
+                        )
+                ),
+                new SqlTestCase("set 'num_var' = '12345'"),
+                new SqlTestCase(
+                        "select `get`('num_var')",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"12345"}
+                        )
+                ),
+                new SqlTestCase(
+                        "select cast(`get`('num_var') as bigint)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{12345L}
+                        )
+                ),
+                new SqlTestCase(
+                        "select `get`('nonexistent_var')",
+                        Arrays.<Object[]>asList(
+                                new Object[]{null}
+                        )
+                ),
+                new SqlTestCase(
+                        "select `get`('test_var') || '!'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"hello_world!"}
+                        )
+                ),
+                new SqlTestCase("cache table tmp as select 'test_var' as name"),
+                new SqlTestCase(
+                        "select `get`(name) || '!' from tmp",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"hello_world!"}
+                        )
+                )
         );
 
         for (SqlTestCase sqlTestCase : sqlList) {
-            sqlTestCase.test(schema, new ExecuteContextImpl());
+            sqlTestCase.test(schema, executeContext);
         }
     }
 }

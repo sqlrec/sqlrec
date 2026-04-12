@@ -4,9 +4,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.schema.impl.ScalarFunctionImpl;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
@@ -21,21 +19,6 @@ import java.util.*;
 
 public class SchemaUtils {
     private static final Logger log = LoggerFactory.getLogger(SchemaUtils.class);
-
-    public static void addFunction(CalciteSchema schema, String functionName, String className) throws Exception {
-        schema.plus().add(
-                functionName, Objects.requireNonNull(createScalarFunction(className))
-        );
-    }
-
-    public static ScalarFunction createScalarFunction(String className) throws Exception {
-        return createScalarFunction(className, "eval");
-    }
-
-    public static ScalarFunction createScalarFunction(String className, String methodName) throws Exception {
-        Class<?> clazz = Class.forName(className);
-        return ScalarFunctionImpl.create(clazz, methodName);
-    }
 
     public static String getValueOfStringLiteral(SqlCharStringLiteral value) {
         if (value == null) {

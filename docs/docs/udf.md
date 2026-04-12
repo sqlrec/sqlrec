@@ -286,6 +286,60 @@ LIMIT 300;
 - 如果向量已归一化，内积等于余弦相似度
 - 常用于向量检索和相似度计算
 
+---
+
+### get
+
+变量获取函数，从执行上下文中获取变量的值。常用于在SQL中引用通过 `SET` 语句设置的变量。
+
+**函数签名**：
+
+```java
+public static String eval(DataContext context, String key)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `key` | String | 变量名 |
+
+**返回值**：返回变量的值（`String`），如果变量不存在则返回 `NULL`。
+
+::: warning 注意
+由于 `get` 是 SQL 关键字，使用时需要用反引号包裹函数名，写作 `` `get` ``。
+:::
+
+**使用示例**：
+
+```sql
+-- 设置变量
+SET 'user_id' = '12345';
+
+-- 获取变量值
+SELECT `get`('user_id') AS user_id;
+
+-- 在表达式中使用
+SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
+
+-- 类型转换
+SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
+
+-- 从表中获取变量名并使用
+CACHE TABLE var_names AS SELECT 'user_id' AS var_name;
+SELECT `get`(var_name) AS var_value FROM var_names;
+```
+
+**工作原理**：
+1. 函数接收一个变量名作为参数
+2. 从执行上下文（`ExecuteContext`）中查找对应的变量值
+3. 返回变量值，如果变量不存在则返回 `NULL`
+
+**典型应用场景**：
+- 参数化SQL查询
+- 动态配置传递
+- 跨语句共享变量
+
 ## 自定义 UDF
 
 可以参考 [编程模型](program_model.md#udf) 文档了解如何开发自定义 UDF。

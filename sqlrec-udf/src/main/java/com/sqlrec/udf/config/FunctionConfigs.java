@@ -1,5 +1,6 @@
 package com.sqlrec.udf.config;
 
+import com.sqlrec.udf.scalar.GetFunction;
 import com.sqlrec.udf.scalar.IpFunction;
 import com.sqlrec.udf.scalar.L2NormFunction;
 import com.sqlrec.udf.scalar.UuidFunction;
@@ -13,6 +14,7 @@ public class FunctionConfigs {
         put("ip", IpFunction.class.getName());
         put("l2_norm", L2NormFunction.class.getName());
         put("uuid", UuidFunction.class.getName());
+        put("get", GetFunction.class.getName());
     }};
 
     public static final Map<String, String> DEFAULT_JAVA_FUNCTION_CONFIGS = new HashMap<String, String>() {{

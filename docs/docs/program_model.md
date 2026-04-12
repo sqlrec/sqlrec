@@ -687,12 +687,35 @@ public class MyTableFunction {
 
 SQLRec 会根据 `eval` 方法的参数类型自动注入相应的值：
 
-| 参数类型 | 注入来源 | SQL 语法 |
-|----------|----------|----------|
-| `CacheTable` | 传入的缓存表 | 标识符（如 `table_name`） |
-| `String` | 字符串字面量或变量 | `'value'` 或 `GET('var')` |
-| `ExecuteContext` | 执行上下文 | 自动注入，无需在 SQL 中指定 |
-| `ConfigContext` | 配置上下文 | 自动注入，无需在 SQL 中指定 |
+| 参数类型 | 注入来源 | SQL 语法 | 适用场景 |
+|----------|----------|----------|----------|
+| `CacheTable` | 传入的缓存表 | 标识符（如 `table_name`） | 表函数 |
+| `String` | 字符串字面量或变量 | `'value'` 或 `GET('var')` | 表函数、标量函数 |
+| `ExecuteContext` | 执行上下文 | 自动注入，无需在 SQL 中指定 | 表函数 |
+| `ConfigContext` | 配置上下文 | 自动注入，无需在 SQL 中指定 | 表函数 |
+| `SqlRecDataContext` | SQLRec 数据上下文 | 自动注入，无需在 SQL 中指定 | 标量函数 |
+
+`SqlRecDataContext` 是专门为标量 UDF 设计的接口，继承自 Calcite 的 `DataContext`。它提供了访问执行上下文变量的能力：
+
+```java
+public interface SqlRecDataContext extends DataContext {
+    String getVariable(String key);
+}
+```
+
+在标量 UDF 中，可以通过 `SqlRecDataContext` 获取变量值：
+
+```java
+public class GetFunction {
+    public static String eval(DataContext context, String key) {
+        if (!(context instanceof SqlRecDataContext)) {
+            throw new IllegalArgumentException("context must be SqlRecDataContext");
+        }
+        SqlRecDataContext sqlRecDataContext = (SqlRecDataContext) context;
+        return sqlRecDataContext.getVariable(key);
+    }
+}
+```
 
 参数注入示例
 

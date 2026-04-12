@@ -286,6 +286,60 @@ LIMIT 300;
 - If vectors are already normalized, inner product equals cosine similarity
 - Commonly used for vector retrieval and similarity calculation
 
+---
+
+### get
+
+Variable retrieval function that gets the value of a variable from the execution context. Commonly used to reference variables set via the `SET` statement in SQL.
+
+**Function Signature**:
+
+```java
+public static String eval(DataContext context, String key)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | String | Variable name |
+
+**Return Value**: Returns the variable value (`String`), or `NULL` if the variable doesn't exist.
+
+::: warning Note
+Since `get` is a SQL keyword, you need to wrap the function name with backticks when using it, written as `` `get` ``.
+:::
+
+**Usage Example**:
+
+```sql
+-- Set variable
+SET 'user_id' = '12345';
+
+-- Get variable value
+SELECT `get`('user_id') AS user_id;
+
+-- Use in expressions
+SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
+
+-- Type conversion
+SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
+
+-- Get variable name from table and use it
+CACHE TABLE var_names AS SELECT 'user_id' AS var_name;
+SELECT `get`(var_name) AS var_value FROM var_names;
+```
+
+**Working Principle**:
+1. Function receives a variable name as parameter
+2. Looks up the corresponding variable value from the execution context (`ExecuteContext`)
+3. Returns the variable value, or `NULL` if the variable doesn't exist
+
+**Typical Use Cases**:
+- Parameterized SQL queries
+- Dynamic configuration passing
+- Cross-statement variable sharing
+
 ## Custom UDF
 
 Refer to [Programming Model](program_model.md#udf) documentation for how to develop custom UDFs.

@@ -687,12 +687,35 @@ public class MyTableFunction {
 
 SQLRec automatically injects corresponding values based on the `eval` method parameter types:
 
-| Parameter Type | Injection Source | SQL Syntax |
-|----------------|------------------|------------|
-| `CacheTable` | Passed cache table | Identifier (like `table_name`) |
-| `String` | String literal or variable | `'value'` or `GET('var')` |
-| `ExecuteContext` | Execution context | Auto-injected, no need to specify in SQL |
-| `ConfigContext` | Configuration context | Auto-injected, no need to specify in SQL |
+| Parameter Type | Injection Source | SQL Syntax | Use Case |
+|----------------|------------------|------------|----------|
+| `CacheTable` | Passed cache table | Identifier (like `table_name`) | Table function |
+| `String` | String literal or variable | `'value'` or `GET('var')` | Table function, Scalar function |
+| `ExecuteContext` | Execution context | Auto-injected, no need to specify in SQL | Table function |
+| `ConfigContext` | Configuration context | Auto-injected, no need to specify in SQL | Table function |
+| `SqlRecDataContext` | SQLRec data context | Auto-injected, no need to specify in SQL | Scalar function |
+
+`SqlRecDataContext` is an interface specifically designed for scalar UDFs, inheriting from Calcite's `DataContext`. It provides the ability to access execution context variables:
+
+```java
+public interface SqlRecDataContext extends DataContext {
+    String getVariable(String key);
+}
+```
+
+In scalar UDFs, you can retrieve variable values through `SqlRecDataContext`:
+
+```java
+public class GetFunction {
+    public static String eval(DataContext context, String key) {
+        if (!(context instanceof SqlRecDataContext)) {
+            throw new IllegalArgumentException("context must be SqlRecDataContext");
+        }
+        SqlRecDataContext sqlRecDataContext = (SqlRecDataContext) context;
+        return sqlRecDataContext.getVariable(key);
+    }
+}
+```
 
 Parameter injection example
 
