@@ -4,6 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "SQLRec",
   description: "SQLRec docs",
+  base: '/sqlrec/',
   locales: {
     root: {
       label: '简体中文',

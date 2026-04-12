@@ -287,6 +287,7 @@ You can test the function directly in the beeline command line as shown below
 2 rows selected (0.003 seconds)
 ```
 You can see that recall, recommendation reasons, and deduplication are all working.
+
 4. Create API Interface
 Refer to the following SQL to expose the SQL function as an API interface:
 ```sql

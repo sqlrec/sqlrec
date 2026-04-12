@@ -1,9 +1,11 @@
 # SQLRec
+
 一个支持使用SQL进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SQLRec将底层的组件访问、模型训练、推理等流程使用SQL封装，上层推荐业务逻辑仅使用SQL进行描述即可。
 
-![system_architecture](docs/public/sqlrec_arch.png)
+![system\_architecture](docs/public/sqlrec_arch.png)
 
 sqlRec有以下特点：
+
 - 云原生，自带基于minikube的部署脚本，可以一键部署SQLRec系统和相关的依赖服务
 - 扩展了SQL语法，让使用SQL描述推荐系统业务逻辑变得可能
 - 基于calcite实现了一个高效的SQL执行引擎，可以满足推荐系统的实时性要求
@@ -15,9 +17,11 @@ sqlRec有以下特点：
 ## 快速开始
 
 ### 服务部署
+
 SQLRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
 
 按下述命令部署SQLRec系统：
+
 ```bash
 # clone sqlrec repository
 git clone https://github.com/sqlrec/sqlrec.git
@@ -43,7 +47,9 @@ kubectl get pod --ALL
 cd ..
 bash ./bin/beeline.sh
 ```
+
 注意：
+
 - 上述基于minikube的部署方案仅用于测试，生产环境需要先部署可靠的大数据基础设施，然后参考deploy下的脚本初始化数据库、部署SQLRec deployment
 - 如果需要重新部署，可以先通过minikube delete删除集群
 - 有一些组件没有默认部署，比如kyuubi、jupyter等，如果需要，可以在deploy目录执行对应的部署脚本，比如`bash ./kyuubi/deploy.sh`
@@ -52,22 +58,29 @@ bash ./bin/beeline.sh
 ### 连接SQLRec服务
 
 #### 使用beeline
+
 SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
+
 ```bash
 bash ./bin/beeline.sh
 ```
 
 #### 使用python
+
 可以在Jupyter Notebook中使用python连接SQLRec服务，并使用python工具分析推荐数据，参考下述代码：
+
 - 使用deploy目录的脚本部署Jupyter
+
 ```bash
 cd deploy
 bash ./jupyter/deploy.sh
 # wait pod ready
 ```
+
 - 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30280`，使用env.sh中的账号密码登录
 - 新建python3 notebook
 - 安装依赖
+
 ```bash
 %pip install pandas
 %pip install pyhive
@@ -75,7 +88,9 @@ bash ./jupyter/deploy.sh
 %pip install thrift
 %pip install thrift-sasl
 ```
+
 - 连接SQLRec服务，运行sql语句
+
 ```python
 from pyhive import hive
 import pandas as pd
@@ -85,9 +100,11 @@ pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001",
 ```
 
 ### SQL开发
+
 执行`bash ./bin/beeline.sh`命令连接SQLRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
 
 1.初始化数据表，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述代码的ip地址
+
 ```sql
 SET table.sql-dialect = default;
 
@@ -139,7 +156,9 @@ CREATE TABLE IF NOT EXISTS `rec_log_kafka` (
   'format' = 'json'
 );
 ```
-2. 写入测试数据
+
+1. 写入测试数据
+
 ```sql
 INSERT INTO `user_interest_category1` VALUES
 (1000001, 'pc', 100),
@@ -161,7 +180,9 @@ select * from `user_interest_category1` where `user_id` = 1000001;
 
 select * from `category1_hot_item` where `category1` = 'pc';
 ```
+
 3.开发sql函数
+
 ```sql
 -- define function save rec data to kafka and redis
 create or replace sql function save_rec_item;
@@ -245,15 +266,17 @@ call save_rec_item(final_rec_data) async;
 
 return final_rec_data;
 ```
-上面SQL定义了推荐函数test_rec，可以发现SQL函数定义语法是：
+
+上面SQL定义了推荐函数test\_rec，可以发现SQL函数定义语法是：
+
 - `create or replace sql function`加函数名开头
 - `define input table`定义输入参数，可以为空或者定义多个
 - `cache table`缓存中间计算结果，可以缓存SELECT语句、SQL函数调用的执行结果
 - `call`调用其他函数, 可以通过async关键字异步调用
 - `return`返回计算结果，可以为空
 
-
 可以直接在beeline命令行测试函数，如下所示
+
 ```sql
 0: jdbc:hive2://192.168.49.2:30300/default> cache table t1 as select cast(1000001 as bigint) as id;
 +-------------+--------+
@@ -286,14 +309,20 @@ return final_rec_data;
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 2 rows selected (0.003 seconds)
 ```
+
 可以发现，召回、推荐理由、去重都已经生效。
-4. 创建API接口
+
+1. 创建API接口
    参考下述SQL将SQL函数暴露为API接口：
+
 ```sql
 create or replace api test_rec with test_rec;
 ```
+
 ### 推荐测试
+
 使用下述命令进行推荐测试：
+
 ```bash
 yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -H "Content-Type: application/json" \
@@ -302,17 +331,22 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 ```
 
 ## 性能测试
+
 benchmark目录下有测试脚本，可以参考如下命令进行测试：
+
 ```bash
 bash init.sh
 bash benchmark.sh
 ```
+
 默认的测试配置如下：
+
 - 10W用户、10W物品数据
 - 推荐流程包含4路召回：全局高热、用户兴趣类目高热、itemcf、向量检索（8维，user embedding固定），以及曝光去重、类目打散
 - 使用10并发测试单个SQLRec实例
 
 在AMD Ryzen 5600H、32GB DDR4内存机器上测试结果如下：
+
 ```
   Thread Stats   Avg      Stdev     Max   +/- Stdev
     Latency     9.23ms    5.04ms  48.96ms   90.50%
@@ -324,8 +358,11 @@ Transfer/sec:      1.93MB
 ```
 
 ## 路线图
+
 ### 1.0版本什么时候发布
+
 1.0之前版本都是beta版本，不建议线上使用，不保证接口兼容性。目前无规划发布时间，将在下述功能完善后发布：
+
 - 完善的单元测试、集成测试、效果测试覆盖
 - 优化代码质量，目前仍很多细节要打磨
 - 支持降级和超时配置
@@ -334,6 +371,7 @@ Transfer/sec:      1.93MB
 - c++模型serving
 
 ### 后续功能规划
+
 - 前端UI，用于查看当前执行DAG、SQL代码、统计信息等
 - 进一步优化SQL语法兼容性、运行性能
 - 更多开箱可用的UDF、模型等
@@ -342,3 +380,4 @@ Transfer/sec:      1.93MB
 - GPU训练、推理支持
 - 支持认证、鉴权
 - 最佳实践教程，包括搜索、推荐等
+
