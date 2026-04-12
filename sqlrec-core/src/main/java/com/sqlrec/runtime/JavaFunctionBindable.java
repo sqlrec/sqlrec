@@ -12,7 +12,6 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.commons.lang3.StringUtils;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -32,7 +31,7 @@ public class JavaFunctionBindable extends BindableInterface {
             String functionName,
             Object tableFunction,
             List<SqlNode> inputTableList,
-            String likeTableName,
+            List<RelDataTypeField> returnDataFields,
             CalciteSchema schema,
             boolean isAsync
     ) {
@@ -42,15 +41,15 @@ public class JavaFunctionBindable extends BindableInterface {
         this.evalMethod = getEvalMethod(tableFunction);
         this.isAsync = isAsync;
 
-        if (!StringUtils.isEmpty(likeTableName)) {
-            returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
+        if (returnDataFields != null) {
+            this.returnDataFields = returnDataFields;
         } else {
             if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
                 Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
                 if (outputTable == null) {
                     throw new RuntimeException("table function return null");
                 }
-                returnDataFields = ((CacheTable) outputTable).getDataFields();
+                this.returnDataFields = ((CacheTable) outputTable).getDataFields();
             }
         }
     }

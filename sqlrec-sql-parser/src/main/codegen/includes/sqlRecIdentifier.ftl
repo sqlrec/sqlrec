@@ -38,6 +38,7 @@ SqlCallSqlFunction GetCallSqlFunction() :
     SqlIdentifier funcName = null;
     List<SqlNode> inputList = new ArrayList<SqlNode>();
     SqlIdentifier likeTableName = null;
+    SqlNode likeFunctionName = null;
     boolean isAsync = false;
 }
 {
@@ -54,13 +55,18 @@ SqlCallSqlFunction GetCallSqlFunction() :
     <RPAREN>
     [
         <LIKE>
-        likeTableName = SimpleIdentifier()
+        (
+            <FUNCTION>
+            likeFunctionName = StringLiteral()
+        |
+            likeTableName = SimpleIdentifier()
+        )
     ]
     [
         <ASYNC> { isAsync = true; }
     ]
     {
-        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName, isAsync);
+        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName, likeFunctionName, isAsync);
     }
 }
 

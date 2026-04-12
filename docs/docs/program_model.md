@@ -720,9 +720,9 @@ CALL my_function(table1, table2, GET('config_var'));
 
 ### 编译期返回数据模式解析
 
-UDF 的返回数据模式（Schema）可以在编译期确定，有以下两种方式：
+UDF 的返回数据模式（Schema）可以在编译期确定，有以下三种方式：
 
-#### 1. 通过 LIKE 子句指定
+#### 1. 通过 LIKE 子句指定表模式
 
 ```sql
 CALL my_function(input_table) LIKE template_table;
@@ -736,7 +736,22 @@ if (!StringUtils.isEmpty(likeTableName)) {
 }
 ```
 
-#### 2. 通过执行 eval 方法推断
+#### 2. 通过 LIKE FUNCTION 子句指定函数模式
+
+```sql
+CALL my_function(input_table) LIKE FUNCTION 'template_function';
+```
+
+编译时，系统会从指定的函数获取返回数据模式：
+
+```java
+if (likeFunctionName != null) {
+    SqlFunctionBindable likeFunctionBindable = compileManager.getSqlFunction(likeFunctionName);
+    returnDataFields = likeFunctionBindable.getReturnDataFields();
+}
+```
+
+#### 3. 通过执行 eval 方法推断
 
 如果没有 LIKE 子句，系统会在编译期执行一次 `eval` 方法来推断返回模式：
 

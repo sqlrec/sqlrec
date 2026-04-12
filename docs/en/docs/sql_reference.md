@@ -615,7 +615,7 @@ Cache query results or function call results to a specified table.
 
 ```sql
 CACHE TABLE table_name AS 
-    {CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
      | select_statement}
 ```
 
@@ -627,6 +627,7 @@ CACHE TABLE table_name AS
 | `function_name` | Function name to call, can be an identifier or `GET()` expression |
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
+| `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `ASYNC` | Optional. Execute asynchronously |
 | `select_statement` | SELECT query statement |
 
@@ -643,6 +644,9 @@ CACHE TABLE cached_result AS
 CALL my_function(GET('var1'), 'param2') LIKE template_table;
 
 CACHE TABLE cached_result AS
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
+
+CACHE TABLE cached_result AS
 CALL my_function('param1') ASYNC;
 ```
 
@@ -656,7 +660,7 @@ Call a SQL function.
 **Syntax:**
 
 ```sql
-CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
 ```
 
 **Parameters:**
@@ -666,6 +670,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
 | `function_name` | Function name, can be an identifier or `GET()` expression |
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
+| `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `ASYNC` | Optional. Execute asynchronously |
 
 **Examples:**
@@ -674,6 +679,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
 CALL my_function('param1', 'param2');
 
 CALL my_function(GET('var1'), 'param2') LIKE template_table;
+
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CALL my_function('param1') ASYNC;
 

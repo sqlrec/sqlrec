@@ -21,24 +21,22 @@ import java.util.Set;
 public class FunctionProxyBindable extends BindableInterface {
     private List<SqlNode> inputList;
     private SqlGetVariable funcNameVariable;
-    private String likeTableName;
     private List<RelDataTypeField> returnDataFields;
     private boolean isAsync;
 
     public FunctionProxyBindable(
             List<SqlNode> inputList,
             SqlGetVariable funcNameVariable,
-            String likeTableName,
-            CalciteSchema schema,
+            List<RelDataTypeField> returnDataFields,
             boolean isAsync
     ) {
-        if (StringUtils.isEmpty(likeTableName)) {
-            throw new RuntimeException("like table name is empty");
+        if (returnDataFields == null) {
+            throw new RuntimeException("return data fields is null");
         }
-        this.returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
+        
         this.inputList = inputList;
         this.funcNameVariable = funcNameVariable;
-        this.likeTableName = likeTableName;
+        this.returnDataFields = returnDataFields;
         this.isAsync = isAsync;
     }
 
@@ -50,20 +48,30 @@ public class FunctionProxyBindable extends BindableInterface {
         List<SqlNode> inputList = callSqlFunction.getInputTableList();
         SqlGetVariable funcNameVariable = callSqlFunction.getFuncNameVariable();
         SqlIdentifier likeTableNameIdentifier = callSqlFunction.getLikeTableName();
-        String likeTableName = null;
+        SqlNode likeFunctionNameNode = callSqlFunction.getLikeFunctionName();
+        
+        List<RelDataTypeField> returnDataFields = null;
         if (likeTableNameIdentifier != null) {
-            likeTableName = likeTableNameIdentifier.getSimple();
+            String likeTableName = likeTableNameIdentifier.getSimple();
+            returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
+        } else if (likeFunctionNameNode != null) {
+            String likeFunctionName = SchemaUtils.getValueOfStringLiteral(likeFunctionNameNode);
+            SqlFunctionBindable likeFunctionBindable = compileManager.getSqlFunction(likeFunctionName);
+            if (likeFunctionBindable == null) {
+                throw new RuntimeException("like function not found: " + likeFunctionName);
+            }
+            returnDataFields = likeFunctionBindable.getReturnDataFields();
         }
 
         if (funcNameVariable != null) {
             return new FunctionProxyBindable(
-                    inputList, funcNameVariable, likeTableName, schema, callSqlFunction.isAsync()
+                    inputList, funcNameVariable, returnDataFields, callSqlFunction.isAsync()
             );
         }
 
         String functionName = callSqlFunction.getFuncName().getSimple();
         return getFunctionBindableByName(
-                functionName, schema, inputList, likeTableName, callSqlFunction.isAsync(), compileManager
+                functionName, schema, inputList, returnDataFields, callSqlFunction.isAsync(), compileManager
         );
     }
 
@@ -71,15 +79,14 @@ public class FunctionProxyBindable extends BindableInterface {
             String functionName,
             CalciteSchema schema,
             List<SqlNode> inputList,
-            String likeTableName,
+            List<RelDataTypeField> returnDataFields,
             boolean isAsync,
             CompileManager compileManager
     ) throws Exception {
-        // todo check is function name ambiguous
         Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
             return new JavaFunctionBindable(
-                    functionName, javaFunctionObj, inputList, likeTableName, schema, isAsync
+                    functionName, javaFunctionObj, inputList, returnDataFields, schema, isAsync
             );
         }
 
@@ -112,7 +119,7 @@ public class FunctionProxyBindable extends BindableInterface {
         BindableInterface bindableInterface = null;
         try {
             bindableInterface = getFunctionBindableByName(
-                    functionName, schema, inputList, likeTableName, isAsync, new CompileManager()
+                    functionName, schema, inputList, returnDataFields, isAsync, new CompileManager()
             );
         } catch (Exception e) {
             throw new RuntimeException(e);

@@ -720,9 +720,9 @@ CALL my_function(table1, table2, GET('config_var'));
 
 ### Compile-time Return Data Schema Resolution
 
-UDF return data schema (Schema) can be determined at compile time in two ways:
+UDF return data schema (Schema) can be determined at compile time in three ways:
 
-#### 1. Specify via LIKE Clause
+#### 1. Specify via LIKE Clause with Table
 
 ```sql
 CALL my_function(input_table) LIKE template_table;
@@ -736,7 +736,22 @@ if (!StringUtils.isEmpty(likeTableName)) {
 }
 ```
 
-#### 2. Infer via Executing eval Method
+#### 2. Specify via LIKE FUNCTION Clause
+
+```sql
+CALL my_function(input_table) LIKE FUNCTION 'template_function';
+```
+
+At compile time, the system gets the return data schema from the specified function:
+
+```java
+if (likeFunctionName != null) {
+    SqlFunctionBindable likeFunctionBindable = compileManager.getSqlFunction(likeFunctionName);
+    returnDataFields = likeFunctionBindable.getReturnDataFields();
+}
+```
+
+#### 3. Infer via Executing eval Method
 
 If there's no LIKE clause, the system executes the `eval` method once at compile time to infer the return schema:
 

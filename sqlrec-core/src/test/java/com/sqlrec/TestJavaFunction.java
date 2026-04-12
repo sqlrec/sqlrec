@@ -2,6 +2,7 @@ package com.sqlrec;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.JavaFunctionUtils;
@@ -32,6 +33,12 @@ public class TestJavaFunction {
         JavaFunctionUtils.registerTableFunction("default", "empty_fun", TestEmptyFun.class);
         JavaFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
         JavaFunctionUtils.registerTableFunction("default", "context_fun", TestContextFun.class);
+
+        List<String> sqlList2 = Arrays.asList(
+                "create sql function test_add_col",
+                "define input table input1(id int, name string, new_col string)",
+                "return input1");
+        new CompileManager().compileSqlFunction("test_add_col", sqlList2);
 
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(
@@ -84,7 +91,14 @@ public class TestJavaFunction {
                                 new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
                         )
                 ),
-                new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4"),
+
+                new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4",
+                        Arrays.asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
+                                new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
+                                new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
+                        )
+                ),
                 new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4 async"),
                 new SqlTestCase(
                         "cache table t5 as call get('func_name')(t1, 'new_col', get('col_value')) like t4",
@@ -92,6 +106,21 @@ public class TestJavaFunction {
                                 new Object[]{"t5", 3L}
                         )
                 ),
+
+                new SqlTestCase("cache table tmp as select 1 as id, '1' as name"),
+                new SqlTestCase("call get('func_name')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, "1", "new_col_value_test"}
+                        )
+                ),
+                new SqlTestCase("call get('func_name')(tmp, 'new_col', get('col_value')) like function 'test_add_col' async"),
+                new SqlTestCase(
+                        "cache table t6 as call get('func_name')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t6", 1L}
+                        )
+                ),
+
                 new SqlTestCase("call empty_fun()"),
                 new SqlTestCase("call string_arg_fun('test_arg')"),
                 new SqlTestCase("call string_arg_fun(get('col_name'))"),

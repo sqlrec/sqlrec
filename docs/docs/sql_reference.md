@@ -615,7 +615,7 @@ DESC SQL FUNCTION my_function;
 
 ```sql
 CACHE TABLE table_name AS 
-    {CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
      | select_statement}
 ```
 
@@ -627,6 +627,7 @@ CACHE TABLE table_name AS
 | `function_name` | 要调用的函数名称，可以是标识符或 `GET()` 表达式 |
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
+| `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `ASYNC` | 可选。异步执行 |
 | `select_statement` | SELECT 查询语句 |
 
@@ -643,6 +644,9 @@ CACHE TABLE cached_result AS
 CALL my_function(GET('var1'), 'param2') LIKE template_table;
 
 CACHE TABLE cached_result AS
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
+
+CACHE TABLE cached_result AS
 CALL my_function('param1') ASYNC;
 ```
 
@@ -656,7 +660,7 @@ CALL my_function('param1') ASYNC;
 **语法：**
 
 ```sql
-CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
 ```
 
 **参数：**
@@ -666,6 +670,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
 | `function_name` | 函数名称，可以是标识符或 `GET()` 表达式 |
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
+| `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `ASYNC` | 可选。异步执行 |
 
 **示例：**
@@ -674,6 +679,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE like_table] [ASYNC]
 CALL my_function('param1', 'param2');
 
 CALL my_function(GET('var1'), 'param2') LIKE template_table;
+
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CALL my_function('param1') ASYNC;
 

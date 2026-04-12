@@ -45,6 +45,16 @@ public class SchemaUtils {
         return removeQuotes(valueStr);
     }
 
+    public static String getValueOfStringLiteral(SqlNode value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof SqlCharStringLiteral) {
+            return getValueOfStringLiteral((SqlCharStringLiteral) value);
+        }
+        throw new RuntimeException("value is not a string literal: " + value);
+    }
+
     public static String removeQuotes(String value) {
         if (value == null) {
             return null;
