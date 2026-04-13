@@ -170,13 +170,14 @@ Show model creation statement or checkpoint information.
 **Syntax:**
 
 ```sql
-{DESCRIBE | DESC} MODEL model_name [CHECKPOINT = 'checkpoint_name']
+{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
 ```
 
 **Parameters:**
 
 | Parameter | Description |
 |-----------|-------------|
+| `FORMATTED` | Optional. Display detailed information in a formatted table, including model information, input fields, output fields, and model parameters |
 | `model_name` | Model name |
 | `checkpoint_name` | Optional. Checkpoint name, if specified shows detailed information for that checkpoint |
 
@@ -186,6 +187,10 @@ Show model creation statement or checkpoint information.
 DESCRIBE MODEL my_model;
 
 DESC MODEL my_model CHECKPOINT = 'v1.0';
+
+DESCRIBE FORMATTED MODEL my_model;
+
+DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
 ```
 
 
@@ -329,13 +334,14 @@ Show service creation statement.
 **Syntax:**
 
 ```sql
-{DESCRIBE | DESC} SERVICE service_name
+{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
 ```
 
 **Parameters:**
 
 | Parameter | Description |
 |-----------|-------------|
+| `FORMATTED` | Optional. Display detailed information in a formatted table, including service information, associated model information, and model fields |
 | `service_name` | Service name |
 
 **Examples:**
@@ -344,6 +350,8 @@ Show service creation statement.
 DESCRIBE SERVICE my_service;
 
 DESC SERVICE my_service;
+
+DESCRIBE FORMATTED SERVICE my_service;
 ```
 
 

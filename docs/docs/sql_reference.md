@@ -170,13 +170,14 @@ SHOW MODELS;
 **语法：**
 
 ```sql
-{DESCRIBE | DESC} MODEL model_name [CHECKPOINT = 'checkpoint_name']
+{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
 ```
 
 **参数：**
 
 | 参数 | 描述 |
 |------|------|
+| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括模型信息、输入字段、输出字段和模型参数 |
 | `model_name` | 模型名称 |
 | `checkpoint_name` | 可选。检查点名称，如果指定则显示该检查点的详细信息 |
 
@@ -186,6 +187,10 @@ SHOW MODELS;
 DESCRIBE MODEL my_model;
 
 DESC MODEL my_model CHECKPOINT = 'v1.0';
+
+DESCRIBE FORMATTED MODEL my_model;
+
+DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
 ```
 
 
@@ -329,13 +334,14 @@ SHOW SERVICES;
 **语法：**
 
 ```sql
-{DESCRIBE | DESC} SERVICE service_name
+{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
 ```
 
 **参数：**
 
 | 参数 | 描述 |
 |------|------|
+| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括服务信息、关联模型信息和模型字段 |
 | `service_name` | 服务名称 |
 
 **示例：**
@@ -344,6 +350,8 @@ SHOW SERVICES;
 DESCRIBE SERVICE my_service;
 
 DESC SERVICE my_service;
+
+DESCRIBE FORMATTED SERVICE my_service;
 ```
 
 

@@ -186,18 +186,45 @@ SqlShowSqlFunction SqlShowSqlFunction() :
     }
 }
 
-SqlShowCreateSqlFunction SqlShowCreateSqlFunction() :
+SqlCall SqlDescribeStatement() :
 {
-    SqlIdentifier funcName = null;
+    SqlIdentifier name = null;
+    SqlNode checkpoint = null;
+    boolean formatted = false;
 }
 {
     ( <DESCRIBE> | <DESC> )
-    <SQL>
-    <FUNCTION>
-    funcName = SimpleIdentifier()
-    {
-        return new SqlShowCreateSqlFunction(getPos(), funcName);
-    }
+    [ <FORMATTED> { formatted = true; } ]
+    (
+        <MODEL>
+        name = SimpleIdentifier()
+        [
+            <CHECKPOINT> <EQ>
+            checkpoint = StringLiteral()
+        ]
+        {
+            return new SqlShowCreateModel(getPos(), name, checkpoint, formatted);
+        }
+    |
+        <SERVICE>
+        name = SimpleIdentifier()
+        {
+            return new SqlShowCreateService(getPos(), name, formatted);
+        }
+    |
+        <SQL>
+        <FUNCTION>
+        name = SimpleIdentifier()
+        {
+            return new SqlShowCreateSqlFunction(getPos(), name);
+        }
+    |
+        <API>
+        name = SimpleIdentifier()
+        {
+            return new SqlShowCreateApi(getPos(), name);
+        }
+    )
 }
 
 SqlShowApi SqlShowApi() :
@@ -208,19 +235,6 @@ SqlShowApi SqlShowApi() :
     <APIS>
     {
         return new SqlShowApi(getPos());
-    }
-}
-
-SqlShowCreateApi SqlShowCreateApi() :
-{
-    SqlIdentifier apiName = null;
-}
-{
-    ( <DESCRIBE> | <DESC> )
-    <API>
-    apiName = SimpleIdentifier()
-    {
-        return new SqlShowCreateApi(getPos(), apiName);
     }
 }
 
@@ -235,24 +249,6 @@ SqlShowModel SqlShowModel() :
     }
 }
 
-SqlShowCreateModel SqlShowCreateModel() :
-{
-    SqlIdentifier modelName = null;
-    SqlNode checkpoint = null;
-}
-{
-    ( <DESCRIBE> | <DESC> )
-    <MODEL>
-    modelName = SimpleIdentifier()
-    [
-        <CHECKPOINT> <EQ>
-        checkpoint = StringLiteral()
-    ]
-    {
-        return new SqlShowCreateModel(getPos(), modelName, checkpoint);
-    }
-}
-
 SqlShowCheckpoint SqlShowCheckpoint() :
 {
     SqlIdentifier modelName = null;
@@ -263,6 +259,17 @@ SqlShowCheckpoint SqlShowCheckpoint() :
     modelName = SimpleIdentifier()
     {
         return new SqlShowCheckpoint(getPos(), modelName);
+    }
+}
+
+SqlShowService SqlShowService() :
+{
+}
+{
+    <SHOW>
+    <SERVICES>
+    {
+        return new SqlShowService(getPos());
     }
 }
 
@@ -440,30 +447,6 @@ SqlNode SqlCreateService() : {
             checkpoint,
             propertyList,
             ifNotExists);
-    }
-}
-
-SqlShowService SqlShowService() :
-{
-}
-{
-    <SHOW>
-    <SERVICES>
-    {
-        return new SqlShowService(getPos());
-    }
-}
-
-SqlShowCreateService SqlShowCreateService() :
-{
-    SqlIdentifier serviceName = null;
-}
-{
-    ( <DESCRIBE> | <DESC> )
-    <SERVICE>
-    serviceName = SimpleIdentifier()
-    {
-        return new SqlShowCreateService(getPos(), serviceName);
     }
 }
 

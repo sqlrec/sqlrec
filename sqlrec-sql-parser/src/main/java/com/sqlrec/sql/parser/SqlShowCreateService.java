@@ -15,10 +15,12 @@ public class SqlShowCreateService extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW_CREATE_SERVICE", SqlKind.OTHER_DDL);
 
     private final SqlIdentifier serviceName;
+    private final boolean formatted;
 
-    public SqlShowCreateService(SqlParserPos pos, SqlIdentifier serviceName) {
+    public SqlShowCreateService(SqlParserPos pos, SqlIdentifier serviceName, boolean formatted) {
         super(pos);
         this.serviceName = serviceName;
+        this.formatted = formatted;
     }
 
     @Override
@@ -30,9 +32,16 @@ public class SqlShowCreateService extends SqlCall {
         return serviceName;
     }
 
+    public boolean isFormatted() {
+        return formatted;
+    }
+
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
         writer.keyword("DESCRIBE");
+        if (formatted) {
+            writer.keyword("FORMATTED");
+        }
         writer.keyword("SERVICE");
         serviceName.unparse(writer, leftPrec, rightPrec);
     }

@@ -355,30 +355,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowCreateModel) {
-            SqlShowCreateModel showCreateModel = (SqlShowCreateModel) sqlNode;
-            if (showCreateModel.hasCheckpoint()) {
-                String checkpointName = SchemaUtils.removeQuotes(showCreateModel.getCheckpoint().toString());
-                Checkpoint checkpoint = DbUtils.getCheckpoint(
-                        showCreateModel.getModelName().getSimple(),
-                        checkpointName
-                );
-                if (checkpoint == null) {
-                    return Utils.convertMsgToResult(
-                            "checkpoint not exists: " + checkpointName + " for model " + showCreateModel.getModelName().getSimple(),
-                            "error"
-                    );
-                }
-                return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
-            } else {
-                Model model = DbUtils.getModel(showCreateModel.getModelName().getSimple());
-                if (model == null) {
-                    return Utils.convertMsgToResult(
-                            "model not exists: " + showCreateModel.getModelName().getSimple(),
-                            "error"
-                    );
-                }
-                return Utils.convertMsgToResult(model.getDdl(), "create sql");
-            }
+            return processShowCreateModel((SqlShowCreateModel) sqlNode);
         }
 
         if (sqlNode instanceof SqlShowCheckpoint) {
@@ -399,15 +376,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowCreateService) {
-            SqlShowCreateService showCreateService = (SqlShowCreateService) sqlNode;
-            Service service = DbUtils.getService(showCreateService.getServiceName().getSimple());
-            if (service == null) {
-                return Utils.convertMsgToResult(
-                        "service not exists: " + showCreateService.getServiceName().getSimple(),
-                        "error"
-                );
-            }
-            return Utils.convertMsgToResult(service.getDdl(), "create sql");
+            return processShowCreateService((SqlShowCreateService) sqlNode);
         }
 
         return null;
@@ -436,6 +405,76 @@ public class SqlProcessor {
             DbUtils.upsertSqlApi(sqlApi);
         } else {
             DbUtils.insertSqlApi(sqlApi);
+        }
+    }
+
+    private SqlProcessResult processShowCreateModel(SqlShowCreateModel showCreateModel) throws Exception {
+        String modelName = showCreateModel.getModelName().getSimple();
+        Model model = DbUtils.getModel(modelName);
+        if (model == null) {
+            return Utils.convertMsgToResult(
+                    "model not exists: " + modelName,
+                    "error"
+            );
+        }
+
+        Checkpoint checkpoint = null;
+        if (showCreateModel.hasCheckpoint()) {
+            String checkpointName = SchemaUtils.removeQuotes(showCreateModel.getCheckpoint().toString());
+            checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+            if (checkpoint == null) {
+                return Utils.convertMsgToResult(
+                        "checkpoint not exists: " + checkpointName + " for model " + modelName,
+                        "error"
+                );
+            }
+        }
+
+        if (showCreateModel.isFormatted()) {
+            java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
+            
+            if (checkpoint != null) {
+                CommonUtils.addModelInfo(rows, checkpoint.getModelDdl(), model);
+                CommonUtils.addCheckpointInfo(rows, checkpoint);
+            } else {
+                CommonUtils.addModelInfo(rows, model);
+            }
+
+            Enumerable<Object[]> enumerable = com.sqlrec.common.utils.DataTransformUtils.convertListToArrayToEnumerable(rows);
+            java.util.List<RelDataTypeField> fields = com.sqlrec.common.utils.DataTypeUtils.getStringTypeFieldList(
+                    java.util.Arrays.asList("col_name", "data_type")
+            );
+            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+        } else {
+            if (checkpoint != null) {
+                return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
+            } else {
+                return Utils.convertMsgToResult(model.getDdl(), "create sql");
+            }
+        }
+    }
+
+    private SqlProcessResult processShowCreateService(SqlShowCreateService showCreateService) throws Exception {
+        String serviceName = showCreateService.getServiceName().getSimple();
+        Service service = DbUtils.getService(serviceName);
+        if (service == null) {
+            return Utils.convertMsgToResult(
+                    "service not exists: " + serviceName,
+                    "error"
+            );
+        }
+
+        if (showCreateService.isFormatted()) {
+            java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
+            CommonUtils.addServiceInfo(rows, service);
+
+            Enumerable<Object[]> enumerable = com.sqlrec.common.utils.DataTransformUtils.convertListToArrayToEnumerable(rows);
+            java.util.List<RelDataTypeField> fields = com.sqlrec.common.utils.DataTypeUtils.getStringTypeFieldList(
+                    java.util.Arrays.asList("col_name", "data_type")
+            );
+            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+        } else {
+            return Utils.convertMsgToResult(service.getDdl(), "create sql");
         }
     }
 }

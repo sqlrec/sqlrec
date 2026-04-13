@@ -30,7 +30,7 @@ SQLRec has the following features:
 - Built on existing big data ecosystem, easy to integrate
 - Easy to extend, supports custom UDFs, Table types, and Model types
 
-For detailed information, refer to the [SQLRec User Manual](https://sqlrec.github.io/sqlrec).
+For detailed information, refer to the [SQLRec User Manual](https://sqlrec.github.io/sqlrec/en/).
 
 ## Quick Start
 

@@ -17,11 +17,13 @@ public class SqlShowCreateModel extends SqlCall {
 
     private final SqlIdentifier modelName;
     private final SqlNode checkpoint;
+    private final boolean formatted;
 
-    public SqlShowCreateModel(SqlParserPos pos, SqlIdentifier modelName, SqlNode checkpoint) {
+    public SqlShowCreateModel(SqlParserPos pos, SqlIdentifier modelName, SqlNode checkpoint, boolean formatted) {
         super(pos);
         this.modelName = modelName;
         this.checkpoint = checkpoint;
+        this.formatted = formatted;
     }
 
     @Override
@@ -41,9 +43,16 @@ public class SqlShowCreateModel extends SqlCall {
         return checkpoint != null;
     }
 
+    public boolean isFormatted() {
+        return formatted;
+    }
+
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
         writer.keyword("DESCRIBE");
+        if (formatted) {
+            writer.keyword("FORMATTED");
+        }
         writer.keyword("MODEL");
         modelName.unparse(writer, leftPrec, rightPrec);
         if (checkpoint != null) {
