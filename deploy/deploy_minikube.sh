@@ -63,6 +63,10 @@ minikube start \
   --ports="${SQLREC_DEBUG_PORT}:${SQLREC_DEBUG_PORT}" \
   --ports="${SQLREC_THRIFT_PORT}:${SQLREC_THRIFT_PORT}" \
   --ports="${SQLREC_REST_PORT}:${SQLREC_REST_PORT}" \
+  --ports="${MONGODB_PORT}:${MONGODB_PORT}" \
+  --ports="${GROWTHBOOK_MONGODB_PORT}:${GROWTHBOOK_MONGODB_PORT}" \
+  --ports="${GROWTHBOOK_WEB_PORT}:${GROWTHBOOK_WEB_PORT}" \
+  --ports="${GROWTHBOOK_API_PORT}:${GROWTHBOOK_API_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

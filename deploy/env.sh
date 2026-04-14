@@ -68,6 +68,17 @@ export JUPYTERHUB_PORT=30280
 export JUPYTERHUB_USER=sqlrec
 export JUPYTERHUB_PASSWORD=abc123456
 
+export MONGODB_PORT=30281
+export MONGODB_USER=sqlrec
+export MONGODB_PASSWORD=abc123456
+export GROWTHBOOK_MONGODB_PORT=30282
+export GROWTHBOOK_MONGODB_USER=sqlrec
+export GROWTHBOOK_MONGODB_PASSWORD=abc123456
+export GROWTHBOOK_MONGODB_USER=sqlrec
+
+export GROWTHBOOK_WEB_PORT=30283
+export GROWTHBOOK_API_PORT=30284
+
 export JFS_LATEST_TAG=1.3.1
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz"
 export JUICEFS_ARCH_NAME=juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz
