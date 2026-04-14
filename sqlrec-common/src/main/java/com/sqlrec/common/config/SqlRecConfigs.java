@@ -1,6 +1,14 @@
 package com.sqlrec.common.config;
 
 public class SqlRecConfigs {
+    public static final ConfigOption<String> SQLREC_VERSION = new ConfigOption<>(
+            "SQLREC_VERSION",
+            null,
+            "sqlrec version",
+            null,
+            String.class
+    );
+
     // service network config
     public static final ConfigOption<Boolean> ENABLE_REST_SERVER = new ConfigOption<>(
             "ENABLE_REST_SERVER",

@@ -1,4 +1,4 @@
-export SQLREC_VERSION=0.1.0
+export SQLREC_VERSION="${SQLREC_VERSION:-0.1.1}"
 
 export SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 export BASE_DIR=${BASE_DIR:-${SCRIPT_DIR}}

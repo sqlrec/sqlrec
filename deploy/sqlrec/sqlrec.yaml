@@ -65,6 +65,8 @@ spec:
               value: "${SQL_GATEWAY_PORT}"
             - name: FLINK_SQL_GATEWAY_CONNECT_TIMEOUT
               value: "600000"
+            - name: SQLREC_VERSION
+              value: "${SQLREC_VERSION}"
           ports:
             - containerPort: ${SQLREC_THRIFT_PORT}
               name: thrift
