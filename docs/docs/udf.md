@@ -180,6 +180,129 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。
 
+---
+
+### truncate_table
+
+表截取函数，从输入表中截取指定范围的行记录。
+
+**函数签名**：
+
+```java
+public CacheTable eval(CacheTable input, String start, String end)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | CacheTable | 输入表 |
+| `start` | String | 起始行索引（从 0 开始，包含） |
+| `end` | String | 结束行索引（不包含） |
+
+**返回值**：返回截取后的 `CacheTable`，结构与输入表相同。
+
+**使用示例**：
+
+```sql
+-- 获取第 10 到 20 条记录
+CACHE TABLE partial_result AS
+CALL truncate_table(recall_item, '10', '20');
+
+-- 获取前 100 条记录
+CACHE TABLE top_100 AS
+CALL truncate_table(recall_item, '0', '100');
+```
+
+**注意事项**：
+- `start` 和 `end` 必须为有效的整数字符串
+- `start` 和 `end` 必须为非负数
+- `start` 必须小于或等于 `end`
+- 截取范围为左闭右开区间 `[start, end)`
+
+---
+
+### get_variables
+
+获取变量函数，从执行上下文中获取所有变量，返回一个包含变量键值对的表。
+
+**函数签名**：
+
+```java
+public CacheTable eval(ExecuteContext context)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | ExecuteContext | 执行上下文 |
+
+**返回值**：返回一个 2 列的 `CacheTable`，列名为 `key` 和 `value`，类型均为 `VARCHAR`。
+
+**使用示例**：
+
+```sql
+-- 设置一些变量
+SET 'user_id' = '12345';
+SET 'limit' = '100';
+
+-- 获取所有变量
+CACHE TABLE all_vars AS
+CALL get_variables();
+
+-- 查看变量
+SELECT * FROM all_vars;
+```
+
+**工作原理**：
+1. 从执行上下文中获取所有变量
+2. 将每个变量的键值对转换为一行记录
+3. 返回包含所有变量的表
+
+---
+
+### set_variables
+
+设置变量函数，从表中读取键值对并设置到执行上下文中。
+
+**函数签名**：
+
+```java
+public CacheTable eval(ExecuteContext context, CacheTable input)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | ExecuteContext | 执行上下文 |
+| `input` | CacheTable | 输入表，必须恰好有 2 列，且均为字符串类型 |
+
+**返回值**：返回输入表本身。
+
+**使用示例**：
+
+```sql
+-- 创建变量表
+CACHE TABLE var_table AS
+SELECT 'user_id' AS key, '12345' AS value
+UNION ALL
+SELECT 'limit', '100';
+
+-- 设置变量
+CALL set_variables(var_table);
+
+-- 使用设置的变量
+SELECT `get`('user_id') AS user_id;
+```
+
+**注意事项**：
+- 输入表必须恰好有 2 列
+- 两列都必须是字符串类型（VARCHAR 或 CHAR）
+- 第一列为变量名，第二列为变量值
+- 如果变量值为 NULL，则会删除该变量
+
 ## 标量函数（Scalar Function）
 
 ### uuid

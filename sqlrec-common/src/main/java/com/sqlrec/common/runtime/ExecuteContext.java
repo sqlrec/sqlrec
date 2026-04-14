@@ -1,11 +1,11 @@
 package com.sqlrec.common.runtime;
 
-import com.sqlrec.common.model.ModelConfig;
-import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ServiceConfig;
+import java.util.Map;
 
 public interface ExecuteContext {
     String getVariable(String key);
 
     void setVariable(String key, String value);
+
+    Map<String, String> getVariables();
 }

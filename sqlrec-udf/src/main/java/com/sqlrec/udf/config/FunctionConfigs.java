@@ -24,5 +24,8 @@ public class FunctionConfigs {
         put("dedup", DedupFunction.class.getName());
         put("call_service", CallServiceFunction.class.getName());
         put("call_service_with_qv", CallServiceWithQVFunction.class.getName());
+        put("truncate_table", TruncateTableFunction.class.getName());
+        put("get_variables", GetVariablesFunction.class.getName());
+        put("set_variables", SetVariablesFunction.class.getName());
     }};
 }

@@ -180,6 +180,129 @@ Model service call function used to call deployed model services for inference. 
 
 Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.
 
+---
+
+### truncate_table
+
+Table truncation function that extracts rows within a specified range from the input table.
+
+**Function Signature**:
+
+```java
+public CacheTable eval(CacheTable input, String start, String end)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | CacheTable | Input table |
+| `start` | String | Starting row index (0-based, inclusive) |
+| `end` | String | Ending row index (exclusive) |
+
+**Return Value**: Returns truncated `CacheTable` with same structure as input table.
+
+**Usage Example**:
+
+```sql
+-- Get records from row 10 to 20
+CACHE TABLE partial_result AS
+CALL truncate_table(recall_item, '10', '20');
+
+-- Get first 100 records
+CACHE TABLE top_100 AS
+CALL truncate_table(recall_item, '0', '100');
+```
+
+**Notes**:
+- `start` and `end` must be valid integer strings
+- `start` and `end` must be non-negative
+- `start` must be less than or equal to `end`
+- Truncation range is left-closed, right-open interval `[start, end)`
+
+---
+
+### get_variables
+
+Get variables function that retrieves all variables from the execution context and returns a table containing key-value pairs.
+
+**Function Signature**:
+
+```java
+public CacheTable eval(ExecuteContext context)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | ExecuteContext | Execution context |
+
+**Return Value**: Returns a 2-column `CacheTable` with column names `key` and `value`, both of type `VARCHAR`.
+
+**Usage Example**:
+
+```sql
+-- Set some variables
+SET 'user_id' = '12345';
+SET 'limit' = '100';
+
+-- Get all variables
+CACHE TABLE all_vars AS
+CALL get_variables();
+
+-- View variables
+SELECT * FROM all_vars;
+```
+
+**Working Principle**:
+1. Get all variables from execution context
+2. Convert each variable's key-value pair to a row
+3. Return table containing all variables
+
+---
+
+### set_variables
+
+Set variables function that reads key-value pairs from a table and sets them in the execution context.
+
+**Function Signature**:
+
+```java
+public CacheTable eval(ExecuteContext context, CacheTable input)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | ExecuteContext | Execution context |
+| `input` | CacheTable | Input table, must have exactly 2 columns, both of string type |
+
+**Return Value**: Returns the input table itself.
+
+**Usage Example**:
+
+```sql
+-- Create variable table
+CACHE TABLE var_table AS
+SELECT 'user_id' AS key, '12345' AS value
+UNION ALL
+SELECT 'limit', '100';
+
+-- Set variables
+CALL set_variables(var_table);
+
+-- Use the set variables
+SELECT `get`('user_id') AS user_id;
+```
+
+**Notes**:
+- Input table must have exactly 2 columns
+- Both columns must be string type (VARCHAR or CHAR)
+- First column is variable name, second column is variable value
+- If variable value is NULL, the variable will be deleted
+
 ## Scalar Functions
 
 ### uuid

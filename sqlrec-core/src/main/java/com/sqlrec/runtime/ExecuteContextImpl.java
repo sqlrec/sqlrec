@@ -33,6 +33,11 @@ public class ExecuteContextImpl implements ExecuteContext {
         }
     }
 
+    @Override
+    public Map<String, String> getVariables() {
+        return variableMap;
+    }
+
     public void addFunNameToStack(String funName) {
         funName = funName.toUpperCase();
         if (funNameStack.contains(funName)) {
