@@ -93,6 +93,11 @@ public class CallSqlFunctionBindable extends BindableInterface {
     }
 
     @Override
+    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
+        return sqlFunctionBindable.isTimeoutAble(schema, context);
+    }
+
+    @Override
     public Set<String> getReadTables() {
         Set<String> readTables = new HashSet<>(sqlFunctionBindable.getReadTables());
         readTables.addAll(inputTables);

@@ -33,7 +33,7 @@ public class FunctionProxyBindable extends BindableInterface {
         if (returnDataFields == null) {
             throw new RuntimeException("return data fields is null");
         }
-        
+
         this.inputList = inputList;
         this.funcNameVariable = funcNameVariable;
         this.returnDataFields = returnDataFields;
@@ -49,7 +49,7 @@ public class FunctionProxyBindable extends BindableInterface {
         SqlGetVariable funcNameVariable = callSqlFunction.getFuncNameVariable();
         SqlIdentifier likeTableNameIdentifier = callSqlFunction.getLikeTableName();
         SqlNode likeFunctionNameNode = callSqlFunction.getLikeFunctionName();
-        
+
         List<RelDataTypeField> returnDataFields = null;
         if (likeTableNameIdentifier != null) {
             String likeTableName = likeTableNameIdentifier.getSimple();
@@ -135,6 +135,22 @@ public class FunctionProxyBindable extends BindableInterface {
     @Override
     public boolean isParallelizable() {
         return false;
+    }
+
+    @Override
+    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
+        try {
+            String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
+            String functionName = context.getVariable(variableName);
+            if (StringUtils.isEmpty(functionName)) {
+                return false;
+            }
+            // java function is timeout able
+            Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
+            return javaFunctionObj != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

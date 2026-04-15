@@ -1,8 +1,10 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.utils.Executor;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -12,6 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class CacheTableBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(CacheTableBindable.class);
@@ -36,8 +41,15 @@ public class CacheTableBindable extends BindableInterface {
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         Enumerable<Object[]> enumerable = null;
+        long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT.getValue(context.getVariables());
+        boolean needTimeout = timeout > 0 && isTimeoutAble(schema, context);
+
         try {
-            enumerable = bindable.bind(schema, context);
+            if (needTimeout) {
+                enumerable = executeWithTimeout(schema, context, timeout);
+            } else {
+                enumerable = bindable.bind(schema, context);
+            }
         } catch (Exception e) {
             if (ignoreException) {
                 log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
@@ -59,6 +71,20 @@ public class CacheTableBindable extends BindableInterface {
         return Linq4j.asEnumerable(list);
     }
 
+    private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
+        CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
+                () -> bindable.bind(schema, context), Executor.getExecutorService()
+        );
+        try {
+            return future.get(timeout, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new RuntimeException("Task execution timeout after " + timeout + "ms", e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
         return Arrays.asList(
@@ -70,6 +96,11 @@ public class CacheTableBindable extends BindableInterface {
     @Override
     public boolean isParallelizable() {
         return bindable.isParallelizable();
+    }
+
+    @Override
+    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
+        return bindable.isTimeoutAble(schema, context);
     }
 
     @Override

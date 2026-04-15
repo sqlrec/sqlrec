@@ -48,6 +48,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Long> NODE_EXEC_TIMEOUT = new ConfigOption<>(
+            "NODE_EXEC_TIMEOUT",
+            0L,
+            "node execution timeout in milliseconds, 0 means no timeout, only work in cache sql",
+            null,
+            Long.class
+    );
     public static final ConfigOption<Boolean> IGNORE_UNION_EXCEPTION = new ConfigOption<>(
             "IGNORE_UNION_EXCEPTION",
             true,

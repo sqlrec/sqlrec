@@ -35,4 +35,8 @@ public abstract class BindableInterface {
         accessTables.addAll(getWriteTables());
         return accessTables;
     }
+
+    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
+        return true;
+    }
 }
