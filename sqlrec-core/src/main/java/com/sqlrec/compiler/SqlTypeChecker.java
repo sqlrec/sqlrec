@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
+import com.sqlrec.sql.parser.SqlIfCache;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -25,6 +26,21 @@ public class SqlTypeChecker {
         if (flinkSqlNode instanceof SqlCache) {
             if (((SqlCache) flinkSqlNode).getSelect() != null) {
                 return isSqlTableRunnable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
+            }
+            return true;
+        }
+        if (flinkSqlNode instanceof SqlIfCache) {
+            SqlIfCache sqlIfCache = (SqlIfCache) flinkSqlNode;
+            if (!(isFlinkSqlCompilable(sqlIfCache.getCondition(), schema, defaultSchema))) {
+                return false;
+            }
+            if (!(isFlinkSqlCompilable(sqlIfCache.getThenClause(), schema, defaultSchema))) {
+                return false;
+            }
+            if (sqlIfCache.getElseClause() != null) {
+                if (!(isFlinkSqlCompilable(sqlIfCache.getElseClause(), schema, defaultSchema))) {
+                    return false;
+                }
             }
             return true;
         }

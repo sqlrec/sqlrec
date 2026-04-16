@@ -9,6 +9,7 @@ import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
+import com.sqlrec.sql.parser.SqlIfCache;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
@@ -61,6 +62,9 @@ public class CompileManager {
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
         }
+        if (flinkSqlNode instanceof SqlIfCache) {
+            return getIfCacheBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
+        }
         if (flinkSqlNode instanceof SqlCache) {
             return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
         }
@@ -98,6 +102,31 @@ public class CompileManager {
         }
 
         throw new Exception("cache sql obj is invalid");
+    }
+
+    private BindableInterface getIfCacheBindable(SqlIfCache ifCache, CalciteSchema schema, String defaultSchema) throws Exception {
+        SqlNode conditionNode = ifCache.getCondition();
+        SqlCache thenClause = ifCache.getThenClause();
+        SqlCache elseClause = ifCache.getElseClause();
+        boolean timein = ifCache.isTimein();
+
+        CalciteBindable conditionBindable = (CalciteBindable) getNormalSqlBindable(
+                getSqlStr(conditionNode), schema, defaultSchema
+        );
+
+        CacheTableBindable thenBindable = (CacheTableBindable) getCacheBindable(thenClause, schema, defaultSchema);
+
+        CacheTableBindable elseBindable = null;
+        if (elseClause != null) {
+            elseBindable = (CacheTableBindable) getCacheBindable(elseClause, schema, defaultSchema);
+        } else {
+            CalciteSchema.TableEntry inputTableEntry = schema.getTable(thenBindable.getTableName(), false);
+            if (inputTableEntry == null) {
+                throw new RuntimeException("must contain same table when no else statement in if sql");
+            }
+        }
+
+        return new IfCacheBindable(conditionBindable, thenBindable, elseBindable, timein);
     }
 
     private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema, String defaultSchema) throws Exception {

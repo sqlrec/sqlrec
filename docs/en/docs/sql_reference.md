@@ -659,6 +659,56 @@ CALL my_function('param1') ASYNC;
 ```
 
 
+### IF
+
+Conditionally execute cache operations.
+
+**Syntax:**
+
+```sql
+IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `TIMEIN` | Optional. Specifies timeout mode, where the condition returns a timeout value in milliseconds |
+| `condition` | Condition expression. Returns a boolean in normal mode, or a numeric value (milliseconds) in timeout mode |
+| `cache_statement` | CACHE TABLE statement |
+| `ELSE` | Optional. Optional in normal mode, required in timeout mode |
+
+**Description:**
+
+The IF statement supports two execution modes:
+
+1. **Normal Mode**: Evaluates the condition expression. If it returns true, executes the THEN clause; otherwise executes the ELSE clause (if present)
+2. **Timeout Mode** (TIMEIN): The condition expression must return a numeric timeout value in milliseconds
+   - If timeout > 0, executes the THEN clause with the specified timeout; falls back to the ELSE clause if timeout occurs
+   - If timeout <= 0, executes the THEN clause immediately
+
+**Notes:**
+- THEN and ELSE clauses must write to the same table name
+- THEN and ELSE clauses must have compatible table schemas
+- ELSE clause is required in timeout mode
+
+**Examples:**
+
+```sql
+IF (SELECT COUNT(*) > 100 FROM source_table) THEN (
+    CACHE TABLE result AS SELECT * FROM source_table
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM backup_table
+);
+
+IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
+    CACHE TABLE result AS CALL slow_function('param')
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM default_table
+);
+```
+
+
 ## Function Calls
 
 ### CALL

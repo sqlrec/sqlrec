@@ -118,26 +118,25 @@ public class SqlTestCase {
 
     public void test(CalciteSchema schema, ExecuteContext executeContext) throws Exception {
         log.info(sql);
-        SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-        BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
-                Consts.DEFAULT_SCHEMA_NAME);
-
-        if (bindable instanceof CalciteBindable) {
-            CalciteBindable calciteBindable = (CalciteBindable) bindable;
-            if (debugOutput) {
-                log.info("=== Logical Plan ===");
-                log.info(calciteBindable.getLogicalPlan());
-                log.info("=== Physical Plan ===");
-                log.info(calciteBindable.getPhysicalPlan());
-                log.info("=== Java Expression ===");
-                log.info(calciteBindable.getJavaExpression());
-            }
-            checkBindable(calciteBindable);
-        }
-
         Exception actualException = null;
         Enumerable enumerable = null;
         try {
+            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
+                    Consts.DEFAULT_SCHEMA_NAME);
+
+            if (bindable instanceof CalciteBindable) {
+                CalciteBindable calciteBindable = (CalciteBindable) bindable;
+                if (debugOutput) {
+                    log.info("=== Logical Plan ===");
+                    log.info(calciteBindable.getLogicalPlan());
+                    log.info("=== Physical Plan ===");
+                    log.info(calciteBindable.getPhysicalPlan());
+                    log.info("=== Java Expression ===");
+                    log.info(calciteBindable.getJavaExpression());
+                }
+                checkBindable(calciteBindable);
+            }
             enumerable = bindable.bind(schema, executeContext);
         } catch (Exception e) {
             actualException = e;

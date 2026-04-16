@@ -12,7 +12,7 @@ SqlCache SqlCache() :
         <CALL>
         callSqlFunction = GetCallSqlFunction()
     |
-        select = SqlQueryEof()
+        select = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
     )
     {
         return new SqlCache(getPos(), tableName, select, callSqlFunction);
@@ -528,5 +528,38 @@ SqlAlterModelDropCheckpoint SqlAlterModelDropCheckpoint() :
     checkpointName = StringLiteral()
     {
         return new SqlAlterModelDropCheckpoint(startPos.plus(getPos()), modelName, checkpointName, ifExists);
+    }
+}
+
+SqlIfCache SqlIfCache() :
+{
+    SqlParserPos startPos;
+    boolean timein = false;
+    SqlNode condition = null;
+    SqlCache thenClause = null;
+    SqlCache elseClause = null;
+}
+{
+    <IF>
+    { startPos = getPos(); }
+    [
+        <TIMEIN>
+        { timein = true; }
+    ]
+    <LPAREN>
+    condition = QueryOrExpr(ExprContext.ACCEPT_QUERY)
+    <RPAREN>
+    <THEN>
+    <LPAREN>
+    thenClause = SqlCache()
+    <RPAREN>
+    [
+        <ELSE>
+        <LPAREN>
+        elseClause = SqlCache()
+        <RPAREN>
+    ]
+    {
+        return new SqlIfCache(startPos.plus(getPos()), timein, condition, thenClause, elseClause);
     }
 }

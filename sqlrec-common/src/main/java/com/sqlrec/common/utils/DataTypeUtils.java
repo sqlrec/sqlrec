@@ -116,6 +116,10 @@ public class DataTypeUtils {
                         "desired field name not equal to given field name: "
                                 + desiredField.getName() + " != " + givenField.getName());
             }
+            if (SqlTypeName.STRING_TYPES.contains(desiredField.getType().getSqlTypeName()) &&
+                    SqlTypeName.STRING_TYPES.contains(givenField.getType().getSqlTypeName())) {
+                continue;
+            }
             if (!desiredField.getType().getSqlTypeName().equals(givenField.getType().getSqlTypeName())) {
                 throw new RuntimeException(
                         "desired field type not equal to given field type: "

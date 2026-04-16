@@ -6,6 +6,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
+import com.sqlrec.runtime.IfCacheBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
@@ -162,6 +163,15 @@ public class FunctionCompiler {
             sqlFunctionBindable.getBindableList().add(bindable);
             if (bindable instanceof CacheTableBindable) {
                 CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
+                CacheProxyTable tmpTable = new CacheProxyTable(
+                        cacheTableBindable.getTableName(),
+                        null,
+                        cacheTableBindable.getTableDataFields()
+                );
+                schema.add(cacheTableBindable.getTableName(), tmpTable);
+            }
+            if (bindable instanceof IfCacheBindable) {
+                CacheTableBindable cacheTableBindable = ((IfCacheBindable) bindable).getElseClause();
                 CacheProxyTable tmpTable = new CacheProxyTable(
                         cacheTableBindable.getTableName(),
                         null,

@@ -75,7 +75,15 @@ public class TestSqlParse {
                 "drop sql function fun1",
                 "drop sql function if exists fun1",
                 "drop api api1",
-                "drop api if exists api1"
+                "drop api if exists api1",
+                "if (select * from t1) then (cache table t2 as select * from t1)",
+                "if timein (select * from t1 where id=1) then (cache table t2 as select * from t1)",
+                "if (select * from t1) then (cache table t2 as select * from t1) else (cache table t3 as select * from t2)",
+                "if timein (select * from t1 where id=1) then (cache table t2 as select * from t1) else (cache table t3 as select * from t2)",
+                "if (select * from t1) then (cache table t2 as call fun1(t1))",
+                "if (select * from t1) then (cache table t2 as call get('fun1')(get('id'), t1, '10') like function 'fun2')",
+                "if timein (select * from t1) then (cache table t2 as call fun1(t1)) else (cache table t3 as call fun2(t2))",
+                "IF (SELECT count(*) > 0 FROM input1) THEN (cache table result1 as SELECT * FROM input1) ELSE (cache table result1 as SELECT 0 as id, 'empty' as name)"
         );
 
         for (String sql : sqlList) {

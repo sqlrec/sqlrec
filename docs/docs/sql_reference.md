@@ -659,6 +659,56 @@ CALL my_function('param1') ASYNC;
 ```
 
 
+### IF
+
+条件执行缓存操作。
+
+**语法：**
+
+```sql
+IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `TIMEIN` | 可选。指定为超时模式，条件返回超时时间（毫秒） |
+| `condition` | 条件表达式。普通模式返回布尔值，超时模式返回数值（毫秒） |
+| `cache_statement` | CACHE TABLE 语句 |
+| `ELSE` | 可选。普通模式下可选，超时模式下必需 |
+
+**描述：**
+
+IF 语句支持两种执行模式：
+
+1. **普通模式**：评估条件表达式，如果返回 true 则执行 THEN 子句，否则执行 ELSE 子句（如果存在）
+2. **超时模式**（TIMEIN）：条件表达式必须返回数值类型的超时时间（毫秒）
+   - 如果超时时间 > 0，执行 THEN 子句并设置超时；如果超时则回退到 ELSE 子句
+   - 如果超时时间 <= 0，立即执行 THEN 子句
+
+**注意：**
+- THEN 和 ELSE 子句必须写入相同的表名
+- THEN 和 ELSE 子句的表结构必须兼容
+- 超时模式下必须提供 ELSE 子句
+
+**示例：**
+
+```sql
+IF (SELECT COUNT(*) > 100 FROM source_table) THEN (
+    CACHE TABLE result AS SELECT * FROM source_table
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM backup_table
+);
+
+IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
+    CACHE TABLE result AS CALL slow_function('param')
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM default_table
+);
+```
+
+
 ## 函数调用
 
 ### CALL
