@@ -34,6 +34,10 @@ spec:
         env:
         - name: MONGODB_URI
           value: mongodb://${GROWTHBOOK_MONGODB_USER}:${GROWTHBOOK_MONGODB_PASSWORD}@${NODE_IP}:${GROWTHBOOK_MONGODB_PORT}/growthbook?authSource=admin
+        - name: APP_ORIGIN
+          value: http://${NODE_IP}:${GROWTHBOOK_WEB_PORT}
+        - name: API_HOST
+          value: http://${NODE_IP}:${GROWTHBOOK_API_PORT}
         volumeMounts:
         - name: uploads
           mountPath: /usr/local/src/app/packages/back-end/uploads

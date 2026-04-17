@@ -79,6 +79,9 @@ export GROWTHBOOK_MONGODB_USER=sqlrec
 export GROWTHBOOK_WEB_PORT=30283
 export GROWTHBOOK_API_PORT=30284
 
+export GRAFANA_PORT=30285
+export PROMETHEUS_PORT=30286
+
 export JFS_LATEST_TAG=1.3.1
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz"
 export JUICEFS_ARCH_NAME=juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz

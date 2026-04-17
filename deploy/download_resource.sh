@@ -20,5 +20,6 @@ bash ${dir}/milvus/init.sh
 bash ${dir}/kyuubi/init.sh
 bash ${dir}/postgresql/init.sh
 bash ${dir}/jupyter/init.sh
+bash ${dir}/prometheus/init.sh
 
 echo 'download resource done'

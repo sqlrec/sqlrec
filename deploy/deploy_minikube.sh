@@ -67,6 +67,8 @@ minikube start \
   --ports="${GROWTHBOOK_MONGODB_PORT}:${GROWTHBOOK_MONGODB_PORT}" \
   --ports="${GROWTHBOOK_WEB_PORT}:${GROWTHBOOK_WEB_PORT}" \
   --ports="${GROWTHBOOK_API_PORT}:${GROWTHBOOK_API_PORT}" \
+  --ports="${GRAFANA_PORT}:${GRAFANA_PORT}" \
+  --ports="${PROMETHEUS_PORT}:${PROMETHEUS_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

@@ -36,6 +36,7 @@ bash ${dir}/spark/deploy.sh
 #bash ${dir}/kyuubi/deploy.sh
 #bash ${dir}/jupyter/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
+#bash ${dir}/prometheus/deploy.sh
 
 bash ${dir}/sqlrec/deploy.sh
 
