@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.RestService;
 
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.frontend.common.PrometheusMetricsUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
@@ -18,6 +19,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
     private static final String SQL_V1_PATH = "/sql/v1";
     private static final String API_V1_PREFIX = "/api/v1/";
+    private static final String METRICS_PATH = "/prometheus";
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest fullHttpRequest) throws Exception {
@@ -25,16 +27,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         HttpMethod method = fullHttpRequest.method();
 
         String responseContent = "{}";
+        String contentType = "application/json";
         HttpResponseStatus status = HttpResponseStatus.OK;
 
         try {
-            if (!HttpMethod.POST.equals(method)) {
-                status = HttpResponseStatus.METHOD_NOT_ALLOWED;
-                responseContent = "{\"msg\":\"only support POST method\"}";
-            } else {
-                ByteBuf content = fullHttpRequest.content();
-                String postData = (content != null) ? content.toString(CharsetUtil.UTF_8) : "";
-                
+            ByteBuf content = fullHttpRequest.content();
+            String postData = (content != null) ? content.toString(CharsetUtil.UTF_8) : "";
+
+            if (HttpMethod.POST.equals(method)) {
                 if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
                     ExecuteDataList executeDataList = SqlExecutor.execute(postData);
                     responseContent = JsonUtils.toJson(executeDataList);
@@ -51,6 +51,18 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                     status = HttpResponseStatus.NOT_FOUND;
                     responseContent = "{\"msg\":\"uri not found\"}";
                 }
+            } else if (HttpMethod.GET.equals(method)) {
+                if (uri.equals(METRICS_PATH)) {
+                    responseContent = PrometheusMetricsUtils.getPrometheusRegistry().scrape();
+                    status = HttpResponseStatus.OK;
+                    contentType = "text/plain";
+                } else {
+                    status = HttpResponseStatus.NOT_FOUND;
+                    responseContent = "{\"msg\":\"uri not found\"}";
+                }
+            } else {
+                status = HttpResponseStatus.METHOD_NOT_ALLOWED;
+                responseContent = "{\"msg\":\"only support POST and GET methods\"}";
             }
         } catch (Exception e) {
             logger.error("Error processing request: uri={}", uri, e);
@@ -66,9 +78,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                 status,
                 Unpooled.copiedBuffer(responseContent, CharsetUtil.UTF_8)
         );
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-
         channelHandlerContext.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 

@@ -3,6 +3,7 @@ package com.sqlrec.frontend;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.RestService.HttpServerHandler;
+import com.sqlrec.frontend.common.PrometheusMetricsUtils;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -24,6 +25,7 @@ public class RestServer {
 
     public static void main(String[] args) throws InterruptedException {
         FunctionUpdater.initFunctionUpdateService();
+        PrometheusMetricsUtils.initMetrics();
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();

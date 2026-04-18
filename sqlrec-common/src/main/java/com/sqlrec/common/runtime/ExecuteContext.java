@@ -8,4 +8,8 @@ public interface ExecuteContext {
     void setVariable(String key, String value);
 
     Map<String, String> getVariables();
+
+    void setMetricsTag(String key, String value);
+
+    Map<String, String> getMetricsTags();
 }

@@ -9,15 +9,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ExecuteContextImpl implements ExecuteContext {
     private Map<String, String> variableMap;
+    private Map<String, String> metricsTagMap;
     private List<String> funNameStack;
 
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
+        metricsTagMap = new ConcurrentHashMap<>();
         funNameStack = new ArrayList<>();
     }
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
         variableMap = parentContext.variableMap;
+        metricsTagMap = parentContext.metricsTagMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
     }
 
@@ -36,6 +39,16 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public Map<String, String> getVariables() {
         return variableMap;
+    }
+
+    @Override
+    public void setMetricsTag(String key, String value) {
+        metricsTagMap.put(key, value);
+    }
+
+    @Override
+    public Map<String, String> getMetricsTags() {
+        return metricsTagMap;
     }
 
     public void addFunNameToStack(String funName) {

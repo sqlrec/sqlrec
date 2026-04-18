@@ -9,4 +9,8 @@ public class Consts {
     public static String CHECKPOINT_STATUS_CREATED = "created";
     public static String CHECKPOINT_STATUS_SUCCEEDED = "succeeded";
     public static String CHECKPOINT_STATUS_FAILED = "failed";
+
+    public static String METRICS_NODE_EXEC_TIME = "node.exec.time";
+    public static String METRICS_NODE_EXEC_COUNT = "node.exec.count";
+    public static String METRICS_NODE_DATA_SIZE = "node.data.size";
 }

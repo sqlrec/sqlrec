@@ -90,6 +90,20 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
+    public static final ConfigOption<Integer> REDIS_POOL_SIZE = new ConfigOption<>(
+            "REDIS_POOL_SIZE",
+            16,
+            "redis connection pool size",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<String> METRICS_PREFIX = new ConfigOption<>(
+            "METRICS_PREFIX",
+            "",
+            "metrics prefix",
+            null,
+            String.class
+    );
 
 
     // dependency service config
@@ -178,13 +192,5 @@ public class SqlRecConfigs {
             "session idle timeout in milliseconds",
             null,
             Long.class
-    );
-
-    public static final ConfigOption<Integer> REDIS_POOL_SIZE = new ConfigOption<>(
-            "REDIS_POOL_SIZE",
-            16,
-            "redis connection pool size",
-            null,
-            Integer.class
     );
 }
