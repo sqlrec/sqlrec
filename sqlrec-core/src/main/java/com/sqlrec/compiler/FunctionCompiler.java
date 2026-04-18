@@ -18,6 +18,7 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlTypeNameSpec;
 import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -161,23 +162,13 @@ public class FunctionCompiler {
         } else {
             BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
             sqlFunctionBindable.getBindableList().add(bindable);
-            if (bindable instanceof CacheTableBindable) {
-                CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
+            if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
                 CacheProxyTable tmpTable = new CacheProxyTable(
-                        cacheTableBindable.getTableName(),
+                        bindable.getCacheTableName(),
                         null,
-                        cacheTableBindable.getTableDataFields()
+                        bindable.getCacheTableDataFields()
                 );
-                schema.add(cacheTableBindable.getTableName(), tmpTable);
-            }
-            if (bindable instanceof IfCacheBindable) {
-                CacheTableBindable cacheTableBindable = ((IfCacheBindable) bindable).getElseClause();
-                CacheProxyTable tmpTable = new CacheProxyTable(
-                        cacheTableBindable.getTableName(),
-                        null,
-                        cacheTableBindable.getTableDataFields()
-                );
-                schema.add(cacheTableBindable.getTableName(), tmpTable);
+                schema.add(bindable.getCacheTableName(), tmpTable);
             }
         }
     }

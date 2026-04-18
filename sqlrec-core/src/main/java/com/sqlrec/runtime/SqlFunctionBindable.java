@@ -9,6 +9,7 @@ import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -139,8 +140,8 @@ public class SqlFunctionBindable extends BindableInterface {
         Set<String> resultTables = new HashSet<>();
         Set<String> cacheTableNames = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            if (bindable instanceof CacheTableBindable) {
-                cacheTableNames.add(((CacheTableBindable) bindable).getTableName());
+            if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
+                cacheTableNames.add(bindable.getCacheTableName());
             }
             Set<String> bindableTables = new HashSet<>(tableFunction.apply(bindable));
             bindableTables.removeAll(cacheTableNames);
@@ -192,8 +193,8 @@ public class SqlFunctionBindable extends BindableInterface {
     public Set<String> getDependencySqlFunctions() {
         Set<String> dependencySqlFunctions = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            if (bindable instanceof CallSqlFunctionBindable) {
-                dependencySqlFunctions.add(((CallSqlFunctionBindable) bindable).getFunName().toUpperCase());
+            if (StringUtils.isNotEmpty(bindable.getDependencySqlFuncName())) {
+                dependencySqlFunctions.add(bindable.getDependencySqlFuncName().toUpperCase());
             }
         }
         return dependencySqlFunctions;
@@ -202,8 +203,8 @@ public class SqlFunctionBindable extends BindableInterface {
     public Set<String> getDependencyJavaFunctions() {
         Set<String> dependencyJavaFunctions = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            if (bindable instanceof JavaFunctionBindable) {
-                dependencyJavaFunctions.add(((JavaFunctionBindable) bindable).getFunName());
+            if (StringUtils.isNotEmpty(bindable.getDependencyJavaFuncName())) {
+                dependencyJavaFunctions.add(bindable.getDependencyJavaFuncName());
             }
         }
         return dependencyJavaFunctions;
@@ -217,13 +218,13 @@ public class SqlFunctionBindable extends BindableInterface {
         allDependSqlFunctionMap = new HashMap<>();
 
         for (BindableInterface bindable : bindableList) {
-            if (bindable instanceof CallSqlFunctionBindable) {
-                SqlFunctionBindable aSqlFunction = ((CallSqlFunctionBindable) bindable).getSqlFunctionBindable();
-                allDependSqlFunctionMap.put(aSqlFunction.getFunName(), aSqlFunction.getFunName());
-                Map<String, String> aSqlFunctionAllDependSqlFunctionMap = aSqlFunction.getAllDependSqlFunctionMap();
+            String directDependencySqlFuncName = bindable.getDependencySqlFuncName();
+            if (StringUtils.isNotEmpty(directDependencySqlFuncName)) {
+                allDependSqlFunctionMap.put(directDependencySqlFuncName, directDependencySqlFuncName);
+                Map<String, String> aSqlFunctionAllDependSqlFunctionMap = bindable.getAllDependSqlFunctionMap();
                 for (Map.Entry<String, String> entry : aSqlFunctionAllDependSqlFunctionMap.entrySet()) {
                     if (!allDependSqlFunctionMap.containsKey(entry.getKey())) {
-                        allDependSqlFunctionMap.put(entry.getKey(), aSqlFunction.getFunName() + "->" + entry.getValue());
+                        allDependSqlFunctionMap.put(entry.getKey(), directDependencySqlFuncName + "->" + entry.getValue());
                     }
                 }
             }
@@ -244,11 +245,8 @@ public class SqlFunctionBindable extends BindableInterface {
         );
         for (int i = 0; i < bindableList.size(); i++) {
             BindableInterface bindable = bindableList.get(i);
-            if (bindable instanceof CacheTableBindable) {
-                CacheTableBindable cacheTableBindable = (CacheTableBindable) bindable;
-                if (isUnionSource.containsKey(i) && isUnionSource.get(i)) {
-                    cacheTableBindable.setIgnoreException(true);
-                }
+            if (isUnionSource.containsKey(i) && isUnionSource.get(i)) {
+                bindable.setIgnoreException(true);
             }
         }
     }

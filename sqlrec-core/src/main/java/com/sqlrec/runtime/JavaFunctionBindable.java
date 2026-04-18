@@ -161,7 +161,7 @@ public class JavaFunctionBindable extends BindableInterface {
         return Set.of();
     }
 
-    public String getFunName() {
+    public String getDependencyJavaFuncName() {
         return functionName;
     }
 }

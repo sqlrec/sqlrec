@@ -121,21 +121,7 @@ public class TopologicalSortUtils {
         for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
             int bindableIndex = sortedBindableList.get(i);
             BindableInterface bindable = bindableList.get(bindableIndex);
-
-            CalciteBindable calciteBindable = null;
-            if (bindable instanceof CalciteBindable) {
-                calciteBindable = (CalciteBindable) bindable;
-            } else if (bindable instanceof CacheTableBindable) {
-                BindableInterface innerBindable = ((CacheTableBindable) bindable).getBindable();
-                if (innerBindable instanceof CalciteBindable) {
-                    calciteBindable = (CalciteBindable) innerBindable;
-                }
-            }
-            if (calciteBindable != null) {
-                isUnionNode.put(bindableIndex, calciteBindable.isUnionSql());
-            } else {
-                isUnionNode.put(bindableIndex, false);
-            }
+            isUnionNode.put(bindableIndex, bindable.isUnionSql());
 
             if (reverseBindableDependency.containsKey(bindableIndex)) {
                 Set<Integer> dependBindableSet = reverseBindableDependency.get(bindableIndex);

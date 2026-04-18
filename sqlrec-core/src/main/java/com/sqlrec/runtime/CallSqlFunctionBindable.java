@@ -112,11 +112,11 @@ public class CallSqlFunctionBindable extends BindableInterface {
         return writeTables;
     }
 
-    public String getFunName() {
-        return funName;
+    public String getDependencySqlFuncName() {
+        return sqlFunctionBindable.getFunName();
     }
 
-    public SqlFunctionBindable getSqlFunctionBindable() {
-        return sqlFunctionBindable;
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        return sqlFunctionBindable.getAllDependSqlFunctionMap();
     }
 }

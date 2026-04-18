@@ -5,15 +5,13 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public abstract class BindableInterface {
-    private final long createTime;
+    private final long createTime = System.currentTimeMillis();
+    private boolean ignoreException = false;
 
     public BindableInterface() {
-        this.createTime = System.currentTimeMillis();
     }
 
     public abstract Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context);
@@ -38,5 +36,37 @@ public abstract class BindableInterface {
 
     public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
         return true;
+    }
+
+    public boolean isUnionSql() {
+        return false;
+    }
+
+    public void setIgnoreException(boolean ignoreException) {
+        this.ignoreException = ignoreException;
+    }
+
+    public boolean isIgnoreException() {
+        return ignoreException;
+    }
+
+    public String getDependencyJavaFuncName() {
+        return null;
+    }
+
+    public String getDependencySqlFuncName() {
+        return null;
+    }
+
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        return new HashMap<>();
+    }
+
+    public String getCacheTableName() {
+        return null;
+    }
+
+    public List<RelDataTypeField> getCacheTableDataFields() {
+        return null;
     }
 }

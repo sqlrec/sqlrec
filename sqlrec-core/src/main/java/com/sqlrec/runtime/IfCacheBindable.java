@@ -23,7 +23,6 @@ public class IfCacheBindable extends BindableInterface {
     private CacheTableBindable thenClause;
     private CacheTableBindable elseClause;
     private boolean timein;
-    private String tableName;
 
     public IfCacheBindable(
             CalciteBindable condition,
@@ -35,7 +34,6 @@ public class IfCacheBindable extends BindableInterface {
         this.thenClause = thenClause;
         this.elseClause = elseClause;
         this.timein = timein;
-        this.tableName = thenClause.getTableName();
 
         if (elseClause != null) {
             if (!thenClause.getTableName().equals(elseClause.getTableName())) {
@@ -167,12 +165,8 @@ public class IfCacheBindable extends BindableInterface {
     @Override
     public Set<String> getWriteTables() {
         Set<String> writeTables = new HashSet<>();
-        writeTables.add(tableName);
+        writeTables.add(thenClause.getTableName());
         return writeTables;
-    }
-
-    public String getTableName() {
-        return tableName;
     }
 
     public CalciteBindable getCondition() {
@@ -189,5 +183,20 @@ public class IfCacheBindable extends BindableInterface {
 
     public boolean isTimein() {
         return timein;
+    }
+
+    public boolean isUnionSql() {
+        if (elseClause == null) {
+            return false;
+        }
+        return thenClause.isUnionSql() && elseClause.isUnionSql();
+    }
+
+    public String getCacheTableName() {
+        return thenClause.getTableName();
+    }
+
+    public List<RelDataTypeField> getCacheTableDataFields() {
+        return thenClause.getReturnDataFields();
     }
 }

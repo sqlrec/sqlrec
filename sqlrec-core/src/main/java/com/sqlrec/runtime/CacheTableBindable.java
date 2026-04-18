@@ -24,13 +24,11 @@ public class CacheTableBindable extends BindableInterface {
     private String tableName;
     private BindableInterface bindable;
     private String createSql;
-    private boolean ignoreException;
 
     public CacheTableBindable(String tableName, BindableInterface bindable, String createSql) {
         this.tableName = tableName;
         this.bindable = bindable;
         this.createSql = createSql;
-        this.ignoreException = false;
 
         List<RelDataTypeField> bindableFields = bindable.getReturnDataFields();
         if (bindableFields == null || bindableFields.isEmpty()) {
@@ -51,7 +49,7 @@ public class CacheTableBindable extends BindableInterface {
                 enumerable = bindable.bind(schema, context);
             }
         } catch (Exception e) {
-            if (ignoreException) {
+            if (isIgnoreException()) {
                 log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
             } else {
                 throw e;
@@ -127,11 +125,15 @@ public class CacheTableBindable extends BindableInterface {
         return bindable;
     }
 
-    public boolean isIgnoreException() {
-        return ignoreException;
+    public boolean isUnionSql() {
+        return bindable.isUnionSql();
     }
 
-    public void setIgnoreException(boolean ignoreException) {
-        this.ignoreException = ignoreException;
+    public String getCacheTableName() {
+        return tableName;
+    }
+
+    public List<RelDataTypeField> getCacheTableDataFields() {
+        return bindable.getReturnDataFields();
     }
 }
