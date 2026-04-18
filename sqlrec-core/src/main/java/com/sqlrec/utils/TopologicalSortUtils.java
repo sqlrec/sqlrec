@@ -1,8 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.CacheTableBindable;
-import com.sqlrec.runtime.CalciteBindable;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
 
@@ -137,8 +136,8 @@ public class TopologicalSortUtils {
                 continue;
             }
 
-            if (bindable instanceof CacheTableBindable) {
-                String cacheTableName = ((CacheTableBindable) bindable).getTableName();
+            if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
+                String cacheTableName = bindable.getCacheTableName();
                 if (cacheTableName.equals(returnTableName)) {
                     isUnionSource.put(bindableIndex, false);
                     continue;

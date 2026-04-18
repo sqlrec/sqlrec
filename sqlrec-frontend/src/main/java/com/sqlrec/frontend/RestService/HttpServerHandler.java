@@ -19,7 +19,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
     private static final String SQL_V1_PATH = "/sql/v1";
     private static final String API_V1_PREFIX = "/api/v1/";
-    private static final String METRICS_PATH = "/prometheus";
+    private static final String METRICS_PATH = "/metrics";
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest fullHttpRequest) throws Exception {

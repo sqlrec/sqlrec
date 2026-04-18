@@ -10,3 +10,6 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n 
   --set grafana.service.nodePort=${GRAFANA_PORT} \
   --set prometheus.service.type=NodePort \
   --set prometheus.service.nodePort=${PROMETHEUS_PORT}
+
+envsubst < ${dir}/sqlrec-servicemonitor.yaml > ${dir}/sqlrec-servicemonitor.yaml.tmp
+kubectl apply -f ${dir}/sqlrec-servicemonitor.yaml.tmp -n "${NAMESPACE}"

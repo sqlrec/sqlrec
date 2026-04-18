@@ -5,7 +5,9 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -40,13 +42,17 @@ public class FunctionExecutor {
         if (requestDataObj.getParams() != null) {
             requestDataObj.getParams().forEach(executeContext::setVariable);
         }
+        if (requestDataObj.getMetricTags() != null) {
+            requestDataObj.getMetricTags().forEach(executeContext::setMetricsTag);
+        }
 
         ExecuteData executeData = new ExecuteData();
         try {
-            Enumerable<Object[]> enumerable = sqlFunctionBindable.bind(schema, executeContext);
+            BindableInterface proxyBindable = new ProxyAllBindable(sqlFunctionBindable, sqlFunctionBindable.getFunName());
+            Enumerable<Object[]> enumerable = proxyBindable.bind(schema, executeContext);
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
-                executeData.setData(DataTransformUtils.convertToMapList(results, sqlFunctionBindable.getReturnDataFields()));
+                executeData.setData(DataTransformUtils.convertToMapList(results, proxyBindable.getReturnDataFields()));
             } else {
                 executeData.setMsg("function return null");
             }
@@ -62,14 +68,14 @@ public class FunctionExecutor {
         for (Map.Entry<String, List<RelDataTypeField>> tablePlaceholder : tablePlaceholders) {
             String tableName = tablePlaceholder.getKey();
             List<RelDataTypeField> dataFields = tablePlaceholder.getValue();
-            
+
             if (params == null) {
                 throw new IllegalArgumentException("params is null, need params for table: " + tableName);
             }
             if (!params.containsKey(tableName)) {
                 throw new IllegalArgumentException("table '" + tableName + "' not found in params");
             }
-            
+
             Enumerable<Object[]> enumerable = DataTransformUtils.convertDataToEnumerable(params.get(tableName), dataFields);
             CacheTable cacheTable = new CacheTable(tableName, enumerable, dataFields);
             schema.add(tableName, cacheTable);

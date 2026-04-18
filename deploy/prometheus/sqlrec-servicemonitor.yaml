@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sqlrec
+  namespace: ${NAMESPACE}
+  labels:
+    app: sqlrec
+    release: prometheus
+spec:
+  endpoints:
+    - interval: 15s
+      path: /metrics
+      port: rest
+  namespaceSelector:
+    matchNames:
+      - ${NAMESPACE}
+  selector:
+    matchLabels:
+      app: sqlrec

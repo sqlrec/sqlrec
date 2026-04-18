@@ -11,12 +11,13 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class CallSqlFunctionBindable extends BindableInterface {
     private String funName;
     private List<String> inputTables;
-    private List<String> tablePlaceholders;
-    private SqlFunctionBindable sqlFunctionBindable;
+    private List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders;
+    private BindableInterface sqlFunctionBindable;
     private boolean isAsync;
 
     public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable, boolean isAsync) {
@@ -24,14 +25,11 @@ public class CallSqlFunctionBindable extends BindableInterface {
             throw new RuntimeException("function input table not match when compile call function: " + funName);
         }
 
-        this.funName = funName;
+        this.funName = sqlFunctionBindable.getFunName();
         this.inputTables = inputTables;
-        this.sqlFunctionBindable = sqlFunctionBindable;
+        this.sqlFunctionBindable = new ProxyAllBindable(sqlFunctionBindable, sqlFunctionBindable.getFunName());
         this.isAsync = isAsync;
-        this.tablePlaceholders = new ArrayList<>();
-        for (Map.Entry<String, List<RelDataTypeField>> placeholder : sqlFunctionBindable.getInputTables()) {
-            tablePlaceholders.add(placeholder.getKey());
-        }
+        this.tablePlaceholders = sqlFunctionBindable.getInputTables();
     }
 
     @Override
@@ -44,7 +42,6 @@ public class CallSqlFunctionBindable extends BindableInterface {
         ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone();
         finalContext.addFunNameToStack(funName);
 
-        List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         CalciteSchema tmpSchema = HmsSchema.getHmsCalciteSchema();
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTables.get(i), false);
@@ -60,7 +57,6 @@ public class CallSqlFunctionBindable extends BindableInterface {
     }
 
     public void checkInputTable(CalciteSchema schema) {
-        List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders = sqlFunctionBindable.getInputTables();
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             String inputTable = inputTables.get(i);
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTable, false);
@@ -101,19 +97,23 @@ public class CallSqlFunctionBindable extends BindableInterface {
     public Set<String> getReadTables() {
         Set<String> readTables = new HashSet<>(sqlFunctionBindable.getReadTables());
         readTables.addAll(inputTables);
-        readTables.removeAll(tablePlaceholders);
+        readTables.removeAll(getPlaceholdersTableNames());
         return readTables;
     }
 
     @Override
     public Set<String> getWriteTables() {
         Set<String> writeTables = new HashSet<>(sqlFunctionBindable.getWriteTables());
-        writeTables.removeAll(tablePlaceholders);
+        writeTables.removeAll(getPlaceholdersTableNames());
         return writeTables;
     }
 
+    private List<String> getPlaceholdersTableNames() {
+        return tablePlaceholders.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
     public String getDependencySqlFuncName() {
-        return sqlFunctionBindable.getFunName();
+        return funName;
     }
 
     public Map<String, String> getAllDependSqlFunctionMap() {

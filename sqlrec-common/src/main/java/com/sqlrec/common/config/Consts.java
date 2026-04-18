@@ -10,7 +10,6 @@ public class Consts {
     public static String CHECKPOINT_STATUS_SUCCEEDED = "succeeded";
     public static String CHECKPOINT_STATUS_FAILED = "failed";
 
-    public static String METRICS_NODE_EXEC_TIME = "node.exec.time";
-    public static String METRICS_NODE_EXEC_COUNT = "node.exec.count";
-    public static String METRICS_NODE_DATA_SIZE = "node.data.size";
+    public static String METRICS_NODE_EXEC_DURATION = "sqlrec.node.exec.duration";
+    public static String METRICS_NODE_DATA_SIZE = "sqlrec.node.data.size";
 }

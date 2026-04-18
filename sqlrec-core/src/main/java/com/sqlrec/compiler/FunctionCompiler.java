@@ -5,8 +5,7 @@ import com.sqlrec.common.schema.CacheProxyTable;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.CacheTableBindable;
-import com.sqlrec.runtime.IfCacheBindable;
+import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
@@ -161,7 +160,12 @@ public class FunctionCompiler {
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
             BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-            sqlFunctionBindable.getBindableList().add(bindable);
+            sqlFunctionBindable.getBindableList().add(
+                    new ProxyAllBindable(
+                            bindable,
+                            sqlFunctionBindable.getFunName() + ":" + sqlFunctionBindable.getBindableList().size()
+                    )
+            );
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
                 CacheProxyTable tmpTable = new CacheProxyTable(
                         bindable.getCacheTableName(),
