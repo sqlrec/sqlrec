@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dolphinscheduler-init
+spec:
+  template:
+    spec:
+      containers:
+      - name: dolphinscheduler-tools
+        image: apache/dolphinscheduler-tools:${DOLPHINSCHEDULER_VERSION}
+        command: ["bash", "tools/bin/upgrade-schema.sh"]
+        env:
+        - name: DATABASE
+          value: "postgresql"
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://${NODE_IP}:${DOLPHINSCHEDULER_POSTGRESQL_PORT}/${DOLPHINSCHEDULER_DB}?sslmode=disable"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "${DOLPHINSCHEDULER_POSTGRESQL_USER}"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "${DOLPHINSCHEDULER_POSTGRESQL_PASSWORD}"
+        - name: SPRING_JACKSON_TIME_ZONE
+          value: "UTC"
+      restartPolicy: OnFailure

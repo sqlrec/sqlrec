@@ -69,6 +69,7 @@ minikube start \
   --ports="${GROWTHBOOK_API_PORT}:${GROWTHBOOK_API_PORT}" \
   --ports="${GRAFANA_PORT}:${GRAFANA_PORT}" \
   --ports="${PROMETHEUS_PORT}:${PROMETHEUS_PORT}" \
+  --ports="${DOLPHINSCHEDULER_PORT}:${DOLPHINSCHEDULER_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 
