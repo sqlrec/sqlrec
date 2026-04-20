@@ -25,7 +25,6 @@ fi
 
 export MINIKUBE_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
-export DEPLOY_HDFS="${DEPLOY_HDFS:-false}"
 export HDFS_NAMENODE_PORT=32400
 export HDFS_DATANODE_PORT=32401
 export HDFS_NAMENODE_HTTP_PORT=32402

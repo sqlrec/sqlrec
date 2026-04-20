@@ -33,6 +33,7 @@ bash ${dir}/milvus/deploy.sh
 bash ${dir}/spark/deploy.sh
 
 # extra components, deploy them if needed
+#bash ${dir}/hdfs/deploy.sh
 #bash ${dir}/kyuubi/deploy.sh
 #bash ${dir}/jupyter/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
