@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hdfs-namenode-init
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: init
+        image: debian:12-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          mkdir -p ${HDFS_NAMENODE_DATA_DIR}
+          mkdir -p ${HDFS_DATANODE_DATA_DIR}
+          echo "export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}" >> ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/hadoop-env.sh
+          ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs namenode -format
+        volumeMounts:
+        - name: client-pv
+          mountPath: ${CLIENT_DIR}
+        - name: namenode-data
+          mountPath: ${HDFS_NAMENODE_DATA_DIR}
+        - name: datanode-data
+          mountPath: ${HDFS_DATANODE_DATA_DIR}
+      volumes:
+      - name: client-pv
+        persistentVolumeClaim:
+          claimName: ${CLIENT_PVC_NAME}
+      - name: namenode-data
+        persistentVolumeClaim:
+          claimName: ${HDFS_NAMENODE_PVC_NAME}
+      - name: datanode-data
+        persistentVolumeClaim:
+          claimName: ${HDFS_DATANODE_PVC_NAME}
