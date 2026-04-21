@@ -456,9 +456,41 @@ public class K8sManager {
             }
 
             if (deployment.getStatus() != null) {
+                Integer replicas = deployment.getSpec() != null ? deployment.getSpec().getReplicas() : 1;
+                if (replicas == null) {
+                    replicas = 1;
+                }
+
                 Integer readyReplicas = deployment.getStatus().getReadyReplicas();
-                if (readyReplicas != null && readyReplicas >= 1) {
+                Integer updatedReplicas = deployment.getStatus().getUpdatedReplicas();
+                Integer availableReplicas = deployment.getStatus().getAvailableReplicas();
+                Integer unavailableReplicas = deployment.getStatus().getUnavailableReplicas();
+
+                if (readyReplicas == null) {
+                    readyReplicas = 0;
+                }
+                if (updatedReplicas == null) {
+                    updatedReplicas = 0;
+                }
+                if (availableReplicas == null) {
+                    availableReplicas = 0;
+                }
+                if (unavailableReplicas == null) {
+                    unavailableReplicas = 0;
+                }
+
+                boolean allReady = readyReplicas.equals(replicas);
+                boolean allUpdated = updatedReplicas.equals(replicas);
+                boolean noneUnavailable = unavailableReplicas == 0;
+
+                if (allReady && allUpdated && noneUnavailable) {
+                    log.info("Deployment {} is fully ready: replicas={}, ready={}, updated={}, available={}, unavailable={}",
+                            deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
                     return true;
+                } else {
+                    log.info("Deployment {} is not ready yet: replicas={}, ready={}, updated={}, available={}, unavailable={}",
+                            deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
+                    return false;
                 }
             }
 

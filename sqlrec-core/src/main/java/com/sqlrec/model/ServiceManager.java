@@ -51,9 +51,6 @@ public class ServiceManager {
         }
 
         String k8sYaml = service.getYaml();
-        if (k8sYaml == null || k8sYaml.isEmpty()) {
-            return true;
-        }
         return K8sManager.isDeploymentReadyFromYaml(k8sYaml);
     }
 
