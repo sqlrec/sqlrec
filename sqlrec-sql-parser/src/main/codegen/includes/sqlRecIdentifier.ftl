@@ -102,19 +102,27 @@ SqlGetVariable SqlGetVariable() :
 SqlDefineInputTable SqlDefineInputTable():
 {
     SqlIdentifier tableName = null;
+    SqlIdentifier likeTable = null;
     List<SqlIdentifier> columnList = new ArrayList<SqlIdentifier>();
     List<SqlTypeNameSpec> columnTypeList = new ArrayList<SqlTypeNameSpec>();
 }
 {
     <DEFINE> <INPUT> <TABLE>
     tableName = SimpleIdentifier()
-    <LPAREN>
-        AddDefineInputTable(columnList, columnTypeList)
-        ( <COMMA> AddDefineInputTable(columnList, columnTypeList) )*
-    <RPAREN>
-    {
-        return new SqlDefineInputTable(getPos(), tableName, columnList, columnTypeList);
-    }
+    (
+        <LIKE> likeTable = CompoundIdentifier()
+        {
+            return new SqlDefineInputTable(getPos(), tableName, likeTable);
+        }
+    |
+        <LPAREN>
+            AddDefineInputTable(columnList, columnTypeList)
+            ( <COMMA> AddDefineInputTable(columnList, columnTypeList) )*
+        <RPAREN>
+        {
+            return new SqlDefineInputTable(getPos(), tableName, columnList, columnTypeList);
+        }
+    )
 }
 
 void AddDefineInputTable(List<SqlIdentifier> columnList, List<SqlTypeNameSpec> columnTypeList):

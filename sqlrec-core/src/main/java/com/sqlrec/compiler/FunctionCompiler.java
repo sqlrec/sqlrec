@@ -11,8 +11,12 @@ import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlReturn;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlTypeNameSpec;
@@ -118,10 +122,21 @@ public class FunctionCompiler {
     private void compileFunctionParam(SqlNode flinkSqlNode) throws Exception {
         if (flinkSqlNode instanceof SqlDefineInputTable) {
             SqlDefineInputTable sqlDefineInputTable = (SqlDefineInputTable) flinkSqlNode;
-            List<RelDataTypeField> relDataTypeFields = getTableFieldsTypes(
-                    sqlDefineInputTable.getColumnList(),
-                    sqlDefineInputTable.getColumnTypeList()
-            );
+            List<RelDataTypeField> relDataTypeFields;
+            if (sqlDefineInputTable.getLikeTable() != null) {
+                String likeTableName = sqlDefineInputTable.getLikeTable().toString();
+                Table table = SchemaUtils.getTableObj(schema, Consts.DEFAULT_SCHEMA_NAME, likeTableName);
+                if (table == null) {
+                    throw new Exception("like table not found: " + likeTableName);
+                }
+                RelDataType rowType = table.getRowType(new JavaTypeFactoryImpl());
+                relDataTypeFields = rowType.getFieldList();
+            } else {
+                relDataTypeFields = getTableFieldsTypes(
+                        sqlDefineInputTable.getColumnList(),
+                        sqlDefineInputTable.getColumnTypeList()
+                );
+            }
             sqlFunctionBindable.addInputTable(sqlDefineInputTable.getTableName().getSimple(), relDataTypeFields);
             CacheProxyTable tmpTable = new CacheProxyTable(
                     sqlDefineInputTable.getTableName().getSimple(),

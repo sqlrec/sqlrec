@@ -40,6 +40,8 @@ public class TestSqlParse {
                 "call fun1(t1)",
                 "call fun1(t1) async",
                 "define input table t1(id integer, name string)",
+                "define input table t1 like t2",
+                "define input table t1 like db1.t2",
                 "return t1",
                 "return",
                 "create model `test_model` (id bigint, name string) with ('param'='value')",

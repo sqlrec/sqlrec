@@ -141,4 +141,26 @@ public class SchemaUtils {
         }
         return tableEntry.getTable();
     }
+
+    public static Table getTableObj(CalciteSchema schema, String defaultSchema, String tableName) {
+        tableName = tableName.replaceAll("`", "");
+        if (tableName.contains(".")) {
+            String[] tableNameParts = tableName.split("\\.");
+            if (tableNameParts.length != 2) {
+                log.error("table name {} is not in format schema.table", tableName);
+                return null;
+            }
+            String schemaName = tableNameParts[0];
+            String shortTableName = tableNameParts[1];
+            CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
+            return getTableObj(subSchema, shortTableName);
+        } else {
+            Table table = getTableObj(schema, tableName);
+            if (table == null) {
+                CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
+                table = getTableObj(subSchema, tableName);
+            }
+            return table;
+        }
+    }
 }

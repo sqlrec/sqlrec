@@ -93,7 +93,7 @@ public class SqlTypeChecker {
     public static boolean isSqlContainKvTable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         List<String> tableNames = NodeUtils.getTableFromSqlNode(flinkSqlNode);
         for (String tableName : tableNames) {
-            Table table = getTableObj(schema, defaultSchema, tableName);
+            Table table = SchemaUtils.getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
                 throw new RuntimeException("table " + tableName + " is not found");
             }
@@ -107,7 +107,7 @@ public class SqlTypeChecker {
     public static boolean isSqlTableRunnable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
         List<String> tableNames = NodeUtils.getTableFromSqlNode(flinkSqlNode);
         for (String tableName : tableNames) {
-            Table table = getTableObj(schema, defaultSchema, tableName);
+            Table table = SchemaUtils.getTableObj(schema, defaultSchema, tableName);
             if (table == null) {
                 log.error("table {} is not found", tableName);
                 return false;
@@ -119,24 +119,4 @@ public class SqlTypeChecker {
         return true;
     }
 
-    private static Table getTableObj(CalciteSchema schema, String defaultSchema, String tableName) {
-        if (tableName.contains(".")) {
-            String[] tableNameParts = tableName.split("\\.");
-            if (tableNameParts.length != 2) {
-                log.error("table name {} is not in format schema.table", tableName);
-                return null;
-            }
-            String schemaName = tableNameParts[0];
-            String shortTableName = tableNameParts[1];
-            CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
-            return SchemaUtils.getTableObj(subSchema, shortTableName);
-        } else {
-            Table table = SchemaUtils.getTableObj(schema, tableName);
-            if (table == null) {
-                CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
-                table = SchemaUtils.getTableObj(subSchema, tableName);
-            }
-            return table;
-        }
-    }
 }

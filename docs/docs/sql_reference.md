@@ -496,6 +496,9 @@ DEFINE INPUT TABLE table_name (
     column_name2 column_type2,
     ...
 )
+
+-- 或者使用 LIKE 子句复制已有表的结构
+DEFINE INPUT TABLE table_name LIKE existing_table
 ```
 
 **参数：**
@@ -505,16 +508,27 @@ DEFINE INPUT TABLE table_name (
 | `table_name` | 输入表名称 |
 | `column_name` | 列名 |
 | `column_type` | 列数据类型 |
+| `existing_table` | 已存在的表名，用于复制其表结构 |
+
+**描述：**
+
+`DEFINE INPUT TABLE` 支持两种方式定义输入表结构：
+1. **显式定义**：直接指定列名和列类型
+2. **LIKE 子句**：复制已有表的结构，包括所有列名和类型
 
 **示例：**
 
 ```sql
+-- 显式定义列
 DEFINE INPUT TABLE input_data (
     id INT,
     name VARCHAR(100),
     score DOUBLE,
     created_at TIMESTAMP
 );
+
+-- 使用 LIKE 子句复制表结构
+DEFINE INPUT TABLE input_data LIKE source_table;
 ```
 
 

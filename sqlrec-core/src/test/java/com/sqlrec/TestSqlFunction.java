@@ -45,6 +45,14 @@ public class TestSqlFunction {
                                 new Object[]{"Charlie", 5L})
                 ),
                 new SqlTestCase(
+                        "call fun4(t1)",
+                        Arrays.asList(
+                                new Object[]{1, "Alice"},
+                                new Object[]{2, "Bob"},
+                                new Object[]{3, "Charlie"}
+                        )
+                ),
+                new SqlTestCase(
                         "call fun1(t1) async",
                         null
                 ),
@@ -129,5 +137,12 @@ public class TestSqlFunction {
                 "cache table r as SELECT * from t2 union all SELECT * from t3 union all SELECT * from t4 union all SELECT * from t5 union all SELECT * from t6",
                 "return r");
         new CompileManager().compileSqlFunction("fun3", sqlList3);
+
+        List<String> sqlList4 = Arrays.asList(
+                "create sql function fun4",
+                "define input table input1 like myTable",
+                "cache table t2 as SELECT * FROM input1",
+                "return t2");
+        new CompileManager().compileSqlFunction("fun4", sqlList4);
     }
 }

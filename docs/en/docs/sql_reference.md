@@ -496,6 +496,9 @@ DEFINE INPUT TABLE table_name (
     column_name2 column_type2,
     ...
 )
+
+-- Or use LIKE clause to copy an existing table's structure
+DEFINE INPUT TABLE table_name LIKE existing_table
 ```
 
 **Parameters:**
@@ -505,16 +508,27 @@ DEFINE INPUT TABLE table_name (
 | `table_name` | Input table name |
 | `column_name` | Column name |
 | `column_type` | Column data type |
+| `existing_table` | Name of an existing table to copy its structure from |
+
+**Description:**
+
+`DEFINE INPUT TABLE` supports two ways to define input table structure:
+1. **Explicit Definition**: Directly specify column names and types
+2. **LIKE Clause**: Copy the structure of an existing table, including all column names and types
 
 **Example:**
 
 ```sql
+-- Explicitly define columns
 DEFINE INPUT TABLE input_data (
     id INT,
     name VARCHAR(100),
     score DOUBLE,
     created_at TIMESTAMP
 );
+
+-- Use LIKE clause to copy table structure
+DEFINE INPUT TABLE input_data LIKE source_table;
 ```
 
 
