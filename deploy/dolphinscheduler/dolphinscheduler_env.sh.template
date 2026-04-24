@@ -1,0 +1,4 @@
+export HADOOP_HOME="${HADOOP_HOME}"
+export HIVE_HOME="${HIVE_HOME}"
+export SPARK_HOME="${SPARK_HOME}"
+export JAVA_HOME="${JAVA_HOME}"

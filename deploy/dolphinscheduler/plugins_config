@@ -1,0 +1,14 @@
+--datasource-plugins--
+dolphinscheduler-datasource-hive
+dolphinscheduler-datasource-kyuubi
+dolphinscheduler-datasource-postgresql
+--end--
+
+--task-plugins--
+dolphinscheduler-task-flink
+dolphinscheduler-task-flink-stream
+dolphinscheduler-task-hivecli
+dolphinscheduler-task-shell
+dolphinscheduler-task-spark
+dolphinscheduler-task-sql
+--end--

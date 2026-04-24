@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dolphinscheduler-plugins-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dolphinscheduler-install-plugins
+spec:
+  template:
+    metadata:
+      labels:
+        app: dolphinscheduler-install-plugins
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: spark
+      containers:
+      - name: install-plugins
+        image: apache/dolphinscheduler-standalone-server:${DOLPHINSCHEDULER_VERSION}
+        command:
+        - bash
+        - -c
+        - bash /opt/dolphinscheduler/bin/install-plugins.sh ${DOLPHINSCHEDULER_VERSION}
+        volumeMounts:
+        - mountPath: /opt/dolphinscheduler/plugins
+          name: dolphinscheduler-plugins
+        - mountPath: /opt/dolphinscheduler/conf/plugins_config
+          name: dolphinscheduler-plugins-config
+          subPath: plugins_config
+      volumes:
+      - name: dolphinscheduler-plugins
+        persistentVolumeClaim:
+          claimName: dolphinscheduler-plugins-pvc
+      - name: dolphinscheduler-plugins-config
+        configMap:
+          name: dolphinscheduler-plugins-config

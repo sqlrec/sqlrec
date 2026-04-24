@@ -58,6 +58,20 @@ spec:
           name: client-dir
         - mountPath: /tmp/dolphinscheduler
           name: dolphinscheduler-data
+        - mountPath: /opt/dolphinscheduler/conf/plugins_config
+          name: dolphinscheduler-plugins-config
+          subPath: plugins_config
+        - mountPath: /opt/dolphinscheduler/plugins
+          name: dolphinscheduler-plugins
+        - mountPath: /opt/dolphinscheduler/bin/env/dolphinscheduler_env.sh
+          name: dolphinscheduler-env
+          subPath: dolphinscheduler_env.sh
+        - mountPath: /opt/dolphinscheduler/standalone-server/conf/dolphinscheduler_env.sh
+          name: dolphinscheduler-env
+          subPath: dolphinscheduler_env.sh
+        - mountPath: /opt/dolphinscheduler/worker-server/conf/dolphinscheduler_env.sh
+          name: dolphinscheduler-env
+          subPath: dolphinscheduler_env.sh
       volumes:
       - name: client-dir
         persistentVolumeClaim:
@@ -65,6 +79,15 @@ spec:
       - name: dolphinscheduler-data
         persistentVolumeClaim:
           claimName: dolphinscheduler-data-pvc
+      - name: dolphinscheduler-plugins-config
+        configMap:
+          name: dolphinscheduler-plugins-config
+      - name: dolphinscheduler-plugins
+        persistentVolumeClaim:
+          claimName: dolphinscheduler-plugins-pvc
+      - name: dolphinscheduler-env
+        configMap:
+          name: dolphinscheduler-env
 ---
 apiVersion: v1
 kind: Service
