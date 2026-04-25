@@ -28,6 +28,9 @@ public class DataTypeUtils {
         if (type.equals("INT")) {
             type = "INTEGER";
         }
+        if (type.startsWith("VARCHAR")) {
+            type = "VARCHAR";
+        }
 
         if (type.startsWith("ARRAY<") && type.endsWith(">")) {
             String elementType = type.substring("ARRAY<".length(), type.length() - 1);
