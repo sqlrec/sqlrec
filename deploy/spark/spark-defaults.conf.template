@@ -7,10 +7,10 @@ spark.shuffle.service.enabled false
 spark.kubernetes.container.image apache/spark:3.5.1
 spark.kubernetes.authenticate.driver.serviceAccountName spark
 spark.kubernetes.namespace ${NAMESPACE}
+spark.driver.extraClassPath /opt/spark/sqlrec_jars/${JUICEFS_HADOOP_JAR_NAME}
+spark.executor.extraClassPath /opt/spark/sqlrec_jars/${JUICEFS_HADOOP_JAR_NAME}
 
-spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/sqlrec_jars
 spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.options.claimName ${LIB_PVC_NAME}
-spark.kubernetes.driver.volumes.persistentVolumeClaim.resource.mount.subPath ${JUICEFS_HADOOP_JAR_NAME}
-spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/jars/juicefs-hadoop.jar
+spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.mount.path /opt/spark/sqlrec_jars
 spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.options.claimName ${LIB_PVC_NAME}
-spark.kubernetes.executor.volumes.persistentVolumeClaim.resource.mount.subPath ${JUICEFS_HADOOP_JAR_NAME}

@@ -9,7 +9,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class ShuffleFunction {
-    public CacheTable eval(CacheTable input) {
+    public CacheTable evaluate(CacheTable input) {
         Enumerable<Object[]> enumerable = input.scan(null);
         List<Object[]> newData = new ArrayList<>();
         if (enumerable != null) {

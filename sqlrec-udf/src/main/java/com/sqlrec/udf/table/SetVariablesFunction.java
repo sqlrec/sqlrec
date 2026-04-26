@@ -9,7 +9,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import java.util.List;
 
 public class SetVariablesFunction {
-    public CacheTable eval(ExecuteContext context, CacheTable input) {
+    public CacheTable evaluate(ExecuteContext context, CacheTable input) {
         if (context == null) {
             throw new IllegalArgumentException("context cannot be null");
         }

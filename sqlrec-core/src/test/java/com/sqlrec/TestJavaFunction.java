@@ -133,19 +133,19 @@ public class TestJavaFunction {
     }
 
     public static class TestEmptyFun {
-        public void eval() {
+        public void evaluate() {
 
         }
     }
 
     public static class TestStringArgFun {
-        public void eval(String arg) {
+        public void evaluate(String arg) {
             System.out.println(arg);
         }
     }
 
     public static class TestContextFun {
-        public void eval(ExecuteContext context, String argName) {
+        public void evaluate(ExecuteContext context, String argName) {
             String argValue = context.getVariable(argName);
             if (argValue != null) {
                 System.out.println(argValue);

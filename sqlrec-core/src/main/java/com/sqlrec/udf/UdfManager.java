@@ -13,7 +13,7 @@ public class UdfManager {
     }
 
     public static ScalarFunction createScalarFunction(String className) throws Exception {
-        return createScalarFunction(className, "eval");
+        return createScalarFunction(className, "evaluate");
     }
 
     public static ScalarFunction createScalarFunction(String className, String methodName) throws Exception {

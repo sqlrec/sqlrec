@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TruncateTableFunction {
-    public CacheTable eval(CacheTable input, String startStr, String endStr) {
+    public CacheTable evaluate(CacheTable input, String startStr, String endStr) {
         if (startStr == null || endStr == null) {
             throw new IllegalArgumentException("start and end parameters cannot be null");
         }

@@ -28,7 +28,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "1", "3");
+        CacheTable output = function.evaluate(input, "1", "3");
 
         assertNotNull(output);
         assertEquals(dataFields, output.getDataFields());
@@ -52,7 +52,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "0", "2");
+        CacheTable output = function.evaluate(input, "0", "2");
 
         assertNotNull(output);
 
@@ -75,7 +75,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "1", "10");
+        CacheTable output = function.evaluate(input, "1", "10");
 
         assertNotNull(output);
 
@@ -97,7 +97,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "5", "10");
+        CacheTable output = function.evaluate(input, "5", "10");
 
         assertNotNull(output);
 
@@ -115,7 +115,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "0", "5");
+        CacheTable output = function.evaluate(input, "0", "5");
 
         assertNotNull(output);
 
@@ -135,7 +135,7 @@ public class TruncateTableFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         TruncateTableFunction function = new TruncateTableFunction();
-        CacheTable output = function.eval(input, "1", "1");
+        CacheTable output = function.evaluate(input, "1", "1");
 
         assertNotNull(output);
 
@@ -156,7 +156,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, null, "5");
+            function.evaluate(input, null, "5");
         });
     }
 
@@ -171,7 +171,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "0", null);
+            function.evaluate(input, "0", null);
         });
     }
 
@@ -186,7 +186,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "-1", "5");
+            function.evaluate(input, "-1", "5");
         });
     }
 
@@ -201,7 +201,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "0", "-1");
+            function.evaluate(input, "0", "-1");
         });
     }
 
@@ -216,7 +216,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "5", "2");
+            function.evaluate(input, "5", "2");
         });
     }
 
@@ -231,7 +231,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "abc", "5");
+            function.evaluate(input, "abc", "5");
         });
     }
 
@@ -246,7 +246,7 @@ public class TruncateTableFunctionTest {
         TruncateTableFunction function = new TruncateTableFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(input, "0", "xyz");
+            function.evaluate(input, "0", "xyz");
         });
     }
 

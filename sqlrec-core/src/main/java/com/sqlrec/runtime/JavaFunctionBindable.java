@@ -58,7 +58,7 @@ public class JavaFunctionBindable extends BindableInterface {
         Method[] allMethods = tableFunction.getClass().getMethods();
         List<Method> evalMethods = new ArrayList<>();
         for (Method method : allMethods) {
-            if (method.getName().equals("eval")) {
+            if (method.getName().equals("evaluate")) {
                 evalMethods.add(method);
             }
         }

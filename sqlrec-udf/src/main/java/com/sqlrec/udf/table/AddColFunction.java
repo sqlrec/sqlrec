@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AddColFunction {
-    public CacheTable eval(CacheTable input, String colName, String value) {
+    public CacheTable evaluate(CacheTable input, String colName, String value) {
         if (colName == null || colName.isEmpty()) {
             throw new IllegalArgumentException("col name is empty");
         }

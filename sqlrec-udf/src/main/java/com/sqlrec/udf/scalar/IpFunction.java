@@ -1,9 +1,11 @@
 package com.sqlrec.udf.scalar;
 
+import org.apache.hadoop.hive.ql.exec.UDF;
+
 import java.util.List;
 
-public class IpFunction {
-    public Object eval(Object emb1, Object emb2) {
+public class IpFunction extends UDF {
+    public Object evaluate(Object emb1, Object emb2) {
         if (emb1 == null || emb2 == null) {
             return null;
         }

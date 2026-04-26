@@ -26,7 +26,7 @@ public class GetVariablesFunctionTest {
     @Test
     public void testGetVariablesEmpty() {
         GetVariablesFunction function = new GetVariablesFunction();
-        CacheTable output = function.eval(context);
+        CacheTable output = function.evaluate(context);
 
         assertNotNull(output);
 
@@ -46,7 +46,7 @@ public class GetVariablesFunctionTest {
         context.setVariable("var1", "value1");
 
         GetVariablesFunction function = new GetVariablesFunction();
-        CacheTable output = function.eval(context);
+        CacheTable output = function.evaluate(context);
 
         assertNotNull(output);
 
@@ -64,7 +64,7 @@ public class GetVariablesFunctionTest {
         context.setVariable("var3", "value3");
 
         GetVariablesFunction function = new GetVariablesFunction();
-        CacheTable output = function.eval(context);
+        CacheTable output = function.evaluate(context);
 
         assertNotNull(output);
 
@@ -89,7 +89,7 @@ public class GetVariablesFunctionTest {
         context.setVariable("var2", null);
 
         GetVariablesFunction function = new GetVariablesFunction();
-        CacheTable output = function.eval(context);
+        CacheTable output = function.evaluate(context);
 
         assertNotNull(output);
 
@@ -106,7 +106,7 @@ public class GetVariablesFunctionTest {
         GetVariablesFunction function = new GetVariablesFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(null);
+            function.evaluate(null);
         });
     }
 }

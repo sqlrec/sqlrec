@@ -26,7 +26,7 @@ public class CallServiceFunction {
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
 
-    public CacheTable eval(ConfigContext context, String serviceName, CacheTable input) {
+    public CacheTable evaluate(ConfigContext context, String serviceName, CacheTable input) {
         ServiceConfig serviceConfig = context.getServiceConfig(serviceName);
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");

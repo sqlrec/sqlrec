@@ -452,7 +452,7 @@ public class TestIfCache {
     public static class SlowFunction {
         private static final long DEFAULT_DELAY_MS = 200;
 
-        public CacheTable eval(CacheTable input) {
+        public CacheTable evaluate(CacheTable input) {
             try {
                 Thread.sleep(DEFAULT_DELAY_MS);
             } catch (InterruptedException e) {

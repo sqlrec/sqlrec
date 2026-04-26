@@ -34,7 +34,7 @@ public class SetVariablesFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         SetVariablesFunction function = new SetVariablesFunction();
-        CacheTable output = function.eval(context, input);
+        CacheTable output = function.evaluate(context, input);
 
         assertNotNull(output);
         assertEquals("value1", context.getVariable("var1"));
@@ -49,7 +49,7 @@ public class SetVariablesFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         SetVariablesFunction function = new SetVariablesFunction();
-        CacheTable output = function.eval(context, input);
+        CacheTable output = function.evaluate(context, input);
 
         assertNotNull(output);
         assertEquals(0, context.getVariables().size());
@@ -67,7 +67,7 @@ public class SetVariablesFunctionTest {
         context.setVariable("var2", "old_value");
 
         SetVariablesFunction function = new SetVariablesFunction();
-        CacheTable output = function.eval(context, input);
+        CacheTable output = function.evaluate(context, input);
 
         assertNotNull(output);
         assertEquals("value1", context.getVariable("var1"));
@@ -85,7 +85,7 @@ public class SetVariablesFunctionTest {
         CacheTable input = new CacheTable("input", Linq4j.asEnumerable(data), dataFields);
 
         SetVariablesFunction function = new SetVariablesFunction();
-        CacheTable output = function.eval(context, input);
+        CacheTable output = function.evaluate(context, input);
 
         assertNotNull(output);
         assertEquals("new_value", context.getVariable("var1"));
@@ -102,7 +102,7 @@ public class SetVariablesFunctionTest {
         SetVariablesFunction function = new SetVariablesFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(null, input);
+            function.evaluate(null, input);
         });
     }
 
@@ -111,7 +111,7 @@ public class SetVariablesFunctionTest {
         SetVariablesFunction function = new SetVariablesFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(context, null);
+            function.evaluate(context, null);
         });
     }
 
@@ -130,7 +130,7 @@ public class SetVariablesFunctionTest {
         SetVariablesFunction function = new SetVariablesFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(context, input);
+            function.evaluate(context, input);
         });
     }
 
@@ -148,7 +148,7 @@ public class SetVariablesFunctionTest {
         SetVariablesFunction function = new SetVariablesFunction();
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.eval(context, input);
+            function.evaluate(context, input);
         });
     }
 

@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class WindowDiversify {
-    public CacheTable eval(
+    public CacheTable evaluate(
             CacheTable input,
             String categoryColumnName,
             String windowSize,

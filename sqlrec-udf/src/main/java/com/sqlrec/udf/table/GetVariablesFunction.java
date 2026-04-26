@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 public class GetVariablesFunction {
-    public CacheTable eval(ExecuteContext context) {
+    public CacheTable evaluate(ExecuteContext context) {
         if (context == null) {
             throw new IllegalArgumentException("context cannot be null");
         }

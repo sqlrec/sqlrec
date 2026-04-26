@@ -79,7 +79,7 @@ public class TestExceptionIgnore {
     }
 
     public static class TestFunction {
-        public CacheTable eval(CacheTable input) {
+        public CacheTable evaluate(CacheTable input) {
             if (input.scan(null).count() == 0) {
                 return input;
             }

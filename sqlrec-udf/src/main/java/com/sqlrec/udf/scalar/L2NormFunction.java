@@ -1,9 +1,11 @@
 package com.sqlrec.udf.scalar;
 
+import org.apache.hadoop.hive.ql.exec.UDF;
+
 import java.util.List;
 
-public class L2NormFunction {
-    public Object eval(Object vector) {
+public class L2NormFunction extends UDF {
+    public Object evaluate(Object vector) {
         if (vector == null) {
             return null;
         }
