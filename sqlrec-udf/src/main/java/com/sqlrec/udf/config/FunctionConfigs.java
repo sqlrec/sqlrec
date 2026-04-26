@@ -3,6 +3,7 @@ package com.sqlrec.udf.config;
 import com.sqlrec.udf.scalar.GetFunction;
 import com.sqlrec.udf.scalar.IpFunction;
 import com.sqlrec.udf.scalar.L2NormFunction;
+import com.sqlrec.udf.scalar.RandomVecFunction;
 import com.sqlrec.udf.scalar.UuidFunction;
 import com.sqlrec.udf.table.*;
 
@@ -13,6 +14,7 @@ public class FunctionConfigs {
     public static final Map<String, String> DEFAULT_SCALAR_FUNCTION_CONFIGS = new HashMap<String, String>() {{
         put("ip", IpFunction.class.getName());
         put("l2_norm", L2NormFunction.class.getName());
+        put("random_vec", RandomVecFunction.class.getName());
         put("uuid", UuidFunction.class.getName());
         put("get", GetFunction.class.getName());
     }};

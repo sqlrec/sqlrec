@@ -2,8 +2,8 @@
 math.randomseed(os.time())
 
 function request()
-    -- Generate random ID between 0-99999 (consistent with mock_data.py)
-    local random_id = math.random(0, 99999)
+    -- Generate random ID between 0-5000
+    local random_id = math.random(0, 5000)
     
     -- Construct request body
     local request_body = string.format('{"inputs":{"user_info":[{"id":%d}]},"params":{"recall_fun":"recall_fun"}}', random_id)

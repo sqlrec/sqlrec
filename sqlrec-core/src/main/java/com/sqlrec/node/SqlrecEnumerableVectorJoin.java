@@ -210,9 +210,9 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
                                 rightExpression,
                                 stashedFilterCondition,
                                 Expressions.constant(leftEmbeddingColIndex),
-                                Expressions.constant(rightEmbeddingColName),
+                                Expressions.constant(rightEmbeddingColName, String.class),
                                 Expressions.constant(limit),
-                                Expressions.constant(projectList))
+                                Expressions.constant(projectList, List.class))
                 ).toBlock()
         );
     }
