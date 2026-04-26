@@ -46,6 +46,9 @@ spec:
             - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
+            - mountPath: /opt/flink/lib/${SQLREC_JAR_NAME}
+              name: ${LIB_PV_NAME}
+              subPath: ${SQLREC_JAR_NAME}
             - mountPath: /opt/hadoop/conf/hive-site.xml
               name: hive-site
               subPath: hive-site.xml
@@ -116,6 +119,9 @@ spec:
             - mountPath: /opt/flink/lib/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}
+            - mountPath: /opt/flink/lib/${SQLREC_JAR_NAME}
+              name: ${LIB_PV_NAME}
+              subPath: ${SQLREC_JAR_NAME}
             - mountPath: /opt/flink/conf/hive-site.xml
               name: hive-site
               subPath: hive-site.xml

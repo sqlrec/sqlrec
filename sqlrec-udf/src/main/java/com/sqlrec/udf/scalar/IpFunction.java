@@ -1,10 +1,8 @@
 package com.sqlrec.udf.scalar;
 
-import org.apache.flink.table.functions.ScalarFunction;
-
 import java.util.List;
 
-public class IpFunction extends ScalarFunction {
+public class IpFunction {
     public Object eval(Object emb1, Object emb2) {
         if (emb1 == null || emb2 == null) {
             return null;

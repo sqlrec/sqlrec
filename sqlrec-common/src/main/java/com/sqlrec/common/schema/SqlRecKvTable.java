@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTable, FilterableTable {
-    private Cache<Object, List<Object[]>> cache;
+    private transient Cache<Object, List<Object[]>> cache;
 
     public int getPrimaryKeyIndex() {
         throw new UnsupportedOperationException("getPrimaryKeyIndex not support");

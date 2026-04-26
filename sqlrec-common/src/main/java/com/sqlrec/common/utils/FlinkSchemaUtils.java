@@ -8,10 +8,7 @@ import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.UniqueConstraint;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.types.logical.ArrayType;
-import org.apache.flink.table.types.logical.DecimalType;
-import org.apache.flink.table.types.logical.FloatType;
-import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,25 +110,28 @@ public class FlinkSchemaUtils {
             case VARBINARY:
                 return rowData.getBinary(index);
             case ARRAY:
-                if (isFloatVectorType(fieldType)) {
-                    ArrayData arrayData = rowData.getArray(index);
-                    List<Float> vector = new ArrayList<>((int) arrayData.size());
-                    for (int i = 0; i < arrayData.size(); i++) {
-                        vector.add(arrayData.getFloat(i));
+                ArrayData arrayData = rowData.getArray(index);
+                LogicalType elementType = ((ArrayType) fieldType).getElementType();
+                List<Object> list = new ArrayList<>((int) arrayData.size());
+
+                for (int i = 0; i < arrayData.size(); i++) {
+                    if (elementType instanceof IntType) {
+                        list.add(arrayData.getInt(i));
+                    } else if (elementType instanceof BigIntType) {
+                        list.add(arrayData.getLong(i));
+                    } else if (elementType instanceof FloatType) {
+                        list.add(arrayData.getFloat(i));
+                    } else if (elementType instanceof DoubleType) {
+                        list.add(arrayData.getDouble(i));
+                    } else if (elementType instanceof VarCharType || elementType instanceof CharType) {
+                        list.add(arrayData.getString(i).toString());
+                    } else {
+                        throw new UnsupportedOperationException("Unsupported array element type: " + elementType);
                     }
-                    return vector;
                 }
-                throw new UnsupportedOperationException("Unsupported array type: " + fieldType);
+                return list;
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + fieldType);
         }
-    }
-
-    public static boolean isFloatVectorType(LogicalType fieldType) {
-        if (fieldType instanceof ArrayType) {
-            ArrayType arrayType = (ArrayType) fieldType;
-            return arrayType.getElementType() instanceof FloatType;
-        }
-        return false;
     }
 }

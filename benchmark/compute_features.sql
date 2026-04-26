@@ -87,12 +87,10 @@ FROM (
     SELECT
         r1.movie_id as movie_id1,
         r2.movie_id as movie_id2,
-        COUNT(*) as co_count,
-        SQRT(uc1.user_count) * SQRT(uc2.user_count) as denominator,
         COUNT(*) / (SQRT(uc1.user_count) * SQRT(uc2.user_count)) as score,
         ROW_NUMBER() OVER (PARTITION BY r1.movie_id ORDER BY COUNT(*) / (SQRT(uc1.user_count) * SQRT(uc2.user_count)) DESC) as rn
     FROM ml_ratings r1
-    JOIN ml_ratings r2 ON r1.user_id = r2.user_id AND r1.movie_id < r2.movie_id
+    JOIN ml_ratings r2 ON r1.user_id = r2.user_id AND r1.movie_id != r2.movie_id
     JOIN movie_user_count uc1 ON r1.movie_id = uc1.movie_id
     JOIN movie_user_count uc2 ON r2.movie_id = uc2.movie_id
     WHERE r1.dt = '2024-01-01' AND r2.dt = '2024-01-01'

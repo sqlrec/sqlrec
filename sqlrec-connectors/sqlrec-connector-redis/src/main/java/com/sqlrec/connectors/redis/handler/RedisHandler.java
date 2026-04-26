@@ -114,26 +114,34 @@ public class RedisHandler {
     }
 
     public void delete(Object[] data) {
-        if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
-            redisClient.lrem(getKey(data), codec.encode(data));
-        } else {
-            redisClient.del(getKey(data));
+        byte[] key = getKey(data);
+        try {
+            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+                redisClient.lrem(key, codec.encode(data)).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            } else {
+                redisClient.del(key).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete data from Redis", e);
         }
     }
 
     public void insert(Object[] data) {
         byte[] key = getKey(data);
-        if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
-            redisClient.lpush(key, codec.encode(data)).whenComplete((x, y) -> {
-                redisClient.expire(key, redisConfig.ttl);
-            });
-            if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                redisClient.ltrim(key, 0, redisConfig.maxListSize - 1);
+        byte[] value = codec.encode(data);
+        try {
+            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+                redisClient.lpush(key, value).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                    redisClient.ltrim(key, 0, redisConfig.maxListSize - 1).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                }
+                redisClient.expire(key, redisConfig.ttl).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            } else {
+                redisClient.set(key, value).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                redisClient.expire(key, redisConfig.ttl).get(30, java.util.concurrent.TimeUnit.SECONDS);
             }
-        } else {
-            redisClient.set(key, codec.encode(data)).whenComplete((x, y) -> {
-                redisClient.expire(key, redisConfig.ttl);
-            });
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to insert data to Redis", e);
         }
     }
 

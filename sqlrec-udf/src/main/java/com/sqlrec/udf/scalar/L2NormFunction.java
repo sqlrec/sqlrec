@@ -1,10 +1,8 @@
 package com.sqlrec.udf.scalar;
 
-import org.apache.flink.table.functions.ScalarFunction;
-
 import java.util.List;
 
-public class L2NormFunction extends ScalarFunction {
+public class L2NormFunction {
     public Object eval(Object vector) {
         if (vector == null) {
             return null;

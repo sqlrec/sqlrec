@@ -1,4 +1,5 @@
 export SQLREC_VERSION="${SQLREC_VERSION:-0.1.1}"
+export SQLREC_JAR_NAME="sqlrec-frontend-${SQLREC_VERSION}.jar"
 
 export SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 export BASE_DIR=${BASE_DIR:-${SCRIPT_DIR}}

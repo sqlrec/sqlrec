@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sqlrec-copy-jar
+spec:
+  template:
+    spec:
+      containers:
+        - name: copy-jar
+          image: sqlrec/sqlrec:${SQLREC_VERSION}
+          command:
+            - cp
+            - /app/${SQLREC_JAR_NAME}
+            - /sqlreclib/${SQLREC_JAR_NAME}
+          volumeMounts:
+            - mountPath: /sqlreclib
+              name: ${LIB_PV_NAME}
+      volumes:
+        - name: ${LIB_PV_NAME}
+          persistentVolumeClaim:
+            claimName: ${LIB_PVC_NAME}
+      restartPolicy: Never
+  backoffLimit: 3

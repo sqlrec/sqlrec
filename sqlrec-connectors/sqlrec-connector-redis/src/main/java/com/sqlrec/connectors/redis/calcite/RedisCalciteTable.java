@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 public class RedisCalciteTable extends SqlRecKvTable {
     private RedisConfig redisConfig;
-    private RedisHandler redisHandler;
+    private transient RedisHandler redisHandler;
 
     public RedisCalciteTable(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;

@@ -100,10 +100,9 @@ echo "Computing features from MovieLens data..."
 beeline -u "jdbc:hive2://${NODE_IP}:${KYUUBI_PORT}/default" -f ${dir}/compute_features.sql
 echo "Feature computation completed"
 
-#echo "Loading features to Redis..."
-#envsubst < ${dir}/load_features.sql > ${dir}/load_features.sql.tmp
-#beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql.tmp
-#echo "Features loaded successfully"
+echo "Loading features to Redis..."
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
+echo "Features loaded successfully"
 
 if ! which wrk > /dev/null 2>&1; then
     echo "wrk not found, installing..."

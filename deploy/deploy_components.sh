@@ -22,6 +22,8 @@ fi
 envsubst < ${dir}/pv.yaml > ${dir}/pv.yaml.tmp
 kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
 
+bash ${dir}/sqlrec/copy_jar.sh
+
 bash ${dir}/minio/deploy.sh
 bash ${dir}/juicefs/deploy.sh
 bash ${dir}/hadoop/deploy.sh

@@ -28,7 +28,7 @@ import java.util.*;
 
 public class MilvusCalciteTable extends SqlRecVectorTable {
     private MilvusConfig milvusConfig;
-    private MilvusHandler milvusHandler;
+    private transient MilvusHandler milvusHandler;
 
     public MilvusCalciteTable(MilvusConfig milvusConfig) {
         this.milvusConfig = milvusConfig;

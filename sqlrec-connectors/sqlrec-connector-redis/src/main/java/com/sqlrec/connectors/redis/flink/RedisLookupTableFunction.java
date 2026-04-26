@@ -14,9 +14,11 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
+    private static final long serialVersionUID = 1L;
+
     private RedisConfig redisConfig;
     private ResolvedSchema tableSchema;
-    private RedisHandler redisHandler;
+    private transient RedisHandler redisHandler;
 
     public RedisLookupTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
         this.redisConfig = redisConfig;
@@ -40,8 +42,12 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
     }
 
     public void eval(CompletableFuture<Collection<GenericRowData>> resultFuture, Object rowkey) {
-        redisHandler.scan(rowkey.toString()).thenAccept(
-                result -> {
+        redisHandler.scan(rowkey.toString())
+                .whenComplete((result, throwable) -> {
+                    if (throwable != null) {
+                        resultFuture.completeExceptionally(throwable);
+                        return;
+                    }
                     List<GenericRowData> rows = new ArrayList<>();
                     for (Object[] objects : result) {
                         GenericRowData rowData = new GenericRowData(redisConfig.fieldSchemas.size());
@@ -51,7 +57,6 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
                         rows.add(rowData);
                     }
                     resultFuture.complete(rows);
-                }
-        );
+                });
     }
 }

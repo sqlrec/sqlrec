@@ -13,9 +13,11 @@ import org.apache.flink.types.RowKind;
 import java.util.List;
 
 public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> {
+    private static final long serialVersionUID = 1L;
+
     private RedisConfig redisConfig;
     private List<DataType> dataTypes;
-    private RedisHandler redisHandler;
+    private transient RedisHandler redisHandler;
 
     public RedisSinkTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
         this.redisConfig = redisConfig;

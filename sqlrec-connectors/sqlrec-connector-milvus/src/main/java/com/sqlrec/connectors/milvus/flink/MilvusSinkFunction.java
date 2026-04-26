@@ -9,20 +9,25 @@ import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 
+import java.io.Serializable;
 import java.util.List;
 
-public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> {
+public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private MilvusConfig milvusConfig;
     private List<org.apache.flink.table.types.DataType> dataTypes;
-    private MilvusHandler milvusHandler;
+    private transient MilvusHandler milvusHandler;
 
     public MilvusSinkFunction(MilvusConfig milvusConfig, ResolvedSchema tableSchema) {
+        this.milvusConfig = milvusConfig;
         this.dataTypes = tableSchema.getColumnDataTypes();
-        this.milvusHandler = new MilvusHandler(milvusConfig);
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
+        this.milvusHandler = new MilvusHandler(milvusConfig);
     }
 
     @Override

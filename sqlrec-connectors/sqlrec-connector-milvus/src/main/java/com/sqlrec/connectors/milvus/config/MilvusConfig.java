@@ -2,9 +2,12 @@ package com.sqlrec.connectors.milvus.config;
 
 import com.sqlrec.common.schema.FieldSchema;
 
+import java.io.Serializable;
 import java.util.List;
 
-public class MilvusConfig {
+public class MilvusConfig implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     public String url;
     public String token;
     public String database;

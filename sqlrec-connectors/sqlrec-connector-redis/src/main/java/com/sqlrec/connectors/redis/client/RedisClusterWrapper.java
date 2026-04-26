@@ -51,6 +51,9 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
 
     @Override
     public void close() {
+        // Connection pool is shared across all instances with the same URL.
+        // Do not close the connection here as other instances may still be using it.
+        // The connection pool will be closed when the JVM shuts down.
     }
 
     public RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end) {
