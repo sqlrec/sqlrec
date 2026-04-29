@@ -15,4 +15,12 @@ public class MilvusConfig implements Serializable {
     public List<FieldSchema> fieldSchemas;
     public String primaryKey;
     public Integer primaryKeyIndex;
+    
+    public Integer batchSize = 1024;
+    public Integer poolMaxIdlePerKey = 10;
+    public Integer poolMaxTotalPerKey = 100;
+    public Integer poolMaxTotal = 100;
+    public Long poolMaxBlockWaitDuration = 5L;
+    public Long poolMinEvictableIdleDuration = 10L;
+    public Long flushInterval = 5L;
 }

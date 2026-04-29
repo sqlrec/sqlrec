@@ -27,8 +27,9 @@ export schema='{
             {
                 "fieldName": "genres",
                 "dataType": "Array",
-                "elementType": "VarChar",
+                "elementDataType": "VarChar",
                 "elementTypeParams": {
+                    "max_capacity": 64,
                     "max_length": 256
                 }
             },

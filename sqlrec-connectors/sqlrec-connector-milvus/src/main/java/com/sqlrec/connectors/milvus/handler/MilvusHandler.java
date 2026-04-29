@@ -50,6 +50,11 @@ public class MilvusHandler {
                 .build();
 
         MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for scan operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
         QueryResp queryResp = null;
         try {
             queryResp = client.query(queryReq);
@@ -69,6 +74,11 @@ public class MilvusHandler {
                 .build();
 
         MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for getByPrimaryKey operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
         QueryResp queryResp = null;
         try {
             queryResp = client.query(queryReq);
@@ -122,6 +132,11 @@ public class MilvusHandler {
 
         SearchReq searchReq = builder.build();
         MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for searchByEmbeddingWithScore operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
         SearchResp searchResp = null;
         try {
             searchResp = client.search(searchReq);
@@ -182,8 +197,89 @@ public class MilvusHandler {
                 .build();
 
         MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for insert operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
         try {
             client.upsert(upsertReq);
+        } catch (Exception e) {
+            logger.error("Error during upsert to Milvus", e);
+            throw e;
+        } finally {
+            returnClient(client, milvusConfig);
+        }
+        return true;
+    }
+
+    public boolean addBatch(List<Object[]> records) {
+        if (records == null || records.isEmpty()) {
+            return true;
+        }
+
+        List<JsonObject> data = new ArrayList<>();
+        for (Object[] objects : records) {
+            JsonObject jsonObject = new JsonObject();
+            for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
+                FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
+                jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
+            }
+            data.add(jsonObject);
+        }
+
+        UpsertReq upsertReq = UpsertReq.builder()
+                .collectionName(milvusConfig.collection)
+                .databaseName(milvusConfig.database)
+                .data(data)
+                .build();
+
+        MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for batch insert operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
+        try {
+            client.upsert(upsertReq);
+            logger.debug("Successfully inserted {} records to Milvus", records.size());
+        } catch (Exception e) {
+            logger.error("Error during batch upsert to Milvus", e);
+            throw e;
+        } finally {
+            returnClient(client, milvusConfig);
+        }
+        return true;
+    }
+
+    public boolean removeBatch(List<Object[]> records) {
+        if (records == null || records.isEmpty()) {
+            return true;
+        }
+
+        List<Object> ids = new ArrayList<>();
+        for (Object[] objects : records) {
+            ids.add(objects[milvusConfig.primaryKeyIndex]);
+        }
+
+        DeleteReq deleteReq = DeleteReq.builder()
+                .collectionName(milvusConfig.collection)
+                .databaseName(milvusConfig.database)
+                .ids(ids)
+                .build();
+
+        MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for batch delete operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
+        try {
+            client.delete(deleteReq);
+            logger.debug("Successfully deleted {} records from Milvus", records.size());
+        } catch (Exception e) {
+            logger.error("Error during batch delete from Milvus", e);
+            throw e;
         } finally {
             returnClient(client, milvusConfig);
         }
@@ -198,8 +294,16 @@ public class MilvusHandler {
                 .build();
 
         MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            logger.error("Failed to get Milvus client from pool for delete operation");
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        
         try {
             client.delete(deleteReq);
+        } catch (Exception e) {
+            logger.error("Error during delete from Milvus", e);
+            throw e;
         } finally {
             returnClient(client, milvusConfig);
         }
@@ -270,11 +374,11 @@ public class MilvusHandler {
                 .token(milvusConfig.token)
                 .build();
         PoolConfig poolConfig = PoolConfig.builder()
-                .maxIdlePerKey(10)
-                .maxTotalPerKey(100)
-                .maxTotal(100)
-                .maxBlockWaitDuration(Duration.ofSeconds(5L))
-                .minEvictableIdleDuration(Duration.ofSeconds(10L))
+                .maxIdlePerKey(milvusConfig.poolMaxIdlePerKey)
+                .maxTotalPerKey(milvusConfig.poolMaxTotalPerKey)
+                .maxTotal(milvusConfig.poolMaxTotal)
+                .maxBlockWaitDuration(Duration.ofSeconds(milvusConfig.poolMaxBlockWaitDuration))
+                .minEvictableIdleDuration(Duration.ofSeconds(milvusConfig.poolMinEvictableIdleDuration))
                 .build();
 
         try {

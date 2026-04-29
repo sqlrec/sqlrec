@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS `item_embedding` (
   `id` BIGINT,
   `title` STRING,
   `genres` ARRAY<STRING>,
-  `embedding` ARRAY<FLOAT>,
+  `embedding` ARRAY<DOUBLE>,
   PRIMARY KEY (id)  NOT ENFORCED
 ) WITH (
   'connector' = 'milvus',

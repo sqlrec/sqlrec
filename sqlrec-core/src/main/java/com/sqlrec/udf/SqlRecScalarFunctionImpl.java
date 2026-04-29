@@ -53,12 +53,29 @@ public class SqlRecScalarFunctionImpl extends ReflectiveFunctionBase
     }
 
     static @Nullable Method findMethod(Class<?> clazz, String name) {
+        Method preferredMethod = null;
+        Method otherMethod = null;
+        
         for (Method method : clazz.getMethods()) {
             if (method.getName().equals(name) && !method.isBridge()) {
-                return method;
+                if (isPreferParams(method)) {
+                    preferredMethod = method;
+                } else if (otherMethod == null) {
+                    otherMethod = method;
+                }
             }
         }
-        return null;
+        
+        return preferredMethod != null ? preferredMethod : otherMethod;
+    }
+
+    private static boolean isPreferParams(Method method) {
+        for (Class<?> paramType : method.getParameterTypes()) {
+            if (paramType != String.class && paramType != DataContext.class && paramType != Object.class) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static ScalarFunction create(Method method) {

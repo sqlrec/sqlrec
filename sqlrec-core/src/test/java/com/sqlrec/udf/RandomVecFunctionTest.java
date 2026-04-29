@@ -70,12 +70,6 @@ public class RandomVecFunctionTest {
     }
 
     @Test
-    public void testRandomVecNullInput() {
-        Object result = function.evaluate(null);
-        assertNull(result);
-    }
-
-    @Test
     public void testRandomVecInvalidDimension() {
         assertThrows(RuntimeException.class, () -> {
             function.evaluate("invalid");

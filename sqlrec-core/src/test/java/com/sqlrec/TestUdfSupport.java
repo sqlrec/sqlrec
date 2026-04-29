@@ -39,6 +39,11 @@ public class TestUdfSupport {
         );
         UdfManager.addFunction(
                 schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "random_vec",
+                "com.sqlrec.udf.scalar.RandomVecFunction"
+        );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
                 "get",
                 "com.sqlrec.udf.scalar.GetFunction"
         );
@@ -64,6 +69,10 @@ public class TestUdfSupport {
                                 new Object[]{Arrays.asList(7.0 / Math.sqrt(194.0d), 8.0 / Math.sqrt(194.0d), 9.0 / Math.sqrt(194.0d))}
                         )
                 ),
+                new SqlTestCase("select random_vec('3')"),
+                new SqlTestCase("select l2_norm(random_vec('3'))"),
+                new SqlTestCase("cache table t1 as select random_vec('3') as vec"),
+                new SqlTestCase("select l2_norm(vec) from t1"),
                 new SqlTestCase(
                         "select SIN(0.1)",
                         Arrays.<Object[]>asList(
