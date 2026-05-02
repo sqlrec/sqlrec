@@ -47,6 +47,11 @@ public class TestUdfSupport {
                 "get",
                 "com.sqlrec.udf.scalar.GetFunction"
         );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains",
+                "com.sqlrec.udf.scalar.ArrayContainsFunction"
+        );
 
         ExecuteContextImpl executeContext = new ExecuteContextImpl();
         executeContext.setVariable("test_var", "hello_world");
@@ -206,6 +211,44 @@ public class TestUdfSupport {
                         "select `get`(name) || '!' from tmp",
                         Arrays.<Object[]>asList(
                                 new Object[]{"hello_world!"}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_int_type, 1) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_int_type, 5) from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_varchar_type, 'a') from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_varchar_type, 'e') from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from myTable where array_contains(array_int_type, 1)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)}
                         )
                 )
         );

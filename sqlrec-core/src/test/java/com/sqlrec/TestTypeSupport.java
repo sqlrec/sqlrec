@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -35,6 +36,22 @@ public class TestTypeSupport {
         });
 
         HmsSchema.setGlobalSchema(schema);
+
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains",
+                "com.sqlrec.udf.scalar.ArrayContainsFunction"
+        );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains_all",
+                "com.sqlrec.udf.scalar.ArrayContainsAllFunction"
+        );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains_any",
+                "com.sqlrec.udf.scalar.ArrayContainsAnyFunction"
+        );
 
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(
@@ -155,6 +172,105 @@ public class TestTypeSupport {
                                 new Object[]{1.0d},
                                 new Object[]{4.0d},
                                 new Object[]{7.0d}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_int_type, 1) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_int_type, 5) from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_varchar_type, 'a') from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains(array_varchar_type, 'e') from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from myTable where array_contains(array_int_type, 1)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_all(array_int_type, ARRAY[1, 2]) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_all(array_int_type, ARRAY[4, 5]) from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_all(array_varchar_type, ARRAY['a', 'b']) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{false},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_any(array_int_type, ARRAY[1, 4]) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_any(array_int_type, ARRAY[7, 8]) from myTable",
+                        Arrays.asList(
+                                new Object[]{false},
+                                new Object[]{false},
+                                new Object[]{true}
+                        )
+                ),
+                new SqlTestCase(
+                        "select array_contains_any(array_varchar_type, ARRAY['a', 'd']) from myTable",
+                        Arrays.asList(
+                                new Object[]{true},
+                                new Object[]{true},
+                                new Object[]{false}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from myTable where array_contains_all(array_int_type, ARRAY[1, 2])",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from myTable where array_contains_any(array_int_type, ARRAY[1, 4])",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d)},
+                                new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d)}
                         )
                 )
         );

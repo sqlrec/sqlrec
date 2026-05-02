@@ -63,13 +63,33 @@ public class FilterUtils {
     }
 
     public static String convertNormalFilter(RexCall filter, List<FieldSchema> fieldSchemas) {
+        String operator = filter.getOperator().getName();
+
+        if (operator.toLowerCase().startsWith("array_contains")) {
+            return convertArrayFunctionFilter(filter, fieldSchemas, operator.toLowerCase());
+        }
+
+        if (filter.getOperands().size() != 2) {
+            throw new IllegalArgumentException("Unsupported filter: " + filter);
+        }
+
         String firstOperand = convertOperand(filter.getOperands().get(0), fieldSchemas);
         String secondOperand = convertOperand(filter.getOperands().get(1), fieldSchemas);
-        String operator = filter.getOperator().getName();
         if (operator.equals("=")) {
             operator = "==";
         }
         return firstOperand + " " + operator + " " + secondOperand;
+    }
+
+    private static String convertArrayFunctionFilter(RexCall filter, List<FieldSchema> fieldSchemas, String functionName) {
+        if (filter.getOperands().size() != 2) {
+            throw new IllegalArgumentException(functionName + " requires exactly 2 arguments");
+        }
+
+        String arrayField = convertOperand(filter.getOperands().get(0), fieldSchemas);
+        String elementValue = convertOperand(filter.getOperands().get(1), fieldSchemas);
+
+        return functionName + "(" + arrayField + ", " + elementValue + ")";
     }
 
     public static String convertOperand(RexNode operand, List<FieldSchema> fieldSchemas) {
@@ -84,6 +104,15 @@ public class FilterUtils {
                 return "\"" + ((NlsString) value).getValue() + "\"";
             }
             return value.toString();
+        }
+        if (operand instanceof RexCall) {
+            RexCall call = (RexCall) operand;
+            if (call.getKind() == SqlKind.ARRAY_VALUE_CONSTRUCTOR) {
+                String elements = call.getOperands().stream()
+                        .map(elem -> convertOperand(elem, fieldSchemas))
+                        .collect(Collectors.joining(", "));
+                return "[" + elements + "]";
+            }
         }
         throw new IllegalArgumentException("Unsupported operand kind: " + operand.getKind());
     }
@@ -134,6 +163,10 @@ public class FilterUtils {
                 }
                 sb.append(")");
                 return sb.toString();
+            }
+
+            if (opName.toLowerCase().startsWith("array_contains")) {
+                return buildArrayFunctionFilterExpression(call, opName, leftValue, leftSize, rightFieldNames);
             }
 
             if (call.getOperands().size() == 2) {
@@ -193,8 +226,21 @@ public class FilterUtils {
         if (value == null) {
             return "null";
         }
+        if (value instanceof NlsString) {
+            return "\"" + ((NlsString) value).getValue() + "\"";
+        }
         if (value instanceof String) {
             return "\"" + value + "\"";
+        }
+        if (value instanceof List) {
+            List<?> list = (List<?>) value;
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(formatValue(list.get(i)));
+            }
+            sb.append("]");
+            return sb.toString();
         }
         return value.toString();
     }
@@ -221,5 +267,70 @@ public class FilterUtils {
             default:
                 return op;
         }
+    }
+
+    private static String buildArrayFunctionFilterExpression(
+            RexCall call,
+            String opName,
+            Object[] leftValue,
+            int leftSize,
+            List<String> rightFieldNames) {
+
+        if (call.getOperands().size() != 2) {
+            return null;
+        }
+
+        RexNode arrayFieldOperand = call.getOperands().get(0);
+        RexNode elementOperand = call.getOperands().get(1);
+
+        String arrayField = null;
+        String elementValue = null;
+
+        if (arrayFieldOperand instanceof RexInputRef) {
+            int idx = ((RexInputRef) arrayFieldOperand).getIndex();
+            if (idx >= leftSize) {
+                arrayField = rightFieldNames.get(idx - leftSize);
+            }
+        }
+
+        if (elementOperand instanceof RexInputRef) {
+            int idx = ((RexInputRef) elementOperand).getIndex();
+            if (idx < leftSize && leftValue != null) {
+                elementValue = formatValue(leftValue[idx]);
+            } else if (idx >= leftSize) {
+                elementValue = rightFieldNames.get(idx - leftSize);
+            }
+        } else if (elementOperand instanceof RexLiteral) {
+            Object value = ((RexLiteral) elementOperand).getValue();
+            elementValue = formatValue(value);
+        } else if (elementOperand instanceof RexCall) {
+            RexCall elementCall = (RexCall) elementOperand;
+            if (elementCall.getKind() == SqlKind.ARRAY_VALUE_CONSTRUCTOR) {
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < elementCall.getOperands().size(); i++) {
+                    if (i > 0) sb.append(", ");
+                    RexNode elem = elementCall.getOperands().get(i);
+                    if (elem instanceof RexInputRef) {
+                        int idx = ((RexInputRef) elem).getIndex();
+                        if (idx < leftSize && leftValue != null) {
+                            sb.append(formatValue(leftValue[idx]));
+                        } else if (idx >= leftSize) {
+                            sb.append(rightFieldNames.get(idx - leftSize));
+                        }
+                    } else if (elem instanceof RexLiteral) {
+                        Object value = ((RexLiteral) elem).getValue();
+                        sb.append(formatValue(value));
+                    }
+                }
+                sb.append("]");
+                elementValue = sb.toString();
+            }
+        }
+
+        if (arrayField != null && elementValue != null) {
+            return opName.toUpperCase() + "(" + arrayField + ", " + elementValue + ")";
+        }
+
+        return null;
     }
 }

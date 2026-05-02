@@ -1,5 +1,8 @@
 package com.sqlrec.udf.config;
 
+import com.sqlrec.udf.scalar.ArrayContainsAllFunction;
+import com.sqlrec.udf.scalar.ArrayContainsAnyFunction;
+import com.sqlrec.udf.scalar.ArrayContainsFunction;
 import com.sqlrec.udf.scalar.GetFunction;
 import com.sqlrec.udf.scalar.IpFunction;
 import com.sqlrec.udf.scalar.L2NormFunction;
@@ -17,6 +20,9 @@ public class FunctionConfigs {
         put("random_vec", RandomVecFunction.class.getName());
         put("uuid", UuidFunction.class.getName());
         put("get", GetFunction.class.getName());
+        put("array_contains", ArrayContainsFunction.class.getName());
+        put("array_contains_all", ArrayContainsAllFunction.class.getName());
+        put("array_contains_any", ArrayContainsAnyFunction.class.getName());
     }};
 
     public static final Map<String, String> DEFAULT_JAVA_FUNCTION_CONFIGS = new HashMap<String, String>() {{

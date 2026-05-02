@@ -46,6 +46,21 @@ public class TestMilvusCalciteTable {
                 "ip",
                 "com.sqlrec.udf.scalar.IpFunction"
         );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains",
+                "com.sqlrec.udf.scalar.ArrayContainsFunction"
+        );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains_all",
+                "com.sqlrec.udf.scalar.ArrayContainsAllFunction"
+        );
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains_any",
+                "com.sqlrec.udf.scalar.ArrayContainsAnyFunction"
+        );
 
         new SqlTestCase("insert into t1 (id, embedding, title, genres) values (0, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 50.0, 51.0, 52.0, 53.0, 54.0, 55.0, 56.0, 57.0, 58.0, 59.0, 60.0, 61.0, 62.0, 63.0, 64.0], 'Movie Title 0', ARRAY['Action', 'Drama'])", null).test(schema);
         new SqlTestCase("insert into t1 (id, embedding, title, genres) values (1, ARRAY[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 50.0, 51.0, 52.0, 53.0, 54.0, 55.0, 56.0, 57.0, 58.0, 59.0, 60.0, 61.0, 62.0, 63.0, 64.0], 'Movie Title 1', ARRAY['Comedy'])", null).test(schema);
@@ -133,6 +148,16 @@ public class TestMilvusCalciteTable {
                           EnumerableTableScan(table=[[default, t2]])
                           EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains(genres, 'Action') limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains(genres, 'Comedy') limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and array_contains(genres, 'Comedy') limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains_all(genres, ARRAY['Action', 'Drama']) limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains_any(genres, ARRAY['Action', 'Comedy']) limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains_all(genres, ARRAY['Action']) limit 10", null).test(schema);
+        new SqlTestCase("select * from t1 where array_contains_any(genres, ARRAY['Sci-Fi', 'Thriller']) limit 10", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains(t1.genres, t2.title) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_all(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_any(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {
