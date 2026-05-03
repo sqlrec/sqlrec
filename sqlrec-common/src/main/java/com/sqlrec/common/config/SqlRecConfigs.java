@@ -97,13 +97,6 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
-    public static final ConfigOption<String> METRICS_PREFIX = new ConfigOption<>(
-            "METRICS_PREFIX",
-            "",
-            "metrics prefix",
-            null,
-            String.class
-    );
 
 
     // dependency service config

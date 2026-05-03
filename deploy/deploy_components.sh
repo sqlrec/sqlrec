@@ -27,33 +27,24 @@ bash ${dir}/sqlrec/copy_jar.sh
 bash ${dir}/minio/deploy.sh
 bash ${dir}/juicefs/deploy.sh
 bash ${dir}/hadoop/deploy.sh
-bash ${dir}/kafka/deploy.sh
-bash ${dir}/redis/deploy.sh
 bash ${dir}/hms/deploy.sh
 bash ${dir}/flink/deploy.sh
-bash ${dir}/milvus/deploy.sh
 bash ${dir}/spark/deploy.sh
 
+bash ${dir}/sqlrec/deploy.sh
+
 # extra components, deploy them if needed
+bash ${dir}/kafka/deploy.sh
+bash ${dir}/redis/deploy.sh
+bash ${dir}/milvus/deploy.sh
 #bash ${dir}/hdfs/deploy.sh
 #bash ${dir}/kyuubi/deploy.sh
 #bash ${dir}/jupyter/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
 #bash ${dir}/prometheus/deploy.sh
 
-bash ${dir}/sqlrec/deploy.sh
-
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
-
-cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
-
-hadoop fs -mkdir -p /spark/upload
-hadoop fs -mkdir -p /etc
-echo "supergroup:0:hdfs,root,${USER}" > groups
-hadoop fs -put groups /etc
-rm groups
-sed -i 's/<!--//; s/-->//' ${CONF_DIR}/core-site.xml
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/

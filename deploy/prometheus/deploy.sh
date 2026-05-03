@@ -13,3 +13,10 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n 
 
 envsubst < ${dir}/sqlrec-servicemonitor.yaml > ${dir}/sqlrec-servicemonitor.yaml.tmp
 kubectl apply -f ${dir}/sqlrec-servicemonitor.yaml.tmp -n "${NAMESPACE}"
+
+kubectl create configmap sqlrec-jvm-dashboard \
+  --from-file=jvm-grafana.json=${dir}/jvm_grafana.json \
+  -n ${NAMESPACE} \
+  --dry-run=client -o yaml | \
+  kubectl label --local -f - grafana_dashboard=1 -o yaml | \
+  kubectl apply -n ${NAMESPACE} -f -

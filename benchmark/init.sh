@@ -6,6 +6,7 @@ dir=$(dirname $(realpath $0))
 
 export BASE_DIR=$(dirname ${dir})/deploy
 source ${dir}/../deploy/env.sh
+bash ${dir}/../deploy/kyuubi/deploy.sh
 
 
 export schema='{
