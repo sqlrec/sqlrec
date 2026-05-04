@@ -1,7 +1,10 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.MetricsUtils;
+import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -83,6 +86,11 @@ public class IfCacheBindable extends BindableInterface {
         boolean conditionValue = (Boolean) value;
         CacheTableBindable selectedClause = conditionValue ? thenClause : elseClause;
 
+        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "branch", conditionValue ? "then" : "else");
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_IF_CACHE_BRANCH, tags)
+                .increment();
+
         if (selectedClause != null) {
             return selectedClause.bind(schema, context);
         }
@@ -133,10 +141,18 @@ public class IfCacheBindable extends BindableInterface {
         } catch (TimeoutException e) {
             log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
             future.cancel(true);
+            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_IF_CACHE_TIMEOUT, tags)
+                    .increment();
             return elseClause.bind(schema, context);
         } catch (Exception e) {
             log.error("Error executing thenClause, falling back to elseClause", e);
             future.cancel(true);
+            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK, tags)
+                    .increment();
             return elseClause.bind(schema, context);
         }
     }

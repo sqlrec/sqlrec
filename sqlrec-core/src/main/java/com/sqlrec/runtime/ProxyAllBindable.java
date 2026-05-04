@@ -19,11 +19,9 @@ public class ProxyAllBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(ProxyAllBindable.class);
 
     private final BindableInterface delegate;
-    private String name;
 
-    public ProxyAllBindable(BindableInterface delegate, String name) {
+    public ProxyAllBindable(BindableInterface delegate) {
         this.delegate = delegate;
-        this.name = name;
     }
 
     @Override
@@ -39,11 +37,11 @@ public class ProxyAllBindable extends BindableInterface {
             }
             return result;
         } catch (Throwable e) {
-            log.error("exec node {} error", name, e);
+            log.error("exec node {} error", getName(), e);
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", name, "status", status);
+            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "status", status);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_NODE_EXEC_DURATION, tags)
                     .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
@@ -130,5 +128,15 @@ public class ProxyAllBindable extends BindableInterface {
 
     public BindableInterface getDelegate() {
         return delegate;
+    }
+
+    @Override
+    public String getName() {
+        return delegate.getName();
+    }
+
+    @Override
+    public void setName(String name) {
+        delegate.setName(name);
     }
 }

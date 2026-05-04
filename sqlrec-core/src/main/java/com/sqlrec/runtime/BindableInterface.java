@@ -10,6 +10,7 @@ import java.util.*;
 public abstract class BindableInterface {
     private final long createTime = System.currentTimeMillis();
     private boolean ignoreException = false;
+    private String name = "";
 
     public BindableInterface() {
     }
@@ -68,5 +69,13 @@ public abstract class BindableInterface {
 
     public List<RelDataTypeField> getCacheTableDataFields() {
         return null;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 }

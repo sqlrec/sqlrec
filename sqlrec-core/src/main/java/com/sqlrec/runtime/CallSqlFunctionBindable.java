@@ -27,7 +27,8 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
         this.funName = sqlFunctionBindable.getFunName();
         this.inputTables = inputTables;
-        this.sqlFunctionBindable = new ProxyAllBindable(sqlFunctionBindable, sqlFunctionBindable.getFunName());
+        this.sqlFunctionBindable = new ProxyAllBindable(sqlFunctionBindable);
+        this.sqlFunctionBindable.setName(sqlFunctionBindable.getFunName());
         this.isAsync = isAsync;
         this.tablePlaceholders = sqlFunctionBindable.getInputTables();
     }

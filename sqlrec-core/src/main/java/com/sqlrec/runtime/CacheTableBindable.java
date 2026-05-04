@@ -1,10 +1,13 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.utils.Executor;
+import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -51,6 +54,10 @@ public class CacheTableBindable extends BindableInterface {
         } catch (Exception e) {
             if (isIgnoreException()) {
                 log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
+                Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+                MetricsUtils.getCompositeMeterRegistry()
+                        .counter(Consts.METRICS_CACHE_TABLE_IGNORE_EXCEPTION, tags)
+                        .increment();
             } else {
                 throw e;
             }

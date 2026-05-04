@@ -24,7 +24,9 @@ import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class FunctionCompiler {
     public enum FunctionCompileStage {
@@ -39,6 +41,7 @@ public class FunctionCompiler {
     private CalciteSchema schema;
     private SqlFunctionBindable sqlFunctionBindable;
     private List<String> sqlList;
+    private Set<String> cacheTableNames;
     private CompileManager compileManager;
 
     public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
@@ -61,6 +64,7 @@ public class FunctionCompiler {
         } else {
             this.compileManager = new CompileManager();
         }
+        cacheTableNames = new HashSet<>();
     }
 
     public SqlFunctionBindable getFunctionBindable() {
@@ -175,12 +179,8 @@ public class FunctionCompiler {
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
             BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
-            sqlFunctionBindable.getBindableList().add(
-                    new ProxyAllBindable(
-                            bindable,
-                            sqlFunctionBindable.getFunName() + ":" + sqlFunctionBindable.getBindableList().size()
-                    )
-            );
+            BindableInterface proxyBindable = new ProxyAllBindable(bindable);
+            sqlFunctionBindable.getBindableList().add(proxyBindable);
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
                 CacheProxyTable tmpTable = new CacheProxyTable(
                         bindable.getCacheTableName(),
@@ -188,6 +188,15 @@ public class FunctionCompiler {
                         bindable.getCacheTableDataFields()
                 );
                 schema.add(bindable.getCacheTableName(), tmpTable);
+                if (!cacheTableNames.contains(bindable.getCacheTableName())) {
+                    cacheTableNames.add(bindable.getCacheTableName());
+                    proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
+                } else {
+                    proxyBindable.setName(sqlFunctionBindable.getFunName() +
+                            ":" + bindable.getCacheTableName() + ":" + sqlFunctionBindable.getBindableList().size());
+                }
+            } else {
+                proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + sqlFunctionBindable.getBindableList().size());
             }
         }
     }

@@ -20,3 +20,10 @@ kubectl create configmap sqlrec-jvm-dashboard \
   --dry-run=client -o yaml | \
   kubectl label --local -f - grafana_dashboard=1 -o yaml | \
   kubectl apply -n ${NAMESPACE} -f -
+
+kubectl create configmap sqlrec-dashboard \
+  --from-file=sqlrec-grafana.json=${dir}/sqlrec_grafana.json \
+  -n ${NAMESPACE} \
+  --dry-run=client -o yaml | \
+  kubectl label --local -f - grafana_dashboard=1 -o yaml | \
+  kubectl apply -n ${NAMESPACE} -f -

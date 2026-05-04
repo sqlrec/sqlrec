@@ -48,7 +48,8 @@ public class FunctionExecutor {
 
         ExecuteData executeData = new ExecuteData();
         try {
-            BindableInterface proxyBindable = new ProxyAllBindable(sqlFunctionBindable, sqlFunctionBindable.getFunName());
+            BindableInterface proxyBindable = new ProxyAllBindable(sqlFunctionBindable);
+            proxyBindable.setName(sqlFunctionBindable.getFunName());
             Enumerable<Object[]> enumerable = proxyBindable.bind(schema, executeContext);
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
