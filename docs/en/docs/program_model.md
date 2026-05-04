@@ -668,14 +668,13 @@ SQLRec supports implementing user-defined functions (UDF) through Java, which ca
 
 A UDF is a regular Java class that needs to meet the following conditions:
 
-1. **Must have an `eval` method**: This is the UDF entry point
-2. **`eval` method can only have one**: Overloading is not supported
-3. **Parameter type restrictions**: Only supports `CacheTable`, `String`, `ExecuteContext` three types
+1. **Must have one or more `evaluate` methods**: This is the UDF entry point
+2. **Parameter type restrictions**: Supports `CacheTable`, `String`, `ExecuteContext`, `ConfigContext` and other types
 
 ```java
 public class MyTableFunction {
     
-    public CacheTable eval(CacheTable inputTable, String config) {
+    public CacheTable evaluate(CacheTable inputTable, String config) {
         // Processing logic
         List<Object[]> results = processTable(inputTable, config);
         return new CacheTable("output", results, inputTable.getDataFields());
@@ -683,9 +682,123 @@ public class MyTableFunction {
 }
 ```
 
+### Method Overloading
+
+Table functions support method overloading, allowing you to define multiple `evaluate` methods with the same name but different parameters. The system automatically selects the matching method based on the parameter types and count passed during invocation.
+
+**Example**:
+
+```java
+public class MyFunction {
+    // No-argument version
+    public CacheTable evaluate() {
+        // ...
+    }
+    
+    // Single string argument version
+    public CacheTable evaluate(String arg) {
+        // ...
+    }
+    
+    // Two string arguments version
+    public CacheTable evaluate(String arg1, String arg2) {
+        // ...
+    }
+    
+    // Table argument version
+    public CacheTable evaluate(CacheTable input) {
+        // ...
+    }
+    
+    // Mixed arguments version
+    public CacheTable evaluate(CacheTable input, String arg) {
+        // ...
+    }
+}
+```
+
+**Usage Example**:
+
+```sql
+-- Call no-argument version
+CALL my_function();
+
+-- Call single-argument version
+CALL my_function('arg1');
+
+-- Call two-argument version
+CALL my_function('arg1', 'arg2');
+
+-- Call table-argument version
+CALL my_function(input_table);
+
+-- Call mixed-argument version
+CALL my_function(input_table, 'arg1');
+```
+
+::: warning Note
+If multiple methods can match the call parameters, the system will throw an exception. For example, if you define both `evaluate(String arg)` and `evaluate(String... args)`, calling `my_function('arg1')` will cause an error because both methods match.
+:::
+
+### Variable Arguments (Varargs)
+
+Table functions support Java variable arguments (varargs), defined using `...` syntax.
+
+**Example**:
+
+```java
+public class MyFunction {
+    // String varargs
+    public CacheTable evaluate(String... args) {
+        for (String arg : args) {
+            System.out.println(arg);
+        }
+        // ...
+    }
+    
+    // Table varargs
+    public CacheTable evaluate(CacheTable... tables) {
+        for (CacheTable table : tables) {
+            // Process each table
+        }
+        // ...
+    }
+    
+    // Mixed arguments: fixed parameter + varargs
+    public CacheTable evaluate(String prefix, CacheTable... tables) {
+        // prefix is a required parameter
+        // tables is a variable argument
+        // ...
+    }
+}
+```
+
+**Usage Example**:
+
+```sql
+-- String varargs
+CALL my_function('arg1');
+CALL my_function('arg1', 'arg2');
+CALL my_function('arg1', 'arg2', 'arg3');
+
+-- Table varargs
+CALL my_function(table1);
+CALL my_function(table1, table2);
+CALL my_function(table1, table2, table3);
+
+-- Mixed arguments
+CALL my_function('prefix', table1);
+CALL my_function('prefix', table1, table2);
+```
+
+**Notes**:
+- Varargs can accept 0 to multiple arguments
+- Varargs must be the last parameter of the method
+- Varargs type can be `String`, `CacheTable`, or any other type
+
 ### Parameter Injection
 
-SQLRec automatically injects corresponding values based on the `eval` method parameter types:
+SQLRec automatically injects corresponding values based on the `evaluate` method parameter types:
 
 | Parameter Type | Injection Source | SQL Syntax | Use Case |
 |----------------|------------------|------------|----------|
@@ -707,7 +820,7 @@ In scalar UDFs, you can retrieve variable values through `SqlRecDataContext`:
 
 ```java
 public class GetFunction {
-    public static String eval(DataContext context, String key) {
+    public static String evaluate(DataContext context, String key) {
         if (!(context instanceof SqlRecDataContext)) {
             throw new IllegalArgumentException("context must be SqlRecDataContext");
         }
@@ -722,7 +835,7 @@ Parameter injection example
 ```java
 public class MyFunction {
     // Method signature
-    public CacheTable eval(
+    public CacheTable evaluate(
         CacheTable input1,      // First parameter: table
         CacheTable input2,      // Second parameter: table
         String config,          // Third parameter: string
@@ -774,9 +887,9 @@ if (likeFunctionName != null) {
 }
 ```
 
-#### 3. Infer via Executing eval Method
+#### 3. Infer via Executing evaluate Method
 
-If there's no LIKE clause, the system executes the `eval` method once at compile time to infer the return schema:
+If there's no LIKE clause, the system executes the `evaluate` method once at compile time to infer the return schema:
 
 ```java
 if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
@@ -827,7 +940,7 @@ When calling a function, the system looks up in the following order:
 | Concurrency | Multi-threading | Auto parallelism + virtual threads |
 | Scope | Variable scope | Session level |
 | Type system | Static typing | Table structure checking |
-| UDF | External libraries/plugins | Java class + `eval` method |
+| UDF | External libraries/plugins | Java class + `evaluate` method |
 | Table type | Data structure | `SqlRecTable` hierarchy |
 | Execution routing | Compile target selection | Local execution / Forward to Flink |
 | Filter query | Conditional filtering | `FilterableTableScan` + rule optimization |

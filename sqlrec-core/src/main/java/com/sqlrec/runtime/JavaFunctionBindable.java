@@ -14,6 +14,7 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -38,7 +39,7 @@ public class JavaFunctionBindable extends BindableInterface {
         this.functionName = functionName;
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
-        this.evalMethod = getEvalMethod(tableFunction);
+        this.evalMethod = selectEvalMethod(tableFunction, inputTableList);
         this.isAsync = isAsync;
 
         if (returnDataFields != null) {
@@ -54,53 +55,148 @@ public class JavaFunctionBindable extends BindableInterface {
         }
     }
 
-    public static Method getEvalMethod(Object tableFunction) {
+    public static List<Method> getEvalMethods(Object tableFunction) {
         Method[] allMethods = tableFunction.getClass().getMethods();
         List<Method> evalMethods = new ArrayList<>();
         for (Method method : allMethods) {
-            if (method.getName().equals("evaluate")) {
+            if (method.getName().equals("evaluate") && Modifier.isPublic(method.getModifiers())) {
                 evalMethods.add(method);
             }
         }
-        if (evalMethods.size() != 1) {
-            throw new RuntimeException("table function must have one eval method");
+        if (evalMethods.isEmpty()) {
+            throw new RuntimeException("table function must have at least one evaluate method");
         }
-        return evalMethods.get(0);
+        return evalMethods;
+    }
+
+    private static Method selectEvalMethod(Object tableFunction, List<SqlNode> inputs) {
+        List<Method> evalMethods = getEvalMethods(tableFunction);
+        List<Method> matchedMethods = new ArrayList<>();
+        
+        for (Method method : evalMethods) {
+            if (isMethodMatch(method, inputs)) {
+                matchedMethods.add(method);
+            }
+        }
+        
+        if (matchedMethods.size() != 1) {
+            int inputCount = inputs != null ? inputs.size() : 0;
+            throw new RuntimeException("found " + matchedMethods.size() + " evaluate method(s) for " + inputCount + " parameters, expected exactly 1");
+        }
+        
+        return matchedMethods.get(0);
+    }
+
+    private static boolean isMethodMatch(Method method, List<SqlNode> inputs) {
+        Class<?>[] paramTypes = method.getParameterTypes();
+        boolean isVarArgs = method.isVarArgs();
+        int inputCount = inputs != null ? inputs.size() : 0;
+        int inputIndex = 0;
+        
+        for (int i = 0; i < paramTypes.length; i++) {
+            Class<?> paramType = paramTypes[i];
+            
+            if (isVarArgs && i == paramTypes.length - 1) {
+                Class<?> varArgType = paramType.getComponentType();
+                while (inputIndex < inputCount) {
+                    if (!isInputTypeMatch(inputs.get(inputIndex), varArgType)) {
+                        return false;
+                    }
+                    inputIndex++;
+                }
+            } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ConfigContext.class)) {
+                continue;
+            } else {
+                if (inputIndex >= inputCount) {
+                    return false;
+                }
+                if (!isInputTypeMatch(inputs.get(inputIndex), paramType)) {
+                    return false;
+                }
+                inputIndex++;
+            }
+        }
+        
+        return inputIndex == inputCount;
+    }
+
+    private static boolean isInputTypeMatch(SqlNode input, Class<?> paramType) {
+        if (paramType.equals(CacheTable.class)) {
+            return input instanceof SqlIdentifier;
+        } else if (paramType.equals(String.class)) {
+            return input instanceof SqlCharStringLiteral || input instanceof SqlGetVariable;
+        }
+        return false;
+    }
+
+    private static Object resolveStringInput(SqlNode input, ExecuteContext context, int inputIndex) {
+        if (input instanceof SqlCharStringLiteral) {
+            return SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) input);
+        } else if (input instanceof SqlGetVariable) {
+            String variableName = SchemaUtils.getValueOfStringLiteral(((SqlGetVariable) input).getVariableName());
+            return context.getVariable(variableName);
+        } else {
+            throw new RuntimeException("input " + inputIndex + " must be char string literal or variable");
+        }
     }
 
     private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         List<Object> paramList = new ArrayList<>();
         int inputParamIndex = 0;
+        boolean isVarArgs = evalMethod.isVarArgs();
 
-        for (Class<?> paramType : paramTypes) {
-            SqlNode input = inputTableList.get(inputParamIndex);
-            if (paramType.equals(CacheTable.class)) {
+        for (int i = 0; i < paramTypes.length; i++) {
+            Class<?> paramType = paramTypes[i];
+            
+            if (isVarArgs && i == paramTypes.length - 1) {
+                Class<?> varArgType = paramType.getComponentType();
+                List<Object> varArgs = new ArrayList<>();
+                while (inputParamIndex < inputTableList.size()) {
+                    SqlNode input = inputTableList.get(inputParamIndex);
+                    if (varArgType.equals(String.class)) {
+                        varArgs.add(resolveStringInput(input, context, inputParamIndex));
+                    } else if (varArgType.equals(CacheTable.class)) {
+                        if (!(input instanceof SqlIdentifier)) {
+                            throw new RuntimeException("should use cache table as input for " + inputParamIndex);
+                        }
+                        varArgs.add(SchemaUtils.getCacheTable(((SqlIdentifier) input).getSimple(), schema));
+                    } else {
+                        throw new RuntimeException("unsupported vararg type: " + varArgType);
+                    }
+                    inputParamIndex++;
+                }
+                Object varArgArray = java.lang.reflect.Array.newInstance(varArgType, varArgs.size());
+                for (int j = 0; j < varArgs.size(); j++) {
+                    java.lang.reflect.Array.set(varArgArray, j, varArgs.get(j));
+                }
+                paramList.add(varArgArray);
+            } else if (paramType.equals(CacheTable.class)) {
+                if (inputParamIndex >= inputTableList.size()) {
+                    throw new RuntimeException("not enough input parameters");
+                }
+                SqlNode input = inputTableList.get(inputParamIndex);
                 if (!(input instanceof SqlIdentifier)) {
                     throw new RuntimeException("should use cache table as input for " + inputParamIndex);
                 }
                 paramList.add(SchemaUtils.getCacheTable(((SqlIdentifier) inputTableList.get(inputParamIndex)).getSimple(), schema));
                 inputParamIndex++;
             } else if (paramType.equals(String.class)) {
-                if (input instanceof SqlCharStringLiteral) {
-                    paramList.add(SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) input));
-                } else if (input instanceof SqlGetVariable) {
-                    String variableName = SchemaUtils.getValueOfStringLiteral(((SqlGetVariable) input).getVariableName());
-                    paramList.add(context.getVariable(variableName));
-                } else {
-                    throw new RuntimeException("input " + inputParamIndex + " must be char string literal or variable");
+                if (inputParamIndex >= inputTableList.size()) {
+                    throw new RuntimeException("not enough input parameters");
                 }
+                paramList.add(resolveStringInput(inputTableList.get(inputParamIndex), context, inputParamIndex));
                 inputParamIndex++;
             } else if (paramType.equals(ExecuteContext.class)) {
                 paramList.add(context);
             } else if (paramType.equals(ConfigContext.class)) {
                 paramList.add(new ConfigContextImpl());
             } else {
-                throw new RuntimeException("input " + inputParamIndex + " must be cache table, char string literal or variable");
+                throw new RuntimeException("unsupported parameter type: " + paramType);
             }
         }
 
-        if (inputParamIndex != inputTableList.size()) {
+        if (!isVarArgs && inputParamIndex != inputTableList.size()) {
             throw new RuntimeException("input parameter count not match");
         }
 

@@ -22,7 +22,7 @@ Deduplication function that excludes records from the input table that already e
 **Function Signature**:
 
 ```java
-public CacheTable eval(CacheTable input, CacheTable dedupTable, String col1, String col2)
+public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1, String col2)
 ```
 
 **Parameter Description**:
@@ -63,7 +63,7 @@ Random shuffle function that randomly sorts records in the input table.
 **Function Signature**:
 
 ```java
-public CacheTable eval(CacheTable input)
+public CacheTable evaluate(CacheTable input)
 ```
 
 **Parameter Description**:
@@ -95,7 +95,7 @@ Window diversification function that ensures adjacent records don't concentrate 
 **Function Signature**:
 
 ```java
-public CacheTable eval(
+public CacheTable evaluate(
     CacheTable input,
     String categoryColumnName,
     String windowSize,
@@ -139,7 +139,7 @@ Add column function that adds a new column to the input table with the same valu
 **Function Signature**:
 
 ```java
-public CacheTable eval(CacheTable input, String colName, String value)
+public CacheTable evaluate(CacheTable input, String colName, String value)
 ```
 
 **Parameter Description**:
@@ -189,7 +189,7 @@ Table truncation function that extracts rows within a specified range from the i
 **Function Signature**:
 
 ```java
-public CacheTable eval(CacheTable input, String start, String end)
+public CacheTable evaluate(CacheTable input, String start, String end)
 ```
 
 **Parameter Description**:
@@ -229,7 +229,7 @@ Get variables function that retrieves all variables from the execution context a
 **Function Signature**:
 
 ```java
-public CacheTable eval(ExecuteContext context)
+public CacheTable evaluate(ExecuteContext context)
 ```
 
 **Parameter Description**:
@@ -269,7 +269,7 @@ Set variables function that reads key-value pairs from a table and sets them in 
 **Function Signature**:
 
 ```java
-public CacheTable eval(ExecuteContext context, CacheTable input)
+public CacheTable evaluate(ExecuteContext context, CacheTable input)
 ```
 
 **Parameter Description**:
@@ -312,7 +312,7 @@ UUID generation function that generates a random UUID string.
 **Function Signature**:
 
 ```java
-public String eval()
+public String evaluate()
 ```
 
 **Return Value**: Returns a random UUID string, format like `ee073e63-b74a-4c7e-8fea-60459729099c`.
@@ -338,7 +338,7 @@ L2 normalization function that performs L2 normalization on vectors.
 **Function Signature**:
 
 ```java
-public Object eval(Object vector)
+public Object evaluate(Object vector)
 ```
 
 **Parameter Description**:
@@ -374,7 +374,7 @@ Inner product calculation function that calculates the inner product (dot produc
 **Function Signature**:
 
 ```java
-public Object eval(Object emb1, Object emb2)
+public Object evaluate(Object emb1, Object emb2)
 ```
 
 **Parameter Description**:
@@ -418,7 +418,7 @@ Variable retrieval function that gets the value of a variable from the execution
 **Function Signature**:
 
 ```java
-public static String eval(DataContext context, String key)
+public static String evaluate(DataContext context, String key)
 ```
 
 **Parameter Description**:

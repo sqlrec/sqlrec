@@ -22,7 +22,7 @@ SQLRec 提供了丰富的内置 UDF，用于推荐系统开发中的常见操作
 **函数签名**：
 
 ```java
-public CacheTable eval(CacheTable input, CacheTable dedupTable, String col1, String col2)
+public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1, String col2)
 ```
 
 **参数说明**：
@@ -63,7 +63,7 @@ CALL dedup(recall_item, exposured_item, 'item_id', 'item_id');
 **函数签名**：
 
 ```java
-public CacheTable eval(CacheTable input)
+public CacheTable evaluate(CacheTable input)
 ```
 
 **参数说明**：
@@ -95,7 +95,7 @@ SELECT * FROM shuffled_result LIMIT 10;
 **函数签名**：
 
 ```java
-public CacheTable eval(
+public CacheTable evaluate(
     CacheTable input,
     String categoryColumnName,
     String windowSize,
@@ -139,7 +139,7 @@ CALL window_diversify(rec_item, 'category1', '3', '1', '10');
 **函数签名**：
 
 ```java
-public CacheTable eval(CacheTable input, String colName, String value)
+public CacheTable evaluate(CacheTable input, String colName, String value)
 ```
 
 **参数说明**：
@@ -189,7 +189,7 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 **函数签名**：
 
 ```java
-public CacheTable eval(CacheTable input, String start, String end)
+public CacheTable evaluate(CacheTable input, String start, String end)
 ```
 
 **参数说明**：
@@ -229,7 +229,7 @@ CALL truncate_table(recall_item, '0', '100');
 **函数签名**：
 
 ```java
-public CacheTable eval(ExecuteContext context)
+public CacheTable evaluate(ExecuteContext context)
 ```
 
 **参数说明**：
@@ -269,7 +269,7 @@ SELECT * FROM all_vars;
 **函数签名**：
 
 ```java
-public CacheTable eval(ExecuteContext context, CacheTable input)
+public CacheTable evaluate(ExecuteContext context, CacheTable input)
 ```
 
 **参数说明**：
@@ -312,7 +312,7 @@ UUID 生成函数，生成一个随机的 UUID 字符串。
 **函数签名**：
 
 ```java
-public String eval()
+public String evaluate()
 ```
 
 **返回值**：返回一个随机 UUID 字符串，格式如 `ee073e63-b74a-4c7e-8fea-60459729099c`。
@@ -338,7 +338,7 @@ L2 归一化函数，对向量进行 L2 归一化处理。
 **函数签名**：
 
 ```java
-public Object eval(Object vector)
+public Object evaluate(Object vector)
 ```
 
 **参数说明**：
@@ -374,7 +374,7 @@ FROM user_features;
 **函数签名**：
 
 ```java
-public Object eval(Object emb1, Object emb2)
+public Object evaluate(Object emb1, Object emb2)
 ```
 
 **参数说明**：
@@ -418,7 +418,7 @@ LIMIT 300;
 **函数签名**：
 
 ```java
-public static String eval(DataContext context, String key)
+public static String evaluate(DataContext context, String key)
 ```
 
 **参数说明**：

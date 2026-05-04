@@ -2,16 +2,24 @@ package com.sqlrec;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -132,6 +140,250 @@ public class TestJavaFunction {
         }
     }
 
+    @Test
+    public void testOverloadAndVarArgs() throws Exception {
+        ExecuteContext executeContext = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
+            }
+        });
+        HmsSchema.setGlobalSchema(schema);
+
+        JavaFunctionUtils.registerTableFunction("default", "overload_fun", TestOverloadFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "varargs_fun", TestVarArgsFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "mixed_overload_fun", TestMixedOverloadFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "varargs_with_table_fun", TestVarArgsWithTableFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "varargs_table_fun", TestVarArgsTableFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "string_then_tables_fun", TestStringThenTablesFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "ambiguous_fun", TestAmbiguousFun.class);
+
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase(
+                        "cache table t1 as select * from myTable",
+                        Arrays.<Object[]>asList(new Object[]{"t1", 3L})
+                ),
+
+                new SqlTestCase(
+                        "cache table r1 as call overload_fun()",
+                        Arrays.<Object[]>asList(new Object[]{"r1", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r1",
+                        Collections.singletonList(new Object[]{"no_args"})
+                ),
+                new SqlTestCase(
+                        "cache table r2 as call overload_fun('arg1')",
+                        Arrays.<Object[]>asList(new Object[]{"r2", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r2",
+                        Collections.singletonList(new Object[]{"one_arg: arg1"})
+                ),
+                new SqlTestCase(
+                        "cache table r3 as call overload_fun('arg1', 'arg2')",
+                        Arrays.<Object[]>asList(new Object[]{"r3", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r3",
+                        Collections.singletonList(new Object[]{"two_args: arg1, arg2"})
+                ),
+
+                new SqlTestCase(
+                        "cache table r4 as call varargs_fun()",
+                        Arrays.<Object[]>asList(new Object[]{"r4", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r4",
+                        Collections.singletonList(new Object[]{"varargs: []"})
+                ),
+                new SqlTestCase(
+                        "cache table r5 as call varargs_fun('arg1')",
+                        Arrays.<Object[]>asList(new Object[]{"r5", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r5",
+                        Collections.singletonList(new Object[]{"varargs: [arg1]"})
+                ),
+                new SqlTestCase(
+                        "cache table r6 as call varargs_fun('arg1', 'arg2')",
+                        Arrays.<Object[]>asList(new Object[]{"r6", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r6",
+                        Collections.singletonList(new Object[]{"varargs: [arg1, arg2]"})
+                ),
+                new SqlTestCase(
+                        "cache table r7 as call varargs_fun('arg1', 'arg2', 'arg3')",
+                        Arrays.<Object[]>asList(new Object[]{"r7", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r7",
+                        Collections.singletonList(new Object[]{"varargs: [arg1, arg2, arg3]"})
+                ),
+
+                new SqlTestCase(
+                        "cache table r8 as call mixed_overload_fun(t1)",
+                        Arrays.<Object[]>asList(new Object[]{"r8", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r8",
+                        Collections.singletonList(new Object[]{"table_only"})
+                ),
+                new SqlTestCase(
+                        "cache table r9 as call mixed_overload_fun(t1, 'extra_arg')",
+                        Arrays.<Object[]>asList(new Object[]{"r9", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r9",
+                        Collections.singletonList(new Object[]{"table_and_string: extra_arg"})
+                ),
+                new SqlTestCase(
+                        "cache table r10 as call mixed_overload_fun('arg1', 'arg2')",
+                        Arrays.<Object[]>asList(new Object[]{"r10", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r10",
+                        Collections.singletonList(new Object[]{"two_strings: arg1, arg2"})
+                ),
+
+                new SqlTestCase(
+                        "cache table r11 as call varargs_with_table_fun(t1)",
+                        Arrays.<Object[]>asList(new Object[]{"r11", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r11",
+                        Collections.singletonList(new Object[]{"table_with_varargs: []"})
+                ),
+                new SqlTestCase(
+                        "cache table r12 as call varargs_with_table_fun(t1, 'arg1')",
+                        Arrays.<Object[]>asList(new Object[]{"r12", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r12",
+                        Collections.singletonList(new Object[]{"table_with_varargs: [arg1]"})
+                ),
+                new SqlTestCase(
+                        "cache table r13 as call varargs_with_table_fun(t1, 'arg1', 'arg2')",
+                        Arrays.<Object[]>asList(new Object[]{"r13", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r13",
+                        Collections.singletonList(new Object[]{"table_with_varargs: [arg1, arg2]"})
+                ),
+
+                new SqlTestCase("set var1=value1"),
+                new SqlTestCase("set var2=value2"),
+                new SqlTestCase(
+                        "cache table r14 as call overload_fun(get('var1'))",
+                        Arrays.<Object[]>asList(new Object[]{"r14", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r14",
+                        Collections.singletonList(new Object[]{"one_arg: value1"})
+                ),
+                new SqlTestCase(
+                        "cache table r15 as call overload_fun(get('var1'), get('var2'))",
+                        Arrays.<Object[]>asList(new Object[]{"r15", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r15",
+                        Collections.singletonList(new Object[]{"two_args: value1, value2"})
+                ),
+                new SqlTestCase(
+                        "cache table r16 as call varargs_fun(get('var1'), get('var2'))",
+                        Arrays.<Object[]>asList(new Object[]{"r16", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r16",
+                        Collections.singletonList(new Object[]{"varargs: [value1, value2]"})
+                ),
+
+                new SqlTestCase(
+                        "cache table tmp1 as select 1 as id, 'a' as name",
+                        Arrays.<Object[]>asList(new Object[]{"tmp1", 1L})
+                ),
+                new SqlTestCase(
+                        "cache table tmp2 as select 2 as id, 'b' as name",
+                        Arrays.<Object[]>asList(new Object[]{"tmp2", 1L})
+                ),
+                new SqlTestCase(
+                        "cache table tmp3 as select 3 as id, 'c' as name",
+                        Arrays.<Object[]>asList(new Object[]{"tmp3", 1L})
+                ),
+
+                new SqlTestCase(
+                        "cache table r17 as call varargs_table_fun(t1)",
+                        Arrays.<Object[]>asList(new Object[]{"r17", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r17",
+                        Collections.singletonList(new Object[]{"tables: 1"})
+                ),
+                new SqlTestCase(
+                        "cache table r18 as call varargs_table_fun(t1, tmp1)",
+                        Arrays.<Object[]>asList(new Object[]{"r18", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r18",
+                        Collections.singletonList(new Object[]{"tables: 2"})
+                ),
+                new SqlTestCase(
+                        "cache table r19 as call varargs_table_fun(t1, tmp1, tmp2)",
+                        Arrays.<Object[]>asList(new Object[]{"r19", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r19",
+                        Collections.singletonList(new Object[]{"tables: 3"})
+                ),
+                new SqlTestCase(
+                        "cache table r20 as call varargs_table_fun(t1, tmp1, tmp2, tmp3)",
+                        Arrays.<Object[]>asList(new Object[]{"r20", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r20",
+                        Collections.singletonList(new Object[]{"tables: 4"})
+                ),
+
+                new SqlTestCase(
+                        "cache table r21 as call string_then_tables_fun('prefix_a', t1)",
+                        Arrays.<Object[]>asList(new Object[]{"r21", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r21",
+                        Collections.singletonList(new Object[]{"prefix_a: 1 tables"})
+                ),
+                new SqlTestCase(
+                        "cache table r22 as call string_then_tables_fun('prefix_b', t1, tmp1)",
+                        Arrays.<Object[]>asList(new Object[]{"r22", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r22",
+                        Collections.singletonList(new Object[]{"prefix_b: 2 tables"})
+                ),
+                new SqlTestCase(
+                        "cache table r23 as call string_then_tables_fun('prefix_c', t1, tmp1, tmp2)",
+                        Arrays.<Object[]>asList(new Object[]{"r23", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r23",
+                        Collections.singletonList(new Object[]{"prefix_c: 3 tables"})
+                ),
+
+                new SqlTestCase(
+                        "call ambiguous_fun('arg1')",
+                        null,
+                        new RuntimeException()
+                )
+        );
+
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema, executeContext);
+        }
+    }
+
     public static class TestEmptyFun {
         public void evaluate() {
 
@@ -151,5 +403,97 @@ public class TestJavaFunction {
                 System.out.println(argValue);
             }
         }
+    }
+
+    public static class TestOverloadFun {
+        public CacheTable evaluate() {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"no_args"});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+
+        public CacheTable evaluate(String arg) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"one_arg: " + arg});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+
+        public CacheTable evaluate(String arg1, String arg2) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"two_args: " + arg1 + ", " + arg2});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestVarArgsFun {
+        public CacheTable evaluate(String... args) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"varargs: " + Arrays.toString(args)});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestMixedOverloadFun {
+        public CacheTable evaluate(CacheTable table) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"table_only"});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+
+        public CacheTable evaluate(CacheTable table, String arg) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"table_and_string: " + arg});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+
+        public CacheTable evaluate(String arg1, String arg2) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"two_strings: " + arg1 + ", " + arg2});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestVarArgsWithTableFun {
+        public CacheTable evaluate(CacheTable table, String... args) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"table_with_varargs: " + Arrays.toString(args)});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestVarArgsTableFun {
+        public CacheTable evaluate(CacheTable... tables) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"tables: " + (tables != null ? tables.length : 0)});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestStringThenTablesFun {
+        public CacheTable evaluate(String prefix, CacheTable... tables) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{prefix + ": " + (tables != null ? tables.length : 0) + " tables"});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    public static class TestAmbiguousFun {
+        public CacheTable evaluate(String arg) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"single_arg: " + arg});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+
+        public CacheTable evaluate(String... args) {
+            List<Object[]> data = new ArrayList<>();
+            data.add(new Object[]{"varargs: " + Arrays.toString(args)});
+            return new CacheTable("output", Linq4j.asEnumerable(data), createStringField("result"));
+        }
+    }
+
+    private static List<RelDataTypeField> createStringField(String name) {
+        return Collections.singletonList(
+                new RelDataTypeFieldImpl(name, 0, new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR))
+        );
     }
 }
