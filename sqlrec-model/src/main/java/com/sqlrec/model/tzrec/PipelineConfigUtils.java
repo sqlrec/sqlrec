@@ -108,12 +108,13 @@ public class PipelineConfigUtils {
                 String fieldType = fieldSchema.getType();
 
                 if (isNumericFeature(fieldType)) {
-                    config.append("feature_configs {\n");
-                    config.append("    raw_feature {\n");
-                    config.append("        feature_name: \"").append(featureName).append("\"\n");
-                    config.append("        expression: \"item:").append(featureName).append("\"\n");
-                    config.append("    }\n");
-                    config.append("}\n");
+                    // skip numeric feature
+//                    config.append("feature_configs {\n");
+//                    config.append("    raw_feature {\n");
+//                    config.append("        feature_name: \"").append(featureName).append("\"\n");
+//                    config.append("        expression: \"item:").append(featureName).append("\"\n");
+//                    config.append("    }\n");
+//                    config.append("}\n");
                 } else {
                     int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
                     int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.getParams());
@@ -197,6 +198,10 @@ public class PipelineConfigUtils {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
         if (model.getInputFields() != null) {
             for (FieldSchema fieldSchema : model.getInputFields()) {
+                if (isNumericFeature(fieldSchema.getType())) {
+                    // skip numeric feature
+                    continue;
+                }
                 categoricalFeatures.add(fieldSchema.getName());
             }
         }

@@ -41,23 +41,18 @@ public class ModelSqlProcessResult extends SqlProcessResult {
 
     @Override
     public boolean isCompleted() {
-        try {
-            if (checkpointInfos.isEmpty()) {
-                return true;
-            }
-
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastCheckTime < 10000) {
-                return cachedCompleted;
-            }
-            lastCheckTime = currentTime;
-
-            boolean allCompleted = ModelManager.isCheckpointOperationCompleted(checkpointInfos);
-            cachedCompleted = allCompleted;
-            return allCompleted;
-        } catch (Exception e) {
-            setException(e);
+        if (checkpointInfos.isEmpty()) {
+            return true;
         }
-        return false;
+
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastCheckTime < 10000) {
+            return cachedCompleted;
+        }
+        lastCheckTime = currentTime;
+
+        boolean allCompleted = ModelManager.isCheckpointOperationCompleted(checkpointInfos);
+        cachedCompleted = allCompleted;
+        return allCompleted;
     }
 }

@@ -5,6 +5,7 @@ import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -209,7 +210,9 @@ public class SessionManager {
                             operationState = TOperationState.RUNNING_STATE;
                         }
                     } catch (Exception e) {
+                        logger.error("Failed to get operation status: {}", e.getMessage(), e);
                         sqlProcessResult.setException(e);
+                        sqlProcessResult.setMsg(e.getMessage() + " stack trace: " + ExceptionUtils.getStackTrace(e));
                         operationState = TOperationState.ERROR_STATE;
                     }
                 }

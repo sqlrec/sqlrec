@@ -1,6 +1,7 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.config.ConfigOption;
+import com.sqlrec.common.config.SqlRecConfigs;
 
 /**
  * Configuration class for model-related parameters
@@ -16,7 +17,7 @@ public class Config {
             "sqlrec/tzrec", "Docker image", null, String.class);
     public static final ConfigOption<String> VERSION = new ConfigOption<>(
             "version",
-            "0.1.0-cpu", "Docker image version", null, String.class);
+            SqlRecConfigs.SQLREC_VERSION.getValue() + "-cpu", "Docker image version", null, String.class);
 
     // Training configuration
     public static final ConfigOption<Double> SPARSE_LR = new ConfigOption<>(

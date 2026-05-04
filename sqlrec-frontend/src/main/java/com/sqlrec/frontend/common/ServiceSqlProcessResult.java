@@ -38,19 +38,14 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
 
     @Override
     public boolean isCompleted() {
-        try {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastCheckTime < 10000) {
-                return cachedCompleted;
-            }
-            lastCheckTime = currentTime;
-
-            boolean completed = ServiceManager.isServiceOperationCompleted(serviceName);
-            cachedCompleted = completed;
-            return completed;
-        } catch (Exception e) {
-            setException(e);
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastCheckTime < 10000) {
+            return cachedCompleted;
         }
-        return false;
+        lastCheckTime = currentTime;
+
+        boolean completed = ServiceManager.isServiceOperationCompleted(serviceName);
+        cachedCompleted = completed;
+        return completed;
     }
 }

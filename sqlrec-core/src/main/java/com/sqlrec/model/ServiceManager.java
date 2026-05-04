@@ -68,6 +68,7 @@ public class ServiceManager {
         if (modelEntity == null) {
             throw new IllegalArgumentException("model not exists: " + serviceConfig.getModelName());
         }
+        serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
         Checkpoint checkpoint = DbUtils.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
         if (checkpoint == null) {

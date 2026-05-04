@@ -419,8 +419,8 @@ public class K8sManager {
                     .get();
 
             if (job == null) {
-                log.warn("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
-                return "running";
+                log.error("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
+                return "failed";
             }
 
             if (job.getStatus() != null) {
