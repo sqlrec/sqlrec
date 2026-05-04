@@ -131,6 +131,17 @@ public class SchemaUtils {
         return (CacheTable) table;
     }
 
+    public static CacheTable tryGetCacheTable(String inputTableName, CalciteSchema schema) {
+        Table table = getTableObj(schema, inputTableName);
+        if (table == null) {
+            return null;
+        }
+        if (!(table instanceof CacheTable)) {
+            return null;
+        }
+        return (CacheTable) table;
+    }
+
     public static Table getTableObj(CalciteSchema schema, String shortTableName) {
         if (schema == null || shortTableName == null) {
             return null;

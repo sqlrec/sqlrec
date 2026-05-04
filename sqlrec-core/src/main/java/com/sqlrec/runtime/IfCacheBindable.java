@@ -2,11 +2,14 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.utils.SchemaUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,7 +97,14 @@ public class IfCacheBindable extends BindableInterface {
         if (selectedClause != null) {
             return selectedClause.bind(schema, context);
         }
-        return null;
+
+        CacheTable table = SchemaUtils.tryGetCacheTable(thenClause.getTableName(), schema);
+        if (table == null) {
+            // add empty table
+            CacheTable cacheTable = new CacheTable(thenClause.getTableName(), Linq4j.emptyEnumerable(), thenClause.getTableDataFields());
+            schema.add(thenClause.getTableName(), cacheTable);
+        }
+        return Linq4j.emptyEnumerable();
     }
 
     private Enumerable<Object[]> bindWithTimein(CalciteSchema schema, ExecuteContext context) {

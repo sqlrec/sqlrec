@@ -104,7 +104,6 @@ public class TestIfCache {
         SqlTestCase sqlTestCase = new SqlTestCase(
                 "IF (SELECT false) THEN (cache table t1 as SELECT 1 as id, 'x' as name)"
         );
-        sqlTestCase.expectedException = new RuntimeException("must contain same table when no else statement in if sql");
         sqlTestCase.test(schema);
     }
 

@@ -3,6 +3,8 @@ package com.sqlrec.compiler;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
@@ -120,9 +122,12 @@ public class CompileManager {
         if (elseClause != null) {
             elseBindable = (CacheTableBindable) getCacheBindable(elseClause, schema, defaultSchema);
         } else {
-            CalciteSchema.TableEntry inputTableEntry = schema.getTable(thenBindable.getTableName(), false);
-            if (inputTableEntry == null) {
-                throw new RuntimeException("must contain same table when no else statement in if sql");
+            CacheTable table = SchemaUtils.tryGetCacheTable(thenBindable.getTableName(), schema);
+            if (table != null) {
+                DataTypeUtils.checkTableSchemaCompatible(
+                        thenBindable.getCacheTableDataFields(),
+                        table.getDataFields()
+                );
             }
         }
 
