@@ -176,6 +176,11 @@ public class ModelManager {
             deleteCheckpoint(modelExportConf.getModelName(), existingCheckpoint.getCheckpointName());
         }
 
+        String exportCleanPath = modelController.getExportCleanPath(modelExportConf);
+        if (StringUtils.isNotEmpty(exportCleanPath)) {
+            HadoopUtils.deletePath(exportCleanPath);
+        }
+
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
 

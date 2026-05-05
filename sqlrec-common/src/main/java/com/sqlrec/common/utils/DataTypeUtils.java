@@ -57,11 +57,12 @@ public class DataTypeUtils {
         List<RelDataTypeField> newFields = new ArrayList<>(origin);
         RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
         for (FieldSchema fieldSchema : fieldsToAdd) {
+            RelDataType fieldType = getRelDataType(typeFactory, fieldSchema.getType());
             newFields.add(
-                    getRelDataTypeField(
+                    new RelDataTypeFieldImpl(
                             fieldSchema.getName(),
                             newFields.size(),
-                            getRelDataType(typeFactory, fieldSchema.getType()).getSqlTypeName()
+                            fieldType
                     )
             );
         }

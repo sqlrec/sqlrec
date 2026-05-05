@@ -1,2 +1,3 @@
 com.sqlrec.model.tzrec.WideAndDeepModel
+com.sqlrec.model.tzrec.DSSMModel
 com.sqlrec.model.external.ExternalModel

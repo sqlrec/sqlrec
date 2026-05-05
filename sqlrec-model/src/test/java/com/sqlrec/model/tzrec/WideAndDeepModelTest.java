@@ -95,7 +95,7 @@ public class WideAndDeepModelTest {
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
-        fieldSchemas.add(new FieldSchema("feature1", "float"));
+        fieldSchemas.add(new FieldSchema("feature1", "int"));
         fieldSchemas.add(new FieldSchema("feature2", "int"));
         fieldSchemas.add(new FieldSchema("feature3", "string"));
         model.setInputFields(fieldSchemas);
@@ -166,9 +166,11 @@ data:
         num_workers: 4
     }
     feature_configs {
-        raw_feature {
+        id_feature {
             feature_name: "feature1"
             expression: "item:feature1"
+            num_buckets: 10000000
+            embedding_dim: 32
         }
     }
     feature_configs {
@@ -275,11 +277,11 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
         volumeMounts:
         - mountPath: "/data"
           name: "config-volume"
@@ -299,7 +301,7 @@ spec:
         model.setModelName("default_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
-        fieldSchemas.add(new FieldSchema("feature1", "double"));
+        fieldSchemas.add(new FieldSchema("feature1", "int"));
         model.setInputFields(fieldSchemas);
 
         Map<String, String> modelParams = new HashMap<>();
@@ -347,9 +349,11 @@ data:
         num_workers: 8
     }
     feature_configs {
-        raw_feature {
+        id_feature {
             feature_name: "feature1"
             expression: "item:feature1"
+            num_buckets: 1000000
+            embedding_dim: 16
         }
     }
     model_config {
@@ -436,11 +440,11 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
         volumeMounts:
         - mountPath: "/data"
           name: "config-volume"
@@ -460,7 +464,7 @@ spec:
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
-        fieldSchemas.add(new FieldSchema("feature1", "float"));
+        fieldSchemas.add(new FieldSchema("feature1", "int"));
         fieldSchemas.add(new FieldSchema("feature2", "int"));
         fieldSchemas.add(new FieldSchema("feature3", "string"));
         model.setInputFields(fieldSchemas);
@@ -503,9 +507,11 @@ data:
         num_workers: 4
     }
     feature_configs {
-        raw_feature {
+        id_feature {
             feature_name: "feature1"
             expression: "item:feature1"
+            num_buckets: 10000000
+            embedding_dim: 32
         }
     }
     feature_configs {
@@ -613,11 +619,11 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
         volumeMounts:
         - mountPath: "/data"
           name: "config-volume"
@@ -757,11 +763,11 @@ spec:
           name: "http"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -946,11 +952,11 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
         volumeMounts:
         - mountPath: "/data"
           name: "config-volume"
@@ -1111,11 +1117,11 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
         volumeMounts:
         - mountPath: "/data"
           name: "config-volume"

@@ -216,4 +216,162 @@ public class PipelineConfigUtils {
             config.append("        feature_names: \"").append(featureName).append("\"\n");
         }
     }
+
+    public static String generateDSSMTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
+        StringBuilder config = new StringBuilder();
+
+        addInputPaths(config, trainConf.getTrainDataPaths());
+
+        addModelDir(config, trainConf.getModelDir());
+
+        config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
+
+        config.append(generateDSSMDataConfig(model, trainConf.getParams()));
+
+        config.append(generateFeatureConfigs(model));
+
+        config.append(generateDSSMModelConfig(model));
+
+        return config.toString();
+    }
+
+    public static String generateDSSMExportConfig(ModelConfig model, ModelExportConf exportConf) {
+        StringBuilder config = new StringBuilder();
+
+        addInputPaths(config, exportConf.getTrainDataPaths());
+
+        addModelDir(config, exportConf.getBaseModelDir());
+
+        config.append(generateDSSMDataConfig(model, exportConf.getParams()));
+
+        config.append(generateFeatureConfigs(model));
+
+        config.append(generateDSSMModelConfig(model));
+
+        return config.toString();
+    }
+
+    public static String generateDSSMDataConfig(ModelConfig model, Map<String, String> params) {
+        StringBuilder config = new StringBuilder();
+        int batchSize = Config.BATCH_SIZE.getValue(params);
+        int numWorkers = Config.NUM_WORKERS.getValue(params);
+        String labelFields = Config.LABEL_COLUMNS.getValue(model.getParams());
+
+        config.append("data_config {\n");
+        config.append("    batch_size: " + batchSize + "\n");
+        config.append("    dataset_type: ParquetDataset\n");
+        config.append("    fg_mode: FG_NORMAL\n");
+        config.append("    label_fields: \"" + labelFields + "\"\n");
+        config.append("    num_workers: " + numWorkers + "\n");
+        config.append("}\n");
+        return config.toString();
+    }
+
+    public static String generateDSSMModelConfig(ModelConfig model) {
+        StringBuilder config = new StringBuilder();
+        config.append("model_config {\n");
+
+        String userFeatures = null;
+        if (model.getParams().containsKey(Config.USER_FEATURES.getKey())) {
+            userFeatures = model.getParams().get(Config.USER_FEATURES.getKey());
+        }
+        String itemFeatures = null;
+        if (model.getParams().containsKey(Config.ITEM_FEATURES.getKey())) {
+            itemFeatures = model.getParams().get(Config.ITEM_FEATURES.getKey());
+        }
+
+        List<String> userFeatureList = parseFeatureList(userFeatures);
+        List<String> itemFeatureList = parseFeatureList(itemFeatures);
+
+        List<String> allFeatures = getFeatures(model);
+
+        if (userFeatureList.isEmpty() && !itemFeatureList.isEmpty()) {
+            userFeatureList = inferRemainingFeatures(allFeatures, itemFeatureList);
+        } else if (itemFeatureList.isEmpty() && !userFeatureList.isEmpty()) {
+            itemFeatureList = inferRemainingFeatures(allFeatures, userFeatureList);
+        }
+
+        if (!userFeatureList.isEmpty()) {
+            config.append("    feature_groups {\n");
+            config.append("        group_name: \"user\"\n");
+            for (String featureName : userFeatureList) {
+                config.append("        feature_names: \"").append(featureName).append("\"\n");
+            }
+            config.append("        group_type: DEEP\n");
+            config.append("    }\n");
+        }
+
+        if (!itemFeatureList.isEmpty()) {
+            config.append("    feature_groups {\n");
+            config.append("        group_name: \"item\"\n");
+            for (String featureName : itemFeatureList) {
+                config.append("        feature_names: \"").append(featureName).append("\"\n");
+            }
+            config.append("        group_type: DEEP\n");
+            config.append("    }\n");
+        }
+
+        String userHiddenUnits = Config.USER_HIDDEN_UNITS.getValue(model.getParams());
+        String itemHiddenUnits = Config.ITEM_HIDDEN_UNITS.getValue(model.getParams());
+        int outputDim = Config.OUTPUT_DIM.getValue(model.getParams());
+
+        config.append("    dssm {\n");
+        config.append("        user_tower {\n");
+        config.append("            input: 'user'\n");
+        config.append("            mlp {\n");
+        config.append("                hidden_units: [" + userHiddenUnits + "]\n");
+        config.append("            }\n");
+        config.append("        }\n");
+        config.append("        item_tower {\n");
+        config.append("            input: 'item'\n");
+        config.append("            mlp {\n");
+        config.append("                hidden_units: [" + itemHiddenUnits + "]\n");
+        config.append("            }\n");
+        config.append("        }\n");
+        config.append("        output_dim: " + outputDim + "\n");
+        config.append("        in_batch_negative: true\n");
+        config.append("    }\n");
+
+        config.append("    metrics {\n");
+        config.append("        recall_at_k {\n");
+        config.append("            top_k: 1\n");
+        config.append("        }\n");
+        config.append("    }\n");
+
+        config.append("    metrics {\n");
+        config.append("        recall_at_k {\n");
+        config.append("            top_k: 5\n");
+        config.append("        }\n");
+        config.append("    }\n");
+
+        config.append("    losses {\n");
+        config.append("        softmax_cross_entropy {}\n");
+        config.append("    }\n");
+
+        config.append("}\n");
+        return config.toString();
+    }
+
+    private static List<String> parseFeatureList(String features) {
+        List<String> featureList = new java.util.ArrayList<>();
+        if (features != null && !features.isEmpty()) {
+            for (String feature : features.split(",")) {
+                String trimmed = feature.trim();
+                if (!trimmed.isEmpty()) {
+                    featureList.add(trimmed);
+                }
+            }
+        }
+        return featureList;
+    }
+
+    private static List<String> inferRemainingFeatures(List<String> allFeatures, List<String> specifiedFeatures) {
+        List<String> remaining = new java.util.ArrayList<>();
+        for (String feature : allFeatures) {
+            if (!specifiedFeatures.contains(feature)) {
+                remaining.add(feature);
+            }
+        }
+        return remaining;
+    }
 }

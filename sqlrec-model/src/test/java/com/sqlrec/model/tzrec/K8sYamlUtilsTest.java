@@ -383,11 +383,11 @@ spec:
           name: "http"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
           requests:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "1"
+            memory: "2Gi"
 """;
         assertEquals(expectedYaml, yaml);
     }

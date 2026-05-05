@@ -3,7 +3,7 @@ package com.sqlrec.common.config;
 public class SqlRecConfigs {
     public static final ConfigOption<String> SQLREC_VERSION = new ConfigOption<>(
             "SQLREC_VERSION",
-            null,
+            "0.1.0",
             "sqlrec version",
             null,
             String.class

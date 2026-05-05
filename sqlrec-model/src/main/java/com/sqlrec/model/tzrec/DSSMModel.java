@@ -6,25 +6,40 @@ import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.*;
 
-public class WideAndDeepModel implements ModelController {
+public class DSSMModel implements ModelController {
     @Override
     public String getModelName() {
-        return "tzrec.wide_and_deep";
+        return "tzrec.dssm";
     }
 
     @Override
     public List<FieldSchema> getOutputFields(ModelConfig model) {
-        return Collections.singletonList(new FieldSchema("probs", "FLOAT"));
+        return Arrays.asList(
+                new FieldSchema("user_tower_emb", "ARRAY<FLOAT>"),
+                new FieldSchema("item_tower_emb", "ARRAY<FLOAT>")
+        );
     }
 
     @Override
     public String checkModel(ModelConfig model) {
+        String userFeatures = null;
+        if (model.getParams().containsKey(Config.USER_FEATURES.getKey())) {
+            userFeatures = model.getParams().get(Config.USER_FEATURES.getKey());
+        }
+        String itemFeatures = null;
+        if (model.getParams().containsKey(Config.ITEM_FEATURES.getKey())) {
+            itemFeatures = model.getParams().get(Config.ITEM_FEATURES.getKey());
+        }
+
+        if ((userFeatures == null || userFeatures.isEmpty()) && (itemFeatures == null || itemFeatures.isEmpty())) {
+            return "At least one of user_features or item_features is required for DSSM model";
+        }
         return null;
     }
 
     @Override
     public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
-        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
+        String pipelineConfig = PipelineConfigUtils.generateDSSMTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
         return genJobYaml(model, pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
     }
@@ -33,19 +48,20 @@ public class WideAndDeepModel implements ModelController {
     public List<String> getExportCheckpoints(ModelExportConf exportConf) {
         List<String> exportCheckpointNames = new ArrayList<>();
         String exportBaseName = exportConf.getCheckpointName() + "_export";
-        exportCheckpointNames.add(exportBaseName);
+        exportCheckpointNames.add(exportBaseName + "/item");
+        exportCheckpointNames.add(exportBaseName + "/user");
         return exportCheckpointNames;
     }
 
     @Override
     public String getExportCleanPath(ModelExportConf exportConf) {
-        return null;
+        return exportConf.getBaseModelDir() + "_export";
     }
 
     @Override
     public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
         String exportDir = exportConf.getBaseModelDir() + "_export";
-        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
+        String pipelineConfig = PipelineConfigUtils.generateDSSMExportConfig(model, exportConf);
         String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
         return genJobYaml(model, pipelineConfig, shell, exportConf.getId(), exportConf.getParams());
     }

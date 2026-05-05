@@ -114,3 +114,17 @@ FROM ml_ratings r
 JOIN ml_movies m ON r.movie_id = m.movie_id AND m.dt = '2024-01-01'
 JOIN ml_users u ON r.user_id = u.user_id AND u.dt = '2024-01-01'
 WHERE r.dt = '2024-01-01';
+
+INSERT OVERWRITE TABLE ml_recall_sample PARTITION(dt='2024-01-01')
+SELECT
+    user_id,
+    movie_id,
+    rating,
+    `timestamp`,
+    genres,
+    gender,
+    age,
+    occupation,
+    zip_code
+FROM ml_sample
+WHERE rating > 0.5 AND dt = '2024-01-01';

@@ -70,6 +70,19 @@ CREATE TABLE IF NOT EXISTS `ml_sample` (
 ) PARTITIONED BY (`dt` STRING)
     STORED AS PARQUET;
 
+CREATE TABLE IF NOT EXISTS `ml_recall_sample` (
+ `user_id` BIGINT,
+ `movie_id` BIGINT,
+ `rating` FLOAT,
+ `timestamp` BIGINT,
+ `genres` ARRAY<STRING>,
+ `gender` STRING,
+ `age` INT,
+ `occupation` INT,
+ `zip_code` STRING
+) PARTITIONED BY (`dt` STRING)
+    STORED AS PARQUET;
+
 ALTER TABLE `ml_users` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');
 ALTER TABLE `ml_movies` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');
 ALTER TABLE `ml_ratings` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');

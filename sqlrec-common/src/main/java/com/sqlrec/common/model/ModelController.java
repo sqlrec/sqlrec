@@ -17,6 +17,8 @@ public interface ModelController {
     // return export checkpoint names (one export command may generate multiple partitions)
     List<String> getExportCheckpoints(ModelExportConf exportConf);
 
+    String getExportCleanPath(ModelExportConf exportConf);
+
     // return model export k8s yaml
     String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf);
 

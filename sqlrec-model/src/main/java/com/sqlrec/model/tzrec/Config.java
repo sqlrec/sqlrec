@@ -81,13 +81,33 @@ public class Config {
 
     public static final ConfigOption<Integer> POD_CPU_CORES = new ConfigOption<>(
             "pod_cpu_cores",
-            2, "Number of CPU cores for pod", null, Integer.class);
+            1, "Number of CPU cores for pod", null, Integer.class);
 
     public static final ConfigOption<String> POD_MEMORY = new ConfigOption<>(
             "pod_memory",
-            "8Gi", "Memory for pod", null, String.class);
+            "2Gi", "Memory for pod", null, String.class);
 
     public static final ConfigOption<Integer> REPLICAS = new ConfigOption<>(
             "replicas",
             1, "Number of replicas for deployment", null, Integer.class);
+
+    public static final ConfigOption<String> USER_FEATURES = new ConfigOption<>(
+            "user_features",
+            null, "User feature names for DSSM model (comma separated)", null, String.class);
+
+    public static final ConfigOption<String> ITEM_FEATURES = new ConfigOption<>(
+            "item_features",
+            null, "Item feature names for DSSM model (comma separated)", null, String.class);
+
+    public static final ConfigOption<String> USER_HIDDEN_UNITS = new ConfigOption<>(
+            "user_hidden_units",
+            "512,256,128", "Hidden units for user tower in DSSM", null, String.class);
+
+    public static final ConfigOption<String> ITEM_HIDDEN_UNITS = new ConfigOption<>(
+            "item_hidden_units",
+            "512,256,128", "Hidden units for item tower in DSSM", null, String.class);
+
+    public static final ConfigOption<Integer> OUTPUT_DIM = new ConfigOption<>(
+            "output_dim",
+            64, "Output embedding dimension for DSSM", null, Integer.class);
 }

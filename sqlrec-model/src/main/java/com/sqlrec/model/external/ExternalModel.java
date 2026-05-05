@@ -45,6 +45,11 @@ public class ExternalModel implements ModelController {
     }
 
     @Override
+    public String getExportCleanPath(ModelExportConf exportConf) {
+        throw new UnsupportedOperationException("External model does not support export");
+    }
+
+    @Override
     public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
         throw new UnsupportedOperationException("External model does not support export");
     }
