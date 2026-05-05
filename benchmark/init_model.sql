@@ -19,6 +19,12 @@ with (
 'batch_size'='128'
 );
 
+-- train model test_model checkpoint='test2' on ml_sample from 'test'
+-- with (
+-- 'NAMESPACE'='sqlrec',
+-- 'batch_size'='128'
+-- );
+
 export model test_model checkpoint='test' on ml_sample
 with (
 'NAMESPACE'='sqlrec'

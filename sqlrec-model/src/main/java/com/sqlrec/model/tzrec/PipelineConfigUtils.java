@@ -17,7 +17,7 @@ public class PipelineConfigUtils {
 
         addModelDir(config, trainConf.getModelDir());
 
-        config.append(generateTrainConfig(model, trainConf.getParams()));
+        config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
 
         config.append(generateDataConfig(model, trainConf.getParams()));
 
@@ -57,7 +57,7 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateTrainConfig(ModelConfig model, Map<String, String> params) {
+    public static String generateTrainConfig(ModelConfig model, Map<String, String> params, String baseModelDir) {
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(params);
         double denseLr = Config.DENSE_LR.getValue(params);
@@ -79,6 +79,9 @@ public class PipelineConfigUtils {
         config.append("        }\n");
         config.append("    }\n");
         config.append("    num_epochs: " + numEpochs + "\n");
+        if (baseModelDir != null && !baseModelDir.isEmpty()) {
+            config.append("    fine_tune_checkpoint: \"").append(baseModelDir).append("\"\n");
+        }
         config.append("}\n");
         return config.toString();
     }
