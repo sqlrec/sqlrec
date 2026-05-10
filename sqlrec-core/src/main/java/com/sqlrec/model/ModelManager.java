@@ -178,7 +178,7 @@ public class ModelManager {
 
         String exportCleanPath = modelController.getExportCleanPath(modelExportConf);
         if (StringUtils.isNotEmpty(exportCleanPath)) {
-            HadoopUtils.deletePath(exportCleanPath);
+            HadoopUtils.deletePathWithCheck(exportCleanPath, modelConfig.getPath());
         }
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
@@ -301,8 +301,9 @@ public class ModelManager {
             }
         }
 
+        ModelConfig modelConfig = ModelEntityConverter.convertToModel(checkpoint.getModelDdl());
         String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
-        HadoopUtils.deletePath(checkpointPath);
+        HadoopUtils.deletePathWithCheck(checkpointPath, modelConfig.getPath());
 
         DbUtils.deleteCheckpoint(modelName, checkpointName);
     }

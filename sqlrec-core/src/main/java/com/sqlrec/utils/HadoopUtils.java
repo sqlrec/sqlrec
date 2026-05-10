@@ -66,6 +66,11 @@ public class HadoopUtils {
         }
     }
 
+    public static void deletePathWithCheck(String hdfsPath, String modelPath) {
+        validateModelPath(hdfsPath, modelPath);
+        deletePath(hdfsPath);
+    }
+
     private static void validatePath(String hdfsPath) {
         if (hdfsPath == null || StringUtils.containsWhitespace(hdfsPath)) {
             throw new IllegalArgumentException("hdfsPath cannot be blank");
@@ -76,6 +81,42 @@ public class HadoopUtils {
                 hdfsPath.contains(")") || hdfsPath.contains("<") || hdfsPath.contains(">")) {
             throw new IllegalArgumentException("hdfsPath contains invalid characters: " + hdfsPath);
         }
+    }
+
+    private static void validateModelPath(String hdfsPath, String modelPath) {
+        String normalizedPath = normalizePath(hdfsPath);
+        String normalizedModelPath = normalizePath(modelPath);
+
+        if (!normalizedPath.startsWith(normalizedModelPath)) {
+            throw new IllegalArgumentException("Path must be under model path. Path: " + hdfsPath + ", Model path: " + modelPath);
+        }
+    }
+
+    private static String normalizePath(String path) {
+        if (path == null) {
+            return "";
+        }
+
+        String normalized = path;
+
+        int protocolIndex = normalized.indexOf("://");
+        if (protocolIndex != -1) {
+            normalized = normalized.substring(protocolIndex + 3);
+            int slashIndex = normalized.indexOf("/");
+            if (slashIndex != -1) {
+                normalized = normalized.substring(slashIndex);
+            }
+        }
+
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        return normalized;
     }
 
     private static void clearJavaToolOptions(Map<String, String> environment) {
