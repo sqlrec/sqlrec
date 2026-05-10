@@ -1279,7 +1279,7 @@
           "repeat": "jvm_memory_pool_heap",
           "seriesOverrides": [],
           "spaceLength": 10,
-          "span": 4,
+          "span": 12,
           "stack": false,
           "steppedLine": false,
           "targets": [
@@ -1413,7 +1413,7 @@
           "repeat": "jvm_memory_pool_nonheap",
           "seriesOverrides": [],
           "spaceLength": 10,
-          "span": 4,
+          "span": 12,
           "stack": false,
           "steppedLine": false,
           "targets": [
@@ -2005,7 +2005,7 @@
             }
           ],
           "spaceLength": 10,
-          "span": 4,
+          "span": 12,
           "stack": false,
           "steppedLine": false,
           "targets": [
@@ -2120,7 +2120,7 @@
               "refId": "A"
             },
             {
-              "expr": "avg(jvm_threads_virtual_pool_size{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"})",
+              "expr": "avg(jvm_threads_virtual_pool_size_threads{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"})",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "pool size",
@@ -2195,14 +2195,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(jvm_threads_virtual_live{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", scheduling_status=\"mounted\"})",
+              "expr": "avg(jvm_threads_virtual_live_threads{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", scheduling_status=\"mounted\"})",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "mounted",
               "refId": "A"
             },
             {
-              "expr": "avg(jvm_threads_virtual_live{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", scheduling_status=\"queued\"})",
+              "expr": "avg(jvm_threads_virtual_live_threads{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", scheduling_status=\"queued\"})",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "queued",

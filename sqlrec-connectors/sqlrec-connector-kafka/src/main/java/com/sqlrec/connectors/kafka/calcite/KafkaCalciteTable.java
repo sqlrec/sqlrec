@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.kafka.calcite;
 
+import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
@@ -42,7 +43,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new kafkaCollection(kafkaConfig);
+        return new KafkaCollection(getTableName(), kafkaConfig);
     }
 
     @Override
@@ -96,47 +97,16 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         return producer;
     }
 
-    public static class kafkaCollection implements Collection<Object[]> {
-        private int size = 0;
-        private KafkaConfig kafkaConfig;
+    public static class KafkaCollection extends SqlRecCollection {
+        private final KafkaConfig kafkaConfig;
 
-        public kafkaCollection(KafkaConfig kafkaConfig) {
+        public KafkaCollection(String tableName, KafkaConfig kafkaConfig) {
+            super(tableName);
             this.kafkaConfig = kafkaConfig;
         }
 
         @Override
-        public int size() {
-            return size;
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return false;
-        }
-
-        @Override
-        public boolean contains(Object o) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Iterator<Object[]> iterator() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Object[] toArray() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> T[] toArray(T[] a) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean add(Object[] objects) {
-            size += 1;
+        protected boolean addImpl(Object[] objects) {
             String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
             KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
             producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
@@ -144,35 +114,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         }
 
         @Override
-        public boolean remove(Object o) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean containsAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean addAll(Collection<? extends Object[]> c) {
-            for (Object[] objects : c) {
-                add(objects);
-            }
-            return true;
-        }
-
-        @Override
-        public boolean removeAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean retainAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void clear() {
+        protected boolean removeImpl(Object[] objects) {
             throw new UnsupportedOperationException();
         }
     }

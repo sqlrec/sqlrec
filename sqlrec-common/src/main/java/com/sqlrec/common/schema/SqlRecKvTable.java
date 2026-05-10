@@ -2,20 +2,59 @@ package com.sqlrec.common.schema;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.MetricsUtils;
+import io.micrometer.core.instrument.Tags;
+import org.apache.calcite.DataContext;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.schema.ModifiableTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTable, FilterableTable {
+    private static final Logger log = LoggerFactory.getLogger(SqlRecKvTable.class);
+
     private transient Cache<Object, List<Object[]>> cache;
+
+    protected abstract Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters);
+
+    @Override
+    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+        long startTime = System.currentTimeMillis();
+        long count = 0;
+        String status = "success";
+
+        try {
+            Enumerable<Object[]> result = scanImpl(root, filters);
+            if (result != null) {
+                count = result.count();
+            }
+            return result;
+        } catch (Throwable e) {
+            log.error("scan table {} error", getTableName(), e);
+            status = "error";
+            throw e;
+        } finally {
+            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_TABLE_SCAN_DURATION, tags)
+                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .summary(Consts.METRICS_TABLE_SCAN_DATA_SIZE, tags)
+                    .record(count);
+        }
+    }
 
     public int getPrimaryKeyIndex() {
         throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
     }
 
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         throw new UnsupportedOperationException("getByPrimaryKey not support");
     }
 
@@ -23,36 +62,65 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         if (maxSize <= 0 || expireAfterWrite <= 0) {
             return;
         }
-
         cache = Caffeine.newBuilder()
                 .maximumSize(maxSize)
                 .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
                 .build();
     }
 
-    public Map<Object, List<Object[]>> getByPrimaryKeyWithCache(Set<Object> keySet) {
-        if (cache == null) {
-            return getByPrimaryKey(keySet);
-        }
+    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+        long startTime = System.currentTimeMillis();
+        String status = "success";
+        int totalCount = keySet.size();
 
-        Map<Object, List<Object[]>> result = new HashMap<>(keySet.size());
-        Set<Object> missKeys = new HashSet<>();
-        for (Object key : keySet) {
-            List<Object[]> list = cache.getIfPresent(key);
-            if (list != null) {
-                result.put(key, list);
-            } else {
-                missKeys.add(key);
+        try {
+            if (cache == null) {
+                return getByPrimaryKeyImpl(keySet);
             }
-        }
-        if (!missKeys.isEmpty()) {
-            Map<Object, List<Object[]>> missKeyResult = getByPrimaryKey(missKeys);
-            result.putAll(missKeyResult);
-            for (Object key : missKeyResult.keySet()) {
-                cache.put(key, missKeyResult.get(key));
+
+            int hitCount = 0;
+            Map<Object, List<Object[]>> result = new HashMap<>(keySet.size());
+            Set<Object> missKeys = new HashSet<>();
+            for (Object key : keySet) {
+                List<Object[]> list = cache.getIfPresent(key);
+                if (list != null) {
+                    result.put(key, list);
+                    hitCount++;
+                } else {
+                    missKeys.add(key);
+                }
             }
+            if (!missKeys.isEmpty()) {
+                Map<Object, List<Object[]>> missKeyResult = getByPrimaryKeyImpl(missKeys);
+                result.putAll(missKeyResult);
+                for (Object key : missKeyResult.keySet()) {
+                    cache.put(key, missKeyResult.get(key));
+                }
+            }
+
+            Tags cacheTags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_TABLE_CACHE_HIT_COUNT, cacheTags)
+                    .increment(hitCount);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .summary(Consts.METRICS_TABLE_CACHE_DATA_SIZE, cacheTags)
+                    .record(cache.estimatedSize());
+
+            return result;
+        } catch (Throwable e) {
+            log.error("getByPrimaryKey table {} error", getTableName(), e);
+            status = "error";
+            throw e;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DURATION, tags)
+                    .record(duration, TimeUnit.MILLISECONDS);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DATA_SIZE, tags)
+                    .record(totalCount);
         }
-        return result;
     }
 
     public boolean onlyFilterByPrimaryKey() {

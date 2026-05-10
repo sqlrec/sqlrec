@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.milvus.calcite;
 
+import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
@@ -24,7 +25,10 @@ import org.apache.calcite.schema.Schemas;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class MilvusCalciteTable extends SqlRecVectorTable {
     private MilvusConfig milvusConfig;
@@ -36,17 +40,17 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
     }
 
     @Override
-    public Enumerable<@Nullable Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
         List<Object[]> rows = milvusHandler.scan(root, filters);
         return Linq4j.asEnumerable(rows);
     }
 
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         return milvusHandler.getByPrimaryKey(keySet);
     }
 
     @Override
-    public List<Object[]> searchByEmbeddingWithScore(
+    protected List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,
@@ -64,7 +68,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new MilvusCollection(milvusHandler);
+        return new MilvusCollection(getTableName(), milvusHandler);
     }
 
     @Override
@@ -104,88 +108,22 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
         return false;
     }
 
-    public static class MilvusCollection implements Collection<Object[]> {
-        private int size = 0;
-        private MilvusHandler milvusHandler;
+    public static class MilvusCollection extends SqlRecCollection {
+        private final MilvusHandler milvusHandler;
 
-        public MilvusCollection(MilvusHandler milvusHandler) {
+        public MilvusCollection(String tableName, MilvusHandler milvusHandler) {
+            super(tableName);
             this.milvusHandler = milvusHandler;
         }
 
         @Override
-        public int size() {
-            return size;
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return false;
-        }
-
-        @Override
-        public boolean contains(Object o) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Iterator<Object[]> iterator() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Object[] toArray() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> T[] toArray(T[] a) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean add(Object[] objects) {
-            size += 1;
+        protected boolean addImpl(Object[] objects) {
             return milvusHandler.add(objects);
         }
 
         @Override
-        public boolean remove(Object o) {
-            if (!(o instanceof Object[])) {
-                throw new RuntimeException("Milvus Collection only support Object[]");
-            }
-            size += 1;
-            return milvusHandler.remove((Object[]) o);
-        }
-
-        @Override
-        public boolean containsAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean addAll(Collection<? extends Object[]> c) {
-            for (Object[] objects : c) {
-                add(objects);
-            }
-            return true;
-        }
-
-        @Override
-        public boolean removeAll(Collection<?> c) {
-            for (Object o : c) {
-                remove(o);
-            }
-            return true;
-        }
-
-        @Override
-        public boolean retainAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void clear() {
-            throw new UnsupportedOperationException();
+        protected boolean removeImpl(Object[] objects) {
+            return milvusHandler.remove(objects);
         }
     }
 }

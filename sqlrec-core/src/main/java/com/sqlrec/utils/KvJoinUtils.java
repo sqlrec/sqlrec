@@ -57,7 +57,7 @@ public class KvJoinUtils {
             joinKeys.add(leftJoinKey);
         }
 
-        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKeyWithCache(joinKeys);
+        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
         Map<String, List<Object[]>> stringKeyMap = new HashMap<>();
         for (Map.Entry<Object, List<Object[]>> entry : rightValuesMap.entrySet()) {
             stringKeyMap.put(entry.getKey().toString(), entry.getValue());

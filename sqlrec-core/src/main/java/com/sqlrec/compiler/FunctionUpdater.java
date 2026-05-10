@@ -3,11 +3,13 @@ package com.sqlrec.compiler;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.JavaFunctionUtils;
+import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,16 +47,57 @@ public class FunctionUpdater {
     }
 
     public static void updateFunctionBindable() {
-        log.info("starting function bindable update check");
-        Map<String, Integer> functionUpdateStatusMap = new HashMap<>();
-        Map<String, SqlFunctionBindable> functionBindableMap = CompileManager.getFunctionBindableMap();
-        Set<String> functionNames = new HashSet<>(functionBindableMap.keySet());
+        long startTime = System.currentTimeMillis();
+        String status = "success";
+        int successCount = 0;
+        int failedCount = 0;
+        int notUpdateCount = 0;
 
-        log.info("total functions to check: {}", functionNames.size());
-        for (String functionName : functionNames) {
-            tryFlushFunctionBindable(functionName, functionUpdateStatusMap, functionBindableMap);
+        try {
+            log.info("starting function bindable update check");
+            Map<String, Integer> functionUpdateStatusMap = new HashMap<>();
+            Map<String, SqlFunctionBindable> functionBindableMap = CompileManager.getFunctionBindableMap();
+            Set<String> functionNames = new HashSet<>(functionBindableMap.keySet());
+
+            log.info("total functions to check: {}", functionNames.size());
+            for (String functionName : functionNames) {
+                tryFlushFunctionBindable(functionName, functionUpdateStatusMap, functionBindableMap);
+            }
+            log.info("function update check completed");
+
+            for (Integer updateStatus : functionUpdateStatusMap.values()) {
+                if (updateStatus == UPDATE_SUCCESS) {
+                    successCount++;
+                } else if (updateStatus == UPDATE_FAILED) {
+                    failedCount++;
+                } else {
+                    notUpdateCount++;
+                }
+            }
+        } catch (Exception e) {
+            log.error("update function bindable failed", e);
+            status = "error";
+            throw e;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            Tags tags = Tags.of("status", status);
+            
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_FUNCTION_UPDATE_DURATION, tags)
+                    .record(duration, TimeUnit.MILLISECONDS);
+            
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "success"))
+                    .increment(successCount);
+            
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "failed"))
+                    .increment(failedCount);
+            
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "not_update"))
+                    .increment(notUpdateCount);
         }
-        log.info("function update check completed");
     }
 
     private static int tryFlushFunctionBindable(

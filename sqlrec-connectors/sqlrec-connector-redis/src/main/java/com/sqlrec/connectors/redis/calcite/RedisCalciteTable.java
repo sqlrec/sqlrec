@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.calcite;
 
+import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
@@ -43,7 +44,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
     }
 
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
         if (filters.size() != 1) {
             throw new RuntimeException("Redis Calcite Table only support one filter");
         }
@@ -76,7 +77,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
         }
     }
 
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         Set<String> keySetStr = keySet.stream()
                 .map(Object::toString)
                 .collect(Collectors.toSet());
@@ -99,7 +100,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
 
     @Override
     public Collection getModifiableCollection() {
-        return new RedisCollection(redisHandler);
+        return new RedisCollection(getTableName(), redisHandler);
     }
 
     @Override
@@ -129,90 +130,24 @@ public class RedisCalciteTable extends SqlRecKvTable {
         return redisConfig.primaryKeyIndex;
     }
 
-    public static class RedisCollection implements Collection<Object[]> {
-        private int size = 0;
-        private RedisHandler redisHandler;
+    public static class RedisCollection extends SqlRecCollection {
+        private final RedisHandler redisHandler;
 
-        public RedisCollection(RedisHandler redisHandler) {
+        public RedisCollection(String tableName, RedisHandler redisHandler) {
+            super(tableName);
             this.redisHandler = redisHandler;
         }
 
         @Override
-        public int size() {
-            return size;
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return false;
-        }
-
-        @Override
-        public boolean contains(Object o) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Iterator<Object[]> iterator() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Object[] toArray() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> T[] toArray(T[] a) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean add(Object[] objects) {
-            size += 1;
+        protected boolean addImpl(Object[] objects) {
             redisHandler.insert(objects);
             return true;
         }
 
         @Override
-        public boolean remove(Object o) {
-            if (!(o instanceof Object[])) {
-                throw new RuntimeException("Redis Collection only support Object[]");
-            }
-            size += 1;
-            redisHandler.delete((Object[]) o);
+        protected boolean removeImpl(Object[] objects) {
+            redisHandler.delete(objects);
             return true;
-        }
-
-        @Override
-        public boolean containsAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean addAll(Collection<? extends Object[]> c) {
-            for (Object[] objects : c) {
-                add(objects);
-            }
-            return true;
-        }
-
-        @Override
-        public boolean removeAll(Collection<?> c) {
-            for (Object o : c) {
-                remove(o);
-            }
-            return true;
-        }
-
-        @Override
-        public boolean retainAll(Collection<?> c) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void clear() {
-            throw new UnsupportedOperationException();
         }
     }
 

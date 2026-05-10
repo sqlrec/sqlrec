@@ -1,8 +1,10 @@
 package com.sqlrec.frontend.service;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -30,6 +32,11 @@ public class SessionManager {
 
     public SessionManager() {
         this.timeoutChecker = new SessionTimeoutChecker(sessionLastAccessTime, this::cleanupSession);
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .gauge(Consts.METRICS_SESSION_ACTIVE_COUNT, hiveClientMap, Map::size);
+        MetricsUtils.getCompositeMeterRegistry()
+                .gauge(Consts.METRICS_OPERATION_ACTIVE_COUNT, operationToSessionMap, Map::size);
     }
 
     public void startTimeoutChecker() {
@@ -75,6 +82,11 @@ public class SessionManager {
             hiveClientMap.put(sessionId, client);
             sqlProcessorMap.put(sessionId, new SqlProcessor());
             updateSessionAccessTime(sessionId);
+
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_SESSION_OPEN_COUNT)
+                    .increment();
+
             logger.info("Session opened successfully, sessionId: {}", sessionId);
             return resp;
         } catch (Exception e) {
@@ -113,6 +125,10 @@ public class SessionManager {
                 removedOperations++;
             }
         }
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_SESSION_CLOSE_COUNT)
+                .increment();
 
         TCloseSessionResp resp;
         try {
@@ -188,6 +204,11 @@ public class SessionManager {
 
         THandleIdentifier operationId = resp.getOperationHandle().getOperationId();
         operationToSessionMap.put(operationId, sessionId);
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_OPERATION_OPEN_COUNT)
+                .increment();
+
         logger.info("Statement executed, sessionId: {}, operationId: {}, operationToSessionMap size: {}",
                 sessionId, operationId, operationToSessionMap.size());
         return resp;
@@ -296,6 +317,10 @@ public class SessionManager {
 
         operationToSessionMap.remove(operationId);
 
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_OPERATION_CLOSE_COUNT)
+                .increment();
+
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
         if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
             sqlProcessor.closeProcessResult(operationId);
@@ -319,6 +344,10 @@ public class SessionManager {
                 operationId, sessionId, operationToSessionMap.size());
 
         operationToSessionMap.remove(operationId);
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_OPERATION_CLOSE_COUNT)
+                .increment();
 
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
         if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {

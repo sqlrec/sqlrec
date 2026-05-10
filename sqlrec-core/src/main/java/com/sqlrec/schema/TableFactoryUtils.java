@@ -1,6 +1,8 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.HmsTableFactory;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.HiveTableUtils;
 import org.apache.calcite.schema.Table;
 import org.slf4j.Logger;
@@ -24,7 +26,16 @@ public class TableFactoryUtils {
             }
             HmsTableFactory tableFactory = getTableFactory(connector);
             if (tableFactory != null) {
-                return tableFactory.getTableFromHmsTable(tableObj);
+                Table table = tableFactory.getTableFromHmsTable(tableObj);
+                if (table instanceof SqlRecTable) {
+                    String dbName = tableObj.getDbName();
+                    String tableName = tableObj.getTableName();
+                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(dbName) 
+                            ? tableName 
+                            : dbName + "." + tableName;
+                    ((SqlRecTable) table).setTableName(fullName);
+                }
+                return table;
             } else {
                 log.warn("Table {} connector {} factory is null, skip", tableObj.getTableName(), connector);
             }
