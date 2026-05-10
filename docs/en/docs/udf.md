@@ -303,7 +303,203 @@ SELECT `get`('user_id') AS user_id;
 - First column is variable name, second column is variable value
 - If variable value is NULL, the variable will be deleted
 
+---
+
+### feature_coverage_metrics
+
+Feature coverage metrics function that calculates feature coverage for each field in tables and reports metrics.
+
+**Function Signature**:
+
+```java
+public Void evaluate(ExecuteContext context, String metricsName, CacheTable... tables)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | ExecuteContext | Execution context |
+| `metricsName` | String | Metrics name |
+| `tables` | CacheTable... | One or more input tables |
+
+**Return Value**: No return value.
+
+**Usage Example**:
+
+```sql
+-- Calculate and report feature coverage
+CALL feature_coverage_metrics('feature.coverage', user_features, item_features);
+
+-- Calculate coverage for a single table
+CALL feature_coverage_metrics('user.feature.coverage', user_info);
+```
+
+**Working Principle**:
+1. Traverse each field of each table
+2. Count non-null values for each field (`null`, empty `Collection`, empty `Map` are considered missing)
+3. Calculate coverage = non-null count / total row count
+4. Report metrics using summary type, tags include `table` (table name) and `field` (field name)
+
+**Notes**:
+- If table is empty, it will be skipped
+- Metrics name cannot be empty
+
 ## Scalar Functions
+
+### array_contains
+
+Array contains function that checks if an array contains a specified element.
+
+**Function Signature**:
+
+```java
+public static Boolean evaluate(List<?> list, Object element)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `list` | List<?> | Input array |
+| `element` | Object | Element to check |
+
+**Return Value**: Returns `true` if the array contains the element, `false` otherwise; returns `null` if either parameter is `null`.
+
+**Usage Example**:
+
+```sql
+-- Check if user tags contain 'vip'
+SELECT
+    user_id,
+    array_contains(tags, 'vip') AS is_vip
+FROM user_info;
+
+-- Filter users with specific tag
+SELECT *
+FROM user_info
+WHERE array_contains(tags, 'active') = true;
+```
+
+---
+
+### array_contains_all
+
+Array contains all function that checks if an array contains all specified elements.
+
+**Function Signature**:
+
+```java
+public static Boolean evaluate(List<?> list, List<?> elements)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `list` | List<?> | Input array |
+| `elements` | List<?> | List of elements to check |
+
+**Return Value**: Returns `true` if the array contains all specified elements, `false` otherwise; returns `null` if either parameter is `null`.
+
+**Usage Example**:
+
+```sql
+-- Check if user has multiple tags
+SELECT
+    user_id,
+    array_contains_all(tags, ARRAY['vip', 'active']) AS is_vip_active
+FROM user_info;
+
+-- Filter users with all specified tags
+SELECT *
+FROM user_info
+WHERE array_contains_all(tags, ARRAY['premium', 'verified']) = true;
+```
+
+---
+
+### array_contains_any
+
+Array contains any function that checks if an array contains any of the specified elements.
+
+**Function Signature**:
+
+```java
+public static Boolean evaluate(List<?> list, List<?> elements)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `list` | List<?> | Input array |
+| `elements` | List<?> | List of elements to check |
+
+**Return Value**: Returns `true` if the array contains any of the specified elements, `false` otherwise; returns `null` if either parameter is `null`.
+
+**Usage Example**:
+
+```sql
+-- Check if user has any VIP level
+SELECT
+    user_id,
+    array_contains_any(levels, ARRAY['gold', 'platinum', 'diamond']) AS is_high_level
+FROM user_info;
+
+-- Filter users with any of the specified tags
+SELECT *
+FROM user_info
+WHERE array_contains_any(tags, ARRAY['new_user', 'trial']) = true;
+```
+
+---
+
+### random_vec
+
+Random vector generation function that generates a normalized random vector of specified dimension.
+
+**Function Signature**:
+
+```java
+public List<Double> evaluate(String dimensionStr)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dimensionStr` | String | Vector dimension, must be a positive integer string |
+
+**Return Value**: Returns a normalized random vector (`List<Double>`), with L2 norm equal to 1.
+
+**Usage Example**:
+
+```sql
+-- Generate a 64-dimensional random vector
+SELECT
+    user_id,
+    random_vec('64') AS random_embedding
+FROM user_info;
+
+-- Generate random vectors for cold-start users
+CACHE TABLE cold_start_users AS
+SELECT
+    user_id,
+    random_vec('128') AS user_embedding
+FROM new_users;
+```
+
+**Working Principle**:
+1. Parse dimension parameter as integer
+2. Generate random vector of specified dimension
+3. Perform L2 normalization on the vector, making norm equal to 1
+
+**Notes**:
+- Dimension must be a positive integer
+- Generated vector is already normalized and can be used directly for similarity calculation
+
+---
 
 ### uuid
 

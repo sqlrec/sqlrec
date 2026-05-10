@@ -35,5 +35,6 @@ public class FunctionConfigs {
         put("truncate_table", TruncateTableFunction.class.getName());
         put("get_variables", GetVariablesFunction.class.getName());
         put("set_variables", SetVariablesFunction.class.getName());
+        put("feature_coverage_metrics", FeatureCoverageMetricsFunction.class.getName());
     }};
 }

@@ -303,7 +303,203 @@ SELECT `get`('user_id') AS user_id;
 - 第一列为变量名，第二列为变量值
 - 如果变量值为 NULL，则会删除该变量
 
+---
+
+### feature_coverage_metrics
+
+特征覆盖率打点函数，计算表中各字段的特征覆盖率并上报指标。
+
+**函数签名**：
+
+```java
+public Void evaluate(ExecuteContext context, String metricsName, CacheTable... tables)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | ExecuteContext | 执行上下文 |
+| `metricsName` | String | 指标名称 |
+| `tables` | CacheTable... | 一个或多个输入表 |
+
+**返回值**：无返回值。
+
+**使用示例**：
+
+```sql
+-- 计算并上报特征覆盖率
+CALL feature_coverage_metrics('feature.coverage', user_features, item_features);
+
+-- 仅计算单个表的覆盖率
+CALL feature_coverage_metrics('user.feature.coverage', user_info);
+```
+
+**工作原理**：
+1. 遍历每个表的每个字段
+2. 统计每个字段的非空值数量（`null`、空 `Collection`、空 `Map` 视为缺失）
+3. 计算覆盖率 = 非空值数量 / 总行数
+4. 使用 summary 类型上报指标，tags 包含 `table`（表名）和 `field`（字段名）
+
+**注意事项**：
+- 如果表为空，则跳过该表
+- 指标名称不能为空
+
 ## 标量函数（Scalar Function）
+
+### array_contains
+
+数组包含函数，检查数组是否包含指定元素。
+
+**函数签名**：
+
+```java
+public static Boolean evaluate(List<?> list, Object element)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `list` | List<?> | 输入数组 |
+| `element` | Object | 要检查的元素 |
+
+**返回值**：如果数组包含该元素返回 `true`，否则返回 `false`；如果任一参数为 `null` 则返回 `null`。
+
+**使用示例**：
+
+```sql
+-- 检查用户标签是否包含 'vip'
+SELECT
+    user_id,
+    array_contains(tags, 'vip') AS is_vip
+FROM user_info;
+
+-- 筛选包含特定标签的用户
+SELECT *
+FROM user_info
+WHERE array_contains(tags, 'active') = true;
+```
+
+---
+
+### array_contains_all
+
+数组全包含函数，检查数组是否包含所有指定元素。
+
+**函数签名**：
+
+```java
+public static Boolean evaluate(List<?> list, List<?> elements)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `list` | List<?> | 输入数组 |
+| `elements` | List<?> | 要检查的元素列表 |
+
+**返回值**：如果数组包含所有指定元素返回 `true`，否则返回 `false`；如果任一参数为 `null` 则返回 `null`。
+
+**使用示例**：
+
+```sql
+-- 检查用户是否同时拥有多个标签
+SELECT
+    user_id,
+    array_contains_all(tags, ARRAY['vip', 'active']) AS is_vip_active
+FROM user_info;
+
+-- 筛选同时满足多个条件的用户
+SELECT *
+FROM user_info
+WHERE array_contains_all(tags, ARRAY['premium', 'verified']) = true;
+```
+
+---
+
+### array_contains_any
+
+数组任一包含函数，检查数组是否包含指定元素中的任意一个。
+
+**函数签名**：
+
+```java
+public static Boolean evaluate(List<?> list, List<?> elements)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `list` | List<?> | 输入数组 |
+| `elements` | List<?> | 要检查的元素列表 |
+
+**返回值**：如果数组包含任一指定元素返回 `true`，否则返回 `false`；如果任一参数为 `null` 则返回 `null`。
+
+**使用示例**：
+
+```sql
+-- 检查用户是否拥有任意一个 VIP 等级
+SELECT
+    user_id,
+    array_contains_any(levels, ARRAY['gold', 'platinum', 'diamond']) AS is_high_level
+FROM user_info;
+
+-- 筛选拥有任意指定标签的用户
+SELECT *
+FROM user_info
+WHERE array_contains_any(tags, ARRAY['new_user', 'trial']) = true;
+```
+
+---
+
+### random_vec
+
+随机向量生成函数，生成指定维度的归一化随机向量。
+
+**函数签名**：
+
+```java
+public List<Double> evaluate(String dimensionStr)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `dimensionStr` | String | 向量维度，必须是正整数字符串 |
+
+**返回值**：返回归一化的随机向量（`List<Double>`），向量的 L2 范数为 1。
+
+**使用示例**：
+
+```sql
+-- 生成 64 维随机向量
+SELECT
+    user_id,
+    random_vec('64') AS random_embedding
+FROM user_info;
+
+-- 为冷启动用户生成随机向量
+CACHE TABLE cold_start_users AS
+SELECT
+    user_id,
+    random_vec('128') AS user_embedding
+FROM new_users;
+```
+
+**工作原理**：
+1. 解析维度参数为整数
+2. 生成指定维度的随机向量
+3. 对向量进行 L2 归一化，使范数为 1
+
+**注意事项**：
+- 维度必须是正整数
+- 生成的向量已归一化，可直接用于相似度计算
+
+---
 
 ### uuid
 
