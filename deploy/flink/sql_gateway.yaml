@@ -158,3 +158,18 @@ spec:
       port: 10000
       targetPort: 10000
       nodePort: ${SQL_GATEWAY_PORT}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobmanager
+spec:
+  type: NodePort
+  selector:
+    app: flink-session-cluster
+    component: jobmanager
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+      nodePort: ${FLINK_JOBMANAGER_PORT}

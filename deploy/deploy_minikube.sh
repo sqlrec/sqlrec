@@ -44,6 +44,7 @@ minikube start \
   --mount \
   --mount-string="${DATA_DIR}:${DATA_DIR}" \
   --ports="${SQL_GATEWAY_PORT}:${SQL_GATEWAY_PORT}" \
+  --ports="${FLINK_JOBMANAGER_PORT}:${FLINK_JOBMANAGER_PORT}" \
   --ports="${HMS_POSTGRESQL_PORT}:${HMS_POSTGRESQL_PORT}" \
   --ports="${HMS_PORT}:${HMS_PORT}" \
   --ports="${KYUUBI_PORT}:${KYUUBI_PORT}" \
