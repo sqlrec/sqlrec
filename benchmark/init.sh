@@ -9,6 +9,15 @@ source ${dir}/../deploy/env.sh
 bash ${dir}/../deploy/kyuubi/deploy.sh
 
 
+if ! which wrk > /dev/null 2>&1; then
+    echo "wrk not found, installing..."
+    sudo apt-get update
+    sudo apt-get install -y wrk
+else
+    echo "wrk is already installed"
+fi
+
+
 export schema='{
         "autoId": false,
         "enabledDynamicField": false,
@@ -106,10 +115,6 @@ echo "Loading features to Redis..."
 beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
 echo "Features loaded successfully"
 
-if ! which wrk > /dev/null 2>&1; then
-    echo "wrk not found, installing..."
-    sudo apt-get update
-    sudo apt-get install -y wrk
-else
-    echo "wrk is already installed"
-fi
+echo "Train model..."
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_model.sql
+echo "Model trained successfully"

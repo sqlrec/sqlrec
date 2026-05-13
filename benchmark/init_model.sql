@@ -1,4 +1,4 @@
-create model `test_model`
+create model `test_model` if not exists
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -47,7 +47,7 @@ SELECT
 
 call call_service('test_service', t1);
 
-create model `test_recall_model`
+create model `test_recall_model` if not exists
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,

@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS `user_exposure_item` (
   'connector' = 'redis',
   'data-structure' = 'list',
   'url' = 'redis://${NODE_IP}:${REDIS_PORT}/0',
-  'cache-ttl' = '0'
+  'cache-ttl' = '0',
+  'ttl' = '3600'
 );
 
 CREATE TABLE IF NOT EXISTS `itemcf_i2i` (
@@ -144,16 +145,13 @@ create or replace sql function main_rec;
 
 define input table user_info(id bigint);
 
-cache table recall_item_schema as select
- cast(0 as BIGINT) as item_id,
- cast('' as varchar) as rec_reason;
-
-cache table recall_item as call get('recall_fun')(user_info) like recall_item_schema;
+cache table recall_item as call get('recall_fun')(user_info) like function 'recall_fun';
 
 cache table rec_item as
 select item_id, genres, title, rec_reason
 from
-recall_item join item_table on movie_id = item_id;
+recall_item join item_table
+on movie_id = item_id;
 
 cache table diversify_rec_item as call window_diversify(rec_item, 'genres', '3', '1', '10');
 
@@ -172,7 +170,8 @@ rec_reason,
 request_meta.req_time as req_time,
 request_meta.req_id as req_id
 from
-request_meta join diversify_rec_item on 1=1;
+request_meta join diversify_rec_item
+on 1=1;
 
 call save_rec_item(final_rec_item) async;
 
@@ -201,12 +200,15 @@ from vector_recall;
 cache table exposured_item as
 select movie_id as item_id
 from
-user_info join user_exposure_item on user_id = user_info.id;
+user_info join user_exposure_item on user_id = user_info.id
+where bhv_time > cast(CURRENT_TIMESTAMP as BIGINT) - 3600000
+group by movie_id;
 
 cache table cur_recent_click_item as
 select movie_id as item_id
 from
 user_info join user_recent_click_item on user_id = user_info.id
+group by movie_id
 limit 10;
 
 cache table i2i_recall as
@@ -225,6 +227,7 @@ cache table cur_user_interest_genre as
 select genre
 from
 user_info join user_interest_genre on user_id = user_info.id
+group by genre
 limit 10;
 
 cache table genre_recall as
