@@ -176,6 +176,108 @@ Model service call function used to call deployed model services for inference. 
 
 ---
 
+### batch_call_service
+
+Batch model service call function used in Flink SQL to batch call deployed model services for inference. This function sends multiple rows of data in batches to a remote service and merges the returned results with the original data.
+
+::: warning Note
+This function can only be used in Flink SQL and does not support SQLRec's CACHE TABLE syntax.
+:::
+
+**Function Signature**:
+
+```java
+@FunctionHint(output = @DataTypeHint("ROW&lt;" +
+        "long_map MAP&lt;STRING, BIGINT&gt;, " +
+        "double_map MAP&lt;STRING, DOUBLE&gt;, " +
+        "string_map MAP&lt;STRING, STRING&gt;, " +
+        "long_array_map MAP&lt;STRING, ARRAY&lt;BIGINT&gt;&gt;, " +
+        "double_array_map MAP&lt;STRING, ARRAY&lt;DOUBLE&gt;&gt;, " +
+        "string_array_map MAP&lt;STRING, ARRAY&lt;STRING&gt;&gt;" +
+        "&gt;"))
+public void eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object... args)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `serviceUrl` | String | URL address of the model service |
+| `batchSize` | Integer | Batch size, number of rows sent per request |
+| `fieldName-value pairs` | Object... | Field name-value pairs specifying fields to send to the service, must appear in pairs |
+
+**Return Value**: Returns a ROW type containing the following fields:
+
+| Field Name | Type | Description |
+|------------|------|-------------|
+| `long_map` | MAP&lt;STRING, BIGINT&gt; | Map of long integer fields |
+| `double_map` | MAP&lt;STRING, DOUBLE&gt; | Map of double precision floating-point fields |
+| `string_map` | MAP&lt;STRING, STRING&gt; | Map of string fields |
+| `long_array_map` | MAP&lt;STRING, ARRAY&lt;BIGINT&gt;&gt; | Map of long integer array fields |
+| `double_array_map` | MAP&lt;STRING, ARRAY&lt;DOUBLE&gt;&gt; | Map of double precision floating-point array fields |
+| `string_array_map` | MAP&lt;STRING, ARRAY&lt;STRING&gt;&gt; | Map of string array fields |
+
+**Usage Example**:
+
+```sql
+-- Create temporary function
+CREATE TEMPORARY FUNCTION batch_call_service AS 'com.sqlrec.udf.udtf.BatchCallServiceUDTF';
+
+-- Call model service to generate item embeddings
+INSERT INTO item_embedding
+SELECT 
+    r.long_map['movie_id'] AS id,
+    r.string_map['title'] AS title,
+    r.string_array_map['genres'] AS genres,
+    r.double_array_map['item_tower_emb'] AS embedding
+FROM ml_movies, LATERAL TABLE(batch_call_service(
+    'http://test-recall-service-item.sqlrec.svc.cluster.local:80/predict', 
+    128, 
+    'movie_id', movie_id, 
+    'title', title, 
+    'genres', genres
+)) AS r
+WHERE dt = '2024-01-01';
+```
+
+**Working Principle**:
+1. Function receives multiple rows of data and caches field name-value pairs in a buffer
+2. When buffer size reaches `batchSize`, data is sent in batch to the model service
+3. Model service receives JSON array format request and returns a JSON object containing prediction results
+4. Function merges prediction results with original data, classifying them by type into different Maps
+5. Each row of data outputs a ROW, accessible via Map for original fields and prediction results
+
+**Request Format**:
+
+JSON format sent to the model service is an array of objects:
+
+```json
+[
+  {"movie_id": 1, "title": "Toy Story", "genres": ["Animation", "Comedy"]},
+  {"movie_id": 2, "title": "Jumanji", "genres": ["Adventure", "Children"]}
+]
+```
+
+**Response Format**:
+
+Model service should return a JSON object where each field's value is an array with the same length as the request data rows:
+
+```json
+{
+  "item_tower_emb": [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  "score": [0.95, 0.87]
+}
+```
+
+**Notes**:
+- This function can only be used in Flink SQL and requires the `LATERAL TABLE` syntax
+- `batchSize` should be adjusted based on model service performance and network latency, typically set to 64-256
+- Model service needs to support POST requests, receiving JSON arrays and returning JSON objects
+- Array fields in the results are automatically matched to input data by row index
+- Remaining data in the buffer is processed in the `close()` method
+
+---
+
 ### call_service_with_qv
 
 Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.

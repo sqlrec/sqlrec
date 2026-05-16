@@ -176,6 +176,108 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 ---
 
+### batch_call_service
+
+批量模型服务调用函数，用于在 Flink SQL 中批量调用已部署的模型服务进行推理。该函数将多行数据批量发送到远程服务，并将返回结果与原始数据合并输出。
+
+::: warning 注意
+此函数只能在 Flink SQL 中使用，不支持 SQLRec 的 CACHE TABLE 语法。
+:::
+
+**函数签名**：
+
+```java
+@FunctionHint(output = @DataTypeHint("ROW&lt;" +
+        "long_map MAP&lt;STRING, BIGINT&gt;, " +
+        "double_map MAP&lt;STRING, DOUBLE&gt;, " +
+        "string_map MAP&lt;STRING, STRING&gt;, " +
+        "long_array_map MAP&lt;STRING, ARRAY&lt;BIGINT&gt;&gt;, " +
+        "double_array_map MAP&lt;STRING, ARRAY&lt;DOUBLE&gt;&gt;, " +
+        "string_array_map MAP&lt;STRING, ARRAY&lt;STRING&gt;&gt;" +
+        "&gt;"))
+public void eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object... args)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `serviceUrl` | String | 模型服务的 URL 地址 |
+| `batchSize` | Integer | 批量大小，每次请求发送的行数 |
+| `fieldName-value pairs` | Object... | 字段名-值对，用于指定要发送到服务的字段，必须成对出现 |
+
+**返回值**：返回一个 ROW 类型，包含以下字段：
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| `long_map` | MAP&lt;STRING, BIGINT&gt; | 长整型字段的 Map |
+| `double_map` | MAP&lt;STRING, DOUBLE&gt; | 双精度浮点型字段的 Map |
+| `string_map` | MAP&lt;STRING, STRING&gt; | 字符串型字段的 Map |
+| `long_array_map` | MAP&lt;STRING, ARRAY&lt;BIGINT&gt;&gt; | 长整型数组字段的 Map |
+| `double_array_map` | MAP&lt;STRING, ARRAY&lt;DOUBLE&gt;&gt; | 双精度浮点型数组字段的 Map |
+| `string_array_map` | MAP&lt;STRING, ARRAY&lt;STRING&gt;&gt; | 字符串型数组字段的 Map |
+
+**使用示例**：
+
+```sql
+-- 创建临时函数
+CREATE TEMPORARY FUNCTION batch_call_service AS 'com.sqlrec.udf.udtf.BatchCallServiceUDTF';
+
+-- 调用模型服务生成物品向量
+INSERT INTO item_embedding
+SELECT 
+    r.long_map['movie_id'] AS id,
+    r.string_map['title'] AS title,
+    r.string_array_map['genres'] AS genres,
+    r.double_array_map['item_tower_emb'] AS embedding
+FROM ml_movies, LATERAL TABLE(batch_call_service(
+    'http://test-recall-service-item.sqlrec.svc.cluster.local:80/predict', 
+    128, 
+    'movie_id', movie_id, 
+    'title', title, 
+    'genres', genres
+)) AS r
+WHERE dt = '2024-01-01';
+```
+
+**工作原理**：
+1. 函数接收多行数据，将字段名-值对缓存到缓冲区
+2. 当缓冲区大小达到 `batchSize` 时，将数据批量发送到模型服务
+3. 模型服务接收 JSON 数组格式的请求，返回包含预测结果的 JSON 对象
+4. 函数将预测结果与原始数据合并，按类型分类存储到不同的 Map 中
+5. 每行数据输出一个 ROW，可通过 Map 访问原始字段和预测结果
+
+**请求格式**：
+
+发送到模型服务的 JSON 格式为对象数组：
+
+```json
+[
+  {"movie_id": 1, "title": "Toy Story", "genres": ["Animation", "Comedy"]},
+  {"movie_id": 2, "title": "Jumanji", "genres": ["Adventure", "Children"]}
+]
+```
+
+**响应格式**：
+
+模型服务应返回一个 JSON 对象，其中每个字段的值是一个数组，数组长度与请求数据行数相同：
+
+```json
+{
+  "item_tower_emb": [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  "score": [0.95, 0.87]
+}
+```
+
+**注意事项**：
+- 此函数只能在 Flink SQL 中使用，需要使用 `LATERAL TABLE` 语法
+- `batchSize` 建议根据模型服务的性能和网络延迟进行调整，通常设置为 64-256
+- 模型服务需要支持 POST 请求，接收 JSON 数组并返回 JSON 对象
+- 返回结果中的数组字段会自动按行索引与输入数据对应
+- 在 `close()` 方法中会处理缓冲区中剩余的数据
+
+---
+
 ### call_service_with_qv
 
 带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。
