@@ -209,6 +209,7 @@ select movie_id as item_id
 from
 user_info join user_recent_click_item on user_id = user_info.id
 group by movie_id
+order by MAX(bhv_time) desc
 limit 10;
 
 cache table i2i_recall as
@@ -228,6 +229,7 @@ select genre
 from
 user_info join user_interest_genre on user_id = user_info.id
 group by genre
+order by MAX(score) desc
 limit 10;
 
 cache table genre_recall as

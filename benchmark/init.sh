@@ -111,10 +111,10 @@ echo "Computing features from MovieLens data..."
 beeline -u "jdbc:hive2://${NODE_IP}:${KYUUBI_PORT}/default" -f ${dir}/compute_features.sql
 echo "Feature computation completed"
 
-echo "Loading features to Redis..."
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
-echo "Features loaded successfully"
-
 echo "Train model..."
 beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_model.sql
 echo "Model trained successfully"
+
+echo "Loading features to Redis..."
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
+echo "Features loaded successfully"

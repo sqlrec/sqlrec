@@ -1,4 +1,4 @@
-create model `test_model` if not exists
+create model if not exists `test_model`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -16,6 +16,7 @@ with (
 train model test_model checkpoint='test' on ml_sample
 with (
 'NAMESPACE'='sqlrec',
+'pod_memory'='8Gi',
 'batch_size'='1024'
 );
 
@@ -27,7 +28,8 @@ with (
 
 export model test_model checkpoint='test' on ml_sample
 with (
-'NAMESPACE'='sqlrec'
+'NAMESPACE'='sqlrec',
+'pod_memory'='8Gi'
 );
 
 create service test_service on model test_model checkpoint='test_export'
@@ -47,7 +49,7 @@ SELECT
 
 call call_service('test_service', t1);
 
-create model `test_recall_model` if not exists
+create model if not exists `test_recall_model`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -66,12 +68,14 @@ with (
 train model test_recall_model checkpoint='test' on ml_recall_sample
 with (
 'NAMESPACE'='sqlrec',
+'pod_memory'='8Gi',
 'batch_size'='1024'
 );
 
 export model test_recall_model checkpoint='test' on ml_recall_sample
 with (
-'NAMESPACE'='sqlrec'
+'NAMESPACE'='sqlrec',
+'pod_memory'='8Gi'
 );
 
 create service test_recall_service_user on model test_recall_model checkpoint='test_export/user'
