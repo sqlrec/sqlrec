@@ -129,6 +129,25 @@ public class TestJavaFunction {
                         )
                 ),
 
+                new SqlTestCase("call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{1, "1", "new_col_value_test"}
+                        )
+                ),
+                new SqlTestCase("call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col' async"),
+                new SqlTestCase(
+                        "cache table t7 as call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t7", 1L}
+                        )
+                ),
+                new SqlTestCase(
+                        "cache table t8 as call get_or_default('non_existing_func', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t8", 1L}
+                        )
+                ),
+
                 new SqlTestCase("call empty_fun()"),
                 new SqlTestCase("call string_arg_fun('test_arg')"),
                 new SqlTestCase("call string_arg_fun(get('col_name'))"),
@@ -302,6 +321,31 @@ public class TestJavaFunction {
                 ),
 
                 new SqlTestCase(
+                        "cache table r17 as call overload_fun(get_or_default('var1', 'default_val'))",
+                        Arrays.<Object[]>asList(new Object[]{"r17", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r17",
+                        Collections.singletonList(new Object[]{"one_arg: value1"})
+                ),
+                new SqlTestCase(
+                        "cache table r18 as call overload_fun(get_or_default('non_existing_var', 'fallback_value'))",
+                        Arrays.<Object[]>asList(new Object[]{"r18", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r18",
+                        Collections.singletonList(new Object[]{"one_arg: fallback_value"})
+                ),
+                new SqlTestCase(
+                        "cache table r19 as call varargs_fun(get_or_default('var1', 'default1'), get_or_default('unknown_var', 'default2'))",
+                        Arrays.<Object[]>asList(new Object[]{"r19", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r19",
+                        Collections.singletonList(new Object[]{"varargs: [value1, default2]"})
+                ),
+
+                new SqlTestCase(
                         "cache table tmp1 as select 1 as id, 'a' as name",
                         Arrays.<Object[]>asList(new Object[]{"tmp1", 1L})
                 ),
@@ -315,60 +359,60 @@ public class TestJavaFunction {
                 ),
 
                 new SqlTestCase(
-                        "cache table r17 as call varargs_table_fun(t1)",
-                        Arrays.<Object[]>asList(new Object[]{"r17", 1L})
-                ),
-                new SqlTestCase(
-                        "select * from r17",
-                        Collections.singletonList(new Object[]{"tables: 1"})
-                ),
-                new SqlTestCase(
-                        "cache table r18 as call varargs_table_fun(t1, tmp1)",
-                        Arrays.<Object[]>asList(new Object[]{"r18", 1L})
-                ),
-                new SqlTestCase(
-                        "select * from r18",
-                        Collections.singletonList(new Object[]{"tables: 2"})
-                ),
-                new SqlTestCase(
-                        "cache table r19 as call varargs_table_fun(t1, tmp1, tmp2)",
-                        Arrays.<Object[]>asList(new Object[]{"r19", 1L})
-                ),
-                new SqlTestCase(
-                        "select * from r19",
-                        Collections.singletonList(new Object[]{"tables: 3"})
-                ),
-                new SqlTestCase(
-                        "cache table r20 as call varargs_table_fun(t1, tmp1, tmp2, tmp3)",
+                        "cache table r20 as call varargs_table_fun(t1)",
                         Arrays.<Object[]>asList(new Object[]{"r20", 1L})
                 ),
                 new SqlTestCase(
                         "select * from r20",
-                        Collections.singletonList(new Object[]{"tables: 4"})
+                        Collections.singletonList(new Object[]{"tables: 1"})
                 ),
-
                 new SqlTestCase(
-                        "cache table r21 as call string_then_tables_fun('prefix_a', t1)",
+                        "cache table r21 as call varargs_table_fun(t1, tmp1)",
                         Arrays.<Object[]>asList(new Object[]{"r21", 1L})
                 ),
                 new SqlTestCase(
                         "select * from r21",
-                        Collections.singletonList(new Object[]{"prefix_a: 1 tables"})
+                        Collections.singletonList(new Object[]{"tables: 2"})
                 ),
                 new SqlTestCase(
-                        "cache table r22 as call string_then_tables_fun('prefix_b', t1, tmp1)",
+                        "cache table r22 as call varargs_table_fun(t1, tmp1, tmp2)",
                         Arrays.<Object[]>asList(new Object[]{"r22", 1L})
                 ),
                 new SqlTestCase(
                         "select * from r22",
-                        Collections.singletonList(new Object[]{"prefix_b: 2 tables"})
+                        Collections.singletonList(new Object[]{"tables: 3"})
                 ),
                 new SqlTestCase(
-                        "cache table r23 as call string_then_tables_fun('prefix_c', t1, tmp1, tmp2)",
+                        "cache table r23 as call varargs_table_fun(t1, tmp1, tmp2, tmp3)",
                         Arrays.<Object[]>asList(new Object[]{"r23", 1L})
                 ),
                 new SqlTestCase(
                         "select * from r23",
+                        Collections.singletonList(new Object[]{"tables: 4"})
+                ),
+
+                new SqlTestCase(
+                        "cache table r24 as call string_then_tables_fun('prefix_a', t1)",
+                        Arrays.<Object[]>asList(new Object[]{"r24", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r24",
+                        Collections.singletonList(new Object[]{"prefix_a: 1 tables"})
+                ),
+                new SqlTestCase(
+                        "cache table r25 as call string_then_tables_fun('prefix_b', t1, tmp1)",
+                        Arrays.<Object[]>asList(new Object[]{"r25", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r25",
+                        Collections.singletonList(new Object[]{"prefix_b: 2 tables"})
+                ),
+                new SqlTestCase(
+                        "cache table r26 as call string_then_tables_fun('prefix_c', t1, tmp1, tmp2)",
+                        Arrays.<Object[]>asList(new Object[]{"r26", 1L})
+                ),
+                new SqlTestCase(
+                        "select * from r26",
                         Collections.singletonList(new Object[]{"prefix_c: 3 tables"})
                 ),
 

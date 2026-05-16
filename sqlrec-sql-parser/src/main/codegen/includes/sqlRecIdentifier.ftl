@@ -88,15 +88,28 @@ void AddCallSqlFunction(List<SqlNode> list) :
 SqlGetVariable SqlGetVariable() :
 {
     SqlNode variableName = null;
+    SqlNode defaultValue = null;
 }
 {
-    <GET>
-    <LPAREN>
-    variableName = StringLiteral()
-    <RPAREN>
-    {
-        return new SqlGetVariable(getPos(), variableName);
-    }
+    (
+        <GET>
+        <LPAREN>
+        variableName = StringLiteral()
+        <RPAREN>
+        {
+            return new SqlGetVariable(getPos(), variableName);
+        }
+    |
+        <GET_OR_DEFAULT>
+        <LPAREN>
+        variableName = StringLiteral()
+        <COMMA>
+        defaultValue = StringLiteral()
+        <RPAREN>
+        {
+            return new SqlGetVariable(getPos(), variableName, defaultValue);
+        }
+    )
 }
 
 SqlDefineInputTable SqlDefineInputTable():

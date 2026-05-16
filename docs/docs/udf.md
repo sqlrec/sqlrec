@@ -761,6 +761,53 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 - 动态配置传递
 - 跨语句共享变量
 
+---
+
+### get_or_default
+
+变量获取函数（带默认值），从执行上下文中获取变量的值，如果变量不存在则返回指定的默认值。
+
+**函数签名**：
+
+```java
+public static String evaluate(DataContext context, String key, String defaultValue)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `key` | String | 变量名 |
+| `defaultValue` | String | 默认值，当变量不存在时返回 |
+
+**返回值**：返回变量的值（`String`），如果变量不存在则返回 `defaultValue`。
+
+**使用示例**：
+
+```sql
+-- 设置变量
+SET 'func_name' = 'add_col';
+
+-- 获取变量值，如果不存在则使用默认值
+SELECT `get_or_default`('user_id', 'default_user') AS user_id;
+
+-- 动态调用函数：变量存在时使用变量值
+CALL `get_or_default`('func_name', 'shuffle')(my_table);
+
+-- 动态调用函数：变量不存在时使用默认值
+CALL `get_or_default`('unknown_func', 'shuffle')(my_table);
+```
+
+**工作原理**：
+1. 函数接收变量名和默认值两个参数
+2. 从执行上下文（`ExecuteContext`）中查找对应的变量值
+3. 如果变量存在，返回变量值；如果变量不存在，返回默认值
+
+**典型应用场景**：
+- 动态函数调用，提供兜底函数
+- 配置项获取，提供默认配置
+- 参数化 SQL，提供默认参数
+
 ## 自定义 UDF
 
 可以参考 [编程模型](program_model.md#udf) 文档了解如何开发自定义 UDF。

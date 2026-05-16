@@ -133,8 +133,13 @@ public class JavaFunctionBindable extends BindableInterface {
         if (input instanceof SqlCharStringLiteral) {
             return SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) input);
         } else if (input instanceof SqlGetVariable) {
-            String variableName = SchemaUtils.getValueOfStringLiteral(((SqlGetVariable) input).getVariableName());
-            return context.getVariable(variableName);
+            SqlGetVariable getVariable = (SqlGetVariable) input;
+            String variableName = SchemaUtils.getValueOfStringLiteral(getVariable.getVariableName());
+            String value = context.getVariable(variableName);
+            if (value == null && getVariable.hasDefaultValue()) {
+                return SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) getVariable.getDefaultValue());
+            }
+            return value;
         } else {
             throw new RuntimeException("input " + inputIndex + " must be char string literal or variable");
         }

@@ -10,6 +10,7 @@ import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
@@ -114,7 +115,11 @@ public class FunctionProxyBindable extends BindableInterface {
         String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
         String functionName = context.getVariable(variableName);
         if (StringUtils.isEmpty(functionName)) {
-            throw new RuntimeException("cant get function name from variable: " + variableName);
+            if (funcNameVariable.hasDefaultValue()) {
+                functionName = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
+            } else {
+                throw new RuntimeException("cant get function name from variable: " + variableName);
+            }
         }
         BindableInterface bindableInterface = null;
         try {
@@ -143,9 +148,12 @@ public class FunctionProxyBindable extends BindableInterface {
             String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
             String functionName = context.getVariable(variableName);
             if (StringUtils.isEmpty(functionName)) {
-                return false;
+                if (funcNameVariable.hasDefaultValue()) {
+                    functionName = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
+                } else {
+                    return false;
+                }
             }
-            // java function is timeout able
             Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
             return javaFunctionObj != null;
         } catch (Exception e) {

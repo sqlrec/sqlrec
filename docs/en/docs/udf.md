@@ -761,6 +761,53 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 - Dynamic configuration passing
 - Cross-statement variable sharing
 
+---
+
+### get_or_default
+
+Variable retrieval function with default value that gets the value of a variable from the execution context, returning the specified default value if the variable doesn't exist.
+
+**Function Signature**:
+
+```java
+public static String evaluate(DataContext context, String key, String defaultValue)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | String | Variable name |
+| `defaultValue` | String | Default value to return when variable doesn't exist |
+
+**Return Value**: Returns the variable value (`String`), or `defaultValue` if the variable doesn't exist.
+
+**Usage Example**:
+
+```sql
+-- Set variable
+SET 'func_name' = 'add_col';
+
+-- Get variable value, use default if not exists
+SELECT `get_or_default`('user_id', 'default_user') AS user_id;
+
+-- Dynamic function call: use variable value when exists
+CALL `get_or_default`('func_name', 'shuffle')(my_table);
+
+-- Dynamic function call: use default value when variable doesn't exist
+CALL `get_or_default`('unknown_func', 'shuffle')(my_table);
+```
+
+**Working Principle**:
+1. Function receives variable name and default value as parameters
+2. Looks up the corresponding variable value from the execution context (`ExecuteContext`)
+3. Returns the variable value if it exists, otherwise returns the default value
+
+**Typical Use Cases**:
+- Dynamic function calls with fallback functions
+- Configuration retrieval with default settings
+- Parameterized SQL with default parameters
+
 ## Custom UDF
 
 Refer to [Programming Model](program_model.md#udf) documentation for how to develop custom UDFs.
