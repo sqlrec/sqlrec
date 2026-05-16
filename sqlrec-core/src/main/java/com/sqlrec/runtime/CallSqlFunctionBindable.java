@@ -86,6 +86,9 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
+        if (isAsync) {
+            return true;
+        }
         return sqlFunctionBindable.isParallelizable();
     }
 

@@ -232,6 +232,9 @@ public class JavaFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
+        if (isAsync) {
+            return true;
+        }
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         for (Class<?> paramType : paramTypes) {
             if (paramType.equals(ExecuteContext.class)) {
