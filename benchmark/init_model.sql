@@ -1,4 +1,4 @@
-create model if not exists `test_model`
+create model if not exists `rank_model`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -13,26 +13,26 @@ with (
 'label_columns'='rating'
 );
 
-train model test_model checkpoint='test' on ml_sample
+train model rank_model checkpoint='v1' on ml_sample
 with (
 'NAMESPACE'='sqlrec',
 'pod_memory'='8Gi',
 'batch_size'='1024'
 );
 
--- train model test_model checkpoint='test2' on ml_sample from 'test'
+-- train model rank_model checkpoint='v2' on ml_sample from 'v1'
 -- with (
 -- 'NAMESPACE'='sqlrec',
 -- 'batch_size'='1024'
 -- );
 
-export model test_model checkpoint='test' on ml_sample
+export model rank_model checkpoint='v1' on ml_sample
 with (
 'NAMESPACE'='sqlrec',
 'pod_memory'='8Gi'
 );
 
-create service test_service on model test_model checkpoint='test_export'
+create service rank_service on model rank_model checkpoint='v1_export'
 with (
 'NAMESPACE'='sqlrec'
 );
@@ -47,9 +47,9 @@ SELECT
     10 AS occupation,
     '10001' AS zip_code;
 
-call call_service('test_service', t1);
+call call_service('rank_service', t1);
 
-create model if not exists `test_recall_model`
+create model if not exists `recall_model`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -65,25 +65,25 @@ with (
 'item_features'='movie_id,genres'
 );
 
-train model test_recall_model checkpoint='test' on ml_recall_sample
+train model recall_model checkpoint='v1' on ml_recall_sample
 with (
 'NAMESPACE'='sqlrec',
 'pod_memory'='8Gi',
 'batch_size'='1024'
 );
 
-export model test_recall_model checkpoint='test' on ml_recall_sample
+export model recall_model checkpoint='v1' on ml_recall_sample
 with (
 'NAMESPACE'='sqlrec',
 'pod_memory'='8Gi'
 );
 
-create service test_recall_service_user on model test_recall_model checkpoint='test_export/user'
+create service recall_service_user on model recall_model checkpoint='v1_export/user'
 with (
 'NAMESPACE'='sqlrec'
 );
 
-create service test_recall_service_item on model test_recall_model checkpoint='test_export/item'
+create service recall_service_item on model recall_model checkpoint='v1_export/item'
 with (
 'NAMESPACE'='sqlrec'
 );
@@ -96,11 +96,11 @@ SELECT
     10 AS occupation,
     '10001' AS zip_code;
 
-call call_service('test_recall_service_user', tmp_user);
+call call_service('recall_service_user', tmp_user);
 
 CACHE TABLE tmp_item AS
 SELECT
     100 AS movie_id,
     ARRAY['Action', 'Adventure', 'Sci-Fi'] AS genres;
 
-call call_service('test_recall_service_item', tmp_item);
+call call_service('recall_service_item', tmp_item);
