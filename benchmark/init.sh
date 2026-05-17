@@ -78,8 +78,9 @@ curl --request POST \
 }"
 
 
-envsubst < ${dir}/init.sql > ${dir}/init.sql.tmp
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init.sql.tmp
+envsubst < ${dir}/init_flink_table.sql > ${dir}/init_flink_table.sql.tmp
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_flink_table.sql.tmp
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_sqlrec_sql.sql
 
 python3 -m venv ${dir}/.venv
 source ${dir}/.venv/bin/activate
@@ -105,7 +106,7 @@ hdfs dfs -mkdir -p ${HDFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}
 hdfs dfs -put -f ${RATINGS_PARQUET} ${HDFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}/
 echo "Ratings parquet file uploaded successfully"
 
-hive -f ${dir}/init_hive.sql
+hive -f ${dir}/init_hive_table.sql
 
 echo "Computing features from MovieLens data..."
 beeline -u "jdbc:hive2://${NODE_IP}:${KYUUBI_PORT}/default" -f ${dir}/compute_features.sql
@@ -118,3 +119,9 @@ echo "Model trained successfully"
 echo "Loading features to Redis..."
 beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
 echo "Features loaded successfully"
+
+echo "Test rec..."
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -e "
+cache table t1 as select cast(1 as bigint) as user_id;
+call main_rec(t1);
+"
