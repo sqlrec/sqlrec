@@ -86,7 +86,7 @@ public class RedisHandler {
                 return result;
             }
             list.forEach(keyValue -> {
-                if (keyValue.getValue() == null) {
+                if (keyValue == null || !keyValue.hasValue()) {
                     return;
                 }
                 String originKey = getOriginKey(keyValue.getKey());
