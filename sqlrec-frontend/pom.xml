@@ -39,6 +39,11 @@
         </dependency>
         <dependency>
             <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-ui</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
             <artifactId>sqlrec-connector-redis</artifactId>
             <version>${sqlrec.version}</version>
         </dependency>

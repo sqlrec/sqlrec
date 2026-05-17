@@ -16,6 +16,7 @@
         <module>sqlrec-common</module>
         <module>sqlrec-udf</module>
         <module>sqlrec-model</module>
+        <module>sqlrec-ui</module>
     </modules>
     
     <properties>

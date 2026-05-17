@@ -24,6 +24,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
     private static final String SQL_V1_PATH = "/sql/v1";
     private static final String API_V1_PREFIX = "/api/v1/";
     private static final String METRICS_PATH = "/metrics";
+    private static final String UI_STATIC_PREFIX = "/ui/static/";
+    private static final String UI_API_PREFIX = "/ui/api/";
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest fullHttpRequest) throws Exception {
@@ -62,6 +64,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                     responseContent = PrometheusMetricsUtils.getPrometheusRegistry().scrape();
                     status = HttpResponseStatus.OK;
                     contentType = "text/plain";
+                } else if (uri.startsWith(UI_STATIC_PREFIX) || uri.startsWith(UI_API_PREFIX)) {
+                    FullHttpResponse uiResponse = UiHandler.handleRequest(uri, method, postData);
+                    channelHandlerContext.writeAndFlush(uiResponse).addListener(ChannelFutureListener.CLOSE);
+                    return;
                 } else {
                     status = HttpResponseStatus.NOT_FOUND;
                     responseContent = "{\"msg\":\"uri not found\"}";
@@ -112,6 +118,15 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                 apiName = apiName.substring(0, queryIndex);
             }
             return API_V1_PREFIX + apiName;
+        } else if (uri.startsWith(UI_STATIC_PREFIX)) {
+            return "/ui/static";
+        } else if (uri.startsWith(UI_API_PREFIX)) {
+            String apiPath = uri.substring(UI_API_PREFIX.length());
+            int queryIndex = apiPath.indexOf('?');
+            if (queryIndex > 0) {
+                apiPath = apiPath.substring(0, queryIndex);
+            }
+            return "/ui/api/" + apiPath;
         } else if (uri.equals(METRICS_PATH)) {
             return METRICS_PATH;
         } else {
