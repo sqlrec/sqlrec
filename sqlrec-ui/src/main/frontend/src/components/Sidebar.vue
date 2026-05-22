@@ -6,10 +6,10 @@
           v-for="item in items" 
           :key="item.id"
           class="item"
-          :class="{ active: selectedItem?.id === item.id }"
+          :class="{ active: selectedId ? item.id === selectedId : selectedItem?.id === item.id }"
           @click="selectItem(item)"
         >
-          <div class="item-name">{{ item.name }}</div>
+          <div class="item-name">{{ item.displayName || item.name }}</div>
         </li>
       </ul>
     </div>
@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   title: {
@@ -27,12 +27,25 @@ const props = defineProps({
   items: {
     type: Array,
     required: true
+  },
+  selectedId: {
+    type: String,
+    default: null
   }
 })
 
 const emit = defineEmits(['select'])
 
 const selectedItem = ref(null)
+
+watch(() => props.selectedId, (newId) => {
+  if (newId) {
+    const item = props.items.find(i => i.id === newId)
+    if (item) {
+      selectedItem.value = item
+    }
+  }
+}, { immediate: true })
 
 const selectItem = (item) => {
   selectedItem.value = item

@@ -110,7 +110,7 @@ public class SqlProcessor {
         }
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
-            BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema);
+            BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema, sql);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
             // set statement should also execute on sql gateway
             if (sqlNode instanceof SqlSet) {

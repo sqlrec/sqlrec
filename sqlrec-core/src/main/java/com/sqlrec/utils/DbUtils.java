@@ -140,6 +140,15 @@ public class DbUtils {
         return execute(dbMapper -> dbMapper.getCheckpointListByModelName(modelName));
     }
 
+    public static int getCheckpointCountByModelName(String modelName) {
+        return execute(dbMapper -> dbMapper.getCheckpointCountByModelName(modelName));
+    }
+
+    public static List<Checkpoint> getCheckpointListByModelNamePaged(String modelName, int page, int pageSize) {
+        int offset = (page - 1) * pageSize;
+        return execute(dbMapper -> dbMapper.getCheckpointListByModelNamePaged(modelName, pageSize, offset));
+    }
+
     public static Checkpoint getCheckpoint(String modelName, String checkpointName) {
         return execute(dbMapper -> dbMapper.getCheckpoint(modelName, checkpointName));
     }

@@ -93,7 +93,7 @@ public class TestSqlFunctionCompile {
         executeContext.setVariable("func_name", "fun1");
         SqlNode flinkSqlNode = CompileManager.parseFlinkSql("call fun1()");
         BindableInterface bindable = new CompileManager().compileSql(
-                flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME
+                flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, "call fun1()"
         );
 
         Exception e = null;

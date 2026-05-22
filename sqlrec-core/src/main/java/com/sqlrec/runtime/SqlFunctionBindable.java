@@ -166,6 +166,10 @@ public class SqlFunctionBindable extends BindableInterface {
         return bindableList;
     }
 
+    public Map<Integer, Set<Integer>> getBindableDependency() {
+        return bindableDependency;
+    }
+
     public void setBindableList(List<BindableInterface> bindableList) {
         this.bindableList = bindableList;
     }

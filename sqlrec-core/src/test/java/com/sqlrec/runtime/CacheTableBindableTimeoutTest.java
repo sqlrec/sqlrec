@@ -31,7 +31,7 @@ public class CacheTableBindableTimeoutTest {
 
         BindableInterface testBindable = createTestBindable(testData, true);
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", testBindable, "SELECT * FROM test"
+                "test_table", testBindable
         );
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -56,7 +56,7 @@ public class CacheTableBindableTimeoutTest {
 
         BindableInterface testBindable = createTestBindable(testData, true);
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", testBindable, "SELECT * FROM test"
+                "test_table", testBindable
         );
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -118,7 +118,7 @@ public class CacheTableBindableTimeoutTest {
         };
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", slowBindable, "SELECT * FROM test"
+                "test_table", slowBindable
         );
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -183,7 +183,7 @@ public class CacheTableBindableTimeoutTest {
         };
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", notTimeoutAbleBindable, "SELECT * FROM test"
+                "test_table", notTimeoutAbleBindable
         );
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -241,7 +241,7 @@ public class CacheTableBindableTimeoutTest {
         };
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", timeoutBindable, "SELECT * FROM test"
+                "test_table", timeoutBindable
         );
         cacheTableBindable.setIgnoreException(true);
 
@@ -292,7 +292,7 @@ public class CacheTableBindableTimeoutTest {
         };
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                "test_table", exceptionBindable, "SELECT * FROM test"
+                "test_table", exceptionBindable
         );
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -350,7 +350,7 @@ public class CacheTableBindableTimeoutTest {
 
         for (int i = 0; i < 3; i++) {
             CacheTableBindable cacheTableBindable = new CacheTableBindable(
-                    "test_table_" + i, quickBindable, "SELECT * FROM test"
+                    "test_table_" + i, quickBindable
             );
 
             CalciteSchema schema = CalciteSchema.createRootSchema(false);

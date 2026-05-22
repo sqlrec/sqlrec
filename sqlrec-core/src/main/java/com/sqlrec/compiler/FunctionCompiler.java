@@ -99,10 +99,10 @@ public class FunctionCompiler {
                 compileFunctionDefinition(flinkSqlNode);
                 break;
             case FUNCTION_PARAM:
-                compileFunctionParam(flinkSqlNode);
+                compileFunctionParam(flinkSqlNode, sql);
                 break;
             case FUNCTION_BODY:
-                compileFunctionBody(flinkSqlNode);
+                compileFunctionBody(flinkSqlNode, sql);
                 break;
             case FUNCTION_RETURN:
                 throw new Exception("sql after return is invalid");
@@ -123,7 +123,7 @@ public class FunctionCompiler {
         }
     }
 
-    private void compileFunctionParam(SqlNode flinkSqlNode) throws Exception {
+    private void compileFunctionParam(SqlNode flinkSqlNode, String sql) throws Exception {
         if (flinkSqlNode instanceof SqlDefineInputTable) {
             SqlDefineInputTable sqlDefineInputTable = (SqlDefineInputTable) flinkSqlNode;
             List<RelDataTypeField> relDataTypeFields;
@@ -150,11 +150,11 @@ public class FunctionCompiler {
             schema.add(sqlDefineInputTable.getTableName().getSimple(), tmpTable);
         } else {
             stage = FunctionCompileStage.FUNCTION_BODY;
-            compileFunctionBody(flinkSqlNode);
+            compileFunctionBody(flinkSqlNode, sql);
         }
     }
 
-    private void compileFunctionBody(SqlNode flinkSqlNode) throws Exception {
+    private void compileFunctionBody(SqlNode flinkSqlNode, String sql) throws Exception {
         if (flinkSqlNode instanceof SqlReturn) {
             SqlReturn sqlReturn = (SqlReturn) flinkSqlNode;
             if (sqlReturn.getTableName() != null) {
@@ -178,7 +178,7 @@ public class FunctionCompiler {
             sqlFunctionBindable.init();
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
-            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
             BindableInterface proxyBindable = new ProxyAllBindable(bindable);
             sqlFunctionBindable.getBindableList().add(proxyBindable);
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
@@ -196,7 +196,7 @@ public class FunctionCompiler {
                             ":" + bindable.getCacheTableName() + ":" + sqlFunctionBindable.getBindableList().size());
                 }
             } else {
-                proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + sqlFunctionBindable.getBindableList().size());
+                proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + SchemaUtils.getSqlFirstWord(sql) + ":" + sqlFunctionBindable.getBindableList().size());
             }
         }
     }

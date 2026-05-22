@@ -7,5 +7,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets'
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/ui/api': {
+        target: 'http://127.0.0.1:30301',
+        changeOrigin: true
+      }
+    }
   }
 })

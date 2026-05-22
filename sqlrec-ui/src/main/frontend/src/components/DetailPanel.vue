@@ -5,7 +5,16 @@
         <tbody>
           <tr v-for="(row, index) in tableData" :key="index" :class="getRowClass(row)">
             <td class="col-name">{{ row.col_name }}</td>
-            <td class="data-type">{{ row.data_type }}</td>
+            <td class="data-type">
+              <template v-if="isLinkRow(row)">
+                <router-link :to="getLinkPath(row)" class="detail-link">
+                  {{ row.data_type }}
+                </router-link>
+              </template>
+              <template v-else>
+                {{ row.data_type }}
+              </template>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -42,13 +51,25 @@ const getRowClass = (row) => {
   }
   return ''
 }
+
+const isLinkRow = (row) => {
+  return row.col_name === 'Function Name:' || row.col_name === 'Model Name:'
+}
+
+const getLinkPath = (row) => {
+  if (row.col_name === 'Function Name:') {
+    return { name: 'FunctionDetail', params: { id: row.data_type } }
+  }
+  if (row.col_name === 'Model Name:') {
+    return { name: 'ModelDetail', params: { id: row.data_type } }
+  }
+  return '#'
+}
 </script>
 
 <style scoped>
 .detail-panel {
-  flex: 1;
   background: #fafafa;
-  overflow-y: auto;
 }
 
 .detail-content {
@@ -99,5 +120,15 @@ const getRowClass = (row) => {
 
 .separator td {
   padding: 8px 16px;
+}
+
+.detail-link {
+  color: #1890ff;
+  text-decoration: none;
+}
+
+.detail-link:hover {
+  color: #40a9ff;
+  text-decoration: underline;
 }
 </style>

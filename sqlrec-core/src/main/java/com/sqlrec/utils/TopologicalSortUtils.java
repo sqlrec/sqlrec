@@ -8,9 +8,78 @@ import java.util.*;
 public class TopologicalSortUtils {
     public static Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> topologicalSort(List<BindableInterface> bindableList) {
         Map<Integer, Set<Integer>> bindableDependency = buildBindableDependency(bindableList);
+        bindableDependency = optimizeDependency(bindableDependency);
         List<Integer> sortedBindableList = topologicalSort(bindableDependency);
 
         return Map.entry(sortedBindableList, bindableDependency);
+    }
+
+    public static Map<Integer, Set<Integer>> optimizeDependency(Map<Integer, Set<Integer>> bindableDependency) {
+        if (bindableDependency == null || bindableDependency.isEmpty()) {
+            return bindableDependency;
+        }
+
+        Map<Integer, Set<Integer>> optimized = new HashMap<>();
+        for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
+            optimized.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        for (Map.Entry<Integer, Set<Integer>> entry : optimized.entrySet()) {
+            Integer node = entry.getKey();
+            Set<Integer> directDeps = entry.getValue();
+            Set<Integer> toRemove = new HashSet<>();
+
+            for (Integer dep : directDeps) {
+                if (hasIndirectPath(optimized, node, dep, directDeps)) {
+                    toRemove.add(dep);
+                }
+            }
+
+            directDeps.removeAll(toRemove);
+        }
+
+        return optimized;
+    }
+
+    private static boolean hasIndirectPath(
+            Map<Integer, Set<Integer>> dependency,
+            Integer start,
+            Integer target,
+            Set<Integer> excludeDirectDeps
+    ) {
+        Set<Integer> visited = new HashSet<>();
+        Queue<Integer> queue = new LinkedList<>();
+
+        Set<Integer> intermediateNodes = new HashSet<>(dependency.getOrDefault(start, Collections.emptySet()));
+        intermediateNodes.remove(target);
+
+        for (Integer intermediate : intermediateNodes) {
+            if (!intermediate.equals(target)) {
+                queue.offer(intermediate);
+                visited.add(intermediate);
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Integer current = queue.poll();
+
+            if (current.equals(target)) {
+                return true;
+            }
+
+            Set<Integer> nextDeps = dependency.getOrDefault(current, Collections.emptySet());
+            for (Integer next : nextDeps) {
+                if (!visited.contains(next) && !next.equals(start)) {
+                    if (next.equals(target)) {
+                        return true;
+                    }
+                    visited.add(next);
+                    queue.offer(next);
+                }
+            }
+        }
+
+        return false;
     }
 
     public static List<Integer> topologicalSort(Map<Integer, Set<Integer>> bindableDependency) {

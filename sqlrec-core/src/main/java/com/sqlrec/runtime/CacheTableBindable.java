@@ -26,12 +26,10 @@ public class CacheTableBindable extends BindableInterface {
 
     private String tableName;
     private BindableInterface bindable;
-    private String createSql;
 
-    public CacheTableBindable(String tableName, BindableInterface bindable, String createSql) {
+    public CacheTableBindable(String tableName, BindableInterface bindable) {
         this.tableName = tableName;
         this.bindable = bindable;
-        this.createSql = createSql;
 
         List<RelDataTypeField> bindableFields = bindable.getReturnDataFields();
         if (bindableFields == null || bindableFields.isEmpty()) {
@@ -67,7 +65,7 @@ public class CacheTableBindable extends BindableInterface {
         }
 
         CacheTable cacheTable = new CacheTable(tableName, enumerable, bindable.getReturnDataFields());
-        cacheTable.setCreateSql(createSql);
+        cacheTable.setCreateSql(getSql());
         schema.add(tableName, cacheTable);
 
         // return cache table counts
@@ -142,5 +140,20 @@ public class CacheTableBindable extends BindableInterface {
 
     public List<RelDataTypeField> getCacheTableDataFields() {
         return bindable.getReturnDataFields();
+    }
+
+    @Override
+    public String getLogicalPlan() {
+        return bindable.getLogicalPlan();
+    }
+
+    @Override
+    public String getPhysicalPlan() {
+        return bindable.getPhysicalPlan();
+    }
+
+    @Override
+    public String getJavaExpression() {
+        return bindable.getJavaExpression();
     }
 }

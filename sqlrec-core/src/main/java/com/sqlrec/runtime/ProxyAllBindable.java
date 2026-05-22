@@ -150,4 +150,29 @@ public class ProxyAllBindable extends BindableInterface {
     public void setName(String name) {
         delegate.setName(name);
     }
+
+    @Override
+    public String getSql() {
+        return delegate.getSql();
+    }
+
+    @Override
+    public void setSql(String sql) {
+        delegate.setSql(sql);
+    }
+
+    @Override
+    public String getLogicalPlan() {
+        return delegate.getLogicalPlan();
+    }
+
+    @Override
+    public String getPhysicalPlan() {
+        return delegate.getPhysicalPlan();
+    }
+
+    @Override
+    public String getJavaExpression() {
+        return delegate.getJavaExpression();
+    }
 }

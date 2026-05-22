@@ -10,6 +10,7 @@ import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.slf4j.Logger;
@@ -173,5 +174,17 @@ public class SchemaUtils {
             }
             return table;
         }
+    }
+
+    public static String getSqlFirstWord(String sql) {
+        if (StringUtils.isEmpty(sql)) {
+            return "";
+        }
+        String[] parts = sql.trim().split("\\s+");
+        if (parts.length == 0) {
+            return "";
+        }
+        String firstWord = parts[0].replaceAll("[^a-zA-Z0-9_]", "");
+        return firstWord.toLowerCase();
     }
 }

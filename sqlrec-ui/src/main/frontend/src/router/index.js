@@ -48,6 +48,10 @@ const routes = [
     path: '/service/:id',
     name: 'ServiceDetail',
     component: ServiceView
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/function'
   }
 ]
 

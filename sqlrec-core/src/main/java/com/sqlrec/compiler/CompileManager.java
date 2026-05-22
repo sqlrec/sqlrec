@@ -56,25 +56,31 @@ public class CompileManager {
         return parser.parseQuery();
     }
 
-    public BindableInterface compileSql(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) throws Exception {
+    public BindableInterface compileSql(
+            SqlNode flinkSqlNode,
+            CalciteSchema schema,
+            String defaultSchema,
+            String originSql
+    ) throws Exception {
         if (!SqlTypeChecker.isFlinkSqlCompilable(flinkSqlNode, schema, defaultSchema)) {
             throw new Exception("sql is not compilable");
         }
 
+        BindableInterface bindable;
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            return getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
-        }
-        if (flinkSqlNode instanceof SqlIfCache) {
-            return getIfCacheBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
-        }
-        if (flinkSqlNode instanceof SqlCache) {
-            return getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
-        }
-        if (flinkSqlNode instanceof SqlSet) {
-            return getSetBindable((SqlSet) flinkSqlNode);
+            bindable = getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
+        } else if (flinkSqlNode instanceof SqlIfCache) {
+            bindable = getIfCacheBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlCache) {
+            bindable = getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlSet) {
+            bindable = getSetBindable((SqlSet) flinkSqlNode);
+        } else {
+            bindable = getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
         }
 
-        return getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
+        bindable.setSql(originSql);
+        return bindable;
     }
 
     private BindableInterface getCallSqlFunctionBindable(
@@ -94,13 +100,17 @@ public class CompileManager {
                 throw new Exception("async function not support in cache");
             }
             BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
-            return new CacheTableBindable(tableName, bindableInterface, createSql);
+            BindableInterface bindable = new CacheTableBindable(tableName, bindableInterface);
+            bindable.setSql(createSql);
+            return bindable;
         }
 
         SqlNode select = cache.getSelect();
         if (select != null) {
             BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
-            return new CacheTableBindable(tableName, bindableInterface, createSql);
+            BindableInterface bindable = new CacheTableBindable(tableName, bindableInterface);
+            bindable.setSql(createSql);
+            return bindable;
         }
 
         throw new Exception("cache sql obj is invalid");

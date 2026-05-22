@@ -11,6 +11,7 @@ public abstract class BindableInterface {
     private final long createTime = System.currentTimeMillis();
     private boolean ignoreException = false;
     private String name = "";
+    private String sql = "";
 
     public BindableInterface() {
     }
@@ -77,5 +78,25 @@ public abstract class BindableInterface {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getSql() {
+        return sql;
+    }
+
+    public void setSql(String sql) {
+        this.sql = sql;
+    }
+
+    public String getLogicalPlan() {
+        return null;
+    }
+
+    public String getPhysicalPlan() {
+        return null;
+    }
+
+    public String getJavaExpression() {
+        return null;
     }
 }

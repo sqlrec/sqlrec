@@ -122,8 +122,9 @@ public class SqlTestCase {
         Enumerable enumerable = null;
         try {
             SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
-            BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema,
-                    Consts.DEFAULT_SCHEMA_NAME);
+            BindableInterface bindable = new CompileManager().compileSql(
+                    flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
+            );
 
             if (bindable instanceof CalciteBindable) {
                 CalciteBindable calciteBindable = (CalciteBindable) bindable;
