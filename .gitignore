@@ -40,5 +40,6 @@ deploy/data
 dependency-reduced-pom.xml
 
 node_modules/
+.node/
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/

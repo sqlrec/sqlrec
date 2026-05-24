@@ -256,4 +256,14 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -H "Content-Type: application/json" \
 -d '{"inputs":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
-`````
+```
+
+## 前端UI
+
+SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `http://192.168.49.2:30301/ui/static/index.html` 访问（请将IP地址替换为你的minikube节点IP）。
+
+前端UI可以让你：
+- 查看SQL函数及其执行DAG（有向无环图）
+- 浏览API配置
+- 监控模型训练状态和检查点
+- 查看服务统计信息和指标`

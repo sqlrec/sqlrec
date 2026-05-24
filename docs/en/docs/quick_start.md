@@ -278,3 +278,13 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -d '{"inputs":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
 ```
+
+## Frontend UI
+
+SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30301/ui/static/index.html` (replace the IP address with your minikube node IP).
+
+The frontend UI allows you to:
+- View SQL functions and their execution DAG (Directed Acyclic Graph)
+- Browse API configurations
+- Monitor model training status and checkpoints
+- View service statistics and metrics

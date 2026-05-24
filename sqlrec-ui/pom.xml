@@ -27,7 +27,7 @@
                 <artifactId>frontend-maven-plugin</artifactId>
                 <version>1.15.0</version>
                 <configuration>
-                    <installDirectory>target</installDirectory>
+                    <installDirectory>${project.basedir}/.node</installDirectory>
                 </configuration>
                 <executions>
                     <execution>

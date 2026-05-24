@@ -8,7 +8,11 @@ WORKDIR /app
 COPY . .
 
 # Build the project (skip tests to speed up build)
-RUN --mount=type=cache,target=/root/.m2,rw mvn clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2,rw \
+    --mount=type=cache,target=/root/.npm,rw \
+    --mount=type=cache,target=/app/sqlrec-ui/.node,rw \
+    --mount=type=cache,target=/app/sqlrec-ui/src/main/frontend/node_modules,rw \
+    mvn clean package -DskipTests
 
 # Stage 2: Runtime stage
 FROM eclipse-temurin:25-jre

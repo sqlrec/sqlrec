@@ -80,13 +80,16 @@ public class IfCacheBindable extends BindableInterface {
         if (row.length != 1) {
             throw new RuntimeException("condition must return exactly one column");
         }
-
         Object value = row[0];
-        if (!(value instanceof Boolean)) {
-            throw new RuntimeException("condition must return a boolean value");
+
+        boolean conditionValue = false;
+        if (value != null) {
+            if (!(value instanceof Boolean)) {
+                throw new RuntimeException("condition must return a boolean value");
+            }
+            conditionValue = (Boolean) value;
         }
 
-        boolean conditionValue = (Boolean) value;
         CacheTableBindable selectedClause = conditionValue ? thenClause : elseClause;
 
         Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "branch", conditionValue ? "then" : "else");

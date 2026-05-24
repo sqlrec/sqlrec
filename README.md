@@ -77,33 +77,6 @@ SQLRec implements the hive thrift interface, you can use beeline to connect to t
 bash ./bin/beeline.sh
 ```
 
-#### Using python
-You can use python in Jupyter Notebook to connect to the SQLRec service and use python tools to analyze recommendation data, refer to the following code:
-- Use the scripts in the deploy directory to deploy Jupyter
-```bash
-cd deploy
-bash ./jupyter/deploy.sh
-# wait pod ready
-```
-- Open Jupyter Notebook in browser, e.g. `http://127.0.0.1:30280`, and use the account and password in env.sh to login
-- Create a new python3 notebook
-- Install dependencies
-```bash
-%pip install pandas
-%pip install pyhive
-%pip install sasl
-%pip install thrift
-%pip install thrift-sasl
-```
-- Connect to SQLRec service and run sql statements
-```python
-from pyhive import hive
-import pandas as pd
-
-conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
-pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
-```
-
 ### SQL Development
 Execute the `bash ./bin/beeline.sh` command to connect to the SQLRec service, and refer to the following process to develop data tables, SQL functions, API interfaces, etc. needed for recommendations:
 
@@ -321,6 +294,15 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -d '{"inputs":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
 ````
+
+### Frontend UI
+SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30301/ui/static/index.html` (replace the IP address with your minikube node IP).
+
+The frontend UI allows you to:
+- View SQL functions and their execution DAG (Directed Acyclic Graph)
+- Browse API configurations
+- Monitor model training status and checkpoints
+- View service statistics and metrics
 
 ## Performance Testing
 There are test scripts in the benchmark directory. You can refer to the following commands for testing:
