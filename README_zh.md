@@ -76,8 +76,6 @@ bash ./bin/beeline.sh
 
 ### 连接SQLRec服务
 
-#### 使用beeline
-
 SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
 
 ```bash

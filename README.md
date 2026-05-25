@@ -71,7 +71,6 @@ Notes:
 
 ### Connecting to SQLRec Service
 
-#### Using beeline
 SQLRec implements the hive thrift interface, you can use beeline to connect to the SQLRec service and use it like hive.
 ```bash
 bash ./bin/beeline.sh

@@ -177,6 +177,8 @@ const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
         logicalPlan: node.logicalPlan,
         physicalPlan: node.physicalPlan,
         javaExpression: node.javaExpression,
+        cacheTableName: node.cacheTableName,
+        cacheTableDataFields: node.cacheTableDataFields,
         zScore: node.zScore
       }
     }

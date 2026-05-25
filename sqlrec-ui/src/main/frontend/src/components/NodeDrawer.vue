@@ -36,6 +36,19 @@
               </table>
             </div>
           </div>
+          <div v-if="cacheTableSchema" class="code-section">
+            <div class="section-title">Cache Table Schema</div>
+            <div class="code-block" tabindex="0" @keydown="handleKeydown">
+              <table class="code-table">
+                <tbody>
+                  <tr v-for="(line, index) in cacheTableSchemaLines" :key="index">
+                    <td class="line-number">{{ index + 1 }}</td>
+                    <td class="line-content"><span v-html="line"></span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           <div v-if="nodeData?.logicalPlan" class="code-section">
             <div class="section-title">Logical Plan</div>
             <div class="code-block" tabindex="0" @keydown="handleKeydown">
@@ -116,6 +129,28 @@ const highlightedSql = computed(() => {
 const sqlLines = computed(() => {
   if (!highlightedSql.value) return []
   return highlightedSql.value.split('\n')
+})
+
+const cacheTableSchema = computed(() => {
+  if (!props.nodeData?.cacheTableName || !props.nodeData?.cacheTableDataFields?.length) return null
+  const fields = props.nodeData.cacheTableDataFields
+    .map(f => `  ${f.name} ${f.type}`)
+    .join(',\n')
+  return `CREATE TABLE ${props.nodeData.cacheTableName} (\n${fields}\n)`
+})
+
+const highlightedCacheTableSchema = computed(() => {
+  if (!cacheTableSchema.value) return ''
+  try {
+    return hljs.highlight(cacheTableSchema.value, { language: 'sql' }).value
+  } catch (e) {
+    return cacheTableSchema.value
+  }
+})
+
+const cacheTableSchemaLines = computed(() => {
+  if (!highlightedCacheTableSchema.value) return []
+  return highlightedCacheTableSchema.value.split('\n')
 })
 
 const logicalPlanLines = computed(() => {

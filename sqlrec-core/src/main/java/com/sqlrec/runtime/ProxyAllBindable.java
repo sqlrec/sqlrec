@@ -48,9 +48,8 @@ public class ProxyAllBindable extends BindableInterface {
             }
             return result;
         } catch (Throwable e) {
-            log.error("exec node {} error", getName(), e);
             status = "error";
-            throw e;
+            throw new RuntimeException("Node " + getName() + " execution failed", e);
         } finally {
             Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "status", status);
             MetricsUtils.getCompositeMeterRegistry()

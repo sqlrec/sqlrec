@@ -8,6 +8,7 @@ import com.sqlrec.entity.*;
 import com.sqlrec.frontend.common.CommonUtils;
 import com.sqlrec.runtime.*;
 import com.sqlrec.utils.DbUtils;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
@@ -253,6 +254,21 @@ public class UiHandler {
             node.put("logicalPlan", bindable.getLogicalPlan());
             node.put("physicalPlan", bindable.getPhysicalPlan());
             node.put("javaExpression", bindable.getJavaExpression());
+
+            String cacheTableName = bindable.getCacheTableName();
+            List<RelDataTypeField> cacheTableDataFields = bindable.getCacheTableDataFields();
+            if (cacheTableName != null && !cacheTableName.isEmpty() && cacheTableDataFields != null && !cacheTableDataFields.isEmpty()) {
+                node.put("cacheTableName", cacheTableName);
+                List<Map<String, String>> fields = new ArrayList<>();
+                for (RelDataTypeField field : cacheTableDataFields) {
+                    Map<String, String> fieldMap = new HashMap<>();
+                    fieldMap.put("name", field.getName());
+                    fieldMap.put("type", field.getType().getFullTypeString());
+                    fields.add(fieldMap);
+                }
+                node.put("cacheTableDataFields", fields);
+            }
+
             nodes.add(node);
         }
 
