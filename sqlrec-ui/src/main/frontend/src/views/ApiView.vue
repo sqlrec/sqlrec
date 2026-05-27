@@ -45,10 +45,10 @@ const loadApiDetail = async (item) => {
   try {
     const response = await fetch(`/ui/api/apis/${item.name}`)
     if (response.ok) {
-      const tableData = await response.json()
+      const data = await response.json()
       selectedApi.value = {
         ...item,
-        tableData
+        tableData: data.tableData
       }
     }
   } catch (error) {

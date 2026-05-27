@@ -138,7 +138,7 @@ public class UiHandler {
                 if (api == null) {
                     return createErrorResponse(HttpResponseStatus.NOT_FOUND, "API not found: " + name);
                 }
-                result = convertApiToTable(api);
+                result = convertApiToDetail(api);
             } else if (apiPath.equals("models")) {
                 List<Model> models = DbUtils.getModelList();
                 result = models.stream()
@@ -170,7 +170,7 @@ public class UiHandler {
                     if (model == null) {
                         return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Model not found: " + pathWithoutQuery);
                     }
-                    result = convertModelToTable(model);
+                    result = convertModelToDetail(model);
                 }
             } else if (apiPath.equals("services")) {
                 List<Service> services = DbUtils.getServiceList();
@@ -188,7 +188,7 @@ public class UiHandler {
                 if (service == null) {
                     return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Service not found: " + name);
                 }
-                result = convertServiceToTable(service);
+                result = convertServiceToDetail(service);
             } else {
                 return createErrorResponse(HttpResponseStatus.NOT_FOUND, "API not found: " + apiPath);
             }
@@ -370,20 +370,29 @@ public class UiHandler {
         return -1;
     }
 
-    private static List<Map<String, String>> convertApiToTable(SqlApi api) {
+    private static Map<String, Object> convertApiToDetail(SqlApi api) {
         List<Map<String, String>> rows = new ArrayList<>();
         rows.add(createRow("# API Information", ""));
         rows.add(createRow("API Name:", api.getName()));
         rows.add(createRow("Function Name:", api.getFunctionName()));
         rows.add(createRow("Created At:", formatTimestamp(api.getCreatedAt())));
         rows.add(createRow("Updated At:", formatTimestamp(api.getUpdatedAt())));
-        return rows;
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("tableData", rows);
+        return result;
     }
 
-    private static List<Map<String, String>> convertModelToTable(Model model) throws Exception {
+    private static Map<String, Object> convertModelToDetail(Model model) throws Exception {
         List<List<String>> rows = new ArrayList<>();
         CommonUtils.addModelInfo(rows, model);
-        return convertRowsToMap(rows);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("tableData", convertRowsToMap(rows));
+        if (model.getDdl() != null) {
+            result.put("ddl", model.getDdl());
+        }
+        return result;
     }
 
     private static Map<String, Object> getCheckpointListPaged(String modelName, String uri) {
@@ -451,10 +460,19 @@ public class UiHandler {
         return result;
     }
 
-    private static List<Map<String, String>> convertServiceToTable(Service service) throws Exception {
+    private static Map<String, Object> convertServiceToDetail(Service service) throws Exception {
         List<List<String>> rows = new ArrayList<>();
         CommonUtils.addServiceInfo(rows, service);
-        return convertRowsToMap(rows);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("tableData", convertRowsToMap(rows));
+        if (service.getYaml() != null) {
+            result.put("yaml", service.getYaml());
+        }
+        if (service.getDdl() != null) {
+            result.put("ddl", service.getDdl());
+        }
+        return result;
     }
 
     private static List<Map<String, String>> convertRowsToMap(List<List<String>> rows) {
