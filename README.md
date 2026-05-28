@@ -117,19 +117,6 @@ CREATE TABLE IF NOT EXISTS `user_exposure_item` (
   'cache-ttl' = '0'
 );
 
-CREATE TABLE IF NOT EXISTS `rec_log_kafka` (
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `item_name` STRING,
-  `rec_reason` STRING,
-  `req_time` BIGINT,
-  `req_id` STRING
-) WITH (
-  'connector' = 'kafka',
-  'topic' = 'rec_log',
-  'properties.bootstrap.servers' = '192.168.49.2:32092',
-  'format' = 'json'
-);
 ```
 2. Write test data
 ```sql
@@ -155,28 +142,6 @@ select * from `category1_hot_item` where `category1` = 'pc';
 ```
 3. Develop SQL functions
 ```sql
--- define function save rec data to kafka and redis
-create or replace sql function save_rec_item;
-
-define input table final_recall_item(
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `item_name` STRING,
-  `rec_reason` STRING,
-  `req_time` BIGINT,
-  `req_id` STRING
-);
-
-insert into rec_log_kafka
-select * from final_recall_item;
-
-insert into user_exposure_item
-select user_id, item_id, req_time from final_recall_item;
-
-return;
-
-
-
 -- define function test rec
 create or replace sql function test_rec;
 
@@ -231,9 +196,6 @@ request_meta.req_time as req_time,
 request_meta.req_id as req_id
 from
 request_meta join final_recall_item on 1=1;
-
--- save rec data to kafka and redis
-call save_rec_item(final_rec_data) async;
 
 return final_rec_data;
 ```
