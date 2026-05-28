@@ -3,12 +3,14 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.utils.SchemaUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.SqlSelect;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +38,15 @@ public class ProxyAllBindable extends BindableInterface {
         try {
             Enumerable<Object[]> result = delegate.bind(schema, context);
             if (result != null) {
+                if (delegate instanceof CalciteBindable && ((CalciteBindable) delegate).getSqlNode() instanceof SqlSelect) {
+                    List<RelDataTypeField> fields = delegate.getReturnDataFields();
+                    List<String> tableLines = DataTransformUtils.formatAsTable(result, fields);
+                    String logId = context.getLogId();
+                    for (String line : tableLines) {
+                        log.info("[{}] {}", logId, line);
+                    }
+                }
+
                 String cacheTableName = delegate.getCacheTableName();
                 if (StringUtils.isNotEmpty(cacheTableName)) {
                     CacheTable cacheTable = SchemaUtils.tryGetCacheTable(cacheTableName, schema);

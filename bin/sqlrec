@@ -1,6 +1,7 @@
 #!/bin/bash
 set -ex
 
+export LOG_DIR=${LOG_DIR:-/var/log/sqlrec}
 export PATH=$PATH:${HADOOP_HOME}/bin
 export HADOOP_CLASSPATH=`hadoop classpath`
 export CLASSPATH=$CLASSPATH:${HADOOP_CLASSPATH}

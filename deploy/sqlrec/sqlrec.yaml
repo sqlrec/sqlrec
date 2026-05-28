@@ -41,6 +41,8 @@ spec:
               value: ${CLIENT_PV_NAME}
             - name: CLIENT_PVC_NAME
               value: ${CLIENT_PVC_NAME}
+            - name: LOG_DIR
+              value: /var/log/sqlrec
             - name: SQLREC_DEBUG_PORT
               value: "${SQLREC_DEBUG_PORT}"
             - name: SQLREC_THRIFT_PORT
@@ -77,10 +79,14 @@ spec:
           volumeMounts:
             - mountPath: ${CLIENT_DIR}
               name: client-dir
+            - mountPath: /var/log/sqlrec
+              name: log-dir
       volumes:
         - name: client-dir
           persistentVolumeClaim:
             claimName: ${CLIENT_PVC_NAME}
+        - name: log-dir
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

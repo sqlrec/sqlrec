@@ -1,10 +1,12 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ExecuteContextImpl implements ExecuteContext {
@@ -14,6 +16,7 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
+        variableMap.put(Consts.LOG_ID, UUID.randomUUID().toString());
         metricsTagMap = new ConcurrentHashMap<>();
         funNameStack = new ArrayList<>();
     }
@@ -49,6 +52,11 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public Map<String, String> getMetricsTags() {
         return metricsTagMap;
+    }
+
+    @Override
+    public String getLogId() {
+        return variableMap.get(Consts.LOG_ID);
     }
 
     public void addFunNameToStack(String funName) {

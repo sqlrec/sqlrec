@@ -36,4 +36,6 @@ public class Consts {
     public static String METRICS_OPERATION_OPEN_COUNT = "sqlrec.operation.open.count";
     public static String METRICS_OPERATION_CLOSE_COUNT = "sqlrec.operation.close.count";
     public static String METRICS_OPERATION_ACTIVE_COUNT = "sqlrec.operation.active.count";
+
+    public static String LOG_ID = "log_id";
 }

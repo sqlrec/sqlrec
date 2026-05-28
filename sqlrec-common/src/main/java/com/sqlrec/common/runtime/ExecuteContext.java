@@ -12,4 +12,6 @@ public interface ExecuteContext {
     void setMetricsTag(String key, String value);
 
     Map<String, String> getMetricsTags();
+
+    String getLogId();
 }

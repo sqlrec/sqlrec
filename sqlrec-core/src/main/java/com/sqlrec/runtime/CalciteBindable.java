@@ -88,6 +88,10 @@ public class CalciteBindable extends BindableInterface {
         return bestExp;
     }
 
+    public SqlNode getSqlNode() {
+        return sqlNode;
+    }
+
     public boolean isUnionSql() {
         return SqlTypeChecker.isUnionSql(sqlNode);
     }
