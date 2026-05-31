@@ -7,7 +7,7 @@ import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlReturn;
@@ -50,7 +50,7 @@ public class FunctionCompiler {
         if (schema != null) {
             this.schema = schema;
         } else {
-            this.schema = HmsSchema.getHmsCalciteSchema();
+            this.schema = CalciteSchemaFactory.createCalciteSchema();
         }
         this.sqlFunctionBindable = new SqlFunctionBindable(
                 new ArrayList<>(),

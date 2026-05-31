@@ -2,7 +2,7 @@ package com.sqlrec;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -27,7 +27,7 @@ public class TestSqlFunction {
             }
         });
 
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
         JavaFunctionUtils.setSkipHmsQuery(true);
 
         testSqlFunctionCompile(schema);

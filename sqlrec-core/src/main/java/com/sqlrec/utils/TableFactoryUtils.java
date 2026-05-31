@@ -1,4 +1,4 @@
-package com.sqlrec.schema;
+package com.sqlrec.utils;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.HmsTableFactory;
@@ -30,8 +30,8 @@ public class TableFactoryUtils {
                 if (table instanceof SqlRecTable) {
                     String dbName = tableObj.getDbName();
                     String tableName = tableObj.getTableName();
-                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(dbName) 
-                            ? tableName 
+                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(dbName)
+                            ? tableName
                             : dbName + "." + tableName;
                     ((SqlRecTable) table).setTableName(fullName);
                 }

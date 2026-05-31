@@ -1,5 +1,6 @@
 package com.sqlrec.udf;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -22,6 +23,7 @@ public class SetVariablesFunctionTest {
     @BeforeEach
     public void setUp() {
         context = new ExecuteContextImpl();
+        context.setVariable(Consts.LOG_ID, null);
     }
 
     @Test

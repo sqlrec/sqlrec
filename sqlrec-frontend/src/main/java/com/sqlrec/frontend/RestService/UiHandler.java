@@ -7,7 +7,8 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.*;
 import com.sqlrec.frontend.common.CommonUtils;
 import com.sqlrec.runtime.*;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
@@ -100,10 +101,11 @@ public class UiHandler {
         }
 
         try {
+            MetadataAccess db = MetadataAccessFactory.getInstance();
             Object result = null;
 
             if (apiPath.equals("functions")) {
-                List<SqlFunction> functions = DbUtils.getSqlFunctionList();
+                List<SqlFunction> functions = db.getSqlFunctionList();
                 result = functions.stream()
                         .map(f -> {
                             Map<String, Object> item = new HashMap<>();
@@ -114,7 +116,7 @@ public class UiHandler {
                         .collect(Collectors.toList());
             } else if (apiPath.startsWith("functions/")) {
                 String name = apiPath.substring("functions/".length());
-                SqlFunction function = DbUtils.getSqlFunction(name);
+                SqlFunction function = db.getSqlFunction(name);
                 if (function == null) {
                     return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Function not found: " + name);
                 }
@@ -123,7 +125,7 @@ public class UiHandler {
                 String name = apiPath.substring("functions-dag/".length());
                 result = getFunctionDag(name);
             } else if (apiPath.equals("apis")) {
-                List<SqlApi> apis = DbUtils.getSqlApiList();
+                List<SqlApi> apis = db.getSqlApiList();
                 result = apis.stream()
                         .map(a -> {
                             Map<String, Object> item = new HashMap<>();
@@ -134,13 +136,13 @@ public class UiHandler {
                         .collect(Collectors.toList());
             } else if (apiPath.startsWith("apis/")) {
                 String name = apiPath.substring("apis/".length());
-                SqlApi api = DbUtils.getSqlApi(name);
+                SqlApi api = db.getSqlApi(name);
                 if (api == null) {
                     return createErrorResponse(HttpResponseStatus.NOT_FOUND, "API not found: " + name);
                 }
                 result = convertApiToDetail(api);
             } else if (apiPath.equals("models")) {
-                List<Model> models = DbUtils.getModelList();
+                List<Model> models = db.getModelList();
                 result = models.stream()
                         .map(m -> {
                             Map<String, Object> item = new HashMap<>();
@@ -166,14 +168,14 @@ public class UiHandler {
                     String modelName = pathWithoutQuery.replace("/checkpoints", "");
                     result = getCheckpointListPaged(modelName, uri);
                 } else {
-                    Model model = DbUtils.getModel(pathWithoutQuery);
+                    Model model = db.getModel(pathWithoutQuery);
                     if (model == null) {
                         return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Model not found: " + pathWithoutQuery);
                     }
                     result = convertModelToDetail(model);
                 }
             } else if (apiPath.equals("services")) {
-                List<Service> services = DbUtils.getServiceList();
+                List<Service> services = db.getServiceList();
                 result = services.stream()
                         .map(s -> {
                             Map<String, Object> item = new HashMap<>();
@@ -184,7 +186,7 @@ public class UiHandler {
                         .collect(Collectors.toList());
             } else if (apiPath.startsWith("services/")) {
                 String name = apiPath.substring("services/".length());
-                Service service = DbUtils.getService(name);
+                Service service = db.getService(name);
                 if (service == null) {
                     return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Service not found: " + name);
                 }
@@ -396,6 +398,7 @@ public class UiHandler {
     }
 
     private static Map<String, Object> getCheckpointListPaged(String modelName, String uri) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         int page = 1;
         int pageSize = 10;
 
@@ -415,8 +418,8 @@ public class UiHandler {
             }
         }
 
-        int total = DbUtils.getCheckpointCountByModelName(modelName);
-        List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelNamePaged(modelName, page, pageSize);
+        int total = db.getCheckpointCountByModelName(modelName);
+        List<Checkpoint> checkpoints = db.getCheckpointListByModelNamePaged(modelName, page, pageSize);
 
         List<Map<String, Object>> items = checkpoints.stream()
                 .map(c -> {
@@ -440,7 +443,8 @@ public class UiHandler {
     }
 
     private static Map<String, Object> getCheckpointDetail(String modelName, String checkpointName) {
-        Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
         if (checkpoint == null) {
             Map<String, Object> error = new HashMap<>();
             error.put("error", "Checkpoint not found: " + modelName + "/" + checkpointName);

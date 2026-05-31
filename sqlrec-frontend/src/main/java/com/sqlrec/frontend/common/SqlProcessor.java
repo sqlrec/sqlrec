@@ -9,16 +9,17 @@ import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.entity.*;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.schema.HmsClient;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.*;
-import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -50,7 +51,7 @@ public class SqlProcessor {
     private Map<THandleIdentifier, SqlProcessResult> sqlProcessorMap;
 
     public SqlProcessor() {
-        schema = HmsSchema.getHmsCalciteSchema();
+        schema = CalciteSchemaFactory.createCalciteSchema();
         context = new ExecuteContextImpl();
         defaultSchema = Consts.DEFAULT_SCHEMA_NAME;
         sqlProcessorMap = new ConcurrentHashMap<>();
@@ -152,6 +153,7 @@ public class SqlProcessor {
     }
 
     private SqlProcessResult processResourceEdit(SqlNode sqlNode) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         if (sqlNode instanceof SqlCreateApi) {
             SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
             return Utils.convertMsgToResult("create api success", "msg");
@@ -186,7 +188,7 @@ public class SqlProcessor {
             SqlAlterModelDropCheckpoint alterModelDropCheckpoint = (SqlAlterModelDropCheckpoint) sqlNode;
             String modelName = alterModelDropCheckpoint.getModelName().getSimple();
             String checkpointName = SchemaUtils.removeQuotes(alterModelDropCheckpoint.getCheckpointName().toString());
-            Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+            Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
             if (checkpoint == null) {
                 if (alterModelDropCheckpoint.isIfExists()) {
                     return Utils.convertMsgToResult("drop checkpoint success", "msg");
@@ -212,35 +214,35 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlDropSqlFunction) {
             SqlDropSqlFunction dropSqlFunction = (SqlDropSqlFunction) sqlNode;
             String funcName = dropSqlFunction.getFuncName().getSimple();
-            SqlFunction sqlFunction = DbUtils.getSqlFunction(funcName);
+            SqlFunction sqlFunction = db.getSqlFunction(funcName);
             if (sqlFunction == null) {
                 if (dropSqlFunction.isIfExists()) {
                     return Utils.convertMsgToResult("drop sql function success", "msg");
                 }
                 throw new RuntimeException("sql function not exists: " + funcName);
             }
-            List<SqlApi> sqlApis = DbUtils.getSqlApiListByFunctionName(funcName);
+            List<SqlApi> sqlApis = db.getSqlApiListByFunctionName(funcName);
             if (!sqlApis.isEmpty()) {
                 List<String> usingApis = sqlApis.stream()
                         .map(SqlApi::getName)
                         .collect(Collectors.toList());
                 throw new RuntimeException("sql function " + funcName + " is used by api: " + String.join(", ", usingApis));
             }
-            DbUtils.deleteSqlFunction(funcName);
+            db.deleteSqlFunction(funcName);
             return Utils.convertMsgToResult("drop sql function success", "msg");
         }
 
         if (sqlNode instanceof SqlDropApi) {
             SqlDropApi dropApi = (SqlDropApi) sqlNode;
             String apiName = dropApi.getApiName().getSimple();
-            SqlApi sqlApi = DbUtils.getSqlApi(apiName);
+            SqlApi sqlApi = db.getSqlApi(apiName);
             if (sqlApi == null) {
                 if (dropApi.isIfExists()) {
                     return Utils.convertMsgToResult("drop api success", "msg");
                 }
                 throw new RuntimeException("api not exists: " + apiName);
             }
-            DbUtils.deleteSqlApi(apiName);
+            db.deleteSqlApi(apiName);
             return Utils.convertMsgToResult("drop api success", "msg");
         }
 
@@ -248,20 +250,21 @@ public class SqlProcessor {
     }
 
     private SqlProcessResult processResourceQuery(SqlNode sqlNode) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         if (sqlNode instanceof SqlShowTables) {
-            String db = defaultSchema;
+            String dbName = defaultSchema;
             String[] dbInSql = ((SqlShowTables) sqlNode).fullDatabaseName();
             if (dbInSql.length > 0) {
-                db = dbInSql[0];
+                dbName = dbInSql[0];
             }
 
-            CalciteSchema subSchema = schema.getSubSchema(db, false);
+            CalciteSchema subSchema = schema.getSubSchema(dbName, false);
             if (subSchema == null) {
-                return Utils.convertMsgToResult("database not exists: " + db, "error");
+                return Utils.convertMsgToResult("database not exists: " + dbName, "error");
             }
 
-            List<String> tableNames = HmsClient.getAllTables(db);
-            if (defaultSchema.equalsIgnoreCase(db)) {
+            List<String> tableNames = HmsClient.getAllTables(dbName);
+            if (defaultSchema.equalsIgnoreCase(dbName)) {
                 tableNames.addAll(schema.getTableNames());
             }
             tableNames = tableNames.stream().distinct().collect(Collectors.toList());
@@ -270,13 +273,13 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlRichDescribeTable) {
             String[] fullTableName = ((SqlRichDescribeTable) sqlNode).fullTableName();
-            String db = defaultSchema;
+            String dbName = defaultSchema;
             String table = fullTableName[fullTableName.length - 1];
             if (fullTableName.length > 1) {
-                db = fullTableName[0];
+                dbName = fullTableName[0];
             }
 
-            if (defaultSchema.equalsIgnoreCase(db)) {
+            if (defaultSchema.equalsIgnoreCase(dbName)) {
                 CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
                 if (tableEntry != null && tableEntry.getTable() != null) {
                     Table tableObj = tableEntry.getTable();
@@ -290,13 +293,13 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowCreateTable) {
             ImmutableList<String> names = ((SqlShowCreateTable) sqlNode).getTableName().names;
-            String db = defaultSchema;
+            String dbName = defaultSchema;
             if (names.size() > 1) {
-                db = names.get(0);
+                dbName = names.get(0);
             }
             String table = names.get(names.size() - 1);
 
-            if (defaultSchema.equalsIgnoreCase(db)) {
+            if (defaultSchema.equalsIgnoreCase(dbName)) {
                 CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
                 if (tableEntry != null && tableEntry.getTable() != null) {
                     Table tableObj = tableEntry.getTable();
@@ -308,7 +311,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowSqlFunction) {
-            List<SqlFunction> sqlFunctions = DbUtils.getSqlFunctionList();
+            List<SqlFunction> sqlFunctions = db.getSqlFunctionList();
             return Utils.convertStringListToResult(
                     sqlFunctions.stream().map(SqlFunction::getName).collect(Collectors.toList()),
                     "sql function"
@@ -317,7 +320,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowCreateSqlFunction) {
             SqlShowCreateSqlFunction showCreateSqlFunction = (SqlShowCreateSqlFunction) sqlNode;
-            SqlFunction sqlFunction = DbUtils.getSqlFunction(showCreateSqlFunction.getFuncName().getSimple());
+            SqlFunction sqlFunction = db.getSqlFunction(showCreateSqlFunction.getFuncName().getSimple());
             if (sqlFunction == null) {
                 return Utils.convertMsgToResult(
                         "sql function not exists: " + showCreateSqlFunction.getFuncName().getSimple(),
@@ -329,7 +332,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowApi) {
-            List<SqlApi> sqlApis = DbUtils.getSqlApiList();
+            List<SqlApi> sqlApis = db.getSqlApiList();
             return Utils.convertStringListToResult(
                     sqlApis.stream().map(SqlApi::getName).collect(Collectors.toList()),
                     "api"
@@ -338,7 +341,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowCreateApi) {
             SqlShowCreateApi showCreateApi = (SqlShowCreateApi) sqlNode;
-            SqlApi sqlApi = DbUtils.getSqlApi(showCreateApi.getApiName().getSimple());
+            SqlApi sqlApi = db.getSqlApi(showCreateApi.getApiName().getSimple());
             if (sqlApi == null) {
                 return Utils.convertMsgToResult("api not exists: " + showCreateApi.getApiName(), "error");
             }
@@ -347,7 +350,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowModel) {
-            List<Model> models = DbUtils.getModelList();
+            List<Model> models = db.getModelList();
             return Utils.convertStringListToResult(
                     models.stream().map(Model::getName).collect(Collectors.toList()),
                     "model"
@@ -360,7 +363,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowCheckpoint) {
             SqlShowCheckpoint showCheckpoint = (SqlShowCheckpoint) sqlNode;
-            List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(showCheckpoint.getModelName().getSimple());
+            List<Checkpoint> checkpoints = db.getCheckpointListByModelName(showCheckpoint.getModelName().getSimple());
             return Utils.convertStringListToResult(
                     checkpoints.stream().map(Checkpoint::getCheckpointName).collect(Collectors.toList()),
                     "checkpoint"
@@ -368,7 +371,7 @@ public class SqlProcessor {
         }
 
         if (sqlNode instanceof SqlShowService) {
-            List<Service> services = DbUtils.getServiceList();
+            List<Service> services = db.getServiceList();
             return Utils.convertStringListToResult(
                     services.stream().map(Service::getName).collect(Collectors.toList()),
                     "service"
@@ -383,34 +386,37 @@ public class SqlProcessor {
     }
 
     public static void saveSqlFunction(FunctionCompiler compiler) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlFunction sqlFunction = new SqlFunction();
         sqlFunction.setName(compiler.getFunctionBindable().getFunName());
         sqlFunction.setSqlList(JsonUtils.toJson(compiler.getSqlList()));
         sqlFunction.setCreatedAt(System.currentTimeMillis());
         sqlFunction.setUpdatedAt(System.currentTimeMillis());
         if (compiler.isOrReplace()) {
-            DbUtils.upsertSqlFunction(sqlFunction);
+            db.upsertSqlFunction(sqlFunction);
         } else {
-            DbUtils.insertSqlFunction(sqlFunction);
+            db.insertSqlFunction(sqlFunction);
         }
     }
 
     public static void saveSqlApi(SqlCreateApi api) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlApi sqlApi = new SqlApi();
         sqlApi.setName(api.getApiName());
         sqlApi.setFunctionName(api.getFuncName());
         sqlApi.setCreatedAt(System.currentTimeMillis());
         sqlApi.setUpdatedAt(System.currentTimeMillis());
         if (api.isOrReplace()) {
-            DbUtils.upsertSqlApi(sqlApi);
+            db.upsertSqlApi(sqlApi);
         } else {
-            DbUtils.insertSqlApi(sqlApi);
+            db.insertSqlApi(sqlApi);
         }
     }
 
     private SqlProcessResult processShowCreateModel(SqlShowCreateModel showCreateModel) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         String modelName = showCreateModel.getModelName().getSimple();
-        Model model = DbUtils.getModel(modelName);
+        Model model = db.getModel(modelName);
         if (model == null) {
             return Utils.convertMsgToResult(
                     "model not exists: " + modelName,
@@ -421,7 +427,7 @@ public class SqlProcessor {
         Checkpoint checkpoint = null;
         if (showCreateModel.hasCheckpoint()) {
             String checkpointName = SchemaUtils.removeQuotes(showCreateModel.getCheckpoint().toString());
-            checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+            checkpoint = db.getCheckpoint(modelName, checkpointName);
             if (checkpoint == null) {
                 return Utils.convertMsgToResult(
                         "checkpoint not exists: " + checkpointName + " for model " + modelName,
@@ -432,7 +438,7 @@ public class SqlProcessor {
 
         if (showCreateModel.isFormatted()) {
             java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
-            
+
             if (checkpoint != null) {
                 CommonUtils.addModelInfo(rows, checkpoint.getModelDdl(), model);
                 CommonUtils.addCheckpointInfo(rows, checkpoint);
@@ -455,8 +461,9 @@ public class SqlProcessor {
     }
 
     private SqlProcessResult processShowCreateService(SqlShowCreateService showCreateService) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         String serviceName = showCreateService.getServiceName().getSimple();
-        Service service = DbUtils.getService(serviceName);
+        Service service = db.getService(serviceName);
         if (service == null) {
             return Utils.convertMsgToResult(
                     "service not exists: " + serviceName,

@@ -12,7 +12,8 @@ import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -161,8 +162,9 @@ public class CompileManager {
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         functionName = functionName.toUpperCase();
-        SqlFunction sqlFunction = DbUtils.getSqlFunction(functionName);
+        SqlFunction sqlFunction = db.getSqlFunction(functionName);
         if (sqlFunction == null) {
             throw new Exception("function not fund : " + functionName);
         }
@@ -193,9 +195,10 @@ public class CompileManager {
     }
 
     public static SqlFunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlApi sqlApi = sqlApiCache.getIfPresent(apiName);
         if (sqlApi == null) {
-            sqlApi = DbUtils.getSqlApi(apiName);
+            sqlApi = db.getSqlApi(apiName);
             if (sqlApi != null) {
                 sqlApiCache.put(apiName, sqlApi);
             }

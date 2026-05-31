@@ -2,7 +2,7 @@ package com.sqlrec;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -15,7 +15,7 @@ public class TestExceptionIgnore {
     @Test
     public void testExceptionIgnore() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         JavaFunctionUtils.registerTableFunction("default", "test_fun", TestExceptionIgnore.TestFunction.class);
         JavaFunctionUtils.setSkipHmsQuery(true);

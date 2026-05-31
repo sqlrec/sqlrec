@@ -4,10 +4,10 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.SqlFunctionBindable;
-import com.sqlrec.schema.HmsSchema;
-import com.sqlrec.utils.DbUtils;
 import com.sqlrec.utils.JavaFunctionUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -81,19 +81,19 @@ public class FunctionUpdater {
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             Tags tags = Tags.of("status", status);
-            
+
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_FUNCTION_UPDATE_DURATION, tags)
                     .record(duration, TimeUnit.MILLISECONDS);
-            
+
             MetricsUtils.getCompositeMeterRegistry()
                     .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "success"))
                     .increment(successCount);
-            
+
             MetricsUtils.getCompositeMeterRegistry()
                     .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "failed"))
                     .increment(failedCount);
-            
+
             MetricsUtils.getCompositeMeterRegistry()
                     .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "not_update"))
                     .increment(notUpdateCount);
@@ -111,6 +111,7 @@ public class FunctionUpdater {
 
         log.info("checking function: {}", functionName);
         try {
+            MetadataAccess db = MetadataAccessFactory.getInstance();
             boolean needFlush = false;
             SqlFunctionBindable functionBindable = functionBindableMap.get(functionName);
             Set<String> dependencySqlFunctions = functionBindable.getDependencySqlFunctions();
@@ -124,7 +125,7 @@ public class FunctionUpdater {
                 }
             }
 
-            SqlFunction sqlFunction = DbUtils.getSqlFunction(functionBindable.getFunName());
+            SqlFunction sqlFunction = db.getSqlFunction(functionBindable.getFunName());
             if (sqlFunction == null) {
                 functionBindableMap.remove(functionName);
                 functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
@@ -163,9 +164,10 @@ public class FunctionUpdater {
             accessTables.remove(placeholder.getKey());
         }
 
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         for (String accessTable : accessTables) {
             Map.Entry<String, String> dbAndTable = HiveTableUtils.getDbAndTable(accessTable);
-            long lastModifiedTime = HmsSchema.getTableUpdateTime(dbAndTable.getKey(), dbAndTable.getValue());
+            long lastModifiedTime = db.getTableUpdateTime(dbAndTable.getKey(), dbAndTable.getValue());
             if (lastModifiedTime > functionBindable.getCreateTime()) {
                 log.info("table {}.{} has been modified, need to flush function",
                         dbAndTable.getKey(), dbAndTable.getValue());

@@ -1,6 +1,6 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.schema.TableFactoryUtils;
+import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.interpreter.Bindables;

@@ -3,7 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.Executor;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -43,7 +43,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
         ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone();
         finalContext.addFunNameToStack(funName);
 
-        CalciteSchema tmpSchema = HmsSchema.getHmsCalciteSchema();
+        CalciteSchema tmpSchema = CalciteSchemaFactory.createCalciteSchema();
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTables.get(i), false);
             tmpSchema.add(tablePlaceholders.get(i).getKey(), inputTableEntry.getTable());

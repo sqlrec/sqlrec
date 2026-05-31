@@ -3,7 +3,7 @@ package com.sqlrec.utils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.schema.HmsClient;
+import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.udf.config.FunctionConfigs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;

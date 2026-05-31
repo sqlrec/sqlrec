@@ -6,7 +6,7 @@ import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.JavaFunctionUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -39,7 +39,7 @@ public class SqlProcessorTest {
             }
         });
 
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
         JavaFunctionUtils.setSkipHmsQuery(true);
 
         testSqlFunctionCompile(schema);

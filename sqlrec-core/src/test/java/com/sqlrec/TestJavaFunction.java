@@ -5,7 +5,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -36,7 +36,7 @@ public class TestJavaFunction {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         JavaFunctionUtils.registerTableFunction("default", "empty_fun", TestEmptyFun.class);
         JavaFunctionUtils.registerTableFunction("default", "string_arg_fun", TestStringArgFun.class);
@@ -169,7 +169,7 @@ public class TestJavaFunction {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         JavaFunctionUtils.registerTableFunction("default", "overload_fun", TestOverloadFun.class);
         JavaFunctionUtils.registerTableFunction("default", "varargs_fun", TestVarArgsFun.class);

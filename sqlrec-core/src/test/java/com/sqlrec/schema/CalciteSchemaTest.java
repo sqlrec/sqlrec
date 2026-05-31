@@ -36,7 +36,7 @@ public class CalciteSchemaTest {
         });
         schema.add("t0", new MyTable("t0", new Object[][]{{2, "Bob"}}));
 
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         String sql = "select * from t0";
 

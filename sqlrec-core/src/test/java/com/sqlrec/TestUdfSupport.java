@@ -2,7 +2,7 @@ package com.sqlrec;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -25,7 +25,7 @@ public class TestUdfSupport {
                 return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         UdfManager.addFunction(
                 schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),

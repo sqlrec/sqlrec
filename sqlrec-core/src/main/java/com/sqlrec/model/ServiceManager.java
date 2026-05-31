@@ -10,7 +10,8 @@ import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.sql.parser.SqlCreateService;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.ObjCache;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -30,7 +31,8 @@ public class ServiceManager {
                         SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
                         oldConfig -> {
                             try {
-                                Service service = DbUtils.getService(name);
+                                MetadataAccess db = MetadataAccessFactory.getInstance();
+                                Service service = db.getService(name);
                                 if (service == null) {
                                     return null;
                                 }
@@ -45,7 +47,8 @@ public class ServiceManager {
     }
 
     public static boolean isServiceOperationCompleted(String serviceName) {
-        Service service = DbUtils.getService(serviceName);
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        Service service = db.getService(serviceName);
         if (service == null) {
             throw new IllegalArgumentException("Service not found: " + serviceName);
         }
@@ -55,22 +58,23 @@ public class ServiceManager {
     }
 
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
-        Service existingService = DbUtils.getService(serviceConfig.getServiceName());
+        Service existingService = db.getService(serviceConfig.getServiceName());
         if (existingService != null) {
             if (sqlCreateService.isIfNotExists()) {
                 return serviceConfig.getServiceName();
             }
         }
 
-        Model modelEntity = DbUtils.getModel(serviceConfig.getModelName());
+        Model modelEntity = db.getModel(serviceConfig.getModelName());
         if (modelEntity == null) {
             throw new IllegalArgumentException("model not exists: " + serviceConfig.getModelName());
         }
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
-        Checkpoint checkpoint = DbUtils.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
+        Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
         if (checkpoint == null) {
             throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
         }
@@ -104,20 +108,21 @@ public class ServiceManager {
         service.setUpdatedAt(System.currentTimeMillis());
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
-        DbUtils.upsertService(service);
+        db.upsertService(service);
         K8sManager.applyYaml(k8sYaml);
 
         return serviceConfig.getServiceName();
     }
 
     public static void deleteService(String serviceName) {
-        Service service = DbUtils.getService(serviceName);
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        Service service = db.getService(serviceName);
         if (service == null) {
             throw new IllegalArgumentException("service not exists: " + serviceName);
         }
         if (!StringUtils.isEmpty(service.getYaml())) {
             K8sManager.deleteYaml(service.getYaml());
         }
-        DbUtils.deleteService(serviceName);
+        db.deleteService(serviceName);
     }
 }

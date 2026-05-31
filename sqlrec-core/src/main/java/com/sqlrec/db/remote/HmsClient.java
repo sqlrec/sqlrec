@@ -1,4 +1,4 @@
-package com.sqlrec.schema;
+package com.sqlrec.db.remote;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.hadoop.conf.Configuration;
@@ -33,17 +33,14 @@ public class HmsClient {
         return client;
     }
 
-    // get all database names
     public synchronized static List<String> getAllDatabases() throws Exception {
         return getClient().getAllDatabases();
     }
 
-    // get all table of a dataase
     public synchronized static List<String> getAllTables(String database) throws Exception {
         return getClient().getAllTables(database);
     }
 
-    // get table obj
     public synchronized static org.apache.hadoop.hive.metastore.api.Table getTableObj(
             String database,
             String table
@@ -51,12 +48,10 @@ public class HmsClient {
         return getClient().getTable(database, table);
     }
 
-    // get all function of a database
     public synchronized static List<String> getAllFunctions(String database) throws Exception {
         return getClient().getFunctions(database, "*");
     }
 
-    // get function obj
     public synchronized static org.apache.hadoop.hive.metastore.api.Function getFunctionObj(
             String database,
             String function
@@ -64,7 +59,6 @@ public class HmsClient {
         return getClient().getFunction(database, function);
     }
 
-    // get all partition paths by database, table and partition filter
     public synchronized static List<String> getPartitionPaths(
             String database,
             String table,

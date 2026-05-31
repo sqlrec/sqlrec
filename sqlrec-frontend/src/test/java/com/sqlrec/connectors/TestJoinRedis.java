@@ -1,7 +1,7 @@
 package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
@@ -31,7 +31,7 @@ public class TestJoinRedis {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
         new SqlTestCase("delete from t2 where id = 2", null).test(schema);

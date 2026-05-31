@@ -5,10 +5,12 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -49,21 +51,22 @@ public class TestSqlFunctionCompile {
 
     @Test
     public void testSqlCompileInDb() throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlFunction sqlFunction = new SqlFunction();
-        DbUtils.deleteSqlFunction("test_compile1");
+        db.deleteSqlFunction("test_compile1");
         sqlFunction.setName("test_compile1");
         sqlFunction.setSqlList("[\"create sql function test_compile1\", \"call test_compile2()\", \"return\"]");
         sqlFunction.setCreatedAt(System.currentTimeMillis());
         sqlFunction.setUpdatedAt(System.currentTimeMillis());
-        DbUtils.insertSqlFunction(sqlFunction);
+        db.insertSqlFunction(sqlFunction);
 
         SqlFunction sqlFunction2 = new SqlFunction();
-        DbUtils.deleteSqlFunction("test_compile2");
+        db.deleteSqlFunction("test_compile2");
         sqlFunction2.setName("test_compile2");
         sqlFunction2.setSqlList("[\"create sql function test_compile2\", \"call test_compile1()\", \"return\"]");
         sqlFunction2.setCreatedAt(System.currentTimeMillis());
         sqlFunction2.setUpdatedAt(System.currentTimeMillis());
-        DbUtils.insertSqlFunction(sqlFunction2);
+        db.insertSqlFunction(sqlFunction2);
 
         Exception e = null;
         try {
@@ -74,8 +77,8 @@ public class TestSqlFunctionCompile {
         assert e != null;
         assert e.getMessage().contains("circular dependency: TEST_COMPILE1 trace: TEST_COMPILE1->TEST_COMPILE2");
 
-        DbUtils.deleteSqlFunction("test_compile1");
-        DbUtils.deleteSqlFunction("test_compile2");
+        db.deleteSqlFunction("test_compile1");
+        db.deleteSqlFunction("test_compile2");
     }
 
     @Test
@@ -103,6 +106,6 @@ public class TestSqlFunctionCompile {
             e = ex;
         }
         assert e != null;
-        assert e.getMessage().contains("Circular dependency detected: FUN1 in stack: FUN1");
+        assert ExceptionUtils.getRootCause(e).getMessage().contains("Circular dependency detected: FUN1 in stack: FUN1");
     }
 }

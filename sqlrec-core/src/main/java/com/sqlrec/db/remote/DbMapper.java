@@ -1,4 +1,4 @@
-package com.sqlrec.utils;
+package com.sqlrec.db.remote;
 
 import com.sqlrec.entity.*;
 import org.apache.ibatis.annotations.Delete;

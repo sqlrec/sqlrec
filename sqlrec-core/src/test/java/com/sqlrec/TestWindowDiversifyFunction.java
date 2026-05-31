@@ -4,7 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -35,7 +35,7 @@ public class TestWindowDiversifyFunction {
                 return Collections.singletonMap("myTable", new MyTable());
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(

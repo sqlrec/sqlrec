@@ -1,6 +1,7 @@
 package com.sqlrec.schema;
 
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.db.remote.HmsClient;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 

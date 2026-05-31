@@ -10,12 +10,13 @@ import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
-import com.sqlrec.schema.HmsClient;
+import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -151,12 +152,13 @@ public class ModelEntityConverter {
     }
 
     public static String getModelCheckpointPath(String modelName, String checkpoint) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         String modelDdl = null;
-        Checkpoint checkpointEntity = DbUtils.getCheckpoint(modelName, checkpoint);
+        Checkpoint checkpointEntity = db.getCheckpoint(modelName, checkpoint);
         if (checkpointEntity != null) {
             modelDdl = checkpointEntity.getModelDdl();
         } else {
-            Model model = DbUtils.getModel(modelName);
+            Model model = db.getModel(modelName);
             if (model == null) {
                 throw new IllegalArgumentException("model not exists: " + modelName);
             }

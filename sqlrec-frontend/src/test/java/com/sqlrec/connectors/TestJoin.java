@@ -2,7 +2,7 @@ package com.sqlrec.connectors;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -34,7 +34,7 @@ public class TestJoin {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
@@ -91,7 +91,7 @@ public class TestJoin {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         JavaFunctionUtils.setSkipHmsQuery(true);
         List<String> joinFuncSqlList = Arrays.asList(

@@ -83,6 +83,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<String> SQL_SCHEMA_DIR = new ConfigOption<>(
+            "SQL_SCHEMA_DIR",
+            "",
+            "sql file directory for schema definition, empty means use HMS",
+            null,
+            String.class
+    );
     public static final ConfigOption<Integer> DEFAULT_VECTOR_SEARCH_LIMIT = new ConfigOption<>(
             "DEFAULT_VECTOR_SEARCH_LIMIT",
             100,

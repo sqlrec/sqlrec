@@ -12,7 +12,8 @@ import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
-import com.sqlrec.utils.DbUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.HadoopUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -54,8 +55,9 @@ public class ModelManager {
     }
 
     public static ModelConfig createModel(SqlCreateModel sqlCreateModel) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         String modelName = sqlCreateModel.getModelName().getSimple();
-        Model existingModel = DbUtils.getModel(modelName);
+        Model existingModel = db.getModel(modelName);
         if (existingModel != null) {
             if (sqlCreateModel.isIfNotExists()) {
                 return null;
@@ -73,25 +75,27 @@ public class ModelManager {
     }
 
     public static void saveModel(ModelConfig modelConfig) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         Model model = new Model();
         model.setName(modelConfig.getModelName());
         model.setDdl(modelConfig.getDdl());
         model.setCreatedAt(System.currentTimeMillis());
         model.setUpdatedAt(System.currentTimeMillis());
-        DbUtils.insertModel(model);
+        db.insertModel(model);
     }
 
     public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
-        Model modelEntity = DbUtils.getModel(modelTrainConf.getModelName());
+        Model modelEntity = db.getModel(modelTrainConf.getModelName());
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
             throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
         }
 
-        Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
+        Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
             String status = existingCheckpoint.getStatus();
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
@@ -121,7 +125,7 @@ public class ModelManager {
         checkpoint.setCreatedAt(System.currentTimeMillis());
         checkpoint.setUpdatedAt(System.currentTimeMillis());
 
-        DbUtils.insertCheckpoint(checkpoint);
+        db.insertCheckpoint(checkpoint);
         K8sManager.applyYaml(k8sYaml);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
@@ -130,14 +134,15 @@ public class ModelManager {
     }
 
     public static List<CheckpointInfo> exportModel(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         ModelExportConf modelExportConf = ModelEntityConverter.convertToModelExportConf(sqlExportModel, defaultSchema);
 
-        Model modelEntity = DbUtils.getModel(modelExportConf.getModelName());
+        Model modelEntity = db.getModel(modelExportConf.getModelName());
         if (modelEntity == null) {
             throw new IllegalArgumentException("model not exists: " + modelExportConf.getModelName());
         }
 
-        Checkpoint sourceCheckpoint = DbUtils.getCheckpoint(modelExportConf.getModelName(), modelExportConf.getCheckpointName());
+        Checkpoint sourceCheckpoint = db.getCheckpoint(modelExportConf.getModelName(), modelExportConf.getCheckpointName());
         if (sourceCheckpoint == null) {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
@@ -153,7 +158,7 @@ public class ModelManager {
         List<CheckpointInfo> createdCheckpointInfos = new ArrayList<>();
         List<Checkpoint> existingCheckpoints = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
-            Checkpoint existingCheckpoint = DbUtils.getCheckpoint(modelExportConf.getModelName(), exportCheckpointName);
+            Checkpoint existingCheckpoint = db.getCheckpoint(modelExportConf.getModelName(), exportCheckpointName);
             if (existingCheckpoint != null) {
                 existingCheckpoints.add(existingCheckpoint);
                 if (Consts.CHECKPOINT_STATUS_CREATED.equals(existingCheckpoint.getStatus())) {
@@ -197,7 +202,7 @@ public class ModelManager {
             checkpoint.setCreatedAt(System.currentTimeMillis());
             checkpoint.setUpdatedAt(System.currentTimeMillis());
 
-            DbUtils.insertCheckpoint(checkpoint);
+            db.insertCheckpoint(checkpoint);
             checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
         }
 
@@ -281,12 +286,13 @@ public class ModelManager {
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
-        Checkpoint checkpoint = DbUtils.getCheckpoint(modelName, checkpointName);
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
         if (checkpoint == null) {
             return;
         }
 
-        List<Service> services = DbUtils.getServiceListByCheckpoint(modelName, checkpointName);
+        List<Service> services = db.getServiceListByCheckpoint(modelName, checkpointName);
         if (!services.isEmpty()) {
             throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName +
                     " because it is being used by " + services.size() + " service(s): " +
@@ -305,23 +311,24 @@ public class ModelManager {
         String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
         HadoopUtils.deletePathWithCheck(checkpointPath, modelConfig.getPath());
 
-        DbUtils.deleteCheckpoint(modelName, checkpointName);
+        db.deleteCheckpoint(modelName, checkpointName);
     }
 
     public static void deleteModel(String modelName) throws Exception {
-        Model model = DbUtils.getModel(modelName);
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        Model model = db.getModel(modelName);
         if (model == null) {
             throw new IllegalArgumentException("model not exists: " + modelName);
         }
 
-        List<Service> services = DbUtils.getServiceListByModelName(modelName);
+        List<Service> services = db.getServiceListByModelName(modelName);
         if (!services.isEmpty()) {
             throw new IllegalArgumentException("Cannot delete model " + modelName +
                     " because it is being used by " + services.size() + " service(s): " +
                     String.join(", ", services.stream().map(Service::getName).toList()));
         }
 
-        List<Checkpoint> checkpoints = DbUtils.getCheckpointListByModelName(modelName);
+        List<Checkpoint> checkpoints = db.getCheckpointListByModelName(modelName);
         for (Checkpoint checkpoint : checkpoints) {
             deleteCheckpoint(modelName, checkpoint.getCheckpointName());
         }
@@ -329,10 +336,11 @@ public class ModelManager {
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
         HadoopUtils.deletePath(modelConfig.getPath());
 
-        DbUtils.deleteModel(modelName);
+        db.deleteModel(modelName);
     }
 
     public static boolean isCheckpointOperationCompleted(List<CheckpointInfo> checkpointInfos) {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         if (checkpointInfos == null || checkpointInfos.isEmpty()) {
             return true;
         }
@@ -342,7 +350,7 @@ public class ModelManager {
         List<String> failedCheckpoints = new ArrayList<>();
 
         for (CheckpointInfo info : checkpointInfos) {
-            Checkpoint checkpoint = DbUtils.getCheckpoint(info.getModelName(), info.getCheckpointName());
+            Checkpoint checkpoint = db.getCheckpoint(info.getModelName(), info.getCheckpointName());
             if (checkpoint == null) {
                 throw new IllegalArgumentException("Checkpoint not found: " + info.getCheckpointName() + " for model " + info.getModelName());
             }
@@ -361,7 +369,7 @@ public class ModelManager {
                 if (StringUtils.isEmpty(k8sYaml)) {
                     checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
                     checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    DbUtils.upsertCheckpoint(checkpoint);
+                    db.upsertCheckpoint(checkpoint);
                     failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName() + " (k8sYaml is empty)");
                     continue;
                 }
@@ -370,12 +378,12 @@ public class ModelManager {
                 if ("succeeded".equals(jobStatus)) {
                     checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    DbUtils.upsertCheckpoint(checkpoint);
+                    db.upsertCheckpoint(checkpoint);
                     yamlsToDelete.add(k8sYaml);
                 } else if ("failed".equals(jobStatus)) {
                     checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
                     checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    DbUtils.upsertCheckpoint(checkpoint);
+                    db.upsertCheckpoint(checkpoint);
                     failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
                 } else {
                     allCompleted = false;

@@ -6,7 +6,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.config.RedisConfig;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -44,7 +44,7 @@ public class TestRedisTable {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
@@ -119,7 +119,7 @@ public class TestRedisTable {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);

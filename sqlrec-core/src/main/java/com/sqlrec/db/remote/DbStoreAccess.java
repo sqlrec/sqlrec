@@ -1,7 +1,12 @@
-package com.sqlrec.utils;
+package com.sqlrec.db.remote;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.entity.*;
+import com.sqlrec.db.StoreAccess;
+import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Service;
+import com.sqlrec.entity.SqlApi;
+import com.sqlrec.entity.SqlFunction;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -15,12 +20,13 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class DbUtils {
-    private static volatile SqlSessionFactory sqlSessionFactory;
+public class DbStoreAccess implements StoreAccess {
 
-    public static SqlSessionFactory getSqlSessionFactory() {
+    private volatile SqlSessionFactory sqlSessionFactory;
+
+    public SqlSessionFactory getSqlSessionFactory() {
         if (sqlSessionFactory == null) {
-            synchronized (DbUtils.class) {
+            synchronized (this) {
                 if (sqlSessionFactory == null) {
                     sqlSessionFactory = createSqlSessionFactory();
                 }
@@ -29,7 +35,7 @@ public class DbUtils {
         return sqlSessionFactory;
     }
 
-    private static SqlSessionFactory createSqlSessionFactory() {
+    private SqlSessionFactory createSqlSessionFactory() {
         PooledDataSource dataSource = new PooledDataSource();
         dataSource.setDriver(SqlRecConfigs.DB_DRIVER.getValue());
         dataSource.setUrl(SqlRecConfigs.DB_URL.getValue());
@@ -57,143 +63,174 @@ public class DbUtils {
         return new SqlSessionFactoryBuilder().build(configuration);
     }
 
-    private static <T> T execute(Function<DbMapper, T> operation) {
+    private <T> T execute(Function<DbMapper, T> operation) {
         try (SqlSession sqlSession = getSqlSessionFactory().openSession()) {
             return operation.apply(sqlSession.getMapper(DbMapper.class));
         }
     }
 
-    private static void executeVoid(Consumer<DbMapper> operation) {
+    private void executeVoid(Consumer<DbMapper> operation) {
         try (SqlSession sqlSession = getSqlSessionFactory().openSession()) {
             operation.accept(sqlSession.getMapper(DbMapper.class));
             sqlSession.commit();
         }
     }
 
-    public static List<SqlFunction> getSqlFunctionList() {
+    @Override
+    public List<SqlFunction> getSqlFunctionList() {
         return execute(DbMapper::getSqlFunctionList);
     }
 
-    public static SqlFunction getSqlFunction(String name) {
+    @Override
+    public SqlFunction getSqlFunction(String name) {
         return execute(dbMapper -> dbMapper.getSqlFunction(name.toUpperCase()));
     }
 
-    public static void insertSqlFunction(SqlFunction sqlFunction) {
+    @Override
+    public void insertSqlFunction(SqlFunction sqlFunction) {
         sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.insertSqlFunction(sqlFunction));
     }
 
-    public static void upsertSqlFunction(SqlFunction sqlFunction) {
+    @Override
+    public void upsertSqlFunction(SqlFunction sqlFunction) {
         sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.upsertSqlFunction(sqlFunction));
     }
 
-    public static void deleteSqlFunction(String name) {
+    @Override
+    public void deleteSqlFunction(String name) {
         executeVoid(dbMapper -> dbMapper.deleteSqlFunction(name.toUpperCase()));
     }
 
-    public static List<SqlApi> getSqlApiList() {
+    @Override
+    public List<SqlApi> getSqlApiList() {
         return execute(DbMapper::getSqlApiList);
     }
 
-    public static SqlApi getSqlApi(String name) {
+    @Override
+    public SqlApi getSqlApi(String name) {
         return execute(dbMapper -> dbMapper.getSqlApi(name));
     }
 
-    public static void insertSqlApi(SqlApi sqlApi) {
+    @Override
+    public void insertSqlApi(SqlApi sqlApi) {
         executeVoid(dbMapper -> dbMapper.insertSqlApi(sqlApi));
     }
 
-    public static void upsertSqlApi(SqlApi sqlApi) {
+    @Override
+    public void upsertSqlApi(SqlApi sqlApi) {
         executeVoid(dbMapper -> dbMapper.upsertSqlApi(sqlApi));
     }
 
-    public static void deleteSqlApi(String name) {
+    @Override
+    public void deleteSqlApi(String name) {
         executeVoid(dbMapper -> dbMapper.deleteSqlApi(name));
     }
 
-    public static List<SqlApi> getSqlApiListByFunctionName(String functionName) {
+    @Override
+    public List<SqlApi> getSqlApiListByFunctionName(String functionName) {
         return execute(dbMapper -> dbMapper.getSqlApiListByFunctionName(functionName.toUpperCase()));
     }
 
-    public static List<Model> getModelList() {
+    @Override
+    public List<Model> getModelList() {
         return execute(DbMapper::getModelList);
     }
 
-    public static Model getModel(String name) {
+    @Override
+    public Model getModel(String name) {
         return execute(dbMapper -> dbMapper.getModel(name));
     }
 
-    public static void insertModel(Model model) {
+    @Override
+    public void insertModel(Model model) {
         executeVoid(dbMapper -> dbMapper.insertModel(model));
     }
 
-    public static void upsertModel(Model model) {
+    @Override
+    public void upsertModel(Model model) {
         executeVoid(dbMapper -> dbMapper.upsertModel(model));
     }
 
-    public static void deleteModel(String name) {
+    @Override
+    public void deleteModel(String name) {
         executeVoid(dbMapper -> dbMapper.deleteModel(name));
     }
 
-    public static List<Checkpoint> getCheckpointListByModelName(String modelName) {
+    @Override
+    public List<Checkpoint> getCheckpointListByModelName(String modelName) {
         return execute(dbMapper -> dbMapper.getCheckpointListByModelName(modelName));
     }
 
-    public static int getCheckpointCountByModelName(String modelName) {
+    @Override
+    public int getCheckpointCountByModelName(String modelName) {
         return execute(dbMapper -> dbMapper.getCheckpointCountByModelName(modelName));
     }
 
-    public static List<Checkpoint> getCheckpointListByModelNamePaged(String modelName, int page, int pageSize) {
+    @Override
+    public List<Checkpoint> getCheckpointListByModelNamePaged(String modelName, int page, int pageSize) {
         int offset = (page - 1) * pageSize;
         return execute(dbMapper -> dbMapper.getCheckpointListByModelNamePaged(modelName, pageSize, offset));
     }
 
-    public static Checkpoint getCheckpoint(String modelName, String checkpointName) {
+    @Override
+    public Checkpoint getCheckpoint(String modelName, String checkpointName) {
         return execute(dbMapper -> dbMapper.getCheckpoint(modelName, checkpointName));
     }
 
-    public static void upsertCheckpoint(Checkpoint checkpoint) {
+    @Override
+    public void upsertCheckpoint(Checkpoint checkpoint) {
         executeVoid(dbMapper -> dbMapper.upsertCheckpoint(checkpoint));
     }
 
-    public static void insertCheckpoint(Checkpoint checkpoint) {
+    @Override
+    public void insertCheckpoint(Checkpoint checkpoint) {
         executeVoid(dbMapper -> dbMapper.insertCheckpoint(checkpoint));
     }
 
-    public static void deleteCheckpoint(String modelName, String checkpointName) {
+    @Override
+    public void deleteCheckpoint(String modelName, String checkpointName) {
         executeVoid(dbMapper -> dbMapper.deleteCheckpoint(modelName, checkpointName));
     }
 
-    public static void deleteCheckpointByModelName(String modelName) {
+    @Override
+    public void deleteCheckpointByModelName(String modelName) {
         executeVoid(dbMapper -> dbMapper.deleteCheckpointByModelName(modelName));
     }
 
-    public static List<Service> getServiceList() {
+    @Override
+    public List<Service> getServiceList() {
         return execute(DbMapper::getServiceList);
     }
 
-    public static Service getService(String name) {
+    @Override
+    public Service getService(String name) {
         return execute(dbMapper -> dbMapper.getService(name));
     }
 
-    public static List<Service> getServiceListByModelName(String modelName) {
+    @Override
+    public List<Service> getServiceListByModelName(String modelName) {
         return execute(dbMapper -> dbMapper.getServiceListByModelName(modelName));
     }
 
-    public static List<Service> getServiceListByCheckpoint(String modelName, String checkpointName) {
+    @Override
+    public List<Service> getServiceListByCheckpoint(String modelName, String checkpointName) {
         return execute(dbMapper -> dbMapper.getServiceListByCheckpoint(modelName, checkpointName));
     }
 
-    public static void insertService(Service service) {
+    @Override
+    public void insertService(Service service) {
         executeVoid(dbMapper -> dbMapper.insertService(service));
     }
 
-    public static void upsertService(Service service) {
+    @Override
+    public void upsertService(Service service) {
         executeVoid(dbMapper -> dbMapper.upsertService(service));
     }
 
-    public static void deleteService(String name) {
+    @Override
+    public void deleteService(String name) {
         executeVoid(dbMapper -> dbMapper.deleteService(name));
     }
 }

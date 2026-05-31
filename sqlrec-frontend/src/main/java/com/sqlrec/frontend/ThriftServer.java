@@ -4,6 +4,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.common.PrometheusMetricsUtils;
 import com.sqlrec.frontend.service.TCLIServiceImpl;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -19,6 +20,7 @@ public class ThriftServer {
     public static void main(String[] args) throws TTransportException {
         FunctionUpdater.initFunctionUpdateService();
         PrometheusMetricsUtils.initMetrics();
+        CalciteSchemaFactory.createCalciteSchema();
 
         TServerSocket serverTransport = new TServerSocket(SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
         TCLIServiceImpl serviceImpl = new TCLIServiceImpl();

@@ -6,7 +6,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.milvus.calcite.MilvusCalciteTable;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
@@ -39,7 +39,7 @@ public class TestMilvusCalciteTable {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         UdfManager.addFunction(
                 schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),

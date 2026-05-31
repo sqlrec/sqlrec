@@ -5,7 +5,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.kafka.calcite.KafkaCalciteTable;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
@@ -31,7 +31,7 @@ public class TestKafkaTable {
                 return tableMap;
             }
         });
-        HmsSchema.setGlobalSchema(schema);
+        CalciteSchemaFactory.setGlobalSchema(schema);
 
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null, """
                 LogicalTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])

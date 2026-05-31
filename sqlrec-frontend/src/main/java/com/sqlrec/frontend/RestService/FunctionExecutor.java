@@ -9,7 +9,7 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
-import com.sqlrec.schema.HmsSchema;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -33,7 +33,7 @@ public class FunctionExecutor {
             throw new IllegalArgumentException("function not found for api: " + apiName);
         }
 
-        CalciteSchema schema = HmsSchema.getHmsCalciteSchema();
+        CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
 
         RequestData requestDataObj = JsonUtils.fromJson(requestData, RequestData.class);
         addTableToSchema(schema, sqlFunctionBindable, requestDataObj.getInputs());
