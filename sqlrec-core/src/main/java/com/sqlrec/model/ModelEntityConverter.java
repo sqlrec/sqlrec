@@ -6,17 +6,16 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -97,8 +96,10 @@ public class ModelEntityConverter {
         serviceConfig.setId(K8sManager.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
         serviceConfig.setServiceName(sqlCreateService.getServiceName().toString());
         serviceConfig.setModelName(sqlCreateService.getModelName().toString());
-        serviceConfig.setCheckpointName(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString()));
-        serviceConfig.setModelCheckpointDir(getModelCheckpointPath(serviceConfig.getModelName(), serviceConfig.getCheckpointName()));
+        if (sqlCreateService.getCheckpoint() != null) {
+            serviceConfig.setCheckpointName(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString()));
+            serviceConfig.setModelCheckpointDir(getModelCheckpointPath(serviceConfig.getModelName(), serviceConfig.getCheckpointName()));
+        }
         serviceConfig.setParams(SchemaUtils.convertPropertyList(sqlCreateService.getPropertyList()));
         return serviceConfig;
     }

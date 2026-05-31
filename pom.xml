@@ -17,6 +17,7 @@
         <module>sqlrec-udf</module>
         <module>sqlrec-model</module>
         <module>sqlrec-ui</module>
+        <module>sqlrec-demo</module>
     </modules>
     
     <properties>

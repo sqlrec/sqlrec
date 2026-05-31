@@ -24,11 +24,14 @@ public class DataTypeUtils {
     }
 
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, String type) {
-        type = type.toUpperCase();
+        type = type.trim().toUpperCase();
         if (type.equals("INT")) {
             type = "INTEGER";
         }
         if (type.startsWith("VARCHAR")) {
+            type = "VARCHAR";
+        }
+        if (type.equals("STRING")) {
             type = "VARCHAR";
         }
 

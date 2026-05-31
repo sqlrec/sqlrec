@@ -104,3 +104,25 @@ SELECT
     ARRAY['Action', 'Adventure', 'Sci-Fi'] AS genres;
 
 call call_service('recall_service_item', tmp_item);
+
+create model if not exists `rank_model_proxy`
+(
+ `user_id` BIGINT,
+ `movie_id` BIGINT,
+ `genres` ARRAY<STRING>,
+ `gender` STRING,
+ `age` INT,
+ `occupation` INT,
+ `zip_code` STRING
+)
+with (
+'model'='external',
+'output_columns'='probs:FLOAT'
+);
+
+create service rank_service_proxy on model rank_model_proxy
+with (
+'url'='http://rank-service.sqlrec.svc.cluster.local:80/predict'
+);
+
+call call_service('rank_service_proxy', t1);

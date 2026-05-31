@@ -7,10 +7,8 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.api.Function;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
-import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
+import org.apache.hadoop.hive.metastore.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +55,7 @@ public class SqlFileSchemaAccess implements SchemaAccess {
                 return fun;
             }
         }
-        throw new RuntimeException("function not found " + funName + " from db " + database);
+        throw new NoSuchObjectException("function not found " + funName + " from db " + database);
     }
 
     @Override
@@ -79,9 +77,14 @@ public class SqlFileSchemaAccess implements SchemaAccess {
                 String tableName = extractTableName(createTable.getTableName());
                 databases.add(database);
                 List<FieldSchema> columns = extractColumnsFromCreateTable(createTable);
+                Map<String, String> properties = SchemaUtils.convertPropertyList(createTable.getPropertyList());
+                String primaryKey = extractPrimaryKey(createTable);
+                if (primaryKey != null) {
+                    properties.put("schema.primary-key.columns", primaryKey);
+                }
                 if (!columns.isEmpty()) {
                     result.computeIfAbsent(database, k -> new ArrayList<>())
-                            .add(buildHmsTable(database, tableName, columns));
+                            .add(buildHmsTable(database, tableName, columns, properties));
                 }
             }
         }
@@ -124,13 +127,28 @@ public class SqlFileSchemaAccess implements SchemaAccess {
         return columns;
     }
 
-    private Table buildHmsTable(String database, String tableName, List<FieldSchema> columns) {
+    private String extractPrimaryKey(SqlCreateTable createTable) {
+        for (SqlTableConstraint constraint : createTable.getFullConstraints()) {
+            if (constraint.isPrimaryKey()) {
+                return String.join(",", constraint.getColumnNames());
+            }
+        }
+        return null;
+    }
+
+    private Table buildHmsTable(String database, String tableName, List<FieldSchema> columns,
+                                Map<String, String> properties) {
         Table table = new Table();
         table.setDbName(database);
         table.setTableName(tableName);
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(columns);
         table.setSd(sd);
+        Map<String, String> parameters = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            parameters.put("flink." + entry.getKey(), entry.getValue());
+        }
+        table.setParameters(parameters);
         return table;
     }
 

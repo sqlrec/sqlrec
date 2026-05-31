@@ -6,6 +6,11 @@ import com.sqlrec.db.local.SqlFileParser;
 import com.sqlrec.db.local.SqlFileSchemaAccess;
 import com.sqlrec.db.remote.DbStoreAccess;
 import com.sqlrec.db.remote.HmsSchemaAccess;
+import com.sqlrec.model.ServiceManager;
+import com.sqlrec.sql.parser.SqlCreateService;
+import org.apache.calcite.sql.SqlNode;
+
+import java.util.ArrayList;
 
 public class MetadataAccessFactory {
 
@@ -15,14 +20,18 @@ public class MetadataAccessFactory {
         if (instance == null) {
             synchronized (MetadataAccessFactory.class) {
                 if (instance == null) {
-                    instance = createDefault();
+                    try {
+                        init();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }
         return instance;
     }
 
-    private static MetadataAccess createDefault() {
+    private static void init() throws Exception {
         String sqlSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getValue();
         if (sqlSchemaDir != null && !sqlSchemaDir.isEmpty()) {
             SqlFileParser parser = new SqlFileParser(sqlSchemaDir);
@@ -35,10 +44,14 @@ public class MetadataAccessFactory {
                     parser.getSqlFunctionNodeGroups(),
                     parser.getApiNodes(),
                     parser.getModelNodes(),
-                    parser.getServiceNodes()
+                    new ArrayList<>()
             );
-            return new MetadataAccess(schemaAccess, storeAccess);
+            instance = new MetadataAccess(schemaAccess, storeAccess);
+            for (SqlNode node : parser.getServiceNodes()) {
+                ServiceManager.saveServiceInDb((SqlCreateService) node, instance);
+            }
+        } else {
+            instance = new MetadataAccess(new HmsSchemaAccess(), new DbStoreAccess());
         }
-        return new MetadataAccess(new HmsSchemaAccess(), new DbStoreAccess());
     }
 }

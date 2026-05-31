@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class ConfigOption<T> {
     private final String key;
-    private final T defaultValue;
+    private T defaultValue;
     private final String description;
     private final List<T> validValues;
     private final Class<T> type;
@@ -20,6 +20,10 @@ public class ConfigOption<T> {
 
     public T getDefaultValue() {
         return defaultValue;
+    }
+
+    public void setDefaultValue(T defaultValue) {
+        this.defaultValue = defaultValue;
     }
 
     public String getDescription() {
@@ -43,7 +47,6 @@ public class ConfigOption<T> {
     }
 
     public T getValue() {
-        //get from environment variable
         String value = System.getenv(key);
         return processValue(value);
     }
@@ -63,7 +66,6 @@ public class ConfigOption<T> {
         if (value == null) {
             return defaultValue;
         }
-        //convert to type
         if (getType() == String.class) {
             return (T) value;
         }

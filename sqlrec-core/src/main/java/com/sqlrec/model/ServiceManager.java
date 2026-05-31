@@ -68,21 +68,34 @@ public class ServiceManager {
             }
         }
 
+        Service service = saveServiceInDb(sqlCreateService, db);
+        K8sManager.applyYaml(service.getYaml());
+
+        return serviceConfig.getServiceName();
+    }
+
+    public static Service saveServiceInDb(SqlCreateService sqlCreateService, MetadataAccess db) throws Exception {
+        ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
+
         Model modelEntity = db.getModel(serviceConfig.getModelName());
         if (modelEntity == null) {
             throw new IllegalArgumentException("model not exists: " + serviceConfig.getModelName());
         }
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
-        Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
-        if (checkpoint == null) {
-            throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
-        }
-        if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
-            throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
-        }
-        if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
-            throw new IllegalArgumentException("service only supports export checkpoint");
+        String modelDdl = modelEntity.getDdl();
+        if(StringUtils.isNotEmpty(serviceConfig.getCheckpointName())) {
+            Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
+            if (checkpoint == null) {
+                throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
+            }
+            if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
+                throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
+            }
+            if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
+                throw new IllegalArgumentException("service only supports export checkpoint");
+            }
+            modelDdl = checkpoint.getModelDdl();
         }
 
         ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.getModelConfig());
@@ -99,7 +112,7 @@ public class ServiceManager {
         Service service = new Service();
         service.setName(serviceConfig.getServiceName());
         service.setModelName(serviceConfig.getModelName());
-        service.setModelDdl(checkpoint.getModelDdl());
+        service.setModelDdl(modelDdl);
         service.setCheckpointName(serviceConfig.getCheckpointName());
         service.setDdl(CompileManager.getSqlStr(sqlCreateService));
         service.setYaml(k8sYaml);
@@ -109,9 +122,7 @@ public class ServiceManager {
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
         db.upsertService(service);
-        K8sManager.applyYaml(k8sYaml);
-
-        return serviceConfig.getServiceName();
+        return service;
     }
 
     public static void deleteService(String serviceName) {

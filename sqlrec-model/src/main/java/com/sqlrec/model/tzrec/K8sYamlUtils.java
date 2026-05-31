@@ -6,6 +6,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -139,6 +140,10 @@ public class K8sYamlUtils {
             String modelCheckpointDir,
             Map<String, String> params
     ) {
+        if (StringUtils.isEmpty(modelCheckpointDir)) {
+            throw new RuntimeException("createDeploymentYaml failed, modelCheckpointDir is empty");
+        }
+
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
 
         Deployment deployment = new DeploymentBuilder()
