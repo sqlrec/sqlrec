@@ -1,9 +1,10 @@
-package com.sqlrec.utils;
+package com.sqlrec.schema;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.db.remote.HmsClient;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.udf.config.FunctionConfigs;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
@@ -82,7 +83,9 @@ public class JavaFunctionUtils {
         if (skipHmsQuery) {
             return null;
         }
-        org.apache.hadoop.hive.metastore.api.Function functionObj = HmsClient.getFunctionObj(db, funName);
+
+        MetadataAccess metadataAccess = MetadataAccessFactory.getInstance();
+        org.apache.hadoop.hive.metastore.api.Function functionObj = metadataAccess.getFunction(db, funName);
         if (functionObj == null) {
             throw new Exception("Function not found: " + funName);
         }

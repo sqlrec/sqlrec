@@ -10,7 +10,7 @@ import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
-import com.sqlrec.db.remote.HmsClient;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
@@ -127,7 +127,7 @@ public class ModelEntityConverter {
             db = dataSource.getComponent(0).toString();
             table = dataSource.getComponent(1).toString();
         }
-        List<String> partitionPaths = HmsClient.getPartitionPaths(db, table, partitionFilter);
+        List<String> partitionPaths = MetadataAccessFactory.getInstance().getPartitionPaths(db, table, partitionFilter);
         partitionPaths = fixPathProtocol(partitionPaths);
         return partitionPaths.stream().map(path -> path + "/*").toList();
     }

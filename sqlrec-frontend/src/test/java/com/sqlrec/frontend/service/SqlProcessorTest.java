@@ -7,7 +7,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;
 import com.sqlrec.schema.CalciteSchemaFactory;
-import com.sqlrec.utils.JavaFunctionUtils;
+import com.sqlrec.schema.JavaFunctionUtils;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;

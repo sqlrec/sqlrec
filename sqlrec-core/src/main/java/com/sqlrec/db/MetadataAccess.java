@@ -24,16 +24,24 @@ public class MetadataAccess {
         return schemaAccess.getDatabases();
     }
 
-    public List<Table> getTableMetas(String database) throws Exception {
-        return schemaAccess.getTableMetas(database);
+    public List<Table> getTables(String database) throws Exception {
+        return schemaAccess.getTables(database);
     }
 
-    public List<Function> getFunctionMetas(String database) throws Exception {
-        return schemaAccess.getFunctionMetas(database);
+    public List<Function> getFunctions(String database) throws Exception {
+        return schemaAccess.getFunctions(database);
+    }
+
+    public Function getFunction(String database, String funName) throws Exception {
+        return schemaAccess.getFunction(database, funName);
     }
 
     public long getTableUpdateTime(String database, String table) {
         return schemaAccess.getTableUpdateTime(database, table);
+    }
+
+    public List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception {
+        return schemaAccess.getPartitionPaths(database, table, partitionFilter);
     }
 
     public List<SqlFunction> getSqlFunctionList() {

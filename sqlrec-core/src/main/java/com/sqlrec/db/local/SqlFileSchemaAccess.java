@@ -14,13 +14,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class SqlFileSchemaAccess implements SchemaAccess {
     private static final Logger log = LoggerFactory.getLogger(SqlFileSchemaAccess.class);
@@ -47,18 +41,33 @@ public class SqlFileSchemaAccess implements SchemaAccess {
     }
 
     @Override
-    public List<Table> getTableMetas(String database) throws Exception {
+    public List<Table> getTables(String database) throws Exception {
         return new ArrayList<>(databaseTables.getOrDefault(database, Collections.emptyList()));
     }
 
     @Override
-    public List<Function> getFunctionMetas(String database) throws Exception {
+    public List<Function> getFunctions(String database) throws Exception {
         return new ArrayList<>(databaseFunctions.getOrDefault(database, Collections.emptyList()));
+    }
+
+    @Override
+    public Function getFunction(String database, String funName) throws Exception {
+        for (Function fun : getFunctions(database)) {
+            if (fun.getFunctionName().equalsIgnoreCase(funName)) {
+                return fun;
+            }
+        }
+        throw new RuntimeException("function not found " + funName + " from db " + database);
     }
 
     @Override
     public long getTableUpdateTime(String database, String table) {
         return tableLoadTime.getOrDefault(database, 0L);
+    }
+
+    @Override
+    public List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception {
+        throw new UnsupportedOperationException("getPartitionPaths is not supported in SqlFileSchemaAccess");
     }
 
     private Map<String, List<Table>> buildDatabaseTables(List<SqlNode> tableNodes, Set<String> databases) {

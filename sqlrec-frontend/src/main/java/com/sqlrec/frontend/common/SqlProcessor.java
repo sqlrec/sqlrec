@@ -11,7 +11,6 @@ import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
-import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.entity.*;
 import com.sqlrec.frontend.service.Utils;
 import com.sqlrec.model.ModelManager;
@@ -263,7 +262,8 @@ public class SqlProcessor {
                 return Utils.convertMsgToResult("database not exists: " + dbName, "error");
             }
 
-            List<String> tableNames = HmsClient.getAllTables(dbName);
+            List<String> tableNames = MetadataAccessFactory.getInstance().getTables(dbName)
+                    .stream().map(org.apache.hadoop.hive.metastore.api.Table::getTableName).collect(Collectors.toList());
             if (defaultSchema.equalsIgnoreCase(dbName)) {
                 tableNames.addAll(schema.getTableNames());
             }

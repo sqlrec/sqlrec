@@ -24,7 +24,7 @@ public class HmsSchemaAccess implements SchemaAccess {
     }
 
     @Override
-    public List<Table> getTableMetas(String database) throws Exception {
+    public List<Table> getTables(String database) throws Exception {
         List<Table> tables = new ArrayList<>();
         Map<String, Long> tableUpdateTimes = tableUpdateTimesMap.computeIfAbsent(database, k -> new ConcurrentHashMap<>());
         try {
@@ -44,7 +44,7 @@ public class HmsSchemaAccess implements SchemaAccess {
     }
 
     @Override
-    public List<Function> getFunctionMetas(String database) throws Exception {
+    public List<Function> getFunctions(String database) throws Exception {
         List<Function> functions = new ArrayList<>();
         try {
             List<String> functionNames = HmsClient.getAllFunctions(database);
@@ -54,17 +54,16 @@ public class HmsSchemaAccess implements SchemaAccess {
                     functions.add(functionObj);
                 }
             }
-            for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
-                Function defaultFunc = new Function();
-                defaultFunc.setFunctionName(entry.getKey());
-                defaultFunc.setClassName(entry.getValue());
-                functions.add(defaultFunc);
-            }
         } catch (Exception e) {
             log.error("Error while getting function metas for schema {}", database, e);
             throw new RuntimeException("Failed to get function metas for schema: " + database, e);
         }
         return functions;
+    }
+
+    @Override
+    public Function getFunction(String database, String funName) throws Exception {
+        return HmsClient.getFunctionObj(database, funName);
     }
 
     @Override
@@ -74,5 +73,10 @@ public class HmsSchemaAccess implements SchemaAccess {
             return 0L;
         }
         return tableUpdateTimes.getOrDefault(table, 0L);
+    }
+
+    @Override
+    public List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception {
+        return HmsClient.getPartitionPaths(database, table, partitionFilter);
     }
 }

@@ -8,7 +8,7 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.SqlFunctionBindable;
-import com.sqlrec.utils.JavaFunctionUtils;
+import com.sqlrec.schema.JavaFunctionUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;

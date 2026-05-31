@@ -6,6 +6,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.udf.UdfManager;
+import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.ObjCache;
 import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.schema.Function;
@@ -54,7 +55,7 @@ public class HmsSchema extends AbstractSchema {
 
     private Map<String, Table> computeTableMap(Map<String, Table> oldTableMap) {
         try {
-            List<org.apache.hadoop.hive.metastore.api.Table> tableMetas = metadataAccess.getTableMetas(databaseName);
+            List<org.apache.hadoop.hive.metastore.api.Table> tableMetas = metadataAccess.getTables(databaseName);
             Map<String, Table> tableMap = new ConcurrentHashMap<>();
             for (org.apache.hadoop.hive.metastore.api.Table tableMeta : tableMetas) {
                 String tableName = tableMeta.getTableName();
@@ -79,7 +80,7 @@ public class HmsSchema extends AbstractSchema {
 
     private Multimap<String, Function> computeFunctionMap(Multimap<String, Function> oldFunctionMap) {
         try {
-            List<org.apache.hadoop.hive.metastore.api.Function> functionMetas = metadataAccess.getFunctionMetas(databaseName);
+            List<org.apache.hadoop.hive.metastore.api.Function> functionMetas = metadataAccess.getFunctions(databaseName);
             Multimap<String, Function> functionMap = ArrayListMultimap.create();
             for (org.apache.hadoop.hive.metastore.api.Function functionMeta : functionMetas) {
                 try {
@@ -90,6 +91,17 @@ public class HmsSchema extends AbstractSchema {
                 } catch (Exception e) {
                     log.error("Failed to create scalar function {} from class {}",
                             functionMeta.getFunctionName(), functionMeta.getClassName(), e);
+                }
+            }
+            for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
+                try {
+                    ScalarFunction scalarFunction = UdfManager.createScalarFunction(entry.getValue());
+                    if (scalarFunction != null) {
+                        functionMap.put(entry.getKey(), scalarFunction);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to create scalar function {} from class {}",
+                            entry.getKey(), entry.getValue(), e);
                 }
             }
             return functionMap;

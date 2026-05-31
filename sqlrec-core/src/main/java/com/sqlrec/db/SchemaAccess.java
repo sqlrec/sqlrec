@@ -9,9 +9,13 @@ public interface SchemaAccess {
 
     List<String> getDatabases() throws Exception;
 
-    List<Table> getTableMetas(String database) throws Exception;
+    List<Table> getTables(String database) throws Exception;
 
-    List<Function> getFunctionMetas(String database) throws Exception;
+    List<Function> getFunctions(String database) throws Exception;
+
+    Function getFunction(String database, String funName) throws Exception;
 
     long getTableUpdateTime(String database, String table);
+
+    List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception;
 }
