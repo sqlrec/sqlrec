@@ -32,14 +32,13 @@ public class SqlCreateApi extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("create");
+        writer.keyword("CREATE");
         if (orReplace) {
-            writer.keyword("or");
-            writer.keyword("replace");
+            writer.keyword("OR REPLACE");
         }
-        writer.keyword("api");
+        writer.keyword("API");
         apiName.unparse(writer, leftPrec, rightPrec);
-        writer.keyword("with");
+        writer.keyword("WITH");
         funcName.unparse(writer, leftPrec, rightPrec);
     }
 

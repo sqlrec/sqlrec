@@ -30,13 +30,11 @@ public class SqlCreateSqlFunction extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("create");
+        writer.keyword("CREATE");
         if (orReplace) {
-            writer.keyword("or");
-            writer.keyword("replace");
+            writer.keyword("OR REPLACE");
         }
-        writer.keyword("sql");
-        writer.keyword("function");
+        writer.keyword("SQL FUNCTION");
         funcName.unparse(writer, leftPrec, rightPrec);
     }
 

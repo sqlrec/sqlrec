@@ -45,31 +45,31 @@ public class SqlCallSqlFunction extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("call");
+        writer.keyword("CALL");
         if (funcNameVariable != null) {
             funcNameVariable.unparse(writer, leftPrec, rightPrec);
         } else {
             funcName.unparse(writer, leftPrec, rightPrec);
         }
-        writer.literal("(");
+        SqlWriter.Frame frame = writer.startList("(", ")");
         for (int i = 0; i < inputTableList.size(); i++) {
             if (i > 0) {
-                writer.literal(", ");
+                writer.literal(",");
             }
             inputTableList.get(i).unparse(writer, leftPrec, rightPrec);
         }
-        writer.literal(")");
+        writer.endList(frame);
         if (likeTableName != null) {
-            writer.keyword("like");
+            writer.keyword("LIKE");
             likeTableName.unparse(writer, leftPrec, rightPrec);
         }
         if (likeFunctionName != null) {
-            writer.keyword("like");
-            writer.keyword("function");
+            writer.keyword("LIKE");
+            writer.keyword("FUNCTION");
             likeFunctionName.unparse(writer, leftPrec, rightPrec);
         }
         if (isAsync) {
-            writer.keyword("async");
+            writer.keyword("ASYNC");
         }
     }
 

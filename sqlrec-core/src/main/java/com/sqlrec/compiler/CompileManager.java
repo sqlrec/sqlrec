@@ -6,21 +6,23 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlWriterConfig;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
@@ -55,6 +57,17 @@ public class CompileManager {
                 .withLex(Lex.JAVA);
         SqlParser parser = SqlParser.create(sql, parserConfig);
         return parser.parseQuery();
+    }
+
+    public static String getSqlStr(SqlNode sqlNode) {
+        SqlWriterConfig config = SqlWriterConfig.of()
+                .withDialect(AnsiSqlDialect.DEFAULT)
+                .withIndentation(4)
+                .withClauseStartsLine(true)
+                .withSelectListItemsOnSeparateLines(true);
+        SqlPrettyWriter writer = new SqlPrettyWriter(config);
+        sqlNode.unparse(writer, 0, 0);
+        return writer.toSqlString().getSql();
     }
 
     public BindableInterface compileSql(
@@ -147,10 +160,6 @@ public class CompileManager {
 
     private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema, String defaultSchema) throws Exception {
         return NormalSqlCompiler.getNormalSqlBindable(sqlStr, schema, defaultSchema);
-    }
-
-    public static String getSqlStr(SqlNode sqlNode) {
-        return sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
     }
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {

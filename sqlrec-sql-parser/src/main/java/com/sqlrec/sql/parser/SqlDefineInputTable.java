@@ -48,24 +48,28 @@ public class SqlDefineInputTable extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("define");
-        writer.keyword("input");
-        writer.keyword("table");
+        writer.keyword("DEFINE");
+        writer.keyword("INPUT");
+        writer.keyword("TABLE");
         tableName.unparse(writer, leftPrec, rightPrec);
         if (likeTable != null) {
-            writer.keyword("like");
+            writer.keyword("LIKE");
             likeTable.unparse(writer, leftPrec, rightPrec);
         } else {
-            writer.keyword("(");
+            writer.print("(\n");
             for (int i = 0; i < columnList.size(); i++) {
-                if (i > 0) {
-                    writer.literal(", ");
-                }
+                writer.print("  ");
+                writer.setNeedWhitespace(false);
                 columnList.get(i).unparse(writer, leftPrec, rightPrec);
-                writer.literal(" ");
                 columnTypeList.get(i).unparse(writer, leftPrec, rightPrec);
+                if (i < columnList.size() - 1) {
+                    writer.setNeedWhitespace(false);
+                    writer.print(",\n");
+                } else {
+                    writer.setNeedWhitespace(false);
+                    writer.print("\n)");
+                }
             }
-            writer.keyword(")");
         }
     }
 

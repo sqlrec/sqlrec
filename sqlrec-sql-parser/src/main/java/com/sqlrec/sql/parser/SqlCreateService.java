@@ -3,6 +3,7 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.SqlNode;
 import java.util.List;
@@ -51,29 +52,35 @@ public class SqlCreateService extends SqlCreate {
     }
 
     @Override
-    public void unparse(org.apache.calcite.sql.SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.print("CREATE SERVICE");
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("CREATE");
+        writer.keyword("SERVICE");
         if (ifNotExists) {
-            writer.print(" IF NOT EXISTS");
+            writer.keyword("IF NOT EXISTS");
         }
-        writer.print(" ");
         serviceName.unparse(writer, leftPrec, rightPrec);
-        writer.print(" ON MODEL");
-        writer.print(" ");
+        writer.keyword("ON");
+        writer.keyword("MODEL");
         modelName.unparse(writer, leftPrec, rightPrec);
         if (checkpoint != null) {
-            writer.print(" checkpoint=");
+            writer.literal("checkpoint=");
             checkpoint.unparse(writer, leftPrec, rightPrec);
         }
         if (propertyList != null && propertyList.size() > 0) {
-            writer.print(" WITH (");
+            writer.keyword("WITH");
+            writer.print("(\n");
             for (int i = 0; i < propertyList.size(); i++) {
-                if (i > 0) {
-                    writer.print(", ");
-                }
+                writer.print("  ");
+                writer.setNeedWhitespace(false);
                 propertyList.get(i).unparse(writer, leftPrec, rightPrec);
+                if (i < propertyList.size() - 1) {
+                    writer.setNeedWhitespace(false);
+                    writer.print(",\n");
+                } else {
+                    writer.setNeedWhitespace(false);
+                    writer.print("\n)");
+                }
             }
-            writer.print(")");
         }
     }
 

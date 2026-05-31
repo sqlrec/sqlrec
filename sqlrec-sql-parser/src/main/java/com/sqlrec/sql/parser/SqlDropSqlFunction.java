@@ -31,11 +31,9 @@ public class SqlDropSqlFunction extends SqlDrop {
     @Override
     public void unparse(org.apache.calcite.sql.SqlWriter writer, int leftPrec, int rightPrec) {
         writer.keyword("DROP");
-        writer.keyword("SQL");
-        writer.keyword("FUNCTION");
+        writer.keyword("SQL FUNCTION");
         if (ifExists) {
-            writer.keyword("IF");
-            writer.keyword("EXISTS");
+            writer.keyword("IF EXISTS");
         }
         funcName.unparse(writer, leftPrec, rightPrec);
     }

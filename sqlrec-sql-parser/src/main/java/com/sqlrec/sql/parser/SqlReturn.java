@@ -28,7 +28,7 @@ public class SqlReturn extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("return");
+        writer.keyword("RETURN");
         if (tableName != null) {
             tableName.unparse(writer, leftPrec, rightPrec);
         }

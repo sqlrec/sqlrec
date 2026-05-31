@@ -58,7 +58,7 @@ public class SqlAlterModelDropCheckpoint extends SqlCall {
             writer.keyword("EXISTS");
         }
         writer.keyword("CHECKPOINT");
-        writer.print("=");
+        writer.literal("=");
         checkpointName.unparse(writer, leftPrec, rightPrec);
     }
 

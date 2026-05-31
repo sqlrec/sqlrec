@@ -2,11 +2,12 @@ package com.sqlrec.sql.parser;
 
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.SqlNode;
-import java.util.List;
+
 import java.util.Collections;
+import java.util.List;
 
 public class SqlCreateModel extends SqlCreate {
     private SqlIdentifier modelName;
@@ -49,31 +50,43 @@ public class SqlCreateModel extends SqlCreate {
 
     @Override
     public void unparse(org.apache.calcite.sql.SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.print("CREATE MODEL");
+        writer.keyword("CREATE");
+        writer.keyword("MODEL");
         if (ifNotExists) {
-            writer.print(" IF NOT EXISTS");
+            writer.keyword("IF NOT EXISTS");
         }
-        writer.print(" ");
         modelName.unparse(writer, leftPrec, rightPrec);
         if (fieldList != null && fieldList.size() > 0) {
-            writer.print(" (");
+            writer.print("(\n");
             for (int i = 0; i < fieldList.size(); i++) {
-                if (i > 0) {
-                    writer.print(", ");
-                }
+                writer.print("  ");
+                writer.setNeedWhitespace(false);
                 fieldList.get(i).unparse(writer, leftPrec, rightPrec);
+                if (i < fieldList.size() - 1) {
+                    writer.setNeedWhitespace(false);
+                    writer.print(",\n");
+                } else {
+                    writer.setNeedWhitespace(false);
+                    writer.print("\n)");
+                }
             }
-            writer.print(")");
+            writer.setNeedWhitespace(true);
         }
         if (propertyList != null && propertyList.size() > 0) {
-            writer.print(" WITH (");
+            writer.keyword("WITH");
+            writer.print("(\n");
             for (int i = 0; i < propertyList.size(); i++) {
-                if (i > 0) {
-                    writer.print(", ");
-                }
+                writer.print("  ");
+                writer.setNeedWhitespace(false);
                 propertyList.get(i).unparse(writer, leftPrec, rightPrec);
+                if (i < propertyList.size() - 1) {
+                    writer.setNeedWhitespace(false);
+                    writer.print(",\n");
+                } else {
+                    writer.setNeedWhitespace(false);
+                    writer.print("\n)");
+                }
             }
-            writer.print(")");
         }
     }
 

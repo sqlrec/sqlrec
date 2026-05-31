@@ -38,7 +38,7 @@ public class SqlCache extends SqlCall {
         writer.keyword("AS");
         if (callSqlFunction != null) {
             callSqlFunction.unparse(writer, leftPrec, rightPrec);
-        } else {
+        } else if (select != null) {
             select.unparse(writer, leftPrec, rightPrec);
         }
     }

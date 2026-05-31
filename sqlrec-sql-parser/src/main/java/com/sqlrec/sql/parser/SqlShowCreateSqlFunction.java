@@ -27,9 +27,8 @@ public class SqlShowCreateSqlFunction extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.keyword("desc");
-        writer.keyword("sql");
-        writer.keyword("function");
+        writer.keyword("DESC");
+        writer.keyword("SQL FUNCTION");
         funcName.unparse(writer, leftPrec, rightPrec);
     }
 

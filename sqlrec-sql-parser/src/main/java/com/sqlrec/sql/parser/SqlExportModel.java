@@ -3,6 +3,7 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.SqlNode;
 import java.util.List;
@@ -51,32 +52,35 @@ public class SqlExportModel extends SqlCreate {
     }
 
     @Override
-    public void unparse(org.apache.calcite.sql.SqlWriter writer, int leftPrec, int rightPrec) {
-        writer.print("EXPORT MODEL");
-        writer.print(" ");
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("EXPORT");
+        writer.keyword("MODEL");
         modelName.unparse(writer, leftPrec, rightPrec);
-        writer.print(" ");
-        writer.print("checkpoint=");
+        writer.literal("checkpoint=");
         checkpoint.unparse(writer, leftPrec, rightPrec);
         if (dataSource != null) {
-            writer.print(" ON");
-            writer.print(" ");
+            writer.keyword("ON");
             dataSource.unparse(writer, leftPrec, rightPrec);
         }
         if (whereCondition != null) {
-            writer.print(" WHERE");
-            writer.print(" ");
+            writer.keyword("WHERE");
             whereCondition.unparse(writer, leftPrec, rightPrec);
         }
         if (propertyList != null && propertyList.size() > 0) {
-            writer.print(" WITH (");
+            writer.keyword("WITH");
+            writer.print("(\n");
             for (int i = 0; i < propertyList.size(); i++) {
-                if (i > 0) {
-                    writer.print(", ");
-                }
+                writer.print("  ");
+                writer.setNeedWhitespace(false);
                 propertyList.get(i).unparse(writer, leftPrec, rightPrec);
+                if (i < propertyList.size() - 1) {
+                    writer.setNeedWhitespace(false);
+                    writer.print(",\n");
+                } else {
+                    writer.setNeedWhitespace(false);
+                    writer.print("\n)");
+                }
             }
-            writer.print(")");
         }
     }
 
