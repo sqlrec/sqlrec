@@ -13,7 +13,7 @@ call get_or_default('recall_fun', 'recall_fun')(full_user_info)
 like function 'recall_fun';
 
 cache table rec_item as
-call get_or_default('rank_fun', 'rank_fun')(full_user_info, recall_item)
+call get_or_default('rank_fun', 'rank_fun_simple')(full_user_info, recall_item)
 like function 'rank_fun';
 
 cache table diversify_rec_item as

@@ -226,6 +226,6 @@ public class IfCacheBindable extends BindableInterface {
     }
 
     public List<RelDataTypeField> getCacheTableDataFields() {
-        return thenClause.getReturnDataFields();
+        return thenClause.getCacheTableDataFields();
     }
 }

@@ -9,7 +9,22 @@ define input table user_info(
   zip_code string
 );
 
-cache table user_embedding as call call_service('recall_service_user', user_info);
+IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
+  (cache table user_embedding as
+    call call_service('recall_service_user', user_info)
+  )
+ELSE
+  (cache table user_embedding as
+    select
+      user_id,
+      gender,
+      age,
+      occupation,
+      zip_code,
+      random_vec('64') as user_tower_emb,
+      random_vec('64') as item_tower_emb
+    from user_info
+  );
 
 cache table vector_recall as
 select item_embedding.id as movie_id
@@ -89,6 +104,35 @@ from truncate_recall_item
 group by movie_id;
 
 return dedup_recall_item;
+
+
+
+-- rank_fun_simple function
+create or replace sql function rank_fun_simple;
+
+define input table user_info(
+  user_id bigint,
+  gender string,
+  age int,
+  occupation int,
+  zip_code string
+);
+
+define input table recall_item(
+  movie_id bigint,
+  rec_reason string
+);
+
+cache table rec_item as
+select
+    recall_item.movie_id,
+    item_table.genres,
+    item_table.title,
+    recall_item.rec_reason
+from
+    recall_item join item_table on recall_item.movie_id = item_table.movie_id;
+
+return rec_item;
 
 
 
@@ -200,7 +244,7 @@ call get_or_default('recall_fun', 'recall_fun')(full_user_info)
 like function 'recall_fun';
 
 cache table rec_item as
-call get_or_default('rank_fun', 'rank_fun')(full_user_info, recall_item)
+call get_or_default('rank_fun', 'rank_fun_simple')(full_user_info, recall_item)
 like function 'rank_fun';
 
 cache table diversify_rec_item as
