@@ -10,8 +10,6 @@ import com.sqlrec.model.ServiceManager;
 import com.sqlrec.sql.parser.SqlCreateService;
 import org.apache.calcite.sql.SqlNode;
 
-import java.util.ArrayList;
-
 public class MetadataAccessFactory {
 
     private static volatile MetadataAccess instance;
@@ -43,12 +41,11 @@ public class MetadataAccessFactory {
             StoreAccess storeAccess = new InMemoryStoreAccess(
                     parser.getSqlFunctionNodeGroups(),
                     parser.getApiNodes(),
-                    parser.getModelNodes(),
-                    new ArrayList<>()
+                    parser.getModelNodes()
             );
             instance = new MetadataAccess(schemaAccess, storeAccess);
             for (SqlNode node : parser.getServiceNodes()) {
-                ServiceManager.saveServiceInDb((SqlCreateService) node, instance);
+                ServiceManager.saveServiceInDb((SqlCreateService) node, instance, true, true);
             }
         } else {
             instance = new MetadataAccess(new HmsSchemaAccess(), new DbStoreAccess());

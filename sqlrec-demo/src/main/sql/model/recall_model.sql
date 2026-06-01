@@ -1,4 +1,4 @@
-create model if not exists `rank_model`
+create model if not exists `recall_model`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -9,6 +9,7 @@ create model if not exists `rank_model`
  `zip_code` STRING
 )
 with (
-'model'='tzrec.wide_and_deep',
-'label_columns'='rating'
+'model'='tzrec.dssm',
+'label_columns'='rating',
+'item_features'='movie_id,genres'
 );

@@ -6,10 +6,8 @@ import com.sqlrec.db.StoreAccess;
 import com.sqlrec.entity.*;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateModel;
-import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,14 +29,10 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     public InMemoryStoreAccess(List<List<SqlNode>> sqlFunctionNodeGroups,
                                List<SqlNode> apiNodes,
-                               List<SqlNode> modelNodes,
-                               List<SqlNode> serviceNodes) {
+                               List<SqlNode> modelNodes) {
         initSqlFunctions(sqlFunctionNodeGroups);
         initApis(apiNodes);
         initModels(modelNodes);
-        initServices(serviceNodes);
-        log.info("Initialized InMemoryStoreAccess with {} functions, {} apis, {} models, {} services",
-                sqlFunctionMap.size(), sqlApiMap.size(), modelMap.size(), serviceMap.size());
     }
 
     private void initSqlFunctions(List<List<SqlNode>> sqlFunctionNodeGroups) {
@@ -93,33 +87,6 @@ public class InMemoryStoreAccess implements StoreAccess {
             model.setUpdatedAt(System.currentTimeMillis());
             modelMap.put(model.getName(), model);
         }
-    }
-
-    private void initServices(List<SqlNode> serviceNodes) {
-        for (SqlNode node : serviceNodes) {
-            if (!(node instanceof SqlCreateService)) {
-                throw new RuntimeException("Expected SqlCreateService but got " + node.getClass().getSimpleName());
-            }
-            SqlCreateService createService = (SqlCreateService) node;
-            Service service = new Service();
-            service.setName(createService.getServiceName().getSimple());
-            service.setModelName(createService.getModelName().getSimple());
-            if (createService.getCheckpoint() != null) {
-                service.setCheckpointName(extractCheckpointName(createService.getCheckpoint()));
-            }
-            service.setDdl(CompileManager.getSqlStr(node));
-            service.setCreatedAt(System.currentTimeMillis());
-            service.setUpdatedAt(System.currentTimeMillis());
-            serviceMap.put(service.getName(), service);
-        }
-    }
-
-    private String extractCheckpointName(SqlNode checkpointNode) {
-        String sql = checkpointNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
-        if (sql.startsWith("'") && sql.endsWith("'")) {
-            return sql.substring(1, sql.length() - 1);
-        }
-        return sql;
     }
 
     private static String checkpointKey(String modelName, String checkpointName) {

@@ -1,4 +1,4 @@
-create service recall_service_item on model recall_model_item
+create service recall_service_item on model recall_model checkpoint='v1_export/item'
 with (
-'url'='http://recall-service-item.sqlrec.svc.cluster.local:80/predict'
+'NAMESPACE'='sqlrec'
 );

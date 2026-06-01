@@ -1,4 +1,4 @@
-create service rank_service on model rank_model
+create service rank_service on model rank_model checkpoint='v1_export'
 with (
-'url'='http://rank-service.sqlrec.svc.cluster.local:80/predict'
+'NAMESPACE'='sqlrec'
 );

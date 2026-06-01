@@ -5,13 +5,13 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.sql.parser.SqlCreateService;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.ObjCache;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -68,13 +68,18 @@ public class ServiceManager {
             }
         }
 
-        Service service = saveServiceInDb(sqlCreateService, db);
+        Service service = saveServiceInDb(sqlCreateService, db, false, false);
         K8sManager.applyYaml(service.getYaml());
 
         return serviceConfig.getServiceName();
     }
 
-    public static Service saveServiceInDb(SqlCreateService sqlCreateService, MetadataAccess db) throws Exception {
+    public static Service saveServiceInDb(
+            SqlCreateService sqlCreateService,
+            MetadataAccess db,
+            boolean skipCheckpoint,
+            boolean skipK8sYaml
+    ) throws Exception {
         ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
         Model modelEntity = db.getModel(serviceConfig.getModelName());
@@ -84,7 +89,7 @@ public class ServiceManager {
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
         String modelDdl = modelEntity.getDdl();
-        if(StringUtils.isNotEmpty(serviceConfig.getCheckpointName())) {
+        if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && !skipCheckpoint) {
             Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
             if (checkpoint == null) {
                 throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
@@ -104,9 +109,12 @@ public class ServiceManager {
         }
 
         String serviceUrl = modelController.getServiceUrl(serviceConfig.getModelConfig(), serviceConfig);
-        String k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
-        if (!StringUtils.isEmpty(k8sYaml)) {
-            k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
+        String k8sYaml = "";
+        if (!skipK8sYaml) {
+            k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
+            if (!StringUtils.isEmpty(k8sYaml)) {
+                k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
+            }
         }
 
         Service service = new Service();
