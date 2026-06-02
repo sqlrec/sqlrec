@@ -1,6 +1,7 @@
 package com.sqlrec.db;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.db.local.InMemoryStoreAccess;
 import com.sqlrec.db.local.SqlFileParser;
 import com.sqlrec.db.local.SqlFileSchemaAccess;
@@ -30,8 +31,8 @@ public class MetadataAccessFactory {
     }
 
     private static void init() throws Exception {
-        String sqlSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getValue();
-        if (sqlSchemaDir != null && !sqlSchemaDir.isEmpty()) {
+        if (ExecEnv.isFileSystemMeta()) {
+            String sqlSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getValue();
             SqlFileParser parser = new SqlFileParser(sqlSchemaDir);
             parser.load();
             SchemaAccess schemaAccess = new SqlFileSchemaAccess(

@@ -5,6 +5,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
@@ -121,6 +122,10 @@ public class SqlProcessor {
             }
             List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
             return Utils.convertEnumerableToTRowSet(enumerable, fields);
+        }
+
+        if (ExecEnv.isFileSystemMeta()) {
+            throw new RuntimeException("sql can not exec in filesystem meta");
         }
 
         return null;
