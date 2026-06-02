@@ -14,10 +14,12 @@ public class MetadataAccess {
 
     private final SchemaAccess schemaAccess;
     private final StoreAccess storeAccess;
+    private final HdfsAccess hdfsAccess;
 
-    public MetadataAccess(SchemaAccess schemaAccess, StoreAccess storeAccess) {
+    public MetadataAccess(SchemaAccess schemaAccess, StoreAccess storeAccess, HdfsAccess hdfsAccess) {
         this.schemaAccess = schemaAccess;
         this.storeAccess = storeAccess;
+        this.hdfsAccess = hdfsAccess;
     }
 
     public List<String> getDatabases() throws Exception {
@@ -166,5 +168,13 @@ public class MetadataAccess {
 
     public void deleteService(String name) {
         storeAccess.deleteService(name);
+    }
+
+    public boolean hdfsPathExists(String hdfsPath) {
+        return hdfsAccess.pathExists(hdfsPath);
+    }
+
+    public void hdfsDeletePath(String hdfsPath) {
+        hdfsAccess.deletePath(hdfsPath);
     }
 }

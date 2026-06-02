@@ -1,5 +1,6 @@
-package com.sqlrec.utils;
+package com.sqlrec.db.remote;
 
+import com.sqlrec.db.HdfsAccess;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,11 +10,12 @@ import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public class HadoopUtils {
-    private static final Logger log = LoggerFactory.getLogger(HadoopUtils.class);
+public class RemoteHdfsAccess implements HdfsAccess {
+    private static final Logger log = LoggerFactory.getLogger(RemoteHdfsAccess.class);
     private static final long DEFAULT_TIMEOUT_SECONDS = 300;
 
-    public static boolean pathExists(String hdfsPath) {
+    @Override
+    public boolean pathExists(String hdfsPath) {
         validatePath(hdfsPath);
 
         try {
@@ -33,7 +35,8 @@ public class HadoopUtils {
         }
     }
 
-    public static void deletePath(String hdfsPath) {
+    @Override
+    public void deletePath(String hdfsPath) {
         validatePath(hdfsPath);
 
         try {
@@ -66,12 +69,7 @@ public class HadoopUtils {
         }
     }
 
-    public static void deletePathWithCheck(String hdfsPath, String modelPath) {
-        validateModelPath(hdfsPath, modelPath);
-        deletePath(hdfsPath);
-    }
-
-    private static void validatePath(String hdfsPath) {
+    private void validatePath(String hdfsPath) {
         if (hdfsPath == null || StringUtils.containsWhitespace(hdfsPath)) {
             throw new IllegalArgumentException("hdfsPath cannot be blank");
         }
@@ -83,43 +81,7 @@ public class HadoopUtils {
         }
     }
 
-    private static void validateModelPath(String hdfsPath, String modelPath) {
-        String normalizedPath = normalizePath(hdfsPath);
-        String normalizedModelPath = normalizePath(modelPath);
-
-        if (!normalizedPath.startsWith(normalizedModelPath)) {
-            throw new IllegalArgumentException("Path must be under model path. Path: " + hdfsPath + ", Model path: " + modelPath);
-        }
-    }
-
-    private static String normalizePath(String path) {
-        if (path == null) {
-            return "";
-        }
-
-        String normalized = path;
-
-        int protocolIndex = normalized.indexOf("://");
-        if (protocolIndex != -1) {
-            normalized = normalized.substring(protocolIndex + 3);
-            int slashIndex = normalized.indexOf("/");
-            if (slashIndex != -1) {
-                normalized = normalized.substring(slashIndex);
-            }
-        }
-
-        if (!normalized.startsWith("/")) {
-            normalized = "/" + normalized;
-        }
-
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-
-        return normalized;
-    }
-
-    private static void clearJavaToolOptions(Map<String, String> environment) {
+    private void clearJavaToolOptions(Map<String, String> environment) {
         environment.remove("JAVA_TOOL_OPTIONS");
     }
 }

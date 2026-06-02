@@ -14,7 +14,7 @@ import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
-import com.sqlrec.utils.HadoopUtils;
+import com.sqlrec.utils.PathUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +66,7 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
-        if (HadoopUtils.pathExists(modelConfig.getPath())) {
+        if (db.hdfsPathExists(modelConfig.getPath())) {
             throw new IllegalArgumentException("Model path already exists: " + modelConfig.getPath());
         }
 
@@ -183,7 +183,8 @@ public class ModelManager {
 
         String exportCleanPath = modelController.getExportCleanPath(modelExportConf);
         if (StringUtils.isNotEmpty(exportCleanPath)) {
-            HadoopUtils.deletePathWithCheck(exportCleanPath, modelConfig.getPath());
+            PathUtils.validateModelPath(exportCleanPath, modelConfig.getPath());
+            db.hdfsDeletePath(exportCleanPath);
         }
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
@@ -309,7 +310,8 @@ public class ModelManager {
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(checkpoint.getModelDdl());
         String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
-        HadoopUtils.deletePathWithCheck(checkpointPath, modelConfig.getPath());
+        PathUtils.validateModelPath(checkpointPath, modelConfig.getPath());
+        db.hdfsDeletePath(checkpointPath);
 
         db.deleteCheckpoint(modelName, checkpointName);
     }
@@ -334,7 +336,7 @@ public class ModelManager {
         }
 
         ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
-        HadoopUtils.deletePath(modelConfig.getPath());
+        db.hdfsDeletePath(modelConfig.getPath());
 
         db.deleteModel(modelName);
     }
