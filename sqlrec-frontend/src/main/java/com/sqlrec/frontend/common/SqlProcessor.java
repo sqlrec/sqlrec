@@ -18,6 +18,7 @@ import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.*;
 import com.sqlrec.utils.SchemaUtils;
@@ -100,11 +101,6 @@ public class SqlProcessor {
             return null;
         }
 
-        result = processResourceEdit(sqlNode);
-        if (result != null) {
-            return result;
-        }
-
         result = processResourceQuery(sqlNode);
         if (result != null) {
             return result;
@@ -126,6 +122,13 @@ public class SqlProcessor {
 
         if (ExecEnv.isFileSystemMeta()) {
             throw new RuntimeException("sql can not exec in filesystem meta");
+        }
+
+        CacheManager.invalidateAll();
+
+        result = processResourceEdit(sqlNode);
+        if (result != null) {
+            return result;
         }
 
         return null;

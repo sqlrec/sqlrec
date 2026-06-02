@@ -25,6 +25,11 @@ public class CalciteSchemaFactory {
             }
     );
 
+    public static void invalidateCache() {
+        databaseListCache.invalidate();
+        schemaMap.values().forEach(HmsSchema::invalidateCache);
+    }
+
     public static void setGlobalSchema(CalciteSchema schema) {
         globalSchema = schema;
     }

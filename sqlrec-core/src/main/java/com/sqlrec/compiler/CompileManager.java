@@ -43,6 +43,11 @@ public class CompileManager {
             .expireAfterWrite(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS)
             .build();
 
+    public static void invalidateCache() {
+        sqlApiCache.invalidateAll();
+        functionBindableMap.clear();
+    }
+
     private List<String> compilingSqlFunctions = new ArrayList<>();
 
     public CompileManager() {

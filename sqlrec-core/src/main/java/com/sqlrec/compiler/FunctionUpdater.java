@@ -2,6 +2,7 @@ package com.sqlrec.compiler;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.db.MetadataAccess;
@@ -28,6 +29,11 @@ public class FunctionUpdater {
     private static ScheduledExecutorService executor;
 
     public static synchronized void initFunctionUpdateService() {
+        if (ExecEnv.isFileSystemMeta()) {
+            log.info("skip start FunctionUpdater when use filesystem meta");
+            return;
+        }
+
         if (executor != null) {
             return;
         }

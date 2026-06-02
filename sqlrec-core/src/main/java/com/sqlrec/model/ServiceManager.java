@@ -24,6 +24,10 @@ public class ServiceManager {
 
     private static final ConcurrentHashMap<String, ObjCache<ServiceConfig>> serviceConfigCacheMap = new ConcurrentHashMap<>();
 
+    public static void invalidateCache() {
+        serviceConfigCacheMap.values().forEach(ObjCache::invalidate);
+    }
+
     public static ServiceConfig getServiceConfig(String serviceName) {
         ObjCache<ServiceConfig> cache = serviceConfigCacheMap.computeIfAbsent(serviceName,
                 name -> new ObjCache<>(

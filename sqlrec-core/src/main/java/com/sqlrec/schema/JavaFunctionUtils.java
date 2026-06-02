@@ -24,6 +24,12 @@ public class JavaFunctionUtils {
             .expireAfterWrite(SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(), TimeUnit.SECONDS)
             .build();
 
+    public static void invalidateCache() {
+        notExistCache.invalidateAll();
+        javaFunctionClassMap.clear();
+        functionUpdateTime.clear();
+    }
+
     public static void setSkipHmsQuery(boolean skip) {
         skipHmsQuery = skip;
     }

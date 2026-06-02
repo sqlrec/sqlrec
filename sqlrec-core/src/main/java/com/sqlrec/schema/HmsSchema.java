@@ -43,6 +43,11 @@ public class HmsSchema extends AbstractSchema {
         );
     }
 
+    public void invalidateCache() {
+        tableMapCache.invalidate();
+        functionMapCache.invalidate();
+    }
+
     @Override
     protected Map<String, Table> getTableMap() {
         return tableMapCache.getObj();

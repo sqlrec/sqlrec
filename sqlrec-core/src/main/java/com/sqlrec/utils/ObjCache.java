@@ -31,6 +31,11 @@ public class ObjCache<T> {
         return obj;
     }
 
+    public synchronized void invalidate() {
+        obj = null;
+        lastUpdateTimeInMillis = 0;
+    }
+
     private synchronized void updateObj() {
         long currentTimeInMillis = System.currentTimeMillis();
         if (currentTimeInMillis - lastUpdateTimeInMillis < cacheExpireTimeInMillis) {
