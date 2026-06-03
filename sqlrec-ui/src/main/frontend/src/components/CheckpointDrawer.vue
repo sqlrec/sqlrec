@@ -33,42 +33,15 @@
           </table>
           <div v-if="checkpointData?.ddl" class="code-section">
             <div class="section-title">DDL</div>
-            <div class="code-block" tabindex="0" @keydown="handleKeydown">
-              <table class="code-table">
-                <tbody>
-                  <tr v-for="(line, index) in ddlLines" :key="index">
-                    <td class="line-number">{{ index + 1 }}</td>
-                    <td class="line-content"><span v-html="line"></span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <CodeBlock :code="checkpointData.ddl" language="sql" />
           </div>
           <div v-if="checkpointData?.modelDdl" class="code-section">
             <div class="section-title">Model DDL</div>
-            <div class="code-block" tabindex="0" @keydown="handleKeydown">
-              <table class="code-table">
-                <tbody>
-                  <tr v-for="(line, index) in modelDdlLines" :key="index">
-                    <td class="line-number">{{ index + 1 }}</td>
-                    <td class="line-content"><span v-html="line"></span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <CodeBlock :code="checkpointData.modelDdl" language="sql" />
           </div>
           <div v-if="checkpointData?.yaml" class="code-section">
             <div class="section-title">YAML</div>
-            <div class="code-block yaml-block" tabindex="0" @keydown="handleKeydown">
-              <table class="code-table">
-                <tbody>
-                  <tr v-for="(line, index) in yamlLines" :key="index">
-                    <td class="line-number">{{ index + 1 }}</td>
-                    <td class="line-content"><span v-html="line"></span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <CodeBlock :code="checkpointData.yaml" language="yaml" />
           </div>
         </div>
       </div>
@@ -78,13 +51,7 @@
 
 <script setup>
 import { computed, watch, ref } from 'vue'
-import hljs from 'highlight.js/lib/core'
-import sql from 'highlight.js/lib/languages/sql'
-import yaml from 'highlight.js/lib/languages/yaml'
-import 'highlight.js/styles/github.css'
-
-hljs.registerLanguage('sql', sql)
-hljs.registerLanguage('yaml', yaml)
+import CodeBlock from './CodeBlock.vue'
 
 const props = defineProps({
   visible: {
@@ -124,62 +91,8 @@ watch(() => [props.visible, props.modelName, props.checkpointName], () => {
   }
 }, { immediate: true })
 
-const highlightedDdl = computed(() => {
-  if (!checkpointData.value?.ddl) return ''
-  try {
-    return hljs.highlight(checkpointData.value.ddl, { language: 'sql' }).value
-  } catch (e) {
-    return checkpointData.value.ddl
-  }
-})
-
-const ddlLines = computed(() => {
-  if (!highlightedDdl.value) return []
-  return highlightedDdl.value.split('\n')
-})
-
-const highlightedModelDdl = computed(() => {
-  if (!checkpointData.value?.modelDdl) return ''
-  try {
-    return hljs.highlight(checkpointData.value.modelDdl, { language: 'sql' }).value
-  } catch (e) {
-    return checkpointData.value.modelDdl
-  }
-})
-
-const modelDdlLines = computed(() => {
-  if (!highlightedModelDdl.value) return []
-  return highlightedModelDdl.value.split('\n')
-})
-
-const highlightedYaml = computed(() => {
-  if (!checkpointData.value?.yaml) return ''
-  try {
-    return hljs.highlight(checkpointData.value.yaml, { language: 'yaml' }).value
-  } catch (e) {
-    return checkpointData.value.yaml
-  }
-})
-
-const yamlLines = computed(() => {
-  if (!highlightedYaml.value) return []
-  return highlightedYaml.value.split('\n')
-})
-
 const close = () => {
   emit('close')
-}
-
-const handleKeydown = (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
-    event.preventDefault()
-    const codeBlock = event.currentTarget
-    const selection = window.getSelection()
-    const range = document.createRange()
-    range.selectNodeContents(codeBlock)
-    selection.removeAllRanges()
-    selection.addRange(range)
-  }
 }
 </script>
 
@@ -284,67 +197,6 @@ const handleKeydown = (event) => {
   font-weight: 600;
   color: #666;
   margin-bottom: 8px;
-}
-
-.code-block {
-  background: #f6f8fa;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
-  overflow: auto;
-  max-height: 300px;
-  cursor: text;
-  outline: none;
-}
-
-.code-block:focus {
-  border-color: #667eea;
-}
-
-.code-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.code-table tr {
-  border: none;
-}
-
-.line-number {
-  padding: 0 12px;
-  text-align: right;
-  color: #bbb;
-  user-select: none;
-  vertical-align: top;
-  white-space: nowrap;
-  width: 1%;
-  border-right: 1px solid #e8e8e8;
-}
-
-.line-content {
-  padding: 0 16px;
-  color: #24292e;
-  white-space: pre;
-}
-
-.code-block::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.code-block::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.code-block::-webkit-scrollbar-thumb {
-  background: #d0d0d0;
-  border-radius: 3px;
-}
-
-.code-block::-webkit-scrollbar-thumb:hover {
-  background: #b0b0b0;
 }
 
 .drawer-body::-webkit-scrollbar {
