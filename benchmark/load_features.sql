@@ -42,7 +42,7 @@ SELECT
     r.string_array_map['genres'] AS genres,
     r.double_array_map['item_tower_emb'] AS embedding
 FROM ml_movies, LATERAL TABLE(batch_call_service(
-    'http://test-recall-service-item.sqlrec.svc.cluster.local:80/predict', 
+    'http://recall-service-item.sqlrec.svc.cluster.local:80/predict',
     128, 
     'movie_id', movie_id, 
     'title', title, 

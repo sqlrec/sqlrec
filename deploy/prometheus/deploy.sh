@@ -27,3 +27,6 @@ kubectl create configmap sqlrec-dashboard \
   --dry-run=client -o yaml | \
   kubectl label --local -f - grafana_dashboard=1 -o yaml | \
   kubectl apply -n ${NAMESPACE} -f -
+
+echo "grafana admin password:"
+kubectl --namespace sqlrec get secrets prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
