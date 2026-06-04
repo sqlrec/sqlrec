@@ -13,3 +13,4 @@ fi
 docker image prune -f
 docker build -t sqlrec/sqlrec:${SQLREC_VERSION} -f ./docker/Dockerfile .
 docker build -t sqlrec/tzrec:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+docker build -t sqlrec/sqlrec-demo:${SQLREC_VERSION} --build-arg SQLREC_VERSION=${SQLREC_VERSION} -f ./docker/demo.Dockerfile .

@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sqlrec
+  labels:
+    app: sqlrec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sqlrec
+  template:
+    metadata:
+      labels:
+        app: sqlrec
+    spec:
+      containers:
+        - name: sqlrec
+          image: sqlrec/sqlrec-demo:${SQLREC_VERSION}
+          env:
+            - name: SERVICE_NAME
+              value: sqlrec
+            - name: ENABLE_REST_SERVER
+              value: "true"
+            - name: ENABLE_THRIFT_SERVER
+              value: "true"
+            - name: NAMESPACE
+              value: ${NAMESPACE}
+            - name: MODEL_BASE_PATH
+              value: /user/sqlrec/models
+            - name: LOG_DIR
+              value: /var/log/sqlrec
+            - name: SQLREC_DEBUG_PORT
+              value: "${SQLREC_DEBUG_PORT}"
+            - name: SQLREC_THRIFT_PORT
+              value: "${SQLREC_THRIFT_PORT}"
+            - name: SQLREC_REST_PORT
+              value: "${SQLREC_REST_PORT}"
+            - name: JAVA_TOOL_OPTIONS
+              value: "${JAVA_TOOL_OPTIONS}"
+            - name: SQLREC_VERSION
+              value: "${SQLREC_VERSION}"
+            - name: SQL_SCHEMA_DIR
+              value: /app/sql
+          ports:
+            - containerPort: ${SQLREC_THRIFT_PORT}
+              name: thrift
+            - containerPort: ${SQLREC_REST_PORT}
+              name: rest
+            - containerPort: ${SQLREC_DEBUG_PORT}
+              name: debug
+          volumeMounts:
+            - mountPath: /var/log/sqlrec
+              name: log-dir
+      volumes:
+        - name: log-dir
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlrec
+  labels:
+    app: sqlrec
+spec:
+  type: NodePort
+  selector:
+    app: sqlrec
+  ports:
+    - protocol: TCP
+      port: ${SQLREC_THRIFT_PORT}
+      targetPort: ${SQLREC_THRIFT_PORT}
+      nodePort: ${SQLREC_THRIFT_PORT}
+      name: thrift
+    - protocol: TCP
+      port: ${SQLREC_REST_PORT}
+      targetPort: ${SQLREC_REST_PORT}
+      nodePort: ${SQLREC_REST_PORT}
+      name: rest
+    - protocol: TCP
+      port: ${SQLREC_DEBUG_PORT}
+      targetPort: ${SQLREC_DEBUG_PORT}
+      nodePort: ${SQLREC_DEBUG_PORT}
+      name: debug
