@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.DataTransformUtils;
@@ -268,6 +268,25 @@ public class Utils {
         sbb.putLong(secretId.getLeastSignificantBits());
 
         return new THandleIdentifier(ByteBuffer.wrap(guid), ByteBuffer.wrap(secret));
+    }
+
+    public static String safeHandleId(THandleIdentifier handleId) {
+        if (handleId == null) {
+            return "null";
+        }
+        byte[] guid = handleId.getGuid();
+        if (guid == null) {
+            return "guid=null";
+        }
+        return "guid=" + bytesToHex(guid);
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     public static String getQueryId() {

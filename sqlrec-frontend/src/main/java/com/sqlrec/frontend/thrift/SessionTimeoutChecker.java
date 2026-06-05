@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
@@ -16,16 +16,16 @@ public class SessionTimeoutChecker {
     private static final Logger logger = LoggerFactory.getLogger(SessionTimeoutChecker.class);
 
     private final ScheduledExecutorService timeoutChecker = Executors.newScheduledThreadPool(1);
-    private final Map<THandleIdentifier, Long> sessionLastAccessTime;
+    private final Map<THandleIdentifier, ClientProxy> clientProxyMap;
     private final SessionExpirationHandler expirationHandler;
 
     public interface SessionExpirationHandler {
         void onSessionExpired(THandleIdentifier sessionId);
     }
 
-    public SessionTimeoutChecker(Map<THandleIdentifier, Long> sessionLastAccessTime,
+    public SessionTimeoutChecker(Map<THandleIdentifier, ClientProxy> clientProxyMap,
                                  SessionExpirationHandler expirationHandler) {
-        this.sessionLastAccessTime = sessionLastAccessTime;
+        this.clientProxyMap = clientProxyMap;
         this.expirationHandler = expirationHandler;
     }
 
@@ -48,13 +48,13 @@ public class SessionTimeoutChecker {
             try {
                 long now = System.currentTimeMillis();
                 List<THandleIdentifier> expiredSessions = new ArrayList<>();
-                sessionLastAccessTime.forEach((sessionId, lastAccess) -> {
-                    if (now - lastAccess > sessionTimeout) {
+                clientProxyMap.forEach((sessionId, proxy) -> {
+                    if (now - proxy.getLastAccessTime() > sessionTimeout) {
                         expiredSessions.add(sessionId);
                     }
                 });
                 for (THandleIdentifier sessionId : expiredSessions) {
-                    logger.warn("Session timeout, cleaning up: {}", sessionId);
+                    logger.warn("Session timeout, cleaning up, sessionGuid: {}", Utils.safeHandleId(sessionId));
                     expirationHandler.onSessionExpired(sessionId);
                 }
             } catch (Exception e) {

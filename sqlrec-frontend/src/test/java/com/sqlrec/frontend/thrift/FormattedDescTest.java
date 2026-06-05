@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.frontend.common.SqlProcessResult;
 import com.sqlrec.frontend.common.SqlProcessor;

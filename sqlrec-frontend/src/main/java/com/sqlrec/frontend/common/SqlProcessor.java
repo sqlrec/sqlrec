@@ -13,7 +13,7 @@ import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.*;
-import com.sqlrec.frontend.service.Utils;
+import com.sqlrec.frontend.thrift.Utils;
 import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;

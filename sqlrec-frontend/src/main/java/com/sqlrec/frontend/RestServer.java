@@ -2,7 +2,7 @@ package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.FunctionUpdater;
-import com.sqlrec.frontend.RestService.HttpServerHandler;
+import com.sqlrec.frontend.rest.HttpServerHandler;
 import com.sqlrec.frontend.common.PrometheusMetricsUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import io.netty.bootstrap.ServerBootstrap;

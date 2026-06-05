@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.RestService;
+package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;

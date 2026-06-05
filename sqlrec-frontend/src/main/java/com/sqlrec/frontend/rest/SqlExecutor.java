@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.RestService;
+package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;

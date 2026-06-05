@@ -1,7 +1,6 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
@@ -10,10 +9,6 @@ import com.sqlrec.frontend.common.SqlProcessor;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,18 +18,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionManager {
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
-    private final Map<THandleIdentifier, TCLIService.Client> hiveClientMap = new ConcurrentHashMap<>();
+    private final Map<THandleIdentifier, ClientProxy> clientMap = new ConcurrentHashMap<>();
     private final Map<THandleIdentifier, THandleIdentifier> operationToSessionMap = new ConcurrentHashMap<>();
     private final Map<THandleIdentifier, SqlProcessor> sqlProcessorMap = new ConcurrentHashMap<>();
 
-    private final Map<THandleIdentifier, Long> sessionLastAccessTime = new ConcurrentHashMap<>();
     private final SessionTimeoutChecker timeoutChecker;
 
     public SessionManager() {
-        this.timeoutChecker = new SessionTimeoutChecker(sessionLastAccessTime, this::cleanupSession);
+        this.timeoutChecker = new SessionTimeoutChecker(clientMap, this::cleanupSession);
 
         MetricsUtils.getCompositeMeterRegistry()
-                .gauge(Consts.METRICS_SESSION_ACTIVE_COUNT, hiveClientMap, Map::size);
+                .gauge(Consts.METRICS_SESSION_ACTIVE_COUNT, clientMap, Map::size);
         MetricsUtils.getCompositeMeterRegistry()
                 .gauge(Consts.METRICS_OPERATION_ACTIVE_COUNT, operationToSessionMap, Map::size);
     }
@@ -52,71 +46,40 @@ public class SessionManager {
             TCloseSessionReq tCloseSessionReq = new TCloseSessionReq();
             tCloseSessionReq.setSessionHandle(new TSessionHandle(sessionId));
             closeSession(tCloseSessionReq);
-            logger.info("Session cleaned up: {}", sessionId);
+            logger.info("Session cleaned up, sessionGuid: {}", Utils.safeHandleId(sessionId));
         } catch (TException e) {
             logger.error("Failed to close session: {}", e.getMessage(), e);
         }
     }
 
-    private void updateSessionAccessTime(THandleIdentifier sessionId) {
-        sessionLastAccessTime.put(sessionId, System.currentTimeMillis());
-    }
-
     public TOpenSessionResp openSession(TOpenSessionReq tOpenSessionReq) throws TException {
-        logger.info("Opening session, user: {}, current map sizes - hiveClient: {}, sqlProcessor: {}, operationToSession: {}",
-                tOpenSessionReq.getUsername(), hiveClientMap.size(), sqlProcessorMap.size(), operationToSessionMap.size());
+        logger.info("Opening session, user: {}, current map sizes - client: {}, sqlProcessor: {}, operationToSession: {}",
+                tOpenSessionReq.getUsername(), clientMap.size(), sqlProcessorMap.size(), operationToSessionMap.size());
 
-        TTransport transport = new TSocket(
-                SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getValue(),
-                SqlRecConfigs.FLINK_SQL_GATEWAY_PORT.getValue(),
-                SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue()
-        );
+        ClientProxy proxy = new ClientProxy();
+        TOpenSessionResp resp = proxy.openSession(tOpenSessionReq);
+        THandleIdentifier sessionId = proxy.getSessionId();
+        clientMap.put(sessionId, proxy);
+        sqlProcessorMap.put(sessionId, new SqlProcessor());
 
-        try {
-            TProtocol protocol = new TBinaryProtocol(transport);
-            TCLIService.Client client = new TCLIService.Client(protocol);
-            transport.open();
-
-            TOpenSessionResp resp = client.OpenSession(tOpenSessionReq);
-            THandleIdentifier sessionId = resp.getSessionHandle().getSessionId();
-            hiveClientMap.put(sessionId, client);
-            sqlProcessorMap.put(sessionId, new SqlProcessor());
-            updateSessionAccessTime(sessionId);
-
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_SESSION_OPEN_COUNT)
-                    .increment();
-
-            logger.info("Session opened successfully, sessionId: {}", sessionId);
-            return resp;
-        } catch (Exception e) {
-            logger.error("Failed to open session: {}", e.getMessage(), e);
-            try {
-                transport.close();
-            } catch (Exception closeEx) {
-                logger.warn("Failed to close transport during error handling", closeEx);
-            }
-            throw e;
-        }
+        logger.info("Session opened successfully, sessionGuid: {}", Utils.safeHandleId(sessionId));
+        return resp;
     }
 
     public TCloseSessionResp closeSession(TCloseSessionReq tCloseSessionReq) throws TException {
         THandleIdentifier sessionId = tCloseSessionReq.getSessionHandle().getSessionId();
-        logger.info("Closing session, sessionId: {}, current map sizes - hiveClient: {}, sqlProcessor: {}, operationToSession: {}",
-                sessionId, hiveClientMap.size(), sqlProcessorMap.size(), operationToSessionMap.size());
+        logger.info("Closing session, sessionGuid: {}, current map sizes - client: {}, sqlProcessor: {}, operationToSession: {}",
+                Utils.safeHandleId(sessionId), clientMap.size(), sqlProcessorMap.size(), operationToSessionMap.size());
 
-        TCLIService.Client client = getHiveClient(sessionId);
-        if (client == null) {
-            logger.warn("Session not found, sessionId: {}", sessionId);
+        ClientProxy proxy = clientMap.remove(sessionId);
+        if (proxy == null) {
+            logger.warn("Session not found, sessionGuid: {}", Utils.safeHandleId(sessionId));
             TCloseSessionResp resp = new TCloseSessionResp(new TStatus(TStatusCode.ERROR_STATUS));
             resp.getStatus().setErrorMessage("Session not found");
-            sessionLastAccessTime.remove(sessionId);
             return resp;
         }
 
-        hiveClientMap.remove(sessionId);
         sqlProcessorMap.remove(sessionId);
-        sessionLastAccessTime.remove(sessionId);
 
         int removedOperations = 0;
         for (Map.Entry<THandleIdentifier, THandleIdentifier> entry : operationToSessionMap.entrySet()) {
@@ -126,31 +89,18 @@ public class SessionManager {
             }
         }
 
-        MetricsUtils.getCompositeMeterRegistry()
-                .counter(Consts.METRICS_SESSION_CLOSE_COUNT)
-                .increment();
-
-        TCloseSessionResp resp;
-        try {
-            resp = client.CloseSession(tCloseSessionReq);
-        } finally {
-            try {
-                client.getInputProtocol().getTransport().close();
-            } catch (Exception e) {
-                logger.warn("Failed to close transport for session: {}", sessionId, e);
-            }
-        }
-        logger.info("Session closed successfully, sessionId: {}, removed operations: {}", sessionId, removedOperations);
+        TCloseSessionResp resp = proxy.closeSession(tCloseSessionReq);
+        logger.info("Session closed successfully, sessionGuid: {}, removed operations: {}", Utils.safeHandleId(sessionId), removedOperations);
         return resp;
     }
 
-    public TCLIService.Client getHiveClient(THandleIdentifier sessionId) {
-        return hiveClientMap.get(sessionId);
+    public TCLIService.Iface getClient(THandleIdentifier sessionId) {
+        return clientMap.get(sessionId);
     }
 
-    public TCLIService.Client getHiveClientByOperationId(THandleIdentifier operationId) {
+    public TCLIService.Iface getClientByOperationId(THandleIdentifier operationId) {
         if (operationToSessionMap.containsKey(operationId)) {
-            return getHiveClient(operationToSessionMap.get(operationId));
+            return getClient(operationToSessionMap.get(operationId));
         }
         return null;
     }
@@ -160,7 +110,10 @@ public class SessionManager {
         if (sqlProcessor == null) {
             throw new TException("session not found");
         }
-        updateSessionAccessTime(sessionId);
+        ClientProxy proxy = clientMap.get(sessionId);
+        if (proxy != null) {
+            proxy.updateAccessTime();
+        }
         return sqlProcessor;
     }
 
@@ -173,7 +126,7 @@ public class SessionManager {
 
     public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
         THandleIdentifier sessionId = tExecuteStatementReq.getSessionHandle().getSessionId();
-        logger.info("Executing statement, sessionId: {}, sql: {}", sessionId, tExecuteStatementReq.getStatement());
+        logger.info("Executing statement, sessionGuid: {}, sql: {}", Utils.safeHandleId(sessionId), tExecuteStatementReq.getStatement());
 
         TExecuteStatementResp resp = null;
 
@@ -186,7 +139,7 @@ public class SessionManager {
                 );
                 resp = new TExecuteStatementResp(new TStatus(TStatusCode.SUCCESS_STATUS));
                 resp.setOperationHandle(operationHandle);
-                logger.info("Statement executed by local SqlProcessor, operationId: {}", operationHandle.getOperationId());
+                logger.info("Statement executed by local SqlProcessor, operationGuid: {}", Utils.safeHandleId(operationHandle.getOperationId()));
             }
         } catch (Exception e) {
             logger.error("Failed to execute statement via SqlProcessor: {}", e.getMessage(), e);
@@ -194,12 +147,12 @@ public class SessionManager {
         }
 
         if (resp == null) {
-            TCLIService.Client client = getHiveClient(sessionId);
+            TCLIService.Iface client = getClient(sessionId);
             if (client == null) {
-                throw new TException("No client found for session: " + sessionId);
+                throw new TException("No client found for session, sessionGuid: " + Utils.safeHandleId(sessionId));
             }
             resp = client.ExecuteStatement(tExecuteStatementReq);
-            logger.info("Statement executed by remote client, operationId: {}", resp.getOperationHandle().getOperationId());
+            logger.info("Statement executed by remote client, operationGuid: {}", Utils.safeHandleId(resp.getOperationHandle().getOperationId()));
         }
 
         THandleIdentifier operationId = resp.getOperationHandle().getOperationId();
@@ -209,8 +162,8 @@ public class SessionManager {
                 .counter(Consts.METRICS_OPERATION_OPEN_COUNT)
                 .increment();
 
-        logger.info("Statement executed, sessionId: {}, operationId: {}, operationToSessionMap size: {}",
-                sessionId, operationId, operationToSessionMap.size());
+        logger.info("Statement executed, sessionGuid: {}, operationGuid: {}, operationToSessionMap size: {}",
+                Utils.safeHandleId(sessionId), Utils.safeHandleId(operationId), operationToSessionMap.size());
         return resp;
     }
 
@@ -248,9 +201,9 @@ public class SessionManager {
             }
         }
 
-        TCLIService.Client client = getHiveClientByOperationId(handleIdentifier);
+        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
         if (client == null) {
-            throw new TException("No client found for operation: " + handleIdentifier);
+            throw new TException("No client found for operation, operationGuid: " + Utils.safeHandleId(handleIdentifier));
         }
         return client.GetOperationStatus(tGetOperationStatusReq);
     }
@@ -271,9 +224,9 @@ public class SessionManager {
             }
         }
 
-        TCLIService.Client client = getHiveClientByOperationId(handleIdentifier);
+        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
         if (client == null) {
-            throw new TException("No client found for operation: " + handleIdentifier);
+            throw new TException("No client found for operation, operationGuid: " + Utils.safeHandleId(handleIdentifier));
         }
         return client.GetResultSetMetadata(tGetResultSetMetadataReq);
     }
@@ -303,9 +256,9 @@ public class SessionManager {
             }
         }
 
-        TCLIService.Client client = getHiveClientByOperationId(handleIdentifier);
+        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
         if (client == null) {
-            throw new TException("No client found for operation: " + handleIdentifier);
+            throw new TException("No client found for operation, operationGuid: " + Utils.safeHandleId(handleIdentifier));
         }
         return client.FetchResults(tFetchResultsReq);
     }
@@ -313,7 +266,7 @@ public class SessionManager {
     public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
         THandleIdentifier operationId = tCancelOperationReq.getOperationHandle().getOperationId();
         THandleIdentifier sessionId = operationToSessionMap.get(operationId);
-        logger.info("Canceling operation, operationId: {}, sessionId: {}", operationId, sessionId);
+        logger.info("Canceling operation, operationGuid: {}, sessionGuid: {}", Utils.safeHandleId(operationId), Utils.safeHandleId(sessionId));
 
         operationToSessionMap.remove(operationId);
 
@@ -324,24 +277,24 @@ public class SessionManager {
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
         if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
             sqlProcessor.closeProcessResult(operationId);
-            logger.info("Operation canceled (local), operationId: {}", operationId);
+            logger.info("Operation canceled (local), operationGuid: {}", Utils.safeHandleId(operationId));
             return new TCancelOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
         }
 
-        TCLIService.Client client = getHiveClient(sessionId);
+        TCLIService.Iface client = getClient(sessionId);
         if (client != null) {
-            logger.info("Operation canceled (remote), operationId: {}", operationId);
+            logger.info("Operation canceled (remote), operationGuid: {}", Utils.safeHandleId(operationId));
             return client.CancelOperation(tCancelOperationReq);
         }
-        logger.warn("Operation cancel failed, no client found, operationId: {}", operationId);
+        logger.warn("Operation cancel failed, no client found, operationGuid: {}", Utils.safeHandleId(operationId));
         return null;
     }
 
     public TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
         THandleIdentifier operationId = tCloseOperationReq.getOperationHandle().getOperationId();
         THandleIdentifier sessionId = operationToSessionMap.get(operationId);
-        logger.info("Closing operation, operationId: {}, sessionId: {}, operationToSessionMap size: {}",
-                operationId, sessionId, operationToSessionMap.size());
+        logger.info("Closing operation, operationGuid: {}, sessionGuid: {}, operationToSessionMap size: {}",
+                Utils.safeHandleId(operationId), Utils.safeHandleId(sessionId), operationToSessionMap.size());
 
         operationToSessionMap.remove(operationId);
 
@@ -352,17 +305,17 @@ public class SessionManager {
         SqlProcessor sqlProcessor = getSqlProcessor(sessionId);
         if (sqlProcessor != null && sqlProcessor.getProcessResult(operationId) != null) {
             sqlProcessor.closeProcessResult(operationId);
-            logger.info("Operation closed (local), operationId: {}, remaining operationToSessionMap size: {}",
-                    operationId, operationToSessionMap.size());
+            logger.info("Operation closed (local), operationGuid: {}, remaining operationToSessionMap size: {}",
+                    Utils.safeHandleId(operationId), operationToSessionMap.size());
             return new TCloseOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
         }
 
-        TCLIService.Client client = getHiveClient(sessionId);
+        TCLIService.Iface client = getClient(sessionId);
         if (client != null) {
-            logger.info("Operation closed (remote), operationId: {}", operationId);
+            logger.info("Operation closed (remote), operationGuid: {}", Utils.safeHandleId(operationId));
             return client.CloseOperation(tCloseOperationReq);
         }
-        logger.warn("Operation close failed, no client found, operationId: {}", operationId);
+        logger.warn("Operation close failed, no client found, operationGuid: {}", Utils.safeHandleId(operationId));
         return null;
     }
 
@@ -373,7 +326,7 @@ public class SessionManager {
             return new TGetQueryIdResp(sqlProcessor.getProcessResult(operationId).getQueryId());
         }
 
-        TCLIService.Client client = getHiveClientByOperationId(operationId);
+        TCLIService.Iface client = getClientByOperationId(operationId);
         if (client != null) {
             return client.GetQueryId(tGetQueryIdReq);
         }

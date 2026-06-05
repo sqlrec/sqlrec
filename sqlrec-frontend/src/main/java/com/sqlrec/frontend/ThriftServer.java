@@ -3,7 +3,7 @@ package com.sqlrec.frontend;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.common.PrometheusMetricsUtils;
-import com.sqlrec.frontend.service.TCLIServiceImpl;
+import com.sqlrec.frontend.thrift.TCLIServiceImpl;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.thrift.TProcessor;

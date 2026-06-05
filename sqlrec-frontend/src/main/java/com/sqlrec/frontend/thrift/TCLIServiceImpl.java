@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.service;
+package com.sqlrec.frontend.thrift;
 
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
@@ -26,7 +26,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
-        return sessionManager.getHiveClient(tGetInfoReq.getSessionHandle().getSessionId()).GetInfo(tGetInfoReq);
+        return sessionManager.getClient(tGetInfoReq.getSessionHandle().getSessionId()).GetInfo(tGetInfoReq);
     }
 
     @Override
@@ -36,47 +36,47 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
-        return sessionManager.getHiveClient(tGetTypeInfoReq.getSessionHandle().getSessionId()).GetTypeInfo(tGetTypeInfoReq);
+        return sessionManager.getClient(tGetTypeInfoReq.getSessionHandle().getSessionId()).GetTypeInfo(tGetTypeInfoReq);
     }
 
     @Override
     public TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
-        return sessionManager.getHiveClient(tGetCatalogsReq.getSessionHandle().getSessionId()).GetCatalogs(tGetCatalogsReq);
+        return sessionManager.getClient(tGetCatalogsReq.getSessionHandle().getSessionId()).GetCatalogs(tGetCatalogsReq);
     }
 
     @Override
     public TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
-        return sessionManager.getHiveClient(tGetSchemasReq.getSessionHandle().getSessionId()).GetSchemas(tGetSchemasReq);
+        return sessionManager.getClient(tGetSchemasReq.getSessionHandle().getSessionId()).GetSchemas(tGetSchemasReq);
     }
 
     @Override
     public TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
-        return sessionManager.getHiveClient(tGetTablesReq.getSessionHandle().getSessionId()).GetTables(tGetTablesReq);
+        return sessionManager.getClient(tGetTablesReq.getSessionHandle().getSessionId()).GetTables(tGetTablesReq);
     }
 
     @Override
     public TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
-        return sessionManager.getHiveClient(tGetTableTypesReq.getSessionHandle().getSessionId()).GetTableTypes(tGetTableTypesReq);
+        return sessionManager.getClient(tGetTableTypesReq.getSessionHandle().getSessionId()).GetTableTypes(tGetTableTypesReq);
     }
 
     @Override
     public TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
-        return sessionManager.getHiveClient(tGetColumnsReq.getSessionHandle().getSessionId()).GetColumns(tGetColumnsReq);
+        return sessionManager.getClient(tGetColumnsReq.getSessionHandle().getSessionId()).GetColumns(tGetColumnsReq);
     }
 
     @Override
     public TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
-        return sessionManager.getHiveClient(tGetFunctionsReq.getSessionHandle().getSessionId()).GetFunctions(tGetFunctionsReq);
+        return sessionManager.getClient(tGetFunctionsReq.getSessionHandle().getSessionId()).GetFunctions(tGetFunctionsReq);
     }
 
     @Override
     public TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
-        return sessionManager.getHiveClient(tGetPrimaryKeysReq.getSessionHandle().getSessionId()).GetPrimaryKeys(tGetPrimaryKeysReq);
+        return sessionManager.getClient(tGetPrimaryKeysReq.getSessionHandle().getSessionId()).GetPrimaryKeys(tGetPrimaryKeysReq);
     }
 
     @Override
     public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
-        return sessionManager.getHiveClient(tGetCrossReferenceReq.getSessionHandle().getSessionId()).GetCrossReference(tGetCrossReferenceReq);
+        return sessionManager.getClient(tGetCrossReferenceReq.getSessionHandle().getSessionId()).GetCrossReference(tGetCrossReferenceReq);
     }
 
     @Override
@@ -106,17 +106,17 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
-        return sessionManager.getHiveClient(tGetDelegationTokenReq.getSessionHandle().getSessionId()).GetDelegationToken(tGetDelegationTokenReq);
+        return sessionManager.getClient(tGetDelegationTokenReq.getSessionHandle().getSessionId()).GetDelegationToken(tGetDelegationTokenReq);
     }
 
     @Override
     public TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
-        return sessionManager.getHiveClient(tCancelDelegationTokenReq.getSessionHandle().getSessionId()).CancelDelegationToken(tCancelDelegationTokenReq);
+        return sessionManager.getClient(tCancelDelegationTokenReq.getSessionHandle().getSessionId()).CancelDelegationToken(tCancelDelegationTokenReq);
     }
 
     @Override
     public TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
-        return sessionManager.getHiveClient(tRenewDelegationTokenReq.getSessionHandle().getSessionId()).RenewDelegationToken(tRenewDelegationTokenReq);
+        return sessionManager.getClient(tRenewDelegationTokenReq.getSessionHandle().getSessionId()).RenewDelegationToken(tRenewDelegationTokenReq);
     }
 
     @Override
@@ -126,6 +126,6 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
-        return sessionManager.getHiveClient(tSetClientInfoReq.getSessionHandle().getSessionId()).SetClientInfo(tSetClientInfoReq);
+        return sessionManager.getClient(tSetClientInfoReq.getSessionHandle().getSessionId()).SetClientInfo(tSetClientInfoReq);
     }
 }

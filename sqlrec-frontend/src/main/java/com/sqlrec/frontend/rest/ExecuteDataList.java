@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.RestService;
+package com.sqlrec.frontend.rest;
 
 import java.util.List;
 
