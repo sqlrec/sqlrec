@@ -12,6 +12,8 @@ import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -57,7 +59,7 @@ public class SessionManager {
                 tOpenSessionReq.getUsername(), clientMap.size(), sqlProcessorMap.size(), operationToSessionMap.size());
 
         ClientProxy proxy = new ClientProxy();
-        TOpenSessionResp resp = proxy.openSession(tOpenSessionReq);
+        TOpenSessionResp resp = proxy.OpenSession(tOpenSessionReq);
         THandleIdentifier sessionId = proxy.getSessionId();
         clientMap.put(sessionId, proxy);
         sqlProcessorMap.put(sessionId, new SqlProcessor());
@@ -81,15 +83,18 @@ public class SessionManager {
 
         sqlProcessorMap.remove(sessionId);
 
-        int removedOperations = 0;
+        List<THandleIdentifier> operationsToRemove = new ArrayList<>();
         for (Map.Entry<THandleIdentifier, THandleIdentifier> entry : operationToSessionMap.entrySet()) {
             if (entry.getValue().equals(sessionId)) {
-                operationToSessionMap.remove(entry.getKey());
-                removedOperations++;
+                operationsToRemove.add(entry.getKey());
             }
         }
+        for (THandleIdentifier operationId : operationsToRemove) {
+            operationToSessionMap.remove(operationId);
+        }
+        int removedOperations = operationsToRemove.size();
 
-        TCloseSessionResp resp = proxy.closeSession(tCloseSessionReq);
+        TCloseSessionResp resp = proxy.CloseSession(tCloseSessionReq);
         logger.info("Session closed successfully, sessionGuid: {}, removed operations: {}", Utils.safeHandleId(sessionId), removedOperations);
         return resp;
     }

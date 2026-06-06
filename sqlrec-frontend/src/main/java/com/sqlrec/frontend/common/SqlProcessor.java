@@ -32,6 +32,7 @@ import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
+import org.apache.flink.sql.parser.dql.SqlShowDatabases;
 import org.apache.flink.sql.parser.dql.SqlShowTables;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 import org.slf4j.Logger;
@@ -98,6 +99,10 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlUseDatabase) {
             defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
+            if (ExecEnv.isFileSystemMeta()) {
+                return Utils.convertMsgToResult("database changed to " + defaultSchema, "msg");
+            }
+            // statement should also execute on sql gateway
             return null;
         }
 
@@ -109,8 +114,11 @@ public class SqlProcessor {
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
             BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema, sql);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
-            // set statement should also execute on sql gateway
             if (sqlNode instanceof SqlSet) {
+                if (ExecEnv.isFileSystemMeta()) {
+                    return Utils.convertMsgToResult("set statement executed", "msg");
+                }
+                // statement should also execute on sql gateway
                 return null;
             }
             if (enumerable == null) {
@@ -258,6 +266,11 @@ public class SqlProcessor {
 
     private SqlProcessResult processResourceQuery(SqlNode sqlNode) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
+        if (sqlNode instanceof SqlShowDatabases) {
+            List<String> databases = db.getDatabases();
+            return Utils.convertStringListToResult(databases, "database name");
+        }
+
         if (sqlNode instanceof SqlShowTables) {
             String dbName = defaultSchema;
             String[] dbInSql = ((SqlShowTables) sqlNode).fullDatabaseName();
