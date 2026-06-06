@@ -72,7 +72,7 @@ const handleKeydown = (event) => {
   border-radius: 6px;
   border: 1px solid #e0e0e0;
   overflow: auto;
-  max-height: 300px;
+  max-height: 800px;
   cursor: text;
   outline: none;
 }

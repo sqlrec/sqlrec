@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import TableView from '../views/TableView.vue'
 import FunctionView from '../views/FunctionView.vue'
 import ApiView from '../views/ApiView.vue'
 import ModelView from '../views/ModelView.vue'
@@ -7,7 +8,17 @@ import ServiceView from '../views/ServiceView.vue'
 const routes = [
   {
     path: '/',
-    redirect: '/function'
+    redirect: '/table'
+  },
+  {
+    path: '/table',
+    name: 'Table',
+    component: TableView
+  },
+  {
+    path: '/table/:id',
+    name: 'TableDetail',
+    component: TableView
   },
   {
     path: '/function',
@@ -51,7 +62,7 @@ const routes = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/function'
+    redirect: '/table'
   }
 ]
 

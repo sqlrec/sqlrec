@@ -35,6 +35,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const leftTabs = [
+  { name: 'table', label: 'Table', path: '/table' },
   { name: 'function', label: 'Function', path: '/function' },
   { name: 'api', label: 'Api', path: '/api' },
   { name: 'model', label: 'Model', path: '/model' },

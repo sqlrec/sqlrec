@@ -1,21 +1,23 @@
 package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.*;
 import com.sqlrec.frontend.common.CommonUtils;
 import com.sqlrec.runtime.*;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
 import io.netty.util.CharsetUtil;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,6 +126,21 @@ public class UiHandler {
             } else if (apiPath.startsWith("functions-dag/")) {
                 String name = apiPath.substring("functions-dag/".length());
                 result = getFunctionDag(name);
+            } else if (apiPath.equals("tables/databases")) {
+                result = getDatabaseList(db);
+            } else if (apiPath.startsWith("tables/")) {
+                String subPath = apiPath.substring("tables/".length());
+                int slashIndex = subPath.indexOf('/');
+                if (slashIndex < 0) {
+                    return createErrorResponse(HttpResponseStatus.BAD_REQUEST, "Invalid table path, expected: tables/{database} or tables/{database}/{tableName}");
+                }
+                String database = subPath.substring(0, slashIndex);
+                String tableName = subPath.substring(slashIndex + 1);
+                if (tableName.isEmpty()) {
+                    result = getTableList(db, database);
+                } else {
+                    result = getTableDetail(db, database, tableName);
+                }
             } else if (apiPath.equals("apis")) {
                 List<SqlApi> apis = db.getSqlApiList();
                 result = apis.stream()
@@ -209,6 +226,78 @@ public class UiHandler {
             logger.error("Error handling API request: {}", apiPath, e);
             return createErrorResponse(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to process request: " + e.getMessage());
         }
+    }
+
+    private static List<Map<String, Object>> getDatabaseList(MetadataAccess db) throws Exception {
+        List<String> databases = db.getDatabases();
+        return databases.stream()
+                .map(name -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", name);
+                    item.put("name", name);
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private static List<Map<String, Object>> getTableList(MetadataAccess db, String database) throws Exception {
+        List<org.apache.hadoop.hive.metastore.api.Table> tables = db.getTables(database);
+        return tables.stream()
+                .map(t -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", t.getTableName());
+                    item.put("name", t.getTableName());
+                    item.put("database", t.getDbName());
+                    item.put("owner", t.getOwner());
+                    item.put("tableType", t.getTableType());
+                    item.put("createTime", formatTimestamp(t.getCreateTime() * 1000L));
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private static Map<String, Object> getTableDetail(MetadataAccess db, String database, String tableName) throws Exception {
+        org.apache.hadoop.hive.metastore.api.Table table = db.getTable(database, tableName);
+        if (table == null) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Table not found: " + database + "." + tableName);
+            return error;
+        }
+
+        List<Map<String, String>> rows = new ArrayList<>();
+        List<FieldSchema> columns = HiveTableUtils.parse(table);
+        rows.add(createRow("# Columns", ""));
+        rows.add(createRow("Name", "Type"));
+        for (FieldSchema col : columns) {
+            rows.add(createRow(col.getName(), col.getType()));
+        }
+        rows.add(createRow("", ""));
+
+        if (table.getPartitionKeys() != null && !table.getPartitionKeys().isEmpty()) {
+            rows.add(createRow("# Partition Keys", ""));
+            rows.add(createRow("Name", "Type"));
+            for (org.apache.hadoop.hive.metastore.api.FieldSchema pk : table.getPartitionKeys()) {
+                rows.add(createRow(pk.getName(), pk.getType()));
+            }
+            rows.add(createRow("", ""));
+        }
+
+        Map<String, String> flinkOptions = HiveTableUtils.getFlinkTableOptions(table);
+        if (!flinkOptions.isEmpty()) {
+            rows.add(createRow("# Parameters", ""));
+            rows.add(createRow("Key", "Value"));
+            for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
+                if (entry.getKey().startsWith("schema.")) {
+                    continue;
+                }
+                rows.add(createRow(entry.getKey(), entry.getValue()));
+            }
+            rows.add(createRow("", ""));
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("tableData", rows);
+        return result;
     }
 
     private static List<Map<String, String>> convertFunctionToTable(SqlFunction function) {
