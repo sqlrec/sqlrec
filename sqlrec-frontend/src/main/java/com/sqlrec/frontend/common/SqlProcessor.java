@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.compiler.CompileManager;
@@ -24,9 +24,13 @@ import com.sqlrec.sql.parser.*;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
@@ -300,15 +304,10 @@ public class SqlProcessor {
                 dbName = fullTableName[0];
             }
 
-            if (defaultSchema.equalsIgnoreCase(dbName)) {
-                CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
-                if (tableEntry != null && tableEntry.getTable() != null) {
-                    Table tableObj = tableEntry.getTable();
-                    if (tableObj instanceof CacheTable) {
-                        List<RelDataTypeField> dataFields = ((CacheTable) tableObj).getDataFields();
-                        return Utils.getTableTypeDescResult(dataFields);
-                    }
-                }
+            Table tableObj = SchemaUtils.getTableObj(schema, dbName, table);
+            if (tableObj != null) {
+                RelDataType rowType = tableObj.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
+                return Utils.getTableTypeDescResult(rowType.getFieldList());
             }
         }
 
@@ -320,14 +319,16 @@ public class SqlProcessor {
             }
             String table = names.get(names.size() - 1);
 
-            if (defaultSchema.equalsIgnoreCase(dbName)) {
-                CalciteSchema.TableEntry tableEntry = schema.getTable(table, false);
-                if (tableEntry != null && tableEntry.getTable() != null) {
-                    Table tableObj = tableEntry.getTable();
-                    if (tableObj instanceof CacheTable) {
-                        return Utils.convertMsgToResult(((CacheTable) tableObj).getCreateSql(), "create sql");
+            Table tableObj = SchemaUtils.getTableObj(schema, dbName, table);
+            if (tableObj != null) {
+                if (tableObj instanceof SqlRecTable) {
+                    SqlRecTable sqlRecTable = (SqlRecTable) tableObj;
+                    if (StringUtils.isNotEmpty(sqlRecTable.getCreateSql())) {
+                        return Utils.convertMsgToResult(sqlRecTable.getCreateSql(), "create sql");
                     }
                 }
+                org.apache.hadoop.hive.metastore.api.Table hmsTable = db.getTable(dbName, table);
+                return Utils.convertMsgToResult(SchemaUtils.generateCreateSqlFromHmsTable(hmsTable), "create sql");
             }
         }
 

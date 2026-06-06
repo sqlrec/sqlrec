@@ -5,14 +5,13 @@ import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.SqlCharStringLiteral;
-import org.apache.calcite.sql.SqlLiteral;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
+import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -186,5 +185,133 @@ public class SchemaUtils {
         }
         String firstWord = parts[0].replaceAll("[^a-zA-Z0-9_]", "");
         return firstWord.toLowerCase();
+    }
+
+    /**
+     * Generate CREATE TABLE DDL from an HMS Table object.
+     * Reconstructs the full DDL including columns, primary key, and WITH properties.
+     */
+    public static String generateCreateSqlFromHmsTable(org.apache.hadoop.hive.metastore.api.Table hmsTable) {
+        String tableName = hmsTable.getDbName().equals("default")
+                ? hmsTable.getTableName()
+                : hmsTable.getDbName() + "." + hmsTable.getTableName();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE TABLE ").append(tableName).append(" (");
+
+        List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns = hmsTable.getSd().getCols();
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            org.apache.hadoop.hive.metastore.api.FieldSchema col = columns.get(i);
+            sb.append(col.getName()).append(" ").append(col.getType());
+        }
+
+        Map<String, String> parameters = hmsTable.getParameters();
+        String primaryKey = parameters != null ? parameters.get("flink.schema.primary-key.columns") : null;
+        if (primaryKey != null && !primaryKey.isEmpty()) {
+            sb.append(", PRIMARY KEY (").append(primaryKey).append(") NOT ENFORCED");
+        }
+
+        sb.append(")");
+
+        if (parameters != null && !parameters.isEmpty()) {
+            Map<String, String> flinkOptions = new LinkedHashMap<>();
+            for (Map.Entry<String, String> entry : parameters.entrySet()) {
+                if (entry.getKey().startsWith("flink.") && !entry.getKey().equals("flink.schema.primary-key.columns")) {
+                    flinkOptions.put(entry.getKey().substring(6), entry.getValue());
+                }
+            }
+            if (!flinkOptions.isEmpty()) {
+                sb.append(" WITH (");
+                int i = 0;
+                for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
+                    if (i > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append("'").append(entry.getKey()).append("' = '").append(entry.getValue()).append("'");
+                    i++;
+                }
+                sb.append(")");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Parse a SqlCreateTable node into an HMS Table object.
+     */
+    public static org.apache.hadoop.hive.metastore.api.Table parseCreateTableToHmsTable(SqlCreateTable createTable) {
+        String database = extractDatabase(createTable.getTableName());
+        String tableName = extractTableName(createTable.getTableName());
+        List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns = extractColumnsFromCreateTable(createTable);
+        Map<String, String> properties = convertPropertyList(createTable.getPropertyList());
+        String primaryKey = extractPrimaryKey(createTable);
+        if (primaryKey != null) {
+            properties.put("schema.primary-key.columns", primaryKey);
+        }
+        if (columns.isEmpty()) {
+            return null;
+        }
+        return buildHmsTable(database, tableName, columns, properties);
+    }
+
+    private static List<org.apache.hadoop.hive.metastore.api.FieldSchema> extractColumnsFromCreateTable(SqlCreateTable createTable) {
+        List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns = new ArrayList<>();
+        SqlNodeList columnList = createTable.getColumnList();
+        if (columnList != null) {
+            for (SqlNode field : columnList) {
+                if (field instanceof SqlTableColumn.SqlRegularColumn) {
+                    SqlTableColumn.SqlRegularColumn col = (SqlTableColumn.SqlRegularColumn) field;
+                    String colName = col.getName().getSimple();
+                    String typeStr = col.getType().toString();
+                    columns.add(new org.apache.hadoop.hive.metastore.api.FieldSchema(colName, typeStr, null));
+                }
+            }
+        }
+        return columns;
+    }
+
+    private static String extractPrimaryKey(SqlCreateTable createTable) {
+        for (SqlTableConstraint constraint : createTable.getFullConstraints()) {
+            if (constraint.isPrimaryKey()) {
+                return String.join(",", constraint.getColumnNames());
+            }
+        }
+        return null;
+    }
+
+    private static org.apache.hadoop.hive.metastore.api.Table buildHmsTable(
+            String database, String tableName,
+            List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns,
+            Map<String, String> properties) {
+        org.apache.hadoop.hive.metastore.api.Table table = new org.apache.hadoop.hive.metastore.api.Table();
+        table.setDbName(database);
+        table.setTableName(tableName);
+        org.apache.hadoop.hive.metastore.api.StorageDescriptor sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor();
+        sd.setCols(columns);
+        table.setSd(sd);
+        Map<String, String> parameters = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            parameters.put("flink." + entry.getKey(), entry.getValue());
+        }
+        table.setParameters(parameters);
+        return table;
+    }
+
+    private static String extractDatabase(SqlIdentifier identifier) {
+        if (identifier.names.size() > 1) {
+            return identifier.names.get(0);
+        }
+        return "default";
+    }
+
+    private static String extractTableName(SqlIdentifier identifier) {
+        if (identifier.names.size() > 1) {
+            return identifier.names.get(identifier.names.size() - 1);
+        }
+        return identifier.getSimple();
     }
 }

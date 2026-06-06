@@ -2,13 +2,12 @@ package com.sqlrec.db.local;
 
 import com.sqlrec.db.SchemaAccess;
 import com.sqlrec.utils.SchemaUtils;
-import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
-import org.apache.flink.sql.parser.ddl.SqlTableColumn;
-import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
-import org.apache.hadoop.hive.metastore.api.*;
+import org.apache.hadoop.hive.metastore.api.Function;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +43,16 @@ public class SqlFileSchemaAccess implements SchemaAccess {
     }
 
     @Override
+    public Table getTable(String database, String tableName) throws Exception {
+        for (Table t : getTables(database)) {
+            if (t.getTableName().equalsIgnoreCase(tableName)) {
+                return t;
+            }
+        }
+        throw new NoSuchObjectException("table not found " + tableName + " from db " + database);
+    }
+
+    @Override
     public List<Function> getFunctions(String database) throws Exception {
         return new ArrayList<>(databaseFunctions.getOrDefault(database, Collections.emptyList()));
     }
@@ -73,18 +82,11 @@ public class SqlFileSchemaAccess implements SchemaAccess {
         for (SqlNode node : tableNodes) {
             if (node instanceof SqlCreateTable) {
                 SqlCreateTable createTable = (SqlCreateTable) node;
-                String database = extractDatabase(createTable.getTableName());
-                String tableName = extractTableName(createTable.getTableName());
-                databases.add(database);
-                List<FieldSchema> columns = extractColumnsFromCreateTable(createTable);
-                Map<String, String> properties = SchemaUtils.convertPropertyList(createTable.getPropertyList());
-                String primaryKey = extractPrimaryKey(createTable);
-                if (primaryKey != null) {
-                    properties.put("schema.primary-key.columns", primaryKey);
-                }
-                if (!columns.isEmpty()) {
-                    result.computeIfAbsent(database, k -> new ArrayList<>())
-                            .add(buildHmsTable(database, tableName, columns, properties));
+                Table hmsTable = SchemaUtils.parseCreateTableToHmsTable(createTable);
+                if (hmsTable != null) {
+                    databases.add(hmsTable.getDbName());
+                    result.computeIfAbsent(hmsTable.getDbName(), k -> new ArrayList<>())
+                            .add(hmsTable);
                 }
             }
         }
@@ -109,60 +111,5 @@ public class SqlFileSchemaAccess implements SchemaAccess {
             }
         }
         return result;
-    }
-
-    private List<FieldSchema> extractColumnsFromCreateTable(SqlCreateTable createTable) {
-        List<FieldSchema> columns = new ArrayList<>();
-        org.apache.calcite.sql.SqlNodeList columnList = createTable.getColumnList();
-        if (columnList != null) {
-            for (SqlNode field : columnList) {
-                if (field instanceof SqlTableColumn.SqlRegularColumn) {
-                    SqlTableColumn.SqlRegularColumn col = (SqlTableColumn.SqlRegularColumn) field;
-                    String colName = col.getName().getSimple();
-                    String typeStr = col.getType().toString();
-                    columns.add(new FieldSchema(colName, typeStr, null));
-                }
-            }
-        }
-        return columns;
-    }
-
-    private String extractPrimaryKey(SqlCreateTable createTable) {
-        for (SqlTableConstraint constraint : createTable.getFullConstraints()) {
-            if (constraint.isPrimaryKey()) {
-                return String.join(",", constraint.getColumnNames());
-            }
-        }
-        return null;
-    }
-
-    private Table buildHmsTable(String database, String tableName, List<FieldSchema> columns,
-                                Map<String, String> properties) {
-        Table table = new Table();
-        table.setDbName(database);
-        table.setTableName(tableName);
-        StorageDescriptor sd = new StorageDescriptor();
-        sd.setCols(columns);
-        table.setSd(sd);
-        Map<String, String> parameters = new HashMap<>();
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            parameters.put("flink." + entry.getKey(), entry.getValue());
-        }
-        table.setParameters(parameters);
-        return table;
-    }
-
-    private String extractDatabase(SqlIdentifier identifier) {
-        if (identifier.names.size() > 1) {
-            return identifier.names.get(0);
-        }
-        return "default";
-    }
-
-    private String extractTableName(SqlIdentifier identifier) {
-        if (identifier.names.size() > 1) {
-            return identifier.names.get(identifier.names.size() - 1);
-        }
-        return identifier.getSimple();
     }
 }

@@ -30,6 +30,10 @@ public class MetadataAccess {
         return schemaAccess.getTables(database);
     }
 
+    public Table getTable(String database, String tableName) throws Exception {
+        return schemaAccess.getTable(database, tableName);
+    }
+
     public List<Function> getFunctions(String database) throws Exception {
         return schemaAccess.getFunctions(database);
     }

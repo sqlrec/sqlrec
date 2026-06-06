@@ -44,6 +44,11 @@ public class HmsSchemaAccess implements SchemaAccess {
     }
 
     @Override
+    public Table getTable(String database, String tableName) throws Exception {
+        return HmsClient.getTableObj(database, tableName);
+    }
+
+    @Override
     public List<Function> getFunctions(String database) throws Exception {
         List<Function> functions = new ArrayList<>();
         try {

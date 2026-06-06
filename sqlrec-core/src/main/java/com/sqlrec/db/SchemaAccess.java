@@ -11,6 +11,8 @@ public interface SchemaAccess {
 
     List<Table> getTables(String database) throws Exception;
 
+    Table getTable(String database, String tableName) throws Exception;
+
     List<Function> getFunctions(String database) throws Exception;
 
     Function getFunction(String database, String funName) throws Exception;
