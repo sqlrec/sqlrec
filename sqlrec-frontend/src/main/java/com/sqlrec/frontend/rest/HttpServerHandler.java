@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.common.PrometheusMetricsUtils;
@@ -44,8 +45,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
             if (HttpMethod.POST.equals(method)) {
                 if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
-                    ExecuteDataList executeDataList = SqlExecutor.execute(postData);
-                    responseContent = JsonUtils.toJson(executeDataList);
+                    if (!SqlRecConfigs.ENABLE_REST_SQL_API.getValue()) {
+                        status = HttpResponseStatus.FORBIDDEN;
+                        responseContent = "{\"msg\":\"sql api is disabled\"}";
+                    } else {
+                        ExecuteDataList executeDataList = SqlExecutor.execute(postData);
+                        responseContent = JsonUtils.toJson(executeDataList);
+                    }
                 } else if (uri.startsWith(API_V1_PREFIX)) {
                     String apiName = uri.substring(API_V1_PREFIX.length());
                     if (apiName.isEmpty()) {
@@ -65,9 +71,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                     status = HttpResponseStatus.OK;
                     contentType = "text/plain";
                 } else if (uri.startsWith(UI_STATIC_PREFIX) || uri.startsWith(UI_API_PREFIX)) {
-                    FullHttpResponse uiResponse = UiHandler.handleRequest(uri, method, postData);
-                    channelHandlerContext.writeAndFlush(uiResponse).addListener(ChannelFutureListener.CLOSE);
-                    return;
+                    if (!SqlRecConfigs.ENABLE_REST_UI_API.getValue()) {
+                        status = HttpResponseStatus.FORBIDDEN;
+                        responseContent = "{\"msg\":\"ui api is disabled\"}";
+                    } else {
+                        FullHttpResponse uiResponse = UiHandler.handleRequest(uri, method, postData);
+                        channelHandlerContext.writeAndFlush(uiResponse).addListener(ChannelFutureListener.CLOSE);
+                        return;
+                    }
                 } else {
                     status = HttpResponseStatus.NOT_FOUND;
                     responseContent = "{\"msg\":\"uri not found\"}";

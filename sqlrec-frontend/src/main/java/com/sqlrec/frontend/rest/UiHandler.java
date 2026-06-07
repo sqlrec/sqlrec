@@ -282,18 +282,18 @@ public class UiHandler {
             rows.add(createRow("", ""));
         }
 
-        Map<String, String> flinkOptions = HiveTableUtils.getFlinkTableOptions(table);
-        if (!flinkOptions.isEmpty()) {
-            rows.add(createRow("# Parameters", ""));
-            rows.add(createRow("Key", "Value"));
-            for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
-                if (entry.getKey().startsWith("schema.")) {
-                    continue;
-                }
-                rows.add(createRow(entry.getKey(), entry.getValue()));
-            }
-            rows.add(createRow("", ""));
-        }
+//        Map<String, String> flinkOptions = HiveTableUtils.getFlinkTableOptions(table);
+//        if (!flinkOptions.isEmpty()) {
+//            rows.add(createRow("# Parameters", ""));
+//            rows.add(createRow("Key", "Value"));
+//            for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
+//                if (entry.getKey().startsWith("schema.")) {
+//                    continue;
+//                }
+//                rows.add(createRow(entry.getKey(), entry.getValue()));
+//            }
+//            rows.add(createRow("", ""));
+//        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("tableData", rows);

@@ -17,6 +17,20 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Boolean> ENABLE_REST_SQL_API = new ConfigOption<>(
+            "ENABLE_REST_SQL_API",
+            true,
+            "enable rest sql execution api",
+            null,
+            Boolean.class
+    );
+    public static final ConfigOption<Boolean> ENABLE_REST_UI_API = new ConfigOption<>(
+            "ENABLE_REST_UI_API",
+            true,
+            "enable rest ui api",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Boolean> ENABLE_THRIFT_SERVER = new ConfigOption<>(
             "ENABLE_THRIFT_SERVER",
             true,
