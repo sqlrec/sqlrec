@@ -3,10 +3,12 @@ package com.sqlrec.common.schema;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.schema.ModifiableTable;
@@ -21,7 +23,9 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
     private transient Cache<Object, List<Object[]>> cache;
 
-    protected abstract Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters);
+    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
+        throw new UnsupportedOperationException("scan not support");
+    }
 
     @Override
     public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
@@ -30,7 +34,15 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         String status = "success";
 
         try {
-            Enumerable<Object[]> result = scanImpl(root, filters);
+            Enumerable<Object[]> result;
+            Object primaryKeyValue = FilterUtils.extractPrimaryKeyValue(filters, getPrimaryKeyIndex());
+            if (primaryKeyValue != null) {
+                Map<Object, List<Object[]>> keyResult = getByPrimaryKey(Collections.singleton(primaryKeyValue));
+                List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
+                result = Linq4j.asEnumerable(rows);
+            } else {
+                result = scanImpl(root, filters);
+            }
             if (result != null) {
                 count = result.count();
             }

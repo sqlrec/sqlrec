@@ -5,9 +5,6 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
-import org.apache.calcite.DataContext;
-import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.linq4j.tree.Expression;
@@ -19,13 +16,9 @@ import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
-import org.apache.calcite.sql.SqlKind;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Type;
@@ -41,40 +34,6 @@ public class RedisCalciteTable extends SqlRecKvTable {
         redisHandler = new RedisHandler(redisConfig);
         redisHandler.open();
         initCache(redisConfig.maxCacheSize, redisConfig.cacheTtl);
-    }
-
-    @Override
-    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
-        if (filters.size() != 1) {
-            throw new RuntimeException("Redis Calcite Table only support one filter");
-        }
-        RexNode filter = filters.get(0);
-        if (!filter.isA(SqlKind.EQUALS)) {
-            throw new RuntimeException("Redis Calcite Table only support EQUALS filter");
-        }
-        final RexCall call = (RexCall) filter;
-        RexNode left = call.getOperands().get(0);
-        if (!(left instanceof RexInputRef)) {
-            throw new RuntimeException("Redis Calcite Table only support EQUALS filter with input ref");
-        }
-
-        int index = ((RexInputRef) left).getIndex();
-        if (index != getPrimaryKeyIndex()) {
-            throw new RuntimeException("Redis Calcite Table only support EQUALS filter with primary key");
-        }
-
-        final RexNode right = call.getOperands().get(1);
-        if (!(right instanceof RexLiteral)) {
-            throw new RuntimeException("Redis Calcite Table only support EQUALS filter with literal");
-        }
-
-        String value = ((RexLiteral) right).getValue2().toString();
-        try {
-            return Linq4j.asEnumerable(redisHandler.scan(value).get());
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    String.format("Failed to scan Redis table with key '%s': %s", value, e.getMessage()), e);
-        }
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
@@ -150,5 +109,4 @@ public class RedisCalciteTable extends SqlRecKvTable {
             return true;
         }
     }
-
 }

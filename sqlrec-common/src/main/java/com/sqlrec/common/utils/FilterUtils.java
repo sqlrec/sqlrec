@@ -13,6 +13,32 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class FilterUtils {
+    public static Object extractPrimaryKeyValue(List<RexNode> filters, int primaryKeyIndex) {
+        if (filters == null || filters.size() != 1 || primaryKeyIndex < 0) {
+            return null;
+        }
+        RexNode filter = filters.get(0);
+        if (!filter.isA(SqlKind.EQUALS)) {
+            return null;
+        }
+        RexCall call = (RexCall) filter;
+        RexNode left = call.getOperands().get(0);
+        RexNode right = call.getOperands().get(1);
+
+        if (left instanceof RexInputRef && right instanceof RexLiteral) {
+            RexInputRef inputRef = (RexInputRef) left;
+            if (inputRef.getIndex() == primaryKeyIndex) {
+                return ((RexLiteral) right).getValue2();
+            }
+        } else if (right instanceof RexInputRef && left instanceof RexLiteral) {
+            RexInputRef inputRef = (RexInputRef) right;
+            if (inputRef.getIndex() == primaryKeyIndex) {
+                return ((RexLiteral) left).getValue2();
+            }
+        }
+        return null;
+    }
+
     public static List<RexNode> getPrimaryKeyFilters(List<RexNode> filters, int primaryKeyIndex) {
         for (RexNode filter : filters) {
             if (filter.isA(SqlKind.EQUALS)) {
