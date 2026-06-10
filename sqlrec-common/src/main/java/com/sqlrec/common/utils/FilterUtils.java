@@ -13,6 +13,57 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class FilterUtils {
+
+    private enum FilterDialect {
+        MILVUS {
+            @Override
+            String quoteString(String value) {
+                return "\"" + value + "\"";
+            }
+
+            @Override
+            String formatArrayConstructor(String elements) {
+                return "[" + elements + "]";
+            }
+
+            @Override
+            String formatOperator(String operator) {
+                return "=".equals(operator) ? "==" : operator;
+            }
+
+            @Override
+            String formatArrayContains(String arrayField, String elementValue) {
+                return "array_contains(" + arrayField + ", " + elementValue + ")";
+            }
+        },
+        SQL {
+            @Override
+            String quoteString(String value) {
+                return "'" + value + "'";
+            }
+
+            @Override
+            String formatArrayConstructor(String elements) {
+                return elements;
+            }
+
+            @Override
+            String formatOperator(String operator) {
+                return operator;
+            }
+
+            @Override
+            String formatArrayContains(String arrayField, String elementValue) {
+                return arrayField + " @> ARRAY[" + elementValue + "]";
+            }
+        };
+
+        abstract String quoteString(String value);
+        abstract String formatArrayConstructor(String elements);
+        abstract String formatOperator(String operator);
+        abstract String formatArrayContains(String arrayField, String elementValue);
+    }
+
     public static Object extractPrimaryKeyValue(List<RexNode> filters, int primaryKeyIndex) {
         if (filters == null || filters.size() != 1 || primaryKeyIndex < 0) {
             return null;
@@ -62,63 +113,72 @@ public class FilterUtils {
         return Collections.emptyList();
     }
 
+    // --- Unified filter string generation ---
+
     public static String getMilvusFilterSqlString(List<RexNode> filters, List<FieldSchema> fieldSchemas) {
+        return getFilterString(filters, fieldSchemas, FilterDialect.MILVUS);
+    }
+
+    public static String getSqlFilterString(List<RexNode> filters, List<FieldSchema> fieldSchemas) {
+        return getFilterString(filters, fieldSchemas, FilterDialect.SQL);
+    }
+
+    private static String getFilterString(List<RexNode> filters, List<FieldSchema> fieldSchemas, FilterDialect dialect) {
         if (filters == null || filters.isEmpty()) {
             return "";
         }
         return filters.stream()
-                .map(filter -> getMilvusFilterSqlString(filter, fieldSchemas))
+                .map(filter -> getFilterString(filter, fieldSchemas, dialect))
                 .collect(Collectors.joining(" AND "));
     }
 
-    public static String getMilvusFilterSqlString(RexNode filter, List<FieldSchema> fieldSchemas) {
+    private static String getFilterString(RexNode filter, List<FieldSchema> fieldSchemas, FilterDialect dialect) {
         if (filter.isA(SqlKind.OR)) {
             RexCall call = (RexCall) filter;
             return call.getOperands().stream()
-                    .map(operand -> "(" + getMilvusFilterSqlString(operand, fieldSchemas) + ")")
+                    .map(operand -> "(" + getFilterString(operand, fieldSchemas, dialect) + ")")
                     .collect(Collectors.joining(" OR "));
         } else if (filter.isA(SqlKind.AND)) {
             RexCall call = (RexCall) filter;
             return call.getOperands().stream()
-                    .map(operand -> "(" + getMilvusFilterSqlString(operand, fieldSchemas) + ")")
+                    .map(operand -> "(" + getFilterString(operand, fieldSchemas, dialect) + ")")
                     .collect(Collectors.joining(" AND "));
         }
-
         RexCall call = (RexCall) filter;
-        return convertNormalFilter(call, fieldSchemas);
+        return convertNormalFilter(call, fieldSchemas, dialect);
     }
 
-    public static String convertNormalFilter(RexCall filter, List<FieldSchema> fieldSchemas) {
+    private static String convertNormalFilter(RexCall filter, List<FieldSchema> fieldSchemas, FilterDialect dialect) {
         String operator = filter.getOperator().getName();
 
         if (operator.toLowerCase().startsWith("array_contains")) {
-            return convertArrayFunctionFilter(filter, fieldSchemas, operator.toLowerCase());
+            return convertArrayFunctionFilter(filter, fieldSchemas, operator.toLowerCase(), dialect);
         }
 
         if (filter.getOperands().size() != 2) {
             throw new IllegalArgumentException("Unsupported filter: " + filter);
         }
 
-        String firstOperand = convertOperand(filter.getOperands().get(0), fieldSchemas);
-        String secondOperand = convertOperand(filter.getOperands().get(1), fieldSchemas);
-        if (operator.equals("=")) {
-            operator = "==";
-        }
-        return firstOperand + " " + operator + " " + secondOperand;
+        String firstOperand = convertOperand(filter.getOperands().get(0), fieldSchemas, dialect);
+        String secondOperand = convertOperand(filter.getOperands().get(1), fieldSchemas, dialect);
+        return firstOperand + " " + dialect.formatOperator(operator) + " " + secondOperand;
     }
 
-    private static String convertArrayFunctionFilter(RexCall filter, List<FieldSchema> fieldSchemas, String functionName) {
+    private static String convertArrayFunctionFilter(RexCall filter, List<FieldSchema> fieldSchemas, String functionName, FilterDialect dialect) {
         if (filter.getOperands().size() != 2) {
             throw new IllegalArgumentException(functionName + " requires exactly 2 arguments");
         }
 
-        String arrayField = convertOperand(filter.getOperands().get(0), fieldSchemas);
-        String elementValue = convertOperand(filter.getOperands().get(1), fieldSchemas);
+        String arrayField = convertOperand(filter.getOperands().get(0), fieldSchemas, dialect);
+        String elementValue = convertOperand(filter.getOperands().get(1), fieldSchemas, dialect);
 
+        if ("array_contains".equals(functionName)) {
+            return dialect.formatArrayContains(arrayField, elementValue);
+        }
         return functionName + "(" + arrayField + ", " + elementValue + ")";
     }
 
-    public static String convertOperand(RexNode operand, List<FieldSchema> fieldSchemas) {
+    private static String convertOperand(RexNode operand, List<FieldSchema> fieldSchemas, FilterDialect dialect) {
         if (operand instanceof RexInputRef) {
             RexInputRef inputRef = (RexInputRef) operand;
             return fieldSchemas.get(inputRef.getIndex()).getName();
@@ -127,7 +187,7 @@ public class FilterUtils {
             RexLiteral literal = (RexLiteral) operand;
             Object value = literal.getValue();
             if (value instanceof NlsString) {
-                return "\"" + ((NlsString) value).getValue() + "\"";
+                return dialect.quoteString(((NlsString) value).getValue());
             }
             return value.toString();
         }
@@ -135,13 +195,15 @@ public class FilterUtils {
             RexCall call = (RexCall) operand;
             if (call.getKind() == SqlKind.ARRAY_VALUE_CONSTRUCTOR) {
                 String elements = call.getOperands().stream()
-                        .map(elem -> convertOperand(elem, fieldSchemas))
+                        .map(elem -> convertOperand(elem, fieldSchemas, dialect))
                         .collect(Collectors.joining(", "));
-                return "[" + elements + "]";
+                return dialect.formatArrayConstructor(elements);
             }
         }
         throw new IllegalArgumentException("Unsupported operand kind: " + operand.getKind());
     }
+
+    // --- Milvus join filter expression ---
 
     public static String buildMilvusFilterExpression(
             RexNode filterCondition,
@@ -172,19 +234,11 @@ public class FilterUtils {
             RexCall call = (RexCall) node;
             String opName = call.getOperator().getName();
 
-            if (opName.equalsIgnoreCase("AND")) {
+            if (opName.equalsIgnoreCase("AND") || opName.equalsIgnoreCase("OR")) {
+                String joiner = opName.equalsIgnoreCase("AND") ? " and " : " or ";
                 StringBuilder sb = new StringBuilder("(");
                 for (int i = 0; i < call.getOperands().size(); i++) {
-                    if (i > 0) sb.append(" and ");
-                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
-                }
-                sb.append(")");
-                return sb.toString();
-            }
-            if (opName.equalsIgnoreCase("OR")) {
-                StringBuilder sb = new StringBuilder("(");
-                for (int i = 0; i < call.getOperands().size(); i++) {
-                    if (i > 0) sb.append(" or ");
+                    if (i > 0) sb.append(joiner);
                     sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
                 }
                 sb.append(")");
@@ -272,12 +326,7 @@ public class FilterUtils {
     }
 
     private static String getOperator(String op) {
-        switch (op) {
-            case "=":
-                return "==";
-            default:
-                return op;
-        }
+        return "=".equals(op) ? "==" : op;
     }
 
     private static String reverseOperator(String op) {

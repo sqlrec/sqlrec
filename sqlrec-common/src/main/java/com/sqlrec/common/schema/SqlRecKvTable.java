@@ -3,15 +3,20 @@ package com.sqlrec.common.schema;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.schema.ModifiableTable;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +42,8 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             Enumerable<Object[]> result;
             Object primaryKeyValue = FilterUtils.extractPrimaryKeyValue(filters, getPrimaryKeyIndex());
             if (primaryKeyValue != null) {
+                SqlTypeName primaryKeyType = getPrimaryKeyType();
+                primaryKeyValue = DataTypeUtils.convertType(primaryKeyValue, primaryKeyType);
                 Map<Object, List<Object[]>> keyResult = getByPrimaryKey(Collections.singleton(primaryKeyValue));
                 List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
                 result = Linq4j.asEnumerable(rows);
@@ -66,6 +73,11 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
     }
 
+    public SqlTypeName getPrimaryKeyType() {
+        RelDataType rowType = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
+        return rowType.getFieldList().get(getPrimaryKeyIndex()).getType().getSqlTypeName();
+    }
+
     public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         throw new UnsupportedOperationException("getByPrimaryKey not support");
     }
@@ -86,14 +98,17 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         int totalCount = keySet.size();
 
         try {
+            SqlTypeName primaryKeyType = getPrimaryKeyType();
+            Set<Object> convertedKeySet = DataTypeUtils.convertKeySet(keySet, primaryKeyType);
+
             if (cache == null) {
-                return getByPrimaryKeyImpl(keySet);
+                return DataTypeUtils.convertMapKeys(getByPrimaryKeyImpl(convertedKeySet), primaryKeyType);
             }
 
             int hitCount = 0;
-            Map<Object, List<Object[]>> result = new HashMap<>(keySet.size());
+            Map<Object, List<Object[]>> result = new HashMap<>(convertedKeySet.size());
             Set<Object> missKeys = new HashSet<>();
-            for (Object key : keySet) {
+            for (Object key : convertedKeySet) {
                 List<Object[]> list = cache.getIfPresent(key);
                 if (list != null) {
                     result.put(key, list);
@@ -103,10 +118,11 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 }
             }
             if (!missKeys.isEmpty()) {
-                Map<Object, List<Object[]>> missKeyResult = getByPrimaryKeyImpl(missKeys);
-                result.putAll(missKeyResult);
-                for (Object key : missKeyResult.keySet()) {
-                    cache.put(key, missKeyResult.get(key));
+                Map<Object, List<Object[]>> missKeyResult = DataTypeUtils.convertMapKeys(
+                        getByPrimaryKeyImpl(missKeys), primaryKeyType);
+                for (Map.Entry<Object, List<Object[]>> entry : missKeyResult.entrySet()) {
+                    result.put(entry.getKey(), entry.getValue());
+                    cache.put(entry.getKey(), entry.getValue());
                 }
             }
 

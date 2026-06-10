@@ -1,9 +1,11 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -277,5 +280,209 @@ public class FilterUtilsTest {
         RexInputRef leftRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), rightIndex);
         RexInputRef rightRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), leftIndex);
         return rexBuilder.makeCall(op, leftRef, rightRef);
+    }
+
+    // --- Milvus filter tests ---
+
+    private List<FieldSchema> milvusFieldSchemas = Arrays.asList(
+            new FieldSchema("id", "INTEGER"),
+            new FieldSchema("name", "VARCHAR"),
+            new FieldSchema("age", "INTEGER")
+    );
+
+    @Test
+    public void testGetMilvusFilterSqlString_Empty() {
+        assertEquals("", FilterUtils.getMilvusFilterSqlString(Collections.emptyList(), milvusFieldSchemas));
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_Null() {
+        assertEquals("", FilterUtils.getMilvusFilterSqlString((List<RexNode>) null, milvusFieldSchemas));
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_Equals() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexLiteral literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("id == 1", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_StringEquals() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("Bob", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("name == \"Bob\"", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_GreaterThan() {
+        RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(25));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN, ref2, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("age > 25", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_LessThan() {
+        RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(30));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.LESS_THAN, ref2, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("age < 30", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_GreaterThanOrEqual() {
+        RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(25));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, ref2, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("age >= 25", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_LessThanOrEqual() {
+        RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(60));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.LESS_THAN_OR_EQUAL, ref2, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("age <= 60", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_NotEquals() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.NOT_EQUALS, ref0, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("id <> 1", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_AndCondition() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal1 = rexBuilder.makeExactLiteral(new java.math.BigDecimal(2));
+        RexNode cond1 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal1);
+
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal2 = rexBuilder.makeLiteral("Bob", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode cond2 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal2);
+
+        RexNode andFilter = rexBuilder.makeCall(SqlStdOperatorTable.AND, cond1, cond2);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(andFilter), milvusFieldSchemas);
+        assertEquals("(id == 2) AND (name == \"Bob\")", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_OrCondition() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal1 = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode cond1 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal1);
+
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal2 = rexBuilder.makeLiteral("Alice", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode cond2 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal2);
+
+        RexNode orFilter = rexBuilder.makeCall(SqlStdOperatorTable.OR, cond1, cond2);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(orFilter), milvusFieldSchemas);
+        assertEquals("(id == 1) OR (name == \"Alice\")", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_MultipleFilters() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Arrays.asList(filter), milvusFieldSchemas);
+        assertEquals("id == 1", result);
+    }
+
+    // --- SQL filter tests ---
+
+    private List<FieldSchema> sqlFieldSchemas = Arrays.asList(
+            new FieldSchema("id", "INTEGER"),
+            new FieldSchema("name", "VARCHAR"),
+            new FieldSchema("age", "INTEGER")
+    );
+
+    @Test
+    public void testGetSqlFilterString_Empty() {
+        assertEquals("", FilterUtils.getSqlFilterString(Collections.emptyList(), sqlFieldSchemas));
+    }
+
+    @Test
+    public void testGetSqlFilterString_Null() {
+        assertEquals("", FilterUtils.getSqlFilterString((List<RexNode>) null, sqlFieldSchemas));
+    }
+
+    @Test
+    public void testGetSqlFilterString_Equals() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexLiteral literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal);
+
+        String result = FilterUtils.getSqlFilterString(Collections.singletonList(filter), sqlFieldSchemas);
+        assertEquals("id = 1", result);
+    }
+
+    @Test
+    public void testGetSqlFilterString_StringEquals() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("Bob", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getSqlFilterString(Collections.singletonList(filter), sqlFieldSchemas);
+        assertEquals("name = 'Bob'", result);
+    }
+
+    @Test
+    public void testGetSqlFilterString_GreaterThanOrEqual() {
+        RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(25));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, ref2, literal);
+
+        String result = FilterUtils.getSqlFilterString(Collections.singletonList(filter), sqlFieldSchemas);
+        assertEquals("age >= 25", result);
+    }
+
+    @Test
+    public void testGetSqlFilterString_AndCondition() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal1 = rexBuilder.makeExactLiteral(new java.math.BigDecimal(2));
+        RexNode cond1 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal1);
+
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal2 = rexBuilder.makeLiteral("Bob", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode cond2 = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal2);
+
+        RexNode andFilter = rexBuilder.makeCall(SqlStdOperatorTable.AND, cond1, cond2);
+
+        String result = FilterUtils.getSqlFilterString(Collections.singletonList(andFilter), sqlFieldSchemas);
+        assertEquals("(id = 2) AND (name = 'Bob')", result);
+    }
+
+    @Test
+    public void testGetSqlFilterString_MultipleFilters() {
+        RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(1));
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref0, literal);
+
+        String result = FilterUtils.getSqlFilterString(Arrays.asList(filter), sqlFieldSchemas);
+        assertEquals("id = 1", result);
     }
 }

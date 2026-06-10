@@ -15,6 +15,7 @@
         <module>sqlrec-connector-redis</module>
         <module>sqlrec-connector-milvus</module>
         <module>sqlrec-connector-kafka</module>
+        <module>sqlrec-connector-jdbc</module>
     </modules>
 
     <properties>

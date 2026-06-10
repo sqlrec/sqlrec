@@ -171,7 +171,7 @@ public class TestRedisTable {
         redisConfig.fieldSchemas = fieldSchemas;
         redisConfig.primaryKey = "ID";
         redisConfig.primaryKeyIndex = 0;
-        redisConfig.cacheTtl = 30;
+        redisConfig.cacheTtl = 0;
         redisConfig.maxCacheSize = 100000;
 
         return new RedisCalciteTable(redisConfig);

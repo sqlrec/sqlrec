@@ -57,6 +57,11 @@
             <artifactId>sqlrec-connector-kafka</artifactId>
             <version>${sqlrec.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-connector-jdbc</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>io.netty</groupId>
@@ -79,6 +84,12 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <version>5.5.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.224</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

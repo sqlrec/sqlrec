@@ -10,9 +10,8 @@ import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.math.BigDecimal;
+import java.util.*;
 
 public class DataTypeUtils {
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
@@ -138,5 +137,64 @@ public class DataTypeUtils {
 
     public static List<String> getTableFieldNames(Table calciteTable) {
         return calciteTable.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldNames();
+    }
+
+    public static Object convertType(Object value, SqlTypeName sqlTypeName) {
+        if (value == null) {
+            return null;
+        }
+        if (sqlTypeName == null) {
+            return value;
+        }
+        switch (sqlTypeName) {
+            case TINYINT:
+                return ((Number) value).byteValue();
+            case SMALLINT:
+                return ((Number) value).shortValue();
+            case INTEGER:
+                return ((Number) value).intValue();
+            case BIGINT:
+                return ((Number) value).longValue();
+            case FLOAT:
+            case REAL:
+                return ((Number) value).floatValue();
+            case DOUBLE:
+                return ((Number) value).doubleValue();
+            case DECIMAL:
+                if (value instanceof BigDecimal) {
+                    return value;
+                }
+                return BigDecimal.valueOf(((Number) value).doubleValue());
+            case BOOLEAN:
+                if (value instanceof Boolean) {
+                    return value;
+                }
+                return Boolean.valueOf(value.toString());
+            case VARCHAR:
+            case CHAR:
+                return value.toString();
+            case DATE:
+            case TIME:
+            case TIMESTAMP:
+                return value;
+            default:
+                return value;
+        }
+    }
+
+    public static Set<Object> convertKeySet(Set<Object> keySet, SqlTypeName sqlTypeName) {
+        Set<Object> result = new HashSet<>(keySet.size());
+        for (Object key : keySet) {
+            result.add(convertType(key, sqlTypeName));
+        }
+        return result;
+    }
+
+    public static <V> Map<Object, V> convertMapKeys(Map<Object, V> map, SqlTypeName sqlTypeName) {
+        Map<Object, V> result = new HashMap<>(map.size());
+        for (Map.Entry<Object, V> entry : map.entrySet()) {
+            result.put(convertType(entry.getKey(), sqlTypeName), entry.getValue());
+        }
+        return result;
     }
 }
