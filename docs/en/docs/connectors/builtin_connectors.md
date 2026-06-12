@@ -181,3 +181,114 @@ CREATE TABLE rec_log_kafka (
 - Kafka connector is mainly used for message writing, does not support query operations
 - `linger.ms` parameter controls batch sending, larger values can improve throughput but increase latency
 - Messages are sent to Kafka in JSON format
+
+### 4. JDBC Connector
+
+The JDBC connector is used to connect to relational databases (e.g., PostgreSQL, MySQL), supporting SQL queries and data writes.
+
+**Connector Identifier**: `jdbc`
+
+**Inheritance Type**: `SqlRecKvTable`
+
+**Features**:
+- Supports various JDBC databases (PostgreSQL, MySQL, etc.)
+- Supports primary key queries and local cache acceleration
+- Supports complex filter condition queries (not limited to primary key filtering)
+- Supports data upsert and deletion
+- Uses HikariCP connection pool for database connection management
+- Supports custom JDBC properties
+
+**Configuration Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | String | - | JDBC connection URL, e.g. `jdbc:postgresql://host:port/db` |
+| `table-name` | String | - | JDBC table name |
+| `username` | String | `""` | Database username |
+| `password` | String | `""` | Database password |
+| `driver` | String | `""` | JDBC driver class name, e.g. `org.postgresql.Driver` |
+| `schema` | String | `""` | Database schema name (e.g. PostgreSQL schema) |
+| `max-cache-size` | Integer | 100000 | Maximum local cache entries |
+| `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
+| `connection.pool.size` | Integer | 0 | Connection pool max size (HikariCP maximumPoolSize), 0 means use default |
+| `connection.pool.min-idle` | Integer | 0 | Connection pool min idle connections, 0 means use default |
+| `connection.pool.idle-timeout` | Long | 0 | Connection pool idle timeout in seconds, 0 means use default |
+| `connection.pool.max-lifetime` | Long | 0 | Connection pool max lifetime in seconds, 0 means use default |
+| `connection.pool.connection-timeout` | Long | 0 | Connection pool connection timeout in seconds, 0 means use default |
+| `connection.pool.validation-timeout` | Long | 0 | Connection pool validation timeout in seconds, 0 means use default |
+| `connection.pool.keepalive-time` | Long | 0 | Connection pool keepalive time in seconds, 0 means use default |
+| `connection.pool.pool-name` | String | `""` | Connection pool name |
+| `jdbc.properties.*` | String | - | Custom JDBC properties, the part after `jdbc.properties.` prefix is used as the property name |
+
+**Usage Example**:
+
+```sql
+CREATE TABLE user_profile (
+  id BIGINT,
+  name STRING,
+  age INT,
+  country STRING,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'jdbc',
+  'url' = 'jdbc:postgresql://localhost:5432/mydb',
+  'table-name' = 'user_profile',
+  'username' = 'postgres',
+  'password' = 'postgres',
+  'driver' = 'org.postgresql.Driver'
+);
+```
+
+**Notes**:
+- JDBC connector supports complex filter conditions, not limited to primary key equality filtering
+- Uses HikariCP connection pool for database connection management, sharing the pool for the same URL and username
+- Supports upsert operations, automatically determining insert or update based on primary key
+- Custom JDBC properties can be passed via the `jdbc.properties.*` prefix
+
+### 5. MongoDB Connector
+
+The MongoDB connector is used to connect to MongoDB document databases, supporting document queries and data writes.
+
+**Connector Identifier**: `mongodb`
+
+**Inheritance Type**: `SqlRecKvTable`
+
+**Features**:
+- Supports MongoDB connection URI
+- Supports primary key queries and local cache acceleration
+- Supports complex filter conditions (AND, OR, comparison operators, IS NULL, etc.)
+- Supports data upsert and deletion
+- Automatically pushes down Calcite filter conditions to MongoDB queries
+
+**Configuration Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `uri` | String | - | MongoDB connection URI, e.g. `mongodb://host:port` |
+| `database` | String | - | Database name |
+| `collection` | String | - | Collection name |
+| `max-cache-size` | Integer | 100000 | Maximum local cache entries |
+| `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
+
+**Usage Example**:
+
+```sql
+CREATE TABLE user_behavior (
+  user_id BIGINT,
+  item_id BIGINT,
+  action STRING,
+  timestamp BIGINT,
+  PRIMARY KEY (user_id) NOT ENFORCED
+) WITH (
+  'connector' = 'mongodb',
+  'uri' = 'mongodb://localhost:27017',
+  'database' = 'recommendation',
+  'collection' = 'user_behavior'
+);
+```
+
+**Notes**:
+- MongoDB connector supports complex filter conditions including AND, OR, equals, not equals, greater than, less than, etc.
+- Filter conditions that cannot be pushed down will be handled by Calcite in memory
+- MongoClient instances are shared for the same URI
+- Upsert operations automatically determine insert or update based on primary key

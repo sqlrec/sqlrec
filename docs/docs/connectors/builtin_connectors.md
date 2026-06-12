@@ -181,3 +181,114 @@ CREATE TABLE rec_log_kafka (
 - Kafka 连接器主要用于消息写入，不支持查询操作
 - `linger.ms` 参数控制批量发送，较大的值可以提高吞吐量但增加延迟
 - 消息以 JSON 格式发送到 Kafka
+
+### 4. JDBC Connector
+
+JDBC 连接器用于连接关系型数据库（如 PostgreSQL、MySQL 等），支持 SQL 查询和数据写入。
+
+**连接器标识符**：`jdbc`
+
+**继承类型**：`SqlRecKvTable`
+
+**特性**：
+- 支持多种 JDBC 数据库（PostgreSQL、MySQL 等）
+- 支持主键查询和本地缓存加速
+- 支持复杂过滤条件查询（不仅限于主键过滤）
+- 支持数据 Upsert 和删除
+- 使用 HikariCP 连接池管理数据库连接
+- 支持自定义 JDBC 属性
+
+**配置参数**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `url` | String | - | JDBC 连接 URL，例如 `jdbc:postgresql://host:port/db` |
+| `table-name` | String | - | JDBC 表名 |
+| `username` | String | `""` | 数据库用户名 |
+| `password` | String | `""` | 数据库密码 |
+| `driver` | String | `""` | JDBC 驱动类名，例如 `org.postgresql.Driver` |
+| `schema` | String | `""` | 数据库 Schema 名称（如 PostgreSQL 的 schema） |
+| `max-cache-size` | Integer | 100000 | 本地缓存最大条目数 |
+| `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
+| `connection.pool.size` | Integer | 0 | 连接池最大连接数（HikariCP maximumPoolSize），0 表示使用默认值 |
+| `connection.pool.min-idle` | Integer | 0 | 连接池最小空闲连接数，0 表示使用默认值 |
+| `connection.pool.idle-timeout` | Long | 0 | 连接池空闲超时时间（秒），0 表示使用默认值 |
+| `connection.pool.max-lifetime` | Long | 0 | 连接池连接最大生命周期（秒），0 表示使用默认值 |
+| `connection.pool.connection-timeout` | Long | 0 | 连接池连接超时时间（秒），0 表示使用默认值 |
+| `connection.pool.validation-timeout` | Long | 0 | 连接池验证超时时间（秒），0 表示使用默认值 |
+| `connection.pool.keepalive-time` | Long | 0 | 连接池保活时间（秒），0 表示使用默认值 |
+| `connection.pool.pool-name` | String | `""` | 连接池名称 |
+| `jdbc.properties.*` | String | - | 自定义 JDBC 属性，前缀 `jdbc.properties.` 后的部分作为属性名 |
+
+**使用示例**：
+
+```sql
+CREATE TABLE user_profile (
+  id BIGINT,
+  name STRING,
+  age INT,
+  country STRING,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'jdbc',
+  'url' = 'jdbc:postgresql://localhost:5432/mydb',
+  'table-name' = 'user_profile',
+  'username' = 'postgres',
+  'password' = 'postgres',
+  'driver' = 'org.postgresql.Driver'
+);
+```
+
+**注意事项**：
+- JDBC 连接器支持复杂过滤条件，不仅限于主键相等过滤
+- 使用 HikariCP 连接池管理数据库连接，相同 URL 和用户名共享连接池
+- 支持 Upsert 操作，根据主键自动判断插入或更新
+- 可通过 `jdbc.properties.*` 前缀传递自定义 JDBC 属性
+
+### 5. MongoDB Connector
+
+MongoDB 连接器用于连接 MongoDB 文档数据库，支持文档查询和数据写入。
+
+**连接器标识符**：`mongodb`
+
+**继承类型**：`SqlRecKvTable`
+
+**特性**：
+- 支持 MongoDB 连接 URI
+- 支持主键查询和本地缓存加速
+- 支持复杂过滤条件（AND、OR、比较运算、IS NULL 等）
+- 支持数据 Upsert 和删除
+- 自动将 Calcite 过滤条件下推为 MongoDB 查询
+
+**配置参数**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `uri` | String | - | MongoDB 连接 URI，例如 `mongodb://host:port` |
+| `database` | String | - | 数据库名称 |
+| `collection` | String | - | 集合名称 |
+| `max-cache-size` | Integer | 100000 | 本地缓存最大条目数 |
+| `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
+
+**使用示例**：
+
+```sql
+CREATE TABLE user_behavior (
+  user_id BIGINT,
+  item_id BIGINT,
+  action STRING,
+  timestamp BIGINT,
+  PRIMARY KEY (user_id) NOT ENFORCED
+) WITH (
+  'connector' = 'mongodb',
+  'uri' = 'mongodb://localhost:27017',
+  'database' = 'recommendation',
+  'collection' = 'user_behavior'
+);
+```
+
+**注意事项**：
+- MongoDB 连接器支持复杂过滤条件，包括 AND、OR、等于、不等于、大于、小于等
+- 无法下推的过滤条件将由 Calcite 在内存中处理
+- 相同 URI 共享 MongoClient 实例
+- Upsert 操作基于主键自动判断插入或更新
