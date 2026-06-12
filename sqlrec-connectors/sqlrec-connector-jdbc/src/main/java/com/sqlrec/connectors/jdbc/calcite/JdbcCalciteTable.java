@@ -2,6 +2,7 @@ package com.sqlrec.connectors.jdbc.calcite;
 
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.sqlrec.connectors.jdbc.handler.JdbcHandler;
@@ -58,7 +59,7 @@ public class JdbcCalciteTable extends SqlRecKvTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new JdbcCollection(getTableName(), jdbcHandler);
+        return new JdbcCollection(this, jdbcHandler);
     }
 
     @Override
@@ -94,11 +95,18 @@ public class JdbcCalciteTable extends SqlRecKvTable {
     }
 
     public static class JdbcCollection extends SqlRecCollection {
+        private final JdbcCalciteTable table;
         private final JdbcHandler jdbcHandler;
 
-        public JdbcCollection(String tableName, JdbcHandler jdbcHandler) {
-            super(tableName);
+        public JdbcCollection(JdbcCalciteTable table, JdbcHandler jdbcHandler) {
+            super(table.getTableName());
+            this.table = table;
             this.jdbcHandler = jdbcHandler;
+        }
+
+        @Override
+        public SqlRecTable getSqlRecTable() {
+            return table;
         }
 
         @Override

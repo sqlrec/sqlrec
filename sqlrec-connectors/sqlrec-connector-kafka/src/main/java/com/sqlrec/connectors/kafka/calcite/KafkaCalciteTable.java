@@ -43,7 +43,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new KafkaCollection(getTableName(), kafkaConfig);
+        return new KafkaCollection(this, kafkaConfig);
     }
 
     @Override
@@ -98,11 +98,18 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     }
 
     public static class KafkaCollection extends SqlRecCollection {
+        private final KafkaCalciteTable table;
         private final KafkaConfig kafkaConfig;
 
-        public KafkaCollection(String tableName, KafkaConfig kafkaConfig) {
-            super(tableName);
+        public KafkaCollection(KafkaCalciteTable table, KafkaConfig kafkaConfig) {
+            super(table.getTableName());
+            this.table = table;
             this.kafkaConfig = kafkaConfig;
+        }
+
+        @Override
+        public SqlRecTable getSqlRecTable() {
+            return table;
         }
 
         @Override

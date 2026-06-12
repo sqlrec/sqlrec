@@ -117,7 +117,7 @@ public class TestMongoTable {
         mongoConfig.primaryKey = "id";
         mongoConfig.primaryKeyIndex = 0;
         mongoConfig.maxCacheSize = 100000;
-        mongoConfig.cacheTtl = 0;
+        mongoConfig.cacheTtl = 30;
 
         return new MongoCalciteTable(mongoConfig);
     }

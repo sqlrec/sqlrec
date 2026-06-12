@@ -138,7 +138,7 @@ public class TestJdbcTable {
         jdbcConfig.primaryKey = "id";
         jdbcConfig.primaryKeyIndex = 0;
         jdbcConfig.maxCacheSize = 100000;
-        jdbcConfig.cacheTtl = 0;
+        jdbcConfig.cacheTtl = 30;
 
         return new JdbcCalciteTable(jdbcConfig);
     }
@@ -159,7 +159,7 @@ public class TestJdbcTable {
         jdbcConfig.primaryKey = "id";
         jdbcConfig.primaryKeyIndex = 0;
         jdbcConfig.maxCacheSize = 100000;
-        jdbcConfig.cacheTtl = 0;
+        jdbcConfig.cacheTtl = 30;
 
         return new JdbcCalciteTable(jdbcConfig);
     }

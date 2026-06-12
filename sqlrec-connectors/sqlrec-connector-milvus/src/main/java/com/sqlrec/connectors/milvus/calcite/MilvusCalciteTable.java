@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.milvus.calcite;
 
 import com.sqlrec.common.schema.SqlRecCollection;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.schema.SqlRecVectorTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
@@ -68,7 +69,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new MilvusCollection(getTableName(), milvusHandler);
+        return new MilvusCollection(this, milvusHandler);
     }
 
     @Override
@@ -109,11 +110,18 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
     }
 
     public static class MilvusCollection extends SqlRecCollection {
+        private final MilvusCalciteTable table;
         private final MilvusHandler milvusHandler;
 
-        public MilvusCollection(String tableName, MilvusHandler milvusHandler) {
-            super(tableName);
+        public MilvusCollection(MilvusCalciteTable table, MilvusHandler milvusHandler) {
+            super(table.getTableName());
+            this.table = table;
             this.milvusHandler = milvusHandler;
+        }
+
+        @Override
+        public SqlRecTable getSqlRecTable() {
+            return table;
         }
 
         @Override

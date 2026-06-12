@@ -2,9 +2,12 @@ package com.sqlrec.connectors.redis.calcite;
 
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
+import org.apache.calcite.DataContext;
+import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.linq4j.tree.Expression;
@@ -59,7 +62,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
 
     @Override
     public Collection getModifiableCollection() {
-        return new RedisCollection(getTableName(), redisHandler);
+        return new RedisCollection(this, redisHandler);
     }
 
     @Override
@@ -85,16 +88,28 @@ public class RedisCalciteTable extends SqlRecKvTable {
     }
 
     @Override
+    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
+        throw new RuntimeException("scan is not support by redis");
+    }
+
+    @Override
     public int getPrimaryKeyIndex() {
         return redisConfig.primaryKeyIndex;
     }
 
     public static class RedisCollection extends SqlRecCollection {
+        private final RedisCalciteTable table;
         private final RedisHandler redisHandler;
 
-        public RedisCollection(String tableName, RedisHandler redisHandler) {
-            super(tableName);
+        public RedisCollection(RedisCalciteTable table, RedisHandler redisHandler) {
+            super(table.getTableName());
+            this.table = table;
             this.redisHandler = redisHandler;
+        }
+
+        @Override
+        public SqlRecTable getSqlRecTable() {
+            return table;
         }
 
         @Override

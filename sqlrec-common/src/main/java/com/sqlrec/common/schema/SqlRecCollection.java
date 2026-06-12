@@ -21,9 +21,18 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         this.tableName = tableName;
     }
 
+    public abstract SqlRecTable getSqlRecTable();
+
     protected abstract boolean addImpl(Object[] objects);
 
     protected abstract boolean removeImpl(Object[] objects);
+
+    private void invalidateCacheIfNeeded(Object[] row) {
+        SqlRecTable table = getSqlRecTable();
+        if (table instanceof SqlRecKvTable) {
+            ((SqlRecKvTable) table).invalidateCache(row);
+        }
+    }
 
     @Override
     public int size() {
@@ -63,6 +72,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         try {
             boolean result = addImpl(objects);
             size += 1;
+            invalidateCacheIfNeeded(objects);
             return result;
         } catch (Throwable e) {
             log.error("add to table {} error", tableName, e);
@@ -88,6 +98,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         try {
             boolean result = removeImpl((Object[]) o);
             size += 1;
+            invalidateCacheIfNeeded((Object[]) o);
             return result;
         } catch (Throwable e) {
             log.error("remove from table {} error", tableName, e);

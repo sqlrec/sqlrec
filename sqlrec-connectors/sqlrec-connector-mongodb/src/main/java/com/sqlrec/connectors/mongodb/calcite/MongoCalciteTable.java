@@ -2,6 +2,7 @@ package com.sqlrec.connectors.mongodb.calcite;
 
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.connectors.mongodb.handler.MongoHandler;
@@ -58,7 +59,7 @@ public class MongoCalciteTable extends SqlRecKvTable {
 
     @Override
     public @Nullable Collection getModifiableCollection() {
-        return new MongoCollection(getTableName(), mongoHandler);
+        return new MongoCollection(this, mongoHandler);
     }
 
     @Override
@@ -94,11 +95,18 @@ public class MongoCalciteTable extends SqlRecKvTable {
     }
 
     public static class MongoCollection extends SqlRecCollection {
+        private final MongoCalciteTable table;
         private final MongoHandler mongoHandler;
 
-        public MongoCollection(String tableName, MongoHandler mongoHandler) {
-            super(tableName);
+        public MongoCollection(MongoCalciteTable table, MongoHandler mongoHandler) {
+            super(table.getTableName());
+            this.table = table;
             this.mongoHandler = mongoHandler;
+        }
+
+        @Override
+        public SqlRecTable getSqlRecTable() {
+            return table;
         }
 
         @Override

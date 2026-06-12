@@ -28,9 +28,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
     private transient Cache<Object, List<Object[]>> cache;
 
-    protected Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters) {
-        throw new UnsupportedOperationException("scan not support");
-    }
+    protected abstract Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters);
 
     @Override
     public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
@@ -69,18 +67,14 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         }
     }
 
-    public int getPrimaryKeyIndex() {
-        throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
-    }
+    public abstract int getPrimaryKeyIndex();
 
     public SqlTypeName getPrimaryKeyType() {
         RelDataType rowType = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
         return rowType.getFieldList().get(getPrimaryKeyIndex()).getType().getSqlTypeName();
     }
 
-    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
-        throw new UnsupportedOperationException("getByPrimaryKey not support");
-    }
+    public abstract Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet);
 
     public void initCache(int maxSize, long expireAfterWrite) {
         if (maxSize <= 0 || expireAfterWrite <= 0) {
@@ -148,6 +142,18 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             MetricsUtils.getCompositeMeterRegistry()
                     .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DATA_SIZE, tags)
                     .record(totalCount);
+        }
+    }
+
+    public void invalidateCache(Object[] row) {
+        if (cache == null) {
+            return;
+        }
+        int pkIndex = getPrimaryKeyIndex();
+        if (pkIndex < row.length) {
+            SqlTypeName primaryKeyType = getPrimaryKeyType();
+            Object primaryKeyValue = DataTypeUtils.convertType(row[pkIndex], primaryKeyType);
+            cache.invalidate(primaryKeyValue);
         }
     }
 
