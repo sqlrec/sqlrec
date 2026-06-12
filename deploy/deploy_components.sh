@@ -38,6 +38,7 @@ bash ${dir}/kafka/deploy.sh
 bash ${dir}/redis/deploy.sh
 bash ${dir}/milvus/deploy.sh
 #bash ${dir}/hdfs/deploy.sh
+#bash ${dir}/mongodb/deploy_default.sh
 #bash ${dir}/kyuubi/deploy.sh
 #bash ${dir}/jupyter/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
