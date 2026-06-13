@@ -40,6 +40,8 @@ SqlCallSqlFunction GetCallSqlFunction() :
     SqlIdentifier likeTableName = null;
     SqlNode likeFunctionName = null;
     boolean isAsync = false;
+    SqlNode partitionBy = null;
+    SqlNode partitionSize = null;
 }
 {
     (
@@ -63,10 +65,16 @@ SqlCallSqlFunction GetCallSqlFunction() :
         )
     ]
     [
+        <PARTITION> <BY>
+        partitionBy = SimpleIdentifier()
+        <SIZE>
+        partitionSize = Literal()
+    ]
+    [
         <ASYNC> { isAsync = true; }
     ]
     {
-        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName, likeFunctionName, isAsync);
+        return new SqlCallSqlFunction(getPos(), funcName, funcNameVariable, inputList, likeTableName, likeFunctionName, isAsync, partitionBy, partitionSize);
     }
 }
 

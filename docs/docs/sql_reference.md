@@ -637,7 +637,7 @@ DESC SQL FUNCTION my_function;
 
 ```sql
 CACHE TABLE table_name AS 
-    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
      | select_statement}
 ```
 
@@ -650,6 +650,7 @@ CACHE TABLE table_name AS
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行 |
 | `select_statement` | SELECT 查询语句 |
 
@@ -670,6 +671,12 @@ CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CACHE TABLE cached_result AS
 CALL my_function('param1') ASYNC;
+
+CACHE TABLE cached_result AS
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CACHE TABLE cached_result AS
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
 ```
 
 
@@ -732,7 +739,7 @@ IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
 **语法：**
 
 ```sql
-CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
 ```
 
 **参数：**
@@ -743,6 +750,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行 |
 
 **示例：**
@@ -757,6 +765,10 @@ CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 CALL my_function('param1') ASYNC;
 
 CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
+
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
 ```
 
 

@@ -637,7 +637,7 @@ Cache query results or function call results to a specified table.
 
 ```sql
 CACHE TABLE table_name AS 
-    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
      | select_statement}
 ```
 
@@ -650,6 +650,7 @@ CACHE TABLE table_name AS
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously |
 | `select_statement` | SELECT query statement |
 
@@ -670,6 +671,12 @@ CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CACHE TABLE cached_result AS
 CALL my_function('param1') ASYNC;
+
+CACHE TABLE cached_result AS
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CACHE TABLE cached_result AS
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
 ```
 
 
@@ -732,7 +739,7 @@ Call a SQL function.
 **Syntax:**
 
 ```sql
-CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [ASYNC]
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
 ```
 
 **Parameters:**
@@ -743,6 +750,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously |
 
 **Examples:**
@@ -757,6 +765,10 @@ CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 CALL my_function('param1') ASYNC;
 
 CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
+
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
 ```
 
 

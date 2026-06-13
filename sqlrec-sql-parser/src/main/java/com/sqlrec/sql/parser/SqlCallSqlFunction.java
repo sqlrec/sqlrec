@@ -14,6 +14,8 @@ public class SqlCallSqlFunction extends SqlCall {
     private SqlIdentifier likeTableName;
     private SqlNode likeFunctionName;
     private boolean isAsync;
+    private SqlNode partitionBy;
+    private SqlNode partitionSize;
 
     public SqlCallSqlFunction(
             SqlParserPos pos,
@@ -22,7 +24,9 @@ public class SqlCallSqlFunction extends SqlCall {
             List<SqlNode> inputTableList,
             SqlIdentifier likeTableName,
             SqlNode likeFunctionName,
-            boolean isAsync
+            boolean isAsync,
+            SqlNode partitionBy,
+            SqlNode partitionSize
     ) {
         super(pos);
         this.funcName = funcName;
@@ -31,6 +35,8 @@ public class SqlCallSqlFunction extends SqlCall {
         this.likeTableName = likeTableName;
         this.likeFunctionName = likeFunctionName;
         this.isAsync = isAsync;
+        this.partitionBy = partitionBy;
+        this.partitionSize = partitionSize;
     }
 
     @Override
@@ -68,6 +74,15 @@ public class SqlCallSqlFunction extends SqlCall {
             writer.keyword("FUNCTION");
             likeFunctionName.unparse(writer, leftPrec, rightPrec);
         }
+        if (partitionBy != null) {
+            writer.keyword("PARTITION");
+            writer.keyword("BY");
+            partitionBy.unparse(writer, leftPrec, rightPrec);
+        }
+        if (partitionSize != null) {
+            writer.keyword("SIZE");
+            partitionSize.unparse(writer, leftPrec, rightPrec);
+        }
         if (isAsync) {
             writer.keyword("ASYNC");
         }
@@ -95,5 +110,13 @@ public class SqlCallSqlFunction extends SqlCall {
 
     public boolean isAsync() {
         return isAsync;
+    }
+
+    public SqlNode getPartitionBy() {
+        return partitionBy;
+    }
+
+    public SqlNode getPartitionSize() {
+        return partitionSize;
     }
 }
