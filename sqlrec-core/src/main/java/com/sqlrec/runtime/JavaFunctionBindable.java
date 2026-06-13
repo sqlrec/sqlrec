@@ -4,7 +4,6 @@ import com.sqlrec.common.runtime.ConfigContext;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.Executor;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -26,26 +25,23 @@ public class JavaFunctionBindable extends BindableInterface {
     private List<SqlNode> inputTableList;
     private List<RelDataTypeField> returnDataFields;
     private Method evalMethod;
-    private boolean isAsync;
 
     public JavaFunctionBindable(
             String functionName,
             Object tableFunction,
             List<SqlNode> inputTableList,
             List<RelDataTypeField> returnDataFields,
-            CalciteSchema schema,
-            boolean isAsync
+            CalciteSchema schema
     ) {
         this.functionName = functionName;
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
         this.evalMethod = selectEvalMethod(tableFunction, inputTableList);
-        this.isAsync = isAsync;
 
         if (returnDataFields != null) {
             this.returnDataFields = returnDataFields;
         } else {
-            if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
+            if (CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
                 Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
                 if (outputTable == null) {
                     throw new RuntimeException("table function return null");
@@ -72,18 +68,18 @@ public class JavaFunctionBindable extends BindableInterface {
     private static Method selectEvalMethod(Object tableFunction, List<SqlNode> inputs) {
         List<Method> evalMethods = getEvalMethods(tableFunction);
         List<Method> matchedMethods = new ArrayList<>();
-        
+
         for (Method method : evalMethods) {
             if (isMethodMatch(method, inputs)) {
                 matchedMethods.add(method);
             }
         }
-        
+
         if (matchedMethods.size() != 1) {
             int inputCount = inputs != null ? inputs.size() : 0;
             throw new RuntimeException("found " + matchedMethods.size() + " evaluate method(s) for " + inputCount + " parameters, expected exactly 1");
         }
-        
+
         return matchedMethods.get(0);
     }
 
@@ -92,10 +88,10 @@ public class JavaFunctionBindable extends BindableInterface {
         boolean isVarArgs = method.isVarArgs();
         int inputCount = inputs != null ? inputs.size() : 0;
         int inputIndex = 0;
-        
+
         for (int i = 0; i < paramTypes.length; i++) {
             Class<?> paramType = paramTypes[i];
-            
+
             if (isVarArgs && i == paramTypes.length - 1) {
                 Class<?> varArgType = paramType.getComponentType();
                 while (inputIndex < inputCount) {
@@ -116,7 +112,7 @@ public class JavaFunctionBindable extends BindableInterface {
                 inputIndex++;
             }
         }
-        
+
         return inputIndex == inputCount;
     }
 
@@ -153,7 +149,7 @@ public class JavaFunctionBindable extends BindableInterface {
 
         for (int i = 0; i < paramTypes.length; i++) {
             Class<?> paramType = paramTypes[i];
-            
+
             if (isVarArgs && i == paramTypes.length - 1) {
                 Class<?> varArgType = paramType.getComponentType();
                 List<Object> varArgs = new ArrayList<>();
@@ -206,12 +202,7 @@ public class JavaFunctionBindable extends BindableInterface {
         }
 
         try {
-            if (isAsync) {
-                Executor.getExecutorService().submit(() -> evalMethod.invoke(tableFunction, paramList.toArray()));
-                return null;
-            } else {
-                return evalMethod.invoke(tableFunction, paramList.toArray());
-            }
+            return evalMethod.invoke(tableFunction, paramList.toArray());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -237,9 +228,6 @@ public class JavaFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        if (isAsync) {
-            return true;
-        }
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         for (Class<?> paramType : paramTypes) {
             if (paramType.equals(ExecuteContext.class)) {

@@ -385,12 +385,12 @@ public class UiHandler {
     private static String getBindableType(BindableInterface bindable) {
         if (bindable instanceof ProxyAllBindable) {
             return getBindableType(((ProxyAllBindable) bindable).getDelegate());
+        } else if (bindable instanceof FunctionProxyBindable) {
+            return "function";
         } else if (bindable instanceof CacheTableBindable) {
             return "cache";
         } else if (bindable instanceof CalciteBindable) {
             return "sql";
-        } else if (bindable instanceof CallSqlFunctionBindable) {
-            return "function";
         } else if (bindable instanceof IfCacheBindable) {
             return "condition";
         } else if (bindable instanceof SetBindable) {

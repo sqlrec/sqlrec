@@ -3,9 +3,10 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.schema.JavaFunctionUtils;
+import com.sqlrec.utils.Executor;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -17,13 +18,23 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class FunctionProxyBindable extends BindableInterface {
     private List<SqlNode> inputList;
     private SqlGetVariable funcNameVariable;
+    private BindableInterface delegate;
     private List<RelDataTypeField> returnDataFields;
     private boolean isAsync;
+
+    public FunctionProxyBindable(BindableInterface delegate, boolean isAsync) {
+        this.inputList = null;
+        this.delegate = delegate;
+        this.funcNameVariable = null;
+        this.returnDataFields = delegate.getReturnDataFields();
+        this.isAsync = isAsync;
+    }
 
     public FunctionProxyBindable(
             List<SqlNode> inputList,
@@ -36,6 +47,7 @@ public class FunctionProxyBindable extends BindableInterface {
         }
 
         this.inputList = inputList;
+        this.delegate = null;
         this.funcNameVariable = funcNameVariable;
         this.returnDataFields = returnDataFields;
         this.isAsync = isAsync;
@@ -71,9 +83,10 @@ public class FunctionProxyBindable extends BindableInterface {
         }
 
         String functionName = callSqlFunction.getFuncName().getSimple();
-        return getFunctionBindableByName(
-                functionName, schema, inputList, returnDataFields, callSqlFunction.isAsync(), compileManager
+        BindableInterface delegate = getFunctionBindableByName(
+                functionName, schema, inputList, returnDataFields, compileManager
         );
+        return new FunctionProxyBindable(delegate, callSqlFunction.isAsync());
     }
 
     public static BindableInterface getFunctionBindableByName(
@@ -81,13 +94,12 @@ public class FunctionProxyBindable extends BindableInterface {
             CalciteSchema schema,
             List<SqlNode> inputList,
             List<RelDataTypeField> returnDataFields,
-            boolean isAsync,
             CompileManager compileManager
     ) throws Exception {
         Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
         if (javaFunctionObj != null) {
             return new JavaFunctionBindable(
-                    functionName, javaFunctionObj, inputList, returnDataFields, schema, isAsync
+                    functionName, javaFunctionObj, inputList, returnDataFields, schema
             );
         }
 
@@ -102,7 +114,7 @@ public class FunctionProxyBindable extends BindableInterface {
                 }
             }
             CallSqlFunctionBindable callSqlFunctionBindable = new CallSqlFunctionBindable(
-                    functionName, inputTableList, sqlFunctionBindable, isAsync);
+                    functionName, inputTableList, sqlFunctionBindable);
             callSqlFunctionBindable.checkInputTable(schema);
             return callSqlFunctionBindable;
         }
@@ -112,6 +124,20 @@ public class FunctionProxyBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        BindableInterface targetBindable = resolveBindable(schema, context);
+        if (isAsync) {
+            Executor.getExecutorService().submit(() -> targetBindable.bind(schema, context));
+            return null;
+        } else {
+            return targetBindable.bind(schema, context);
+        }
+    }
+
+    private BindableInterface resolveBindable(CalciteSchema schema, ExecuteContext context) {
+        if (delegate != null) {
+            return delegate;
+        }
+
         String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
         String functionName = context.getVariable(variableName);
         if (StringUtils.isEmpty(functionName)) {
@@ -121,29 +147,39 @@ public class FunctionProxyBindable extends BindableInterface {
                 throw new RuntimeException("cant get function name from variable: " + variableName);
             }
         }
-        BindableInterface bindableInterface = null;
         try {
-            bindableInterface = getFunctionBindableByName(
-                    functionName, schema, inputList, returnDataFields, isAsync, new CompileManager()
+            return getFunctionBindableByName(
+                    functionName, schema, inputList, returnDataFields, new CompileManager()
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return bindableInterface.bind(schema, context);
     }
 
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
+        if (delegate != null) {
+            return delegate.getReturnDataFields();
+        }
         return returnDataFields;
     }
 
     @Override
     public boolean isParallelizable() {
+        if (isAsync) {
+            return true;
+        }
+        if (delegate != null) {
+            return delegate.isParallelizable();
+        }
         return false;
     }
 
     @Override
     public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
+        if (delegate != null) {
+            return delegate.isTimeoutAble(schema, context);
+        }
         try {
             String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
             String functionName = context.getVariable(variableName);
@@ -163,11 +199,89 @@ public class FunctionProxyBindable extends BindableInterface {
 
     @Override
     public Set<String> getReadTables() {
+        if (delegate != null) {
+            return delegate.getReadTables();
+        }
         return Set.of();
     }
 
     @Override
     public Set<String> getWriteTables() {
+        if (delegate != null) {
+            return delegate.getWriteTables();
+        }
         return Set.of();
+    }
+
+    @Override
+    public String getDependencyJavaFuncName() {
+        if (delegate != null) {
+            return delegate.getDependencyJavaFuncName();
+        }
+        return null;
+    }
+
+    @Override
+    public String getDependencySqlFuncName() {
+        if (delegate != null) {
+            return delegate.getDependencySqlFuncName();
+        }
+        return null;
+    }
+
+    @Override
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        if (delegate != null) {
+            return delegate.getAllDependSqlFunctionMap();
+        }
+        return super.getAllDependSqlFunctionMap();
+    }
+
+    @Override
+    public String getCacheTableName() {
+        if (delegate != null) {
+            return delegate.getCacheTableName();
+        }
+        return null;
+    }
+
+    @Override
+    public List<RelDataTypeField> getCacheTableDataFields() {
+        if (delegate != null) {
+            return delegate.getCacheTableDataFields();
+        }
+        return null;
+    }
+
+    @Override
+    public boolean isUnionSql() {
+        if (delegate != null) {
+            return delegate.isUnionSql();
+        }
+        return false;
+    }
+
+    @Override
+    public String getLogicalPlan() {
+        if (delegate != null) {
+            return delegate.getLogicalPlan();
+        }
+        return null;
+    }
+
+    @Override
+    public String getPhysicalPlan() {
+        if (delegate != null) {
+            return delegate.getPhysicalPlan();
+        }
+        return null;
+    }
+
+    @Override
+    public String getJavaExpression() {
+        if (delegate != null) {
+            return delegate.getJavaExpression();
+        }
+        return null;
     }
 }

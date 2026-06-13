@@ -4,7 +4,6 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
-import com.sqlrec.utils.Executor;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -18,9 +17,8 @@ public class CallSqlFunctionBindable extends BindableInterface {
     private List<String> inputTables;
     private List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders;
     private BindableInterface sqlFunctionBindable;
-    private boolean isAsync;
 
-    public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable, boolean isAsync) {
+    public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable) {
         if (sqlFunctionBindable.getInputTables().size() != inputTables.size()) {
             throw new RuntimeException("function input table not match when compile call function: " + funName);
         }
@@ -29,7 +27,6 @@ public class CallSqlFunctionBindable extends BindableInterface {
         this.inputTables = inputTables;
         this.sqlFunctionBindable = new ProxyAllBindable(sqlFunctionBindable);
         this.sqlFunctionBindable.setName(sqlFunctionBindable.getFunName());
-        this.isAsync = isAsync;
         this.tablePlaceholders = sqlFunctionBindable.getInputTables();
     }
 
@@ -49,12 +46,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
             tmpSchema.add(tablePlaceholders.get(i).getKey(), inputTableEntry.getTable());
         }
 
-        if (isAsync) {
-            Executor.getExecutorService().submit(() -> sqlFunctionBindable.bind(tmpSchema, finalContext));
-            return null;
-        } else {
-            return sqlFunctionBindable.bind(tmpSchema, finalContext);
-        }
+        return sqlFunctionBindable.bind(tmpSchema, finalContext);
     }
 
     public void checkInputTable(CalciteSchema schema) {
@@ -86,9 +78,6 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        if (isAsync) {
-            return true;
-        }
         return sqlFunctionBindable.isParallelizable();
     }
 
