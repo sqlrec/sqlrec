@@ -27,7 +27,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{4, "D"}, {5, "E"}, {6, "F"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "2,1", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "2,1", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
@@ -50,7 +50,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{3, "C"}, {2, "B2"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,1", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "1,1", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
@@ -68,7 +68,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{1, "A2"}, {3, "C"}, {4, "D"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,2", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "1,2", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(4, result.size());
@@ -86,7 +86,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{4, "D"}, {5, "E"}, {6, "F"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,1", "3", t1, t2);
+        CacheTable output = function.evaluate("id", "1,1", "3", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
@@ -102,7 +102,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t3 = createTable(new Object[][]{{3, "C"}, {6, "F"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,1,1", "10", t1, t2, t3);
+        CacheTable output = function.evaluate("id", "1,1,1", "10", t1, t2, t3);
 
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
@@ -123,7 +123,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{5, "E"}, {6, "F"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "3,1", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "3,1", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
@@ -143,7 +143,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,1", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "1,1", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(1, result.size());
@@ -162,7 +162,7 @@ public class WeightedMergeFunctionTest {
 
         WeightedMergeFunction function = new WeightedMergeFunction();
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate("0", "1,1", "10", t1, t2);
+            function.evaluate("id", "1,1", "10", t1, t2);
         });
     }
 
@@ -179,17 +179,17 @@ public class WeightedMergeFunctionTest {
 
         WeightedMergeFunction function = new WeightedMergeFunction();
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate("0", "1,1", "10", t1, t2);
+            function.evaluate("id", "1,1", "10", t1, t2);
         });
     }
 
     @Test
-    public void testInvalidPrimaryKeyIndex() {
+    public void testInvalidPrimaryKey() {
         CacheTable t1 = createTable(new Object[][]{{1, "A"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate("5", "1", "10", t1);
+            function.evaluate("nonexistent", "1", "10", t1);
         });
     }
 
@@ -200,7 +200,7 @@ public class WeightedMergeFunctionTest {
 
         WeightedMergeFunction function = new WeightedMergeFunction();
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate("0", "1", "10", t1, t2);
+            function.evaluate("id", "1", "10", t1, t2);
         });
     }
 
@@ -215,7 +215,7 @@ public class WeightedMergeFunctionTest {
         CacheTable t2 = createTable(new Object[][]{{null, "C"}, {3, "D"}});
 
         WeightedMergeFunction function = new WeightedMergeFunction();
-        CacheTable output = function.evaluate("0", "1,1", "10", t1, t2);
+        CacheTable output = function.evaluate("id", "1,1", "10", t1, t2);
 
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());

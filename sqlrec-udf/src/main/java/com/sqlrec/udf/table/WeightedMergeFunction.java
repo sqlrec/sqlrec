@@ -15,12 +15,12 @@ import java.util.Set;
 
 public class WeightedMergeFunction {
 
-    public CacheTable evaluate(String primaryKeyIndex, String weights, String limit, CacheTable... tables) {
+    public CacheTable evaluate(String primaryKey, String weights, String limit, CacheTable... tables) {
         if (tables == null || tables.length == 0) {
             throw new IllegalArgumentException("At least one table is required");
         }
-        if (primaryKeyIndex == null || primaryKeyIndex.isEmpty()) {
-            throw new IllegalArgumentException("primaryKeyIndex cannot be null or empty");
+        if (primaryKey == null || primaryKey.isEmpty()) {
+            throw new IllegalArgumentException("primaryKey cannot be null or empty");
         }
         if (weights == null || weights.isEmpty()) {
             throw new IllegalArgumentException("weights cannot be null or empty");
@@ -29,11 +29,15 @@ public class WeightedMergeFunction {
             throw new IllegalArgumentException("limit cannot be null or empty");
         }
 
-        int pkIndex;
-        try {
-            pkIndex = Integer.parseInt(primaryKeyIndex.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid primaryKeyIndex: " + primaryKeyIndex);
+        // Check all tables have the same schema
+        List<RelDataTypeField> referenceFields = tables[0].getDataFields();
+        for (int i = 1; i < tables.length; i++) {
+            DataTypeUtils.checkTableSchemaIdentical(referenceFields, tables[i].getDataFields(), i);
+        }
+
+        int pkIndex = DataTypeUtils.findFieldIndex(referenceFields, primaryKey.trim());
+        if (pkIndex < 0) {
+            throw new IllegalArgumentException("primaryKey field not found: " + primaryKey);
         }
 
         int limitNum;
@@ -62,16 +66,6 @@ public class WeightedMergeFunction {
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid weight value: " + weightParts[i]);
             }
-        }
-
-        // Check all tables have the same schema
-        List<RelDataTypeField> referenceFields = tables[0].getDataFields();
-        for (int i = 1; i < tables.length; i++) {
-            DataTypeUtils.checkTableSchemaIdentical(referenceFields, tables[i].getDataFields(), i);
-        }
-
-        if (pkIndex < 0 || pkIndex >= referenceFields.size()) {
-            throw new IllegalArgumentException("primaryKeyIndex out of bounds: " + pkIndex);
         }
 
         // Collect iterators from each table
