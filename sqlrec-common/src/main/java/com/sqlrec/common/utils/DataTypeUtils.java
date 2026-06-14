@@ -22,6 +22,11 @@ public class DataTypeUtils {
         return builder.build();
     }
 
+    public static RelDataType getRelDataType(String type) {
+        RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+        return getRelDataType(typeFactory, type);
+    }
+
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, String type) {
         type = type.trim().toUpperCase();
         if (type.equals("INT")) {
@@ -53,6 +58,11 @@ public class DataTypeUtils {
                 index,
                 new BasicSqlType(RelDataTypeSystem.DEFAULT, typeName)
         );
+    }
+
+    public static RelDataTypeField getRelDataTypeField(String name, int index, String typeName) {
+        RelDataType fieldType = getRelDataType(typeName);
+        return new RelDataTypeFieldImpl(name, index, fieldType);
     }
 
     public static List<RelDataTypeField> addTypeFields(List<RelDataTypeField> origin, List<FieldSchema> fieldsToAdd) {
