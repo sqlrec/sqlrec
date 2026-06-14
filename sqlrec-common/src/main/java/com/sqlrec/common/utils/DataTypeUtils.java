@@ -135,6 +135,18 @@ public class DataTypeUtils {
         }
     }
 
+    public static void checkTableSchemaIdentical(List<RelDataTypeField> referenceFields, List<RelDataTypeField> fields, int tableIndex) {
+        if (referenceFields.size() != fields.size()) {
+            throw new IllegalArgumentException("Table " + tableIndex + " has different column count than table 0");
+        }
+        for (int j = 0; j < referenceFields.size(); j++) {
+            if (!referenceFields.get(j).getType().equals(fields.get(j).getType())) {
+                throw new IllegalArgumentException("Column type mismatch at index " + j
+                        + ": " + referenceFields.get(j).getType() + " vs " + fields.get(j).getType());
+            }
+        }
+    }
+
     public static List<String> getTableFieldNames(Table calciteTable) {
         return calciteTable.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldNames();
     }

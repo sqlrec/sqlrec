@@ -38,5 +38,6 @@ public class FunctionConfigs {
         put("get_variables", GetVariablesFunction.class.getName());
         put("set_variables", SetVariablesFunction.class.getName());
         put("feature_coverage_metrics", FeatureCoverageMetricsFunction.class.getName());
+        put("weighted_merge", WeightedMergeFunction.class.getName());
     }};
 }
