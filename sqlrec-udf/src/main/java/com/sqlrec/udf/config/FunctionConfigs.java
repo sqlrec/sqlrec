@@ -39,5 +39,6 @@ public class FunctionConfigs {
         put("set_variables", SetVariablesFunction.class.getName());
         put("feature_coverage_metrics", FeatureCoverageMetricsFunction.class.getName());
         put("weighted_merge", WeightedMergeFunction.class.getName());
+        put("dpp_diversity", DppDiversity.class.getName());
     }};
 }

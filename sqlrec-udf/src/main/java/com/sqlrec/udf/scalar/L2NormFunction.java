@@ -1,5 +1,6 @@
 package com.sqlrec.udf.scalar;
 
+import com.sqlrec.common.utils.DataTransformUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -10,7 +11,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class L2NormFunction extends GenericUDF {
@@ -25,30 +25,7 @@ public class L2NormFunction extends GenericUDF {
             throw new RuntimeException("L2NormFunction only support number list");
         }
 
-        List<?> list = (List<?>) vector;
-        double sum = 0;
-        for (Object o : list) {
-            if (o instanceof Number) {
-                sum += Math.pow(((Number) o).doubleValue(), 2);
-            } else {
-                throw new RuntimeException("L2NormFunction only support number list");
-            }
-        }
-
-        if (sum <= 0) {
-            List<Double> result = new ArrayList<>();
-            for (Object o : list) {
-                result.add(((Number) o).doubleValue());
-            }
-            return result;
-        }
-
-        double norm = Math.sqrt(sum);
-        List<Double> result = new ArrayList<>();
-        for (Object o : list) {
-            result.add(((Number) o).doubleValue() / norm);
-        }
-        return result;
+        return DataTransformUtils.l2NormalizeList((List<?>) vector);
     }
 
     @Override

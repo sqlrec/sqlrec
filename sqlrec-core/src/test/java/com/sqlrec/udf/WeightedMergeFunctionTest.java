@@ -170,10 +170,10 @@ public class WeightedMergeFunctionTest {
     public void testSchemaMismatchColumnName() {
         List<RelDataTypeField> fields2 = new ArrayList<>();
         fields2.add(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER));
-        fields2.add(DataTypeUtils.getRelDataTypeField("other", 1, SqlTypeName.VARCHAR));
+        fields2.add(DataTypeUtils.getRelDataTypeField("name", 1, SqlTypeName.INTEGER));
 
         List<Object[]> rows2 = new ArrayList<>();
-        rows2.add(new Object[]{1, "A"});
+        rows2.add(new Object[]{1, 1});
         CacheTable t1 = createTable(new Object[][]{{1, "A"}});
         CacheTable t2 = new CacheTable("t2", Linq4j.asEnumerable(rows2), fields2);
 

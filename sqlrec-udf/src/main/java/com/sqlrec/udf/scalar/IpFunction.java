@@ -1,5 +1,6 @@
 package com.sqlrec.udf.scalar;
 
+import com.sqlrec.common.utils.DataTransformUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -24,21 +25,7 @@ public class IpFunction extends GenericUDF {
             throw new IllegalArgumentException("emb1 and emb2 must be list");
         }
 
-        List<Object> emb1Array = (List<Object>) emb1;
-        List<Object> emb2Array = (List<Object>) emb2;
-
-        if (emb1Array.size() != emb2Array.size()) {
-            throw new IllegalArgumentException("emb1 and emb2 must have same length");
-        }
-
-        double ip = 0.0;
-        for (int i = 0; i < emb1Array.size(); i++) {
-            if (!(emb1Array.get(i) instanceof Number) || !(emb2Array.get(i) instanceof Number)) {
-                throw new IllegalArgumentException("emb1 and emb2 must be array of number");
-            }
-            ip += ((Number) emb1Array.get(i)).doubleValue() * ((Number) emb2Array.get(i)).doubleValue();
-        }
-        return ip;
+        return DataTransformUtils.innerProduct((List<?>) emb1, (List<?>) emb2);
     }
 
     @Override

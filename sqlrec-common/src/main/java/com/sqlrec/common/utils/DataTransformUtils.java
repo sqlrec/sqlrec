@@ -24,6 +24,93 @@ public class DataTransformUtils {
         throw new IllegalArgumentException("obj is not list");
     }
 
+    /**
+     * Convert a vector object to double array.
+     * Supports List<? extends Number>, double[], float[].
+     */
+    public static double[] toDoubleArray(Object vecObj) {
+        if (vecObj instanceof List) {
+            List<?> list = (List<?>) vecObj;
+            double[] arr = new double[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                arr[i] = ((Number) list.get(i)).doubleValue();
+            }
+            return arr;
+        } else if (vecObj instanceof double[]) {
+            return (double[]) vecObj;
+        } else if (vecObj instanceof float[]) {
+            float[] farr = (float[]) vecObj;
+            double[] arr = new double[farr.length];
+            for (int i = 0; i < farr.length; i++) {
+                arr[i] = farr[i];
+            }
+            return arr;
+        } else {
+            throw new IllegalArgumentException("Unsupported vector type: " + vecObj.getClass().getName());
+        }
+    }
+
+    /**
+     * L2 normalize a double array in place.
+     */
+    public static void l2Normalize(double[] vec) {
+        double norm = 0.0;
+        for (double v : vec) {
+            norm += v * v;
+        }
+        norm = Math.sqrt(norm);
+        if (norm > 1e-10) {
+            for (int i = 0; i < vec.length; i++) {
+                vec[i] /= norm;
+            }
+        }
+    }
+
+    /**
+     * L2 normalize a number list, returning a new List<Double>.
+     */
+    public static List<Double> l2NormalizeList(List<?> list) {
+        double sum = 0;
+        for (Object o : list) {
+            if (!(o instanceof Number)) {
+                throw new IllegalArgumentException("list contains non-number element");
+            }
+            sum += Math.pow(((Number) o).doubleValue(), 2);
+        }
+
+        if (sum <= 0) {
+            List<Double> result = new ArrayList<>(list.size());
+            for (Object o : list) {
+                result.add(((Number) o).doubleValue());
+            }
+            return result;
+        }
+
+        double norm = Math.sqrt(sum);
+        List<Double> result = new ArrayList<>(list.size());
+        for (Object o : list) {
+            result.add(((Number) o).doubleValue() / norm);
+        }
+        return result;
+    }
+
+    /**
+     * Compute inner product of two number lists.
+     */
+    public static double innerProduct(List<?> list1, List<?> list2) {
+        if (list1.size() != list2.size()) {
+            throw new IllegalArgumentException("vectors must have same length");
+        }
+        double ip = 0.0;
+        for (int i = 0; i < list1.size(); i++) {
+            if (!(list1.get(i) instanceof Number) || !(list2.get(i) instanceof Number)) {
+                throw new IllegalArgumentException("vectors must contain numbers only");
+            }
+            ip += ((Number) list1.get(i)).doubleValue() * ((Number) list2.get(i)).doubleValue();
+        }
+        return ip;
+    }
+
     public static List<Map<String, Object>> convertToMapList(List<Object[]> results, List<RelDataTypeField> fields) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object[] row : results) {

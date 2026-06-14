@@ -1,5 +1,6 @@
 package com.sqlrec.udf.scalar;
 
+import com.sqlrec.common.utils.DataTransformUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -85,25 +86,10 @@ public class RandomVecFunction extends GenericUDF {
     }
 
     private List<Double> generateRandomVector(int dimension) {
-        List<Double> vector = new ArrayList<>();
-        double sum = 0;
-
+        List<Double> vector = new ArrayList<>(dimension);
         for (int i = 0; i < dimension; i++) {
-            double value = random.nextDouble();
-            vector.add(value);
-            sum += value * value;
+            vector.add(random.nextDouble());
         }
-
-        if (sum <= 0) {
-            return vector;
-        }
-
-        double norm = Math.sqrt(sum);
-        List<Double> result = new ArrayList<>();
-        for (Double value : vector) {
-            result.add(value / norm);
-        }
-
-        return result;
+        return DataTransformUtils.l2NormalizeList(vector);
     }
 }

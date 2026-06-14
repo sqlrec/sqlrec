@@ -147,6 +147,15 @@ public class DataTypeUtils {
         }
     }
 
+    public static int findFieldIndex(List<RelDataTypeField> fields, String fieldName) {
+        for (RelDataTypeField field : fields) {
+            if (field.getName().equals(fieldName)) {
+                return field.getIndex();
+            }
+        }
+        return -1;
+    }
+
     public static List<String> getTableFieldNames(Table calciteTable) {
         return calciteTable.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldNames();
     }
