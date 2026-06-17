@@ -42,5 +42,6 @@ public class FunctionConfigs {
         put("dpp_diversity", DppDiversity.class.getName());
         put("rule_diversity", RuleDiversity.class.getName());
         put("tag_to_vec", TagToVecFunction.class.getName());
+        put("json_to_table", JsonToTableFunction.class.getName());
     }};
 }
