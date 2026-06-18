@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ConfigContext;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -215,9 +216,11 @@ public class JavaFunctionBindable extends BindableInterface {
             return null;
         }
         if (outputTable instanceof CacheTable) {
-            return ((CacheTable) outputTable).scan(null);
+            CacheTable cacheTable = (CacheTable) outputTable;
+            DataTypeUtils.checkTableSchemaCompatible(returnDataFields, cacheTable.getDataFields());
+            return cacheTable.scan(null);
         } else {
-            return null;
+            throw new RuntimeException("output table is not a CacheTable: " + outputTable.getClass().getName());
         }
     }
 
