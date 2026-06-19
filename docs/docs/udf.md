@@ -278,6 +278,267 @@ WHERE dt = '2024-01-01';
 
 ---
 
+### dpp_diversity
+
+DPP（Determinantal Point Process）多样性函数，基于行列式点过程实现推荐结果的多样性打散。采用快速贪心 MAP 推理算法（参考 Hulu NIPS 2018 论文），在保证相关性的同时提升推荐结果的多样性。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(
+    CacheTable input,
+    String embeddingColumnName,
+    String scoreColumnName,
+    String theta,
+    String maxLength
+)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | CacheTable | 输入表 |
+| `embeddingColumnName` | String | 向量列名，用于计算物品间的相似度 |
+| `scoreColumnName` | String | 相关性得分列名，用于衡量物品质量 |
+| `theta` | String | 相关性-多样性权衡参数，取值范围 [0, 1)，值越接近 1 越偏向相关性，越接近 0 越偏向多样性 |
+| `maxLength` | String | 最大返回记录数 |
+
+**返回值**：返回多样性选择后的 `CacheTable`，结构与输入表相同。
+
+**使用示例**：
+
+```sql
+-- DPP 多样性打散：theta=0.5 平衡相关性与多样性，返回 20 条
+CACHE TABLE dpp_result AS
+CALL dpp_diversity(rec_item, 'item_embedding', 'score', '0.5', '20');
+```
+
+**工作原理**：
+1. 从输入表中提取相关性得分和向量
+2. 对负得分裁剪为极小正值，然后进行指数变换：`score = exp(alpha * r)`，其中 `alpha = theta / (2 * (1 - theta))`
+3. 对向量进行 L2 归一化
+4. 构建核矩阵 `L = Diag(scores) * S * Diag(scores)`，其中 `S[i][j] = (1 + dot(emb[i], emb[j])) / 2`
+5. 运行贪心 DPP MAP 推理算法，选择多样性子集
+
+**注意事项**：
+- `theta` 必须在 [0, 1) 范围内
+- `maxLength` 必须为正整数
+- 向量列中的所有向量维度必须一致
+- 得分或向量为 NULL 的行会被自动跳过
+
+---
+
+### rule_diversity
+
+基于规则的多样性函数，通过贪心算法根据用户定义的规则对推荐结果进行打散重排，支持灵活的多样性约束配置。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(
+    CacheTable targetTable,
+    CacheTable ruleTable,
+    String maxReturn
+)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `targetTable` | CacheTable | 待打散的目标表 |
+| `ruleTable` | CacheTable | 规则表，定义多样性约束规则 |
+| `maxReturn` | String | 最大返回记录数 |
+
+**规则表字段说明**：
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| `window_size` | Integer | 窗口大小 |
+| `window_start` | Integer | 窗口起始位置（从 1 开始） |
+| `window_num` | Integer | 滑动窗口数量（1 表示不滑动） |
+| `diversity_column` | String | 目标表中用于打散的列名 |
+| `diversity_value` | String | 匹配值（为空时约束适用于每个不同的值） |
+| `op` | String | 比较运算符（`>`、`=`、`<`） |
+| `diversity_num` | Integer | 约束阈值 |
+| `weight` | Double | 规则权重，权重越高优先级越高 |
+
+**返回值**：返回打散后的 `CacheTable`，结构与目标表相同。
+
+**使用示例**：
+
+```sql
+-- 创建规则表
+CACHE TABLE diversity_rules AS
+SELECT
+    5 AS window_size,
+    1 AS window_start,
+    1 AS window_num,
+    'category' AS diversity_column,
+    '' AS diversity_value,
+    '<' AS op,
+    2 AS diversity_num,
+    1.0 AS weight
+UNION ALL
+SELECT
+    3, 1, 1, 'brand', 'Nike', '=', 1, 2.0;
+
+-- 基于规则打散，返回 20 条
+CACHE TABLE rule_diversify_result AS
+CALL rule_diversity(rec_item, diversity_rules, '20');
+```
+
+**工作原理**：
+1. 解析规则表，为每条规则构建滑动窗口
+2. 对每个输出位置，贪心选择违反约束惩罚最小的未分配物品
+3. 如果没有违反约束，则按原始排名顺序选择
+4. 权重越高的规则，违反时的惩罚越大
+
+**注意事项**：
+- 规则表必须包含所有必需字段
+- `diversity_column` 必须在目标表中存在
+- `diversity_value` 为空时，约束适用于窗口内每个不同的属性值
+- 目标表中用于打散的列可以是单值或列表
+
+---
+
+### json_to_table
+
+JSON 转表函数，将 JSON 字符串转换为 CacheTable 表。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(String jsonString)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `jsonString` | String | JSON 字符串，支持 JSON 对象或 JSON 数组 |
+
+**返回值**：返回转换后的 `CacheTable`，列名和类型根据 JSON 内容自动推断。
+
+**使用示例**：
+
+```sql
+-- 将 JSON 数组转换为表
+CACHE TABLE json_result AS
+CALL json_to_table('[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]');
+
+-- 将单个 JSON 对象转换为表
+CACHE TABLE single_obj AS
+CALL json_to_table('{"id": 1, "name": "Alice", "score": 95.5}');
+```
+
+**工作原理**：
+1. 解析 JSON 字符串，支持 JSON 对象和 JSON 数组
+2. 收集所有键作为列名，保持插入顺序
+3. 根据第一个非空值自动推断列类型（`BOOLEAN`、`DOUBLE`、`VARCHAR`、`ARRAY<...>`）
+4. 将每个 JSON 对象转换为一行记录
+
+**注意事项**：
+- JSON 字符串不能为空
+- 必须是 JSON 对象或 JSON 数组格式
+- 数组中的嵌套对象会以 JSON 字符串形式存储为 `VARCHAR`
+- 数组类型会自动推断元素类型（`ARRAY<DOUBLE>`、`ARRAY<BOOLEAN>`、`ARRAY<VARCHAR>`）
+
+---
+
+### tag_to_vec
+
+标签转向量函数，将标签列转换为 Multi-Hot 向量表示。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(CacheTable input, String tagColName, String outputColName)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | CacheTable | 输入表 |
+| `tagColName` | String | 标签列名，可以是单值或列表 |
+| `outputColName` | String | 输出向量列名 |
+
+**返回值**：返回添加了向量列的 `CacheTable`，新列类型为 `ARRAY<FLOAT>`。
+
+**使用示例**：
+
+```sql
+-- 将用户标签转换为 Multi-Hot 向量
+CACHE TABLE user_with_vec AS
+CALL tag_to_vec(user_info, 'tags', 'tag_vector');
+
+-- 将物品类目转换为向量
+CACHE TABLE item_with_vec AS
+CALL tag_to_vec(item_info, 'categories', 'category_vector');
+```
+
+**工作原理**：
+1. 遍历所有行，收集标签列中的所有唯一标签，构建标签到索引的映射
+2. 为每行生成 Multi-Hot 向量，向量维度等于唯一标签数
+3. 如果行中包含某个标签，对应位置为 1.0，否则为 0.0
+4. 将向量列追加到原始表中
+
+**注意事项**：
+- 标签列可以是单值（字符串）或列表（`ARRAY<STRING>`）
+- 输出列名不能与已有列名重复
+- 向量维度取决于所有行中唯一标签的总数
+
+---
+
+### weighted_merge
+
+加权合并函数，按指定权重将多个表合并为一个表，支持按主键去重。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(String primaryKey, String weights, String limit, CacheTable... tables)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `primaryKey` | String | 主键列名，用于去重 |
+| `weights` | String | 各表权重，逗号分隔，如 `"2,1,1"` |
+| `limit` | String | 最大返回记录数 |
+| `tables` | CacheTable... | 两个或多个输入表，所有表结构必须相同 |
+
+**返回值**：返回合并后的 `CacheTable`，结构与输入表相同。
+
+**使用示例**：
+
+```sql
+-- 按权重 2:1:1 合并三个召回通道，返回 100 条
+CACHE TABLE merged_recall AS
+CALL weighted_merge('item_id', '2,1,1', '100', recall_channel_a, recall_channel_b, recall_channel_c);
+
+-- 按权重 3:2 合并两个召回通道，返回 50 条
+CACHE TABLE merged_result AS
+CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
+```
+
+**工作原理**：
+1. 每轮按表的顺序，从每个表中取权重数量的记录
+2. 按主键去重，已出现的记录不再重复添加
+3. 重复轮次直到达到 `limit` 或所有表遍历完毕
+4. 权重越大的表，每轮贡献的记录越多
+
+**注意事项**：
+- 所有输入表的结构（列名和类型）必须完全相同
+- 权重数量必须与表的数量一致
+- 权重和 limit 必须为正整数
+- 主键列必须存在于所有表中
+
+---
+
 ### call_service_with_qv
 
 带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。

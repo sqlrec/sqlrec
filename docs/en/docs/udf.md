@@ -278,6 +278,267 @@ Model service should return a JSON object where each field's value is an array w
 
 ---
 
+### dpp_diversity
+
+DPP (Determinantal Point Process) diversity function that implements diversity in recommendation results based on determinantal point processes. Uses the fast greedy MAP inference algorithm (referencing the Hulu NIPS 2018 paper) to improve recommendation diversity while maintaining relevance.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(
+    CacheTable input,
+    String embeddingColumnName,
+    String scoreColumnName,
+    String theta,
+    String maxLength
+)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | CacheTable | Input table |
+| `embeddingColumnName` | String | Embedding column name, used to compute item similarity |
+| `scoreColumnName` | String | Relevance score column name, used to measure item quality |
+| `theta` | String | Relevance-diversity trade-off parameter, range [0, 1). Closer to 1 favors relevance, closer to 0 favors diversity |
+| `maxLength` | String | Maximum number of records to return |
+
+**Return Value**: Returns diversified `CacheTable` with same structure as input table.
+
+**Usage Example**:
+
+```sql
+-- DPP diversity: theta=0.5 balances relevance and diversity, return 20 records
+CACHE TABLE dpp_result AS
+CALL dpp_diversity(rec_item, 'item_embedding', 'score', '0.5', '20');
+```
+
+**Working Principle**:
+1. Extract relevance scores and embedding vectors from the input table
+2. Clip negative scores to a small positive value, then apply exponential transform: `score = exp(alpha * r)`, where `alpha = theta / (2 * (1 - theta))`
+3. L2 normalize embedding vectors
+4. Build kernel matrix `L = Diag(scores) * S * Diag(scores)`, where `S[i][j] = (1 + dot(emb[i], emb[j])) / 2`
+5. Run greedy DPP MAP inference algorithm to select a diverse subset
+
+**Notes**:
+- `theta` must be in the range [0, 1)
+- `maxLength` must be a positive integer
+- All vectors in the embedding column must have the same dimension
+- Rows with NULL scores or embeddings are automatically skipped
+
+---
+
+### rule_diversity
+
+Rule-based diversity function that reorders recommendation results using a greedy algorithm based on user-defined rules, supporting flexible diversity constraint configurations.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(
+    CacheTable targetTable,
+    CacheTable ruleTable,
+    String maxReturn
+)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `targetTable` | CacheTable | Target table to be diversified |
+| `ruleTable` | CacheTable | Rule table defining diversity constraints |
+| `maxReturn` | String | Maximum number of records to return |
+
+**Rule Table Fields**:
+
+| Field Name | Type | Description |
+|------------|------|-------------|
+| `window_size` | Integer | Window size |
+| `window_start` | Integer | Window start position (1-based) |
+| `window_num` | Integer | Number of sliding windows (1 = no sliding) |
+| `diversity_column` | String | Column name in target table for diversification |
+| `diversity_value` | String | Value to match (empty/null = constraint applies to each distinct value) |
+| `op` | String | Comparison operator (`>`, `=`, `<`) |
+| `diversity_num` | Integer | Constraint threshold |
+| `weight` | Double | Rule weight, higher weight = higher priority |
+
+**Return Value**: Returns diversified `CacheTable` with same structure as target table.
+
+**Usage Example**:
+
+```sql
+-- Create rule table
+CACHE TABLE diversity_rules AS
+SELECT
+    5 AS window_size,
+    1 AS window_start,
+    1 AS window_num,
+    'category' AS diversity_column,
+    '' AS diversity_value,
+    '<' AS op,
+    2 AS diversity_num,
+    1.0 AS weight
+UNION ALL
+SELECT
+    3, 1, 1, 'brand', 'Nike', '=', 1, 2.0;
+
+-- Rule-based diversification, return 20 records
+CACHE TABLE rule_diversify_result AS
+CALL rule_diversity(rec_item, diversity_rules, '20');
+```
+
+**Working Principle**:
+1. Parse rule table and build sliding windows for each rule
+2. For each output position, greedily select the unassigned item with the minimum constraint violation penalty
+3. If no violation, select by original rank order
+4. Higher weight rules incur larger penalties when violated
+
+**Notes**:
+- Rule table must contain all required fields
+- `diversity_column` must exist in the target table
+- When `diversity_value` is empty, the constraint applies to each distinct attribute value in the window
+- The diversity column in the target table can be a single value or a list
+
+---
+
+### json_to_table
+
+JSON to table function that converts a JSON string into a CacheTable.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(String jsonString)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `jsonString` | String | JSON string, supports JSON object or JSON array |
+
+**Return Value**: Returns converted `CacheTable` with column names and types automatically inferred from JSON content.
+
+**Usage Example**:
+
+```sql
+-- Convert JSON array to table
+CACHE TABLE json_result AS
+CALL json_to_table('[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]');
+
+-- Convert single JSON object to table
+CACHE TABLE single_obj AS
+CALL json_to_table('{"id": 1, "name": "Alice", "score": 95.5}');
+```
+
+**Working Principle**:
+1. Parse JSON string, supporting both JSON objects and JSON arrays
+2. Collect all keys as column names, preserving insertion order
+3. Automatically infer column types from the first non-null value (`BOOLEAN`, `DOUBLE`, `VARCHAR`, `ARRAY<...>`)
+4. Convert each JSON object to a row
+
+**Notes**:
+- JSON string cannot be empty
+- Must be in JSON object or JSON array format
+- Nested objects in arrays are stored as JSON strings in `VARCHAR` type
+- Array types automatically infer element types (`ARRAY<DOUBLE>`, `ARRAY<BOOLEAN>`, `ARRAY<VARCHAR>`)
+
+---
+
+### tag_to_vec
+
+Tag to vector function that converts a tag column to a Multi-Hot vector representation.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(CacheTable input, String tagColName, String outputColName)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | CacheTable | Input table |
+| `tagColName` | String | Tag column name, can be a single value or a list |
+| `outputColName` | String | Output vector column name |
+
+**Return Value**: Returns `CacheTable` with the vector column added, new column type is `ARRAY<FLOAT>`.
+
+**Usage Example**:
+
+```sql
+-- Convert user tags to Multi-Hot vectors
+CACHE TABLE user_with_vec AS
+CALL tag_to_vec(user_info, 'tags', 'tag_vector');
+
+-- Convert item categories to vectors
+CACHE TABLE item_with_vec AS
+CALL tag_to_vec(item_info, 'categories', 'category_vector');
+```
+
+**Working Principle**:
+1. Traverse all rows, collect all unique tags from the tag column, and build a tag-to-index mapping
+2. Generate a Multi-Hot vector for each row, with dimension equal to the number of unique tags
+3. If a row contains a tag, the corresponding position is 1.0, otherwise 0.0
+4. Append the vector column to the original table
+
+**Notes**:
+- Tag column can be a single value (string) or a list (`ARRAY<STRING>`)
+- Output column name cannot duplicate existing column names
+- Vector dimension depends on the total number of unique tags across all rows
+
+---
+
+### weighted_merge
+
+Weighted merge function that merges multiple tables into one based on specified weights, with deduplication by primary key.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(String primaryKey, String weights, String limit, CacheTable... tables)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `primaryKey` | String | Primary key column name for deduplication |
+| `weights` | String | Weights for each table, comma-separated, e.g. `"2,1,1"` |
+| `limit` | String | Maximum number of records to return |
+| `tables` | CacheTable... | Two or more input tables, all must have the same schema |
+
+**Return Value**: Returns merged `CacheTable` with same structure as input tables.
+
+**Usage Example**:
+
+```sql
+-- Merge three recall channels with weights 2:1:1, return 100 records
+CACHE TABLE merged_recall AS
+CALL weighted_merge('item_id', '2,1,1', '100', recall_channel_a, recall_channel_b, recall_channel_c);
+
+-- Merge two recall channels with weights 3:2, return 50 records
+CACHE TABLE merged_result AS
+CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
+```
+
+**Working Principle**:
+1. In each round, take the weight number of records from each table in order
+2. Deduplicate by primary key, already seen records are not added again
+3. Repeat rounds until `limit` is reached or all tables are exhausted
+4. Tables with higher weights contribute more records per round
+
+**Notes**:
+- All input tables must have identical schema (column names and types)
+- Number of weights must match the number of tables
+- Weights and limit must be positive integers
+- Primary key column must exist in all tables
+
+---
+
 ### call_service_with_qv
 
 Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.
