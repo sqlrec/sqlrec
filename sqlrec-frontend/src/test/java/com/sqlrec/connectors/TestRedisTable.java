@@ -46,6 +46,8 @@ public class TestRedisTable {
         });
         CalciteSchemaFactory.setGlobalSchema(schema);
 
+        new SqlTestCase("select * from t1", null, new UnsupportedOperationException()).test(schema);
+
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
         new SqlTestCase("select * from t1 where id = 1", null).test(schema);

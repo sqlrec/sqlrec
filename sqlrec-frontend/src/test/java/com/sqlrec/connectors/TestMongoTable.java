@@ -49,6 +49,8 @@ public class TestMongoTable {
         });
         CalciteSchemaFactory.setGlobalSchema(schema);
 
+        new SqlTestCase("select * from t1").test(schema);
+
         // insert
         new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice', 30)", null).test(schema);
         new SqlTestCase("insert into t1 (id, name, age) values (2, 'Bob', 25)", null).test(schema);

@@ -18,7 +18,6 @@ import io.milvus.v2.service.vector.request.UpsertReq;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
-import org.apache.calcite.DataContext;
 import org.apache.calcite.rex.RexNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +40,7 @@ public class MilvusHandler {
         this.milvusConfig = milvusConfig;
     }
 
-    public List<Object[]> scan(DataContext root, List<RexNode> filters) {
+    public List<Object[]> scan(List<RexNode> filters) {
         String filterSql = FilterUtils.getMilvusFilterSqlString(filters, milvusConfig.fieldSchemas);
         QueryReq queryReq = QueryReq.builder()
                 .collectionName(milvusConfig.collection)

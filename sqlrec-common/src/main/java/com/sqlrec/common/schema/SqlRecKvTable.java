@@ -10,16 +10,29 @@ import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.linq4j.QueryProvider;
+import org.apache.calcite.linq4j.Queryable;
+import org.apache.calcite.linq4j.tree.Expression;
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.prepare.Prepare;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.TableModify;
+import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.schema.ModifiableTable;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -28,7 +41,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
     private transient Cache<Object, List<Object[]>> cache;
 
-    protected abstract Enumerable<Object[]> scanImpl(DataContext root, List<RexNode> filters);
+    protected abstract Enumerable<Object[]> scanImpl(List<RexNode> filters);
 
     @Override
     public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
@@ -46,7 +59,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
                 result = Linq4j.asEnumerable(rows);
             } else {
-                result = scanImpl(root, filters);
+                result = scanImpl(filters);
             }
             if (result != null) {
                 count = result.count();
@@ -65,6 +78,29 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                     .summary(Consts.METRICS_TABLE_SCAN_DATA_SIZE, tags)
                     .record(count);
         }
+    }
+
+    @Override
+    public TableModify toModificationRel(RelOptCluster cluster, RelOptTable table, Prepare.CatalogReader catalogReader, RelNode child, TableModify.Operation operation, @Nullable List<String> updateColumnList, @Nullable List<RexNode> sourceExpressionList, boolean flattened) {
+        return LogicalTableModify.create(table, catalogReader, child, operation,
+                updateColumnList, sourceExpressionList, flattened);
+    }
+
+    @Override
+    public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema, String tableName) {
+        Enumerable<Object[]> data = scan(null, Collections.emptyList());
+        return (Queryable<T>) data.asQueryable();
+    }
+
+    @Override
+    public Type getElementType() {
+        return Object[].class;
+    }
+
+    @Override
+    public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
+        return Schemas.tableExpression(schema, getElementType(),
+                tableName, clazz);
     }
 
     public abstract int getPrimaryKeyIndex();

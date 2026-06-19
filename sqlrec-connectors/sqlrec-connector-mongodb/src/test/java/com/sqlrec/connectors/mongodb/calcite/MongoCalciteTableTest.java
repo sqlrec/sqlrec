@@ -67,13 +67,6 @@ class MongoCalciteTableTest {
     }
 
     @Test
-    void testAsQueryableThrows() {
-        MongoCalciteTable table = new MongoCalciteTable(mongoConfig);
-        assertThrows(UnsupportedOperationException.class, () ->
-                table.asQueryable(null, null, "test"));
-    }
-
-    @Test
     void testGetModifiableCollection() {
         MongoCalciteTable table = new MongoCalciteTable(mongoConfig);
         MongoCalciteTable.MongoCollection collection = (MongoCalciteTable.MongoCollection) table.getModifiableCollection();

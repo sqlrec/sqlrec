@@ -85,8 +85,7 @@ class JdbcCalciteTableTest {
     @Test
     void testAsQueryableThrows() {
         JdbcCalciteTable table = new JdbcCalciteTable(jdbcConfig);
-        assertThrows(UnsupportedOperationException.class, () ->
-                table.asQueryable(null, null, "test"));
+        table.asQueryable(null, null, "test");
     }
 
     @Test
@@ -104,7 +103,7 @@ class JdbcCalciteTableTest {
     @Test
     void testScanImpl() {
         JdbcCalciteTable table = new JdbcCalciteTable(jdbcConfig);
-        Iterable<Object[]> result = table.scanImpl(null, Collections.emptyList());
+        Iterable<Object[]> result = table.scanImpl(Collections.emptyList());
         List<Object[]> rows = new ArrayList<>();
         result.forEach(rows::add);
         assertEquals(2, rows.size());
