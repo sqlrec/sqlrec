@@ -5,6 +5,7 @@ import com.sqlrec.connectors.redis.client.RedisClusterWrapper;
 import com.sqlrec.connectors.redis.client.RedisWrapper;
 import com.sqlrec.connectors.redis.codec.AbstractCodec;
 import com.sqlrec.connectors.redis.codec.JsonCodec;
+import com.sqlrec.connectors.redis.codec.StringCodec;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.KeyValue;
@@ -31,8 +32,12 @@ public class RedisHandler {
             redisClient = new RedisWrapper();
         }
         redisClient.open(redisConfig.url);
-        codec = new JsonCodec();
-        codec.init(redisConfig.fieldSchemas);
+        if (redisConfig.dataStructure.equals(RedisOptions.STRING_DATA_STRUCTURE)) {
+            codec = new StringCodec();
+        } else {
+            codec = new JsonCodec();
+        }
+        codec.init(redisConfig.fieldSchemas, redisConfig.primaryKeyIndex);
     }
 
     public void close() {
@@ -45,14 +50,14 @@ public class RedisHandler {
     public CompletableFuture<List<Object[]>> scan(String rowKey) {
         if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
             RedisFuture<List<byte[]>> future = redisClient.lrange(getKeyBytes(rowKey), 0, -1);
-            return future.toCompletableFuture().thenApply(this::decodeDatas);
+            return future.toCompletableFuture().thenApply(data -> decodeDatas(data, rowKey));
         }
 
         RedisFuture<byte[]> future = redisClient.get(getKeyBytes(rowKey));
         return future.toCompletableFuture().thenApply(bytes -> {
             List<Object[]> list = new ArrayList<>();
             if (bytes != null) {
-                list.add(codec.decode(bytes));
+                list.add(codec.decode(bytes, rowKey));
             }
             return list;
         });
@@ -70,7 +75,7 @@ public class RedisHandler {
                         for (Map.Entry<String, CompletableFuture<List<byte[]>>> entry : futureMap.entrySet()) {
                             String key = entry.getKey();
                             List<byte[]> data = entry.getValue().join();
-                            result.put(key, decodeDatas(data));
+                            result.put(key, decodeDatas(data, key));
                         }
                         return result;
                     });
@@ -90,21 +95,22 @@ public class RedisHandler {
                     return;
                 }
                 String originKey = getOriginKey(keyValue.getKey());
+                Object[] row = codec.decode(keyValue.getValue(), originKey);
                 result.computeIfAbsent(originKey, k -> new ArrayList<>())
-                        .add(codec.decode(keyValue.getValue()));
+                        .add(row);
             });
             return result;
         });
     }
 
-    public List<Object[]> decodeDatas(List<byte[]> datas) {
+    public List<Object[]> decodeDatas(List<byte[]> datas, String primaryKey) {
         if (datas == null) {
             return Collections.emptyList();
         }
         return datas.stream()
                 .map(bytes -> {
                     try {
-                        return codec.decode(bytes);
+                        return codec.decode(bytes, primaryKey);
                     } catch (Exception e) {
                         return null;
                     }

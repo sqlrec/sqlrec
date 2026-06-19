@@ -51,7 +51,7 @@ Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 |------|------|--------|------|
 | `url` | String | - | Redis 连接 URL，格式：`redis://password@host:port/db` |
 | `redis-mode` | String | `single` | Redis 模式，可选值：`single`（单机）、`cluster`（集群） |
-| `data-structure` | String | `string` | 数据结构，可选值：`string`、`list` |
+| `data-structure` | String | `json` | 数据结构，可选值：`json`、`list`、`string` |
 | `max-list-size` | Integer | 0 | List 最大长度，0 表示无限制 |
 | `ttl` | Integer | 2592000 | Key 过期时间（秒），默认 30 天 |
 | `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |

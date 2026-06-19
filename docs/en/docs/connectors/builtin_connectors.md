@@ -51,7 +51,7 @@ The Redis connector is used to connect to Redis databases, supporting key-value 
 |-----------|------|---------|-------------|
 | `url` | String | - | Redis connection URL, format: `redis://password@host:port/db` |
 | `redis-mode` | String | `single` | Redis mode, options: `single` (standalone), `cluster` |
-| `data-structure` | String | `string` | Data structure, options: `string`, `list` |
+| `data-structure` | String | `json` | Data structure, options: `json`, `list`, `string` |
 | `max-list-size` | Integer | 0 | Maximum list length, 0 means unlimited |
 | `ttl` | Integer | 2592000 | Key expiration time (seconds), default 30 days |
 | `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |

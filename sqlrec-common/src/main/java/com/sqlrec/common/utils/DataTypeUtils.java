@@ -170,6 +170,44 @@ public class DataTypeUtils {
         return calciteTable.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldNames();
     }
 
+    public static Object parseStringAsType(String value, String type) {
+        if (value == null) {
+            return null;
+        }
+        switch (type.toUpperCase()) {
+            case "TINYINT":
+                return Byte.parseByte(value);
+            case "SMALLINT":
+                return Short.parseShort(value);
+            case "INTEGER":
+            case "INT":
+                return Integer.parseInt(value);
+            case "BIGINT":
+                return Long.parseLong(value);
+            case "FLOAT":
+            case "REAL":
+                return Float.parseFloat(value);
+            case "DOUBLE":
+                return Double.parseDouble(value);
+            case "DECIMAL":
+            case "NUMERIC":
+                return new BigDecimal(value);
+            case "BOOLEAN":
+                return Boolean.valueOf(value);
+            case "VARCHAR":
+            case "CHAR":
+            case "TEXT":
+            case "STRING":
+                return value;
+            case "DATE":
+            case "TIME":
+            case "TIMESTAMP":
+                return value;
+            default:
+                return value;
+        }
+    }
+
     public static Object convertType(Object value, SqlTypeName sqlTypeName) {
         if (value == null) {
             return null;

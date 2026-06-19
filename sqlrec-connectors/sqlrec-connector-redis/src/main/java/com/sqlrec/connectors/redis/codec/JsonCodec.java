@@ -10,12 +10,12 @@ public class JsonCodec implements AbstractCodec {
     private List<FieldSchema> fieldSchemas;
 
     @Override
-    public void init(List<FieldSchema> fieldSchemas) {
+    public void init(List<FieldSchema> fieldSchemas, int primaryKeyIndex) {
         this.fieldSchemas = fieldSchemas;
     }
 
     @Override
-    public Object[] decode(byte[] bytes) {
+    public Object[] decode(byte[] bytes, String primaryKey) {
         String json = new String(bytes, StandardCharsets.UTF_8);
         return JsonUtils.fromJson(json, fieldSchemas);
     }

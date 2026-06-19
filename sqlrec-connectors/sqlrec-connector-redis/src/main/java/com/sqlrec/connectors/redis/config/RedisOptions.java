@@ -11,8 +11,9 @@ public class RedisOptions {
     public static final String CLUSTER_MODE = "cluster";
     public static final String SINGLE_MODE = "single";
 
-    public static final String STRING_DATA_STRUCTURE = "string";
+    public static final String JSON_DATA_STRUCTURE = "json";
     public static final String LIST_DATA_STRUCTURE = "list";
+    public static final String STRING_DATA_STRUCTURE = "string";
 
     public static final ConfigOption<String> URL = new ConfigOption<>(
             "url",
@@ -32,9 +33,9 @@ public class RedisOptions {
 
     public static final ConfigOption<String> DATA_STRUCTURE = new ConfigOption<>(
             "data-structure",
-            STRING_DATA_STRUCTURE,
-            "data-structure for redis, can be string or list",
-            Arrays.asList(STRING_DATA_STRUCTURE, LIST_DATA_STRUCTURE),
+            JSON_DATA_STRUCTURE,
+            "data-structure for redis, can be json, list or string",
+            Arrays.asList(JSON_DATA_STRUCTURE, LIST_DATA_STRUCTURE, STRING_DATA_STRUCTURE),
             String.class
     );
 

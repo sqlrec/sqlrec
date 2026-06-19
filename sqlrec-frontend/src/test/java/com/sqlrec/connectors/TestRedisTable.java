@@ -22,10 +22,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Tag("integration")
 public class TestRedisTable {
@@ -138,6 +135,65 @@ public class TestRedisTable {
         new SqlTestCase("select * from t2 where id = 1", null).test(schema);
     }
 
+    @Test
+    public void testRedisStringTable() throws Exception {
+        Map<String, Table> tableMap = new HashMap<>();
+        tableMap.put("t5", getStringRedisTable("t5", "ID", "INTEGER", "SCORE", "INTEGER", 0));
+        tableMap.put("t6", getStringRedisTable("t6", "ID", "INTEGER", "SCORE", "DOUBLE", 0));
+        tableMap.put("t7", getStringRedisTable("t7", "ID", "INTEGER", "ACTIVE", "BOOLEAN", 0));
+        tableMap.put("t8", getStringRedisTable("t8", "ID", "INTEGER", "NAME", "VARCHAR", 0));
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return tableMap;
+            }
+        });
+        CalciteSchemaFactory.setGlobalSchema(schema);
+
+        // integer value
+        new SqlTestCase("delete from t5 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t5 (ID, SCORE) values (1, 100)", null).test(schema);
+        new SqlTestCase("select * from t5 where id = 1",
+                Collections.singletonList(new Object[]{1, 100})).test(schema);
+        new SqlTestCase("delete from t5 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t5 where id = 1",
+                Collections.emptyList()).test(schema);
+
+        // double value
+        new SqlTestCase("delete from t6 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t6 (ID, SCORE) values (1, 3.14)", null).test(schema);
+        new SqlTestCase("select * from t6 where id = 1",
+                Collections.singletonList(new Object[]{1, 3.14})).test(schema);
+        new SqlTestCase("delete from t6 where id = 1", null).test(schema);
+
+        // boolean value
+        new SqlTestCase("delete from t7 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t7 (ID, ACTIVE) values (1, true)", null).test(schema);
+        new SqlTestCase("select * from t7 where id = 1",
+                Collections.singletonList(new Object[]{1, true})).test(schema);
+        new SqlTestCase("delete from t7 where id = 1", null).test(schema);
+
+        // varchar value
+        new SqlTestCase("delete from t8 where id = 1", null).test(schema);
+        new SqlTestCase("insert into t8 (ID, NAME) values (1, 'hello')", null).test(schema);
+        new SqlTestCase("select * from t8 where id = 1",
+                Collections.singletonList(new Object[]{1, "hello"})).test(schema);
+        new SqlTestCase("delete from t8 where id = 1", null).test(schema);
+
+        // field count > 2 should throw exception
+        boolean exceptionThrown = false;
+        try {
+            getStringRedisTable("t9", "ID", "INTEGER", "SCORE", "INTEGER", 0,
+                    new FieldSchema("EXTRA", "INTEGER"));
+        } catch (IllegalArgumentException e) {
+            exceptionThrown = true;
+            assert e.getMessage().contains("exactly 2 fields");
+        }
+        assert exceptionThrown : "Expected IllegalArgumentException for field count > 2";
+    }
+
     public static class MyTable extends SqlRecTable implements ScannableTable {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
@@ -166,7 +222,7 @@ public class TestRedisTable {
         RedisConfig redisConfig = new RedisConfig();
         redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
         redisConfig.redisMode = "single";
-        redisConfig.dataStructure = "string";
+        redisConfig.dataStructure = "json";
         redisConfig.ttl = 10000;
         redisConfig.database = "default";
         redisConfig.tableName = "t1";
@@ -198,6 +254,32 @@ public class TestRedisTable {
         redisConfig.cacheTtl = 30;
         redisConfig.maxCacheSize = 100000;
         redisConfig.maxListSize = 10;
+
+        return new RedisCalciteTable(redisConfig);
+    }
+
+    public static Table getStringRedisTable(String tableName, String pkName, String pkType,
+                                             String valueName, String valueType, int primaryKeyIndex,
+                                             FieldSchema... extraFields) {
+        List<FieldSchema> fieldSchemas = new ArrayList<>();
+        fieldSchemas.add(new FieldSchema(pkName, pkType));
+        fieldSchemas.add(new FieldSchema(valueName, valueType));
+        for (FieldSchema extra : extraFields) {
+            fieldSchemas.add(extra);
+        }
+
+        RedisConfig redisConfig = new RedisConfig();
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
+        redisConfig.redisMode = "single";
+        redisConfig.dataStructure = "string";
+        redisConfig.ttl = 10000;
+        redisConfig.database = "default";
+        redisConfig.tableName = tableName;
+        redisConfig.fieldSchemas = fieldSchemas;
+        redisConfig.primaryKey = pkName;
+        redisConfig.primaryKeyIndex = primaryKeyIndex;
+        redisConfig.cacheTtl = 30;
+        redisConfig.maxCacheSize = 100000;
 
         return new RedisCalciteTable(redisConfig);
     }

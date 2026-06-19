@@ -19,7 +19,7 @@ public class JsonCodecTest {
         fieldSchemas.add(new FieldSchema("name", "string"));
         fieldSchemas.add(new FieldSchema("age", "int"));
         fieldSchemas.add(new FieldSchema("score", "double"));
-        jsonCodec.init(fieldSchemas);
+        jsonCodec.init(fieldSchemas, 0);
 
         Object[] objects = new Object[3];
         objects[0] = "张三";
@@ -29,7 +29,7 @@ public class JsonCodecTest {
         byte[] bytes = jsonCodec.encode(objects);
         String str = new String(bytes, StandardCharsets.UTF_8);
 
-        Object[] objects2 = jsonCodec.decode(bytes);
+        Object[] objects2 = jsonCodec.decode(bytes, null);
         assert objects[0].equals(objects2[0]);
         assert objects[1].equals(objects2[1]);
         assert objects[2].equals(objects2[2]);
