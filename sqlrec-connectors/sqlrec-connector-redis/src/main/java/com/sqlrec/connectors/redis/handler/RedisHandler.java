@@ -151,6 +151,63 @@ public class RedisHandler {
         }
     }
 
+    public void batchInsert(Collection<? extends Object[]> dataList) {
+        try {
+            List<RedisFuture<?>> futures = new ArrayList<>();
+            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+                Map<byte[], List<byte[]>> keyToValues = new LinkedHashMap<>();
+                for (Object[] data : dataList) {
+                    byte[] key = getKey(data);
+                    byte[] value = codec.encode(data);
+                    keyToValues.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+                }
+                for (Map.Entry<byte[], List<byte[]>> entry : keyToValues.entrySet()) {
+                    byte[] key = entry.getKey();
+                    List<byte[]> values = entry.getValue();
+                    futures.add(redisClient.lpush(key, values.toArray(new byte[0][])));
+                    if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                        futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+                    }
+                    futures.add(redisClient.expire(key, redisConfig.ttl));
+                }
+            } else {
+                Map<byte[], byte[]> kvMap = new LinkedHashMap<>();
+                for (Object[] data : dataList) {
+                    kvMap.put(getKey(data), codec.encode(data));
+                }
+                futures.add(redisClient.mset(kvMap));
+                for (byte[] key : kvMap.keySet()) {
+                    futures.add(redisClient.expire(key, redisConfig.ttl));
+                }
+            }
+            for (RedisFuture<?> future : futures) {
+                future.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to batch insert data to Redis", e);
+        }
+    }
+
+    public void batchDelete(Collection<? extends Object[]> dataList) {
+        try {
+            List<RedisFuture<?>> futures = new ArrayList<>();
+            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+                for (Object[] data : dataList) {
+                    futures.add(redisClient.lrem(getKey(data), codec.encode(data)));
+                }
+            } else {
+                for (Object[] data : dataList) {
+                    futures.add(redisClient.del(getKey(data)));
+                }
+            }
+            for (RedisFuture<?> future : futures) {
+                future.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to batch delete data from Redis", e);
+        }
+    }
+
     private byte[] getKey(Object[] data) {
         return getKeyBytes(data[redisConfig.primaryKeyIndex].toString());
     }

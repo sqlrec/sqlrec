@@ -27,6 +27,22 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
     protected abstract boolean removeImpl(Object[] objects);
 
+    protected boolean addAllImpl(Collection<? extends Object[]> c) {
+        boolean modified = false;
+        for (Object[] objects : c) {
+            modified |= addImpl(objects);
+        }
+        return modified;
+    }
+
+    protected boolean removeAllImpl(Collection<?> c) {
+        boolean modified = false;
+        for (Object o : c) {
+            modified |= removeImpl((Object[]) o);
+        }
+        return modified;
+    }
+
     private void invalidateCacheIfNeeded(Object[] row) {
         SqlRecTable table = getSqlRecTable();
         if (table instanceof SqlRecKvTable) {
@@ -119,18 +135,56 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
     @Override
     public boolean addAll(Collection<? extends Object[]> c) {
-        for (Object[] objects : c) {
-            add(objects);
+        long startTime = System.currentTimeMillis();
+        String status = "success";
+
+        try {
+            boolean result = addAllImpl(c);
+            size += c.size();
+            for (Object[] row : c) {
+                invalidateCacheIfNeeded(row);
+            }
+            return result;
+        } catch (Throwable e) {
+            log.error("addAll to table {} error", tableName, e);
+            status = "error";
+            throw e;
+        } finally {
+            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "addAll", "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, tags)
+                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
         }
-        return true;
     }
 
     @Override
     public boolean removeAll(Collection<?> c) {
         for (Object o : c) {
-            remove(o);
+            if (!(o instanceof Object[])) {
+                throw new RuntimeException("SqlRecCollection only support Object[]");
+            }
         }
-        return true;
+
+        long startTime = System.currentTimeMillis();
+        String status = "success";
+
+        try {
+            boolean result = removeAllImpl(c);
+            size += c.size();
+            for (Object o : c) {
+                invalidateCacheIfNeeded((Object[]) o);
+            }
+            return result;
+        } catch (Throwable e) {
+            log.error("removeAll from table {} error", tableName, e);
+            status = "error";
+            throw e;
+        } finally {
+            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "removeAll", "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, tags)
+                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override

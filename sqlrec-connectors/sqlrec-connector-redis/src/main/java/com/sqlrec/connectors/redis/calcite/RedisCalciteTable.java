@@ -87,5 +87,17 @@ public class RedisCalciteTable extends SqlRecKvTable {
             redisHandler.delete(objects);
             return true;
         }
+
+        @Override
+        protected boolean addAllImpl(Collection<? extends Object[]> c) {
+            redisHandler.batchInsert(c);
+            return true;
+        }
+
+        @Override
+        protected boolean removeAllImpl(Collection<?> c) {
+            redisHandler.batchDelete((Collection<? extends Object[]>) c);
+            return true;
+        }
     }
 }

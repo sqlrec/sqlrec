@@ -4,6 +4,7 @@ import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
 
 import java.util.List;
+import java.util.Map;
 
 public interface AbstractRedisWrapper {
     void open(String url);
@@ -20,11 +21,13 @@ public interface AbstractRedisWrapper {
 
     RedisFuture<Long> del(byte[] key);
 
-    RedisFuture<Long> lpush(byte[] key, byte[] value);
+    RedisFuture<Long> lpush(byte[] key, byte[]... values);
 
     RedisFuture<Long> lrem(byte[] key, byte[] value);
 
     RedisFuture<String> ltrim(byte[] key, long start, long stop);
 
     RedisFuture<Boolean> expire(byte[] key, long seconds);
+
+    RedisFuture<String> mset(Map<byte[], byte[]> kvMap);
 }

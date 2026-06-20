@@ -76,8 +76,8 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
         return getCommands().del(key);
     }
 
-    public RedisFuture<Long> lpush(byte[] key, byte[] value) {
-        return getCommands().lpush(key, value);
+    public RedisFuture<Long> lpush(byte[] key, byte[]... values) {
+        return getCommands().lpush(key, values);
     }
 
     public RedisFuture<Long> lrem(byte[] key, byte[] value) {
@@ -90,5 +90,9 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
 
     public RedisFuture<Boolean> expire(byte[] key, long seconds) {
         return getCommands().expire(key, seconds);
+    }
+
+    public RedisFuture<String> mset(Map<byte[], byte[]> kvMap) {
+        return getCommands().mset(kvMap);
     }
 }

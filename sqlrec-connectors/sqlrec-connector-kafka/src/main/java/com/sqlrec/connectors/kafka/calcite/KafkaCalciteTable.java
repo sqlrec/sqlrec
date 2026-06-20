@@ -124,5 +124,16 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         protected boolean removeImpl(Object[] objects) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        protected boolean addAllImpl(Collection<? extends Object[]> c) {
+            KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
+            for (Object[] objects : c) {
+                String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
+                producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
+            }
+            producer.flush();
+            return true;
+        }
     }
 }

@@ -12,7 +12,6 @@ import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.util.BuiltInMethod;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -128,22 +127,30 @@ public class SqlRecEnumerableTableModify extends EnumerableTableModify {
         } else {
             convertedChildExp = childExp;
         }
-        final Method method;
         switch (getOperation()) {
             case UPDATE:
             case INSERT:
-                method = BuiltInMethod.INTO.method;
+                builder.add(
+                        Expressions.statement(
+                                Expressions.call(
+                                        collectionParameter,
+                                        "addAll",
+                                        Expressions.call(
+                                                convertedChildExp,
+                                                BuiltInMethod.INTO.method,
+                                                Expressions.new_(ArrayList.class)))));
                 break;
             case DELETE:
-                method = BuiltInMethod.REMOVE_ALL.method;
+                builder.add(
+                        Expressions.statement(
+                                Expressions.call(
+                                        convertedChildExp,
+                                        BuiltInMethod.REMOVE_ALL.method,
+                                        collectionParameter)));
                 break;
             default:
                 throw new AssertionError(getOperation());
         }
-        builder.add(
-                Expressions.statement(
-                        Expressions.call(
-                                convertedChildExp, method, collectionParameter)));
         final Expression updatedCountParameter =
                 builder.append(
                         "updatedCount",
