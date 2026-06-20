@@ -100,6 +100,18 @@ public class TestMongoTable {
         new SqlTestCase("select t1.id, t1.name from t2 join t1 on t2.id = t1.id",
                 Arrays.asList(new Object[]{1, "Alice2"}, new Object[]{2, "Bob"})).test(schema);
 
+        // join on non-primary-key column
+        new SqlTestCase("select * from t2 join t1 on t2.name = t1.name",
+                Collections.singletonList(new Object[]{2, "Bob", 2, "Bob", 25})).test(schema);
+
+        // left join on non-primary-key column
+        new SqlTestCase("select * from t2 left join t1 on t2.name = t1.name",
+                Arrays.asList(
+                        new Object[]{1, "Alice", null, null, null},
+                        new Object[]{2, "Bob", 2, "Bob", 25},
+                        new Object[]{3, "Charlie", null, null, null}
+                )).test(schema);
+
         // cleanup
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
         new SqlTestCase("delete from t1 where id = 2", null).test(schema);

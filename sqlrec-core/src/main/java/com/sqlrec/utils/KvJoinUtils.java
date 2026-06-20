@@ -7,7 +7,10 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 
 import java.util.*;
 
@@ -33,18 +36,10 @@ public class KvJoinUtils {
             return Linq4j.emptyEnumerable();
         }
 
-        return joinByPrimaryKey(leftValues, condition, rightTable, joinType);
-    }
-
-    private static Enumerable joinByPrimaryKey(
-            List<Object[]> leftValues,
-            RexNode condition,
-            SqlRecKvTable rightTable,
-            JoinRelType joinType
-    ) {
         Map.Entry<Integer, Integer> joinKeyColIndex = NodeUtils.getJoinKeyColIndex(condition);
         int leftJoinKeyColIndex = joinKeyColIndex.getKey();
         int leftSize = leftValues.get(0).length;
+        int rightJoinKeyColIndex = joinKeyColIndex.getValue() - leftSize;
         RelDataType rightRowType = rightTable.getRowType(new JavaTypeFactoryImpl());
         int rightSize = rightRowType.getFieldCount();
 
@@ -57,7 +52,13 @@ public class KvJoinUtils {
             joinKeys.add(leftJoinKey);
         }
 
-        Map<Object, List<Object[]>> rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
+        Map<Object, List<Object[]>> rightValuesMap;
+        if (rightJoinKeyColIndex == rightTable.getPrimaryKeyIndex()) {
+            rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
+        } else {
+            rightValuesMap = scanRightTableByJoinKey(rightTable, rightJoinKeyColIndex, joinKeys);
+        }
+
         Map<String, List<Object[]>> stringKeyMap = new HashMap<>();
         for (Map.Entry<Object, List<Object[]>> entry : rightValuesMap.entrySet()) {
             stringKeyMap.put(entry.getKey().toString(), entry.getValue());
@@ -85,6 +86,37 @@ public class KvJoinUtils {
 
         List<Object[]> merged = MergeUtils.snakeMerge(rowList.toArray(new Iterable[0]));
         return Linq4j.asEnumerable(merged);
+    }
+
+    private static Map<Object, List<Object[]>> scanRightTableByJoinKey(
+            SqlRecKvTable rightTable,
+            int rightJoinKeyColIndex,
+            Set<Object> joinKeys
+    ) {
+        if (joinKeys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        RelDataType rightRowType = rightTable.getRowType(new JavaTypeFactoryImpl());
+        RelDataTypeField joinKeyField = rightRowType.getFieldList().get(rightJoinKeyColIndex);
+        RexBuilder rexBuilder = new RexBuilder(new JavaTypeFactoryImpl());
+
+        Map<Object, List<Object[]>> rightValuesMap = new HashMap<>();
+        for (Object key : joinKeys) {
+            RexNode inputRef = rexBuilder.makeInputRef(joinKeyField.getType(), rightJoinKeyColIndex);
+            RexNode literal = rexBuilder.makeLiteral(key, joinKeyField.getType());
+            RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, inputRef, literal);
+
+            Enumerable<Object[]> result = rightTable.scan(null, Collections.singletonList(filter));
+            List<Object[]> rows = new ArrayList<>();
+            for (Object[] row : result) {
+                rows.add(row);
+            }
+            if (!rows.isEmpty()) {
+                rightValuesMap.put(key, rows);
+            }
+        }
+        return rightValuesMap;
     }
 
     public static Object[] copyValues(Object[] leftValue, Object[] rightValue, int leftSize, int rightSize) {
