@@ -17,6 +17,13 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.sqlrec</groupId>
@@ -42,6 +49,11 @@
             <groupId>org.ejml</groupId>
             <artifactId>ejml-all</artifactId>
             <version>0.45.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.growthbook</groupId>
+            <artifactId>growthbook-sdk-java</artifactId>
+            <version>0.10.10</version>
         </dependency>
 
         <dependency>

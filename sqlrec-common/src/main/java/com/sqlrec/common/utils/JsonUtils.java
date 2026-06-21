@@ -26,6 +26,19 @@ public class JsonUtils {
         return gson.toJson(jsonObject);
     }
 
+    public static String toJsonByFields(Object[] objects, List<RelDataTypeField> fields) {
+        JsonObject jsonObject = new JsonObject();
+        for (int i = 0; i < fields.size(); i++) {
+            Object value = objects[i];
+            if (value != null) {
+                jsonObject.add(fields.get(i).getName(), gson.toJsonTree(value));
+            } else {
+                jsonObject.add(fields.get(i).getName(), JsonNull.INSTANCE);
+            }
+        }
+        return gson.toJson(jsonObject);
+    }
+
     public static <T> T fromJson(String json, Class<T> classOfT) throws JsonSyntaxException {
         return gson.fromJson(json, classOfT);
     }

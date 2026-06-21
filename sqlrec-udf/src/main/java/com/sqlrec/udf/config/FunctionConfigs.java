@@ -43,5 +43,6 @@ public class FunctionConfigs {
         put("rule_diversity", RuleDiversity.class.getName());
         put("tag_to_vec", TagToVecFunction.class.getName());
         put("json_to_table", JsonToTableFunction.class.getName());
+        put("get_growthbook_features", GetGrowthbookFeaturesFunction.class.getName());
     }};
 }
