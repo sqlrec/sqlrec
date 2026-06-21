@@ -708,6 +708,68 @@ CALL feature_coverage_metrics('user.feature.coverage', user_info);
 - 如果表为空，则跳过该表
 - 指标名称不能为空
 
+---
+
+### get_growthbook_features
+
+GrowthBook 特征获取函数，从 GrowthBook 平台获取 A/B 实验特征值，并将实验参数设置为执行上下文变量，同时返回实验追踪数据用于指标计算。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(ExecuteContext context, String apiHost, String clientKey,
+                           CacheTable usertable, String... featureKeys)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | ExecuteContext | 执行上下文 |
+| `apiHost` | String | GrowthBook API 地址 |
+| `clientKey` | String | GrowthBook 客户端密钥 |
+| `usertable` | CacheTable | 用户表，表中的列将作为用户属性传入 GrowthBook |
+| `featureKeys` | String... | 一个或多个特征键名 |
+
+**返回值**：返回包含实验追踪数据的 `CacheTable`，包含以下字段：
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| `experiment_id` | VARCHAR | 实验标识 |
+| `variation_id` | VARCHAR | 实验分组标识 |
+| `user_id` | VARCHAR | 用户标识 |
+
+**使用示例**：
+
+```sql
+-- 获取 GrowthBook 特征并设置变量
+CACHE TABLE gb_tracking AS
+CALL get_growthbook_features(
+    'https://cdn.growthbook.io',
+    'sdk-abc123',
+    user_info,
+    'new_recommendation_algo',
+    'ui_theme'
+);
+
+-- 使用设置的实验变量
+SELECT `get`('new_recommendation_algo') AS algo;
+```
+
+**工作原理**：
+1. 根据 `apiHost` 和 `clientKey` 创建或复用 GrowthBookClient（客户端会被缓存）
+2. 遍历用户表中的每一行，将行数据序列化为 JSON 作为用户属性
+3. 对每个特征键调用 `evalFeature` 获取特征值
+4. 如果特征有实验结果，将实验值通过 `context.setVariable()` 设置为变量，变量名即特征键名
+5. 收集实验追踪数据（实验 ID、分组 ID、用户 ID）并返回
+
+**注意事项**：
+- `apiHost` 和 `clientKey` 不能为空
+- `usertable` 不能为空
+- 至少需要指定一个 `featureKey`
+- GrowthBookClient 初始化失败时会抛出异常
+- 同一组 `apiHost` 和 `clientKey` 会复用同一个客户端实例
+
 ## 标量函数（Scalar Function）
 
 ### array_contains

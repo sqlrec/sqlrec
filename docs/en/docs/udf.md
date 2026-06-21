@@ -708,6 +708,68 @@ CALL feature_coverage_metrics('user.feature.coverage', user_info);
 - If table is empty, it will be skipped
 - Metrics name cannot be empty
 
+---
+
+### get_growthbook_features
+
+GrowthBook feature retrieval function that fetches A/B experiment feature values from the GrowthBook platform, sets experiment parameters as execution context variables, and returns experiment tracking data for metrics calculation.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(ExecuteContext context, String apiHost, String clientKey,
+                           CacheTable usertable, String... featureKeys)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | ExecuteContext | Execution context |
+| `apiHost` | String | GrowthBook API host URL |
+| `clientKey` | String | GrowthBook client key |
+| `usertable` | CacheTable | User table, columns will be passed as user attributes to GrowthBook |
+| `featureKeys` | String... | One or more feature key names |
+
+**Return Value**: Returns a `CacheTable` containing experiment tracking data with the following fields:
+
+| Field Name | Type | Description |
+|------------|------|-------------|
+| `experiment_id` | VARCHAR | Experiment identifier |
+| `variation_id` | VARCHAR | Experiment variation identifier |
+| `user_id` | VARCHAR | User identifier |
+
+**Usage Example**:
+
+```sql
+-- Get GrowthBook features and set variables
+CACHE TABLE gb_tracking AS
+CALL get_growthbook_features(
+    'https://cdn.growthbook.io',
+    'sdk-abc123',
+    user_info,
+    'new_recommendation_algo',
+    'ui_theme'
+);
+
+-- Use the set experiment variables
+SELECT `get`('new_recommendation_algo') AS algo;
+```
+
+**Working Principle**:
+1. Create or reuse a GrowthBookClient based on `apiHost` and `clientKey` (clients are cached)
+2. Traverse each row in the user table, serializing row data as JSON for user attributes
+3. Call `evalFeature` for each feature key to get the feature value
+4. If a feature has an experiment result, set the experiment value as a variable via `context.setVariable()`, with the variable name being the feature key
+5. Collect experiment tracking data (experiment ID, variation ID, user ID) and return it
+
+**Notes**:
+- `apiHost` and `clientKey` cannot be empty
+- `usertable` cannot be null
+- At least one `featureKey` must be specified
+- An exception will be thrown if GrowthBookClient initialization fails
+- The same client instance is reused for the same `apiHost` and `clientKey` combination
+
 ## Scalar Functions
 
 ### array_contains
