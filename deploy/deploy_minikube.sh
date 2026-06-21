@@ -71,6 +71,8 @@ minikube start \
   --ports="${GRAFANA_PORT}:${GRAFANA_PORT}" \
   --ports="${PROMETHEUS_PORT}:${PROMETHEUS_PORT}" \
   --ports="${DOLPHINSCHEDULER_PORT}:${DOLPHINSCHEDULER_PORT}" \
+  --ports="${CLICKHOUSE_PORT}:${CLICKHOUSE_PORT}" \
+  --ports="${CLICKHOUSE_HTTP_PORT}:${CLICKHOUSE_HTTP_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

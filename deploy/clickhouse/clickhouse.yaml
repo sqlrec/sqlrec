@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clickhouse-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  labels:
+    app: clickhouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      containers:
+      - name: clickhouse
+        image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION}-alpine
+        ports:
+        - containerPort: 8123
+          name: http
+        - containerPort: 9000
+          name: tcp
+        env:
+        - name: CLICKHOUSE_DB
+          value: default
+        - name: CLICKHOUSE_USER
+          value: ${CLICKHOUSE_USER}
+        - name: CLICKHOUSE_PASSWORD
+          value: ${CLICKHOUSE_PASSWORD}
+        - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+          value: "1"
+        volumeMounts:
+        - name: clickhouse-data
+          mountPath: /var/lib/clickhouse
+        - name: clickhouse-logs
+          mountPath: /var/log/clickhouse-server
+      volumes:
+      - name: clickhouse-data
+        persistentVolumeClaim:
+          claimName: clickhouse-pvc
+      - name: clickhouse-logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+spec:
+  type: NodePort
+  selector:
+    app: clickhouse
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8123
+    targetPort: 8123
+    nodePort: ${CLICKHOUSE_HTTP_PORT}
+  - name: tcp
+    protocol: TCP
+    port: 9000
+    targetPort: 9000
+    nodePort: ${CLICKHOUSE_TCP_PORT}
