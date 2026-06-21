@@ -19,6 +19,8 @@ export NAMESPACE="${NAMESPACE:-sqlrec}"
 
 export IMAGE_REGISTRY_PORT=5000
 export IMAGE_REGISTRY_URL="host.minikube.internal:${IMAGE_REGISTRY_PORT}"
+export HOST_IP=`hostname -I | awk '{print $1}'`
+export NODE_IP=$HOST_IP
 if command -v kubectl &> /dev/null; then
     export NODE_IP=`kubectl get node -o wide | awk 'NR==2{print $6}'`
     export K8S_APISERVER_ADDR=k8s://https://${NODE_IP}:8443
@@ -76,7 +78,10 @@ export GROWTHBOOK_MONGODB_PORT=30282
 export GROWTHBOOK_MONGODB_USER=sqlrec
 export GROWTHBOOK_MONGODB_PASSWORD=abc123456
 export GROWTHBOOK_MONGODB_USER=sqlrec
-
+export GROWTHBOOK_VERSION=4.4.0
+export GROWTHBOOK_NODE_ENV=production
+export GROWTHBOOK_JWT_SECRET=sqlrec_growthbook_jwt_secret
+export GROWTHBOOK_ENCRYPTION_KEY=sqlrec_growthbook_encryption_key
 export GROWTHBOOK_WEB_PORT=30283
 export GROWTHBOOK_API_PORT=30284
 

@@ -132,7 +132,6 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
                 String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
                 producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
             }
-            producer.flush();
             return true;
         }
     }
