@@ -103,4 +103,29 @@ public class GetGrowthbookFeaturesFunctionTest {
         ConcurrentHashMap<String, ?> cache = getClientCache();
         assertEquals(1, cache.size(), "Same key should create only one client instance");
     }
+
+//    @Test
+    public void testCacheRefreshByPolling() throws Exception {
+        GetGrowthbookFeaturesFunction func = new GetGrowthbookFeaturesFunction();
+        int durationSeconds = 120;
+        int intervalMs = 1000;
+
+        for (int i = 0; i < durationSeconds; i++) {
+            ExecuteContext ctx = createContext();
+            CacheTable usertable = createUserTable(Collections.singletonList(new Object[]{"user_poll_" + i, "US"}));
+            CacheTable result = func.evaluate(ctx, API_HOST, CLIENT_KEY, usertable, FEATURE_KEY);
+
+            String featureValue = ctx.getVariable(FEATURE_KEY);
+            System.out.printf("[%ds] featureKey=%s, value=%s%n", i, FEATURE_KEY, featureValue);
+
+            if (result != null) {
+                result.scan(null).forEach(row -> System.out.printf("  tracking: experiment_id=%s, variation_id=%s, user_id=%s%n",
+                        row[0], row[1], row[2]));
+            }
+
+            if (i < durationSeconds - 1) {
+                Thread.sleep(intervalMs);
+            }
+        }
+    }
 }
