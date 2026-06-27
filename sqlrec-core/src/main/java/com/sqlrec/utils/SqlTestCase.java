@@ -1,6 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.DataCheckUtils;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
@@ -53,26 +54,6 @@ public class SqlTestCase {
     public SqlTestCase setDebugOutput(boolean debugOutput) {
         this.debugOutput = debugOutput;
         return this;
-    }
-
-    public void checkResult(List<Object[]> actualResult) {
-        if (expectedResult == null) {
-            return;
-        }
-
-        assert actualResult != null : "actualResult is null";
-        assert actualResult.size() == expectedResult.size() :
-                "size mismatch: expected " + expectedResult.size() + ", actual " + actualResult.size();
-        for (int i = 0; i < actualResult.size(); i++) {
-            Object[] actualRow = actualResult.get(i);
-            Object[] expectedRow = expectedResult.get(i);
-            if (!java.util.Arrays.deepEquals(actualRow, expectedRow)) {
-                log.error("Row {} mismatch:", i);
-                log.error("  Expected: {}", java.util.Arrays.deepToString(expectedRow));
-                log.error("  Actual:   {}", java.util.Arrays.deepToString(actualRow));
-                assert false : "Row " + i + " mismatch";
-            }
-        }
     }
 
     public void checkBindable(CalciteBindable bindable) {
@@ -163,6 +144,6 @@ public class SqlTestCase {
             log.info("no result");
         }
 
-        checkResult(actualResults);
+        DataCheckUtils.checkResultEqual(actualResults, expectedResult);
     }
 }

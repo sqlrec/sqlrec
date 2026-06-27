@@ -1,10 +1,8 @@
 package com.sqlrec.demo;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.schema.CalciteSchemaFactory;
-import com.sqlrec.utils.SqlTestCase;
-import org.apache.calcite.jdbc.CalciteSchema;
+import com.sqlrec.common.utils.DataCheckUtils;
+import com.sqlrec.executor.SqlExecutor;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -12,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.List;
 
 @Tag("integration")
 public class TestRec {
@@ -27,21 +24,13 @@ public class TestRec {
 
     @Test
     void testRec() throws Exception {
-        CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
-        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        SqlExecutor sqlExecutor = new SqlExecutor();
 
-        List<SqlTestCase> sqlList = Arrays.asList(
-                new SqlTestCase(
-                        "cache table t1 as select cast(1 as bigint) as user_id",
-                        Arrays.<Object[]>asList(new Object[]{"t1", 1L})
-                ),
-                new SqlTestCase(
-                        "call main_rec(t1)"
-                )
+        DataCheckUtils.check(
+                sqlExecutor.executeSql("cache table t1 as select cast(1 as bigint) as user_id"),
+                Arrays.<Object[]>asList(new Object[]{"t1", 1L})
         );
 
-        for (SqlTestCase sqlTestCase : sqlList) {
-            sqlTestCase.test(schema, executeContext);
-        }
+        sqlExecutor.executeSql("call main_rec(t1)");
     }
 }
