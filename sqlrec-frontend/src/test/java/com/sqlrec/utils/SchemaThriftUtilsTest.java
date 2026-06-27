@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class SchemaUtilsTest {
+public class SchemaThriftUtilsTest {
 
     @Test
     public void testParseCreateTableToHmsTable() throws Exception {

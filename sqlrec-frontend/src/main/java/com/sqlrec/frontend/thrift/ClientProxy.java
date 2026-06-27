@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -37,7 +38,7 @@ public class ClientProxy implements TCLIService.Iface {
 
     @Override
     public TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
-        this.localSessionId = Utils.getHandleIdentifier();
+        this.localSessionId = ThriftUtils.getHandleIdentifier();
         this.pendingOpenSessionReq = req;
 
         TOpenSessionResp resp = new TOpenSessionResp();
@@ -50,7 +51,7 @@ public class ClientProxy implements TCLIService.Iface {
                 .counter(Consts.METRICS_SESSION_OPEN_COUNT)
                 .increment();
 
-        logger.info("Session opened (mock), sessionGuid: {}", Utils.safeHandleId(localSessionId));
+        logger.info("Session opened (mock), sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId));
         return resp;
     }
 
@@ -84,7 +85,7 @@ public class ClientProxy implements TCLIService.Iface {
             this.connected = true;
 
             logger.info("Remote connection opened, localSessionGuid: {}, remoteSessionGuid: {}",
-                    Utils.safeHandleId(localSessionId), Utils.safeHandleId(remoteSessionId));
+                    ThriftUtils.safeHandleId(localSessionId), ThriftUtils.safeHandleId(remoteSessionId));
         } catch (Exception e) {
             logger.error("Failed to open remote connection: {}", e.getMessage(), e);
             try {
@@ -149,7 +150,7 @@ public class ClientProxy implements TCLIService.Iface {
                 try {
                     transport.close();
                 } catch (Exception e) {
-                    logger.warn("Failed to close transport for sessionGuid: {}", Utils.safeHandleId(localSessionId), e);
+                    logger.warn("Failed to close transport for sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId), e);
                 }
             }
             connected = false;

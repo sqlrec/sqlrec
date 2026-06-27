@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.common;
+package com.sqlrec.frontend.utils;
 
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.binder.jvm.*;

@@ -1,9 +1,8 @@
 package com.sqlrec.frontend.rest;
 
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.frontend.common.SqlProcessResult;
-import com.sqlrec.frontend.common.SqlProcessor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -23,20 +22,20 @@ public class SqlExecutor {
             throw new IllegalArgumentException("sqls is null or empty");
         }
 
-        SqlProcessor sqlProcessor = new SqlProcessor();
-        sqlProcessor.setExecuteParams(params.getParams());
+        com.sqlrec.executor.SqlExecutor sqlExecutor = new com.sqlrec.executor.SqlExecutor();
+        sqlExecutor.setExecuteParams(params.getParams());
 
         ExecuteDataList executeDataList = new ExecuteDataList();
         executeDataList.setData(new ArrayList<>());
 
         for (String sql : params.getSqls()) {
-            ExecuteData executeData = executeSingleSql(sqlProcessor, sql);
+            ExecuteData executeData = executeSingleSql(sqlExecutor, sql);
             executeDataList.getData().add(executeData);
         }
         return executeDataList;
     }
 
-    private static ExecuteData executeSingleSql(SqlProcessor sqlProcessor, String sql) {
+    private static ExecuteData executeSingleSql(com.sqlrec.executor.SqlExecutor sqlExecutor, String sql) {
         ExecuteData executeData = new ExecuteData();
 
         if (StringUtils.isEmpty(sql)) {
@@ -44,15 +43,14 @@ public class SqlExecutor {
             return executeData;
         }
 
-        SqlProcessResult sqlProcessResult = sqlProcessor.tryExecuteSql(sql);
-        if (sqlProcessResult == null) {
-            executeData.setMsg("cannot execute sql: " + sql);
-        } else {
-            executeData.setMsg(sqlProcessResult.getMsg());
+        try {
+            CacheTable result = sqlExecutor.executeSql(sql);
             executeData.setData(DataTransformUtils.convertToMapList(
-                    sqlProcessResult.getEnumerable() != null ? sqlProcessResult.getEnumerable().toList() : null,
-                    sqlProcessResult.getFields()
+                    result.scan(null) != null ? result.scan(null).toList() : null,
+                    result.getDataFields()
             ));
+        } catch (Exception e) {
+            executeData.setMsg("process sql error: " + e.getMessage());
         }
         return executeData;
     }

@@ -4,8 +4,8 @@ package com.sqlrec.frontend.thrift;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.frontend.common.SqlProcessResult;
-import com.sqlrec.frontend.common.SqlProcessor;
+import com.sqlrec.executor.SqlExecutor;
+import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
 import org.apache.calcite.DataContext;
@@ -58,17 +58,16 @@ public class SqlProcessorTest {
                 "select * from t3"
         );
 
-        SqlProcessor processor = new SqlProcessor();
+        SqlExecutor executor = new SqlExecutor();
         for (String sql : sqlList) {
             System.out.println("\n\n" + sql);
-            SqlProcessResult rowSet = processor.tryExecuteSql(sql);
-            System.out.println(rowSet);
-            assert rowSet != null;
-            assert rowSet.getException() == null;
-            if (rowSet.getEnumerable() != null) {
-                List<Object[]> results = rowSet.getEnumerable().toList();
-                for (Object[] result : results) {
-                    System.out.println(java.util.Arrays.toString(result));
+            SqlProcessResult result = executor.executeSqlAsync(sql);
+            System.out.println(result);
+            assert result != null;
+            if (result.getEnumerable() != null) {
+                List<Object[]> results = result.getEnumerable().toList();
+                for (Object[] row : results) {
+                    System.out.println(java.util.Arrays.toString(row));
                 }
             }
         }

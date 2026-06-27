@@ -1,11 +1,6 @@
-package com.sqlrec.frontend.thrift;
+package com.sqlrec.frontend.utils;
 
-import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.DataTransformUtils;
-import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.frontend.common.ModelSqlProcessResult;
-import com.sqlrec.frontend.common.ServiceSqlProcessResult;
-import com.sqlrec.frontend.common.SqlProcessResult;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.hive.service.rpc.thrift.*;
@@ -14,49 +9,9 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.stream.Collectors;
 
-public class Utils {
-    private static final Logger logger = LoggerFactory.getLogger(Utils.class);
-
-    public static SqlProcessResult convertMsgToResult(String msg, String fieldName) {
-        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
-    }
-
-    public static ModelSqlProcessResult convertModelMsgToResult(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
-        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
-        return new ModelSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, checkpointInfos);
-    }
-
-    public static ServiceSqlProcessResult convertServiceMsgToResult(String msg, String fieldName, String serviceName) {
-        Enumerable<Object[]> enumerable = DataTransformUtils.getMsgEnumerable(msg);
-        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
-        return new ServiceSqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null, serviceName);
-    }
-
-    public static SqlProcessResult convertStringListToResult(List<String> list, String fieldName) {
-        Enumerable<Object[]> enumerable = DataTransformUtils.convertListToEnumerable(list);
-        List<RelDataTypeField> fields = DataTypeUtils.getStringTypeField(fieldName);
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
-    }
-
-    public static SqlProcessResult convertEnumerableToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
-        return new SqlProcessResult(enumerable, fields, getHandleIdentifier(), getQueryId(), null);
-    }
-
-    public static SqlProcessResult getTableTypeDescResult(List<RelDataTypeField> dataFields) {
-        List<List<String>> fieldNameAndType = dataFields.stream().map(
-                f -> Arrays.asList(f.getName(), f.getType().toString())
-        ).collect(Collectors.toList());
-        Enumerable<Object[]> enumerable = DataTransformUtils.convertListToArrayToEnumerable(fieldNameAndType);
-        List<RelDataTypeField> resultFields = DataTypeUtils.getStringTypeFieldList(
-                Arrays.asList("name", "type")
-        );
-        return new SqlProcessResult(enumerable, resultFields, getHandleIdentifier(), getQueryId(), null);
-    }
+public class ThriftUtils {
+    private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
 
     public static TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
         TRowSet tRowSet = new TRowSet();

@@ -1,10 +1,11 @@
-package com.sqlrec.frontend.common;
+package com.sqlrec.executor;
 
 import com.sqlrec.common.model.CheckpointInfo;
+import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.model.ModelManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,13 +23,18 @@ public class ModelSqlProcessResult extends SqlProcessResult {
     public ModelSqlProcessResult(
             Enumerable<Object[]> enumerable,
             List<RelDataTypeField> fields,
-            THandleIdentifier handleIdentifier,
-            String queryId,
-            String msg,
             List<CheckpointInfo> checkpointInfos
     ) {
-        super(enumerable, fields, handleIdentifier, queryId, msg);
+        super(enumerable, fields);
         this.checkpointInfos = checkpointInfos != null ? checkpointInfos : new ArrayList<>();
+    }
+
+    public static ModelSqlProcessResult msg(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
+        return new ModelSqlProcessResult(
+                DataTransformUtils.getMsgEnumerable(msg),
+                DataTypeUtils.getStringTypeField(fieldName),
+                checkpointInfos
+        );
     }
 
     public List<CheckpointInfo> getCheckpointInfos() {

@@ -9,7 +9,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.*;
-import com.sqlrec.frontend.common.CommonUtils;
+import com.sqlrec.utils.ModelUtils;
 import com.sqlrec.runtime.*;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
@@ -476,7 +476,7 @@ public class UiHandler {
 
     private static Map<String, Object> convertModelToDetail(Model model) throws Exception {
         List<List<String>> rows = new ArrayList<>();
-        CommonUtils.addModelInfo(rows, model);
+        ModelUtils.addModelInfo(rows, model);
 
         Map<String, Object> result = new HashMap<>();
         result.put("tableData", convertRowsToMap(rows));
@@ -555,7 +555,7 @@ public class UiHandler {
 
     private static Map<String, Object> convertServiceToDetail(Service service) throws Exception {
         List<List<String>> rows = new ArrayList<>();
-        CommonUtils.addServiceInfo(rows, service);
+        ModelUtils.addServiceInfo(rows, service);
 
         Map<String, Object> result = new HashMap<>();
         result.put("tableData", convertRowsToMap(rows));

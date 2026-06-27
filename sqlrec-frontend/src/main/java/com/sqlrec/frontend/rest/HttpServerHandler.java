@@ -4,7 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.frontend.common.PrometheusMetricsUtils;
+import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import io.micrometer.core.instrument.Tags;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

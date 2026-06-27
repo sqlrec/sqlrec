@@ -207,4 +207,12 @@ public class SqlRecConfigs {
             null,
             Long.class
     );
+
+    public static final ConfigOption<Long> SQL_SYNC_EXECUTE_TIMEOUT = new ConfigOption<>(
+            "SQL_SYNC_EXECUTE_TIMEOUT",
+            180000L,
+            "sql execution timeout in milliseconds, only effective for synchronous execution",
+            null,
+            Long.class
+    );
 }

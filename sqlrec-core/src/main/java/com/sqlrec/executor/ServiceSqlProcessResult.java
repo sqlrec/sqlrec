@@ -1,9 +1,10 @@
-package com.sqlrec.frontend.common;
+package com.sqlrec.executor;
 
+import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.model.ServiceManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 
 import java.util.List;
 
@@ -19,13 +20,18 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
     public ServiceSqlProcessResult(
             Enumerable<Object[]> enumerable,
             List<RelDataTypeField> fields,
-            THandleIdentifier handleIdentifier,
-            String queryId,
-            String msg,
             String serviceName
     ) {
-        super(enumerable, fields, handleIdentifier, queryId, msg);
+        super(enumerable, fields);
         this.serviceName = serviceName;
+    }
+
+    public static ServiceSqlProcessResult msg(String msg, String fieldName, String serviceName) {
+        return new ServiceSqlProcessResult(
+                DataTransformUtils.getMsgEnumerable(msg),
+                DataTypeUtils.getStringTypeField(fieldName),
+                serviceName
+        );
     }
 
     public String getServiceName() {

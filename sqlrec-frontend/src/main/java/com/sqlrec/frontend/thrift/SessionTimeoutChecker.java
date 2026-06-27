@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +55,7 @@ public class SessionTimeoutChecker {
                     }
                 });
                 for (THandleIdentifier sessionId : expiredSessions) {
-                    logger.warn("Session timeout, cleaning up, sessionGuid: {}", Utils.safeHandleId(sessionId));
+                    logger.warn("Session timeout, cleaning up, sessionGuid: {}", ThriftUtils.safeHandleId(sessionId));
                     expirationHandler.onSessionExpired(sessionId);
                 }
             } catch (Exception e) {

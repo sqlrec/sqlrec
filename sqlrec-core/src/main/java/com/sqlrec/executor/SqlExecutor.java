@@ -1,9 +1,11 @@
-package com.sqlrec.frontend.common;
+package com.sqlrec.executor;
 
 import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.JsonUtils;
@@ -13,7 +15,6 @@ import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.*;
-import com.sqlrec.frontend.thrift.Utils;
 import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;
@@ -21,6 +22,7 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.*;
+import com.sqlrec.utils.ModelUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -31,36 +33,31 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
 import org.apache.flink.sql.parser.dql.SqlShowDatabases;
 import org.apache.flink.sql.parser.dql.SqlShowTables;
-import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class SqlProcessor {
-    private static final Logger logger = LoggerFactory.getLogger(SqlProcessor.class);
+public class SqlExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(SqlExecutor.class);
 
     private CalciteSchema schema;
     private ExecuteContext context;
     private String defaultSchema;
     private FunctionCompiler functionCompiler;
-    private Map<THandleIdentifier, SqlProcessResult> sqlProcessorMap;
 
-    public SqlProcessor() {
+    public SqlExecutor() {
         schema = CalciteSchemaFactory.createCalciteSchema();
         context = new ExecuteContextImpl();
         defaultSchema = Consts.DEFAULT_SCHEMA_NAME;
-        sqlProcessorMap = new ConcurrentHashMap<>();
     }
 
     public void setExecuteParams(Map<String, String> params) {
@@ -69,31 +66,7 @@ public class SqlProcessor {
         }
     }
 
-    public SqlProcessResult getProcessResult(THandleIdentifier handleIdentifier) {
-        return sqlProcessorMap.get(handleIdentifier);
-    }
-
-    public void closeProcessResult(THandleIdentifier handleIdentifier) {
-        sqlProcessorMap.remove(handleIdentifier);
-    }
-
-    public SqlProcessResult tryExecuteSql(String sql) {
-        SqlProcessResult result = null;
-        try {
-            result = executeSql(sql);
-        } catch (Exception e) {
-            String stackTrace = ExceptionUtils.getStackTrace(e);
-            result = Utils.convertMsgToResult("process sql error: " + stackTrace, "error");
-            result.setMsg("process sql error: " + e.getMessage() + " stack trace: " + stackTrace);
-            result.setException(e);
-        }
-        if (result != null) {
-            sqlProcessorMap.put(result.getHandleIdentifier(), result);
-        }
-        return result;
-    }
-
-    private SqlProcessResult executeSql(String sql) throws Exception {
+    public SqlProcessResult executeSqlAsync(String sql) throws Exception {
         SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
 
         SqlProcessResult result = tryCompileFunction(sqlNode, sql);
@@ -104,9 +77,8 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlUseDatabase) {
             defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
             if (ExecEnv.isFileSystemMeta()) {
-                return Utils.convertMsgToResult("database changed to " + defaultSchema, "msg");
+                return SqlProcessResult.msg("database changed to " + defaultSchema, "msg");
             }
-            // statement should also execute on sql gateway
             return null;
         }
 
@@ -120,16 +92,15 @@ public class SqlProcessor {
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
             if (sqlNode instanceof SqlSet) {
                 if (ExecEnv.isFileSystemMeta()) {
-                    return Utils.convertMsgToResult("set statement executed", "msg");
+                    return SqlProcessResult.msg("set statement executed", "msg");
                 }
-                // statement should also execute on sql gateway
                 return null;
             }
             if (enumerable == null) {
-                return Utils.convertMsgToResult("sql run success without output", "msg");
+                return SqlProcessResult.msg("sql run success without output", "msg");
             }
             List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
-            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+            return SqlProcessResult.of(enumerable, fields);
         }
 
         if (ExecEnv.isFileSystemMeta()) {
@@ -146,21 +117,45 @@ public class SqlProcessor {
         return null;
     }
 
+    public CacheTable executeSql(String sql) throws Exception {
+        SqlProcessResult result = executeSqlAsync(sql);
+        if (result == null) {
+            throw new RuntimeException("cannot exec sql: " + sql);
+        }
+        if (result.isCompleted()) {
+            return new CacheTable("result", result.getEnumerable(), result.getFields());
+        }
+
+        long timeout = SqlRecConfigs.SQL_SYNC_EXECUTE_TIMEOUT.getValue();
+        long start = System.currentTimeMillis();
+        logger.info("executeSql start, timeout: {}ms, sql: {}", timeout, sql);
+        while (!result.isCompleted()) {
+            long duration = System.currentTimeMillis() - start;
+            logger.error("executeSql duration {}ms, sql: {}", timeout, sql);
+            if (duration > timeout) {
+                throw new RuntimeException("sql execution timeout after " + timeout + "ms");
+            }
+            Thread.sleep(1000);
+        }
+        logger.info("executeSql completed in {}ms, sql: {}", System.currentTimeMillis() - start, sql);
+        return new CacheTable("result", result.getEnumerable(), result.getFields());
+    }
+
     private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) throws Exception {
         try {
             if (functionCompiler != null) {
                 functionCompiler.compile(sqlNode, sql);
                 if (functionCompiler.isFunctionCompileFinish()) {
-                    SqlProcessor.saveSqlFunction(functionCompiler);
+                    SqlExecutor.saveSqlFunction(functionCompiler);
                     functionCompiler = null;
-                    return Utils.convertMsgToResult("function compile success", "msg");
+                    return SqlProcessResult.msg("function compile success", "msg");
                 } else {
-                    return Utils.convertMsgToResult("add a sql to function", "msg");
+                    return SqlProcessResult.msg("add a sql to function", "msg");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
                 functionCompiler = new FunctionCompiler(null, null);
                 functionCompiler.compile(sqlNode, sql);
-                return Utils.convertMsgToResult("start compile function", "msg");
+                return SqlProcessResult.msg("start compile function", "msg");
             }
         } catch (Exception e) {
             functionCompiler = null;
@@ -174,33 +169,33 @@ public class SqlProcessor {
     private SqlProcessResult processResourceEdit(SqlNode sqlNode) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         if (sqlNode instanceof SqlCreateApi) {
-            SqlProcessor.saveSqlApi((SqlCreateApi) sqlNode);
-            return Utils.convertMsgToResult("create api success", "msg");
+            SqlExecutor.saveSqlApi((SqlCreateApi) sqlNode);
+            return SqlProcessResult.msg("create api success", "msg");
         }
 
         if (sqlNode instanceof SqlCreateModel) {
             SqlCreateModel createModel = (SqlCreateModel) sqlNode;
             ModelManager.createModel(createModel);
-            return Utils.convertMsgToResult("create model success", "msg");
+            return SqlProcessResult.msg("create model success", "msg");
         }
 
         if (sqlNode instanceof SqlTrainModel) {
             SqlTrainModel trainModel = (SqlTrainModel) sqlNode;
             List<CheckpointInfo> checkpointInfos = ModelManager.trainModel(trainModel, defaultSchema);
-            return Utils.convertModelMsgToResult("train model success", "msg", checkpointInfos);
+            return ModelSqlProcessResult.msg("train model success", "msg", checkpointInfos);
         }
 
         if (sqlNode instanceof SqlExportModel) {
             SqlExportModel exportModel = (SqlExportModel) sqlNode;
             List<CheckpointInfo> checkpointInfos = ModelManager.exportModel(exportModel, defaultSchema);
-            return Utils.convertModelMsgToResult("export model success", "msg", checkpointInfos);
+            return ModelSqlProcessResult.msg("export model success", "msg", checkpointInfos);
         }
 
         if (sqlNode instanceof SqlDropModel) {
             SqlDropModel dropModel = (SqlDropModel) sqlNode;
             String modelName = dropModel.getModelName().getSimple();
             ModelManager.deleteModel(modelName);
-            return Utils.convertMsgToResult("drop model success", "msg");
+            return SqlProcessResult.msg("drop model success", "msg");
         }
 
         if (sqlNode instanceof SqlAlterModelDropCheckpoint) {
@@ -210,24 +205,24 @@ public class SqlProcessor {
             Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
             if (checkpoint == null) {
                 if (alterModelDropCheckpoint.isIfExists()) {
-                    return Utils.convertMsgToResult("drop checkpoint success", "msg");
+                    return SqlProcessResult.msg("drop checkpoint success", "msg");
                 }
                 throw new RuntimeException("checkpoint not exists: " + checkpointName + " for model " + modelName);
             }
             ModelManager.deleteCheckpoint(modelName, checkpointName);
-            return Utils.convertMsgToResult("drop checkpoint success", "msg");
+            return SqlProcessResult.msg("drop checkpoint success", "msg");
         }
 
         if (sqlNode instanceof SqlCreateService) {
             SqlCreateService createService = (SqlCreateService) sqlNode;
             String serviceName = ServiceManager.createService(createService);
-            return Utils.convertServiceMsgToResult("create service success", "msg", serviceName);
+            return ServiceSqlProcessResult.msg("create service success", "msg", serviceName);
         }
 
         if (sqlNode instanceof SqlDropService) {
             SqlDropService dropService = (SqlDropService) sqlNode;
             ServiceManager.deleteService(dropService.getServiceName().getSimple());
-            return Utils.convertMsgToResult("drop service success", "msg");
+            return SqlProcessResult.msg("drop service success", "msg");
         }
 
         if (sqlNode instanceof SqlDropSqlFunction) {
@@ -236,7 +231,7 @@ public class SqlProcessor {
             SqlFunction sqlFunction = db.getSqlFunction(funcName);
             if (sqlFunction == null) {
                 if (dropSqlFunction.isIfExists()) {
-                    return Utils.convertMsgToResult("drop sql function success", "msg");
+                    return SqlProcessResult.msg("drop sql function success", "msg");
                 }
                 throw new RuntimeException("sql function not exists: " + funcName);
             }
@@ -248,7 +243,7 @@ public class SqlProcessor {
                 throw new RuntimeException("sql function " + funcName + " is used by api: " + String.join(", ", usingApis));
             }
             db.deleteSqlFunction(funcName);
-            return Utils.convertMsgToResult("drop sql function success", "msg");
+            return SqlProcessResult.msg("drop sql function success", "msg");
         }
 
         if (sqlNode instanceof SqlDropApi) {
@@ -257,12 +252,12 @@ public class SqlProcessor {
             SqlApi sqlApi = db.getSqlApi(apiName);
             if (sqlApi == null) {
                 if (dropApi.isIfExists()) {
-                    return Utils.convertMsgToResult("drop api success", "msg");
+                    return SqlProcessResult.msg("drop api success", "msg");
                 }
                 throw new RuntimeException("api not exists: " + apiName);
             }
             db.deleteSqlApi(apiName);
-            return Utils.convertMsgToResult("drop api success", "msg");
+            return SqlProcessResult.msg("drop api success", "msg");
         }
 
         return null;
@@ -272,7 +267,7 @@ public class SqlProcessor {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         if (sqlNode instanceof SqlShowDatabases) {
             List<String> databases = db.getDatabases();
-            return Utils.convertStringListToResult(databases, "database name");
+            return SqlProcessResult.stringList(databases, "database name");
         }
 
         if (sqlNode instanceof SqlShowTables) {
@@ -284,7 +279,7 @@ public class SqlProcessor {
 
             CalciteSchema subSchema = schema.getSubSchema(dbName, false);
             if (subSchema == null) {
-                return Utils.convertMsgToResult("database not exists: " + dbName, "error");
+                throw new RuntimeException("database not exists: " + dbName);
             }
 
             List<String> tableNames = MetadataAccessFactory.getInstance().getTables(dbName)
@@ -293,7 +288,7 @@ public class SqlProcessor {
                 tableNames.addAll(schema.getTableNames());
             }
             tableNames = tableNames.stream().distinct().collect(Collectors.toList());
-            return Utils.convertStringListToResult(tableNames, "table name");
+            return SqlProcessResult.stringList(tableNames, "table name");
         }
 
         if (sqlNode instanceof SqlRichDescribeTable) {
@@ -307,7 +302,7 @@ public class SqlProcessor {
             Table tableObj = SchemaUtils.getTableObj(schema, dbName, table);
             if (tableObj != null) {
                 RelDataType rowType = tableObj.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
-                return Utils.getTableTypeDescResult(rowType.getFieldList());
+                return SqlProcessResult.tableTypeDesc(rowType.getFieldList());
             }
         }
 
@@ -324,17 +319,17 @@ public class SqlProcessor {
                 if (tableObj instanceof SqlRecTable) {
                     SqlRecTable sqlRecTable = (SqlRecTable) tableObj;
                     if (StringUtils.isNotEmpty(sqlRecTable.getCreateSql())) {
-                        return Utils.convertMsgToResult(sqlRecTable.getCreateSql(), "create sql");
+                        return SqlProcessResult.msg(sqlRecTable.getCreateSql(), "create sql");
                     }
                 }
                 org.apache.hadoop.hive.metastore.api.Table hmsTable = db.getTable(dbName, table);
-                return Utils.convertMsgToResult(SchemaUtils.generateCreateSqlFromHmsTable(hmsTable), "create sql");
+                return SqlProcessResult.msg(SchemaUtils.generateCreateSqlFromHmsTable(hmsTable), "create sql");
             }
         }
 
         if (sqlNode instanceof SqlShowSqlFunction) {
             List<SqlFunction> sqlFunctions = db.getSqlFunctionList();
-            return Utils.convertStringListToResult(
+            return SqlProcessResult.stringList(
                     sqlFunctions.stream().map(SqlFunction::getName).collect(Collectors.toList()),
                     "sql function"
             );
@@ -344,18 +339,15 @@ public class SqlProcessor {
             SqlShowCreateSqlFunction showCreateSqlFunction = (SqlShowCreateSqlFunction) sqlNode;
             SqlFunction sqlFunction = db.getSqlFunction(showCreateSqlFunction.getFuncName().getSimple());
             if (sqlFunction == null) {
-                return Utils.convertMsgToResult(
-                        "sql function not exists: " + showCreateSqlFunction.getFuncName().getSimple(),
-                        "error"
-                );
+                throw new RuntimeException("sql function not exists: " + showCreateSqlFunction.getFuncName().getSimple());
             }
             List<String> sqlList = JsonUtils.parseStringList(sqlFunction.getSqlList());
-            return Utils.convertMsgToResult(String.join(";\n\n", sqlList) + ";", "create sql");
+            return SqlProcessResult.msg(String.join(";\n\n", sqlList) + ";", "create sql");
         }
 
         if (sqlNode instanceof SqlShowApi) {
             List<SqlApi> sqlApis = db.getSqlApiList();
-            return Utils.convertStringListToResult(
+            return SqlProcessResult.stringList(
                     sqlApis.stream().map(SqlApi::getName).collect(Collectors.toList()),
                     "api"
             );
@@ -365,15 +357,15 @@ public class SqlProcessor {
             SqlShowCreateApi showCreateApi = (SqlShowCreateApi) sqlNode;
             SqlApi sqlApi = db.getSqlApi(showCreateApi.getApiName().getSimple());
             if (sqlApi == null) {
-                return Utils.convertMsgToResult("api not exists: " + showCreateApi.getApiName(), "error");
+                throw new RuntimeException("api not exists: " + showCreateApi.getApiName());
             }
             String sql = "create api " + sqlApi.getName() + " with " + sqlApi.getFunctionName();
-            return Utils.convertMsgToResult(sql, "create sql");
+            return SqlProcessResult.msg(sql, "create sql");
         }
 
         if (sqlNode instanceof SqlShowModel) {
             List<Model> models = db.getModelList();
-            return Utils.convertStringListToResult(
+            return SqlProcessResult.stringList(
                     models.stream().map(Model::getName).collect(Collectors.toList()),
                     "model"
             );
@@ -386,7 +378,7 @@ public class SqlProcessor {
         if (sqlNode instanceof SqlShowCheckpoint) {
             SqlShowCheckpoint showCheckpoint = (SqlShowCheckpoint) sqlNode;
             List<Checkpoint> checkpoints = db.getCheckpointListByModelName(showCheckpoint.getModelName().getSimple());
-            return Utils.convertStringListToResult(
+            return SqlProcessResult.stringList(
                     checkpoints.stream().map(Checkpoint::getCheckpointName).collect(Collectors.toList()),
                     "checkpoint"
             );
@@ -394,7 +386,7 @@ public class SqlProcessor {
 
         if (sqlNode instanceof SqlShowService) {
             List<Service> services = db.getServiceList();
-            return Utils.convertStringListToResult(
+            return SqlProcessResult.stringList(
                     services.stream().map(Service::getName).collect(Collectors.toList()),
                     "service"
             );
@@ -440,10 +432,7 @@ public class SqlProcessor {
         String modelName = showCreateModel.getModelName().getSimple();
         Model model = db.getModel(modelName);
         if (model == null) {
-            return Utils.convertMsgToResult(
-                    "model not exists: " + modelName,
-                    "error"
-            );
+            throw new RuntimeException("model not exists: " + modelName);
         }
 
         Checkpoint checkpoint = null;
@@ -451,10 +440,7 @@ public class SqlProcessor {
             String checkpointName = SchemaUtils.removeQuotes(showCreateModel.getCheckpoint().toString());
             checkpoint = db.getCheckpoint(modelName, checkpointName);
             if (checkpoint == null) {
-                return Utils.convertMsgToResult(
-                        "checkpoint not exists: " + checkpointName + " for model " + modelName,
-                        "error"
-                );
+                throw new RuntimeException("checkpoint not exists: " + checkpointName + " for model " + modelName);
             }
         }
 
@@ -462,22 +448,22 @@ public class SqlProcessor {
             java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
 
             if (checkpoint != null) {
-                CommonUtils.addModelInfo(rows, checkpoint.getModelDdl(), model);
-                CommonUtils.addCheckpointInfo(rows, checkpoint);
+                ModelUtils.addModelInfo(rows, checkpoint.getModelDdl(), model);
+                ModelUtils.addCheckpointInfo(rows, checkpoint);
             } else {
-                CommonUtils.addModelInfo(rows, model);
+                ModelUtils.addModelInfo(rows, model);
             }
 
             Enumerable<Object[]> enumerable = com.sqlrec.common.utils.DataTransformUtils.convertListToArrayToEnumerable(rows);
             java.util.List<RelDataTypeField> fields = com.sqlrec.common.utils.DataTypeUtils.getStringTypeFieldList(
                     java.util.Arrays.asList("col_name", "data_type")
             );
-            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+            return SqlProcessResult.of(enumerable, fields);
         } else {
             if (checkpoint != null) {
-                return Utils.convertMsgToResult(checkpoint.getDdl(), "create sql");
+                return SqlProcessResult.msg(checkpoint.getDdl(), "create sql");
             } else {
-                return Utils.convertMsgToResult(model.getDdl(), "create sql");
+                return SqlProcessResult.msg(model.getDdl(), "create sql");
             }
         }
     }
@@ -487,23 +473,20 @@ public class SqlProcessor {
         String serviceName = showCreateService.getServiceName().getSimple();
         Service service = db.getService(serviceName);
         if (service == null) {
-            return Utils.convertMsgToResult(
-                    "service not exists: " + serviceName,
-                    "error"
-            );
+            throw new RuntimeException("service not exists: " + serviceName);
         }
 
         if (showCreateService.isFormatted()) {
             java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
-            CommonUtils.addServiceInfo(rows, service);
+            ModelUtils.addServiceInfo(rows, service);
 
             Enumerable<Object[]> enumerable = com.sqlrec.common.utils.DataTransformUtils.convertListToArrayToEnumerable(rows);
             java.util.List<RelDataTypeField> fields = com.sqlrec.common.utils.DataTypeUtils.getStringTypeFieldList(
                     java.util.Arrays.asList("col_name", "data_type")
             );
-            return Utils.convertEnumerableToTRowSet(enumerable, fields);
+            return SqlProcessResult.of(enumerable, fields);
         } else {
-            return Utils.convertMsgToResult(service.getDdl(), "create sql");
+            return SqlProcessResult.msg(service.getDdl(), "create sql");
         }
     }
 }
