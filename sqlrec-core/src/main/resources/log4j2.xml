@@ -22,7 +22,7 @@
         </RollingFile>
     </Appenders>
     <Loggers>
-        <Root level="info">
+        <Root level="${sys:log.level:-info}">
             <AppenderRef ref="LogToConsole"/>
             <AppenderRef ref="LogToFile"/>
         </Root>

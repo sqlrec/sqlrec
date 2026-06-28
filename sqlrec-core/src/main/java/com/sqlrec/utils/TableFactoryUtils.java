@@ -21,7 +21,7 @@ public class TableFactoryUtils {
         try {
             String connector = HiveTableUtils.getTableConnector(tableObj);
             if (connector == null) {
-                log.warn("Table {} has null connector, skip", tableObj.getTableName());
+                log.info("Table {} has null connector, skip", tableObj.getTableName());
                 return null;
             }
             HmsTableFactory tableFactory = getTableFactory(connector);
@@ -37,7 +37,7 @@ public class TableFactoryUtils {
                 }
                 return table;
             } else {
-                log.warn("Table {} connector {} factory is null, skip", tableObj.getTableName(), connector);
+                log.info("Table {} connector {} factory is null, skip", tableObj.getTableName(), connector);
             }
         } catch (Exception e) {
             log.error("Error while getting table from hms table {}", tableObj.getTableName(), e);

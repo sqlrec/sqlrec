@@ -25,9 +25,10 @@ ENV PATH="$PATH:/app"
 # Copy built artifacts and script from build stage
 COPY --from=builder /app/sqlrec-frontend/target/sqlrec-frontend-*.jar ./
 COPY --from=builder /app/bin/sqlrec ./
+COPY --from=builder /app/bin/cli.sh ./
 
 # Set script as executable
-RUN chmod +x sqlrec
+RUN chmod +x sqlrec && chmod +x cli.sh
 
 # Use script as entry point
 ENTRYPOINT ["sh", "sqlrec"]

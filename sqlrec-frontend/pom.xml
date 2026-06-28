@@ -74,6 +74,18 @@
             <version>4.1.107.Final</version>
         </dependency>
 
+        <!-- CLI dependencies: Picocli for arg parsing, JLine for interactive REPL -->
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>3.30.0</version>
+        </dependency>
+
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
