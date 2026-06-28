@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -390,5 +391,70 @@ class SqlFileParserTest {
         assertEquals(1, parser.getApiNodes().size());
         assertEquals(1, parser.getModelNodes().size());
         assertEquals(1, parser.getServiceNodes().size());
+    }
+
+    @Test
+    void testResolveVariablesNoPlaceholders() {
+        Map<String, String> vars = Map.of();
+        String content = "CREATE TABLE t1 (id INT)";
+        assertEquals(content, parser.resolveVariables(content, vars));
+    }
+
+    @Test
+    void testResolveVariablesSingleReplacement() {
+        Map<String, String> vars = Map.of("REDIS_HOST", "redis://prod:6379");
+        String result = parser.resolveVariables("'url' = '${REDIS_HOST}'", vars);
+        assertEquals("'url' = 'redis://prod:6379'", result);
+    }
+
+    @Test
+    void testResolveVariablesMultipleReplacements() {
+        Map<String, String> vars = Map.of("KAFKA_HOST", "kafka-broker", "KAFKA_PORT", "9092");
+        String result = parser.resolveVariables("'servers' = '${KAFKA_HOST}:${KAFKA_PORT}'", vars);
+        assertEquals("'servers' = 'kafka-broker:9092'", result);
+    }
+
+    @Test
+    void testResolveVariablesNotFoundKeepsPlaceholder() {
+        Map<String, String> vars = Map.of();
+        String content = "'url' = '${SQLREC_NONEXISTENT_VAR_12345}'";
+        String result = parser.resolveVariables(content, vars);
+        assertEquals(content, result);
+    }
+
+    @Test
+    void testResolveVariablesEmptyVarName() {
+        Map<String, String> vars = Map.of();
+        String content = "'url' = '${}'";
+        String result = parser.resolveVariables(content, vars);
+        assertEquals(content, result);
+    }
+
+    @Test
+    void testResolveVariablesUnclosedBraceKeepsOriginal() {
+        Map<String, String> vars = Map.of();
+        String content = "'url' = '${UNCLOSED'";
+        String result = parser.resolveVariables(content, vars);
+        assertEquals(content, result);
+    }
+
+    @Test
+    void testResolveVariablesDollarSignWithoutBrace() {
+        Map<String, String> vars = Map.of();
+        String content = "price = $100";
+        assertEquals(content, parser.resolveVariables(content, vars));
+    }
+
+    @Test
+    void testResolveVariablesEmptyContent() {
+        Map<String, String> vars = Map.of();
+        assertEquals("", parser.resolveVariables("", vars));
+    }
+
+    @Test
+    void testResolveVariablesAdjacentPlaceholders() {
+        Map<String, String> vars = Map.of("A", "hello", "B", "world");
+        String result = parser.resolveVariables("${A}${B}", vars);
+        assertEquals("helloworld", result);
     }
 }

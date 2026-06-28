@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 public class SqlFileParser {
@@ -67,6 +68,7 @@ public class SqlFileParser {
         String content;
         try {
             content = Files.readString(sqlFile);
+            content = resolveVariables(content, System.getenv());
             parseContent(content);
         } catch (Exception e) {
             throw new RuntimeException("Error parsing SQL file: " + fileName, e);
@@ -153,6 +155,31 @@ public class SqlFileParser {
         }
 
         return statements;
+    }
+
+    String resolveVariables(String content, Map<String, String> variables) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < content.length()) {
+            if (i + 1 < content.length() && content.charAt(i) == '$' && content.charAt(i + 1) == '{') {
+                int end = content.indexOf('}', i + 2);
+                if (end != -1) {
+                    String varName = content.substring(i + 2, end);
+                    String value = variables.get(varName);
+                    if (value != null) {
+                        result.append(value);
+                    } else {
+                        log.warn("Environment variable not found: {}, keeping placeholder", varName);
+                        result.append(content, i, end + 1);
+                    }
+                    i = end + 1;
+                    continue;
+                }
+            }
+            result.append(content.charAt(i));
+            i++;
+        }
+        return result.toString();
     }
 
     private boolean isSqlFile(Path path) {
