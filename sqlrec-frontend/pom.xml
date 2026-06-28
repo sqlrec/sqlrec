@@ -67,6 +67,11 @@
             <artifactId>sqlrec-connector-mongodb</artifactId>
             <version>${sqlrec.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-connector-filesystem</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>io.netty</groupId>

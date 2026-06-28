@@ -292,3 +292,69 @@ CREATE TABLE user_behavior (
 - Filter conditions that cannot be pushed down will be handled by Calcite in memory
 - MongoClient instances are shared for the same URI
 - Upsert operations automatically determine insert or update based on primary key
+
+### 6. Filesystem Connector
+
+The Filesystem connector is used to read data files from the local file system, supporting CSV and JSON formats.
+
+**Connector Identifier**: `filesystem`
+
+**Inheritance Type**: `SqlRecKvTable`
+
+**Features**:
+- Supports CSV and JSON file formats
+- Data is loaded only once on first access; subsequent accesses use in-memory data
+- Supports primary key queries and filter queries
+- Supports data upsert and deletion (modifies memory only, does not write back to the file system)
+- Automatically initializes as an empty table if no path is configured or the path does not exist
+
+**Configuration Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | String | - | File path, supports `file:///` prefix, e.g. `file:///path/to/data.csv` |
+| `format` | String | `csv` | File format, options: `csv`, `json` |
+
+**Usage Example**:
+
+```sql
+-- CSV format
+CREATE TABLE user_profile (
+  id INT,
+  name STRING,
+  age INT,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/users.csv',
+  'format' = 'csv'
+);
+
+-- JSON format
+CREATE TABLE product_info (
+  id INT,
+  name STRING,
+  price INT,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/products.json',
+  'format' = 'json'
+);
+
+-- No path specified, initializes as empty table
+CREATE TABLE temp_table (
+  id INT,
+  name STRING,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem'
+);
+```
+
+**Notes**:
+- The first line of a CSV file is treated as a header and is automatically skipped
+- CSV files support double-quoted fields (RFC 4180)
+- JSON files support array format `[{...}, {...}]` and single object format `{...}`
+- Write operations only modify in-memory data and do not write back to the file system
+- If the path does not exist or the format is invalid, the table is initialized as an empty table without throwing an exception

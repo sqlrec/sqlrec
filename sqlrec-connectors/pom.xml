@@ -17,6 +17,7 @@
         <module>sqlrec-connector-kafka</module>
         <module>sqlrec-connector-jdbc</module>
         <module>sqlrec-connector-mongodb</module>
+        <module>sqlrec-connector-filesystem</module>
     </modules>
 
     <properties>

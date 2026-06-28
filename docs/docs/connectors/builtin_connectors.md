@@ -292,3 +292,69 @@ CREATE TABLE user_behavior (
 - 无法下推的过滤条件将由 Calcite 在内存中处理
 - 相同 URI 共享 MongoClient 实例
 - Upsert 操作基于主键自动判断插入或更新
+
+### 6. Filesystem Connector
+
+Filesystem 连接器用于读取本地文件系统中的数据文件，支持 CSV 和 JSON 格式。
+
+**连接器标识符**：`filesystem`
+
+**继承类型**：`SqlRecKvTable`
+
+**特性**：
+- 支持 CSV 和 JSON 两种文件格式
+- 数据仅在首次访问时加载一次，后续访问直接使用内存数据
+- 支持主键查询和过滤查询
+- 支持数据 Upsert 和删除（仅修改内存，不写回文件系统）
+- 如果未配置路径或路径不存在，自动初始化为空表
+
+**配置参数**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `path` | String | - | 文件路径，支持 `file:///` 前缀，例如 `file:///path/to/data.csv` |
+| `format` | String | `csv` | 文件格式，可选值：`csv`、`json` |
+
+**使用示例**：
+
+```sql
+-- CSV 格式
+CREATE TABLE user_profile (
+  id INT,
+  name STRING,
+  age INT,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/users.csv',
+  'format' = 'csv'
+);
+
+-- JSON 格式
+CREATE TABLE product_info (
+  id INT,
+  name STRING,
+  price INT,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/products.json',
+  'format' = 'json'
+);
+
+-- 不指定路径，初始化为空表
+CREATE TABLE temp_table (
+  id INT,
+  name STRING,
+  PRIMARY KEY (id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem'
+);
+```
+
+**注意事项**：
+- CSV 文件第一行为表头，会被自动跳过
+- CSV 文件支持双引号包裹的字段（RFC 4180）
+- JSON 文件支持数组格式 `[{...}, {...}]` 和单对象格式 `{...}`
+- 数据写入操作仅修改内存中的数据，不会写回到文件系统
+- 如果路径不存在或格式无效，表会被初始化为空表，不会抛出异常
