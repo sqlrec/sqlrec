@@ -30,10 +30,11 @@ if [ -n "${HADOOP_HOME}" ]; then
     fi
 fi
 
-# Suppress log noise: only show WARN and above on the console
-LOG_LEVEL="${LOG_LEVEL:-warn}"
+if [ -n "${SQLREC_ENV_CONF}" ]; then
+  source "${SQLREC_ENV_CONF}"
+fi
 
-exec java \
-    -Dlog.level="${LOG_LEVEL}" \
-    -cp "${CLASSPATH}" \
-    com.sqlrec.frontend.Cli "$@"
+export LOG_DIR=${LOG_DIR:-/var/log/sqlrec}
+export LOG_LEVEL=${LOG_LEVEL:-warn}
+
+exec java -cp "${CLASSPATH}" com.sqlrec.frontend.Cli "$@"

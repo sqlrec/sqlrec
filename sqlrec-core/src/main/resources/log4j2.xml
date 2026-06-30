@@ -2,6 +2,7 @@
 <Configuration status="WARN">
     <Properties>
         <Property name="LOG_DIR">${env:LOG_DIR:-/var/log/sqlrec}</Property>
+        <Property name="LOG_LEVEL">${env:LOG_LEVEL:-info}</Property>
     </Properties>
     <Appenders>
         <Console name="LogToConsole" target="SYSTEM_OUT">
@@ -22,7 +23,7 @@
         </RollingFile>
     </Appenders>
     <Loggers>
-        <Root level="${sys:log.level:-info}">
+        <Root level="${LOG_LEVEL}">
             <AppenderRef ref="LogToConsole"/>
             <AppenderRef ref="LogToFile"/>
         </Root>

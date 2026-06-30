@@ -42,7 +42,7 @@ import java.util.concurrent.Callable;
 public class Cli implements Callable<Integer> {
 
     private static final String PROMPT1 = "sqlrec> ";
-    private static final String PROMPT2 = "   ...> ";
+    private static final String PROMPT2 = "......> ";
     private static final String HISTORY_FILE =
             System.getProperty("user.home", ".") + "/.sqlrec_history";
 
