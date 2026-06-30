@@ -69,6 +69,13 @@ public class SqlRecConfigs {
             null,
             Long.class
     );
+    public static final ConfigOption<Boolean> DEBUG_PRINT = new ConfigOption<>(
+            "DEBUG_PRINT",
+            false,
+            "whether to print node execution debug logs, enabled when set to true via env var or ExecuteContext variable",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Boolean> IGNORE_UNION_EXCEPTION = new ConfigOption<>(
             "IGNORE_UNION_EXCEPTION",
             true,

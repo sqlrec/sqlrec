@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
@@ -34,33 +35,26 @@ public class ProxyAllBindable extends BindableInterface {
         long startTime = System.currentTimeMillis();
         long count = 0;
         String status = "success";
+        boolean debugPrint = isDebugPrintEnabled(context);
+        String logId = context.getLogId();
+        String nodeName = getName();
+
+        if (debugPrint) {
+            log.info("[{}] node [{}] start execution", logId, nodeName);
+        }
 
         try {
             Enumerable<Object[]> result = delegate.bind(schema, context);
-            if (result != null) {
-                if (delegate instanceof CalciteBindable && ((CalciteBindable) delegate).getSqlNode() instanceof SqlSelect) {
-                    List<RelDataTypeField> fields = delegate.getReturnDataFields();
-                    List<String> tableLines = DataTransformUtils.formatAsTable(result, fields);
-                    String logId = context.getLogId();
-                    for (String line : tableLines) {
-                        log.info("[{}] {}", logId, line);
-                    }
-                }
+            count = printAndCountResult(schema, context, debugPrint, result);
 
-                String cacheTableName = delegate.getCacheTableName();
-                if (StringUtils.isNotEmpty(cacheTableName)) {
-                    CacheTable cacheTable = SchemaUtils.tryGetCacheTable(cacheTableName, schema);
-                    if (cacheTable != null) {
-                        count = cacheTable.scan(null).count();
-                    }
-                } else {
-                    count = result.count();
-                }
+            if (debugPrint) {
+                log.info("[{}] node [{}] execution complete, cost {} ms", logId, nodeName,
+                        System.currentTimeMillis() - startTime);
             }
             return result;
         } catch (Throwable e) {
             status = "error";
-            throw new RuntimeException("Node " + getName() + " execution failed", e);
+            throw new RuntimeException("Node " + nodeName + " execution failed", e);
         } finally {
             Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "status", status);
             MetricsUtils.getCompositeMeterRegistry()
@@ -70,6 +64,63 @@ public class ProxyAllBindable extends BindableInterface {
                     .summary(Consts.METRICS_NODE_DATA_SIZE, tags)
                     .record(count);
         }
+    }
+
+    private boolean isDebugPrintEnabled(ExecuteContext context) {
+        Map<String, String> vars = context.getVariables();
+        if (vars != null && vars.containsKey(SqlRecConfigs.DEBUG_PRINT.getKey())) {
+            return SqlRecConfigs.DEBUG_PRINT.getValue(vars);
+        }
+        return SqlRecConfigs.DEBUG_PRINT.getValue();
+    }
+
+    private void printNodeResult(ExecuteContext context, String nodeName,
+                                 Enumerable<Object[]> data, List<RelDataTypeField> fields) {
+        String logId = context.getLogId();
+        log.info("[{}] node [{}] output:", logId, nodeName);
+        List<String> tableLines = DataTransformUtils.formatAsTable(data, fields);
+        for (String line : tableLines) {
+            log.info("[{}] {}", logId, line);
+        }
+    }
+
+    private long printAndCountResult(CalciteSchema schema, ExecuteContext context,
+                                     boolean debugPrint, Enumerable<Object[]> result) {
+        String logId = context.getLogId();
+        String nodeName = getName();
+
+        if (result == null) {
+            if (debugPrint) {
+                log.info("[{}] node [{}] return data is null", logId, nodeName);
+            }
+            return 0;
+        }
+
+        boolean isSelect = delegate instanceof CalciteBindable
+                && ((CalciteBindable) delegate).getSqlNode() instanceof SqlSelect;
+        if (isSelect) {
+            printNodeResult(context, nodeName, result, delegate.getReturnDataFields());
+        }
+
+        String cacheTableName = delegate.getCacheTableName();
+        if (StringUtils.isNotEmpty(cacheTableName)) {
+            CacheTable cacheTable = SchemaUtils.tryGetCacheTable(cacheTableName, schema);
+            if (cacheTable == null) {
+                return 0;
+            }
+            Enumerable<Object[]> cacheData = cacheTable.scan(null);
+            long count = cacheData.count();
+            if (debugPrint) {
+                printNodeResult(context, nodeName, cacheData, cacheTable.getDataFields());
+            }
+            return count;
+        }
+
+        long count = result.count();
+        if (debugPrint && !isSelect) {
+            printNodeResult(context, nodeName, result, delegate.getReturnDataFields());
+        }
+        return count;
     }
 
     @Override
