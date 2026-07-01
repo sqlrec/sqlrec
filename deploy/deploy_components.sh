@@ -44,6 +44,7 @@ bash ${dir}/milvus/deploy.sh
 #bash ${dir}/clickhouse/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
 #bash ${dir}/prometheus/deploy.sh
+#bash ${dir}/jaeger/deploy.sh
 
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/

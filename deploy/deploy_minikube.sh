@@ -73,6 +73,9 @@ minikube start \
   --ports="${DOLPHINSCHEDULER_PORT}:${DOLPHINSCHEDULER_PORT}" \
   --ports="${CLICKHOUSE_PORT}:${CLICKHOUSE_PORT}" \
   --ports="${CLICKHOUSE_HTTP_PORT}:${CLICKHOUSE_HTTP_PORT}" \
+  --ports="${JAEGER_UI_PORT}:${JAEGER_UI_PORT}" \
+  --ports="${JAEGER_OTLP_GRPC_PORT}:${JAEGER_OTLP_GRPC_PORT}" \
+  --ports="${JAEGER_OTLP_HTTP_PORT}:${JAEGER_OTLP_HTTP_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 

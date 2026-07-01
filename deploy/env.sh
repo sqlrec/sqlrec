@@ -100,6 +100,11 @@ export CLICKHOUSE_PASSWORD=abc123456
 export GRAFANA_PORT=30285
 export PROMETHEUS_PORT=30286
 
+export JAEGER_VERSION=2.19.0
+export JAEGER_UI_PORT=30288
+export JAEGER_OTLP_GRPC_PORT=30289
+export JAEGER_OTLP_HTTP_PORT=30290
+
 export JFS_LATEST_TAG=1.3.1
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz"
 export JUICEFS_ARCH_NAME=juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz
