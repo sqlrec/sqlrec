@@ -14,4 +14,8 @@ public interface ExecuteContext {
     Map<String, String> getMetricsTags();
 
     String getLogId();
+
+    void setTraceContext(Object context);
+
+    Object getTraceContext();
 }

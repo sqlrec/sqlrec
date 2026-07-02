@@ -13,6 +13,7 @@ public class ExecuteContextImpl implements ExecuteContext {
     private Map<String, String> variableMap;
     private Map<String, String> metricsTagMap;
     private List<String> funNameStack;
+    private Object traceContext;
 
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
@@ -25,6 +26,7 @@ public class ExecuteContextImpl implements ExecuteContext {
         variableMap = parentContext.variableMap;
         metricsTagMap = parentContext.metricsTagMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
+        traceContext = parentContext.traceContext;
     }
 
     public String getVariable(String key) {
@@ -57,6 +59,16 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public String getLogId() {
         return variableMap.get(Consts.LOG_ID);
+    }
+
+    @Override
+    public void setTraceContext(Object context) {
+        this.traceContext = context;
+    }
+
+    @Override
+    public Object getTraceContext() {
+        return this.traceContext;
     }
 
     public void addFunNameToStack(String funName) {

@@ -69,6 +69,12 @@ spec:
               value: "600000"
             - name: SQLREC_VERSION
               value: "${SQLREC_VERSION}"
+            - name: DEBUG_TRACE
+              value: "${DEBUG_TRACE}"
+            - name: TRACE_ENDPOINT
+              value: "${TRACE_ENDPOINT}"
+            - name: TRACE_SERVICE_NAME
+              value: "${TRACE_SERVICE_NAME}"
           ports:
             - containerPort: ${SQLREC_THRIFT_PORT}
               name: thrift

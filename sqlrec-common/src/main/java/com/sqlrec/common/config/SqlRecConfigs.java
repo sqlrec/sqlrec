@@ -76,6 +76,34 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Boolean> DEBUG_TRACE = new ConfigOption<>(
+            "DEBUG_TRACE",
+            false,
+            "enable OpenTelemetry trace spans for node execution",
+            null,
+            Boolean.class
+    );
+    public static final ConfigOption<String> TRACE_ENDPOINT = new ConfigOption<>(
+            "TRACE_ENDPOINT",
+            "http://localhost:4317",
+            "OTLP gRPC endpoint for trace export",
+            null,
+            String.class
+    );
+    public static final ConfigOption<String> TRACE_HEADERS = new ConfigOption<>(
+            "TRACE_HEADERS",
+            "",
+            "OTLP headers in key1=value1,key2=value2 format",
+            null,
+            String.class
+    );
+    public static final ConfigOption<String> TRACE_SERVICE_NAME = new ConfigOption<>(
+            "TRACE_SERVICE_NAME",
+            "sqlrec",
+            "service name for trace spans",
+            null,
+            String.class
+    );
     public static final ConfigOption<Boolean> IGNORE_UNION_EXCEPTION = new ConfigOption<>(
             "IGNORE_UNION_EXCEPTION",
             true,

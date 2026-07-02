@@ -7,7 +7,9 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.utils.SchemaUtils;
+import com.sqlrec.utils.TraceUtils;
 import io.micrometer.core.instrument.Tags;
+import io.opentelemetry.api.trace.Span;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -39,12 +41,16 @@ public class ProxyAllBindable extends BindableInterface {
         String logId = context.getLogId();
         String nodeName = getName();
 
+        ExecuteContext traceContext = ((ExecuteContextImpl) context).clone();
+        Span span = TraceUtils.startSpan(traceContext, nodeName);
+
         if (debugPrint) {
             log.info("[{}] node [{}] start execution", logId, nodeName);
         }
 
+        Throwable error = null;
         try {
-            Enumerable<Object[]> result = delegate.bind(schema, context);
+            Enumerable<Object[]> result = delegate.bind(schema, traceContext);
             count = printAndCountResult(schema, context, debugPrint, result);
 
             if (debugPrint) {
@@ -54,12 +60,15 @@ public class ProxyAllBindable extends BindableInterface {
             return result;
         } catch (Throwable e) {
             status = "error";
+            error = e;
             throw new RuntimeException("Node " + nodeName + " execution failed", e);
         } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            TraceUtils.endSpan(span, logId, duration, count, status, error);
             Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "status", status);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_NODE_EXEC_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+                    .record(duration, TimeUnit.MILLISECONDS);
             MetricsUtils.getCompositeMeterRegistry()
                     .summary(Consts.METRICS_NODE_DATA_SIZE, tags)
                     .record(count);
