@@ -1,8 +1,12 @@
 package com.sqlrec.frontend.utils;
 
 import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.compiler.CompileManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.flink.sql.parser.ddl.SqlSet;
+import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.hive.service.rpc.thrift.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -246,5 +250,10 @@ public class ThriftUtils {
 
     public static String getQueryId() {
         return UUID.randomUUID().toString();
+    }
+
+    public static boolean isSqlNeedExecInRemote(String sql) throws Exception {
+        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        return sqlNode instanceof SqlUseDatabase || sqlNode instanceof SqlSet;
     }
 }

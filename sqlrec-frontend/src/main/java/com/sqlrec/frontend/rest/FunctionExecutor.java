@@ -51,6 +51,7 @@ public class FunctionExecutor {
             BindableInterface proxyBindable = new ProxyAllBindable(sqlFunctionBindable);
             proxyBindable.setName(sqlFunctionBindable.getFunName());
             Enumerable<Object[]> enumerable = proxyBindable.bind(schema, executeContext);
+            executeData.setParams(executeContext.getVariables());
             if (enumerable != null) {
                 List<Object[]> results = enumerable.toList();
                 executeData.setData(DataTransformUtils.convertToMapList(results, proxyBindable.getReturnDataFields()));

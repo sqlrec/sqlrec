@@ -49,6 +49,7 @@ public class SqlExecutor {
                     result.scan(null) != null ? result.scan(null).toList() : null,
                     result.getDataFields()
             ));
+            executeData.setParams(sqlExecutor.getExecuteContext().getVariables());
         } catch (Exception e) {
             executeData.setMsg("process sql error: " + e.getMessage());
         }

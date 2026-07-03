@@ -3,6 +3,7 @@ package com.sqlrec.frontend.thrift;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
@@ -129,28 +130,37 @@ public class SessionManager {
         THandleIdentifier sessionId = tExecuteStatementReq.getSessionHandle().getSessionId();
         logger.info("Executing statement, sessionGuid: {}, sql: {}", ThriftUtils.safeHandleId(sessionId), tExecuteStatementReq.getStatement());
 
+        THandleIdentifier operationId = ThriftUtils.getHandleIdentifier();
+        String queryId = ThriftUtils.getQueryId();
+        SqlOperation operation = null;
         TExecuteStatementResp resp = null;
 
         SqlExecutor sqlExecutor = getSqlExecutor(sessionId);
         try {
             SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(tExecuteStatementReq.getStatement());
-            if (coreResult != null) {
-                THandleIdentifier operationId = ThriftUtils.getHandleIdentifier();
-                String queryId = ThriftUtils.getQueryId();
-                SqlOperation operation = new SqlOperation(coreResult, operationId, queryId);
-                operationMap.put(operationId, operation);
-                operationToSessionMap.put(operationId, sessionId);
-
-                TOperationHandle operationHandle = new TOperationHandle(
-                        operationId, TOperationType.EXECUTE_STATEMENT, true
-                );
-                resp = new TExecuteStatementResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-                resp.setOperationHandle(operationHandle);
+            if (coreResult != null &&
+                    !ExecEnv.isFileSystemMeta() &&
+                    !ThriftUtils.isSqlNeedExecInRemote(tExecuteStatementReq.getStatement())
+            ) {
+                operation = new SqlOperation(coreResult, operationId, queryId);
                 logger.info("Statement executed by local SqlExecutor, operationGuid: {}", ThriftUtils.safeHandleId(operationId));
             }
         } catch (Exception e) {
             logger.error("Failed to execute statement via SqlExecutor: {}", e.getMessage(), e);
-            throw new TException(e);
+            operation = new SqlOperation(new SqlProcessResult(), operationId, queryId);
+            operation.setException(e);
+            operation.setMsg("exec error: " + ExceptionUtils.getStackTrace(e));
+        }
+
+        if (operation != null) {
+            operationMap.put(operationId, operation);
+            operationToSessionMap.put(operationId, sessionId);
+
+            TOperationHandle operationHandle = new TOperationHandle(
+                    operationId, TOperationType.EXECUTE_STATEMENT, true
+            );
+            resp = new TExecuteStatementResp(new TStatus(TStatusCode.SUCCESS_STATUS));
+            resp.setOperationHandle(operationHandle);
         }
 
         if (resp == null) {
@@ -162,7 +172,7 @@ public class SessionManager {
             logger.info("Statement executed by remote client, operationGuid: {}", ThriftUtils.safeHandleId(resp.getOperationHandle().getOperationId()));
         }
 
-        THandleIdentifier operationId = resp.getOperationHandle().getOperationId();
+        operationId = resp.getOperationHandle().getOperationId();
         if (!operationToSessionMap.containsKey(operationId)) {
             operationToSessionMap.put(operationId, sessionId);
         }

@@ -66,6 +66,10 @@ public class SqlExecutor {
         }
     }
 
+    public ExecuteContext getExecuteContext() {
+        return context;
+    }
+
     public SqlProcessResult executeSqlAsync(String sql) throws Exception {
         SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
 
@@ -76,10 +80,7 @@ public class SqlExecutor {
 
         if (sqlNode instanceof SqlUseDatabase) {
             defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
-            if (ExecEnv.isFileSystemMeta()) {
-                return SqlProcessResult.msg("database changed to " + defaultSchema, "msg");
-            }
-            return null;
+            return SqlProcessResult.msg("database changed to " + defaultSchema, "msg");
         }
 
         result = processResourceQuery(sqlNode);
@@ -90,12 +91,6 @@ public class SqlExecutor {
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
             BindableInterface bindableInterface = new CompileManager().compileSql(sqlNode, schema, defaultSchema, sql);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
-            if (sqlNode instanceof SqlSet) {
-                if (ExecEnv.isFileSystemMeta()) {
-                    return SqlProcessResult.msg("set statement executed", "msg");
-                }
-                return null;
-            }
             if (enumerable == null) {
                 return SqlProcessResult.msg("sql run success without output", "msg");
             }

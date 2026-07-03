@@ -5,6 +5,7 @@ import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.frontend.cli.*;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -111,7 +112,7 @@ public class Cli implements Callable<Integer> {
             lines.add("Time: " + duration + " ms, " + rows.size() + " row(s)");
             printLines(lines);
         } catch (Exception e) {
-            printLines(List.of("Error: " + e.getMessage()));
+            printLines(List.of("exec error: ", ExceptionUtils.getStackTrace(e)));
         }
     }
 
