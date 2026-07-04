@@ -66,13 +66,14 @@
           },
           "id": 1,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -159,13 +160,14 @@
           },
           "id": 2,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -264,13 +266,14 @@
           },
           "id": 3,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -357,13 +360,14 @@
           },
           "id": 4,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -462,13 +466,14 @@
           },
           "id": 5,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -557,13 +562,14 @@
           },
           "id": 6,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -664,13 +670,14 @@
           },
           "id": 7,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -772,13 +779,14 @@
           },
           "id": 8,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -867,13 +875,14 @@
           },
           "id": 9,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -962,13 +971,14 @@
           },
           "id": 10,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1067,13 +1077,14 @@
           },
           "id": 11,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1175,13 +1186,14 @@
           },
           "id": 12,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1270,13 +1282,14 @@
           },
           "id": 13,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1365,13 +1378,14 @@
           },
           "id": 14,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1463,13 +1477,14 @@
           "grid": {},
           "id": 15,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1549,13 +1564,14 @@
           "grid": {},
           "id": 16,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1647,13 +1663,14 @@
           "grid": {},
           "id": 17,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1733,13 +1750,14 @@
           "grid": {},
           "id": 18,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1756,7 +1774,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(sqlrec_table_cache_hit_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_get_by_primary_key_data_size_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
+              "expr": "sum(rate(sqlrec_table_cache_hit_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_get_by_primary_key_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{table}}",
@@ -1819,13 +1837,14 @@
           "grid": {},
           "id": 30,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -1917,13 +1936,14 @@
           "grid": {},
           "id": 19,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2003,13 +2023,14 @@
           "grid": {},
           "id": 20,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2101,13 +2122,14 @@
           "grid": {},
           "id": 21,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2187,13 +2209,14 @@
           "grid": {},
           "id": 22,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2285,13 +2308,14 @@
           "grid": {},
           "id": 23,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2371,13 +2395,14 @@
           "grid": {},
           "id": 24,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2469,13 +2494,14 @@
           "grid": {},
           "id": 25,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2555,13 +2581,14 @@
           "grid": {},
           "id": 26,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2653,13 +2680,14 @@
           "grid": {},
           "id": 27,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2739,13 +2767,14 @@
           "grid": {},
           "id": 28,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2833,13 +2862,14 @@
           "grid": {},
           "id": 29,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
@@ -2919,13 +2949,14 @@
           "grid": {},
           "id": 31,
           "legend": {
-            "avg": false,
-            "current": true,
+            "avg": true,
+            "current": false,
             "max": true,
-            "min": false,
+            "min": true,
             "show": true,
             "total": false,
-            "values": true
+            "values": true,
+            "alignAsTable": true
           },
           "lines": true,
           "linewidth": 1,
