@@ -9,5 +9,5 @@ envsubst < ${dir}/config.yaml > ${dir}/config.sub.yaml
 
 helm upgrade --install jupyterhub jupyterhub/jupyterhub \
   --namespace ${NAMESPACE} \
-  --version=4.3.1 \
+  --version=${JUPYTERHUB_VERSION} \
   --values ${dir}/config.sub.yaml

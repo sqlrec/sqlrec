@@ -7,7 +7,7 @@ source ${dir}/../env.sh
 
 helm upgrade --install milvus \
   --namespace "${NAMESPACE}-milvus" \
-  --set image.all.tag=v2.6.2 \
+  --set image.all.tag=${MILVUS_VERSION} \
   --set cluster.enabled=false \
   --set pulsarv3.enabled=false \
   --set standalone.messageQueue=woodpecker \

@@ -20,7 +20,7 @@ spec:
       hostNetwork: true
       containers:
       - name: namenode
-        image: debian:12-slim
+        image: debian:${DEBIAN_IMAGE_VERSION}
         command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "namenode"]
         volumeMounts:
         - name: client-pv
@@ -57,7 +57,7 @@ spec:
       hostNetwork: true
       containers:
       - name: datanode
-        image: debian:12-slim
+        image: debian:${DEBIAN_IMAGE_VERSION}
         command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "datanode"]
         volumeMounts:
         - name: client-pv

@@ -8,7 +8,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: init
-        image: debian:12-slim
+        image: debian:${DEBIAN_IMAGE_VERSION}
         command:
         - /bin/bash
         - -c

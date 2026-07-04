@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${MYSQL_NAME}-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${MYSQL_NAME}
+  labels:
+    app: ${MYSQL_NAME}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${MYSQL_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${MYSQL_NAME}
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:${MYSQL_VERSION}
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: ${MYSQL_ROOT_PASSWORD}
+        - name: MYSQL_DATABASE
+          value: ${MYSQL_DATABASE}
+        - name: MYSQL_USER
+          value: ${MYSQL_USER}
+        - name: MYSQL_PASSWORD
+          value: ${MYSQL_PASSWORD}
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: ${MYSQL_NAME}-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${MYSQL_NAME}
+spec:
+  type: NodePort
+  selector:
+    app: ${MYSQL_NAME}
+  ports:
+  - protocol: TCP
+    port: 3306
+    targetPort: 3306
+    nodePort: ${MYSQL_PORT}

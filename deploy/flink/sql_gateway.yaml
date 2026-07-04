@@ -22,8 +22,8 @@ kind: FlinkDeployment
 metadata:
   name: flink-session-cluster
 spec:
-  image: flink:1.19
-  flinkVersion: v1_19
+  image: flink:${FLINK_VERSION}
+  flinkVersion: ${FLINK_API_VERSION}
   mode: standalone
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
@@ -98,7 +98,7 @@ spec:
     spec:
       containers:
         - name: flink-sql-gateway
-          image: flink:1.19
+          image: flink:${FLINK_VERSION}
           env:
             - name: HADOOP_CONF_DIR
               value: /opt/flink/conf
