@@ -20,6 +20,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
@@ -60,6 +61,11 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 result = Linq4j.asEnumerable(rows);
             } else {
                 result = scanImpl(filters);
+                if (result != null) {
+                    List<Object[]> rows = result.toList();
+                    DataTypeUtils.convertRowTypes(rows, getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList());
+                    result = Linq4j.asEnumerable(rows);
+                }
             }
             if (result != null) {
                 count = result.count();
@@ -132,7 +138,13 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             Set<Object> convertedKeySet = DataTypeUtils.convertKeySet(keySet, primaryKeyType);
 
             if (cache == null) {
-                return DataTypeUtils.convertMapKeys(getByPrimaryKeyImpl(convertedKeySet), primaryKeyType);
+                Map<Object, List<Object[]>> result = DataTypeUtils.convertMapKeys(
+                        getByPrimaryKeyImpl(convertedKeySet), primaryKeyType);
+                List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
+                for (List<Object[]> rows : result.values()) {
+                    DataTypeUtils.convertRowTypes(rows, fields);
+                }
+                return result;
             }
 
             int hitCount = 0;
@@ -150,7 +162,9 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             if (!missKeys.isEmpty()) {
                 Map<Object, List<Object[]>> missKeyResult = DataTypeUtils.convertMapKeys(
                         getByPrimaryKeyImpl(missKeys), primaryKeyType);
+                List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
                 for (Map.Entry<Object, List<Object[]>> entry : missKeyResult.entrySet()) {
+                    DataTypeUtils.convertRowTypes(entry.getValue(), fields);
                     result.put(entry.getKey(), entry.getValue());
                     cache.put(entry.getKey(), entry.getValue());
                 }

@@ -83,13 +83,13 @@ class SqlStatementUtilsTest {
     @Test
     void splitSemicolonInLineCommentIsNotASeparator() {
         List<String> r = SqlStatementUtils.splitStatements("select 1 -- a;b;c\n; select 2");
-        assertEquals(List.of("select 1 -- a;b;c", "select 2"), r);
+        assertEquals(List.of("select 1", "select 2"), r);
     }
 
     @Test
     void splitSemicolonInBlockCommentIsNotASeparator() {
         List<String> r = SqlStatementUtils.splitStatements("select 1 /* a;b;c */; select 2");
-        assertEquals(List.of("select 1 /* a;b;c */", "select 2"), r);
+        assertEquals(List.of("select 1", "select 2"), r);
     }
 
     @Test
@@ -107,8 +107,8 @@ class SqlStatementUtilsTest {
     }
 
     @Test
-    void splitPreservesCommentsAndQuotesInOutput() {
-        String sql = "select 1 -- comment\n /* block */ 'str' \"id\"";
+    void splitPreservesQuotesInOutput() {
+        String sql = "select 1 'str' \"id\"";
         List<String> r = SqlStatementUtils.splitStatements(sql + ";");
         assertEquals(List.of(sql), r);
     }

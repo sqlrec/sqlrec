@@ -71,19 +71,16 @@ public class Cli implements Callable<Integer> {
     public Integer call() throws Exception {
         SqlExecutor sqlExecutor = new SqlExecutor();
 
-        boolean batch = false;
         if (inlineSql != null) {
             executeStatements(sqlExecutor, inlineSql);
-            batch = true;
+            return 0;
         }
         if (sqlFile != null) {
             String content = Files.readString(sqlFile);
             executeStatements(sqlExecutor, content);
-            batch = true;
-        }
-        if (batch) {
             return 0;
         }
+
         return runInteractive(sqlExecutor);
     }
 
@@ -101,12 +98,7 @@ public class Cli implements Callable<Integer> {
             CacheTable result = sqlExecutor.executeSql(sql);
             List<RelDataTypeField> fields = result.getDataFields();
             Enumerable<Object[]> enumerable = result.scan(null);
-            List<Object[]> rows = new ArrayList<>();
-            if (enumerable != null) {
-                for (Object[] row : enumerable) {
-                    rows.add(row);
-                }
-            }
+            List<Object[]> rows = enumerable.toList();
             long duration = System.currentTimeMillis() - start;
             List<String> lines = new ArrayList<>(SqlOutputFormatter.format(rows, fields, outputFormat));
             lines.add("Time: " + duration + " ms, " + rows.size() + " row(s)");

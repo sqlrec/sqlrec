@@ -17,41 +17,41 @@ public final class SqlStatementUtils {
     }
 
     /**
-     * Split SQL text by top-level ';', ignoring empty statements.
-     * Semicolons inside single/double quotes or line/block comments are skipped.
-     *
-     * @return a list of non-empty trimmed statements; never {@code null}.
+     * Splits SQL text by top-level ';', appending each trimmed statement to
+     * {@code out}. Semicolons inside single/double quotes or line/block
+     * comments are skipped. Comments are stripped from the output.
+     * Returns the remaining text after the last top-level ';' (may be empty).
      */
-    public static List<String> splitStatements(String text) {
-        List<String> stmts = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            return stmts;
-        }
+    static String splitTo(String text, List<String> out) {
         StringBuilder cur = new StringBuilder();
         int i = 0;
         int n = text.length();
         while (i < n) {
             char c = text.charAt(i);
-            // line comment --
+            // line comment -- skip entirely (including the trailing newline is left for the next iteration)
             if (c == '-' && i + 1 < n && text.charAt(i + 1) == '-') {
-                int start = i;
+                i += 2;
                 while (i < n && text.charAt(i) != '\n') {
                     i++;
                 }
-                cur.append(text, start, i);
                 continue;
             }
-            // block comment /* */
+            // block comment /* */ — skip if closed; append "/*" if unclosed so that
+            // isCompleteStatement sees a non-empty remainder and returns false
             if (c == '/' && i + 1 < n && text.charAt(i + 1) == '*') {
-                int start = i;
                 i += 2;
-                while (i < n && !(text.charAt(i) == '*' && i + 1 < n && text.charAt(i + 1) == '/')) {
+                boolean closed = false;
+                while (i < n) {
+                    if (text.charAt(i) == '*' && i + 1 < n && text.charAt(i + 1) == '/') {
+                        i += 2;
+                        closed = true;
+                        break;
+                    }
                     i++;
                 }
-                if (i < n) {
-                    i += 2;
+                if (!closed) {
+                    cur.append("/*");
                 }
-                cur.append(text, start, i);
                 continue;
             }
             // single-quoted string
@@ -95,7 +95,7 @@ public final class SqlStatementUtils {
             if (c == ';') {
                 String s = cur.toString().trim();
                 if (!s.isEmpty()) {
-                    stmts.add(s);
+                    out.add(s);
                 }
                 cur.setLength(0);
                 i++;
@@ -104,7 +104,21 @@ public final class SqlStatementUtils {
             cur.append(c);
             i++;
         }
-        String rest = cur.toString().trim();
+        return cur.toString();
+    }
+
+    /**
+     * Split SQL text by top-level ';', ignoring empty statements.
+     * Semicolons inside single/double quotes or line/block comments are skipped.
+     *
+     * @return a list of non-empty trimmed statements; never {@code null}.
+     */
+    public static List<String> splitStatements(String text) {
+        List<String> stmts = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return stmts;
+        }
+        String rest = splitTo(text, stmts).trim();
         if (!rest.isEmpty()) {
             stmts.add(rest);
         }
@@ -121,82 +135,8 @@ public final class SqlStatementUtils {
         if (text == null || text.trim().isEmpty()) {
             return true;
         }
-        int i = 0;
-        int n = text.length();
-        char lastSignificant = 0;
-        while (i < n) {
-            char c = text.charAt(i);
-            if (c == '-' && i + 1 < n && text.charAt(i + 1) == '-') {
-                i += 2;
-                while (i < n && text.charAt(i) != '\n') {
-                    i++;
-                }
-                continue;
-            }
-            if (c == '/' && i + 1 < n && text.charAt(i + 1) == '*') {
-                i += 2;
-                boolean closed = false;
-                while (i < n) {
-                    if (text.charAt(i) == '*' && i + 1 < n && text.charAt(i + 1) == '/') {
-                        i += 2;
-                        closed = true;
-                        break;
-                    }
-                    i++;
-                }
-                if (!closed) {
-                    return false;
-                }
-                lastSignificant = 'a';
-                continue;
-            }
-            if (c == '\'') {
-                i++;
-                boolean closed = false;
-                while (i < n) {
-                    if (text.charAt(i) == '\'') {
-                        if (i + 1 < n && text.charAt(i + 1) == '\'') {
-                            i += 2;
-                            continue;
-                        }
-                        i++;
-                        closed = true;
-                        break;
-                    }
-                    i++;
-                }
-                if (!closed) {
-                    return false;
-                }
-                lastSignificant = 'a';
-                continue;
-            }
-            if (c == '"') {
-                i++;
-                boolean closed = false;
-                while (i < n) {
-                    if (text.charAt(i) == '"') {
-                        if (i + 1 < n && text.charAt(i + 1) == '"') {
-                            i += 2;
-                            continue;
-                        }
-                        i++;
-                        closed = true;
-                        break;
-                    }
-                    i++;
-                }
-                if (!closed) {
-                    return false;
-                }
-                lastSignificant = 'a';
-                continue;
-            }
-            if (!Character.isWhitespace(c)) {
-                lastSignificant = c;
-            }
-            i++;
-        }
-        return lastSignificant == ';';
+        List<String> sink = new ArrayList<>();
+        String rest = splitTo(text, sink).trim();
+        return rest.isEmpty();
     }
 }

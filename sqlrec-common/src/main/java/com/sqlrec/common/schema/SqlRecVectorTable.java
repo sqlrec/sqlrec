@@ -1,9 +1,12 @@
 package com.sqlrec.common.schema;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +40,10 @@ public abstract class SqlRecVectorTable extends SqlRecKvTable {
             List<Object[]> result = searchByEmbeddingWithScoreImpl(
                     leftValue, embedding, annFieldName, filterCondition, limit, projectColumns);
             if (result != null) {
+                DataTypeUtils.convertRowTypes(
+                        result,
+                        getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList()
+                );
                 count = result.size();
             }
             return result;

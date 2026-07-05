@@ -217,17 +217,35 @@ public class DataTypeUtils {
         }
         switch (sqlTypeName) {
             case TINYINT:
+                if (value instanceof Byte) {
+                    return value;
+                }
                 return ((Number) value).byteValue();
             case SMALLINT:
+                if (value instanceof Short) {
+                    return value;
+                }
                 return ((Number) value).shortValue();
             case INTEGER:
+                if (value instanceof Integer) {
+                    return value;
+                }
                 return ((Number) value).intValue();
             case BIGINT:
+                if (value instanceof Long) {
+                    return value;
+                }
                 return ((Number) value).longValue();
             case FLOAT:
             case REAL:
+                if (value instanceof Float) {
+                    return value;
+                }
                 return ((Number) value).floatValue();
             case DOUBLE:
+                if (value instanceof Double) {
+                    return value;
+                }
                 return ((Number) value).doubleValue();
             case DECIMAL:
                 if (value instanceof BigDecimal) {
@@ -241,6 +259,9 @@ public class DataTypeUtils {
                 return Boolean.valueOf(value.toString());
             case VARCHAR:
             case CHAR:
+                if (value instanceof String) {
+                    return value;
+                }
                 return value.toString();
             case DATE:
             case TIME:
@@ -265,5 +286,26 @@ public class DataTypeUtils {
             result.put(convertType(entry.getKey(), sqlTypeName), entry.getValue());
         }
         return result;
+    }
+
+    public static void convertRowTypes(List<Object[]> rows, List<RelDataTypeField> fields) {
+        if (rows == null || fields == null) {
+            return;
+        }
+        for (Object[] row : rows) {
+            if (row == null) {
+                continue;
+            }
+            if (fields.size() > row.length) {
+                throw new RuntimeException("convertRowTypes failed, row length is " + row.length + ", fields size is " + fields.size());
+            }
+            for (int i = 0; i < fields.size(); i++) {
+                RelDataTypeField field = fields.get(i);
+                SqlTypeName targetType = field.getType().getSqlTypeName();
+                if (row[i] != null) {
+                    row[i] = convertType(row[i], targetType);
+                }
+            }
+        }
     }
 }
