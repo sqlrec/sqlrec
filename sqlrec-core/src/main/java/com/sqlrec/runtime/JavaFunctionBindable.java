@@ -8,6 +8,7 @@ import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -218,7 +219,9 @@ public class JavaFunctionBindable extends BindableInterface {
         if (outputTable instanceof CacheTable) {
             CacheTable cacheTable = (CacheTable) outputTable;
             DataTypeUtils.checkTableSchemaCompatible(returnDataFields, cacheTable.getDataFields());
-            return cacheTable.scan(null);
+            List<Object[]> rows = cacheTable.scan(null).toList();
+            DataTypeUtils.convertRowTypes(rows, returnDataFields);
+            return Linq4j.asEnumerable(rows);
         } else {
             throw new RuntimeException("output table is not a CacheTable: " + outputTable.getClass().getName());
         }

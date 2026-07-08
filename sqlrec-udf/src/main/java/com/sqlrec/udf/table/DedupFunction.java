@@ -65,7 +65,6 @@ public class DedupFunction {
                 Object value = row[inputColIndex];
                 String key = value == null ? "null" : value.toString();
                 if (!existingKeys.contains(key)) {
-                    existingKeys.add(key);
                     newData.add(row);
                 }
             }

@@ -54,15 +54,15 @@ public class TestJoinRedis {
                 EnumerableTableScan(table=[[t3]])""", null).test(schema);
 
         new SqlTestCase("select * from t3 join t2 on t3.id = t2.id", Arrays.<Object[]>asList(
-                new Object[]{1, 1L, "Alice3", 3L},
-                new Object[]{2, 2L, "Alice3", 3L},
-                new Object[]{3, 3L, "Alice3", 3L},
-                new Object[]{1, 1L, "Alice2", 2L},
-                new Object[]{2, 2L, "Alice2", 2L},
-                new Object[]{3, 3L, "Alice2", 2L},
-                new Object[]{1, 1L, "Alice1", 1L},
-                new Object[]{2, 2L, "Alice1", 1L},
-                new Object[]{3, 3L, "Alice1", 1L}), """
+                new Object[]{1, 1, "Alice3", 3},
+                new Object[]{2, 2, "Alice3", 3},
+                new Object[]{3, 3, "Alice3", 3},
+                new Object[]{1, 1, "Alice2", 2},
+                new Object[]{2, 2, "Alice2", 2},
+                new Object[]{3, 3, "Alice2", 2},
+                new Object[]{1, 1, "Alice1", 1},
+                new Object[]{2, 2, "Alice1", 1},
+                new Object[]{3, 3, "Alice1", 1}), """
                 LogicalProject(id=[$0], ID0=[$1], NAME=[$2], CNT=[$3])
                   LogicalJoin(condition=[=($0, $1)], joinType=[inner])
                     LogicalTableScan(table=[[t3]])
