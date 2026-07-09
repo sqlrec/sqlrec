@@ -1,0 +1,32 @@
+clusterName: opensearch-cluster
+singleNode: true
+replicas: 1
+opensearchJavaOpts: "-Xmx1G -Xms1G"
+extraEnvs:
+  - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+    value: ${OPENSEARCH_PASSWORD}
+  - name: DISABLE_SECURITY_PLUGIN
+    value: "true"
+config:
+  opensearch.yml: |
+    cluster.name: opensearch-cluster
+    network.host: 0.0.0.0
+    discovery.type: single-node
+    plugins.security.disabled: "true"
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 64Gi
+service:
+  type: NodePort
+  httpPortName: http
+httpPort: 9200
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+antiAffinity: "soft"

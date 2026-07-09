@@ -131,6 +131,11 @@ export JAEGER_UI_PORT=30288
 export JAEGER_OTLP_GRPC_PORT=30289
 export JAEGER_OTLP_HTTP_PORT=30290
 
+export OPENSEARCH_VERSION=2.19.1
+export OPENSEARCH_HTTP_PORT=30920
+export OPENSEARCH_PASSWORD=Sqlrec_123456
+export OPENSEARCH_DASHBOARDS_PORT=30561
+
 export JFS_LATEST_TAG=1.3.1
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz"
 export JUICEFS_ARCH_NAME=juicefs-${JFS_LATEST_TAG}-linux-amd64.tar.gz

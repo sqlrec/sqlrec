@@ -1,0 +1,30 @@
+opensearchHosts: "http://opensearch-cluster-master:9200"
+replicaCount: 1
+image:
+  repository: "opensearchproject/opensearch-dashboards"
+  tag: ${OPENSEARCH_VERSION}
+extraEnvs:
+  - name: OPENSEARCH_HOSTS
+    value: "http://opensearch-cluster-master:9200"
+config:
+  opensearch_dashboards.yml: |
+    server:
+      name: dashboards
+      host: "0.0.0.0"
+    opensearch:
+      hosts: ["http://opensearch-cluster-master:9200"]
+      ssl.verificationMode: none
+      username: admin
+      password: ${OPENSEARCH_PASSWORD}
+serverHost: "0.0.0.0"
+service:
+  type: NodePort
+  port: 5601
+  nodePort: ${OPENSEARCH_DASHBOARDS_PORT}
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512M"
+  limits:
+    cpu: "500m"
+    memory: "1Gi"

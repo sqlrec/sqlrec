@@ -77,6 +77,8 @@ minikube start \
   --ports="${JAEGER_UI_PORT}:${JAEGER_UI_PORT}" \
   --ports="${JAEGER_OTLP_GRPC_PORT}:${JAEGER_OTLP_GRPC_PORT}" \
   --ports="${JAEGER_OTLP_HTTP_PORT}:${JAEGER_OTLP_HTTP_PORT}" \
+  --ports="${OPENSEARCH_HTTP_PORT}:${OPENSEARCH_HTTP_PORT}" \
+  --ports="${OPENSEARCH_DASHBOARDS_PORT}:${OPENSEARCH_DASHBOARDS_PORT}" \
   --registry-mirror=http://${IMAGE_REGISTRY_URL} \
   --insecure-registry=${IMAGE_REGISTRY_URL}
 
