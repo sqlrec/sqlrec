@@ -5,9 +5,9 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
+import com.sqlrec.frontend.utils.RestUtils;
 import io.micrometer.core.instrument.Tags;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -16,136 +16,120 @@ import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
-    private static final String SQL_V1_PATH = "/sql/v1";
-    private static final String API_V1_PREFIX = "/api/v1/";
-    private static final String METRICS_PATH = "/metrics";
-    private static final String UI_STATIC_PREFIX = "/ui/static/";
-    private static final String UI_API_PREFIX = "/ui/api/";
+    public static final String SQL_V1_PATH = "/sql/v1";
+    public static final String API_V1_PREFIX = "/api/v1/";
+    public static final String METRICS_PATH = "/metrics";
+    public static final String UI_STATIC_PREFIX = "/ui/static/";
+    public static final String UI_API_PREFIX = "/ui/api/";
 
     @Override
-    protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest fullHttpRequest) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
         long startTime = System.currentTimeMillis();
-        String uri = fullHttpRequest.uri();
-        HttpMethod method = fullHttpRequest.method();
+        String uri = request.uri();
+        HttpMethod method = request.method();
         String path = extractPath(uri);
 
-        String responseContent = "{}";
-        String contentType = "application/json";
-        HttpResponseStatus status = HttpResponseStatus.OK;
-
         try {
-            ByteBuf content = fullHttpRequest.content();
+            ByteBuf content = request.content();
             String postData = (content != null) ? content.toString(CharsetUtil.UTF_8) : "";
 
+            FullHttpResponse response;
             if (HttpMethod.POST.equals(method)) {
-                if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
-                    if (!SqlRecConfigs.ENABLE_REST_SQL_API.getValue()) {
-                        status = HttpResponseStatus.FORBIDDEN;
-                        responseContent = "{\"msg\":\"sql api is disabled\"}";
-                    } else {
-                        ExecuteDataList executeDataList = SqlExecutor.execute(postData);
-                        responseContent = JsonUtils.toJson(executeDataList);
-                    }
-                } else if (uri.startsWith(API_V1_PREFIX)) {
-                    String apiName = uri.substring(API_V1_PREFIX.length());
-                    if (apiName.isEmpty()) {
-                        status = HttpResponseStatus.BAD_REQUEST;
-                        responseContent = "{\"msg\":\"api name is required\"}";
-                    } else {
-                        ExecuteData executeData = FunctionExecutor.execute(apiName, postData);
-                        responseContent = JsonUtils.toJson(executeData);
-                    }
-                } else {
-                    status = HttpResponseStatus.NOT_FOUND;
-                    responseContent = "{\"msg\":\"uri not found\"}";
-                }
+                response = handlePost(uri, postData);
             } else if (HttpMethod.GET.equals(method)) {
-                if (uri.equals(METRICS_PATH)) {
-                    responseContent = PrometheusMetricsUtils.getPrometheusRegistry().scrape();
-                    status = HttpResponseStatus.OK;
-                    contentType = "text/plain";
-                } else if (uri.startsWith(UI_STATIC_PREFIX) || uri.startsWith(UI_API_PREFIX)) {
-                    if (!SqlRecConfigs.ENABLE_REST_UI_API.getValue()) {
-                        status = HttpResponseStatus.FORBIDDEN;
-                        responseContent = "{\"msg\":\"ui api is disabled\"}";
-                    } else {
-                        FullHttpResponse uiResponse = UiHandler.handleRequest(uri, method, postData);
-                        channelHandlerContext.writeAndFlush(uiResponse).addListener(ChannelFutureListener.CLOSE);
-                        return;
-                    }
-                } else {
-                    status = HttpResponseStatus.NOT_FOUND;
-                    responseContent = "{\"msg\":\"uri not found\"}";
-                }
+                response = handleGet(uri, method, postData);
             } else {
-                status = HttpResponseStatus.METHOD_NOT_ALLOWED;
-                responseContent = "{\"msg\":\"only support POST and GET methods\"}";
+                response = RestUtils.error(HttpResponseStatus.METHOD_NOT_ALLOWED, "only support POST and GET methods");
             }
+
+            writeResponse(ctx, response, path, method, startTime);
         } catch (Exception e) {
             logger.error("Error processing request: uri={}", uri, e);
-            status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
-            Map<String, String> errorMap = new HashMap<>();
             String errorMsg = e.getMessage();
-            errorMap.put("msg", errorMsg != null ? errorMsg : "unknown error");
-            responseContent = JsonUtils.toJson(errorMap);
-        } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            Tags tags = Tags.of("path", path)
-                    .and("method", method.name())
-                    .and("status", String.valueOf(status.code()));
-
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_HTTP_REQUEST_DURATION, tags)
-                    .record(duration, TimeUnit.MILLISECONDS);
-
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_HTTP_REQUEST_COUNT, tags)
-                    .increment();
+            FullHttpResponse response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, errorMsg != null ? errorMsg : "unknown error");
+            writeResponse(ctx, response, path, method, startTime);
         }
+    }
 
-        FullHttpResponse response = new DefaultFullHttpResponse(
-                HttpVersion.HTTP_1_1,
-                status,
-                Unpooled.copiedBuffer(responseContent, CharsetUtil.UTF_8)
-        );
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
-        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-        channelHandlerContext.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    private FullHttpResponse handlePost(String uri, String postData) throws Exception {
+        if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
+            return handleSql(postData);
+        } else if (uri.startsWith(API_V1_PREFIX)) {
+            return handleApi(uri, postData);
+        } else {
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
+        }
+    }
+
+    private FullHttpResponse handleGet(String uri, HttpMethod method, String postData) {
+        if (uri.equals(METRICS_PATH)) {
+            return handleMetrics();
+        } else if (uri.startsWith(UI_STATIC_PREFIX) || uri.startsWith(UI_API_PREFIX)) {
+            return handleUi(uri, method, postData);
+        } else {
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
+        }
+    }
+
+    private FullHttpResponse handleSql(String postData) throws Exception {
+        if (!SqlRecConfigs.ENABLE_REST_SQL_API.getValue()) {
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "sql api is disabled");
+        }
+        ExecuteDataList executeDataList = RestSqlExecutor.execute(postData);
+        return RestUtils.ok(JsonUtils.toJson(executeDataList));
+    }
+
+    private FullHttpResponse handleApi(String uri, String postData) throws Exception {
+        String apiName = uri.substring(API_V1_PREFIX.length());
+        if (apiName.isEmpty()) {
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "api name is required");
+        }
+        ExecuteData executeData = RestFunctionExecutor.execute(apiName, postData);
+        return RestUtils.ok(JsonUtils.toJson(executeData));
+    }
+
+    private FullHttpResponse handleMetrics() {
+        return RestUtils.ok(PrometheusMetricsUtils.getPrometheusRegistry().scrape(), "text/plain");
+    }
+
+    private FullHttpResponse handleUi(String uri, HttpMethod method, String postData) {
+        if (!SqlRecConfigs.ENABLE_REST_UI_API.getValue()) {
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "ui api is disabled");
+        }
+        return UiHandler.handleRequest(uri, method, postData);
+    }
+
+    private void writeResponse(ChannelHandlerContext ctx, FullHttpResponse response, String path, HttpMethod method, long startTime) {
+        long duration = System.currentTimeMillis() - startTime;
+        Tags tags = Tags.of("path", path)
+                .and("method", method.name())
+                .and("status", String.valueOf(response.status().code()));
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .timer(Consts.METRICS_HTTP_REQUEST_DURATION, tags)
+                .record(duration, TimeUnit.MILLISECONDS);
+
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_HTTP_REQUEST_COUNT, tags)
+                .increment();
+
+        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
     private String extractPath(String uri) {
-        if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
+        int queryIndex = uri.indexOf('?');
+        String path = (queryIndex > 0) ? uri.substring(0, queryIndex) : uri;
+
+        if (path.equals(SQL_V1_PATH) || path.startsWith(SQL_V1_PATH + "/")) {
             return SQL_V1_PATH;
-        } else if (uri.startsWith(API_V1_PREFIX)) {
-            String apiName = uri.substring(API_V1_PREFIX.length());
-            int queryIndex = apiName.indexOf('?');
-            if (queryIndex > 0) {
-                apiName = apiName.substring(0, queryIndex);
-            }
-            return API_V1_PREFIX + apiName;
-        } else if (uri.startsWith(UI_STATIC_PREFIX)) {
-            return "/ui/static";
-        } else if (uri.startsWith(UI_API_PREFIX)) {
-            String apiPath = uri.substring(UI_API_PREFIX.length());
-            int queryIndex = apiPath.indexOf('?');
-            if (queryIndex > 0) {
-                apiPath = apiPath.substring(0, queryIndex);
-            }
-            return "/ui/api/" + apiPath;
-        } else if (uri.equals(METRICS_PATH)) {
-            return METRICS_PATH;
+        } else if (path.startsWith(UI_STATIC_PREFIX)) {
+            return UI_STATIC_PREFIX;
         } else {
-            int queryIndex = uri.indexOf('?');
-            if (queryIndex > 0) {
-                return uri.substring(0, queryIndex);
-            }
-            return uri;
+            return path;
         }
     }
 

@@ -9,14 +9,15 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.*;
-import com.sqlrec.utils.ModelUtils;
+import com.sqlrec.frontend.utils.RestUtils;
 import com.sqlrec.runtime.*;
+import com.sqlrec.utils.ModelUtils;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.*;
-import io.netty.util.CharsetUtil;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,82 +25,61 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class UiHandler {
     private static final Logger logger = LoggerFactory.getLogger(UiHandler.class);
-    private static final String STATIC_PREFIX = "/ui/static/";
-    private static final String API_PREFIX = "/ui/api/";
 
     public static FullHttpResponse handleRequest(String uri, HttpMethod method, String postData) {
         try {
-            if (uri.startsWith(STATIC_PREFIX)) {
+            if (uri.startsWith(HttpServerHandler.UI_STATIC_PREFIX)) {
                 return handleStaticResource(uri);
-            } else if (uri.startsWith(API_PREFIX)) {
+            } else if (uri.startsWith(HttpServerHandler.UI_API_PREFIX)) {
                 return handleApiRequest(uri, method, postData);
             } else {
-                return createErrorResponse(HttpResponseStatus.NOT_FOUND, "UI path not found");
+                return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
             }
         } catch (Exception e) {
             logger.error("Error handling UI request: {}", uri, e);
-            return createErrorResponse(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 
     private static FullHttpResponse handleStaticResource(String uri) {
-        String resourcePath = uri.substring(STATIC_PREFIX.length());
-
+        String resourcePath = uri.substring(HttpServerHandler.UI_STATIC_PREFIX.length());
         if (resourcePath.isEmpty()) {
-            return createErrorResponse(HttpResponseStatus.BAD_REQUEST, "Resource path is empty");
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Resource path is empty");
         }
 
-        try {
-            InputStream inputStream = UiHandler.class.getClassLoader()
-                    .getResourceAsStream("ui/static/" + resourcePath);
+        String actualPath = resourcePath;
+        InputStream inputStream = UiHandler.class.getClassLoader()
+                .getResourceAsStream("ui/static/" + resourcePath);
+        if (inputStream == null) {
+            logger.warn("Static resource not found: {}, returning index.html", resourcePath);
+            inputStream = UiHandler.class.getClassLoader().getResourceAsStream("ui/static/index.html");
+            actualPath = "index.html";
+        }
+        if (inputStream == null) {
+            logger.error("index.html not found in jar");
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "index.html not found");
+        }
 
-            if (inputStream == null) {
-                logger.warn("Static resource not found: {}, returning index.html", resourcePath);
-                inputStream = UiHandler.class.getClassLoader()
-                        .getResourceAsStream("ui/static/index.html");
-
-                if (inputStream == null) {
-                    logger.error("index.html not found in jar");
-                    return createErrorResponse(HttpResponseStatus.NOT_FOUND, "index.html not found");
-                }
-
-                resourcePath = "index.html";
-            }
-
-            byte[] content = inputStream.readAllBytes();
-            inputStream.close();
-
-            String contentType = getContentType(resourcePath);
-            FullHttpResponse response = new DefaultFullHttpResponse(
-                    HttpVersion.HTTP_1_1,
-                    HttpResponseStatus.OK,
-                    Unpooled.wrappedBuffer(content)
-            );
-            response.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
-            response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
-
-            if (resourcePath.equals("index.html")) {
-                response.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-cache");
-            } else {
-                response.headers().set(HttpHeaderNames.CACHE_CONTROL, "max-age=86400");
-            }
-
-            return response;
+        try (InputStream is = inputStream) {
+            byte[] content = is.readAllBytes();
+            String cacheControl = actualPath.equals("index.html") ? "no-cache" : "max-age=86400";
+            return RestUtils.ok(content, getContentType(actualPath), Map.of("Cache-Control", cacheControl));
         } catch (Exception e) {
             logger.error("Error reading static resource: {}", resourcePath, e);
-            return createErrorResponse(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to read resource");
+            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to read resource");
         }
     }
 
     private static FullHttpResponse handleApiRequest(String uri, HttpMethod method, String postData) {
-        String apiPath = uri.substring(API_PREFIX.length());
+        String apiPath = uri.substring(HttpServerHandler.UI_API_PREFIX.length());
 
         if (apiPath.isEmpty()) {
-            return createErrorResponse(HttpResponseStatus.BAD_REQUEST, "API path is empty");
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "API path is empty");
         }
 
         try {
@@ -107,32 +87,24 @@ public class UiHandler {
             Object result = null;
 
             if (apiPath.equals("functions")) {
-                List<SqlFunction> functions = db.getSqlFunctionList();
-                result = functions.stream()
-                        .map(f -> {
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", f.getName());
-                            item.put("name", f.getName());
-                            return item;
-                        })
-                        .collect(Collectors.toList());
+                result = toItems(db.getSqlFunctionList(), SqlFunction::getName);
             } else if (apiPath.startsWith("functions/")) {
                 String name = apiPath.substring("functions/".length());
                 SqlFunction function = db.getSqlFunction(name);
                 if (function == null) {
-                    return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Function not found: " + name);
+                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name);
                 }
                 result = convertFunctionToTable(function);
             } else if (apiPath.startsWith("functions-dag/")) {
                 String name = apiPath.substring("functions-dag/".length());
                 result = getFunctionDag(name);
             } else if (apiPath.equals("tables/databases")) {
-                result = getDatabaseList(db);
+                result = toItems(db.getDatabases(), Function.identity());
             } else if (apiPath.startsWith("tables/")) {
                 String subPath = apiPath.substring("tables/".length());
                 int slashIndex = subPath.indexOf('/');
                 if (slashIndex < 0) {
-                    return createErrorResponse(HttpResponseStatus.BAD_REQUEST, "Invalid table path, expected: tables/{database} or tables/{database}/{tableName}");
+                    return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid table path, expected: tables/{database} or tables/{database}/{tableName}");
                 }
                 String database = subPath.substring(0, slashIndex);
                 String tableName = subPath.substring(slashIndex + 1);
@@ -142,32 +114,16 @@ public class UiHandler {
                     result = getTableDetail(db, database, tableName);
                 }
             } else if (apiPath.equals("apis")) {
-                List<SqlApi> apis = db.getSqlApiList();
-                result = apis.stream()
-                        .map(a -> {
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", a.getName());
-                            item.put("name", a.getName());
-                            return item;
-                        })
-                        .collect(Collectors.toList());
+                result = toItems(db.getSqlApiList(), SqlApi::getName);
             } else if (apiPath.startsWith("apis/")) {
                 String name = apiPath.substring("apis/".length());
                 SqlApi api = db.getSqlApi(name);
                 if (api == null) {
-                    return createErrorResponse(HttpResponseStatus.NOT_FOUND, "API not found: " + name);
+                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + name);
                 }
                 result = convertApiToDetail(api);
             } else if (apiPath.equals("models")) {
-                List<Model> models = db.getModelList();
-                result = models.stream()
-                        .map(m -> {
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", m.getName());
-                            item.put("name", m.getName());
-                            return item;
-                        })
-                        .collect(Collectors.toList());
+                result = toItems(db.getModelList(), Model::getName);
             } else if (apiPath.startsWith("models/")) {
                 String subPath = apiPath.substring("models/".length());
                 int queryIndex = subPath.indexOf('?');
@@ -179,7 +135,7 @@ public class UiHandler {
                         String checkpointName = parts[1];
                         result = getCheckpointDetail(modelName, checkpointName);
                     } else {
-                        return createErrorResponse(HttpResponseStatus.BAD_REQUEST, "Invalid checkpoint path");
+                        return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid checkpoint path");
                     }
                 } else if (pathWithoutQuery.endsWith("/checkpoints")) {
                     String modelName = pathWithoutQuery.replace("/checkpoints", "");
@@ -187,54 +143,36 @@ public class UiHandler {
                 } else {
                     Model model = db.getModel(pathWithoutQuery);
                     if (model == null) {
-                        return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Model not found: " + pathWithoutQuery);
+                        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + pathWithoutQuery);
                     }
                     result = convertModelToDetail(model);
                 }
             } else if (apiPath.equals("services")) {
-                List<Service> services = db.getServiceList();
-                result = services.stream()
-                        .map(s -> {
-                            Map<String, Object> item = new HashMap<>();
-                            item.put("id", s.getName());
-                            item.put("name", s.getName());
-                            return item;
-                        })
-                        .collect(Collectors.toList());
+                result = toItems(db.getServiceList(), Service::getName);
             } else if (apiPath.startsWith("services/")) {
                 String name = apiPath.substring("services/".length());
                 Service service = db.getService(name);
                 if (service == null) {
-                    return createErrorResponse(HttpResponseStatus.NOT_FOUND, "Service not found: " + name);
+                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Service not found: " + name);
                 }
                 result = convertServiceToDetail(service);
             } else {
-                return createErrorResponse(HttpResponseStatus.NOT_FOUND, "API not found: " + apiPath);
+                return RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + apiPath);
             }
 
-            String jsonContent = JsonUtils.toJson(result);
-            FullHttpResponse response = new DefaultFullHttpResponse(
-                    HttpVersion.HTTP_1_1,
-                    HttpResponseStatus.OK,
-                    Unpooled.copiedBuffer(jsonContent, CharsetUtil.UTF_8)
-            );
-            response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json");
-            response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-
-            return response;
+            return RestUtils.ok(JsonUtils.toJson(result));
         } catch (Exception e) {
             logger.error("Error handling API request: {}", apiPath, e);
-            return createErrorResponse(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to process request: " + e.getMessage());
+            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to process request: " + e.getMessage());
         }
     }
 
-    private static List<Map<String, Object>> getDatabaseList(MetadataAccess db) throws Exception {
-        List<String> databases = db.getDatabases();
-        return databases.stream()
-                .map(name -> {
+    private static <T> List<Map<String, Object>> toItems(List<T> list, Function<T, String> nameFn) {
+        return list.stream()
+                .map(t -> {
                     Map<String, Object> item = new HashMap<>();
-                    item.put("id", name);
-                    item.put("name", name);
+                    item.put("id", nameFn.apply(t));
+                    item.put("name", nameFn.apply(t));
                     return item;
                 })
                 .collect(Collectors.toList());
@@ -493,16 +431,12 @@ public class UiHandler {
 
         int queryIndex = uri.indexOf('?');
         if (queryIndex > 0) {
-            String queryString = uri.substring(queryIndex + 1);
-            String[] params = queryString.split("&");
-            for (String param : params) {
-                String[] keyValue = param.split("=");
-                if (keyValue.length == 2) {
-                    if (keyValue[0].equals("page")) {
-                        page = Integer.parseInt(keyValue[1]);
-                    } else if (keyValue[0].equals("pageSize")) {
-                        pageSize = Integer.parseInt(keyValue[1]);
-                    }
+            for (String param : uri.substring(queryIndex + 1).split("&")) {
+                String[] kv = param.split("=", 2);
+                if (kv.length == 2 && kv[0].equals("page")) {
+                    page = Integer.parseInt(kv[1]);
+                } else if (kv.length == 2 && kv[0].equals("pageSize")) {
+                    pageSize = Integer.parseInt(kv[1]);
                 }
             }
         }
@@ -609,21 +543,5 @@ public class UiHandler {
         } else {
             return "application/octet-stream";
         }
-    }
-
-    private static FullHttpResponse createErrorResponse(HttpResponseStatus status, String message) {
-        Map<String, String> errorMap = new HashMap<>();
-        errorMap.put("error", message);
-        String jsonContent = JsonUtils.toJson(errorMap);
-
-        FullHttpResponse response = new DefaultFullHttpResponse(
-                HttpVersion.HTTP_1_1,
-                status,
-                Unpooled.copiedBuffer(jsonContent, CharsetUtil.UTF_8)
-        );
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json");
-        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-
-        return response;
     }
 }

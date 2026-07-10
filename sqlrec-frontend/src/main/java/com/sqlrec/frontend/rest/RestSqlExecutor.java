@@ -3,11 +3,12 @@ package com.sqlrec.frontend.rest;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.executor.SqlExecutor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 
-public class SqlExecutor {
+public class RestSqlExecutor {
     public static ExecuteDataList execute(String requestData) throws Exception {
         if (StringUtils.isEmpty(requestData)) {
             throw new IllegalArgumentException("request data is null or empty");
@@ -22,7 +23,7 @@ public class SqlExecutor {
             throw new IllegalArgumentException("sqls is null or empty");
         }
 
-        com.sqlrec.executor.SqlExecutor sqlExecutor = new com.sqlrec.executor.SqlExecutor();
+        SqlExecutor sqlExecutor = new SqlExecutor();
         sqlExecutor.setExecuteParams(params.getParams());
 
         ExecuteDataList executeDataList = new ExecuteDataList();
@@ -35,7 +36,7 @@ public class SqlExecutor {
         return executeDataList;
     }
 
-    private static ExecuteData executeSingleSql(com.sqlrec.executor.SqlExecutor sqlExecutor, String sql) {
+    private static ExecuteData executeSingleSql(SqlExecutor sqlExecutor, String sql) {
         ExecuteData executeData = new ExecuteData();
 
         if (StringUtils.isEmpty(sql)) {

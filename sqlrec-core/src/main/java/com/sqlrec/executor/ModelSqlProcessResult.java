@@ -1,8 +1,8 @@
 package com.sqlrec.executor;
 
 import com.sqlrec.common.model.CheckpointInfo;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.ModelManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;

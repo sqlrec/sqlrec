@@ -13,10 +13,10 @@ public class FormattedDescTest {
     @Test
     public void testFormattedDesc() throws Exception {
         List<String> sqlList = Arrays.asList(
-                "describe model test_model",
-                "describe formatted model test_model",
-                "describe model test_model checkpoint='test'",
-                "describe formatted model test_model checkpoint='test'",
+                "describe model rank_model",
+                "describe formatted model rank_model",
+                "describe model rank_model checkpoint='v1'",
+                "describe formatted model rank_model checkpoint='v1'",
                 "describe service rank_service",
                 "describe formatted service rank_service"
         );

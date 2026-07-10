@@ -20,8 +20,8 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 
-public class FunctionExecutor {
-    private static final Logger logger = LoggerFactory.getLogger(FunctionExecutor.class);
+public class RestFunctionExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(RestFunctionExecutor.class);
 
     public static ExecuteData execute(String apiName, String requestData) throws Exception {
         if (StringUtils.isEmpty(apiName)) {
