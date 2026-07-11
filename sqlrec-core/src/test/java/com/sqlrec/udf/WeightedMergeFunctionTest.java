@@ -224,6 +224,106 @@ public class WeightedMergeFunctionTest {
         assertArrayEquals(new Object[]{2, "B"}, result.get(2));
     }
 
+    @Test
+    public void testEmptyPrimaryKeyNoDedup() {
+        // Empty primaryKey => no dedup, duplicate ids across tables are all kept
+        // T1: [1,A], [2,B]
+        // T2: [1,D], [3,E]   -- id=1 duplicates T1 but should be kept
+        // Weights: 1,1
+        // Round1: T1(1,A), T2(1,D)
+        // Round2: T1(2,B), T2(3,E)
+        CacheTable t1 = createTable(new Object[][]{{1, "A"}, {2, "B"}});
+        CacheTable t2 = createTable(new Object[][]{{1, "D"}, {3, "E"}});
+
+        WeightedMergeFunction function = new WeightedMergeFunction();
+        CacheTable output = function.evaluate("", "1,1", "10", t1, t2);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(4, result.size());
+        assertArrayEquals(new Object[]{1, "A"}, result.get(0));
+        assertArrayEquals(new Object[]{1, "D"}, result.get(1));
+        assertArrayEquals(new Object[]{2, "B"}, result.get(2));
+        assertArrayEquals(new Object[]{3, "E"}, result.get(3));
+    }
+
+    @Test
+    public void testNullPrimaryKeyNoDedup() {
+        // null primaryKey behaves same as empty => no dedup
+        CacheTable t1 = createTable(new Object[][]{{1, "A"}});
+        CacheTable t2 = createTable(new Object[][]{{1, "B"}});
+
+        WeightedMergeFunction function = new WeightedMergeFunction();
+        CacheTable output = function.evaluate(null, "1,1", "10", t1, t2);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(2, result.size());
+        assertArrayEquals(new Object[]{1, "A"}, result.get(0));
+        assertArrayEquals(new Object[]{1, "B"}, result.get(1));
+    }
+
+    @Test
+    public void testEmptyPrimaryKeyWithLimit() {
+        // No dedup + limit still truncates output
+        CacheTable t1 = createTable(new Object[][]{{1, "A"}, {2, "B"}, {3, "C"}});
+        CacheTable t2 = createTable(new Object[][]{{4, "D"}, {5, "E"}, {6, "F"}});
+
+        WeightedMergeFunction function = new WeightedMergeFunction();
+        CacheTable output = function.evaluate("", "1,1", "3", t1, t2);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(3, result.size());
+        assertArrayEquals(new Object[]{1, "A"}, result.get(0));
+        assertArrayEquals(new Object[]{4, "D"}, result.get(1));
+        assertArrayEquals(new Object[]{2, "B"}, result.get(2));
+    }
+
+    @Test
+    public void testEmptyPrimaryKeyWeightSemantics() {
+        // Weights still control per-round take count; no skipping on duplicate
+        // T1: [1,A], [2,B], [3,C], [4,D]
+        // T2: [1,E], [5,F]
+        // Weights: 2,1
+        // Round1: T1 takes 2 (1,A; 2,B), T2 takes 1 (1,E) -- NOT skipped
+        // Round2: T1 takes 2 (3,C; 4,D), T2 takes 1 (5,F)
+        CacheTable t1 = createTable(new Object[][]{{1, "A"}, {2, "B"}, {3, "C"}, {4, "D"}});
+        CacheTable t2 = createTable(new Object[][]{{1, "E"}, {5, "F"}});
+
+        WeightedMergeFunction function = new WeightedMergeFunction();
+        CacheTable output = function.evaluate("", "2,1", "10", t1, t2);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(6, result.size());
+        assertArrayEquals(new Object[]{1, "A"}, result.get(0));
+        assertArrayEquals(new Object[]{2, "B"}, result.get(1));
+        assertArrayEquals(new Object[]{1, "E"}, result.get(2));
+        assertArrayEquals(new Object[]{3, "C"}, result.get(3));
+        assertArrayEquals(new Object[]{4, "D"}, result.get(4));
+        assertArrayEquals(new Object[]{5, "F"}, result.get(5));
+    }
+
+    @Test
+    public void testEmptyPrimaryKeyDuplicateWithinSameTable() {
+        // Duplicates within the same table are also kept when dedup is disabled
+        // T1: [1,A], [1,A2], [2,B]
+        // T2: [3,C]
+        // Weights: 1,1
+        // Round1: T1(1,A), T2(3,C)
+        // Round2: T1(1,A2), T2 exhausted
+        // Round3: T1(2,B), T2 exhausted
+        CacheTable t1 = createTable(new Object[][]{{1, "A"}, {1, "A2"}, {2, "B"}});
+        CacheTable t2 = createTable(new Object[][]{{3, "C"}});
+
+        WeightedMergeFunction function = new WeightedMergeFunction();
+        CacheTable output = function.evaluate("", "1,1", "10", t1, t2);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(4, result.size());
+        assertArrayEquals(new Object[]{1, "A"}, result.get(0));
+        assertArrayEquals(new Object[]{3, "C"}, result.get(1));
+        assertArrayEquals(new Object[]{1, "A2"}, result.get(2));
+        assertArrayEquals(new Object[]{2, "B"}, result.get(3));
+    }
+
     private CacheTable createTable(Object[][] data) {
         List<Object[]> rows = new ArrayList<>();
         for (Object[] row : data) {

@@ -5,22 +5,15 @@ import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.commons.lang3.StringUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class WeightedMergeFunction {
 
     public CacheTable evaluate(String primaryKey, String weights, String limit, CacheTable... tables) {
         if (tables == null || tables.length == 0) {
             throw new IllegalArgumentException("At least one table is required");
-        }
-        if (primaryKey == null || primaryKey.isEmpty()) {
-            throw new IllegalArgumentException("primaryKey cannot be null or empty");
         }
         if (weights == null || weights.isEmpty()) {
             throw new IllegalArgumentException("weights cannot be null or empty");
@@ -35,9 +28,13 @@ public class WeightedMergeFunction {
             DataTypeUtils.checkTableSchemaIdentical(referenceFields, tables[i].getDataFields(), i);
         }
 
-        int pkIndex = DataTypeUtils.findFieldIndex(referenceFields, primaryKey.trim());
-        if (pkIndex < 0) {
-            throw new IllegalArgumentException("primaryKey field not found: " + primaryKey);
+        boolean dedupEnabled = StringUtils.isNotEmpty(primaryKey);
+        int pkIndex = -1;
+        if (dedupEnabled) {
+            pkIndex = DataTypeUtils.findFieldIndex(referenceFields, primaryKey.trim());
+            if (pkIndex < 0) {
+                throw new IllegalArgumentException("primaryKey field not found: " + primaryKey);
+            }
         }
 
         int limitNum;
@@ -75,7 +72,7 @@ public class WeightedMergeFunction {
             iterators.add(enumerable == null ? Collections.<Object[]>emptyIterator() : enumerable.iterator());
         }
 
-        Set<String> seenKeys = new HashSet<>();
+        Set<String> seenKeys = dedupEnabled ? new HashSet<>() : null;
         List<Object[]> merged = new ArrayList<>();
 
         while (merged.size() < limitNum) {
@@ -86,10 +83,15 @@ public class WeightedMergeFunction {
                 int taken = 0;
                 while (taken < w && it.hasNext() && merged.size() < limitNum) {
                     Object[] row = it.next();
-                    Object pkValue = row[pkIndex];
-                    String key = pkValue == null ? "null" : pkValue.toString();
-                    if (!seenKeys.contains(key)) {
-                        seenKeys.add(key);
+                    if (dedupEnabled) {
+                        Object pkValue = row[pkIndex];
+                        String key = pkValue == null ? "null" : pkValue.toString();
+                        if (!seenKeys.contains(key)) {
+                            seenKeys.add(key);
+                            merged.add(row);
+                            taken++;
+                        }
+                    } else {
                         merged.add(row);
                         taken++;
                     }

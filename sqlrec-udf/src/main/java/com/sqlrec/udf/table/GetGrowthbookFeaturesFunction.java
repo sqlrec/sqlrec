@@ -9,7 +9,6 @@ import growthbook.sdk.java.model.FeatureResult;
 import growthbook.sdk.java.multiusermode.GrowthBookClient;
 import growthbook.sdk.java.multiusermode.configurations.Options;
 import growthbook.sdk.java.multiusermode.configurations.UserContext;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -49,35 +48,35 @@ public class GetGrowthbookFeaturesFunction {
 
         List<Object[]> trackingData = new ArrayList<>();
         List<RelDataTypeField> userFields = usertable.getDataFields();
-        Enumerable<Object[]> userEnumerable = usertable.scan(null);
+        List<Object[]> userEnumerable = usertable.scan(null).toList();
 
-        if (userEnumerable != null) {
-            for (Object[] row : userEnumerable) {
-                String attributesJson = JsonUtils.toJsonByFields(row, userFields);
+        if (userEnumerable.size() != 1) {
+            throw new RuntimeException("usertable should contain 1 row");
+        }
 
-                UserContext userContext = UserContext.builder()
-                        .attributesJson(attributesJson)
-                        .build();
+        Object[] row = userEnumerable.get(0);
+        String attributesJson = JsonUtils.toJsonByFields(row, userFields);
+        UserContext userContext = UserContext.builder()
+                .attributesJson(attributesJson)
+                .build();
 
-                for (String featureKey : featureKeys) {
-                    FeatureResult<?> result = gb.evalFeature(featureKey, Object.class, userContext);
+        for (String featureKey : featureKeys) {
+            FeatureResult<?> result = gb.evalFeature(featureKey, Object.class, userContext);
 
-                    if (result != null && result.getExperimentResult() != null) {
-                        ExperimentResult<?> expResult = result.getExperimentResult();
+            if (result != null && result.getExperimentResult() != null) {
+                ExperimentResult<?> expResult = result.getExperimentResult();
 
-                        String experimentId = result.getExperiment() != null
-                                ? result.getExperiment().getKey() : null;
-                        String variationId = expResult.getVariationId() != null
-                                ? expResult.getVariationId().toString() : null;
-                        String userId = expResult.getHashValue();
+                String experimentId = result.getExperiment() != null
+                        ? result.getExperiment().getKey() : null;
+                String variationId = expResult.getVariationId() != null
+                        ? expResult.getVariationId().toString() : null;
+                String userId = expResult.getHashValue();
 
-                        // Set AB experiment parameters as variables via ExecuteContext
-                        context.setVariable(featureKey, expResult.getValue() != null ? expResult.getValue().toString() : null);
+                // Set AB experiment parameters as variables via ExecuteContext
+                context.setVariable(featureKey, expResult.getValue() != null ? expResult.getValue().toString() : null);
 
-                        // Collect tracking data for metrics calculation
-                        trackingData.add(new Object[]{experimentId, variationId, userId});
-                    }
-                }
+                // Collect tracking data for metrics calculation
+                trackingData.add(new Object[]{experimentId, variationId, userId});
             }
         }
 

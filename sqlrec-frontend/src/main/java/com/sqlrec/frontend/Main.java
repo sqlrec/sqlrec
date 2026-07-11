@@ -20,7 +20,6 @@ public class Main {
                 try {
                     RestServer.main(args);
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 }
             });
@@ -39,7 +38,6 @@ public class Main {
         try {
             latch.await();
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         } finally {
             logger.info("servers exited");

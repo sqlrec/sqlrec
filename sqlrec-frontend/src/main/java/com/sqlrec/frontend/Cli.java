@@ -44,13 +44,14 @@ public class Cli implements Callable<Integer> {
 
     private static final String PROMPT1 = "sqlrec> ";
     private static final String PROMPT2 = "......> ";
-    private static final String HISTORY_FILE =
-            System.getProperty("user.home", ".") + "/.sqlrec_history";
+    private static final String HISTORY_FILE = System.getProperty("user.home", ".") + "/.sqlrec_history";
 
-    @Option(names = {"-e", "--execute"}, description = "Execute the given SQL string (multiple statements separated by ';').")
+    @Option(names = {"-e", "--execute"},
+            description = "Execute the given SQL string (multiple statements separated by ';').")
     private String inlineSql;
 
-    @Option(names = {"-f", "--file"}, description = "Execute SQL statements from the given file.")
+    @Option(names = {"-f", "--file"},
+            description = "Execute SQL statements from the given file.")
     private Path sqlFile;
 
     @Option(names = {"--outputformat", "--format"}, defaultValue = "table",

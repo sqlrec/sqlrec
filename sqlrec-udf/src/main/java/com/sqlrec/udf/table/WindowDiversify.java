@@ -29,7 +29,7 @@ public class WindowDiversify {
             }
         }
         if (categoryIndex == -1) {
-            throw new IllegalArgumentException("catalogColumnName not found: " + categoryColumnName);
+            throw new IllegalArgumentException("categoryColumnName not found: " + categoryColumnName);
         }
 
         // Build rule table for RuleDiversity

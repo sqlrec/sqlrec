@@ -139,8 +139,9 @@ public class SessionManager {
         try {
             SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(tExecuteStatementReq.getStatement());
             if (coreResult != null &&
-                    !ExecEnv.isFileSystemMeta() &&
-                    !ThriftUtils.isSqlNeedExecInRemote(tExecuteStatementReq.getStatement())
+                    (ExecEnv.isFileSystemMeta() ||
+                            !ThriftUtils.isSqlNeedExecInRemote(tExecuteStatementReq.getStatement())
+                    )
             ) {
                 operation = new SqlOperation(coreResult, operationId, queryId);
                 logger.info("Statement executed by local SqlExecutor, operationGuid: {}", ThriftUtils.safeHandleId(operationId));
@@ -154,8 +155,6 @@ public class SessionManager {
 
         if (operation != null) {
             operationMap.put(operationId, operation);
-            operationToSessionMap.put(operationId, sessionId);
-
             TOperationHandle operationHandle = new TOperationHandle(
                     operationId, TOperationType.EXECUTE_STATEMENT, true
             );
@@ -173,9 +172,7 @@ public class SessionManager {
         }
 
         operationId = resp.getOperationHandle().getOperationId();
-        if (!operationToSessionMap.containsKey(operationId)) {
-            operationToSessionMap.put(operationId, sessionId);
-        }
+        operationToSessionMap.put(operationId, sessionId);
 
         MetricsUtils.getCompositeMeterRegistry()
                 .counter(Consts.METRICS_OPERATION_OPEN_COUNT)

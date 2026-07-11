@@ -6,7 +6,6 @@ import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
-import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
@@ -19,7 +18,6 @@ import java.util.Random;
 public class RandomVecFunction extends GenericUDF {
     private static final Random random = new Random();
     private StringObjectInspector dimensionOI;
-    private ListObjectInspector returnOI;
 
     public List<Double> evaluate(String dimensionStr) {
         if (dimensionStr == null) {
