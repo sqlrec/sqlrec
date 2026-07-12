@@ -1,7 +1,5 @@
 package com.sqlrec.connectors.redis.client;
 
-import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.SharePool;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
@@ -16,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisWrapper implements AbstractRedisWrapper {
     private static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, SharePool<StatefulRedisConnection<byte[], byte[]>>> poolMap = new ConcurrentHashMap<>();
+    private static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
 
     private String url;
 
@@ -26,29 +24,23 @@ public class RedisWrapper implements AbstractRedisWrapper {
     }
 
     private static synchronized void openRedisClient(String url) {
-        if (poolMap.containsKey(url)) {
+        if (connectionMap.containsKey(url)) {
             return;
         }
 
         RedisURI redisURI = RedisURI.create(url);
         RedisClient redisClient = RedisClient.create(redisURI);
-
-        SharePool<StatefulRedisConnection<byte[], byte[]>> pool = new SharePool<>(
-                SqlRecConfigs.REDIS_POOL_SIZE.getValue(),
-                () -> redisClient.connect(new ByteArrayCodec())
-        );
+        StatefulRedisConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
 
         redisClientMap.put(url, redisClient);
-        poolMap.put(url, pool);
+        connectionMap.put(url, connection);
     }
 
     private RedisAsyncCommands<byte[], byte[]> getCommands() {
-        if (!poolMap.containsKey(url)) {
+        if (!connectionMap.containsKey(url)) {
             openRedisClient(url);
         }
-        SharePool<StatefulRedisConnection<byte[], byte[]>> pool = poolMap.get(url);
-        StatefulRedisConnection<byte[], byte[]> connection = pool.getObject();
-        return connection.async();
+        return connectionMap.get(url).async();
     }
 
     @Override

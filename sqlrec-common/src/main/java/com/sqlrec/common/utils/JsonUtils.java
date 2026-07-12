@@ -64,7 +64,7 @@ public class JsonUtils {
             JsonObject jsonObject = new JsonObject();
             for (int i = 0; i < inputFields.size(); i++) {
                 FieldSchema field = inputFields.get(i);
-                int fieldIndex = findFieldIndex(dataFields, field.getName());
+                int fieldIndex = DataTypeUtils.findFieldIndex(dataFields, field.getName());
                 if (fieldIndex >= 0 && fieldIndex < row.length) {
                     Object value = row[fieldIndex];
                     if (value != null) {
@@ -78,15 +78,6 @@ public class JsonUtils {
         return gson.toJson(jsonArray);
     }
 
-    private static int findFieldIndex(List<RelDataTypeField> dataFields, String fieldName) {
-        for (int i = 0; i < dataFields.size(); i++) {
-            if (dataFields.get(i).getName().equalsIgnoreCase(fieldName)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     public static Map<String, Object> parseJsonToMap(String json) {
         return gson.fromJson(json, Map.class);
     }
@@ -98,7 +89,7 @@ public class JsonUtils {
 
         for (int i = 0; i < queryFields.size(); i++) {
             FieldSchema field = queryFields.get(i);
-            int fieldIndex = findFieldIndex(queryDataFields, field.getName());
+            int fieldIndex = DataTypeUtils.findFieldIndex(queryDataFields, field.getName());
             if (fieldIndex >= 0 && queryData.size() > 0) {
                 Object value = queryData.get(0)[fieldIndex];
                 JsonArray jsonArray = new JsonArray();
@@ -113,7 +104,7 @@ public class JsonUtils {
 
         for (int i = 0; i < valueFields.size(); i++) {
             FieldSchema field = valueFields.get(i);
-            int fieldIndex = findFieldIndex(valueDataFields, field.getName());
+            int fieldIndex = DataTypeUtils.findFieldIndex(valueDataFields, field.getName());
             if (fieldIndex >= 0) {
                 JsonArray jsonArray = new JsonArray();
                 for (Object[] row : valueData) {

@@ -1,7 +1,6 @@
 package com.sqlrec.compiler;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.schema.CacheProxyTable;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.BindableInterface;
@@ -142,7 +141,7 @@ public class FunctionCompiler {
                 );
             }
             sqlFunctionBindable.addInputTable(sqlDefineInputTable.getTableName().getSimple(), relDataTypeFields);
-            CacheProxyTable tmpTable = new CacheProxyTable(
+            CacheTable tmpTable = new CacheTable(
                     sqlDefineInputTable.getTableName().getSimple(),
                     null,
                     relDataTypeFields
@@ -182,7 +181,7 @@ public class FunctionCompiler {
             BindableInterface proxyBindable = new ProxyAllBindable(bindable);
             sqlFunctionBindable.getBindableList().add(proxyBindable);
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
-                CacheProxyTable tmpTable = new CacheProxyTable(
+                CacheTable tmpTable = new CacheTable(
                         bindable.getCacheTableName(),
                         null,
                         bindable.getCacheTableDataFields()

@@ -1,7 +1,5 @@
 package com.sqlrec.connectors.redis.client;
 
-import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.SharePool;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.cluster.RedisClusterClient;
@@ -15,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisClusterWrapper implements AbstractRedisWrapper {
     private static Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, SharePool<StatefulRedisClusterConnection<byte[], byte[]>>> poolMap = new ConcurrentHashMap<>();
+    private static Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
 
     private String url;
 
@@ -25,28 +23,22 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
     }
 
     private static synchronized void openRedisClusterClient(String url) {
-        if (poolMap.containsKey(url)) {
+        if (connectionMap.containsKey(url)) {
             return;
         }
 
         RedisClusterClient redisClient = RedisClusterClient.create(url);
-
-        SharePool<StatefulRedisClusterConnection<byte[], byte[]>> pool = new SharePool<>(
-                SqlRecConfigs.REDIS_POOL_SIZE.getValue(),
-                () -> redisClient.connect(new ByteArrayCodec())
-        );
+        StatefulRedisClusterConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
 
         redisClientMap.put(url, redisClient);
-        poolMap.put(url, pool);
+        connectionMap.put(url, connection);
     }
 
     private RedisAdvancedClusterAsyncCommands<byte[], byte[]> getCommands() {
-        if (!poolMap.containsKey(url)) {
+        if (!connectionMap.containsKey(url)) {
             openRedisClusterClient(url);
         }
-        SharePool<StatefulRedisClusterConnection<byte[], byte[]>> pool = poolMap.get(url);
-        StatefulRedisClusterConnection<byte[], byte[]> connection = pool.getObject();
-        return connection.async();
+        return connectionMap.get(url).async();
     }
 
     @Override

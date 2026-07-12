@@ -69,12 +69,12 @@ public class FlinkSchemaUtils {
         Object[] values = new Object[record.getArity()];
         for (int i = 0; i < record.getArity(); ++i) {
             org.apache.flink.table.types.DataType dataType = dataTypes.get(i);
-            values[i] = typeConvertion(dataType.getLogicalType(), record, i);
+            values[i] = typeConversion(dataType.getLogicalType(), record, i);
         }
         return values;
     }
 
-    public static Object typeConvertion(LogicalType fieldType, RowData rowData, int index) {
+    public static Object typeConversion(LogicalType fieldType, RowData rowData, int index) {
         if (rowData.isNullAt(index)) {
             return null;
         }

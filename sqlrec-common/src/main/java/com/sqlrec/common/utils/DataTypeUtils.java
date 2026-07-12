@@ -159,7 +159,7 @@ public class DataTypeUtils {
 
     public static int findFieldIndex(List<RelDataTypeField> fields, String fieldName) {
         for (RelDataTypeField field : fields) {
-            if (field.getName().equals(fieldName)) {
+            if (field.getName().equalsIgnoreCase(fieldName)) {
                 return field.getIndex();
             }
         }

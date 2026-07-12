@@ -146,14 +146,6 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
-    public static final ConfigOption<Integer> REDIS_POOL_SIZE = new ConfigOption<>(
-            "REDIS_POOL_SIZE",
-            16,
-            "redis connection pool size",
-            null,
-            Integer.class
-    );
-
 
     // dependency service config
     public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
@@ -207,7 +199,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> FLINK_SQL_GATEWAY_ADDRESS = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_ADDRESS",
-            DEFAULT_TEST_IP.getDefaultValue(),
+            DEFAULT_TEST_IP.getValue(),
             "flink sql gateway to proxy",
             null,
             String.class
