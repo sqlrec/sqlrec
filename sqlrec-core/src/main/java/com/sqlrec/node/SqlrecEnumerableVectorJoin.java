@@ -1,7 +1,7 @@
 package com.sqlrec.node;
 
 import com.google.common.collect.ImmutableList;
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.VectorJoinUtils;
 import org.apache.calcite.adapter.enumerable.*;
@@ -163,8 +163,8 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
         RelOptTable rightTable = NodeUtils.getScanTable(right);
-        if (rightTable == null || rightTable.unwrap(SqlRecVectorTable.class) == null) {
-            throw new IllegalArgumentException("Right table must be SqlRecVectorTable");
+        if (rightTable == null || rightTable.unwrap(VectorSearchable.class) == null) {
+            throw new IllegalArgumentException("Right table must be VectorSearchable");
         }
 
         RelOptSchema relOptSchema = rightTable.getRelOptSchema();
@@ -183,7 +183,7 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
                 Schemas.expression(tableEntry.schema.plus()),
                 BuiltInMethod.SCHEMA_GET_TABLE.method,
                 Expressions.constant(tableEntry.name));
-        rightExpression = Expressions.convert_(rightExpression, SqlRecVectorTable.class);
+        rightExpression = Expressions.convert_(rightExpression, VectorSearchable.class);
 
         final BlockBuilder builder = new BlockBuilder();
         final Result leftResult =

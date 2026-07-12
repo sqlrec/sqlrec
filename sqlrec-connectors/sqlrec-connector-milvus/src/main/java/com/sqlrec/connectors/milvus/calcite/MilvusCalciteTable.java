@@ -1,8 +1,9 @@
 package com.sqlrec.connectors.milvus.calcite;
 
 import com.sqlrec.common.schema.SqlRecCollection;
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
@@ -18,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class MilvusCalciteTable extends SqlRecVectorTable {
+public class MilvusCalciteTable extends SqlRecKvTable implements VectorSearchable {
     private MilvusConfig milvusConfig;
     private transient MilvusHandler milvusHandler;
 
@@ -38,7 +39,7 @@ public class MilvusCalciteTable extends SqlRecVectorTable {
     }
 
     @Override
-    protected List<Object[]> searchByEmbeddingWithScoreImpl(
+    public List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,

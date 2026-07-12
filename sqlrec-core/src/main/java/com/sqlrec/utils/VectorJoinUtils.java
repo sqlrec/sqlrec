@@ -1,7 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
@@ -16,6 +16,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.schema.Table;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +24,7 @@ import java.util.List;
 public class VectorJoinUtils {
     public static Enumerable vectorJoin(
             Enumerable left,
-            SqlRecVectorTable rightTable,
+            VectorSearchable rightTable,
             Object filterConditionObj,
             int leftEmbeddingColIndex,
             String rightEmbeddingColName,
@@ -59,7 +60,7 @@ public class VectorJoinUtils {
 
     private static Enumerable doVectorJoin(
             List<Object[]> leftValues,
-            SqlRecVectorTable rightTable,
+            VectorSearchable rightTable,
             RexNode filterCondition,
             int leftEmbeddingColIndex,
             String rightEmbeddingColName,
@@ -67,7 +68,7 @@ public class VectorJoinUtils {
             List<Integer> projectColumns
     ) {
         int leftSize = leftValues.get(0).length;
-        List<String> rightFieldNames = DataTypeUtils.getTableFieldNames(rightTable);
+        List<String> rightFieldNames = DataTypeUtils.getTableFieldNames((Table) rightTable);
         int rightSize = rightFieldNames.size() + 1;
         int projectSize = projectColumns != null ? projectColumns.size() : (leftSize + rightSize);
 

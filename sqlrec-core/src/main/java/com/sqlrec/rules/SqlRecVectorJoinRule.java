@@ -1,6 +1,6 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.node.SqlrecEnumerableVectorJoin;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.VectorJoinUtils;
@@ -48,7 +48,7 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
             return;
         }
         RelOptTable rightTable = NodeUtils.getScanTable(join.getRight());
-        if (rightTable == null || rightTable.unwrap(SqlRecVectorTable.class) == null) {
+        if (rightTable == null || rightTable.unwrap(VectorSearchable.class) == null) {
             return;
         }
 
