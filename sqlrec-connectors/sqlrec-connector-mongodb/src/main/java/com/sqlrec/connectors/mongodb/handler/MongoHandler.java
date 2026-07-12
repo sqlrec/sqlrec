@@ -1,9 +1,6 @@
 package com.sqlrec.connectors.mongodb.handler;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.*;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import com.sqlrec.common.schema.FieldSchema;
@@ -18,11 +15,13 @@ import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class MongoHandler {
+public class MongoHandler implements Serializable {
+    private static final long serialVersionUID = 1L;
     private static final Logger logger = LoggerFactory.getLogger(MongoHandler.class);
     private static final Map<String, MongoClient> mongoClients = new ConcurrentHashMap<>();
 
@@ -36,8 +35,10 @@ public class MongoHandler {
         MongoCollection<Document> collection = getCollection();
         Bson query = buildQuery(filters);
         List<Object[]> rows = new ArrayList<>();
-        for (Document doc : collection.find(query)) {
-            rows.add(documentToRow(doc));
+        try (MongoCursor<Document> cursor = collection.find(query).iterator()) {
+            while (cursor.hasNext()) {
+                rows.add(documentToRow(cursor.next()));
+            }
         }
         return rows;
     }
@@ -50,13 +51,14 @@ public class MongoHandler {
         MongoCollection<Document> collection = getCollection();
         String primaryKey = mongoConfig.primaryKey;
         List<Object> keyList = new ArrayList<>(keySet);
-        Iterable<Document> docs = collection.find(Filters.in(primaryKey, keyList));
 
         Map<Object, List<Object[]>> result = new HashMap<>();
-        for (Document doc : docs) {
-            Object[] row = documentToRow(doc);
-            Object key = row[mongoConfig.primaryKeyIndex];
-            result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+        try (MongoCursor<Document> cursor = collection.find(Filters.in(primaryKey, keyList)).iterator()) {
+            while (cursor.hasNext()) {
+                Object[] row = documentToRow(cursor.next());
+                Object key = row[mongoConfig.primaryKeyIndex];
+                result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+            }
         }
         return result;
     }
@@ -97,56 +99,46 @@ public class MongoHandler {
         return Filters.and(bsonFilters);
     }
 
+    private static final Map<SqlKind, java.util.function.BiFunction<String, Object, Bson>> COMPARISON_OPS = new EnumMap<>(SqlKind.class);
+    private static final Map<SqlKind, SqlKind> REVERSED_COMPARISON = new EnumMap<>(SqlKind.class);
+
+    static {
+        COMPARISON_OPS.put(SqlKind.EQUALS, Filters::eq);
+        COMPARISON_OPS.put(SqlKind.NOT_EQUALS, Filters::ne);
+        COMPARISON_OPS.put(SqlKind.GREATER_THAN, Filters::gt);
+        COMPARISON_OPS.put(SqlKind.GREATER_THAN_OR_EQUAL, Filters::gte);
+        COMPARISON_OPS.put(SqlKind.LESS_THAN, Filters::lt);
+        COMPARISON_OPS.put(SqlKind.LESS_THAN_OR_EQUAL, Filters::lte);
+
+        REVERSED_COMPARISON.put(SqlKind.GREATER_THAN, SqlKind.LESS_THAN);
+        REVERSED_COMPARISON.put(SqlKind.LESS_THAN, SqlKind.GREATER_THAN);
+        REVERSED_COMPARISON.put(SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN_OR_EQUAL);
+        REVERSED_COMPARISON.put(SqlKind.LESS_THAN_OR_EQUAL, SqlKind.GREATER_THAN_OR_EQUAL);
+    }
+
     private Bson buildBsonFilter(RexNode filter) {
-        if (filter.isA(SqlKind.AND)) {
+        if (filter.isA(SqlKind.AND) || filter.isA(SqlKind.OR)) {
             RexCall call = (RexCall) filter;
             List<Bson> operands = call.getOperands().stream()
                     .map(this::buildBsonFilter)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
-            return operands.isEmpty() ? null : Filters.and(operands);
+            if (operands.isEmpty()) {
+                return null;
+            }
+            return filter.isA(SqlKind.AND) ? Filters.and(operands) : Filters.or(operands);
         }
-        if (filter.isA(SqlKind.OR)) {
-            RexCall call = (RexCall) filter;
-            List<Bson> operands = call.getOperands().stream()
-                    .map(this::buildBsonFilter)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-            return operands.isEmpty() ? null : Filters.or(operands);
-        }
-        if (filter.isA(SqlKind.IS_NULL)) {
+        if (filter.isA(SqlKind.IS_NULL) || filter.isA(SqlKind.IS_NOT_NULL)) {
             RexCall call = (RexCall) filter;
             String fieldName = getFieldName(call.getOperands().get(0));
-            if (fieldName != null) {
-                return Filters.eq(fieldName, null);
+            if (fieldName == null) {
+                return null;
             }
-            return null;
+            return filter.isA(SqlKind.IS_NULL) ? Filters.eq(fieldName, null) : Filters.ne(fieldName, null);
         }
-        if (filter.isA(SqlKind.IS_NOT_NULL)) {
-            RexCall call = (RexCall) filter;
-            String fieldName = getFieldName(call.getOperands().get(0));
-            if (fieldName != null) {
-                return Filters.ne(fieldName, null);
-            }
-            return null;
-        }
-        if (filter.isA(SqlKind.EQUALS)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.eq(field, value));
-        }
-        if (filter.isA(SqlKind.NOT_EQUALS)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.ne(field, value));
-        }
-        if (filter.isA(SqlKind.GREATER_THAN)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.gt(field, value));
-        }
-        if (filter.isA(SqlKind.GREATER_THAN_OR_EQUAL)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.gte(field, value));
-        }
-        if (filter.isA(SqlKind.LESS_THAN)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.lt(field, value));
-        }
-        if (filter.isA(SqlKind.LESS_THAN_OR_EQUAL)) {
-            return buildComparisonFilter((RexCall) filter, (field, value) -> Filters.lte(field, value));
+        java.util.function.BiFunction<String, Object, Bson> op = COMPARISON_OPS.get(filter.getKind());
+        if (op != null) {
+            return buildComparisonFilter((RexCall) filter, op);
         }
         logger.warn("Unsupported filter kind: {}, filter will be handled by Calcite", filter.getKind());
         return null;
@@ -157,26 +149,18 @@ public class MongoHandler {
         RexNode right = call.getOperands().get(1);
 
         String fieldName = getFieldName(left);
-        Object value = extractValue(right);
-        if (fieldName != null && value != null) {
-            return filterFactory.apply(fieldName, value);
+        RexLiteral literal = getLiteral(right);
+        if (fieldName != null && literal != null) {
+            return filterFactory.apply(fieldName, literal.getValue2());
         }
 
         // Try reversed: literal on left, field on right
         fieldName = getFieldName(right);
-        value = extractValue(left);
-        if (fieldName != null && value != null) {
-            SqlKind kind = call.getKind();
-            if (kind == SqlKind.GREATER_THAN) {
-                return Filters.lt(fieldName, value);
-            } else if (kind == SqlKind.LESS_THAN) {
-                return Filters.gt(fieldName, value);
-            } else if (kind == SqlKind.GREATER_THAN_OR_EQUAL) {
-                return Filters.lte(fieldName, value);
-            } else if (kind == SqlKind.LESS_THAN_OR_EQUAL) {
-                return Filters.gte(fieldName, value);
-            }
-            return filterFactory.apply(fieldName, value);
+        literal = getLiteral(left);
+        if (fieldName != null && literal != null) {
+            SqlKind reversed = REVERSED_COMPARISON.getOrDefault(call.getKind(), call.getKind());
+            java.util.function.BiFunction<String, Object, Bson> reversedOp = COMPARISON_OPS.get(reversed);
+            return (reversedOp != null ? reversedOp : filterFactory).apply(fieldName, literal.getValue2());
         }
         logger.warn("Cannot convert filter to MongoDB query: {}", call);
         return null;
@@ -190,27 +174,24 @@ public class MongoHandler {
         return null;
     }
 
-    private Object extractValue(RexNode node) {
-        if (node instanceof RexLiteral) {
-            return ((RexLiteral) node).getValue2();
-        }
-        return null;
+    private RexLiteral getLiteral(RexNode node) {
+        return node instanceof RexLiteral ? (RexLiteral) node : null;
     }
 
     private Object[] documentToRow(Document doc) {
-        Object[] row = new Object[mongoConfig.fieldSchemas.size()];
-        for (int i = 0; i < mongoConfig.fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = mongoConfig.fieldSchemas.get(i);
-            row[i] = doc.get(fieldSchema.getName());
+        List<FieldSchema> schemas = mongoConfig.fieldSchemas;
+        Object[] row = new Object[schemas.size()];
+        for (int i = 0; i < schemas.size(); i++) {
+            row[i] = doc.get(schemas.get(i).getName());
         }
         return row;
     }
 
     private Document rowToDocument(Object[] row) {
+        List<FieldSchema> schemas = mongoConfig.fieldSchemas;
         Document doc = new Document();
-        for (int i = 0; i < mongoConfig.fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = mongoConfig.fieldSchemas.get(i);
-            doc.put(fieldSchema.getName(), row[i]);
+        for (int i = 0; i < schemas.size(); i++) {
+            doc.put(schemas.get(i).getName(), row[i]);
         }
         return doc;
     }
@@ -222,18 +203,6 @@ public class MongoHandler {
     }
 
     private MongoClient getOrCreateMongoClient() {
-        String key = mongoConfig.uri;
-        MongoClient client = mongoClients.get(key);
-        if (client != null) {
-            return client;
-        }
-        synchronized (mongoClients) {
-            client = mongoClients.get(key);
-            if (client == null) {
-                client = MongoClients.create(mongoConfig.uri);
-                mongoClients.put(key, client);
-            }
-            return client;
-        }
+        return mongoClients.computeIfAbsent(mongoConfig.uri, MongoClients::create);
     }
 }

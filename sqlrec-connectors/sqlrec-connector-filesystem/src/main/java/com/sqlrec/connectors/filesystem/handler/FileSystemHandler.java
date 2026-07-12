@@ -12,18 +12,18 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class FileSystemHandler {
     private static final Logger logger = LoggerFactory.getLogger(FileSystemHandler.class);
 
     private final FileSystemConfig fileSystemConfig;
     private volatile List<Object[]> data;
-    private final Object loadLock = new Object();
+    private final Object lock = new Object();
 
     public FileSystemHandler(FileSystemConfig fileSystemConfig) {
         this.fileSystemConfig = fileSystemConfig;
@@ -31,7 +31,7 @@ public class FileSystemHandler {
 
     private List<Object[]> ensureData() {
         if (data == null) {
-            synchronized (loadLock) {
+            synchronized (lock) {
                 if (data == null) {
                     data = loadData();
                 }
@@ -43,13 +43,13 @@ public class FileSystemHandler {
     private List<Object[]> loadData() {
         if (fileSystemConfig.path == null || fileSystemConfig.path.isEmpty()) {
             logger.info("No path configured, initializing as empty table");
-            return new CopyOnWriteArrayList<>();
+            return new ArrayList<>();
         }
 
         Path filePath = resolvePath();
         if (filePath == null || !Files.exists(filePath)) {
             logger.info("Path does not exist: {}, initializing as empty table", fileSystemConfig.path);
-            return new CopyOnWriteArrayList<>();
+            return new ArrayList<>();
         }
 
         try {
@@ -61,11 +61,11 @@ public class FileSystemHandler {
                     return loadJson(filePath);
                 default:
                     logger.warn("Unsupported format: {}, initializing as empty table", format);
-                    return new CopyOnWriteArrayList<>();
+                    return new ArrayList<>();
             }
         } catch (Exception e) {
             logger.warn("Failed to load data from {}: {}, initializing as empty table", filePath, e.getMessage());
-            return new CopyOnWriteArrayList<>();
+            return new ArrayList<>();
         }
     }
 
@@ -86,8 +86,8 @@ public class FileSystemHandler {
     }
 
     private List<Object[]> loadCsv(Path filePath) throws IOException {
-        List<Object[]> rows = new CopyOnWriteArrayList<>();
-        try (BufferedReader reader = Files.newBufferedReader(filePath)) {
+        List<Object[]> rows = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String line;
             boolean firstLine = true;
             while ((line = reader.readLine()) != null) {
@@ -99,10 +99,7 @@ public class FileSystemHandler {
                     firstLine = false;
                     continue;
                 }
-                Object[] row = parseCsvLine(line);
-                if (row != null) {
-                    rows.add(row);
-                }
+                rows.add(parseCsvLine(line));
             }
         }
         return rows;
@@ -148,44 +145,44 @@ public class FileSystemHandler {
                 if (c == '"') {
                     inQuotes = true;
                 } else if (c == ',') {
-                    fields.add(current.toString().trim());
+                    fields.add(current.toString());
                     current = new StringBuilder();
                 } else {
                     current.append(c);
                 }
             }
         }
-        fields.add(current.toString().trim());
+        fields.add(current.toString());
         return fields;
     }
 
     private List<Object[]> loadJson(Path filePath) throws IOException {
-        List<Object[]> rows = new CopyOnWriteArrayList<>();
-        String content = new String(Files.readAllBytes(filePath));
+        List<Object[]> rows = new ArrayList<>();
+        String content = Files.readString(filePath, StandardCharsets.UTF_8);
         Gson gson = new Gson();
         JsonArray jsonArray;
 
         try {
-            JsonElement element = gson.fromJson(content, JsonElement.class);
-            if (element.isJsonArray()) {
-                jsonArray = element.getAsJsonArray();
-            } else if (element.isJsonObject()) {
+            JsonElement root = gson.fromJson(content, JsonElement.class);
+            if (root.isJsonArray()) {
+                jsonArray = root.getAsJsonArray();
+            } else if (root.isJsonObject()) {
                 jsonArray = new JsonArray();
-                jsonArray.add(element.getAsJsonObject());
+                jsonArray.add(root.getAsJsonObject());
             } else {
                 logger.warn("JSON content is not an array or object, initializing as empty table");
-                return new CopyOnWriteArrayList<>();
+                return new ArrayList<>();
             }
         } catch (Exception e) {
             logger.warn("Invalid JSON format: {}", e.getMessage());
-            return new CopyOnWriteArrayList<>();
+            return new ArrayList<>();
         }
 
-        for (JsonElement element : jsonArray) {
-            if (!element.isJsonObject()) {
+        for (JsonElement item : jsonArray) {
+            if (!item.isJsonObject()) {
                 continue;
             }
-            JsonObject obj = element.getAsJsonObject();
+            JsonObject obj = item.getAsJsonObject();
             Object[] row = new Object[fileSystemConfig.fieldSchemas.size()];
             for (int i = 0; i < fileSystemConfig.fieldSchemas.size(); i++) {
                 FieldSchema fieldSchema = fileSystemConfig.fieldSchemas.get(i);
@@ -212,6 +209,10 @@ public class FileSystemHandler {
         }
     }
 
+    private Object getKey(Object[] row) {
+        return row[fileSystemConfig.primaryKeyIndex];
+    }
+
     public List<Object[]> scan() {
         return new ArrayList<>(ensureData());
     }
@@ -224,7 +225,7 @@ public class FileSystemHandler {
         List<Object[]> allData = ensureData();
         Map<Object, List<Object[]>> result = new HashMap<>();
         for (Object[] row : allData) {
-            Object key = row[fileSystemConfig.primaryKeyIndex];
+            Object key = getKey(row);
             if (keySet.contains(key)) {
                 result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
             }
@@ -233,24 +234,27 @@ public class FileSystemHandler {
     }
 
     public boolean upsert(Object[] data) {
-        List<Object[]> allData = ensureData();
-        Object primaryKeyValue = data[fileSystemConfig.primaryKeyIndex];
+        synchronized (lock) {
+            List<Object[]> allData = ensureData();
+            Object primaryKeyValue = getKey(data);
 
-        for (int i = 0; i < allData.size(); i++) {
-            Object[] existing = allData.get(i);
-            if (primaryKeyValue.equals(existing[fileSystemConfig.primaryKeyIndex])) {
-                allData.set(i, data);
-                return true;
+            for (int i = 0; i < allData.size(); i++) {
+                if (primaryKeyValue.equals(getKey(allData.get(i)))) {
+                    allData.set(i, data);
+                    return true;
+                }
             }
-        }
 
-        allData.add(data);
-        return true;
+            allData.add(data);
+            return true;
+        }
     }
 
     public boolean delete(Object[] data) {
-        List<Object[]> allData = ensureData();
-        Object primaryKeyValue = data[fileSystemConfig.primaryKeyIndex];
-        return allData.removeIf(row -> primaryKeyValue.equals(row[fileSystemConfig.primaryKeyIndex]));
+        synchronized (lock) {
+            List<Object[]> allData = ensureData();
+            Object primaryKeyValue = getKey(data);
+            return allData.removeIf(row -> primaryKeyValue.equals(getKey(row)));
+        }
     }
 }

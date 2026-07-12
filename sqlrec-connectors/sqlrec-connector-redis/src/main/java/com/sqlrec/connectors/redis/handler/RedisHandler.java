@@ -10,34 +10,36 @@ import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class RedisHandler {
+    private static final Logger LOG = LoggerFactory.getLogger(RedisHandler.class);
+    private static final int TIMEOUT_SECONDS = 30;
+
     private AbstractRedisWrapper redisClient;
     private RedisConfig redisConfig;
     private AbstractCodec codec;
+    private String keyPrefix;
 
     public RedisHandler(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;
     }
 
     public void open() {
-        if (redisConfig.redisMode.equals(RedisOptions.CLUSTER_MODE)) {
-            redisClient = new RedisClusterWrapper();
-        } else {
-            redisClient = new RedisWrapper();
-        }
+        redisClient = redisConfig.redisMode.equals(RedisOptions.CLUSTER_MODE)
+                ? new RedisClusterWrapper() : new RedisWrapper();
         redisClient.open(redisConfig.url);
-        if (redisConfig.dataStructure.equals(RedisOptions.STRING_DATA_STRUCTURE)) {
-            codec = new StringCodec();
-        } else {
-            codec = new JsonCodec();
-        }
+        codec = redisConfig.dataStructure.equals(RedisOptions.STRING_DATA_STRUCTURE)
+                ? new StringCodec() : new JsonCodec();
         codec.init(redisConfig.fieldSchemas, redisConfig.primaryKeyIndex);
+        keyPrefix = redisConfig.database + ":" + redisConfig.tableName + ":";
     }
 
     public void close() {
@@ -48,84 +50,72 @@ public class RedisHandler {
     }
 
     public CompletableFuture<List<Object[]>> scan(String rowKey) {
-        if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
-            RedisFuture<List<byte[]>> future = redisClient.lrange(getKeyBytes(rowKey), 0, -1);
-            return future.toCompletableFuture().thenApply(data -> decodeDatas(data, rowKey));
+        if (isListMode()) {
+            return redisClient.lrange(getKeyBytes(rowKey), 0, -1)
+                    .toCompletableFuture().thenApply(data -> decodeList(data, rowKey));
         }
-
-        RedisFuture<byte[]> future = redisClient.get(getKeyBytes(rowKey));
-        return future.toCompletableFuture().thenApply(bytes -> {
-            List<Object[]> list = new ArrayList<>();
-            if (bytes != null) {
-                list.add(codec.decode(bytes, rowKey));
-            }
-            return list;
-        });
+        return redisClient.get(getKeyBytes(rowKey))
+                .toCompletableFuture().thenApply(bytes -> {
+                    if (bytes == null) {
+                        return Collections.emptyList();
+                    }
+                    return Collections.singletonList(codec.decode(bytes, rowKey));
+                });
     }
 
     public CompletableFuture<Map<String, List<Object[]>>> scan(Set<String> keySet) {
-        if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+        if (isListMode()) {
             Map<String, CompletableFuture<List<byte[]>>> futureMap = keySet.stream()
                     .collect(Collectors.toMap(
                             key -> key,
                             key -> redisClient.lrange(getKeyBytes(key), 0, -1).toCompletableFuture()));
             return CompletableFuture.allOf(futureMap.values().toArray(new CompletableFuture[0]))
-                    .thenApply(x -> {
+                    .thenApply(v -> {
                         Map<String, List<Object[]>> result = new HashMap<>();
-                        for (Map.Entry<String, CompletableFuture<List<byte[]>>> entry : futureMap.entrySet()) {
-                            String key = entry.getKey();
-                            List<byte[]> data = entry.getValue().join();
-                            result.put(key, decodeDatas(data, key));
-                        }
+                        futureMap.forEach((key, f) -> result.put(key, decodeList(f.join(), key)));
                         return result;
                     });
         }
 
-        List<byte[]> keys = keySet.stream()
-                .map(this::getKeyBytes)
-                .collect(Collectors.toList());
-        RedisFuture<List<KeyValue<byte[], byte[]>>> future = redisClient.mget(keys.toArray(new byte[0][]));
-        return future.toCompletableFuture().thenApply(list -> {
+        byte[][] keys = keySet.stream().map(this::getKeyBytes).toArray(byte[][]::new);
+        return redisClient.mget(keys).toCompletableFuture().thenApply(list -> {
             Map<String, List<Object[]>> result = new HashMap<>();
             if (list == null) {
                 return result;
             }
-            list.forEach(keyValue -> {
-                if (keyValue == null || !keyValue.hasValue()) {
-                    return;
+            for (KeyValue<byte[], byte[]> kv : list) {
+                if (kv != null && kv.hasValue()) {
+                    String originKey = getOriginKey(kv.getKey());
+                    result.computeIfAbsent(originKey, k -> new ArrayList<>())
+                            .add(codec.decode(kv.getValue(), originKey));
                 }
-                String originKey = getOriginKey(keyValue.getKey());
-                Object[] row = codec.decode(keyValue.getValue(), originKey);
-                result.computeIfAbsent(originKey, k -> new ArrayList<>())
-                        .add(row);
-            });
+            }
             return result;
         });
     }
 
-    public List<Object[]> decodeDatas(List<byte[]> datas, String primaryKey) {
+    public List<Object[]> decodeList(List<byte[]> datas, String primaryKey) {
         if (datas == null) {
             return Collections.emptyList();
         }
-        return datas.stream()
-                .map(bytes -> {
-                    try {
-                        return codec.decode(bytes, primaryKey);
-                    } catch (Exception e) {
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        List<Object[]> result = new ArrayList<>(datas.size());
+        for (byte[] bytes : datas) {
+            try {
+                result.add(codec.decode(bytes, primaryKey));
+            } catch (Exception e) {
+                LOG.warn("Failed to decode data for key {}: {}", primaryKey, e.getMessage());
+            }
+        }
+        return result;
     }
 
     public void delete(Object[] data) {
         byte[] key = getKey(data);
         try {
-            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
-                redisClient.lrem(key, codec.encode(data)).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (isListMode()) {
+                await(redisClient.lrem(key, codec.encode(data)));
             } else {
-                redisClient.del(key).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                await(redisClient.del(key));
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to delete data from Redis", e);
@@ -136,15 +126,13 @@ public class RedisHandler {
         byte[] key = getKey(data);
         byte[] value = codec.encode(data);
         try {
-            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
-                redisClient.lpush(key, value).get(30, java.util.concurrent.TimeUnit.SECONDS);
-                if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                    redisClient.ltrim(key, 0, redisConfig.maxListSize - 1).get(30, java.util.concurrent.TimeUnit.SECONDS);
-                }
-                redisClient.expire(key, redisConfig.ttl).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (isListMode()) {
+                await(redisClient.lpush(key, value));
+                trimIfNeeded(key);
+                await(redisClient.expire(key, redisConfig.ttl));
             } else {
-                redisClient.set(key, value).get(30, java.util.concurrent.TimeUnit.SECONDS);
-                redisClient.expire(key, redisConfig.ttl).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                await(redisClient.set(key, value));
+                await(redisClient.expire(key, redisConfig.ttl));
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to insert data to Redis", e);
@@ -154,17 +142,15 @@ public class RedisHandler {
     public void batchInsert(Collection<? extends Object[]> dataList) {
         try {
             List<RedisFuture<?>> futures = new ArrayList<>();
-            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+            if (isListMode()) {
                 Map<byte[], List<byte[]>> keyToValues = new LinkedHashMap<>();
                 for (Object[] data : dataList) {
-                    byte[] key = getKey(data);
-                    byte[] value = codec.encode(data);
-                    keyToValues.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+                    keyToValues.computeIfAbsent(getKey(data), k -> new ArrayList<>())
+                            .add(codec.encode(data));
                 }
                 for (Map.Entry<byte[], List<byte[]>> entry : keyToValues.entrySet()) {
                     byte[] key = entry.getKey();
-                    List<byte[]> values = entry.getValue();
-                    futures.add(redisClient.lpush(key, values.toArray(new byte[0][])));
+                    futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
                     if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
                         futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
                     }
@@ -180,9 +166,7 @@ public class RedisHandler {
                     futures.add(redisClient.expire(key, redisConfig.ttl));
                 }
             }
-            for (RedisFuture<?> future : futures) {
-                future.get(30, java.util.concurrent.TimeUnit.SECONDS);
-            }
+            awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch insert data to Redis", e);
         }
@@ -191,7 +175,7 @@ public class RedisHandler {
     public void batchDelete(Collection<? extends Object[]> dataList) {
         try {
             List<RedisFuture<?>> futures = new ArrayList<>();
-            if (redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE)) {
+            if (isListMode()) {
                 for (Object[] data : dataList) {
                     futures.add(redisClient.lrem(getKey(data), codec.encode(data)));
                 }
@@ -200,25 +184,46 @@ public class RedisHandler {
                     futures.add(redisClient.del(getKey(data)));
                 }
             }
-            for (RedisFuture<?> future : futures) {
-                future.get(30, java.util.concurrent.TimeUnit.SECONDS);
-            }
+            awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch delete data from Redis", e);
         }
     }
 
+    private boolean isListMode() {
+        return redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE);
+    }
+
+    private void await(RedisFuture<?> future) throws Exception {
+        future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void awaitAll(List<RedisFuture<?>> futures) throws Exception {
+        CompletableFuture.allOf(futures.stream()
+                        .map(RedisFuture::toCompletableFuture)
+                        .toArray(CompletableFuture[]::new))
+                .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void trimIfNeeded(byte[] key) throws Exception {
+        if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+            await(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+        }
+    }
+
     private byte[] getKey(Object[] data) {
-        return getKeyBytes(data[redisConfig.primaryKeyIndex].toString());
+        Object keyValue = data[redisConfig.primaryKeyIndex];
+        if (keyValue == null) {
+            throw new IllegalArgumentException("Primary key at index " + redisConfig.primaryKeyIndex + " is null");
+        }
+        return getKeyBytes(keyValue.toString());
     }
 
     private byte[] getKeyBytes(String rowKey) {
-        String finalRowKey = redisConfig.database + ":" + redisConfig.tableName + ":" + rowKey;
-        return finalRowKey.getBytes(StandardCharsets.UTF_8);
+        return (keyPrefix + rowKey).getBytes(StandardCharsets.UTF_8);
     }
 
     private String getOriginKey(byte[] key) {
-        return new String(key, StandardCharsets.UTF_8)
-                .substring(redisConfig.database.length() + redisConfig.tableName.length() + 2);
+        return new String(key, StandardCharsets.UTF_8).substring(keyPrefix.length());
     }
 }

@@ -1,6 +1,5 @@
 package com.sqlrec.connectors.jdbc.handler;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.SqlUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.zaxxer.hikari.HikariConfig;
@@ -26,20 +25,12 @@ public class JdbcHandler {
     public List<Object[]> scan(List<RexNode> filters) {
         String whereClause = SqlUtils.buildWhereClause(filters, jdbcConfig.fieldSchemas);
         String sql = SqlUtils.buildSelectSql(jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        try {
-            conn = getConnection();
-            stmt = conn.prepareStatement(sql);
-            rs = stmt.executeQuery();
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
             return parseResultSet(rs);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to scan table " + jdbcConfig.tableName, e);
-        } finally {
-            closeQuietly(rs);
-            closeQuietly(stmt);
-            closeQuietly(conn);
         }
     }
 
@@ -48,78 +39,49 @@ public class JdbcHandler {
             return Collections.emptyMap();
         }
 
-        String primaryKey = jdbcConfig.primaryKey;
-        StringBuilder placeholders = new StringBuilder();
-        for (int i = 0; i < keySet.size(); i++) {
-            if (i > 0) {
-                placeholders.append(",");
-            }
-            placeholders.append("?");
-        }
-
-        String whereClause = primaryKey + " IN (" + placeholders + ")";
+        String placeholders = String.join(",", Collections.nCopies(keySet.size(), "?"));
+        String whereClause = jdbcConfig.primaryKey + " IN (" + placeholders + ")";
         String sql = SqlUtils.buildSelectSql(jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        try {
-            conn = getConnection();
-            stmt = conn.prepareStatement(sql);
+
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             int idx = 1;
             for (Object key : keySet) {
                 stmt.setObject(idx++, key);
             }
-            rs = stmt.executeQuery();
-            List<Object[]> rows = parseResultSet(rs);
-
-            Map<Object, List<Object[]>> result = new HashMap<>();
-            for (Object[] row : rows) {
-                Object key = row[jdbcConfig.primaryKeyIndex];
-                result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+            try (ResultSet rs = stmt.executeQuery()) {
+                Map<Object, List<Object[]>> result = new HashMap<>();
+                for (Object[] row : parseResultSet(rs)) {
+                    result.computeIfAbsent(row[jdbcConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
+                }
+                return result;
             }
-            return result;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query by primary key from table " + jdbcConfig.tableName, e);
-        } finally {
-            closeQuietly(rs);
-            closeQuietly(stmt);
-            closeQuietly(conn);
         }
     }
 
     public boolean upsert(Object[] data) {
         String sql = SqlUtils.buildUpsertSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        try {
-            conn = getConnection();
-            stmt = conn.prepareStatement(sql);
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             setStatementParameters(stmt, data);
             stmt.executeUpdate();
             return true;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to upsert into table " + jdbcConfig.tableName, e);
-        } finally {
-            closeQuietly(stmt);
-            closeQuietly(conn);
         }
     }
 
     public boolean delete(Object[] data) {
         String sql = SqlUtils.buildDeleteSql(jdbcConfig.tableName, jdbcConfig.primaryKey);
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        try {
-            conn = getConnection();
-            stmt = conn.prepareStatement(sql);
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setObject(1, data[jdbcConfig.primaryKeyIndex]);
             stmt.executeUpdate();
             return true;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete from table " + jdbcConfig.tableName, e);
-        } finally {
-            closeQuietly(stmt);
-            closeQuietly(conn);
         }
     }
 
@@ -130,8 +92,7 @@ public class JdbcHandler {
     }
 
     private List<Object[]> parseResultSet(ResultSet rs) throws SQLException {
-        ResultSetMetaData metaData = rs.getMetaData();
-        int columnCount = metaData.getColumnCount();
+        int columnCount = rs.getMetaData().getColumnCount();
         List<Object[]> rows = new ArrayList<>();
         while (rs.next()) {
             Object[] row = new Object[columnCount];
@@ -144,14 +105,13 @@ public class JdbcHandler {
     }
 
     private Connection getConnection() throws SQLException {
-        HikariDataSource ds = getOrCreateDataSource();
-        Connection conn = ds.getConnection();
+        Connection conn = getOrCreateDataSource().getConnection();
         conn.setAutoCommit(true);
         return conn;
     }
 
     private HikariDataSource getOrCreateDataSource() {
-        String key = getDataSourceKey();
+        String key = jdbcConfig.url + "|" + jdbcConfig.username;
         HikariDataSource ds = dataSources.get(key);
         if (ds != null) {
             return ds;
@@ -164,10 +124,6 @@ public class JdbcHandler {
             }
             return ds;
         }
-    }
-
-    private String getDataSourceKey() {
-        return jdbcConfig.url + "|" + jdbcConfig.username;
     }
 
     private HikariDataSource createDataSource() {
@@ -220,15 +176,5 @@ public class JdbcHandler {
         }
 
         return new HikariDataSource(hikariConfig);
-    }
-
-    private void closeQuietly(AutoCloseable closeable) {
-        if (closeable != null) {
-            try {
-                closeable.close();
-            } catch (Exception e) {
-                logger.warn("Failed to close resource", e);
-            }
-        }
     }
 }

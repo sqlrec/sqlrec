@@ -50,7 +50,6 @@ public class KafkaOptions {
             Integer.class
     );
 
-
     public static KafkaConfig getKafkaConfig(Map<String, String> options) {
         KafkaConfig kafkaConfig = new KafkaConfig();
         kafkaConfig.bootstrapServers = BOOTSTRAP_SERVERS.getValue(options);

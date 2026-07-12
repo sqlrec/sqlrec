@@ -29,7 +29,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
-    private static Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
+    private static final Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
     private final KafkaConfig kafkaConfig;
 
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
@@ -64,8 +64,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     @Override
     public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
-        return Schemas.tableExpression(schema, getElementType(),
-                tableName, clazz);
+        return Schemas.tableExpression(schema, getElementType(), tableName, clazz);
     }
 
     private static String getProducerConfigKey(KafkaConfig config) {
@@ -74,27 +73,14 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     public static KafkaProducer<String, String> getKafkaProducer(KafkaConfig kafkaConfig) {
         String configKey = getProducerConfigKey(kafkaConfig);
-        if (kafkaProducerMap.containsKey(configKey)) {
-            return kafkaProducerMap.get(configKey);
-        }
-        return openKafkaProducer(kafkaConfig);
-    }
-
-    private static synchronized KafkaProducer<String, String> openKafkaProducer(KafkaConfig kafkaConfig) {
-        String configKey = getProducerConfigKey(kafkaConfig);
-        if (kafkaProducerMap.containsKey(configKey)) {
-            return kafkaProducerMap.get(configKey);
-        }
-
-        Properties props = new Properties();
-        props.put("bootstrap.servers", kafkaConfig.bootstrapServers);
-        props.put("key.serializer", kafkaConfig.keySerializer);
-        props.put("value.serializer", kafkaConfig.valueSerializer);
-        props.put("linger.ms", kafkaConfig.lingerMs);
-
-        KafkaProducer<String, String> producer = new KafkaProducer<>(props);
-        kafkaProducerMap.put(configKey, producer);
-        return producer;
+        return kafkaProducerMap.computeIfAbsent(configKey, k -> {
+            Properties props = new Properties();
+            props.put("bootstrap.servers", kafkaConfig.bootstrapServers);
+            props.put("key.serializer", kafkaConfig.keySerializer);
+            props.put("value.serializer", kafkaConfig.valueSerializer);
+            props.put("linger.ms", String.valueOf(kafkaConfig.lingerMs));
+            return new KafkaProducer<>(props);
+        });
     }
 
     public static class KafkaCollection extends SqlRecCollection {
@@ -123,16 +109,6 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         @Override
         protected boolean removeImpl(Object[] objects) {
             throw new UnsupportedOperationException();
-        }
-
-        @Override
-        protected boolean addAllImpl(Collection<? extends Object[]> c) {
-            KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
-            for (Object[] objects : c) {
-                String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
-                producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
-            }
-            return true;
         }
     }
 }

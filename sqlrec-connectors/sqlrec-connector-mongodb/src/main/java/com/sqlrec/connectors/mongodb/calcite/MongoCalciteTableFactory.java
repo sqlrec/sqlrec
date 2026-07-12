@@ -6,7 +6,7 @@ import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.connectors.mongodb.config.MongoOptions;
 import org.apache.calcite.plan.RelOptRule;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +29,6 @@ public class MongoCalciteTableFactory implements HmsTableFactory {
 
     @Override
     public List<RelOptRule> getRules() {
-        return new ArrayList<>();
+        return Collections.emptyList();
     }
 }

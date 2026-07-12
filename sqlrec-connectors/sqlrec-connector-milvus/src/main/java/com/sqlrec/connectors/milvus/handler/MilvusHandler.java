@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MilvusHandler {
@@ -40,6 +41,18 @@ public class MilvusHandler {
         this.milvusConfig = milvusConfig;
     }
 
+    private <T> T withClient(Function<MilvusClientV2, T> action) {
+        MilvusClientV2 client = getClient(milvusConfig);
+        if (client == null) {
+            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+        }
+        try {
+            return action.apply(client);
+        } finally {
+            returnClient(client, milvusConfig);
+        }
+    }
+
     public List<Object[]> scan(List<RexNode> filters) {
         String filterSql = FilterUtils.getMilvusFilterSqlString(filters, milvusConfig.fieldSchemas);
         QueryReq queryReq = QueryReq.builder()
@@ -48,21 +61,8 @@ public class MilvusHandler {
                 .filter(filterSql)
                 .build();
 
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for scan operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        QueryResp queryResp = null;
-        try {
-            queryResp = client.query(queryReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
-        List<Object[]> rows = parseQueryResp(queryResp);
-        return rows;
+        QueryResp queryResp = withClient(client -> client.query(queryReq));
+        return parseQueryResp(queryResp);
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
@@ -72,24 +72,11 @@ public class MilvusHandler {
                 .ids(new ArrayList<>(keySet))
                 .build();
 
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for getByPrimaryKey operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        QueryResp queryResp = null;
-        try {
-            queryResp = client.query(queryReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
+        QueryResp queryResp = withClient(client -> client.query(queryReq));
         List<Object[]> rows = parseQueryResp(queryResp);
         Map<Object, List<Object[]>> rowsMap = new HashMap<>();
         for (Object[] row : rows) {
-            Object key = row[milvusConfig.primaryKeyIndex];
-            rowsMap.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+            rowsMap.computeIfAbsent(row[milvusConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
         }
         return rowsMap;
     }
@@ -101,66 +88,39 @@ public class MilvusHandler {
             Object[] leftValue,
             int limit,
             List<Integer> projectColumns) {
-        if (limit == 0) {
-            limit = 100;
-        }
-
-        List<String> rightFieldNames = milvusConfig.fieldSchemas.stream()
-                .map(f -> f.getName())
-                .collect(Collectors.toList());
+        int topK = limit == 0 ? 100 : limit;
 
         String filterExpression = FilterUtils.buildMilvusFilterExpression(
                 filterCondition,
                 leftValue,
-                rightFieldNames
+                milvusConfig.fieldSchemas.stream().map(FieldSchema::getName).collect(Collectors.toList())
         );
 
-        List<String> outputFields = getOutputFields(projectColumns);
-
-        FloatVec queryVector = new FloatVec(embedding);
         SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
                 .annsField(fieldName)
-                .data(Collections.singletonList(queryVector))
-                .outputFields(outputFields)
-                .topK(limit);
+                .data(Collections.singletonList(new FloatVec(embedding)))
+                .outputFields(getOutputFields(projectColumns))
+                .topK(topK);
         if (filterExpression != null && !filterExpression.isEmpty()) {
             builder.filter(filterExpression);
         }
 
-        SearchReq searchReq = builder.build();
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for searchByEmbeddingWithScore operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        SearchResp searchResp = null;
-        try {
-            searchResp = client.search(searchReq);
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-
-        List<Object[]> rows = parseSearchRespWithScore(searchResp);
-        return rows;
+        SearchResp searchResp = withClient(client -> client.search(builder.build()));
+        return parseSearchRespWithScore(searchResp);
     }
 
     private List<String> getOutputFields(List<Integer> projectColumns) {
-        if (projectColumns != null && !projectColumns.isEmpty()) {
-            List<String> outputFields = new ArrayList<>();
-            for (Integer projectColumn : projectColumns) {
-                if (projectColumn >= 0 && projectColumn < milvusConfig.fieldSchemas.size()) {
-                    outputFields.add(milvusConfig.fieldSchemas.get(projectColumn).getName());
-                }
-            }
-            return outputFields;
-        } else {
+        if (projectColumns == null || projectColumns.isEmpty()) {
             return milvusConfig.fieldSchemas.stream()
-                    .map(f -> f.getName())
+                    .map(FieldSchema::getName)
                     .collect(Collectors.toList());
         }
+        return projectColumns.stream()
+                .filter(i -> i >= 0 && i < milvusConfig.fieldSchemas.size())
+                .map(i -> milvusConfig.fieldSchemas.get(i).getName())
+                .collect(Collectors.toList());
     }
 
     private List<Object[]> parseSearchRespWithScore(SearchResp searchResp) {
@@ -181,35 +141,7 @@ public class MilvusHandler {
     }
 
     public boolean add(Object[] objects) {
-        List<JsonObject> data = new ArrayList<>();
-        JsonObject jsonObject = new JsonObject();
-        for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
-            jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
-        }
-        data.add(jsonObject);
-
-        UpsertReq upsertReq = UpsertReq.builder()
-                .collectionName(milvusConfig.collection)
-                .databaseName(milvusConfig.database)
-                .data(data)
-                .build();
-
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for insert operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        try {
-            client.upsert(upsertReq);
-        } catch (Exception e) {
-            logger.error("Error during upsert to Milvus", e);
-            throw e;
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-        return true;
+        return addBatch(Collections.singletonList(objects));
     }
 
     public boolean addBatch(List<Object[]> records) {
@@ -217,15 +149,9 @@ public class MilvusHandler {
             return true;
         }
 
-        List<JsonObject> data = new ArrayList<>();
-        for (Object[] objects : records) {
-            JsonObject jsonObject = new JsonObject();
-            for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
-                FieldSchema fieldSchema = milvusConfig.fieldSchemas.get(i);
-                jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
-            }
-            data.add(jsonObject);
-        }
+        List<JsonObject> data = records.stream()
+                .map(this::toJsonObject)
+                .collect(Collectors.toList());
 
         UpsertReq upsertReq = UpsertReq.builder()
                 .collectionName(milvusConfig.collection)
@@ -233,22 +159,15 @@ public class MilvusHandler {
                 .data(data)
                 .build();
 
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for batch insert operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        try {
+        withClient(client -> {
             client.upsert(upsertReq);
-            logger.debug("Successfully inserted {} records to Milvus", records.size());
-        } catch (Exception e) {
-            logger.error("Error during batch upsert to Milvus", e);
-            throw e;
-        } finally {
-            returnClient(client, milvusConfig);
-        }
+            return null;
+        });
         return true;
+    }
+
+    public boolean remove(Object[] objects) {
+        return removeBatch(Collections.singletonList(objects));
     }
 
     public boolean removeBatch(List<Object[]> records) {
@@ -256,10 +175,9 @@ public class MilvusHandler {
             return true;
         }
 
-        List<Object> ids = new ArrayList<>();
-        for (Object[] objects : records) {
-            ids.add(objects[milvusConfig.primaryKeyIndex]);
-        }
+        List<Object> ids = records.stream()
+                .map(row -> row[milvusConfig.primaryKeyIndex])
+                .collect(Collectors.toList());
 
         DeleteReq deleteReq = DeleteReq.builder()
                 .collectionName(milvusConfig.collection)
@@ -267,46 +185,19 @@ public class MilvusHandler {
                 .ids(ids)
                 .build();
 
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for batch delete operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        
-        try {
+        withClient(client -> {
             client.delete(deleteReq);
-            logger.debug("Successfully deleted {} records from Milvus", records.size());
-        } catch (Exception e) {
-            logger.error("Error during batch delete from Milvus", e);
-            throw e;
-        } finally {
-            returnClient(client, milvusConfig);
-        }
+            return null;
+        });
         return true;
     }
 
-    public boolean remove(Object[] objects) {
-        DeleteReq deleteReq = DeleteReq.builder()
-                .collectionName(milvusConfig.collection)
-                .databaseName(milvusConfig.database)
-                .ids(Collections.singletonList(objects[milvusConfig.primaryKeyIndex]))
-                .build();
-
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            logger.error("Failed to get Milvus client from pool for delete operation");
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
+    private JsonObject toJsonObject(Object[] objects) {
+        JsonObject jsonObject = new JsonObject();
+        for (int i = 0; i < milvusConfig.fieldSchemas.size(); i++) {
+            jsonObject.add(milvusConfig.fieldSchemas.get(i).getName(), gson.toJsonTree(objects[i]));
         }
-        
-        try {
-            client.delete(deleteReq);
-        } catch (Exception e) {
-            logger.error("Error during delete from Milvus", e);
-            throw e;
-        } finally {
-            returnClient(client, milvusConfig);
-        }
-        return true;
+        return jsonObject;
     }
 
     private List<Object[]> parseQueryResp(QueryResp queryResp) {

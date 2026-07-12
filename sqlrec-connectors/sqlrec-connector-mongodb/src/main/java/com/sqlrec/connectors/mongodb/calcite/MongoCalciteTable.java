@@ -20,7 +20,7 @@ import java.util.Set;
 
 public class MongoCalciteTable extends SqlRecKvTable {
     private final MongoConfig mongoConfig;
-    private transient MongoHandler mongoHandler;
+    private final MongoHandler mongoHandler;
 
     public MongoCalciteTable(MongoConfig mongoConfig) {
         this.mongoConfig = mongoConfig;
