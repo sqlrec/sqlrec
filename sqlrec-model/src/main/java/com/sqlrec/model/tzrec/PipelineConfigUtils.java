@@ -226,7 +226,7 @@ public class PipelineConfigUtils {
 
         config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
 
-        config.append(generateDSSMDataConfig(model, trainConf.getParams()));
+        config.append(generateDataConfig(model, trainConf.getParams()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -242,7 +242,7 @@ public class PipelineConfigUtils {
 
         addModelDir(config, exportConf.getBaseModelDir());
 
-        config.append(generateDSSMDataConfig(model, exportConf.getParams()));
+        config.append(generateDataConfig(model, exportConf.getParams()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -251,34 +251,13 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDSSMDataConfig(ModelConfig model, Map<String, String> params) {
-        StringBuilder config = new StringBuilder();
-        int batchSize = Config.BATCH_SIZE.getValue(params);
-        int numWorkers = Config.NUM_WORKERS.getValue(params);
-        String labelFields = Config.LABEL_COLUMNS.getValue(model.getParams());
-
-        config.append("data_config {\n");
-        config.append("    batch_size: " + batchSize + "\n");
-        config.append("    dataset_type: ParquetDataset\n");
-        config.append("    fg_mode: FG_NORMAL\n");
-        config.append("    label_fields: \"" + labelFields + "\"\n");
-        config.append("    num_workers: " + numWorkers + "\n");
-        config.append("}\n");
-        return config.toString();
-    }
-
     public static String generateDSSMModelConfig(ModelConfig model) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
-        String userFeatures = null;
-        if (model.getParams().containsKey(Config.USER_FEATURES.getKey())) {
-            userFeatures = model.getParams().get(Config.USER_FEATURES.getKey());
-        }
-        String itemFeatures = null;
-        if (model.getParams().containsKey(Config.ITEM_FEATURES.getKey())) {
-            itemFeatures = model.getParams().get(Config.ITEM_FEATURES.getKey());
-        }
+        Map<String, String> params = model.getParams();
+        String userFeatures = params != null ? params.get(Config.USER_FEATURES.getKey()) : null;
+        String itemFeatures = params != null ? params.get(Config.ITEM_FEATURES.getKey()) : null;
 
         List<String> userFeatureList = parseFeatureList(userFeatures);
         List<String> itemFeatureList = parseFeatureList(itemFeatures);

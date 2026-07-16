@@ -81,11 +81,19 @@ public class Config {
 
     public static final ConfigOption<Integer> POD_CPU_CORES = new ConfigOption<>(
             "pod_cpu_cores",
-            1, "Number of CPU cores for pod", null, Integer.class);
+            1, "Number of CPU cores for pod (used as resource request)", null, Integer.class);
 
     public static final ConfigOption<String> POD_MEMORY = new ConfigOption<>(
             "pod_memory",
-            "2Gi", "Memory for pod", null, String.class);
+            "2Gi", "Memory for pod (used as resource request)", null, String.class);
+
+    public static final ConfigOption<String> POD_CPU_LIMIT = new ConfigOption<>(
+            "pod_cpu_limit",
+            null, "CPU limit for pod (e.g. '2' or '2000m'). If not set, no CPU limit is configured.", null, String.class);
+
+    public static final ConfigOption<String> POD_MEMORY_LIMIT = new ConfigOption<>(
+            "pod_memory_limit",
+            null, "Memory limit for pod (e.g. '8Gi'). If not set, no memory limit is configured.", null, String.class);
 
     public static final ConfigOption<Integer> REPLICAS = new ConfigOption<>(
             "replicas",

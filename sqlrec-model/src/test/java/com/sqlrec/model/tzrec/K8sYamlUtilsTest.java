@@ -95,6 +95,8 @@ spec:
         params.put("version", "0.1.0-cpu");
         params.put("pod_cpu_cores", "2");
         params.put("pod_memory", "8Gi");
+        params.put("pod_cpu_limit", "4");
+        params.put("pod_memory_limit", "16Gi");
 
         String yaml = K8sYamlUtils.createJobYaml(
                 jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
@@ -138,8 +140,8 @@ spec:
         name: "tzrec-job"
         resources:
           limits:
-            cpu: "2"
-            memory: "8Gi"
+            cpu: "4"
+            memory: "16Gi"
           requests:
             cpu: "2"
             memory: "8Gi"
@@ -151,6 +153,77 @@ spec:
       volumes:
       - configMap:
           name: "test-configmap"
+        name: "config-volume"
+""";
+        assertEquals(expectedYaml, yaml);
+    }
+
+    @Test
+    public void testCreateJobYamlWithoutLimits() {
+        String jobName = "nolimit-job";
+        String configMapName = "nolimit-configmap";
+        String serviceName = "nolimit-service";
+        int nnodes = 1;
+        int nprocPerNode = 1;
+        int masterPort = 29500;
+        Map<String, String> params = new HashMap<>();
+        params.put("image", "sqlrec/tzrec");
+        params.put("version", "0.1.0-cpu");
+        params.put("pod_cpu_cores", "2");
+        params.put("pod_memory", "8Gi");
+
+        String yaml = K8sYamlUtils.createJobYaml(
+                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
+        );
+
+        String expectedYaml = """
+---
+apiVersion: "batch/v1"
+kind: "Job"
+metadata:
+  name: "nolimit-job"
+spec:
+  backoffLimit: 1
+  completionMode: "Indexed"
+  completions: 1
+  parallelism: 1
+  template:
+    spec:
+      containers:
+      - command:
+        - "bash"
+        - "/data/start.sh"
+        env:
+        - name: "JOB_NAME"
+          value: "nolimit-job"
+        - name: "SERVICE_NAME"
+          value: "nolimit-service"
+        - name: "MASTER_PORT"
+          value: "29500"
+        - name: "NNODES"
+          value: "1"
+        - name: "NPROC_PER_NODE"
+          value: "1"
+        - name: "USE_FSSPEC"
+          value: "1"
+        - name: "USE_SPAWN_MULTI_PROCESS"
+          value: "1"
+        - name: "USE_FARM_HASH_TO_BUCKETIZE"
+          value: "true"
+        image: "sqlrec/tzrec:0.1.0-cpu"
+        name: "tzrec-job"
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+        volumeMounts:
+        - mountPath: "/data"
+          name: "config-volume"
+      restartPolicy: "Never"
+      subdomain: "nolimit-service"
+      volumes:
+      - configMap:
+          name: "nolimit-configmap"
         name: "config-volume"
 """;
         assertEquals(expectedYaml, yaml);
@@ -211,9 +284,6 @@ spec:
         image: "custom/image:v2.0"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "8"
-            memory: "16Gi"
           requests:
             cpu: "8"
             memory: "16Gi"
@@ -287,12 +357,14 @@ metadata:
         params.put("version", "0.1.0-cpu");
         params.put("pod_cpu_cores", "4");
         params.put("pod_memory", "16Gi");
+        params.put("pod_cpu_limit", "8");
+        params.put("pod_memory_limit", "32Gi");
         params.put("replicas", "3");
 
         String yaml = K8sYamlUtils.createDeploymentYaml(
                 deployName, modelCheckpointDir, params
         );
-        
+
         String expectedYaml = """
 ---
 apiVersion: "apps/v1"
@@ -329,8 +401,8 @@ spec:
           name: "http"
         resources:
           limits:
-            cpu: "4"
-            memory: "16Gi"
+            cpu: "8"
+            memory: "32Gi"
           requests:
             cpu: "4"
             memory: "16Gi"
@@ -382,9 +454,6 @@ spec:
         - containerPort: 80
           name: "http"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"

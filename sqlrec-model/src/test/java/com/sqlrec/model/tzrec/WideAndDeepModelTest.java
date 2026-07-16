@@ -276,9 +276,6 @@ spec:
         image: "sqlrec/tzrec:0.1.0-cpu"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"
@@ -439,9 +436,6 @@ spec:
         image: "sqlrec/tzrec:0.1.0-cpu"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"
@@ -618,9 +612,6 @@ spec:
         image: "sqlrec/tzrec:0.1.0-cpu"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"
@@ -652,6 +643,8 @@ spec:
         Map<String, String> params = new HashMap<>();
         params.put("pod_cpu_cores", "4");
         params.put("pod_memory", "16Gi");
+        params.put("pod_cpu_limit", "8");
+        params.put("pod_memory_limit", "32Gi");
         params.put("replicas", "3");
         serviceConf.setParams(params);
 
@@ -694,8 +687,8 @@ spec:
           name: "http"
         resources:
           limits:
-            cpu: "4"
-            memory: "16Gi"
+            cpu: "8"
+            memory: "32Gi"
           requests:
             cpu: "4"
             memory: "16Gi"
@@ -762,9 +755,6 @@ spec:
         - containerPort: 80
           name: "http"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"
@@ -951,9 +941,6 @@ spec:
         image: "sqlrec/tzrec:0.1.0-cpu"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"
@@ -1116,9 +1103,6 @@ spec:
         image: "sqlrec/tzrec:0.1.0-cpu"
         name: "tzrec-job"
         resources:
-          limits:
-            cpu: "1"
-            memory: "2Gi"
           requests:
             cpu: "1"
             memory: "2Gi"

@@ -1,5 +1,7 @@
 package com.sqlrec.model.tzrec;
 
+import com.sqlrec.common.config.ModelConfigs;
+import com.sqlrec.common.model.ServiceConfig;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
@@ -95,14 +97,7 @@ public class K8sYamlUtils {
                                 .withName("tzrec-job")
                                 .withImage(image)
                                 .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
-                                .withResources(
-                                        new ResourceRequirementsBuilder()
-                                                .addToLimits("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
-                                                .addToLimits("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
-                                                .addToRequests("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
-                                                .addToRequests("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
-                                                .build()
-                                )
+                                .withResources(buildResourceRequirements(params))
                                 .withEnv(
                                     new ArrayList<EnvVar>() {{
                                         add(new EnvVarBuilder().withName("JOB_NAME").withValue(jobName).build());
@@ -181,14 +176,7 @@ public class K8sYamlUtils {
                                             add(new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getDefaultValue()).build());
                                         }}
                                 )
-                                .withResources(
-                                        new ResourceRequirementsBuilder()
-                                                .addToLimits("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
-                                                .addToLimits("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
-                                                .addToRequests("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
-                                                .addToRequests("memory", new Quantity(Config.POD_MEMORY.getValue(params)))
-                                                .build()
-                                )
+                                .withResources(buildResourceRequirements(params))
                             .endContainer()
                         .endSpec()
                     .endTemplate()
@@ -196,6 +184,26 @@ public class K8sYamlUtils {
                 .build();
 
         return Serialization.asYaml(deployment);
+    }
+
+    /**
+     * Builds pod resource requirements. Requests are always configured from {@link Config#POD_CPU_CORES}
+     * and {@link Config#POD_MEMORY}. Limits are only added when the corresponding limit option
+     * ({@link Config#POD_CPU_LIMIT} / {@link Config#POD_MEMORY_LIMIT}) is present in params.
+     */
+    private static ResourceRequirements buildResourceRequirements(Map<String, String> params) {
+        ResourceRequirementsBuilder builder = new ResourceRequirementsBuilder()
+                .addToRequests("cpu", new Quantity(String.valueOf(Config.POD_CPU_CORES.getValue(params))))
+                .addToRequests("memory", new Quantity(Config.POD_MEMORY.getValue(params)));
+
+        if (Config.POD_CPU_LIMIT.isSet(params)) {
+            builder.addToLimits("cpu", new Quantity(Config.POD_CPU_LIMIT.getValue(params)));
+        }
+        if (Config.POD_MEMORY_LIMIT.isSet(params)) {
+            builder.addToLimits("memory", new Quantity(Config.POD_MEMORY_LIMIT.getValue(params)));
+        }
+
+        return builder.build();
     }
 
     public static String mergeK8sYamls(String... yamls) {
@@ -210,5 +218,47 @@ public class K8sYamlUtils {
             }
         }
         return mergedYaml.toString();
+    }
+
+    public static String genJobYaml(String pipelineConfig, String shell, String id, Map<String, String> params) {
+        String configMapName = id + "-cm";
+        String jobName = id + "-job";
+        String serviceName = jobName + "-headless";
+        int nnodes = Config.NNODES.getValue(params);
+        int nprocPerNode = Config.NPROC_PER_NODE.getValue(params);
+        int masterPort = Config.MASTER_PORT.getValue(params);
+
+        String configMapYaml = createConfigMapYaml(
+                configMapName,
+                new HashMap<String, String>() {{
+                    put(Config.PIPELINE_CONFIG_NAME, pipelineConfig);
+                    put(Config.START_SHELL_NAME, shell);
+                }}
+        );
+
+        String serviceYaml = createHeadlessServiceYaml(jobName, serviceName, masterPort);
+
+        String jobYaml = createJobYaml(
+                jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
+        );
+
+        return mergeK8sYamls(configMapYaml, serviceYaml, jobYaml);
+    }
+
+    public static String getServiceUrl(ServiceConfig serviceConf) {
+        String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.getParams());
+        return "http://" + serviceConf.getId() + "." + namespace + ".svc.cluster.local:80/predict";
+    }
+
+    public static String getServiceK8sYaml(ServiceConfig serviceConf) {
+        String deploymentName = serviceConf.getId();
+        String serviceName = serviceConf.getId();
+
+        String serviceYaml = createServiceYaml(serviceName, 80, "app", deploymentName);
+        String deploymentYaml = createDeploymentYaml(
+                deploymentName, serviceConf.getModelCheckpointDir(), serviceConf.getParams()
+        );
+
+        return mergeK8sYamls(deploymentYaml, serviceYaml);
     }
 }

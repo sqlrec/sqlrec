@@ -46,6 +46,10 @@ public class ConfigOption<T> {
         return processValue(value);
     }
 
+    public boolean isSet(Map<String, String> options) {
+        return options != null && options.containsKey(key) && options.get(key) != null;
+    }
+
     public T getValue() {
         String value = System.getenv(key);
         return processValue(value);
