@@ -120,6 +120,11 @@ public class FunctionUpdater {
             MetadataAccess db = MetadataAccessFactory.getInstance();
             boolean needFlush = false;
             SqlFunctionBindable functionBindable = functionBindableMap.get(functionName);
+            if (functionBindable == null) {
+                log.warn("function bindable {} not found (may have been removed concurrently)", functionName);
+                functionUpdateStatusMap.put(functionName, UPDATE_FAILED);
+                return UPDATE_FAILED;
+            }
             Set<String> dependencySqlFunctions = functionBindable.getDependencySqlFunctions();
             for (String dependencySqlFunction : dependencySqlFunctions) {
                 int dependencyStatus = tryFlushFunctionBindable(

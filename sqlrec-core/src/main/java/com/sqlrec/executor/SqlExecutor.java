@@ -125,7 +125,7 @@ public class SqlExecutor {
         logger.info("executeSql start, timeout: {}ms, sql: {}", timeout, sql);
         while (!result.isCompleted()) {
             long duration = System.currentTimeMillis() - start;
-            logger.error("executeSql duration {}ms, sql: {}", timeout, sql);
+            logger.info("executeSql duration {}ms, sql: {}", duration, sql);
             if (duration > timeout) {
                 throw new RuntimeException("sql execution timeout after " + timeout + "ms");
             }

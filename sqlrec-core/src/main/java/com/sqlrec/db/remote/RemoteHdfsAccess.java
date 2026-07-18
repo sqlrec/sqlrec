@@ -18,19 +18,32 @@ public class RemoteHdfsAccess implements HdfsAccess {
     public boolean pathExists(String hdfsPath) {
         validatePath(hdfsPath);
 
+        StringBuilder output = new StringBuilder();
         try {
             ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-test", "-e", hdfsPath);
             pb.redirectErrorStream(true);
             clearJavaToolOptions(pb.environment());
             Process process = pb.start();
+            // Collect output to prevent pipe buffer deadlock and for diagnostics
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
+                log.error("Check hdfs path exists timeout: path={}, output={}", hdfsPath, output);
                 throw new RuntimeException("Check hdfs path exists timeout: path=" + hdfsPath);
             }
             int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                log.warn("Check hdfs path exists failed: path={}, exitCode={}, output={}", hdfsPath, exitCode, output);
+            }
             return exitCode == 0;
         } catch (Exception e) {
+            log.error("Check hdfs path exists exception: path={}, output={}", hdfsPath, output, e);
             throw new RuntimeException("Check hdfs path exists failed: path=" + hdfsPath, e);
         }
     }
