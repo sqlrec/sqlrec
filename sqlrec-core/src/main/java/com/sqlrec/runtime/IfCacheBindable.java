@@ -5,6 +5,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.utils.Executor;
 import com.sqlrec.utils.SchemaUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -146,7 +147,7 @@ public class IfCacheBindable extends BindableInterface {
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
         CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
                 () -> thenClause.bind(schema, context),
-                java.util.concurrent.Executors.newSingleThreadExecutor()
+                Executor.getExecutorService()
         );
 
         try {

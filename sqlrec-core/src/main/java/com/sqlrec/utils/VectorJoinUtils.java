@@ -168,6 +168,8 @@ public class VectorJoinUtils {
                         } else if (rightIdx < leftSize && leftIdx >= leftSize) {
                             config.leftEmbeddingColIndex = rightIdx;
                             config.rightEmbeddingColIndex = leftIdx - leftSize;
+                        } else {
+                            throw new RuntimeException("Cannot determine left/right embedding columns from ip() call");
                         }
 
                         config.rightEmbeddingColName = rightFieldNames.get(config.rightEmbeddingColIndex);

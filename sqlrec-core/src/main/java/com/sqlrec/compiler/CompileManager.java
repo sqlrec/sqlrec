@@ -195,8 +195,11 @@ public class CompileManager {
 
         compilingSqlFunctions.add(functionName);
         FunctionCompiler functionCompiler = new FunctionCompiler(null, this);
-        functionCompiler.compileAllSql(sqlList);
-        compilingSqlFunctions.removeLast();
+        try {
+            functionCompiler.compileAllSql(sqlList);
+        } finally {
+            compilingSqlFunctions.removeLast();
+        }
 
         if (functionCompiler.isFunctionCompileFinish()) {
             if (!functionName.equalsIgnoreCase(functionCompiler.getFunctionBindable().getFunName())) {

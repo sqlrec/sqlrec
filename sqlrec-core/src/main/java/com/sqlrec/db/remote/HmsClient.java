@@ -14,20 +14,16 @@ import java.util.stream.Collectors;
 public class HmsClient {
     private static volatile HiveMetaStoreClient client;
 
-    private static HiveMetaStoreClient getClient() {
+    private static synchronized HiveMetaStoreClient getClient() {
         if (client == null) {
-            synchronized (HmsClient.class) {
-                if (client == null) {
-                    String hiveMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getValue();
-                    Configuration hiveConf = new Configuration();
-                    hiveConf.set(HiveConf.ConfVars.METASTOREURIS.toString(), hiveMetastoreUri);
-                    hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), SqlRecConfigs.EXECUTE_SET_UGI.getValue());
-                    try {
-                        client = new HiveMetaStoreClient(hiveConf);
-                    } catch (MetaException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
+            String hiveMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getValue();
+            Configuration hiveConf = new Configuration();
+            hiveConf.set(HiveConf.ConfVars.METASTOREURIS.toString(), hiveMetastoreUri);
+            hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), SqlRecConfigs.EXECUTE_SET_UGI.getValue());
+            try {
+                client = new HiveMetaStoreClient(hiveConf);
+            } catch (MetaException e) {
+                throw new RuntimeException(e);
             }
         }
         return client;

@@ -39,8 +39,8 @@ public class SchemaUtils {
     }
 
     public static String removeQuotes(String value) {
-        if (value == null) {
-            return null;
+        if (value == null || value.length() < 2) {
+            return value;
         }
         if ((value.startsWith("'") && value.endsWith("'")) ||
                 (value.startsWith("\"") && value.endsWith("\""))) {
@@ -230,7 +230,8 @@ public class SchemaUtils {
                     if (i > 0) {
                         sb.append(", ");
                     }
-                    sb.append("'").append(entry.getKey()).append("' = '").append(entry.getValue()).append("'");
+                    sb.append("'").append(entry.getKey().replace("'", "''"))
+                            .append("' = '").append(entry.getValue().replace("'", "''")).append("'");
                     i++;
                 }
                 sb.append(")");

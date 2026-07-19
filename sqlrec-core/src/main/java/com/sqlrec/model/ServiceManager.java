@@ -147,5 +147,6 @@ public class ServiceManager {
             K8sManager.deleteYaml(service.getYaml());
         }
         db.deleteService(serviceName);
+        serviceConfigCacheMap.remove(serviceName);
     }
 }

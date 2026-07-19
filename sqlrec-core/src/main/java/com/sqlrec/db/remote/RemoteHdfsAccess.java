@@ -34,6 +34,7 @@ public class RemoteHdfsAccess implements HdfsAccess {
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
+                try { process.waitFor(); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 log.error("Check hdfs path exists timeout: path={}, output={}", hdfsPath, output);
                 throw new RuntimeException("Check hdfs path exists timeout: path=" + hdfsPath);
             }
@@ -69,6 +70,7 @@ public class RemoteHdfsAccess implements HdfsAccess {
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
+                try { process.waitFor(); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 throw new RuntimeException("Delete hdfs path timeout: path=" + hdfsPath);
             }
             int exitCode = process.exitValue();

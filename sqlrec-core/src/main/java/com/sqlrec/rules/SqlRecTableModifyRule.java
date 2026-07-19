@@ -46,9 +46,6 @@ public class SqlRecTableModifyRule extends ConverterRule {
     @Override
     public boolean matches(RelOptRuleCall call) {
         RelOptTableImpl table = (RelOptTableImpl) call.rel(0).getTable();
-        if (table != null && table.unwrap(ModifiableTable.class) != null) {
-            return true;
-        }
-        return false;
+        return table != null && table.unwrap(ModifiableTable.class) != null;
     }
 }

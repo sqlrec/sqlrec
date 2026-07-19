@@ -223,15 +223,18 @@ public class FunctionProxyBindable extends BindableInterface {
 
         // wait for all partitions and merge results
         List<Object[]> mergedResults = new ArrayList<>();
-        for (int i = 0; i < futures.size(); i++) {
-            try {
+        try {
+            for (int i = 0; i < futures.size(); i++) {
                 Enumerable<Object[]> result = futures.get(i).join();
                 if (result != null) {
                     result.forEach(mergedResults::add);
                 }
-            } catch (Exception e) {
-                throw new RuntimeException("Partition " + i + " execution failed", e);
             }
+        } catch (Exception e) {
+            for (CompletableFuture<Enumerable<Object[]>> f : futures) {
+                f.cancel(true);
+            }
+            throw new RuntimeException("Partition execution failed", e);
         }
 
         return Linq4j.asEnumerable(mergedResults);

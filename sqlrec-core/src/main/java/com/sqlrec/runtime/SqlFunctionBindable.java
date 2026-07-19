@@ -100,7 +100,12 @@ public class SqlFunctionBindable extends BindableInterface {
         CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(
                 bindFutures.values().toArray(new CompletableFuture[0])
         );
-        allBindFutures.join();
+        try {
+            allBindFutures.join();
+        } catch (Exception e) {
+            bindFutures.values().forEach(f -> f.cancel(true));
+            throw e;
+        }
     }
 
     @Override

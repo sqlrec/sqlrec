@@ -12,8 +12,8 @@ public class ObjCache<T> {
     private static final Logger log = LoggerFactory.getLogger(ObjCache.class);
     private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-    private T obj;
-    private long lastUpdateTimeInMillis;
+    private volatile T obj;
+    private volatile long lastUpdateTimeInMillis;
     private long cacheExpireTimeInMillis;
     private boolean asyncUpdate;
     private Function<T, T> updateFunction;

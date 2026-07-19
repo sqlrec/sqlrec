@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,10 +58,10 @@ public class K8sManager {
         }
 
         try {
-            InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes());
+            InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8));
             resources = getKubernetesClient().load(inputStream).items();
         } catch (Exception e) {
-            log.error("Failed to parse YAML: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse YAML: " + e.getMessage(), e);
         }
 
         return resources;
@@ -277,7 +278,7 @@ public class K8sManager {
             return;
         }
         try {
-            InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes());
+            InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8));
             getKubernetesClient().load(inputStream).serverSideApply();
         } catch (Exception e) {
             log.error("Failed to apply YAML: {}", e.getMessage(), e);

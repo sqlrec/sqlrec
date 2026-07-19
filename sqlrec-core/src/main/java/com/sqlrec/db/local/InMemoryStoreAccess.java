@@ -106,10 +106,9 @@ public class InMemoryStoreAccess implements StoreAccess {
     @Override
     public void insertSqlFunction(SqlFunction sqlFunction) {
         sqlFunction.setName(sqlFunction.getName().toUpperCase());
-        if (sqlFunctionMap.containsKey(sqlFunction.getName())) {
+        if (sqlFunctionMap.putIfAbsent(sqlFunction.getName(), sqlFunction) != null) {
             throw new RuntimeException("SqlFunction already exists: " + sqlFunction.getName());
         }
-        sqlFunctionMap.put(sqlFunction.getName(), sqlFunction);
     }
 
     @Override
@@ -135,10 +134,9 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void insertSqlApi(SqlApi sqlApi) {
-        if (sqlApiMap.containsKey(sqlApi.getName())) {
+        if (sqlApiMap.putIfAbsent(sqlApi.getName(), sqlApi) != null) {
             throw new RuntimeException("SqlApi already exists: " + sqlApi.getName());
         }
-        sqlApiMap.put(sqlApi.getName(), sqlApi);
     }
 
     @Override
@@ -170,10 +168,9 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void insertModel(Model model) {
-        if (modelMap.containsKey(model.getName())) {
+        if (modelMap.putIfAbsent(model.getName(), model) != null) {
             throw new RuntimeException("Model already exists: " + model.getName());
         }
-        modelMap.put(model.getName(), model);
     }
 
     @Override
@@ -189,7 +186,7 @@ public class InMemoryStoreAccess implements StoreAccess {
     @Override
     public List<Checkpoint> getCheckpointListByModelName(String modelName) {
         return checkpointMap.values().stream()
-                .filter(cp -> cp.getModelName().equals(modelName))
+                .filter(cp -> cp.getModelName() != null && cp.getModelName().equals(modelName))
                 .collect(Collectors.toList());
     }
 
@@ -223,10 +220,9 @@ public class InMemoryStoreAccess implements StoreAccess {
     @Override
     public void insertCheckpoint(Checkpoint checkpoint) {
         String key = checkpointKey(checkpoint.getModelName(), checkpoint.getCheckpointName());
-        if (checkpointMap.containsKey(key)) {
+        if (checkpointMap.putIfAbsent(key, checkpoint) != null) {
             throw new RuntimeException("Checkpoint already exists: " + key);
         }
-        checkpointMap.put(key, checkpoint);
     }
 
     @Override
@@ -266,10 +262,9 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void insertService(Service service) {
-        if (serviceMap.containsKey(service.getName())) {
+        if (serviceMap.putIfAbsent(service.getName(), service) != null) {
             throw new RuntimeException("Service already exists: " + service.getName());
         }
-        serviceMap.put(service.getName(), service);
     }
 
     @Override
