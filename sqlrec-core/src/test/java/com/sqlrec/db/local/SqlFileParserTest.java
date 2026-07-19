@@ -457,4 +457,99 @@ class SqlFileParserTest {
         String result = parser.resolveVariables("${A}${B}", vars);
         assertEquals("helloworld", result);
     }
+
+    // --- Escaped quote tests for splitStatements ---
+
+    @Test
+    void testParseWithEscapedSingleQuote() throws Exception {
+        // Escaped single quote ('') in connector option value should not break parsing
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('url' = 'it''s ok')
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseWithEscapedSingleQuoteAndSemicolon() throws Exception {
+        // Semicolons inside escaped-quoted strings must not split the statement
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('url' = 'a;b''c;d')
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseMultipleStatementsWithEscapedQuotes() throws Exception {
+        // First statement has escaped quote, separated by semicolon, then second statement
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('url' = 'it''s ok');
+            CREATE TABLE t2 (id INT)
+            """);
+
+        assertEquals(2, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseWithConsecutiveEscapedSingleQuotes() throws Exception {
+        // Two escaped quotes in a row: 'x''y''z' should be treated as one string
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('a' = 'x''y''z')
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseWithEscapedQuoteAndRealSemicolon() throws Exception {
+        // Escaped quote in first statement's WITH clause, real semicolon, then second statement
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('url' = 'can''t');
+            CREATE TABLE t2 (id INT)
+            """);
+
+        assertEquals(2, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseSemicolonInsideQuotedStringNotSplit() throws Exception {
+        // Semicolons inside single-quoted strings should not split statements
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('url' = 'hello;world')
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseEscapedQuoteAtEndOfString() throws Exception {
+        // Tricky case: escaped quote at end of string like 'can''t'
+        parser.parseContent("""
+            CREATE TABLE t1 (id INT) WITH ('name' = 'can''t')
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+    }
+
+    @Test
+    void testParseRealScenarioWithEscapedQuotes() throws Exception {
+        // Realistic scenario: connector options and SQL function with escaped quotes
+        parser.parseContent("""
+            CREATE TABLE user_table (
+              user_id BIGINT,
+              name STRING,
+              PRIMARY KEY (user_id) NOT ENFORCED
+            ) WITH (
+              'connector' = 'redis',
+              'url' = 'redis://localhost:6379/0'
+            );
+            CREATE SQL FUNCTION my_func;
+            CACHE TABLE t AS SELECT * FROM user_table WHERE name = 'O''Brien';
+            RETURN t
+            """);
+
+        assertEquals(1, parser.getTableNodes().size());
+        assertEquals(1, parser.getSqlFunctionNodeGroups().size());
+    }
 }

@@ -62,14 +62,14 @@ public class JavaFunctionUtils {
             if (StringUtils.isEmpty(className)) {
                 return null;
             }
-            if (!javaFunctionClassMap.containsKey(mapKey) ||
-                    !javaFunctionClassMap.get(mapKey).getName().equals(className)) {
+            Class<?> existingClazz = javaFunctionClassMap.get(mapKey);
+            if (existingClazz == null || !existingClazz.getName().equals(className)) {
                 clazz = Class.forName(className);
                 javaFunctionClassMap.put(mapKey, clazz);
                 functionUpdateTime.put(mapKey, System.currentTimeMillis());
                 log.info("Register table function: db={}, funName={}, className={}", db, funName, className);
             } else {
-                clazz = javaFunctionClassMap.get(mapKey);
+                clazz = existingClazz;
             }
         } catch (NoSuchObjectException e) {
             log.info("function: db={}, funName={} not found", db, funName);

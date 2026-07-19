@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TableFactoryUtils {
     private static final Logger log = LoggerFactory.getLogger(TableFactoryUtils.class);
 
-    private static Map<String, HmsTableFactory> tableFactories;
+    private static volatile Map<String, HmsTableFactory> tableFactories;
 
     public static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         try {

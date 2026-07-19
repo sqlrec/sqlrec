@@ -48,10 +48,9 @@ public class CalciteSchemaFactory {
         try {
             List<String> databases = databaseListCache.getObj();
             for (String database : databases) {
-                if (!schemaMap.containsKey(database)) {
-                    schemaMap.put(database, new HmsSchema(database, metadataAccess));
-                }
-                rootSchema.add(database, schemaMap.get(database));
+                HmsSchema hmsSchema = schemaMap.computeIfAbsent(database,
+                        db -> new HmsSchema(db, metadataAccess));
+                rootSchema.add(database, hmsSchema);
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

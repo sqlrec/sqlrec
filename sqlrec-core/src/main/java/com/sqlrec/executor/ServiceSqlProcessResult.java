@@ -45,7 +45,7 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
     @Override
     public boolean isCompleted() {
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCheckTime < 10000) {
+        if (currentTime - lastCheckTime < 1000) {
             return cachedCompleted;
         }
         lastCheckTime = currentTime;

@@ -194,8 +194,9 @@ public class CompileManager {
         }
 
         compilingSqlFunctions.add(functionName);
-        FunctionCompiler functionCompiler = new FunctionCompiler(null, this);
+        FunctionCompiler functionCompiler;
         try {
+            functionCompiler = new FunctionCompiler(null, this);
             functionCompiler.compileAllSql(sqlList);
         } finally {
             compilingSqlFunctions.removeLast();

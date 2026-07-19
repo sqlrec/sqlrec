@@ -133,9 +133,21 @@ public class SqlFileParser {
             char c = content.charAt(i);
 
             if (c == '\'' && !inDoubleQuote) {
+                // Handle escaped single quote (''): two consecutive single quotes inside a string
+                if (inSingleQuote && i + 1 < content.length() && content.charAt(i + 1) == '\'') {
+                    current.append("''");
+                    i++; // skip the next quote
+                    continue;
+                }
                 inSingleQuote = !inSingleQuote;
                 current.append(c);
             } else if (c == '"' && !inSingleQuote) {
+                // Handle escaped double quote (""): two consecutive double quotes inside a string
+                if (inDoubleQuote && i + 1 < content.length() && content.charAt(i + 1) == '"') {
+                    current.append("\"\"");
+                    i++; // skip the next quote
+                    continue;
+                }
                 inDoubleQuote = !inDoubleQuote;
                 current.append(c);
             } else if (c == ';' && !inSingleQuote && !inDoubleQuote) {
