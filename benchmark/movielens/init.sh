@@ -4,9 +4,9 @@ source ~/.bash_profile
 set -ex
 dir=$(dirname $(realpath $0))
 
-export BASE_DIR=$(dirname ${dir})/deploy
-source ${dir}/../deploy/env.sh
-bash ${dir}/../deploy/kyuubi/deploy.sh
+export BASE_DIR=$(dirname $(dirname ${dir}))/deploy
+source ${BASE_DIR}/env.sh
+bash ${BASE_DIR}/kyuubi/deploy.sh
 
 
 if ! which wrk > /dev/null 2>&1; then

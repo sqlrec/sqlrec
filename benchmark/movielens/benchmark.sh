@@ -4,8 +4,8 @@ source ~/.bash_profile
 set -ex
 dir=$(dirname $(realpath $0))
 
-export BASE_DIR=$(dirname ${dir})/deploy
-source ${dir}/../deploy/env.sh
+export BASE_DIR=$(dirname $(dirname ${dir}))/deploy
+source ${BASE_DIR}/env.sh
 
 CONCURRENCY=10
 DURATION=30
