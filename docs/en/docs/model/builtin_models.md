@@ -244,7 +244,7 @@ CREATE SERVICE dssm_service
     );
 ```
 
-### 4. LightGBM Model (Gradient Boosting Decision Tree)
+### 4. LightGBM Model
 
 The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
 
@@ -252,7 +252,7 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 
 **Features**:
 - LightGBM-based gradient boosting decision tree
-- Native categorical feature support
+- Float/double numerical features only (no categorical support; use CatBoost for categorical/integer features)
 - LightGBM socket-based distributed training
 - Parquet training data on distributed storage
 - Model artifacts persisted to distributed storage
@@ -286,7 +286,6 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 | `bagging_freq` | Integer | 5 | Bagging frequency |
 | `min_data_in_leaf` | Integer | 20 | Minimum samples in a leaf |
 | `l2_regularization` | Double | 1.0 | L2 regularization coefficient |
-| `categorical_features` | String | "" | Categorical feature names (comma separated) |
 
 **Distributed training parameters**:
 
@@ -312,16 +311,14 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 
 ```sql
 CREATE MODEL lgb_model (
-    user_id BIGINT,
-    user_country VARCHAR,
-    age INT,
-    item_id BIGINT,
-    item_category VARCHAR,
+    user_id FLOAT,
+    age FLOAT,
+    item_id FLOAT,
+    item_price FLOAT,
     label INT
 ) WITH (
     model = 'gbdt.lightgbm',
     label_columns = 'label',
-    categorical_features = 'user_country,item_category',
     num_iterations = 200,
     learning_rate = 0.05,
     num_leaves = 127
@@ -347,7 +344,7 @@ CREATE SERVICE lgb_service
     );
 ```
 
-### 5. XGBoost Model (Gradient Boosting Decision Tree)
+### 5. XGBoost Model
 
 The XGBoost model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and model artifacts are stored on distributed storage; export produces ONNX format for online inference.
 
@@ -434,7 +431,7 @@ CREATE SERVICE xgb_service
     );
 ```
 
-### 6. CatBoost Model (Gradient Boosting Decision Tree)
+### 6. CatBoost Model
 
 The CatBoost model is based on the GBDT framework with native categorical feature handling. It supports the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
 
@@ -442,7 +439,7 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 
 **Features**:
 - CatBoost-based gradient boosting decision tree
-- Native categorical feature handling (no manual encoding needed)
+- Native categorical feature handling (no manual encoding needed); int/bigint/string columns are automatically treated as categorical features, float/double columns as numeric features
 - CatBoost distributed training (`catboost run-worker` daemon + `fit_with_workers` Python API)
 - Parquet training data on distributed storage
 - Model artifacts persisted to distributed storage
@@ -471,7 +468,6 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 | `cb_depth` | Integer | 6 | CatBoost tree depth |
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 leaf regularization |
 | `learning_rate` | Double | 0.1 | Learning rate |
-| `categorical_features` | String | "" | Categorical feature names (comma separated) |
 
 **Distributed training parameters**:
 
@@ -508,7 +504,6 @@ CREATE MODEL cb_model (
 ) WITH (
     model = 'gbdt.catboost',
     label_columns = 'label',
-    categorical_features = 'user_country,item_category',
     cb_iterations = 1000,
     cb_depth = 8,
     learning_rate = 0.03

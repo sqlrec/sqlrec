@@ -6,7 +6,7 @@
 
 SQLRec 内置了以下模型类型：
 
-### 1. External Model（外部模型）
+### 1. 外部模型
 
 外部模型用于对接已有的外部模型服务，不支持训练和导出操作。
 
@@ -38,7 +38,7 @@ CREATE SERVICE external_service
     ON MODEL external_model;
 ```
 
-### 2. Wide & Deep Model（推荐模型）
+### 2. Wide & Deep 模型
 
 Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的训练、导出和服务部署流程。
 
@@ -136,7 +136,7 @@ CREATE SERVICE rec_service
     );
 ```
 
-### 3. DSSM Model（双塔召回模型）
+### 3. DSSM 模型
 
 DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的双塔召回模型，支持完整的训练、导出和服务部署流程。
 
@@ -244,7 +244,7 @@ CREATE SERVICE dssm_service
     );
 ```
 
-### 4. LightGBM Model（梯度提升树模型）
+### 4. LightGBM 模型
 
 LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，支持完整的训练、导出和服务部署流程。训练数据和模型文件均存储在 HDFS 上，导出时转换为 ONNX 格式用于在线推理。
 
@@ -252,7 +252,7 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 
 **特性**：
 - 基于 LightGBM 框架的梯度提升树模型
-- 原生支持类别特征（categorical features）
+- 仅支持浮点数值特征（float/double），不支持类别特征（如需类别/整数特征请使用 CatBoost）
 - 支持 LightGBM socket 分布式训练
 - 支持 Parquet 格式训练数据（存储在分布式存储）
 - 模型文件持久化到分布式存储
@@ -286,7 +286,6 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 | `bagging_freq` | Integer | 5 | bagging 频率 |
 | `min_data_in_leaf` | Integer | 20 | 叶子节点最小样本数 |
 | `l2_regularization` | Double | 1.0 | L2 正则化系数 |
-| `categorical_features` | String | "" | 类别特征列名（逗号分隔） |
 
 **分布式训练参数**：
 
@@ -312,16 +311,14 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 
 ```sql
 CREATE MODEL lgb_model (
-    user_id BIGINT,
-    user_country VARCHAR,
-    age INT,
-    item_id BIGINT,
-    item_category VARCHAR,
+    user_id FLOAT,
+    age FLOAT,
+    item_id FLOAT,
+    item_price FLOAT,
     label INT
 ) WITH (
     model = 'gbdt.lightgbm',
     label_columns = 'label',
-    categorical_features = 'user_country,item_category',
     num_iterations = 200,
     learning_rate = 0.05,
     num_leaves = 127
@@ -347,7 +344,7 @@ CREATE SERVICE lgb_service
     );
 ```
 
-### 5. XGBoost Model（梯度提升树模型）
+### 5. XGBoost 模型
 
 XGBoost 模型是基于 GBDT（梯度提升决策树）框架实现的模型，支持完整的训练、导出和服务部署流程。训练数据和模型文件均存储在分布式存储上，导出时转换为 ONNX 格式用于在线推理。
 
@@ -434,7 +431,7 @@ CREATE SERVICE xgb_service
     );
 ```
 
-### 6. CatBoost Model（梯度提升树模型）
+### 6. CatBoost 模型
 
 CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征处理，支持完整的训练、导出和服务部署流程。训练数据和模型文件均存储在 HDFS 上，导出时转换为 ONNX 格式用于在线推理。
 
@@ -442,7 +439,7 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 
 **特性**：
 - 基于 CatBoost 框架的梯度提升树模型
-- 原生支持类别特征处理（无需手动编码）
+- 原生支持类别特征处理（无需手动编码）；int/bigint/string 类型的列自动作为类别特征，float/double 类型的列作为数值特征
 - 支持 CatBoost 分布式训练（`catboost run-worker` daemon + `fit_with_workers` Python API）
 - 支持 Parquet 格式训练数据（存储在分布式存储）
 - 模型文件持久化到分布式存储
@@ -471,7 +468,6 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 | `cb_depth` | Integer | 6 | CatBoost 树深度 |
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 叶子正则化系数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
-| `categorical_features` | String | "" | 类别特征列名（逗号分隔） |
 
 **分布式训练参数**：
 
@@ -508,7 +504,6 @@ CREATE MODEL cb_model (
 ) WITH (
     model = 'gbdt.catboost',
     label_columns = 'label',
-    categorical_features = 'user_country,item_category',
     cb_iterations = 1000,
     cb_depth = 8,
     learning_rate = 0.03
