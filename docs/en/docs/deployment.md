@@ -219,7 +219,8 @@ bash ./bin/build_docker.sh
 | Image | Dockerfile | Description |
 |-------|------------|-------------|
 | `sqlrec/sqlrec:${VERSION}` | `docker/Dockerfile` | SQLRec service image |
-| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | Model training/inference image (CPU version) |
+| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
+| `sqlrec/gbdt:${VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/CatBoost) training/inference image (CPU version) |
 
 **Minikube Environment**:
 

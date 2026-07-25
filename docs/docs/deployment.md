@@ -219,7 +219,8 @@ bash ./bin/build_docker.sh
 | 镜像 | Dockerfile | 说明 |
 |------|------------|------|
 | `sqlrec/sqlrec:${VERSION}` | `docker/Dockerfile` | SQLRec 服务镜像 |
-| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | 模型训练/推理镜像（CPU 版本） |
+| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
+| `sqlrec/gbdt:${VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/CatBoost) 训练/推理镜像（CPU 版本） |
 
 **Minikube 环境**：
 

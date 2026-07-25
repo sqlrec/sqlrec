@@ -10,7 +10,12 @@ find_package(Torch REQUIRED)
 add_library( fbgemm SHARED IMPORTED GLOBAL )
 set_target_properties(fbgemm PROPERTIES IMPORTED_LOCATION ${FBGEMM_LIB})
 
+# Shared third-party header-only libraries (httplib.h, json.hpp) live in the
+# sibling common/ directory so they can be reused by other model servers.
+set(COMMON_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
+
 add_executable(server server.cpp)
+target_include_directories(server PRIVATE ${COMMON_INCLUDE_DIR})
 target_link_libraries(server
   "${TORCH_LIBRARIES}"
   fbgemm

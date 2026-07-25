@@ -4,7 +4,7 @@ This document introduces SQLRec built-in model types and their usage.
 
 ## Built-in Model Types
 
-SQLRec has three built-in model types:
+SQLRec has the following built-in model types:
 
 ### 1. External Model
 
@@ -236,6 +236,294 @@ EXPORT MODEL dssm_model CHECKPOINT = 'v1.0';
 
 CREATE SERVICE dssm_service
     ON MODEL dssm_model
+    CHECKPOINT = 'v1.0'
+    WITH (
+        replicas = 3,
+        pod_cpu_cores = 4,
+        pod_memory = '16Gi'
+    );
+```
+
+### 4. LightGBM Model (Gradient Boosting Decision Tree)
+
+The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
+
+**Model name**: `gbdt.lightgbm`
+
+**Features**:
+- LightGBM-based gradient boosting decision tree
+- Native categorical feature support
+- LightGBM socket-based distributed training
+- Parquet training data on distributed storage
+- Model artifacts persisted to distributed storage
+- Exports ONNX format for serving (via onnxmltools)
+- C++ ONNX Runtime inference server
+
+**Output fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `probs` | FLOAT | Predicted probability |
+
+**Required parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `label_columns` | String | Label column name |
+
+**Training parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
+| `num_iterations` | Integer | 100 | Number of boosting iterations |
+| `learning_rate` | Double | 0.1 | Learning rate |
+| `num_leaves` | Integer | 63 | Maximum leaves per tree |
+| `max_depth` | Integer | 6 | Maximum tree depth |
+| `feature_fraction` | Double | 0.9 | Fraction of features used per tree |
+| `bagging_fraction` | Double | 0.9 | Fraction of data used per tree |
+| `bagging_freq` | Integer | 5 | Bagging frequency |
+| `min_data_in_leaf` | Integer | 20 | Minimum samples in a leaf |
+| `l2_regularization` | Double | 1.0 | L2 regularization coefficient |
+| `categorical_features` | String | "" | Categorical feature names (comma separated) |
+
+**Distributed training parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `nnodes` | Integer | 1 | Number of nodes (>1 enables LightGBM distributed mode) |
+| `nproc_per_node` | Integer | 1 | Processes per node |
+| `master_port` | Integer | 29500 | Distributed training master port |
+
+**Resource parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `image` | String | "sqlrec/gbdt" | Docker image name |
+| `version` | String | "0.1.0-cpu" | Docker image version |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
+| `replicas` | Integer | 1 | Service replica count |
+
+**Usage Example**:
+
+```sql
+CREATE MODEL lgb_model (
+    user_id BIGINT,
+    user_country VARCHAR,
+    age INT,
+    item_id BIGINT,
+    item_category VARCHAR,
+    label INT
+) WITH (
+    model = 'gbdt.lightgbm',
+    label_columns = 'label',
+    categorical_features = 'user_country,item_category',
+    num_iterations = 200,
+    learning_rate = 0.05,
+    num_leaves = 127
+);
+
+TRAIN MODEL lgb_model CHECKPOINT = 'v1.0'
+    ON training_data
+    WITH (
+        num_iterations = 500,
+        nnodes = 2,
+        nproc_per_node = 4
+    );
+
+EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
+
+CREATE SERVICE lgb_service
+    ON MODEL lgb_model
+    CHECKPOINT = 'v1.0'
+    WITH (
+        replicas = 3,
+        pod_cpu_cores = 4,
+        pod_memory = '16Gi'
+    );
+```
+
+### 5. XGBoost Model (Gradient Boosting Decision Tree)
+
+The XGBoost model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and model artifacts are stored on distributed storage; export produces ONNX format for online inference.
+
+**Model name**: `gbdt.xgboost`
+
+**Features**:
+- XGBoost-based gradient boosting decision tree
+- Float/double numerical features only (no categorical support)
+- Parquet training data on distributed storage
+- Model artifacts persisted to distributed storage
+- Exports ONNX format for serving (via onnxmltools)
+- C++ ONNX Runtime inference server
+
+**Output fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `probs` | FLOAT | Predicted probability |
+
+**Required parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `label_columns` | String | Label column name |
+
+**Training parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
+| `num_iterations` | Integer | 100 | Number of boosting iterations |
+| `learning_rate` | Double | 0.1 | Learning rate |
+| `max_depth` | Integer | 6 | Maximum tree depth |
+| `feature_fraction` | Double | 0.9 | Fraction of features used per tree (XGBoost colsample_bytree) |
+| `bagging_fraction` | Double | 0.9 | Fraction of data used per tree (XGBoost subsample) |
+| `min_child_weight` | Integer | 1 | Minimum sum of instance weight in a child |
+| `l2_regularization` | Double | 1.0 | L2 regularization coefficient (XGBoost reg_lambda) |
+
+**Resource parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `image` | String | "sqlrec/gbdt" | Docker image name |
+| `version` | String | "0.1.0-cpu" | Docker image version |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
+| `replicas` | Integer | 1 | Service replica count |
+
+**Usage Example**:
+
+```sql
+CREATE MODEL xgb_model (
+    user_id FLOAT,
+    user_age FLOAT,
+    item_id FLOAT,
+    item_price FLOAT,
+    label INT
+) WITH (
+    model = 'gbdt.xgboost',
+    label_columns = 'label',
+    num_iterations = 200,
+    learning_rate = 0.05,
+    max_depth = 8
+);
+
+TRAIN MODEL xgb_model CHECKPOINT = 'v1.0'
+    ON training_data
+    WITH (
+        num_iterations = 500
+    );
+
+EXPORT MODEL xgb_model CHECKPOINT = 'v1.0';
+
+CREATE SERVICE xgb_service
+    ON MODEL xgb_model
+    CHECKPOINT = 'v1.0'
+    WITH (
+        replicas = 3,
+        pod_cpu_cores = 4,
+        pod_memory = '16Gi'
+    );
+```
+
+### 6. CatBoost Model (Gradient Boosting Decision Tree)
+
+The CatBoost model is based on the GBDT framework with native categorical feature handling. It supports the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
+
+**Model name**: `gbdt.catboost`
+
+**Features**:
+- CatBoost-based gradient boosting decision tree
+- Native categorical feature handling (no manual encoding needed)
+- CatBoost distributed training (`catboost run-worker` daemon + `fit_with_workers` Python API)
+- Parquet training data on distributed storage
+- Model artifacts persisted to distributed storage
+- Exports native .cbm format for serving (loaded via CatBoost C API, supports categorical features)
+- C++ CatBoost native inference server
+
+**Output fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `probs` | FLOAT | Predicted probability |
+
+**Required parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `label_columns` | String | Label column name |
+
+**Training parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
+| `cb_iterations` | Integer | 1000 | CatBoost iterations |
+| `cb_depth` | Integer | 6 | CatBoost tree depth |
+| `cb_l2_leaf_reg` | Double | 3.0 | L2 leaf regularization |
+| `learning_rate` | Double | 0.1 | Learning rate |
+| `categorical_features` | String | "" | Categorical feature names (comma separated) |
+
+**Distributed training parameters**:
+
+> When `nnodes > 1`, CatBoost distributed training is enabled: each worker pod starts a `catboost run-worker` daemon, and the master pod drives training via the `fit_with_workers()` API. Worker endpoints follow the Indexed-Job DNS convention `{job_name}-{i}.{service_name}:{master_port + i}`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `nnodes` | Integer | 1 | Number of nodes (>1 enables CatBoost distributed training) |
+| `nproc_per_node` | Integer | 1 | Processes per node |
+| `master_port` | Integer | 29500 | Distributed training master port (each worker listens on master_port + node_rank) |
+
+**Resource parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `image` | String | "sqlrec/gbdt" | Docker image name |
+| `version` | String | "0.1.0-cpu" | Docker image version |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
+| `replicas` | Integer | 1 | Service replica count |
+
+**Usage Example**:
+
+```sql
+CREATE MODEL cb_model (
+    user_id BIGINT,
+    user_country VARCHAR,
+    age INT,
+    item_id BIGINT,
+    item_category VARCHAR,
+    label INT
+) WITH (
+    model = 'gbdt.catboost',
+    label_columns = 'label',
+    categorical_features = 'user_country,item_category',
+    cb_iterations = 1000,
+    cb_depth = 8,
+    learning_rate = 0.03
+);
+
+TRAIN MODEL cb_model CHECKPOINT = 'v1.0'
+    ON training_data
+    WITH (
+        nnodes = 2
+    );
+
+EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
+
+CREATE SERVICE cb_service
+    ON MODEL cb_model
     CHECKPOINT = 'v1.0'
     WITH (
         replicas = 3,

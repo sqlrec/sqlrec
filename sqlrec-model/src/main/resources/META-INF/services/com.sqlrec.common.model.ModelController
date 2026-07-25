@@ -1,3 +1,6 @@
 com.sqlrec.model.tzrec.WideAndDeepModel
 com.sqlrec.model.tzrec.DSSMModel
+com.sqlrec.model.gbdt.LightGBMModel
+com.sqlrec.model.gbdt.XGBoostModel
+com.sqlrec.model.gbdt.CatBoostModel
 com.sqlrec.model.external.ExternalModel

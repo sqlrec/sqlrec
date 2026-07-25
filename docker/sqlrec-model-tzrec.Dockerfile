@@ -13,4 +13,4 @@ RUN rm -rf /data/*.whl \
     && rm -rf /root/.cache/pip \
     && mkdir -p /app
 
-COPY ./sqlrec-model/src/main/python/* /app/
+COPY ./sqlrec-model/src/main/python/tzrec/* /app/
