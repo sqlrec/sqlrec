@@ -309,6 +309,85 @@ public class DataTypeUtils {
         }
     }
 
+    /**
+     * Adapt rows from the givenFields schema to the desiredFields schema with relaxed
+     * compatibility, supporting the following cases:
+     * 1. Fields may be in any order: as long as each desired field exists in given fields,
+     *    the result is reordered to match the desired order.
+     * 2. Any type can be converted to a string type (when the desired type is a string type).
+     * 3. Numeric types can be converted between each other.
+     * Any other incompatible case throws an exception.
+     *
+     * @return a new list of rows reordered and converted to the desired field order and types.
+     */
+    public static List<Object[]> adaptRowsToSchema(
+            List<Object[]> rows,
+            List<RelDataTypeField> desiredFields,
+            List<RelDataTypeField> givenFields
+    ) {
+        if (rows == null || desiredFields == null || givenFields == null) {
+            throw new RuntimeException("adaptRowsToSchema failed, rows/desiredFields/givenFields must not be null");
+        }
+
+        Map<String, Integer> givenNameToIndex = new HashMap<>();
+        for (int i = 0; i < givenFields.size(); i++) {
+            givenNameToIndex.put(givenFields.get(i).getName().toLowerCase(Locale.ROOT), i);
+        }
+
+        int[] indexMapping = new int[desiredFields.size()];
+        for (int i = 0; i < desiredFields.size(); i++) {
+            RelDataTypeField desiredField = desiredFields.get(i);
+            Integer givenIdx = givenNameToIndex.get(desiredField.getName().toLowerCase(Locale.ROOT));
+            if (givenIdx == null) {
+                throw new RuntimeException(
+                        "adaptRowsToSchema failed, desired field not found in given fields: "
+                                + desiredField.getName());
+            }
+            checkFieldTypeCompatible(desiredField, givenFields.get(givenIdx));
+            indexMapping[i] = givenIdx;
+        }
+
+        List<Object[]> result = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            if (row == null) {
+                result.add(null);
+                continue;
+            }
+            Object[] newRow = new Object[desiredFields.size()];
+            for (int i = 0; i < desiredFields.size(); i++) {
+                int givenIdx = indexMapping[i];
+                if (givenIdx < row.length && row[givenIdx] != null) {
+                    SqlTypeName targetType = desiredFields.get(i).getType().getSqlTypeName();
+                    newRow[i] = convertType(row[givenIdx], targetType);
+                }
+            }
+            result.add(newRow);
+        }
+        return result;
+    }
+
+    private static void checkFieldTypeCompatible(RelDataTypeField desiredField, RelDataTypeField givenField) {
+        SqlTypeName desiredType = desiredField.getType().getSqlTypeName();
+        SqlTypeName givenType = givenField.getType().getSqlTypeName();
+        // Rule 2: any type can be converted to a string type
+        if (SqlTypeName.STRING_TYPES.contains(desiredType)) {
+            return;
+        }
+        // Rule 3: numeric types can be converted between each other
+        if (SqlTypeName.NUMERIC_TYPES.contains(desiredType)
+                && SqlTypeName.NUMERIC_TYPES.contains(givenType)) {
+            return;
+        }
+        // Otherwise an exact type match is required
+        if (desiredType.equals(givenType)) {
+            return;
+        }
+        throw new RuntimeException(
+                "adaptRowsToSchema failed, incompatible field type for '"
+                        + desiredField.getName() + "': desired " + desiredType
+                        + ", given " + givenType);
+    }
+
     public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
         List<RelDataTypeField> fields = new ArrayList<>();
         if (rows == null || rows.isEmpty()) {
