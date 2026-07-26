@@ -1,3 +1,4 @@
+-- user_recent_click_item: recent click history per user (seeds for i2i recall).
 CREATE TABLE IF NOT EXISTS `user_recent_click_item` (
   `user_id` BIGINT,
   `movie_id` BIGINT,

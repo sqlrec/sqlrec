@@ -1,3 +1,7 @@
+/*
+ * rank_model: Wide & Deep ranking model (tzrec.wide_and_deep).
+ * Inputs: user features + item features; label: rating.
+ */
 create model if not exists `rank_model`
 (
  `user_id` BIGINT,

@@ -170,7 +170,7 @@ public class FunctionUpdater {
     }
 
     private static boolean isSqlFunctionDependentResourceUpdate(SqlFunctionBindable functionBindable) throws Exception {
-        Set<String> accessTables = functionBindable.getAccessTables();
+        Set<String> accessTables = new HashSet<>(functionBindable.getAccessTables());
         for (Map.Entry<String, List<RelDataTypeField>> placeholder : functionBindable.getInputTables()) {
             accessTables.remove(placeholder.getKey());
         }

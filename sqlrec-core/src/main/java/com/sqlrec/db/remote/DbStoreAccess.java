@@ -170,8 +170,10 @@ public class DbStoreAccess implements StoreAccess {
 
     @Override
     public List<Checkpoint> getCheckpointListByModelNamePaged(String modelName, int page, int pageSize) {
-        int offset = (page - 1) * pageSize;
-        return execute(dbMapper -> dbMapper.getCheckpointListByModelNamePaged(modelName, pageSize, offset));
+        int validPage = Math.max(page, 1);
+        int validPageSize = Math.max(pageSize, 1);
+        int offset = (validPage - 1) * validPageSize;
+        return execute(dbMapper -> dbMapper.getCheckpointListByModelNamePaged(modelName, validPageSize, offset));
     }
 
     @Override

@@ -1,3 +1,7 @@
+/*
+ * Item embedding table - stored in Milvus vector database.
+ * Multi-line block comment; the semicolon below must not split statements ;
+ */
 CREATE TABLE IF NOT EXISTS `item_embedding` (
   `id` BIGINT,
   `title` STRING,
@@ -10,4 +14,4 @@ CREATE TABLE IF NOT EXISTS `item_embedding` (
   'token' = 'root:Milvus',
   'database' = 'default',
   'collection' = 'item_embedding'
-);
+); -- trailing line comment without newline

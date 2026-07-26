@@ -1,3 +1,4 @@
+-- global_hot_item: globally hot items, keyed by an invert_key (e.g. 'global').
 CREATE TABLE IF NOT EXISTS `global_hot_item` (
   `invert_key` STRING,
   `movie_id` BIGINT,

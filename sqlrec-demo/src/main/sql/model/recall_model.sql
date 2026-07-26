@@ -1,3 +1,8 @@
+/*
+ * recall_model: DSSM two-tower recall model (tzrec.dssm).
+ * Trained jointly on user and item features; serves two towers via
+ * recall_service_user and recall_service_item.
+ */
 create model if not exists `recall_model`
 (
  `user_id` BIGINT,

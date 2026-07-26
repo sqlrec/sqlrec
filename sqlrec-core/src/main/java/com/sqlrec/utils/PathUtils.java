@@ -6,7 +6,8 @@ public class PathUtils {
         String normalizedPath = normalizePath(hdfsPath);
         String normalizedModelPath = normalizePath(modelPath);
 
-        if (!normalizedPath.startsWith(normalizedModelPath)) {
+        if (!normalizedPath.equals(normalizedModelPath)
+                && !normalizedPath.startsWith(normalizedModelPath + "/")) {
             throw new IllegalArgumentException("Path must be under model path. Path: " + hdfsPath + ", Model path: " + modelPath);
         }
     }

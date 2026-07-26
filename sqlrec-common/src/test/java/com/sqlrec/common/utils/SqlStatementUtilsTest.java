@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.cli;
+package com.sqlrec.common.utils;
 
 import org.junit.jupiter.api.Test;
 
@@ -200,7 +200,7 @@ class SqlStatementUtilsTest {
 
     @Test
     void isCompleteLineCommentWithoutNewlineDoesNotChangeLastSignificant() {
-        // "select 1; -- trailing comment (no newline)" — last significant char is ';'
+        // "select 1; -- trailing comment (no newline)" - last significant char is ';'
         assertTrue(SqlStatementUtils.isCompleteStatement("select 1; -- trailing"));
     }
 

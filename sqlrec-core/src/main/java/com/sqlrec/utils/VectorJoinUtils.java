@@ -173,6 +173,11 @@ public class VectorJoinUtils {
                         }
 
                         config.rightEmbeddingColName = rightFieldNames.get(config.rightEmbeddingColIndex);
+                    } else {
+                        throw new RuntimeException(
+                                "ip() function operands must be RexInputRef references, got: "
+                                        + operand0.getClass().getSimpleName() + " and "
+                                        + operand1.getClass().getSimpleName());
                     }
                     break;
                 }

@@ -1,6 +1,7 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.SqlStatementUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.frontend.cli.*;
 import org.apache.calcite.linq4j.Enumerable;

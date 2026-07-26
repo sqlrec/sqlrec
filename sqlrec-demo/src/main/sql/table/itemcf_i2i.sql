@@ -1,3 +1,5 @@
+-- itemcf_i2i: item-to-item co-occurrence table (item-cf).
+-- movie_id1 -> movie_id2 with a co-occurrence score.
 CREATE TABLE IF NOT EXISTS `itemcf_i2i` (
   `movie_id1` BIGINT,
   `movie_id2` BIGINT,

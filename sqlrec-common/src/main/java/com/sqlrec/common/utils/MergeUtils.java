@@ -10,25 +10,37 @@ import java.util.List;
 public class MergeUtils {
     public static <T> List<T> snakeMerge(Iterable<T>... sources) {
         List<Iterator<T>> iterators = new ArrayList<>();
-        for (Iterable<T> source : sources) {
-            iterators.add(source.iterator());
-        }
+        try {
+            for (Iterable<T> source : sources) {
+                iterators.add(source.iterator());
+            }
 
-        List<T> merged = new ArrayList<>();
-        while (true) {
-            boolean allEmpty = true;
-            for (Iterator<T> iterator : iterators) {
-                if (iterator.hasNext()) {
-                    merged.add(iterator.next());
-                    allEmpty = false;
+            List<T> merged = new ArrayList<>();
+            while (true) {
+                boolean allEmpty = true;
+                for (Iterator<T> iterator : iterators) {
+                    if (iterator.hasNext()) {
+                        merged.add(iterator.next());
+                        allEmpty = false;
+                    }
+                }
+                if (allEmpty) {
+                    break;
                 }
             }
-            if (allEmpty) {
-                break;
+
+            return merged;
+        } finally {
+            for (Iterator<T> iterator : iterators) {
+                if (iterator instanceof AutoCloseable) {
+                    try {
+                        ((AutoCloseable) iterator).close();
+                    } catch (Exception e) {
+                        // ignore close exception
+                    }
+                }
             }
         }
-
-        return merged;
     }
 
     public static <T> Enumerable<T> snakeMergeEnumerable(Iterable<T>... sources) {

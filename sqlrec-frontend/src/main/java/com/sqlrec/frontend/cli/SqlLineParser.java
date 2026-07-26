@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.cli;
 
+import com.sqlrec.common.utils.SqlStatementUtils;
 import org.jline.reader.EOFError;
 import org.jline.reader.ParsedLine;
 import org.jline.reader.impl.DefaultParser;

@@ -1,3 +1,4 @@
+-- rec_log_kafka: kafka sink for recommendation logs (JSON format).
 CREATE TABLE IF NOT EXISTS `rec_log_kafka` (
   `user_id` BIGINT,
   `movie_id` BIGINT,

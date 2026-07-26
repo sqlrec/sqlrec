@@ -1,3 +1,5 @@
+-- user_exposure_item: items the user has been exposed to (for recall dedup).
+-- TTL: 3600s (1 hour) - entries auto-expire after the exposure window.
 CREATE TABLE IF NOT EXISTS `user_exposure_item` (
   `user_id` BIGINT,
   `movie_id` BIGINT,

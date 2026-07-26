@@ -1,3 +1,4 @@
+-- genre_hot_item: hot items per genre, stored as a redis list keyed by genre.
 CREATE TABLE IF NOT EXISTS `genre_hot_item` (
   `genre` STRING,
   `movie_id` BIGINT,

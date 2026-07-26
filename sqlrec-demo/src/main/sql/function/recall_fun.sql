@@ -1,5 +1,12 @@
+/*
+ * recall_fun: multi-source recall pipeline.
+ * Sources: vector recall, i2i (item-cf), global hot, genre interest.
+ * The IF/ELSE block lets users plug in an online service for user embeddings,
+ * falling back to random_vec for local testing.
+ */
 create or replace sql function recall_fun;
 
+-- Input table: full user profile (joined upstream).
 define input table user_info(
   user_id bigint,
   gender string,
@@ -8,6 +15,7 @@ define input table user_info(
   zip_code string
 );
 
+-- Conditional branch: use online service when use_recall_service='true'.
 IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
   (cache table user_embedding as
     call call_service('recall_service_user', user_info)
@@ -25,6 +33,7 @@ ELSE
     from user_info
   );
 
+-- Vector recall: ANN search by inner product (ip()).
 cache table vector_recall as
 select item_embedding.id as movie_id
 from
@@ -32,10 +41,12 @@ user_embedding join item_embedding on 1=1
 order by ip(user_embedding.user_tower_emb, item_embedding.embedding)
 limit 300;
 
+-- Tag vector recall results with a rec_reason label.
 cache table vector_recall as
 select movie_id, 'vector_recall' as rec_reason
 from vector_recall;
 
+-- Exposure filter: items the user already saw in the last hour.
 cache table exposured_item as
 select movie_id
 from
@@ -43,6 +54,7 @@ user_info join user_exposure_item on user_exposure_item.user_id = user_info.user
 where bhv_time > cast(CURRENT_TIMESTAMP as BIGINT) - 3600000
 group by movie_id;
 
+-- Recent clicks: used as seeds for i2i recall.
 cache table cur_recent_click_item as
 select movie_id
 from
@@ -51,18 +63,21 @@ group by movie_id
 order by MAX(bhv_time) desc
 limit 10;
 
+-- i2i recall via item-cf co-occurrence.
 cache table i2i_recall as
 select movie_id2 as movie_id, 'itemcf_recall' as rec_reason
 from
 cur_recent_click_item join itemcf_i2i on movie_id1 = cur_recent_click_item.movie_id
 limit 300;
 
+-- Global hot recall (non-personalized fallback).
 cache table global_hot_recall as
 select movie_id, 'global_hot_recall' as rec_reason
 from
 global_hot_item where invert_key = 'global'
 limit 300;
 
+-- User interest by genre, ranked by score.
 cache table cur_user_interest_genre as
 select genre
 from
@@ -71,6 +86,7 @@ group by genre
 order by MAX(score) desc
 limit 10;
 
+-- Genre recall: top items in the user's preferred genres.
 cache table genre_recall as
 select movie_id, 'user_genre_interest_recall' as rec_reason
 from
@@ -78,11 +94,13 @@ cur_user_interest_genre join genre_hot_item
 on genre_hot_item.genre = cur_user_interest_genre.genre
 limit 300;
 
+-- Dedup each recall source against exposure history.
 cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'movie_id', 'movie_id');
 cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'movie_id', 'movie_id');
 cache table dedup_genre_recall as call dedup(genre_recall, exposured_item, 'movie_id', 'movie_id');
 cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'movie_id', 'movie_id');
 
+-- Merge all recall sources via UNION ALL.
 cache table all_recall_item as
 select * from dedup_i2i_recall
 union all
@@ -92,11 +110,13 @@ select * from dedup_genre_recall
 union all
 select * from dedup_vector_recall;
 
+-- Truncate to a fixed recall budget.
 cache table truncate_recall_item as
 select movie_id, rec_reason
 from all_recall_item
 limit 300;
 
+-- Dedup rec_reason per movie via LISTAGG.
 cache table dedup_recall_item as
 select movie_id, LISTAGG(distinct rec_reason) as rec_reason
 from truncate_recall_item

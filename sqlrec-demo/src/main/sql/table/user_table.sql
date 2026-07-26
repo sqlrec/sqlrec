@@ -1,3 +1,4 @@
+-- user_table: user profile (demographics), keyed by user_id in redis.
 CREATE TABLE IF NOT EXISTS `user_table` (
   `user_id` BIGINT,
   `gender` STRING,

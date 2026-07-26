@@ -1,4 +1,4 @@
-package com.sqlrec.frontend.cli;
+package com.sqlrec.common.utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +36,7 @@ public final class SqlStatementUtils {
                 }
                 continue;
             }
-            // block comment /* */ — skip if closed; append "/*" if unclosed so that
+            // block comment /* */ - skip if closed; append "/*" if unclosed so that
             // isCompleteStatement sees a non-empty remainder and returns false
             if (c == '/' && i + 1 < n && text.charAt(i + 1) == '*') {
                 i += 2;

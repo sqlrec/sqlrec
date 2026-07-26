@@ -1,5 +1,6 @@
 package com.sqlrec.db.local;
 
+import com.sqlrec.common.utils.SqlStatementUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.sql.parser.*;
 import org.apache.calcite.sql.SqlNode;
@@ -76,7 +77,7 @@ public class SqlFileParser {
     }
 
     void parseContent(String content) throws Exception {
-        List<String> statements = splitStatements(content);
+        List<String> statements = SqlStatementUtils.splitStatements(content);
         log.debug("Parsing {} statements", statements.size());
         parseStatements(statements);
     }
@@ -121,52 +122,6 @@ public class SqlFileParser {
         } else {
             log.warn("unsupported SQL node type: {} in statement: {}", sqlNode.getClass().getSimpleName(), statement);
         }
-    }
-
-    private List<String> splitStatements(String content) {
-        List<String> statements = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean inSingleQuote = false;
-        boolean inDoubleQuote = false;
-
-        for (int i = 0; i < content.length(); i++) {
-            char c = content.charAt(i);
-
-            if (c == '\'' && !inDoubleQuote) {
-                // Handle escaped single quote (''): two consecutive single quotes inside a string
-                if (inSingleQuote && i + 1 < content.length() && content.charAt(i + 1) == '\'') {
-                    current.append("''");
-                    i++; // skip the next quote
-                    continue;
-                }
-                inSingleQuote = !inSingleQuote;
-                current.append(c);
-            } else if (c == '"' && !inSingleQuote) {
-                // Handle escaped double quote (""): two consecutive double quotes inside a string
-                if (inDoubleQuote && i + 1 < content.length() && content.charAt(i + 1) == '"') {
-                    current.append("\"\"");
-                    i++; // skip the next quote
-                    continue;
-                }
-                inDoubleQuote = !inDoubleQuote;
-                current.append(c);
-            } else if (c == ';' && !inSingleQuote && !inDoubleQuote) {
-                String stmt = current.toString().trim();
-                if (!stmt.isEmpty()) {
-                    statements.add(stmt);
-                }
-                current = new StringBuilder();
-            } else {
-                current.append(c);
-            }
-        }
-
-        String lastStmt = current.toString().trim();
-        if (!lastStmt.isEmpty()) {
-            statements.add(lastStmt);
-        }
-
-        return statements;
     }
 
     String resolveVariables(String content, Map<String, String> variables) {
