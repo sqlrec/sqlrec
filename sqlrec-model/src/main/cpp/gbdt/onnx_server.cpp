@@ -78,13 +78,21 @@ void init_model(const std::string& model_dir) {
         }
     }
     if (!found) {
-        // Fallback: use output 0 (regression or older export without zipmap).
-        auto name_alloc = g_session->GetOutputNameAllocated(0, allocator);
-        g_output_name = name_alloc.get();
-        std::cout << "Warning: no float tensor output found, using output 0: "
-                  << g_output_name
-                  << " (re-export the model with zipmap=False if this is a "
-                  << "classifier)" << std::endl;
+        // No float tensor output found. This typically means the model was
+        // exported with zipmap=True (the ONNXMLTools default), whose outputs
+        // are an int64 label tensor and a seq<map> of probabilities - neither
+        // is a float tensor we can read. Falling back to output 0 would feed
+        // the int64 label bytes to GetTensorMutableData<float>(), which does
+        // NO runtime type check and would silently return garbage "probs" with
+        // HTTP 200. Fail fast at load time instead, and ask the user to
+        // re-export with zipmap=False so a real float probabilities tensor is
+        // exposed. (Pure regression models have a single float output and are
+        // already selected by the loop above, so they never reach here.)
+        throw std::runtime_error(
+            "No float tensor output found in ONNX model '" + model_path +
+            "'. Re-export the classifier with zipmap=False (e.g. "
+            "option zipmap=False in skl2onnx) so the model exposes a float "
+            "probabilities tensor.");
     }
 
     std::cout << "Model loaded. Input name=" << g_input_name

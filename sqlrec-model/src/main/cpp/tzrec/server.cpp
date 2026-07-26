@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <fstream>
 
+#include "farmhash.h"
 #include "httplib.h"
 #include "json.hpp"
 #include "utils.h"
@@ -20,6 +22,163 @@ using json = nlohmann::json;
 torch::jit::script::Module g_module;
 bool g_model_initialized = false;
 torch::Device g_device = torch::kCPU;
+
+// ---------------------------------------------------------------------------
+// Feature hashing - must match the training-side pyfg FarmHash bucketizer.
+//
+// SQLRec trains with USE_FARM_HASH_TO_BUCKETIZE=true (see Config.java), so
+// pyfg maps each feature value to an embedding index as
+//     index = FarmHash(str(value)) % hash_bucket_size
+// where str(value) matches pyfg's value_type="string" stringification (ints
+// are decimal-stringified). The exported TorchScript model expects these
+// indices already bucketized, so the C++ server must reproduce them.
+//
+// pyfg's source is unavailable, so we cannot read which farmhash function it
+// calls. FarmHash exposes both Fingerprint64 (portable, stable) and Hash64
+// (may vary by platform/build). select_hash_func() auto-picks by reproducing
+// the bucket ids pinned in TorchEasyRec's id_feature_test, and refuses to
+// start if neither matches - rather than silently serving garbage embeddings.
+// ---------------------------------------------------------------------------
+
+enum class HashFunc { Fingerprint64, Hash64 };
+HashFunc g_hash_func = HashFunc::Fingerprint64;
+
+uint64_t compute_hash(const char* s, size_t len) {
+    switch (g_hash_func) {
+        case HashFunc::Fingerprint64:
+            return util::Fingerprint64(s, len);
+        case HashFunc::Hash64:
+            return util::Hash64(s, len);
+    }
+    return 0;
+}
+
+uint64_t compute_hash(const std::string& s) {
+    return compute_hash(s.data(), s.size());
+}
+
+// Per-feature bucketizer config loaded from fg.json (exported next to
+// scripted_model.pt by tzrec.export). bucket_size = hash_bucket_size or
+// num_buckets; default_value, when non-empty, replaces missing/null values
+// (matching pyfg).
+struct FeatureHashConfig {
+    uint64_t bucket_size = 0;  // 0 => vocab/raw feature, not hash-bucketized.
+    std::string default_value;
+};
+std::unordered_map<std::string, FeatureHashConfig> g_hash_configs;
+
+uint64_t hash_feature(const std::string& value) {
+    return compute_hash(value);
+}
+
+uint64_t hash_feature(int64_t value) {
+    return hash_feature(std::to_string(value));
+}
+
+// Reduce a raw hash into [0, bucket_size) with UNSIGNED modulo so the result is
+// always non-negative (signed modulo on a high-bit-set hash would yield a
+// negative, out-of-range embedding index).
+inline int64_t bucketize(uint64_t hash, uint64_t bucket_size) {
+    return static_cast<int64_t>(hash % bucket_size);
+}
+
+void select_hash_func() {
+    // Pinned in TorchEasyRec/tzrec/features/id_feature_test.py with
+    // hash_bucket_size=100 and USE_FARM_HASH_TO_BUCKETIZE=true:
+    //   "1" -> 49, "2" -> 59, "3" -> 21
+    struct Probe { const char* s; uint64_t expected; };
+    const Probe probes[3] = {{"1", 49}, {"2", 59}, {"3", 21}};
+
+    auto matches = [&](HashFunc candidate) -> bool {
+        g_hash_func = candidate;
+        for (const auto& p : probes) {
+            std::string s(p.s);
+            if (compute_hash(s.data(), s.size()) % 100 != p.expected) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if (matches(HashFunc::Fingerprint64)) {
+        g_hash_func = HashFunc::Fingerprint64;
+    } else if (matches(HashFunc::Hash64)) {
+        g_hash_func = HashFunc::Hash64;
+        std::cout << "Note: pyfg hash matched FarmHash Hash64, not Fingerprint64."
+                  << std::endl;
+    } else {
+        throw std::runtime_error(
+            "FarmHash self-check failed: neither Fingerprint64 nor Hash64 "
+            "reproduces pyfg's expected bucket ids (\"1\",\"2\",\"3\" -> "
+            "49,59,21 mod 100). The C++ server cannot safely bucketize "
+            "features. Verify the vendored farmhash matches the one pyfg was "
+            "built with.");
+    }
+    std::cout << "FarmHash self-check passed (using "
+              << (g_hash_func == HashFunc::Fingerprint64 ? "Fingerprint64"
+                                                         : "Hash64")
+              << ")." << std::endl;
+}
+
+std::string parent_dir(const std::string& path) {
+    size_t pos = path.find_last_of('/');
+    if (pos == std::string::npos) return ".";
+    if (pos == 0) return "/";
+    return path.substr(0, pos);
+}
+
+void load_one_feature_config(const json& feat) {
+    // Sequence containers look like {"sequence_name":..., "features":[...]}.
+    if (feat.contains("features") && feat["features"].is_array()) {
+        for (const auto& sub : feat["features"]) {
+            load_one_feature_config(sub);
+        }
+        return;
+    }
+    if (!feat.contains("feature_name") || !feat["feature_name"].is_string()) {
+        return;
+    }
+    std::string name = feat["feature_name"].get<std::string>();
+    FeatureHashConfig cfg;
+    if (feat.contains("hash_bucket_size")) {
+        cfg.bucket_size = feat["hash_bucket_size"].get<uint64_t>();
+    } else if (feat.contains("num_buckets")) {
+        cfg.bucket_size = feat["num_buckets"].get<uint64_t>();
+    }
+    // bucket_size == 0 => vocab_list/vocab_dict/vocab_file or raw feature: not
+    // hash-bucketized; parse_input rejects requests that include it rather
+    // than feeding wrong indices.
+    if (feat.contains("default_value") && feat["default_value"].is_string()) {
+        cfg.default_value = feat["default_value"].get<std::string>();
+    }
+    g_hash_configs[name] = cfg;
+}
+
+void load_hash_configs(const std::string& fg_json_path) {
+    g_hash_configs.clear();
+    std::ifstream in(fg_json_path);
+    if (!in) {
+        throw std::runtime_error(
+            "Failed to open fg.json: " + fg_json_path +
+            ". The C++ server needs the fg.json exported alongside "
+            "scripted_model.pt (written by tzrec.export) to bucketize "
+            "features the same way pyfg does.");
+    }
+    json fg;
+    in >> fg;
+    if (!fg.is_object() || !fg.contains("features") ||
+        !fg["features"].is_array()) {
+        throw std::runtime_error(
+            "fg.json must be an object with a 'features' array");
+    }
+    for (const auto& feat : fg["features"]) {
+        load_one_feature_config(feat);
+    }
+    if (g_hash_configs.empty()) {
+        throw std::runtime_error(
+            "fg.json contained no features with a feature_name");
+    }
+}
 
 torch::Device get_device() {
     int rank = 0;
@@ -42,26 +201,34 @@ bool init_model(const std::string& model_path) {
         // need fix error: Unknown builtin op: fbgemm::bounds_check_indices
         g_module = torch::jit::load(model_path);
         g_module.eval();
-        g_model_initialized = true;
-        std::cout << "Model loaded successfully" << std::endl;
-        return true;
     } catch (const c10::Error& e) {
         std::cerr << "Error loading model: " << e.what() << std::endl;
         return false;
     }
-}
 
-int64_t hash_feature(const std::string& value) {
-    int64_t hash = 1469598103934665603ULL;
-    for (char c : value) {
-        hash ^= static_cast<int64_t>(static_cast<unsigned char>(c));
-        hash *= 1099511628211ULL;
+    // Verify the farmhash function matches pyfg before bucketizing anything.
+    try {
+        select_hash_func();
+    } catch (const std::exception& e) {
+        std::cerr << "Hash self-check failed: " << e.what() << std::endl;
+        return false;
     }
-    return hash;
-}
 
-int64_t hash_feature(int64_t value) {
-    return hash_feature(std::to_string(value));
+    // Load per-feature hash_bucket_size / num_buckets from fg.json (written
+    // next to scripted_model.pt by tzrec.export) so we can reproduce pyfg's
+    // hash % bucket_size bucketization.
+    std::string fg_json_path = parent_dir(model_path) + "/fg.json";
+    try {
+        load_hash_configs(fg_json_path);
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading fg.json: " << e.what() << std::endl;
+        return false;
+    }
+
+    g_model_initialized = true;
+    std::cout << "Model loaded successfully (" << g_hash_configs.size()
+              << " feature configs)" << std::endl;
+    return true;
 }
 
 json build_nested_json(const std::vector<float>& data, const std::vector<int64_t>& shape, int dim, int64_t& index) {
@@ -151,6 +318,22 @@ c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
         const std::string& field_name = field_entry.first;
         FieldType field_type = field_entry.second;
 
+        auto cfg_it = g_hash_configs.find(field_name);
+        if (cfg_it == g_hash_configs.end()) {
+            // Not a configured id feature (e.g. a label/metadata column). The
+            // Python DataParser likewise only processes configured features,
+            // so skip it instead of feeding garbage to the model.
+            continue;
+        }
+        const FeatureHashConfig& cfg = cfg_it->second;
+        if (cfg.bucket_size == 0) {
+            // vocab/raw feature - the hashing path cannot produce a valid index.
+            throw std::runtime_error(
+                "Feature '" + field_name + "' has no hash_bucket_size/"
+                "num_buckets in fg.json; vocab/raw bucketization is not "
+                "supported by the C++ server.");
+        }
+
         std::vector<int64_t> values;
         std::vector<int32_t> lengths;
 
@@ -158,7 +341,13 @@ c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
             const auto& record = request_data[i];
 
             if (!record.contains(field_name) || record[field_name].is_null()) {
-                lengths.push_back(0);
+                if (!cfg.default_value.empty()) {
+                    values.push_back(bucketize(hash_feature(cfg.default_value),
+                                               cfg.bucket_size));
+                    lengths.push_back(1);
+                } else {
+                    lengths.push_back(0);
+                }
                 continue;
             }
 
@@ -167,16 +356,13 @@ c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
             switch (field_type) {
                 case FieldType::Int64: {
                     int64_t v = value.get<int64_t>();
-                    if (v < 0 || v >= 1000000) {
-                        v = 0;
-                    }
-                    values.push_back(hash_feature(v));
+                    values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
                     lengths.push_back(1);
                     break;
                 }
                 case FieldType::String: {
                     std::string v = value.get<std::string>();
-                    values.push_back(hash_feature(v));
+                    values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
                     lengths.push_back(1);
                     break;
                 }
@@ -185,10 +371,7 @@ c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
                     lengths.push_back(len);
                     for (const auto& item : value) {
                         int64_t v = item.get<int64_t>();
-                        if (v < 0 || v >= 1000000) {
-                            v = 0;
-                        }
-                        values.push_back(hash_feature(v));
+                        values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
                     }
                     break;
                 }
@@ -197,7 +380,7 @@ c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
                     lengths.push_back(len);
                     for (const auto& item : value) {
                         std::string v = item.get<std::string>();
-                        values.push_back(hash_feature(v));
+                        values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
                     }
                     break;
                 }
@@ -264,7 +447,14 @@ int main(int argc, char** argv) {
     }
 
     std::string model_path = argv[1];
-    int port = std::stoi(argv[2]);
+
+    int port;
+    try {
+        port = std::stoi(argv[2]);
+    } catch (const std::exception& e) {
+        std::cerr << "Invalid port: " << argv[2] << std::endl;
+        return -1;
+    }
 
     if (!init_model(model_path)) {
         std::cerr << "Failed to initialize model" << std::endl;

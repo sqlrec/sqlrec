@@ -3,6 +3,7 @@
 #include <csignal>
 #include <fstream>
 #include <functional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -51,6 +52,70 @@ inline std::string get_string_value(const nlohmann::json& row, const std::string
     return v.dump();
 }
 
+// Normalize request data to row-wise format.
+// Accepts both row-wise [{"f1":1,"f2":"a"}, ...] and columnar {"f1":[1,...], "f2":["a",...]}.
+// Columnar input is converted to row-wise; row-wise input is passed through.
+// Lists of length 1 (in columnar format) are broadcast to all rows.
+inline nlohmann::json parse_request_data(const nlohmann::json& data) {
+    if (data.is_array()) return data;
+    if (!data.is_object()) {
+        throw std::runtime_error("Input data must be a JSON array or a map with string keys and list values");
+    }
+    if (data.empty()) return nlohmann::json::array();
+
+    // Validate: all values must be arrays.
+    for (auto it = data.begin(); it != data.end(); ++it) {
+        if (!it.value().is_array()) {
+            throw std::runtime_error("Map values must be lists (key: " + it.key() + ")");
+        }
+    }
+
+    // Determine row count following the Python columnar_to_row logic:
+    //   - If all lists share the same length, use it (may be 0).
+    //   - Otherwise, only length-1 lists may differ (they are broadcast);
+    //     all other lengths must agree on a single value.
+    std::set<size_t> unique_lengths;
+    for (auto it = data.begin(); it != data.end(); ++it) {
+        unique_lengths.insert(it.value().size());
+    }
+
+    size_t n;
+    if (unique_lengths.size() == 1) {
+        n = *unique_lengths.begin();
+    } else {
+        if (unique_lengths.count(1) == 0) {
+            throw std::runtime_error(
+                "All lists in columnar format must have the same length or some can have length 1");
+        }
+        // Exactly one non-1 length is allowed (the row count); all others must be 1.
+        size_t non_1_count = 0;
+        size_t non_1_len = 0;
+        for (size_t l : unique_lengths) {
+            if (l != 1) {
+                ++non_1_count;
+                non_1_len = l;
+            }
+        }
+        if (non_1_count != 1) {
+            throw std::runtime_error(
+                "All non-length-1 lists in columnar format must have the same length");
+        }
+        n = non_1_len;
+    }
+
+    // Build rows, broadcasting length-1 lists.
+    nlohmann::json rows = nlohmann::json::array();
+    for (size_t i = 0; i < n; ++i) {
+        nlohmann::json row = nlohmann::json::object();
+        for (auto it = data.begin(); it != data.end(); ++it) {
+            const auto& arr = it.value();
+            row[it.key()] = (arr.size() == 1) ? arr[0] : arr[i];
+        }
+        rows.push_back(row);
+    }
+    return rows;
+}
+
 // --- Server utilities ---
 
 inline void setup_graceful_shutdown(httplib::Server& svr) {
@@ -74,7 +139,8 @@ inline void register_predict_endpoint(httplib::Server& svr,
     svr.Post("/predict", [predict_fn](const httplib::Request& req, httplib::Response& res) {
         try {
             auto body = nlohmann::json::parse(req.body);
-            auto result = predict_fn(body);
+            auto parsed = parse_request_data(body);
+            auto result = predict_fn(parsed);
             if (result.contains("error")) {
                 res.status = 400;
             }

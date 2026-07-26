@@ -14,7 +14,7 @@ set_target_properties(fbgemm PROPERTIES IMPORTED_LOCATION ${FBGEMM_LIB})
 # sibling common/ directory so they can be reused by other model servers.
 set(COMMON_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
 
-add_executable(server server.cpp)
+add_executable(server server.cpp ${COMMON_INCLUDE_DIR}/farmhash.cc)
 target_include_directories(server PRIVATE ${COMMON_INCLUDE_DIR})
 target_link_libraries(server
   "${TORCH_LIBRARIES}"
