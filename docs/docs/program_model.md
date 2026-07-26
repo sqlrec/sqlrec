@@ -669,7 +669,7 @@ SQLRec 支持通过 Java 实现用户定义函数（UDF），可以在 SQL 中�
 UDF 是一个普通的 Java 类，需要满足以下条件：
 
 1. **必须有一个或多个 `evaluate` 方法**：这是 UDF 的入口点
-2. **参数类型限制**：支持 `CacheTable`、`String`、`ExecuteContext`、`ConfigContext` 等类型
+2. **参数类型限制**：支持 `CacheTable`、`String`、`ExecuteContext`、`ReadonlyContext` 等类型
 
 ```java
 public class MyTableFunction {
@@ -805,7 +805,7 @@ SQLRec 会根据 `evaluate` 方法的参数类型自动注入相应的值：
 | `CacheTable` | 传入的缓存表 | 标识符（如 `table_name`） | 表函数 |
 | `String` | 字符串字面量或变量 | `'value'` 或 `GET('var')` | 表函数、标量函数 |
 | `ExecuteContext` | 执行上下文 | 自动注入，无需在 SQL 中指定 | 表函数 |
-| `ConfigContext` | 配置上下文 | 自动注入，无需在 SQL 中指定 | 表函数 |
+| `ReadonlyContext` | 只读上下文 | 自动注入，无需在 SQL 中指定 | 表函数 |
 | `SqlRecDataContext` | SQLRec 数据上下文 | 自动注入，无需在 SQL 中指定 | 标量函数 |
 
 `SqlRecDataContext` 是专门为标量 UDF 设计的接口，继承自 Calcite 的 `DataContext`。它提供了访问执行上下文变量的能力：

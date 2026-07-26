@@ -1,6 +1,6 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.runtime.ConfigContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -102,7 +102,7 @@ public class JavaFunctionBindable extends BindableInterface {
                     }
                     inputIndex++;
                 }
-            } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ConfigContext.class)) {
+            } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ReadonlyContext.class)) {
                 continue;
             } else {
                 if (inputIndex >= inputCount) {
@@ -190,10 +190,8 @@ public class JavaFunctionBindable extends BindableInterface {
                 }
                 paramList.add(resolveStringInput(inputTableList.get(inputParamIndex), context, inputParamIndex));
                 inputParamIndex++;
-            } else if (paramType.equals(ExecuteContext.class)) {
+            } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ReadonlyContext.class)) {
                 paramList.add(context);
-            } else if (paramType.equals(ConfigContext.class)) {
-                paramList.add(new ConfigContextImpl());
             } else {
                 throw new RuntimeException("unsupported parameter type: " + paramType);
             }

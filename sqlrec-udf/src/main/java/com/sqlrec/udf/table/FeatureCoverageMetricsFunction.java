@@ -1,6 +1,6 @@
 package com.sqlrec.udf.table;
 
-import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 public class FeatureCoverageMetricsFunction {
-    public Void evaluate(ExecuteContext context, String metricsName, CacheTable... tables) {
+    public Void evaluate(ReadonlyContext context, String metricsName, CacheTable... tables) {
         if (context == null) {
             throw new IllegalArgumentException("context cannot be null");
         }
@@ -33,7 +33,7 @@ public class FeatureCoverageMetricsFunction {
         return null;
     }
 
-    private void processTable(ExecuteContext context, String metricsName, CacheTable table) {
+    private void processTable(ReadonlyContext context, String metricsName, CacheTable table) {
         String tableName = table.getTableName();
         List<RelDataTypeField> fields = table.getDataFields();
         Enumerable<Object[]> enumerable = table.scan(null);

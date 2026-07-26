@@ -1,21 +1,9 @@
 package com.sqlrec.common.runtime;
 
-import java.util.Map;
-
-public interface ExecuteContext {
-    String getVariable(String key);
-
+public interface ExecuteContext extends ReadonlyContext {
     void setVariable(String key, String value);
-
-    Map<String, String> getVariables();
 
     void setMetricsTag(String key, String value);
 
-    Map<String, String> getMetricsTags();
-
-    String getLogId();
-
     void setTraceContext(Object context);
-
-    Object getTraceContext();
 }

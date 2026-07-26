@@ -669,7 +669,7 @@ SQLRec supports implementing user-defined functions (UDF) through Java, which ca
 A UDF is a regular Java class that needs to meet the following conditions:
 
 1. **Must have one or more `evaluate` methods**: This is the UDF entry point
-2. **Parameter type restrictions**: Supports `CacheTable`, `String`, `ExecuteContext`, `ConfigContext` and other types
+2. **Parameter type restrictions**: Supports `CacheTable`, `String`, `ExecuteContext`, `ReadonlyContext` and other types
 
 ```java
 public class MyTableFunction {
@@ -805,7 +805,7 @@ SQLRec automatically injects corresponding values based on the `evaluate` method
 | `CacheTable` | Passed cache table | Identifier (like `table_name`) | Table function |
 | `String` | String literal or variable | `'value'` or `GET('var')` | Table function, Scalar function |
 | `ExecuteContext` | Execution context | Auto-injected, no need to specify in SQL | Table function |
-| `ConfigContext` | Configuration context | Auto-injected, no need to specify in SQL | Table function |
+| `ReadonlyContext` | Readonly context | Auto-injected, no need to specify in SQL | Table function |
 | `SqlRecDataContext` | SQLRec data context | Auto-injected, no need to specify in SQL | Scalar function |
 
 `SqlRecDataContext` is an interface specifically designed for scalar UDFs, inheriting from Calcite's `DataContext`. It provides the ability to access execution context variables:

@@ -1,6 +1,6 @@
 package com.sqlrec.udf.table;
 
-import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -26,7 +26,7 @@ public class CallSqlRecApiFunction {
             .build();
 
     @SuppressWarnings("unchecked")
-    public CacheTable evaluate(ExecuteContext context, String url, CacheTable... tables) {
+    public CacheTable evaluate(ReadonlyContext context, String url, CacheTable... tables) {
         if (url == null || url.isEmpty()) {
             throw new IllegalArgumentException("url is null or empty");
         }

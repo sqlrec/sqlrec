@@ -2,7 +2,7 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConfig;
-import com.sqlrec.common.runtime.ConfigContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -26,7 +26,7 @@ public class CallServiceFunction {
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
 
-    public CacheTable evaluate(ConfigContext context, String serviceName, CacheTable input) {
+    public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input) {
         ServiceConfig serviceConfig = context.getServiceConfig(serviceName);
         if (serviceConfig == null) {
             throw new RuntimeException("Service " + serviceName + " not exist or formate error");
