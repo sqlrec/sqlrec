@@ -57,6 +57,12 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 |--------|------|------|
 | `probs` | FLOAT | 预测概率值 |
 
+**必需参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `label_columns` | String | 标签列名 |
+
 **训练配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -69,7 +75,6 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 | `embedding_dim` | Integer | 16 | 嵌入维度 |
 | `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
 | `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
-| `label_columns` | String | - | 标签列名 |
 
 **分布式训练参数**：
 
@@ -85,8 +90,10 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 |------|------|--------|------|
 | `image` | String | "sqlrec/tzrec" | Docker 镜像名称 |
 | `version` | String | "0.1.0-cpu" | Docker 镜像版本 |
-| `pod_cpu_cores` | Integer | 2 | Pod CPU 核数 |
-| `pod_memory` | String | "8Gi" | Pod 内存 |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
+| `pod_memory` | String | "2Gi" | Pod 内存 |
+| `pod_cpu_limit` | String | - | Pod CPU 上限 |
+| `pod_memory_limit` | String | - | Pod 内存上限 |
 | `replicas` | Integer | 1 | 服务副本数 |
 
 **列级配置参数**：
@@ -178,6 +185,9 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 | `embedding_dim` | Integer | 16 | 嵌入维度 |
 | `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
 | `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
+| `user_hidden_units` | String | "512,256,128" | 用户塔隐藏层单元数 |
+| `item_hidden_units` | String | "512,256,128" | 物品塔隐藏层单元数 |
+| `output_dim` | Integer | 64 | 输出嵌入维度 |
 
 **分布式训练参数**：
 
@@ -193,8 +203,10 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 |------|------|--------|------|
 | `image` | String | "sqlrec/tzrec" | Docker 镜像名称 |
 | `version` | String | "0.1.0-cpu" | Docker 镜像版本 |
-| `pod_cpu_cores` | Integer | 2 | Pod CPU 核数 |
-| `pod_memory` | String | "8Gi" | Pod 内存 |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
+| `pod_memory` | String | "2Gi" | Pod 内存 |
+| `pod_cpu_limit` | String | - | Pod CPU 上限 |
+| `pod_memory_limit` | String | - | Pod 内存上限 |
 | `replicas` | Integer | 1 | 服务副本数 |
 
 **列级配置参数**：
@@ -253,7 +265,6 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 **特性**：
 - 基于 LightGBM 框架的梯度提升树模型
 - 仅支持浮点数值特征（float/double），不支持类别特征（如需类别/整数特征请使用 CatBoost）
-- 支持 LightGBM socket 分布式训练
 - 支持 Parquet 格式训练数据（存储在分布式存储）
 - 模型文件持久化到分布式存储
 - 导出 ONNX 格式用于 serving（通过 onnxmltools 转换）
@@ -277,23 +288,15 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 |------|------|--------|------|
 | `objective` | String | "binary" | 学习目标（binary, multiclass, regression） |
 | `metric` | String | "auc" | 评估指标（auc, logloss, rmse） |
-| `num_iterations` | Integer | 100 | boosting 迭代次数 |
+| `num_iterations` | Integer | 300 | boosting 迭代次数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
 | `num_leaves` | Integer | 63 | 每棵树最大叶子数 |
 | `max_depth` | Integer | 6 | 最大树深度 |
-| `feature_fraction` | Double | 0.9 | 每棵树使用的特征比例 |
-| `bagging_fraction` | Double | 0.9 | 每棵树使用的数据比例 |
+| `feature_fraction` | Double | 0.8 | 每棵树使用的特征比例 |
+| `bagging_fraction` | Double | 0.8 | 每棵树使用的数据比例 |
 | `bagging_freq` | Integer | 5 | bagging 频率 |
 | `min_data_in_leaf` | Integer | 20 | 叶子节点最小样本数 |
 | `l2_regularization` | Double | 1.0 | L2 正则化系数 |
-
-**分布式训练参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `nnodes` | Integer | 1 | 训练节点数（>1 启用 LightGBM 分布式） |
-| `nproc_per_node` | Integer | 1 | 每节点进程数 |
-| `master_port` | Integer | 29500 | 分布式训练主端口 |
 
 **资源配置参数**：
 
@@ -327,9 +330,7 @@ CREATE MODEL lgb_model (
 TRAIN MODEL lgb_model CHECKPOINT = 'v1.0'
     ON training_data
     WITH (
-        num_iterations = 500,
-        nnodes = 2,
-        nproc_per_node = 4
+        num_iterations = 500
     );
 
 EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
@@ -376,11 +377,11 @@ XGBoost 模型是基于 GBDT（梯度提升决策树）框架实现的模型，�
 |------|------|--------|------|
 | `objective` | String | "binary" | 学习目标（binary, multiclass, regression） |
 | `metric` | String | "auc" | 评估指标（auc, logloss, rmse） |
-| `num_iterations` | Integer | 100 | boosting 迭代次数 |
+| `num_iterations` | Integer | 300 | boosting 迭代次数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
 | `max_depth` | Integer | 6 | 最大树深度 |
-| `feature_fraction` | Double | 0.9 | 每棵树使用的特征比例（对应 XGBoost colsample_bytree） |
-| `bagging_fraction` | Double | 0.9 | 每棵树使用的数据比例（对应 XGBoost subsample） |
+| `feature_fraction` | Double | 0.8 | 每棵树使用的特征比例（对应 XGBoost colsample_bytree） |
+| `bagging_fraction` | Double | 0.8 | 每棵树使用的数据比例（对应 XGBoost subsample） |
 | `min_child_weight` | Integer | 1 | 子节点最小权重和 |
 | `l2_regularization` | Double | 1.0 | L2 正则化系数（对应 XGBoost reg_lambda） |
 
@@ -440,7 +441,6 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 **特性**：
 - 基于 CatBoost 框架的梯度提升树模型
 - 原生支持类别特征处理（无需手动编码）；int/bigint/string 类型的列自动作为类别特征，float/double 类型的列作为数值特征
-- 支持 CatBoost 分布式训练（`catboost run-worker` daemon + `fit_with_workers` Python API）
 - 支持 Parquet 格式训练数据（存储在分布式存储）
 - 模型文件持久化到分布式存储
 - 导出原生 .cbm 格式用于 serving（通过 CatBoost C API 直接加载，支持类别特征）
@@ -468,16 +468,6 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 | `cb_depth` | Integer | 6 | CatBoost 树深度 |
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 叶子正则化系数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
-
-**分布式训练参数**：
-
-> 当 `nnodes > 1` 时启用 CatBoost 分布式训练：每个 worker Pod 启动 `catboost run-worker` 守护进程，master Pod 通过 `fit_with_workers()` API 驱动训练。worker 端点遵循 Indexed-Job DNS 约定 `{job_name}-{i}.{service_name}:{master_port + i}`。
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `nnodes` | Integer | 1 | 训练节点数（>1 启用 CatBoost 分布式训练） |
-| `nproc_per_node` | Integer | 1 | 每节点进程数 |
-| `master_port` | Integer | 29500 | 分布式训练主端口（每个 worker 监听 master_port + node_rank） |
 
 **资源配置参数**：
 
@@ -510,10 +500,7 @@ CREATE MODEL cb_model (
 );
 
 TRAIN MODEL cb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        nnodes = 2
-    );
+    ON training_data;
 
 EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
 

@@ -32,7 +32,7 @@ public class Config {
             "auc", "Evaluation metric (auc, logloss, rmse)", null, String.class);
     public static final ConfigOption<Integer> NUM_ITERATIONS = new ConfigOption<>(
             "num_iterations",
-            100, "Number of boosting iterations", null, Integer.class);
+            300, "Number of boosting iterations", null, Integer.class);
     public static final ConfigOption<Double> LEARNING_RATE = new ConfigOption<>(
             "learning_rate",
             0.1, "Learning rate / shrinkage", null, Double.class);
@@ -44,10 +44,10 @@ public class Config {
             63, "Maximum number of leaves per tree (LightGBM)", null, Integer.class);
     public static final ConfigOption<Double> FEATURE_FRACTION = new ConfigOption<>(
             "feature_fraction",
-            0.9, "Fraction of features used per tree (LightGBM)", null, Double.class);
+            0.8, "Fraction of features used per tree (LightGBM)", null, Double.class);
     public static final ConfigOption<Double> BAGGING_FRACTION = new ConfigOption<>(
             "bagging_fraction",
-            0.9, "Fraction of data used per tree (LightGBM)", null, Double.class);
+            0.8, "Fraction of data used per tree (LightGBM)", null, Double.class);
     public static final ConfigOption<Integer> BAGGING_FREQ = new ConfigOption<>(
             "bagging_freq",
             5, "Frequency of bagging (LightGBM)", null, Integer.class);

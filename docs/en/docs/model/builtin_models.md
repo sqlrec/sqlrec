@@ -57,6 +57,12 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 |-----------|------|-------------|
 | `probs` | FLOAT | Predicted probability value |
 
+**Required parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `label_columns` | String | Label column name |
+
 **Training Configuration Parameters**:
 
 | Parameter | Type | Default | Description |
@@ -69,7 +75,6 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 | `embedding_dim` | Integer | 16 | Embedding dimension |
 | `num_buckets` | Integer | 1000000 | Integer feature bucket count |
 | `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
-| `label_columns` | String | - | Label column name |
 
 **Distributed Training Parameters**:
 
@@ -85,8 +90,10 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 |-----------|------|---------|-------------|
 | `image` | String | "sqlrec/tzrec" | Docker image name |
 | `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 2 | Pod CPU core count |
-| `pod_memory` | String | "8Gi" | Pod memory |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU core count |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
 | `replicas` | Integer | 1 | Service replica count |
 
 **Column-level Configuration Parameters**:
@@ -178,6 +185,9 @@ DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemente
 | `embedding_dim` | Integer | 16 | Embedding dimension |
 | `num_buckets` | Integer | 1000000 | Integer feature bucket count |
 | `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
+| `user_hidden_units` | String | "512,256,128" | User tower hidden layer unit count |
+| `item_hidden_units` | String | "512,256,128" | Item tower hidden layer unit count |
+| `output_dim` | Integer | 64 | Output embedding dimension |
 
 **Distributed Training Parameters**:
 
@@ -193,8 +203,10 @@ DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemente
 |-----------|------|---------|-------------|
 | `image` | String | "sqlrec/tzrec" | Docker image name |
 | `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 2 | Pod CPU core count |
-| `pod_memory` | String | "8Gi" | Pod memory |
+| `pod_cpu_cores` | Integer | 1 | Pod CPU core count |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
 | `replicas` | Integer | 1 | Service replica count |
 
 **Column-level Configuration Parameters**:
@@ -253,7 +265,6 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 **Features**:
 - LightGBM-based gradient boosting decision tree
 - Float/double numerical features only (no categorical support; use CatBoost for categorical/integer features)
-- LightGBM socket-based distributed training
 - Parquet training data on distributed storage
 - Model artifacts persisted to distributed storage
 - Exports ONNX format for serving (via onnxmltools)
@@ -277,23 +288,15 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 |-----------|------|---------|-------------|
 | `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
 | `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
-| `num_iterations` | Integer | 100 | Number of boosting iterations |
+| `num_iterations` | Integer | 300 | Number of boosting iterations |
 | `learning_rate` | Double | 0.1 | Learning rate |
 | `num_leaves` | Integer | 63 | Maximum leaves per tree |
 | `max_depth` | Integer | 6 | Maximum tree depth |
-| `feature_fraction` | Double | 0.9 | Fraction of features used per tree |
-| `bagging_fraction` | Double | 0.9 | Fraction of data used per tree |
+| `feature_fraction` | Double | 0.8 | Fraction of features used per tree |
+| `bagging_fraction` | Double | 0.8 | Fraction of data used per tree |
 | `bagging_freq` | Integer | 5 | Bagging frequency |
 | `min_data_in_leaf` | Integer | 20 | Minimum samples in a leaf |
 | `l2_regularization` | Double | 1.0 | L2 regularization coefficient |
-
-**Distributed training parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `nnodes` | Integer | 1 | Number of nodes (>1 enables LightGBM distributed mode) |
-| `nproc_per_node` | Integer | 1 | Processes per node |
-| `master_port` | Integer | 29500 | Distributed training master port |
 
 **Resource parameters**:
 
@@ -327,9 +330,7 @@ CREATE MODEL lgb_model (
 TRAIN MODEL lgb_model CHECKPOINT = 'v1.0'
     ON training_data
     WITH (
-        num_iterations = 500,
-        nnodes = 2,
-        nproc_per_node = 4
+        num_iterations = 500
     );
 
 EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
@@ -376,11 +377,11 @@ The XGBoost model is based on the GBDT (Gradient Boosting Decision Tree) framewo
 |-----------|------|---------|-------------|
 | `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
 | `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
-| `num_iterations` | Integer | 100 | Number of boosting iterations |
+| `num_iterations` | Integer | 300 | Number of boosting iterations |
 | `learning_rate` | Double | 0.1 | Learning rate |
 | `max_depth` | Integer | 6 | Maximum tree depth |
-| `feature_fraction` | Double | 0.9 | Fraction of features used per tree (XGBoost colsample_bytree) |
-| `bagging_fraction` | Double | 0.9 | Fraction of data used per tree (XGBoost subsample) |
+| `feature_fraction` | Double | 0.8 | Fraction of features used per tree (XGBoost colsample_bytree) |
+| `bagging_fraction` | Double | 0.8 | Fraction of data used per tree (XGBoost subsample) |
 | `min_child_weight` | Integer | 1 | Minimum sum of instance weight in a child |
 | `l2_regularization` | Double | 1.0 | L2 regularization coefficient (XGBoost reg_lambda) |
 
@@ -440,7 +441,6 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 **Features**:
 - CatBoost-based gradient boosting decision tree
 - Native categorical feature handling (no manual encoding needed); int/bigint/string columns are automatically treated as categorical features, float/double columns as numeric features
-- CatBoost distributed training (`catboost run-worker` daemon + `fit_with_workers` Python API)
 - Parquet training data on distributed storage
 - Model artifacts persisted to distributed storage
 - Exports native .cbm format for serving (loaded via CatBoost C API, supports categorical features)
@@ -468,16 +468,6 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 | `cb_depth` | Integer | 6 | CatBoost tree depth |
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 leaf regularization |
 | `learning_rate` | Double | 0.1 | Learning rate |
-
-**Distributed training parameters**:
-
-> When `nnodes > 1`, CatBoost distributed training is enabled: each worker pod starts a `catboost run-worker` daemon, and the master pod drives training via the `fit_with_workers()` API. Worker endpoints follow the Indexed-Job DNS convention `{job_name}-{i}.{service_name}:{master_port + i}`.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `nnodes` | Integer | 1 | Number of nodes (>1 enables CatBoost distributed training) |
-| `nproc_per_node` | Integer | 1 | Processes per node |
-| `master_port` | Integer | 29500 | Distributed training master port (each worker listens on master_port + node_rank) |
 
 **Resource parameters**:
 
@@ -510,10 +500,7 @@ CREATE MODEL cb_model (
 );
 
 TRAIN MODEL cb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        nnodes = 2
-    );
+    ON training_data;
 
 EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
 
