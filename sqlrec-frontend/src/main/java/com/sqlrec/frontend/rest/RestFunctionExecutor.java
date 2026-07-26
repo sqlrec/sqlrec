@@ -36,7 +36,7 @@ public class RestFunctionExecutor {
         CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
 
         RequestData requestDataObj = JsonUtils.fromJson(requestData, RequestData.class);
-        addTableToSchema(schema, sqlFunctionBindable, requestDataObj.getInputs());
+        addTableToSchema(schema, sqlFunctionBindable, requestDataObj.getData());
 
         ExecuteContext executeContext = new ExecuteContextImpl();
         if (requestDataObj.getParams() != null) {

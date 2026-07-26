@@ -216,7 +216,7 @@ create or replace api test_rec with test_rec;
 ```bash
 yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 -H "Content-Type: application/json" \
--d '{"inputs":{"user_info":[{"id": 1000001}]}}'
+-d '{"data":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
 ```
 

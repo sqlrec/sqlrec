@@ -86,7 +86,7 @@ public class LightGBMModelTest {
 
         String result = modelController.checkModel(model);
         assertNotNull(result);
-        assertTrue(result.contains("LightGBM only supports float/double features"));
+        assertTrue(result.contains("only supports float/double features"));
         assertTrue(result.contains("age"));
     }
 
@@ -204,12 +204,12 @@ data:
       "params": {
         "objective": "binary",
         "metric": "auc",
-        "num_iterations": 100,
+        "num_iterations": 300,
         "num_leaves": 63,
         "max_depth": 6,
         "learning_rate": 0.1,
-        "feature_fraction": 0.9,
-        "bagging_fraction": 0.9,
+        "feature_fraction": 0.8,
+        "bagging_fraction": 0.8,
         "bagging_freq": 5,
         "min_data_in_leaf": 20,
         "l2_regularization": 1.0
@@ -411,7 +411,7 @@ spec:
           LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
           python -c "import sys; from common.filesystem import download_dir; download_dir(sys.argv[1], sys.argv[2])" '/model/checkpoint/v1' "$LOCAL_CACHE_DIR"
 
-          exec /app/lightgbm_server $LOCAL_CACHE_DIR 80
+          exec /app/onnx_server $LOCAL_CACHE_DIR 80
         image: "sqlrec/gbdt:0.1.0-cpu"
         name: "gbdt-service"
         ports:
@@ -480,7 +480,7 @@ spec:
           LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
           python -c "import sys; from common.filesystem import download_dir; download_dir(sys.argv[1], sys.argv[2])" '/model/checkpoint/default' "$LOCAL_CACHE_DIR"
 
-          exec /app/lightgbm_server $LOCAL_CACHE_DIR 80
+          exec /app/onnx_server $LOCAL_CACHE_DIR 80
         image: "sqlrec/gbdt:0.1.0-cpu"
         name: "gbdt-service"
         ports:

@@ -4,17 +4,17 @@ import java.util.List;
 import java.util.Map;
 
 public class RequestData {
-    private Map<String, List<Map<String, Object>>> inputs;
+    private Map<String, List<Map<String, Object>>> data;
     private List<String> sqls;
     private Map<String, String> params;
     private Map<String, String> metricTags;
 
-    public Map<String, List<Map<String, Object>>> getInputs() {
-        return inputs;
+    public Map<String, List<Map<String, Object>>> getData() {
+        return data;
     }
 
-    public void setInputs(Map<String, List<Map<String, Object>>> inputs) {
-        this.inputs = inputs;
+    public void setData(Map<String, List<Map<String, Object>>> data) {
+        this.data = data;
     }
 
     public List<String> getSqls() {

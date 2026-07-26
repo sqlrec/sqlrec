@@ -110,7 +110,7 @@ function request()
     
     -- Construct request body
     local request_body = string.format(
-        '{"inputs":{"user_info":[{"id":%d}]},"params":{"recall_fun":"recall_fun"}}',
+        '{"data":{"user_info":[{"id":%d}]},"params":{"recall_fun":"recall_fun"}}',
         random_id
     )
     

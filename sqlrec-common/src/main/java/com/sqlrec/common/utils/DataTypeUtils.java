@@ -308,4 +308,65 @@ public class DataTypeUtils {
             }
         }
     }
+
+    public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
+        List<RelDataTypeField> fields = new ArrayList<>();
+        if (rows == null || rows.isEmpty()) {
+            return fields;
+        }
+        Map<String, Object> firstRow = rows.get(0);
+        int index = 0;
+        for (String name : firstRow.keySet()) {
+            fields.add(getRelDataTypeField(name, index, inferColumnTypeName(rows, name)));
+            index++;
+        }
+        return fields;
+    }
+
+    public static String inferColumnTypeName(List<Map<String, Object>> rows, String columnName) {
+        for (Map<String, Object> row : rows) {
+            Object value = row.get(columnName);
+            if (value != null) {
+                return inferTypeName(value);
+            }
+        }
+        return "VARCHAR";
+    }
+
+    public static String inferTypeName(Object value) {
+        if (value == null) {
+            return "VARCHAR";
+        }
+        if (value instanceof Long || value instanceof Integer) {
+            return "BIGINT";
+        }
+        if (value instanceof Number) {
+            return "DOUBLE";
+        }
+        if (value instanceof Boolean) {
+            return "BOOLEAN";
+        }
+        if (value instanceof List) {
+            String elementType = inferListElementType((List<?>) value);
+            if (elementType != null) {
+                return "ARRAY<" + elementType + ">";
+            }
+            return "VARCHAR";
+        }
+        // String, Map -> VARCHAR
+        return "VARCHAR";
+    }
+
+    public static String inferListElementType(List<?> list) {
+        for (Object elem : list) {
+            if (elem != null) {
+                // nested complex type -> fall back to VARCHAR
+                if (elem instanceof Map || elem instanceof List) {
+                    return null;
+                }
+                return inferTypeName(elem);
+            }
+        }
+        return null;
+    }
 }
