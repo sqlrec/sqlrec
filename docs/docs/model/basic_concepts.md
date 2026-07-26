@@ -104,12 +104,21 @@ SQLRec 模型系统与 Kubernetes 深度集成，训练和服务部署都在 Kub
 
 1. **性能优化**：导出过程会对模型进行切图、量化等优化，显著提升推理性能
 2. **格式兼容**：导出后的模型格式更适合推理引擎加载
-3. **检查机制**：系统在创建服务时会验证 Checkpoint 类型必须为 `export`
+3. **检查机制**：创建服务时由模型控制器（`ModelController`）校验 Checkpoint 类型必须为 `export`；外部模型（`external`）不需要导出产物，可豁免该校验
 
 ```java
-// ServiceManager.java 中的验证逻辑
-if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
-    throw new IllegalArgumentException("service only supports export checkpoint");
+// ModelController.java 中的默认校验：导出类型校验下沉到模型控制器
+default String validateServiceCheckpointType(String checkpointType) {
+    if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpointType)) {
+        return "service only supports export checkpoint";
+    }
+    return null;
+}
+
+// ServiceManager.java 调用模型控制器进行校验
+String checkpointError = modelController.validateServiceCheckpointType(checkpoint.getCheckpointType());
+if (checkpointError != null) {
+    throw new IllegalArgumentException(checkpointError);
 }
 ```
 

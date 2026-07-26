@@ -63,4 +63,10 @@ public class ExternalModel implements ModelController {
     public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
         return "";
     }
+
+    @Override
+    public String validateServiceCheckpointType(String checkpointType) {
+        // External model serves an external URL and does not require an exported checkpoint.
+        return null;
+    }
 }

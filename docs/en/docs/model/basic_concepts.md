@@ -105,12 +105,21 @@ Service deployment **can only use exported models**, not directly use trained mo
 
 1. **Performance Optimization**: Export process performs graph optimization, quantization, etc., significantly improving inference performance
 2. **Format Compatibility**: Exported model formats are more suitable for inference engine loading
-3. **Check Mechanism**: System verifies Checkpoint type must be `export` when creating service
+3. **Check Mechanism**: When creating a service, the model controller (`ModelController`) validates that the Checkpoint type is `export`; external models (`external`) do not need exported artifacts and are exempt from this check
 
 ```java
-// Validation logic in ServiceManager.java
-if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
-    throw new IllegalArgumentException("service only supports export checkpoint");
+// Default validation in ModelController.java: the export-type check is delegated to the model controller
+default String validateServiceCheckpointType(String checkpointType) {
+    if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpointType)) {
+        return "service only supports export checkpoint";
+    }
+    return null;
+}
+
+// ServiceManager.java invokes the model controller to validate
+String checkpointError = modelController.validateServiceCheckpointType(checkpoint.getCheckpointType());
+if (checkpointError != null) {
+    throw new IllegalArgumentException(checkpointError);
 }
 ```
 

@@ -92,6 +92,11 @@ public class ServiceManager {
         }
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
+        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.getModelConfig());
+        if (modelController == null) {
+            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.getModelConfig().getModelName());
+        }
+
         String modelDdl = modelEntity.getDdl();
         if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && !skipCheckpoint) {
             Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
@@ -101,15 +106,11 @@ public class ServiceManager {
             if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
                 throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }
-            if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
-                throw new IllegalArgumentException("service only supports export checkpoint");
+            String checkpointError = modelController.validateServiceCheckpointType(checkpoint.getCheckpointType());
+            if (checkpointError != null) {
+                throw new IllegalArgumentException(checkpointError);
             }
             modelDdl = checkpoint.getModelDdl();
-        }
-
-        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.getModelConfig());
-        if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.getModelConfig().getModelName());
         }
 
         String serviceUrl = modelController.getServiceUrl(serviceConfig.getModelConfig(), serviceConfig);
