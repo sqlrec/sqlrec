@@ -770,6 +770,48 @@ SELECT `get`('new_recommendation_algo') AS algo;
 - An exception will be thrown if GrowthBookClient initialization fails
 - The same client instance is reused for the same `apiHost` and `clientKey` combination
 
+---
+
+### sleep
+
+Sleep function that causes the current thread to sleep for a specified number of milliseconds. Mainly used for testing, rate limiting, or simulating latency scenarios.
+
+**Function Signature**:
+
+```java
+public Void evaluate(String millisStr)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `millisStr` | String | Sleep duration in milliseconds, must be a non-negative integer string |
+
+**Return Value**: No return value.
+
+**Usage Example**:
+
+```sql
+-- Sleep for 1000 milliseconds (1 second)
+CALL sleep('1000');
+
+-- Sleep for 500 milliseconds
+CALL sleep('500');
+```
+
+**Working Principle**:
+1. Parse `millisStr` as a long integer
+2. Call `Thread.sleep()` to make the current thread sleep for the specified duration
+3. If the thread is interrupted during sleep, the interrupt status is restored and an exception is thrown
+
+**Notes**:
+- `millisStr` must be a valid long integer string
+- Sleep duration must be non-negative
+- This function only has side effects and no return value
+
+---
+
 ## Scalar Functions
 
 ### array_contains

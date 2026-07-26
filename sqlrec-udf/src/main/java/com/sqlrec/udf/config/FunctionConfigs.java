@@ -44,5 +44,6 @@ public class FunctionConfigs {
         put("tag_to_vec", TagToVecFunction.class.getName());
         put("json_to_table", JsonToTableFunction.class.getName());
         put("get_growthbook_features", GetGrowthbookFeaturesFunction.class.getName());
+        put("sleep", SleepFunction.class.getName());
     }};
 }

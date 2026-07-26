@@ -770,6 +770,48 @@ SELECT `get`('new_recommendation_algo') AS algo;
 - GrowthBookClient 初始化失败时会抛出异常
 - 同一组 `apiHost` 和 `clientKey` 会复用同一个客户端实例
 
+---
+
+### sleep
+
+睡眠函数，使当前线程休眠指定的毫秒数。主要用于测试、限流或模拟延迟等场景。
+
+**函数签名**：
+
+```java
+public Void evaluate(String millisStr)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `millisStr` | String | 休眠时长，单位为毫秒，必须是非负整数字符串 |
+
+**返回值**：无返回值。
+
+**使用示例**：
+
+```sql
+-- 休眠 1000 毫秒（1 秒）
+CALL sleep('1000');
+
+-- 休眠 500 毫秒
+CALL sleep('500');
+```
+
+**工作原理**：
+1. 解析 `millisStr` 为长整型
+2. 调用 `Thread.sleep()` 使当前线程休眠指定时长
+3. 如果线程在休眠期间被中断，会恢复中断状态并抛出异常
+
+**注意事项**：
+- `millisStr` 必须是有效的长整数字符串
+- 休眠时长必须为非负数
+- 该函数仅产生副作用，无返回值
+
+---
+
 ## 标量函数（Scalar Function）
 
 ### array_contains

@@ -37,6 +37,8 @@ with (
 'NAMESPACE'='sqlrec'
 );
 
+call sleep('3000');
+
 CACHE TABLE t1 AS
 SELECT
     1 AS user_id,
@@ -87,6 +89,8 @@ create service recall_service_item on model recall_model checkpoint='v1_export/i
 with (
 'NAMESPACE'='sqlrec'
 );
+
+call sleep('3000');
 
 CACHE TABLE tmp_user AS
 SELECT

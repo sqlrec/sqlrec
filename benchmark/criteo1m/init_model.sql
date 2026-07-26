@@ -44,6 +44,8 @@ WITH (
  'NAMESPACE'='sqlrec'
 );
 
+call sleep('3000');
+
 -- Inference test
 CACHE TABLE cb_test_input AS
 SELECT
@@ -95,6 +97,8 @@ WITH (
  'NAMESPACE'='sqlrec'
 );
 
+call sleep('3000');
+
 -- Inference test (only I1-I13, matching the model definition)
 CACHE TABLE lgb_test_input AS
 SELECT
@@ -138,6 +142,8 @@ CREATE SERVICE xgb_ctr_service ON MODEL xgb_ctr_model CHECKPOINT='v1_export'
 WITH (
  'NAMESPACE'='sqlrec'
 );
+
+call sleep('3000');
 
 -- Inference test (only I1-I13, matching the model definition)
 CACHE TABLE xgb_test_input AS
