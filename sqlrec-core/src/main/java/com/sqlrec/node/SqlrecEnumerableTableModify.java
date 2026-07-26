@@ -18,8 +18,8 @@ import java.util.Collection;
 import java.util.List;
 
 // update will perform as insert
-public class SqlRecEnumerableTableModify extends EnumerableTableModify {
-    public SqlRecEnumerableTableModify(
+public class SqlrecEnumerableTableModify extends EnumerableTableModify {
+    public SqlrecEnumerableTableModify(
             RelOptCluster cluster,
             RelTraitSet traits,
             RelOptTable table,
@@ -43,7 +43,7 @@ public class SqlRecEnumerableTableModify extends EnumerableTableModify {
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new SqlRecEnumerableTableModify(
+        return new SqlrecEnumerableTableModify(
                 getCluster(),
                 traitSet,
                 getTable(),

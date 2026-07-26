@@ -1,6 +1,6 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.node.SqlRecEnumerableTableModify;
+import com.sqlrec.node.SqlrecEnumerableTableModify;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -32,7 +32,7 @@ public class SqlRecTableModifyRule extends ConverterRule {
             return null;
         }
         final RelTraitSet traitSet = modify.getTraitSet().replace(EnumerableConvention.INSTANCE);
-        return new SqlRecEnumerableTableModify(
+        return new SqlrecEnumerableTableModify(
                 modify.getCluster(), traitSet,
                 modify.getTable(),
                 modify.getCatalogReader(),

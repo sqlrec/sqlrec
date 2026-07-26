@@ -8,7 +8,7 @@ import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.Executor;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -176,14 +176,14 @@ public class FunctionProxyBindable extends BindableInterface {
 
         if (partitionBy != null) {
             if (isAsync) {
-                Executor.getExecutorService().submit(() -> bindWithPartition(schema, context, targetBindable));
+                ExecutorServiceUtils.getExecutorService().submit(() -> bindWithPartition(schema, context, targetBindable));
                 return null;
             }
             return bindWithPartition(schema, context, targetBindable);
         }
 
         if (isAsync) {
-            Executor.getExecutorService().submit(() -> targetBindable.bind(schema, context));
+            ExecutorServiceUtils.getExecutorService().submit(() -> targetBindable.bind(schema, context));
             return null;
         } else {
             return targetBindable.bind(schema, context);
@@ -217,7 +217,7 @@ public class FunctionProxyBindable extends BindableInterface {
                     }
                 }
                 return targetBindable.bind(partitionSchema, context);
-            }, Executor.getExecutorService());
+            }, ExecutorServiceUtils.getExecutorService());
             futures.add(future);
         }
 

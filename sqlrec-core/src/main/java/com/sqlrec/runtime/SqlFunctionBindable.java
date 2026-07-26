@@ -3,7 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.utils.Executor;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -80,7 +80,7 @@ public class SqlFunctionBindable extends BindableInterface {
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
                 CompletableFuture<Object> bindFuture = CompletableFuture.supplyAsync(
-                        () -> bindable.bind(schema, context), Executor.getExecutorService()
+                        () -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
                 );
                 bindFutures.put(i, bindFuture);
             } else {
@@ -92,7 +92,7 @@ public class SqlFunctionBindable extends BindableInterface {
                         dependentBindFutures.toArray(new CompletableFuture[0])
                 );
                 CompletableFuture<Object> bindFuture = dependentBindFuturesAll.thenApplyAsync(
-                        (v) -> bindable.bind(schema, context), Executor.getExecutorService()
+                        (v) -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
                 );
                 bindFutures.put(i, bindFuture);
             }

@@ -1,7 +1,6 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.CompileManager;
@@ -9,6 +8,7 @@ import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
+import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
@@ -112,7 +112,7 @@ public class ModelManager {
         }
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
-        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
+        k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
         Checkpoint checkpoint = new Checkpoint();
         checkpoint.setModelName(modelTrainConf.getModelName());
@@ -188,7 +188,7 @@ public class ModelManager {
         }
 
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
-        k8sYaml = injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
+        k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
@@ -210,80 +210,6 @@ public class ModelManager {
         K8sManager.applyYaml(k8sYaml);
 
         return checkpointInfos;
-    }
-
-    public static String injectPodConfig(String k8sYaml, ModelConfig model, Map<String, String> params) {
-        String namespace;
-        if (params.containsKey(ModelConfigs.NAMESPACE.getKey())) {
-            namespace = params.get(ModelConfigs.NAMESPACE.getKey());
-        } else {
-            namespace = ModelConfigs.NAMESPACE.getValue();
-        }
-
-        k8sYaml = K8sManager.injectNamespaceIntoYaml(k8sYaml, namespace);
-
-        Map<String, String> envVars = new HashMap<>();
-        String javaHome = ModelConfigs.JAVA_HOME.getValue();
-        if (javaHome != null) {
-            envVars.put("JAVA_HOME", javaHome);
-        }
-        String hadoopHome = ModelConfigs.HADOOP_HOME.getValue();
-        if (hadoopHome != null) {
-            envVars.put("HADOOP_HOME", hadoopHome);
-        }
-        String classpath = ModelConfigs.CLASSPATH.getValue();
-        if (classpath != null) {
-            envVars.put("CLASSPATH", classpath);
-        }
-        String hadoopConfDir = ModelConfigs.HADOOP_CONF_DIR.getValue();
-        if (hadoopConfDir != null) {
-            envVars.put("HADOOP_CONF_DIR", hadoopConfDir);
-        }
-        String clientDir = ModelConfigs.CLIENT_DIR.getValue();
-        if (clientDir != null) {
-            envVars.put("CLIENT_DIR", clientDir);
-        }
-        envVars.putAll(parseEnvVars(params));
-
-        if (!envVars.isEmpty()) {
-            k8sYaml = K8sManager.injectEnvVarsIntoYaml(k8sYaml, envVars);
-        }
-
-        String pvcName = ModelConfigs.CLIENT_PVC_NAME.getValue();
-        String pvName = ModelConfigs.CLIENT_PV_NAME.getValue();
-        String clientDirValue = ModelConfigs.CLIENT_DIR.getValue();
-        k8sYaml = K8sManager.injectVolumeMountIntoYaml(k8sYaml, pvcName, pvName, clientDirValue, null);
-
-        Map<String, String> nodeSelectors = parseNodeSelectors(params);
-        if (!nodeSelectors.isEmpty()) {
-            k8sYaml = K8sManager.injectNodeSelectorIntoYaml(k8sYaml, nodeSelectors);
-        }
-
-        return k8sYaml;
-    }
-
-    private static Map<String, String> parseNodeSelectors(Map<String, String> params) {
-        Map<String, String> nodeSelectors = new HashMap<>();
-        String prefix = "kubernetes.node.selector.";
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getKey().startsWith(prefix)) {
-                String labelKey = entry.getKey().substring(prefix.length());
-                nodeSelectors.put(labelKey, entry.getValue());
-            }
-        }
-        return nodeSelectors;
-    }
-
-    private static Map<String, String> parseEnvVars(Map<String, String> params) {
-        Map<String, String> envVars = new HashMap<>();
-        String prefix = "kubernetes.env.";
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getKey().startsWith(prefix)) {
-                String envKey = entry.getKey().substring(prefix.length());
-                envVars.put(envKey, entry.getValue());
-            }
-        }
-        return envVars;
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {

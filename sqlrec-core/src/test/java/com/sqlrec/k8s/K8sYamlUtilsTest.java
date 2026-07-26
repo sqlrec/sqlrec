@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class K8sManagerTest {
+public class K8sYamlUtilsTest {
 
     @Test
     public void testInjectEnvVarsIntoYaml() {
@@ -46,7 +46,7 @@ spec:
         envVars.put("DB_HOST", "localhost");
         envVars.put("DB_PORT", "5432");
 
-        String result = K8sManager.injectEnvVarsIntoYaml(yamlContent, envVars);
+        String result = K8sYamlUtils.injectEnvVarsIntoYaml(yamlContent, envVars);
 
         String expectedYaml = """
 ---
@@ -94,10 +94,10 @@ spec:
 
     @Test
     public void testInjectEnvVarsIntoYamlWithEmptyInput() {
-        assertNull(K8sManager.injectEnvVarsIntoYaml(null, new HashMap<>()));
-        assertEquals("", K8sManager.injectEnvVarsIntoYaml("", new HashMap<>()));
-        assertEquals("test", K8sManager.injectEnvVarsIntoYaml("test", null));
-        assertEquals("test", K8sManager.injectEnvVarsIntoYaml("test", new HashMap<>()));
+        assertNull(K8sYamlUtils.injectEnvVarsIntoYaml(null, new HashMap<>()));
+        assertEquals("", K8sYamlUtils.injectEnvVarsIntoYaml("", new HashMap<>()));
+        assertEquals("test", K8sYamlUtils.injectEnvVarsIntoYaml("test", null));
+        assertEquals("test", K8sYamlUtils.injectEnvVarsIntoYaml("test", new HashMap<>()));
     }
 
     @Test
@@ -115,7 +115,7 @@ spec:
         image: busybox
 """;
 
-        var jobs = K8sManager.parseK8sYamlAndGetJobs(yamlContent);
+        var jobs = K8sYamlUtils.parseK8sYamlAndGetJobs(yamlContent);
         assertEquals(1, jobs.size());
         assertEquals("test-job", jobs.get(0).getMetadata().getName());
     }
@@ -142,20 +142,20 @@ spec:
         image: nginx
 """;
 
-        var deployments = K8sManager.parseK8sYamlAndGetDeployments(yamlContent);
+        var deployments = K8sYamlUtils.parseK8sYamlAndGetDeployments(yamlContent);
         assertEquals(1, deployments.size());
         assertEquals("test-deployment", deployments.get(0).getMetadata().getName());
     }
 
     @Test
     public void testConvertToValidK8sName() {
-        assertEquals("test-name", K8sManager.convertToValidK8sName("Test_Name"));
-        assertEquals("test-name", K8sManager.convertToValidK8sName("test@name"));
-        assertEquals("test-name", K8sManager.convertToValidK8sName("  test-name  "));
-        assertEquals("test-name", K8sManager.convertToValidK8sName("test--name"));
-        assertEquals("test-name", K8sManager.convertToValidK8sName("-test-name-"));
-        assertNull(K8sManager.convertToValidK8sName(null));
-        assertEquals("", K8sManager.convertToValidK8sName(""));
+        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("Test_Name"));
+        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("test@name"));
+        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("  test-name  "));
+        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("test--name"));
+        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("-test-name-"));
+        assertNull(K8sYamlUtils.convertToValidK8sName(null));
+        assertEquals("", K8sYamlUtils.convertToValidK8sName(""));
     }
 
     @Test
@@ -191,7 +191,7 @@ spec:
         image: nginx
 """;
 
-        String result = K8sManager.injectVolumeMountIntoYaml(
+        String result = K8sYamlUtils.injectVolumeMountIntoYaml(
             yamlContent,
             "my-pvc",
             "my-volume",
@@ -251,11 +251,11 @@ spec:
 
     @Test
     public void testInjectVolumeMountIntoYamlWithEmptyInput() {
-        assertNull(K8sManager.injectVolumeMountIntoYaml(null, "pvc", "volume", "/path", "subpath"));
-        assertEquals("", K8sManager.injectVolumeMountIntoYaml("", "pvc", "volume", "/path", "subpath"));
-        assertEquals("test", K8sManager.injectVolumeMountIntoYaml("test", null, "volume", "/path", "subpath"));
-        assertEquals("test", K8sManager.injectVolumeMountIntoYaml("test", "pvc", null, "/path", "subpath"));
-        assertEquals("test", K8sManager.injectVolumeMountIntoYaml("test", "pvc", "volume", null, "subpath"));
+        assertNull(K8sYamlUtils.injectVolumeMountIntoYaml(null, "pvc", "volume", "/path", "subpath"));
+        assertEquals("", K8sYamlUtils.injectVolumeMountIntoYaml("", "pvc", "volume", "/path", "subpath"));
+        assertEquals("test", K8sYamlUtils.injectVolumeMountIntoYaml("test", null, "volume", "/path", "subpath"));
+        assertEquals("test", K8sYamlUtils.injectVolumeMountIntoYaml("test", "pvc", null, "/path", "subpath"));
+        assertEquals("test", K8sYamlUtils.injectVolumeMountIntoYaml("test", "pvc", "volume", null, "subpath"));
     }
 
     @Test
@@ -291,7 +291,7 @@ spec:
         image: nginx
 """;
 
-        String result = K8sManager.injectVolumeMountIntoYaml(
+        String result = K8sYamlUtils.injectVolumeMountIntoYaml(
             yamlContent,
             "my-pvc",
             "my-volume",
@@ -380,7 +380,7 @@ spec:
         image: nginx
 """;
 
-        String result = K8sManager.injectNamespaceIntoYaml(yamlContent, "my-namespace");
+        String result = K8sYamlUtils.injectNamespaceIntoYaml(yamlContent, "my-namespace");
 
         String expectedYaml = """
 ---
@@ -434,7 +434,7 @@ spec:
         image: busybox
 """;
 
-        String result = K8sManager.injectNamespaceIntoYaml(yamlContent, "new-namespace");
+        String result = K8sYamlUtils.injectNamespaceIntoYaml(yamlContent, "new-namespace");
 
         String expectedYaml = """
 ---
@@ -455,10 +455,10 @@ spec:
 
     @Test
     public void testInjectNamespaceIntoYamlWithEmptyInput() {
-        assertNull(K8sManager.injectNamespaceIntoYaml(null, "namespace"));
-        assertEquals("", K8sManager.injectNamespaceIntoYaml("", "namespace"));
-        assertEquals("test", K8sManager.injectNamespaceIntoYaml("test", null));
-        assertEquals("test", K8sManager.injectNamespaceIntoYaml("test", ""));
+        assertNull(K8sYamlUtils.injectNamespaceIntoYaml(null, "namespace"));
+        assertEquals("", K8sYamlUtils.injectNamespaceIntoYaml("", "namespace"));
+        assertEquals("test", K8sYamlUtils.injectNamespaceIntoYaml("test", null));
+        assertEquals("test", K8sYamlUtils.injectNamespaceIntoYaml("test", ""));
     }
 
     @Test
@@ -498,7 +498,7 @@ spec:
         nodeSelectors.put("disk-type", "ssd");
         nodeSelectors.put("zone", "us-west-1");
 
-        String result = K8sManager.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
+        String result = K8sYamlUtils.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
 
         String expectedYaml = """
 ---
@@ -542,10 +542,10 @@ spec:
 
     @Test
     public void testInjectNodeSelectorIntoYamlWithEmptyInput() {
-        assertNull(K8sManager.injectNodeSelectorIntoYaml(null, new HashMap<>()));
-        assertEquals("", K8sManager.injectNodeSelectorIntoYaml("", new HashMap<>()));
-        assertEquals("test", K8sManager.injectNodeSelectorIntoYaml("test", null));
-        assertEquals("test", K8sManager.injectNodeSelectorIntoYaml("test", new HashMap<>()));
+        assertNull(K8sYamlUtils.injectNodeSelectorIntoYaml(null, new HashMap<>()));
+        assertEquals("", K8sYamlUtils.injectNodeSelectorIntoYaml("", new HashMap<>()));
+        assertEquals("test", K8sYamlUtils.injectNodeSelectorIntoYaml("test", null));
+        assertEquals("test", K8sYamlUtils.injectNodeSelectorIntoYaml("test", new HashMap<>()));
     }
 
     @Test
@@ -568,7 +568,7 @@ spec:
         Map<String, String> nodeSelectors = new HashMap<>();
         nodeSelectors.put("new-key", "new-value");
 
-        String result = K8sManager.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
+        String result = K8sYamlUtils.injectNodeSelectorIntoYaml(yamlContent, nodeSelectors);
 
         String expectedYaml = """
 ---

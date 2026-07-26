@@ -6,7 +6,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.utils.Executor;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -76,7 +76,7 @@ public class CacheTableBindable extends BindableInterface {
 
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
         CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> bindable.bind(schema, context), Executor.getExecutorService()
+                () -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
         );
         try {
             return future.get(timeout, TimeUnit.MILLISECONDS);

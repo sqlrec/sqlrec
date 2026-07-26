@@ -36,7 +36,7 @@ public class TestKafkaTable {
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null, """
                 LogicalTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])
                   LogicalValues(tuples=[[{ 1, 'Alice1', 1 }]])""", """
-                SqlRecEnumerableTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])
+                SqlrecEnumerableTableModify(table=[[default, t1]], operation=[INSERT], flattened=[false])
                   EnumerableValues(tuples=[[{ 1, 'Alice1', 1 }]])""", null).test(schema);
     }
 

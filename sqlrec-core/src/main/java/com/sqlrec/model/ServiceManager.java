@@ -11,6 +11,7 @@ import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
+import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.utils.ObjCache;
 import org.apache.commons.lang3.StringUtils;
@@ -118,7 +119,7 @@ public class ServiceManager {
         if (!skipK8sYaml) {
             k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
             if (!StringUtils.isEmpty(k8sYaml)) {
-                k8sYaml = ModelManager.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
+                k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
             }
         }
 

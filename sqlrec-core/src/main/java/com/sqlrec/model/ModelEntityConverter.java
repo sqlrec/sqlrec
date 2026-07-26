@@ -11,7 +11,7 @@ import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
-import com.sqlrec.k8s.K8sManager;
+import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
@@ -74,7 +74,7 @@ public class ModelEntityConverter {
             ));
         }
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
-        modelTrainConf.setId(K8sManager.convertToValidK8sName(modelTrainConf.getModelName() + "-" + modelTrainConf.getCheckpointName()));
+        modelTrainConf.setId(K8sYamlUtils.convertToValidK8sName(modelTrainConf.getModelName() + "-" + modelTrainConf.getCheckpointName()));
         modelTrainConf.setTrainDataPaths(getHivePartitionPaths(sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
         return modelTrainConf;
     }
@@ -86,14 +86,14 @@ public class ModelEntityConverter {
         modelExportConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         modelExportConf.setParams(SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList()));
-        modelExportConf.setId(K8sManager.convertToValidK8sName(modelExportConf.getModelName() + "-" + modelExportConf.getCheckpointName() + "-export"));
+        modelExportConf.setId(K8sYamlUtils.convertToValidK8sName(modelExportConf.getModelName() + "-" + modelExportConf.getCheckpointName() + "-export"));
         modelExportConf.setTrainDataPaths(getHivePartitionPaths(sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema));
         return modelExportConf;
     }
 
     public static ServiceConfig convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
         ServiceConfig serviceConfig = new ServiceConfig();
-        serviceConfig.setId(K8sManager.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
+        serviceConfig.setId(K8sYamlUtils.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
         serviceConfig.setServiceName(sqlCreateService.getServiceName().toString());
         serviceConfig.setModelName(sqlCreateService.getModelName().toString());
         if (sqlCreateService.getCheckpoint() != null) {
