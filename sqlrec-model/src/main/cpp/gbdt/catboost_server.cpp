@@ -13,17 +13,15 @@
 // Response body: {"probs": [p1, p2, ...]}.
 
 #include <iostream>
-#include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 #include <cmath>
-#include <csignal>
 #include <cstdlib>
-#include <fstream>
 
 #include "httplib.h"
 #include "json.hpp"
+#include "schema.h"
+#include "utils.h"
 
 #include <catboost/libs/model_interface/c_api.h>
 
@@ -32,51 +30,14 @@ using json = nlohmann::json;
 namespace {
 
 ModelCalcerHandle* g_model = nullptr;
-std::vector<std::string> g_feature_columns;
-std::set<std::string> g_categorical_features;
-std::vector<int> g_cat_feature_indices;
-std::string g_objective;
-httplib::Server* g_server = nullptr;  // for signal handler access
-
-std::string read_file(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("Failed to open file: " + path);
-    }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
-}
-
-void load_schema(const std::string& schema_path) {
-    json schema = json::parse(read_file(schema_path));
-    g_feature_columns.clear();
-    g_categorical_features.clear();
-    g_cat_feature_indices.clear();
-    g_objective = schema.value("objective", "binary");
-    for (const auto& f : schema["feature_columns"]) {
-        g_feature_columns.push_back(f.get<std::string>());
-    }
-    if (schema.contains("categorical_features")) {
-        for (const auto& f : schema["categorical_features"]) {
-            std::string name = f.get<std::string>();
-            g_categorical_features.insert(name);
-        }
-    }
-    // Build categorical feature index list (0-based positions).
-    for (size_t i = 0; i < g_feature_columns.size(); ++i) {
-        if (g_categorical_features.count(g_feature_columns[i])) {
-            g_cat_feature_indices.push_back(static_cast<int>(i));
-        }
-    }
-}
+Schema g_schema;
 
 void init_model(const std::string& model_dir) {
     std::string model_path = model_dir + "/model.cbm";
     std::string schema_path = model_dir + "/schema.json";
 
     std::cout << "Loading schema from " << schema_path << std::endl;
-    load_schema(schema_path);
+    g_schema.load(schema_path);
 
     std::cout << "Loading CatBoost model from " << model_path << std::endl;
     g_model = ModelCalcerCreate();
@@ -86,8 +47,8 @@ void init_model(const std::string& model_dir) {
         throw std::runtime_error("Failed to load CatBoost model: " + msg);
     }
 
-    std::cout << "CatBoost model loaded. n_features=" << g_feature_columns.size()
-              << ", n_categorical=" << g_cat_feature_indices.size() << std::endl;
+    std::cout << "CatBoost model loaded. n_features=" << g_schema.feature_columns.size()
+              << ", n_categorical=" << g_schema.cat_feature_indices.size() << std::endl;
 }
 
 json predict(const json& request_data) {
@@ -99,8 +60,8 @@ json predict(const json& request_data) {
     }
 
     size_t batch = request_data.size();
-    size_t n_features = g_feature_columns.size();
-    size_t n_cat = g_cat_feature_indices.size();
+    size_t n_features = g_schema.feature_columns.size();
+    size_t n_cat = g_schema.cat_feature_indices.size();
     size_t n_float = n_features - n_cat;
 
     // Build float and cat features arrays per the CatBoost C API.
@@ -121,34 +82,16 @@ json predict(const json& request_data) {
         size_t float_idx = 0;
         size_t cat_idx = 0;
         for (size_t j = 0; j < n_features; ++j) {
-            const std::string& col = g_feature_columns[j];
-            bool is_cat = g_categorical_features.count(col) > 0;
+            const std::string& col = g_schema.feature_columns[j];
+            bool is_cat = g_schema.categorical_features.count(col) > 0;
             if (is_cat) {
                 // Categorical: always consume the slot (even if null) so that
                 // cat_idx stays aligned with the categorical feature order.
-                if (row.contains(col) && !row[col].is_null()) {
-                    const auto& v = row[col];
-                    std::string s = v.is_string() ? v.get<std::string>() : v.dump();
-                    cat_storage[i * n_cat + cat_idx] = std::move(s);
-                }
-                // Default empty string "" is already set for null/missing.
+                cat_storage[i * n_cat + cat_idx] = get_string_value(row, col);
                 flat_cats[i * n_cat + cat_idx] = cat_storage[i * n_cat + cat_idx].c_str();
                 ++cat_idx;
             } else {
-                // Numeric.
-                if (row.contains(col) && !row[col].is_null()) {
-                    const auto& v = row[col];
-                    if (v.is_number()) {
-                        flat_floats[i * n_float + float_idx] = v.get<float>();
-                    } else {
-                        try {
-                            flat_floats[i * n_float + float_idx] = std::stof(
-                                    v.is_string() ? v.get<std::string>() : v.dump());
-                        } catch (...) {
-                            // leave as 0
-                        }
-                    }
-                }
+                flat_floats[i * n_float + float_idx] = get_float_value(row, col);
                 ++float_idx;
             }
         }
@@ -185,7 +128,7 @@ json predict(const json& request_data) {
 
     json probs = json::array();
     for (double p : predictions) {
-        if (g_objective == "binary") {
+        if (g_schema.objective == "binary") {
             probs.push_back(1.0 / (1.0 + std::exp(-p)));
         } else {
             probs.push_back(p);
@@ -227,34 +170,9 @@ int main(int argc, char** argv) {
     }
 
     httplib::Server svr;
-
-    // Graceful shutdown: K8s sends SIGTERM during pod termination. Use a
-    // global server pointer so the signal handler can call svr.stop(),
-    // which unblocks listen() and allows in-flight requests to complete.
-    g_server = &svr;
-    std::signal(SIGTERM, [](int) {
-        if (g_server) g_server->stop();
-    });
-    std::signal(SIGINT, [](int) {
-        if (g_server) g_server->stop();
-    });
-
-    svr.Post("/predict", [&](const httplib::Request& req, httplib::Response& res) {
-        try {
-            auto body = json::parse(req.body);
-            auto result = predict(body);
-            if (result.contains("error")) {
-                res.status = 400;
-            }
-            res.set_content(result.dump(), "application/json");
-        } catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
-        }
-    });
-    svr.Get("/health", [&](const httplib::Request&, httplib::Response& res) {
-        res.set_content(json{{"status", "ok"}}.dump(), "application/json");
-    });
+    setup_graceful_shutdown(svr);
+    register_predict_endpoint(svr, predict);
+    register_health_endpoint(svr);
 
     std::cout << "CatBoost server listening on http://0.0.0.0:" << port << std::endl;
     if (!svr.listen("0.0.0.0", port)) {

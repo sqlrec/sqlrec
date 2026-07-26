@@ -14,16 +14,15 @@
 
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <vector>
-#include <csignal>
 #include <cstdint>
 #include <cstdlib>
-#include <fstream>
 
 #include "httplib.h"
 #include "json.hpp"
+#include "schema.h"
+#include "utils.h"
 
 #include <onnxruntime_cxx_api.h>
 
@@ -33,35 +32,16 @@ namespace {
 
 Ort::Env g_env{ORT_LOGGING_LEVEL_WARNING, "onnx_server"};
 Ort::Session* g_session = nullptr;
-std::vector<std::string> g_feature_columns;
+Schema g_schema;
 std::string g_input_name;
 std::string g_output_name;
-httplib::Server* g_server = nullptr;  // for signal handler access
-
-std::string read_file(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("Failed to open file: " + path);
-    }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
-}
-
-void load_schema(const std::string& schema_path) {
-    json schema = json::parse(read_file(schema_path));
-    g_feature_columns.clear();
-    for (const auto& f : schema["feature_columns"]) {
-        g_feature_columns.push_back(f.get<std::string>());
-    }
-}
 
 void init_model(const std::string& model_dir) {
     std::string model_path = model_dir + "/model.onnx";
     std::string schema_path = model_dir + "/schema.json";
 
     std::cout << "Loading schema from " << schema_path << std::endl;
-    load_schema(schema_path);
+    g_schema.load(schema_path);
 
     std::cout << "Loading ONNX model from " << model_path << std::endl;
     Ort::SessionOptions session_opts;
@@ -108,12 +88,12 @@ void init_model(const std::string& model_dir) {
     }
 
     std::cout << "Model loaded. Input name=" << g_input_name
-              << ", n_features=" << g_feature_columns.size() << std::endl;
+              << ", n_features=" << g_schema.feature_columns.size() << std::endl;
 }
 
 std::vector<float> build_input_tensor(const json& rows) {
     size_t batch = rows.size();
-    size_t n_features = g_feature_columns.size();
+    size_t n_features = g_schema.feature_columns.size();
     std::vector<float> tensor(batch * n_features, 0.0f);
     for (size_t i = 0; i < batch; ++i) {
         const auto& row = rows[i];
@@ -121,21 +101,7 @@ std::vector<float> build_input_tensor(const json& rows) {
             throw std::runtime_error("Each array element must be a JSON object");
         }
         for (size_t j = 0; j < n_features; ++j) {
-            const std::string& col = g_feature_columns[j];
-            if (!row.contains(col) || row[col].is_null()) {
-                continue;
-            }
-            const auto& v = row[col];
-            if (v.is_number()) {
-                tensor[i * n_features + j] = v.get<float>();
-            } else {
-                try {
-                    tensor[i * n_features + j] = std::stof(
-                            v.is_string() ? v.get<std::string>() : v.dump());
-                } catch (...) {
-                    // leave as 0
-                }
-            }
+            tensor[i * n_features + j] = get_float_value(row, g_schema.feature_columns[j]);
         }
     }
     return tensor;
@@ -150,7 +116,7 @@ json predict(const json& request_data) {
     }
 
     size_t batch = request_data.size();
-    size_t n_features = g_feature_columns.size();
+    size_t n_features = g_schema.feature_columns.size();
     auto input_values = build_input_tensor(request_data);
 
     std::array<int64_t, 2> input_shape{static_cast<int64_t>(batch), static_cast<int64_t>(n_features)};
@@ -238,34 +204,9 @@ int main(int argc, char** argv) {
     }
 
     httplib::Server svr;
-
-    // Graceful shutdown: K8s sends SIGTERM during pod termination. Use a
-    // global server pointer so the signal handler can call svr.stop(),
-    // which unblocks listen() and allows in-flight requests to complete.
-    g_server = &svr;
-    std::signal(SIGTERM, [](int) {
-        if (g_server) g_server->stop();
-    });
-    std::signal(SIGINT, [](int) {
-        if (g_server) g_server->stop();
-    });
-
-    svr.Post("/predict", [&](const httplib::Request& req, httplib::Response& res) {
-        try {
-            auto body = json::parse(req.body);
-            auto result = predict(body);
-            if (result.contains("error")) {
-                res.status = 400;
-            }
-            res.set_content(result.dump(), "application/json");
-        } catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
-        }
-    });
-    svr.Get("/health", [&](const httplib::Request&, httplib::Response& res) {
-        res.set_content(json{{"status", "ok"}}.dump(), "application/json");
-    });
+    setup_graceful_shutdown(svr);
+    register_predict_endpoint(svr, predict);
+    register_health_endpoint(svr);
 
     std::cout << "ONNX server listening on http://0.0.0.0:" << port << std::endl;
     if (!svr.listen("0.0.0.0", port)) {

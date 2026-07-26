@@ -23,11 +23,12 @@ CREATE MODEL IF NOT EXISTS `cb_ctr_model` (
  'label_columns'='label'
 );
 
--- Train
+-- Train (use small iterations for benchmark)
 TRAIN MODEL cb_ctr_model CHECKPOINT='v1' ON criteo
 WITH (
  'NAMESPACE'='sqlrec',
- 'pod_memory'='4Gi'
+ 'pod_memory'='4Gi',
+ 'cb_iterations'='50'
 );
 
 -- Export to serving format (.cbm)
@@ -73,11 +74,12 @@ CREATE MODEL IF NOT EXISTS `lgb_ctr_model` (
  'label_columns'='label'
 );
 
--- Train
+-- Train (use small iterations for benchmark)
 TRAIN MODEL lgb_ctr_model CHECKPOINT='v1' ON criteo
 WITH (
  'NAMESPACE'='sqlrec',
- 'pod_memory'='4Gi'
+ 'pod_memory'='4Gi',
+ 'num_iterations'='50'
 );
 
 -- Export to serving format (.onnx)
@@ -116,11 +118,12 @@ CREATE MODEL IF NOT EXISTS `xgb_ctr_model` (
  'label_columns'='label'
 );
 
--- Train
+-- Train (use small iterations for benchmark)
 TRAIN MODEL xgb_ctr_model CHECKPOINT='v1' ON criteo
 WITH (
  'NAMESPACE'='sqlrec',
- 'pod_memory'='4Gi'
+ 'pod_memory'='4Gi',
+ 'num_iterations'='50'
 );
 
 -- Export to serving format (.onnx)

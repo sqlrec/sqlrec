@@ -10,6 +10,7 @@
 
 #include "httplib.h"
 #include "json.hpp"
+#include "utils.h"
 
 #include <torch/script.h>
 #include <torch/torch.h>
@@ -231,9 +232,8 @@ json predict(const json& request_data) {
             return json{{"error", "Model not initialized"}};
         }
 
-        size_t batch_size = request_data.size();
-        if (batch_size == 0) {
-            return json{{"error", "Input data is empty"}};
+        if (!request_data.is_array() || request_data.empty()) {
+            return json{{"error", "Input data must be a non-empty JSON array"}};
         }
 
         auto dict = parse_input(request_data);
@@ -274,40 +274,9 @@ int main(int argc, char** argv) {
     std::cout << "Starting HTTP server on port " << port << std::endl;
 
     httplib::Server svr;
-
-    svr.Post("/predict", [&](const httplib::Request& req, httplib::Response& res) {
-        std::cout << "Predict request received" << std::endl;
-
-        try {
-            auto request_data = json::parse(req.body);
-
-            if (!request_data.is_array()) {
-                res.set_content(json{{"error", "Input data must be a JSON array"}}.dump(), "application/json");
-                res.status = 400;
-                return;
-            }
-
-            if (request_data.empty()) {
-                res.set_content(json{{"error", "Input data is empty"}}.dump(), "application/json");
-                res.status = 400;
-                return;
-            }
-
-            auto result = predict(request_data);
-            res.set_content(result.dump(), "application/json");
-
-        } catch (const json::parse_error& e) {
-            res.set_content(json{{"error", std::string("JSON parse error: ") + e.what()}}.dump(), "application/json");
-            res.status = 400;
-        } catch (const std::exception& e) {
-            res.set_content(json{{"error", std::string(e.what())}}.dump(), "application/json");
-            res.status = 500;
-        }
-    });
-
-    svr.Get("/health", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(json{{"status", "ok"}}.dump(), "application/json");
-    });
+    setup_graceful_shutdown(svr);
+    register_predict_endpoint(svr, predict);
+    register_health_endpoint(svr);
 
     std::cout << "Server listening on http://0.0.0.0:" << port << std::endl;
     svr.listen("0.0.0.0", port);
