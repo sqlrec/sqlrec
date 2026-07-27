@@ -2,6 +2,8 @@ package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.rest.ExecuteData;
+import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;

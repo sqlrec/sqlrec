@@ -1,31 +1,23 @@
 package com.sqlrec.udf.table;
 
+import com.sqlrec.common.rest.ExecuteData;
+import com.sqlrec.common.rest.SqlRecApiClient;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
-import okhttp3.*;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 public class CallSqlRecApiFunction {
-    private static final OkHttpClient httpClient = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build();
-
-    @SuppressWarnings("unchecked")
     public CacheTable evaluate(ReadonlyContext context, String url, CacheTable... tables) {
         if (url == null || url.isEmpty()) {
             throw new IllegalArgumentException("url is null or empty");
@@ -46,25 +38,15 @@ public class CallSqlRecApiFunction {
             inputs.put(tableName, DataTransformUtils.convertToMapList(rows, table.getDataFields()));
         }
 
-        // build request body: {data, params, metricTags}
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("data", inputs);
-        requestBody.put("params", context.getVariables());
-        requestBody.put("metricTags", context.getMetricsTags());
-        String bodyJson = JsonUtils.toJson(requestBody);
-
-        // call remote sqlrec api
-        String responseJson = callRemoteApi(url, bodyJson);
-
-        // parse response: {msg, data, params}
-        Map<String, Object> respMap = JsonUtils.parseJsonToMap(responseJson);
-        Object dataObj = respMap.get("data");
-        List<Map<String, Object>> dataRows = dataObj instanceof List ? (List<Map<String, Object>>) dataObj : null;
+        // call remote sqlrec api via common client
+        ExecuteData response = SqlRecApiClient.callFunctionApi(
+                url, inputs, context.getVariables(), context.getMetricsTags());
+        List<Map<String, Object>> dataRows = response.getData();
 
         if (dataRows == null || dataRows.isEmpty()) {
-            Object msgObj = respMap.get("msg");
-            String msg = msgObj == null ? "remote api returned empty data" : msgObj.toString();
-            throw new RuntimeException("remote sqlrec api call failed: " + msg);
+            String msg = response.getMsg();
+            throw new RuntimeException("remote sqlrec api call failed: "
+                    + (msg == null ? "remote api returned empty data" : msg));
         }
 
         // infer output fields from response rows
@@ -87,27 +69,5 @@ public class CallSqlRecApiFunction {
         }
 
         return new CacheTable("output", Linq4j.asEnumerable(outRows), dataFields);
-    }
-
-    private static String callRemoteApi(String url, String bodyJson) {
-        try {
-            RequestBody body = RequestBody.create(
-                    bodyJson,
-                    MediaType.parse("application/json; charset=utf-8")
-            );
-            Request request = new Request.Builder()
-                    .url(url)
-                    .post(body)
-                    .addHeader("Accept", "application/json")
-                    .build();
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    throw new RuntimeException("HTTP request failed with response code: " + response.code());
-                }
-                return response.body() != null ? response.body().string() : "";
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to call remote sqlrec api: " + e.getMessage(), e);
-        }
     }
 }

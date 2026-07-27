@@ -1,5 +1,7 @@
 package com.sqlrec.frontend.rest;
 
+import com.sqlrec.common.rest.ExecuteData;
+import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
