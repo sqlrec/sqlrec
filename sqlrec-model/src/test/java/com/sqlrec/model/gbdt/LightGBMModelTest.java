@@ -406,12 +406,12 @@ spec:
         - |
           #!/bin/bash
           set -ex
-          export PYTHONPATH=/app:$PYTHONPATH
 
           LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
-          python -c "import sys; from common.filesystem import download_dir; download_dir(sys.argv[1], sys.argv[2])" '/model/checkpoint/v1' "$LOCAL_CACHE_DIR"
+          rm -rf "$LOCAL_CACHE_DIR"
+          ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/v1' "$LOCAL_CACHE_DIR"
 
-          exec /app/onnx_server $LOCAL_CACHE_DIR 80
+          exec /app/onnx_server "$LOCAL_CACHE_DIR" 80
         image: "sqlrec/gbdt:0.1.0-cpu"
         name: "gbdt-service"
         ports:
@@ -475,12 +475,12 @@ spec:
         - |
           #!/bin/bash
           set -ex
-          export PYTHONPATH=/app:$PYTHONPATH
 
           LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
-          python -c "import sys; from common.filesystem import download_dir; download_dir(sys.argv[1], sys.argv[2])" '/model/checkpoint/default' "$LOCAL_CACHE_DIR"
+          rm -rf "$LOCAL_CACHE_DIR"
+          ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/default' "$LOCAL_CACHE_DIR"
 
-          exec /app/onnx_server $LOCAL_CACHE_DIR 80
+          exec /app/onnx_server "$LOCAL_CACHE_DIR" 80
         image: "sqlrec/gbdt:0.1.0-cpu"
         name: "gbdt-service"
         ports:

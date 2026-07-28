@@ -42,8 +42,16 @@ public class ShellUtils {
     }
 
     /**
-     * Downloads model artifacts from remote storage via Python, then launches
-     * the C++ server via {@code exec} (PID 1 for direct K8s SIGTERM handling).
+     * Downloads model artifacts from remote storage via the Hadoop client, then
+     * launches the C++ server via {@code exec} (PID 1 for direct K8s SIGTERM
+     * handling).
+     *
+     * <p>The Hadoop client is mounted into the serving container by the framework
+     * (with {@code HADOOP_HOME} pointing at it), so {@code hadoop fs -get} pulls
+     * the model directory from HDFS directly. The cache dir is removed first so
+     * the remote directory's contents land at the top level (matching the layout
+     * the C++ servers expect: {@code model.cbm}/{@code model.onnx} and
+     * {@code schema.json}).
      *
      * <p>CatBoost uses {@code catboost_server} (native C API). LightGBM and
      * XGBoost both use {@code onnx_server} (ONNX Runtime).
@@ -55,11 +63,11 @@ public class ShellUtils {
         String escapedPath = modelCheckpointDir.replace("'", "'\\''");
         return "#!/bin/bash\n" +
                 "set -ex\n" +
-                "export PYTHONPATH=/app:$PYTHONPATH\n" +
                 "\n" +
                 "LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}\n" +
-                "python -c \"import sys; from common.filesystem import download_dir; download_dir(sys.argv[1], sys.argv[2])\" '" + escapedPath + "' \"$LOCAL_CACHE_DIR\"\n" +
+                "rm -rf \"$LOCAL_CACHE_DIR\"\n" +
+                "${HADOOP_HOME}/bin/hadoop fs -get '" + escapedPath + "' \"$LOCAL_CACHE_DIR\"\n" +
                 "\n" +
-                "exec /app/" + serverBinary + " $LOCAL_CACHE_DIR 80\n";
+                "exec /app/" + serverBinary + " \"$LOCAL_CACHE_DIR\" 80\n";
     }
 }
