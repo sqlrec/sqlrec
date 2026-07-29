@@ -28,10 +28,10 @@ Versions before 1.0 are beta versions, not recommended for production use, and d
 
 ### Future Feature Plans
 
-- Frontend UI for viewing current execution DAG, SQL code, statistics, etc.
+- Further enhance frontend UI with more management and monitoring features
 - Further optimize SQL syntax compatibility and runtime performance
 - More ready-to-use UDFs, models, etc.
-- Support for more external data sources, such as JDBC, MongoDB, etc.
+- Support for more external data sources, such as Elasticsearch, etc.
 - Tensorboard visualization of model training process
 - GPU training and inference support
 - Support for authentication and authorization

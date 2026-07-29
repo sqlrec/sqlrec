@@ -40,19 +40,20 @@ import org.apache.calcite.schema.ModifiableTable;
 
 import java.util.*;
 
-public abstract class SqlRecKvTable extends SqlRecTable 
+public abstract class SqlRecKvTable extends SqlRecTable
     implements ModifiableTable, FilterableTable {
-    
+
     private Cache<Object, List<Object[]>> cache;
 
-    // Get primary key index
-    public int getPrimaryKeyIndex() {
-        throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
-    }
+    // Get primary key index (abstract, subclasses must implement)
+    public abstract int getPrimaryKeyIndex();
 
-    // Batch query by primary key
+    // Batch query by primary key implementation (abstract, subclasses implement data source access)
+    public abstract Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet);
+
+    // Batch query by primary key (with built-in cache; calls getByPrimaryKeyImpl on cache miss)
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        throw new UnsupportedOperationException("getByPrimaryKey not support");
+        // ... returns cached result on hit, calls getByPrimaryKeyImpl and caches on miss
     }
 
     // Initialize cache
@@ -64,14 +65,6 @@ public abstract class SqlRecKvTable extends SqlRecTable
                 .maximumSize(maxSize)
                 .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
                 .build();
-    }
-
-    // Primary key query with cache
-    public Map<Object, List<Object[]>> getByPrimaryKeyWithCache(Set<Object> keySet) {
-        if (cache == null) {
-            return getByPrimaryKey(keySet);
-        }
-        // ... cache logic
     }
 
     // Whether only primary key filtering is supported
@@ -88,14 +81,14 @@ public abstract class SqlRecKvTable extends SqlRecTable
 
 **Methods to Implement**:
 - `getPrimaryKeyIndex()`: Returns the index of the primary key column
-- `getByPrimaryKey(Set<Object> keySet)`: Batch query data by primary key
+- `getByPrimaryKeyImpl(Set<Object> keySet)`: Batch query data by primary key (called by base class `getByPrimaryKey` which provides built-in caching)
 - `getRowType(RelDataTypeFactory typeFactory)`: Define table structure
-- `scan(DataContext root, List<RexNode> filters)`: Implement filter queries
+- `scanImpl(List<RexNode> filters)`: Implement filter queries (called by base class `scan`)
 - `getModifiableCollection()`: Return a modifiable collection object
 
-### SqlRecVectorTable
+### VectorSearchable Interface
 
-`SqlRecVectorTable` inherits from `SqlRecKvTable`, adding vector retrieval functionality.
+`VectorSearchable` is a vector search interface (not a class), implemented by `SqlRecKvTable` subclasses to provide vector retrieval functionality.
 
 ```java
 package com.sqlrec.common.schema;
@@ -103,18 +96,19 @@ package com.sqlrec.common.schema;
 import org.apache.calcite.rex.RexNode;
 import java.util.List;
 
-public abstract class SqlRecVectorTable extends SqlRecKvTable {
+public interface VectorSearchable {
 
-    // Vector similarity search
-    public List<Object[]> searchByEmbeddingWithScore(
+    // Vector similarity search (must implement)
+    List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,
             RexNode filterCondition,
             int limit,
-            List<Integer> projectColumns) {
-        throw new UnsupportedOperationException("searchByEmbeddingWithScore not support");
-    }
+            List<Integer> projectColumns);
+
+    // searchByEmbeddingWithScore is a default method that wraps
+    // searchByEmbeddingWithScoreImpl with type conversion and metrics
 }
 ```
 
@@ -123,8 +117,7 @@ public abstract class SqlRecVectorTable extends SqlRecKvTable {
 - Example: Milvus connector
 
 **Methods to Implement**:
-- All methods inherited from `SqlRecKvTable`
-- `searchByEmbeddingWithScore()`: Implement vector search
+- Implement the `VectorSearchable` interface's `searchByEmbeddingWithScoreImpl()`: Implement vector search
 
 ## Developing Custom Connectors
 
@@ -270,7 +263,7 @@ public class ExampleCalciteTable extends SqlRecKvTable {
     }
 
     @Override
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         return handler.batchGet(keySet);
     }
 
@@ -280,7 +273,7 @@ public class ExampleCalciteTable extends SqlRecKvTable {
     }
 
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         // Implement filter query logic
         List<Object[]> results = handler.scan(filters);
         return Linq4j.asEnumerable(results);
@@ -293,16 +286,17 @@ public class ExampleCalciteTable extends SqlRecKvTable {
 }
 ```
 
-#### Implementing SqlRecVectorTable
+#### Implementing VectorSearchable Interface
 
 ```java
 package com.sqlrec.connectors.example.calcite;
 
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import org.apache.calcite.rex.RexNode;
 import java.util.*;
 
-public class ExampleVectorTable extends SqlRecVectorTable {
+public class ExampleVectorTable extends SqlRecKvTable implements VectorSearchable {
     private final ExampleConfig config;
     private final ExampleHandler handler;
 
@@ -312,7 +306,7 @@ public class ExampleVectorTable extends SqlRecVectorTable {
     }
 
     @Override
-    public List<Object[]> searchByEmbeddingWithScore(
+    public List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,
@@ -383,11 +377,9 @@ Create a service registration file in the `META-INF/services` directory:
 com.sqlrec.connectors.example.calcite.ExampleCalciteTableFactory
 ```
 
-## Best Practices
+## Table Object Lifecycle
 
-### 1. Table Object Lifecycle
-
-#### Global Sharing Mechanism
+### Global Sharing Mechanism
 
 Table objects in SQLRec are globally shared and managed by `HmsSchema`. This means:
 
@@ -395,7 +387,7 @@ Table objects in SQLRec are globally shared and managed by `HmsSchema`. This mea
 2. **Caching Mechanism**: Table objects are cached to avoid repeated creation
 3. **Lifecycle Management**: Table object lifecycle is managed by the SQLRec framework
 
-#### Thread Safety Requirements
+### Thread Safety Requirements
 
 Since Table objects are globally shared, custom connectors must ensure thread safety:
 
@@ -407,9 +399,9 @@ Since Table objects are globally shared, custom connectors must ensure thread sa
 ```java
 public class UnsafeCalciteTable extends SqlRecKvTable {
     private List<Object[]> queryResult;  // Danger: instance variable stores query result
-    
+
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         queryResult = handler.query(filters);  // Concurrency issue: multiple queries will overwrite each other
         return Linq4j.asEnumerable(queryResult);
     }
@@ -421,20 +413,22 @@ public class UnsafeCalciteTable extends SqlRecKvTable {
 ```java
 public class SafeCalciteTable extends SqlRecKvTable {
     private final ExampleHandler handler;  // Safe: immutable handler reference
-    
+
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         List<Object[]> queryResult = handler.query(filters);  // Safe: local variable
         return Linq4j.asEnumerable(queryResult);
     }
 }
 ```
 
-#### Connection Resource Management
+### Connection Resource Management
 
 For connectors that need to manage connection resources, it is recommended to use lazy initialization for connections. To avoid creating a connection for each table, you can share connections between different tables or use a connection pool.
 
-### 2. Connection Management
+## Best Practices
+
+### 1. Connection Management
 
 - Use connection pools to manage database connections
 - Implement lazy loading and automatic reconnection
@@ -495,5 +489,5 @@ sqlrec-connector-example/
 You can refer to the following built-in connector implementations:
 
 - **Redis Connector**: `sqlrec-connector-redis` - Complete implementation of `SqlRecKvTable`
-- **Milvus Connector**: `sqlrec-connector-milvus` - Complete implementation of `SqlRecVectorTable`
+- **Milvus Connector**: `sqlrec-connector-milvus` - Complete implementation of `VectorSearchable`
 - **Kafka Connector**: `sqlrec-connector-kafka` - Simple implementation of `SqlRecTable`

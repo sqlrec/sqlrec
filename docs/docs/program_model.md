@@ -12,7 +12,7 @@ SQLRec 定义了一套表类型层次结构，不同类型的表具有不同的�
 SqlRecTable (抽象基类)
 ├── CacheTable          -- 内存缓存表
 └── SqlRecKvTable       -- KV 表（支持主键查询）
-    └── SqlRecVectorTable -- 向量表（支持向量搜索）
+    └── implements VectorSearchable -- 向量检索接口（支持向量搜索）
 ```
 
 ### SqlRecTable
@@ -58,10 +58,12 @@ SELECT * FROM source_table WHERE condition;
 
 | 方法 | 说明 |
 |------|------|
-| `getPrimaryKeyIndex()` | 获取主键列索引 |
-| `getByPrimaryKey(Set<Object> keySet)` | 按主键批量查询 |
-| `getByPrimaryKeyWithCache(Set<Object> keySet)` | 带缓存的批量查询 |
+| `getPrimaryKeyIndex()` | 获取主键列索引（抽象方法，由子类实现） |
+| `getByPrimaryKeyImpl(Set<Object> keySet)` | 按主键批量查询（抽象方法，由子类实现具体数据源访问逻辑） |
+| `getByPrimaryKey(Set<Object> keySet)` | 按主键批量查询（内置 Caffeine 缓存，缓存命中时直接返回，未命中时调用 `getByPrimaryKeyImpl`） |
 | `initCache(int maxSize, long expireAfterWrite)` | 初始化查询缓存 |
+| `onlyFilterByPrimaryKey()` | 是否仅支持主键过滤（默认返回 `true`） |
+| `invalidateCache(Object[] row)` | 根据行数据失效对应主键的缓存 |
 
 **缓存配置：**
 
@@ -70,9 +72,9 @@ SELECT * FROM source_table WHERE condition;
 kvTable.initCache(10000, 60);
 ```
 
-### SqlRecVectorTable
+### VectorSearchable 接口
 
-`SqlRecVectorTable` 继承自 `SqlRecKvTable`，增加了向量搜索能力。
+`VectorSearchable` 是向量检索接口，由 `SqlRecKvTable` 子类实现，提供向量搜索能力。
 
 **特性：**
 - 继承 KV 表的所有能力
@@ -82,10 +84,8 @@ kvTable.initCache(10000, 60);
 **核心方法：**
 
 ```java
-public abstract class SqlRecVectorTable extends SqlRecKvTable {
-    public abstract List<String> getFieldNames();
-    
-    public List<Object[]> searchByEmbeddingWithScore(
+public interface VectorSearchable {
+    List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,      // 左表连接值
             List<Float> embedding,   // 查询向量
             String annFieldName,     // 向量字段名
@@ -93,6 +93,9 @@ public abstract class SqlRecVectorTable extends SqlRecKvTable {
             int limit,               // 返回数量限制
             List<Integer> projectColumns  // 投影列
     );
+
+    // searchByEmbeddingWithScore 是默认方法，包装 searchByEmbeddingWithScoreImpl，
+    // 提供类型转换和指标统计
 }
 ```
 
@@ -148,6 +151,8 @@ SQL 请求
 | `SqlDropSqlFunction` | 删除 SQL 函数 |
 | `SqlCache` | 缓存表 |
 | `SqlCallSqlFunction` | 调用函数 |
+| `SqlAssert` | 断言 |
+| `SqlIfCache` | 条件缓存 |
 | `SqlSet` | 设置变量 |
 | `SqlShowTables` | 显示表列表 |
 | `SqlShowSqlFunction` | 显示函数列表 |
@@ -163,7 +168,7 @@ SQL 请求
 对于 SELECT、INSERT、UPDATE、DELETE 等 CRUD 语句，系统会检查所有涉及的表：
 
 ```java
-public static boolean isSqlTableRunable(SqlNode sqlNode, CalciteSchema schema, String defaultSchema) {
+public static boolean isSqlTableRunnable(SqlNode sqlNode, CalciteSchema schema, String defaultSchema) {
     List<String> tableNames = getTableFromSqlNode(sqlNode);
     for (String tableName : tableNames) {
         Table table = getTableObj(schema, defaultSchema, tableName);
@@ -207,7 +212,7 @@ SQLRec 根据表类型的不同，支持不同的 SQL 查询能力。本节介�
 |--------|----------|----------|---------|----------|
 | CacheTable | ✅ | ❌ | ❌ | ❌ |
 | SqlRecKvTable | ✅ | ✅ | ✅ | ❌ |
-| SqlRecVectorTable | ✅ | ✅ | ✅ | ✅ |
+| VectorSearchable | ✅ | ✅ | ✅ | ✅ |
 
 > **写入操作支持**：表是否支持写入（INSERT/UPDATE/DELETE）取决于是否实现 `ModifiableTable` 接口，而非表类型本身。例如 `SqlRecKvTable` 和 `KafkaCalciteTable` 都实现了 `ModifiableTable`，因此支持写入操作。
 
@@ -309,7 +314,7 @@ KV Join 是 SqlRecKvTable 特有的连接方式，通过主键批量查询实现
 // SqlRecKvJoinRule 检查条件
 RexNode condition = join.getCondition();
 try {
-    KvJoinUtils.getJoinKeyColIndex(condition);
+    NodeUtils.getJoinKeyColIndex(condition);
 } catch (Exception e) {
     return; // 非等值条件，不应用此规则
 }
@@ -336,7 +341,7 @@ public static Enumerable kvJoin(
     
     // 2. 批量查询右表数据（利用缓存）
     Map<Object, List<Object[]>> rightValuesMap = 
-        rightTable.getByPrimaryKeyWithCache(joinKeys);
+        rightTable.getByPrimaryKey(joinKeys);
     
     // 3. 关联左右表数据
     // ...
@@ -361,25 +366,25 @@ LEFT JOIN user_kv_table u ON o.user_id = u.user_id;
 
 ### 向量搜索 Join
 
-向量搜索 Join 是 SqlRecVectorTable 特有的连接方式，通过向量相似度进行关联。
+向量搜索 Join 是实现了 `VectorSearchable` 接口的表特有的连接方式，通过向量相似度进行关联。
 
 #### 触发条件
 
 1. **左表必须是 CacheTable**（内存中的数据，可被遍历）
 2. Project 中必须包含 **`ip()` 函数**（向量内积）
 3. Join 条件必须为 **true**（无条件连接）
-4. 右表必须是 `SqlRecVectorTable`
+4. 右表必须实现了 `VectorSearchable` 接口
 5. 必须有 **ORDER BY ... LIMIT** 子句
 
 ```java
 // SqlRecVectorJoinRule 检查条件
-if (!VectorJoinUtils.hasIpFunction(project)) {
+if (!NodeUtils.hasIpFunction(project)) {
     return; // 必须有 ip 函数
 }
-if (!VectorJoinUtils.isTrueCondition(join)) {
+if (!NodeUtils.isTrueCondition(join)) {
     return; // Join 条件必须为 true
 }
-if (rightTable.unwrap(SqlRecVectorTable.class) == null) {
+if (rightTable.unwrap(VectorSearchable.class) == null) {
     return; // 右表必须是向量表
 }
 ```
@@ -405,8 +410,8 @@ LIMIT 10;
 // VectorJoinUtils.vectorJoin
 public static Enumerable vectorJoin(
         Enumerable left,
-        SqlRecVectorTable rightTable,
-        RexNode filterCondition,      // 右表过滤条件
+        VectorSearchable rightTable,
+        Object filterConditionObj,    // 右表过滤条件（内部转换为 RexNode）
         int leftEmbeddingColIndex,    // 左表向量列索引
         String rightEmbeddingColName, // 右表向量列名
         int limit,                    // 返回数量
@@ -438,7 +443,7 @@ public static Enumerable vectorJoin(
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `DEFAULT_VECTOR_SEARCH_LIMIT` | 默认返回数量 | 配置项 |
+| `DEFAULT_VECTOR_SEARCH_LIMIT` | 默认返回数量 | 100 |
 
 ### UNION 操作
 

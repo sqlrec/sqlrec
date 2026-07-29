@@ -15,9 +15,18 @@ public interface ModelController {
     String checkModel(ModelConfig model);
     String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf);
     List<String> getExportCheckpoints(ModelExportConf exportConf);
+    String getExportCleanPath(ModelExportConf exportConf);
     String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf);
     String getServiceUrl(ModelConfig model, ServiceConfig serviceConf);
     String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf);
+
+    // Validate whether the checkpoint type can be used for serving; return null if valid
+    default String validateServiceCheckpointType(String checkpointType) {
+        if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpointType)) {
+            return "service only supports export checkpoint";
+        }
+        return null;
+    }
 }
 ```
 
@@ -30,9 +39,11 @@ public interface ModelController {
 | `checkModel(ModelConfig)` | Check if model configuration is valid, return null if valid |
 | `genModelTrainK8sYaml(ModelConfig, ModelTrainConf)` | Generate training task Kubernetes YAML |
 | `getExportCheckpoints(ModelExportConf)` | Get exported checkpoint name list |
+| `getExportCleanPath(ModelExportConf)` | Get the cleanup path for the export task |
 | `genModelExportK8sYaml(ModelConfig, ModelExportConf)` | Generate export task Kubernetes YAML |
 | `getServiceUrl(ModelConfig, ServiceConfig)` | Get service access URL |
 | `getServiceK8sYaml(ModelConfig, ServiceConfig)` | Generate service deployment Kubernetes YAML |
+| `validateServiceCheckpointType(String)` | Validate whether the checkpoint type can be used for serving, return null if valid (default requires `export` type; external models are exempt) |
 
 ## Implementation Steps
 

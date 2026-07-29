@@ -545,6 +545,57 @@ Model service call function with Query-Value mode. See [Models documentation](./
 
 ---
 
+### call_sqlrec_api
+
+Remote SQLRec API call function. Invokes an API published on a remote SQLRec instance (i.e. a SQL function exposed via `CREATE API`) and converts the returned result into a `CacheTable`. Useful for cross-cluster / cross-instance calls to other SQLRec services.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String url, CacheTable... tables)
+```
+
+**Parameter Description**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | ReadonlyContext | Read-only context (auto-injected), used to pass variables and metric tags |
+| `url` | String | Remote SQLRec API URL, e.g. `http://host:port/api/v1/function_name` |
+| `tables` | CacheTable... | One or more input tables; the table name is used as the input placeholder for the remote function |
+
+**Return Value**: Returns a `CacheTable` containing the remote function's result; column names and types are inferred from the response data.
+
+**Usage Example**:
+
+```sql
+-- Prepare input data
+CACHE TABLE user_input AS
+SELECT 1001 AS user_id, 'Alice' AS user_name;
+
+-- Call a recommendation API published on a remote SQLRec instance
+CACHE TABLE remote_rec AS
+CALL call_sqlrec_api(
+    'http://remote-sqlrec:30301/api/v1/recommend',
+    user_input
+);
+
+SELECT * FROM remote_rec;
+```
+
+**How it works**:
+1. Each input table is serialized by table name into `Map<String, List<Map<String, Object>>>` and sent to the remote API along with the context variables
+2. The remote SQLRec executes the corresponding SQL function and returns the result data
+3. Output field types are inferred from the response rows (`BOOLEAN`, `DOUBLE`, `VARCHAR`, `ARRAY<...>`, etc.)
+4. Complex values (`Map`, etc.) are serialized to JSON strings stored as `VARCHAR`; `ARRAY` types are kept as list objects
+
+**Notes**:
+- `url` must not be empty and must point to a valid SQLRec API endpoint
+- At least one input table is required, and each input table must have a name
+- An exception is thrown when the remote API call fails (empty data or error message returned)
+- The input table name must match the input table placeholder in the remote function definition
+
+---
+
 ### truncate_table
 
 Table truncation function that extracts rows within a specified range from the input table.
@@ -592,14 +643,14 @@ Get variables function that retrieves all variables from the execution context a
 **Function Signature**:
 
 ```java
-public CacheTable evaluate(ExecuteContext context)
+public CacheTable evaluate(ReadonlyContext context)
 ```
 
 **Parameter Description**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `context` | ExecuteContext | Execution context |
+| `context` | ReadonlyContext | Readonly context |
 
 **Return Value**: Returns a 2-column `CacheTable` with column names `key` and `value`, both of type `VARCHAR`.
 
@@ -675,14 +726,14 @@ Feature coverage metrics function that calculates feature coverage for each fiel
 **Function Signature**:
 
 ```java
-public Void evaluate(ExecuteContext context, String metricsName, CacheTable... tables)
+public Void evaluate(ReadonlyContext context, String metricsName, CacheTable... tables)
 ```
 
 **Parameter Description**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `context` | ExecuteContext | Execution context |
+| `context` | ReadonlyContext | Readonly context |
 | `metricsName` | String | Metrics name |
 | `tables` | CacheTable... | One or more input tables |
 
@@ -1001,7 +1052,7 @@ L2 normalization function that performs L2 normalization on vectors.
 **Function Signature**:
 
 ```java
-public Object evaluate(Object vector)
+public List<Double> evaluate(Object vector)
 ```
 
 **Parameter Description**:
@@ -1037,7 +1088,7 @@ Inner product calculation function that calculates the inner product (dot produc
 **Function Signature**:
 
 ```java
-public Object evaluate(Object emb1, Object emb2)
+public Double evaluate(Object emb1, Object emb2)
 ```
 
 **Parameter Description**:
@@ -1047,7 +1098,7 @@ public Object evaluate(Object emb1, Object emb2)
 | `emb1` | Object | First vector, must be a list of numbers |
 | `emb2` | Object | Second vector, must be a list of numbers |
 
-**Return Value**: Returns inner product of two vectors (`Float`).
+**Return Value**: Returns inner product of two vectors (`Double`).
 
 **Usage Example**:
 

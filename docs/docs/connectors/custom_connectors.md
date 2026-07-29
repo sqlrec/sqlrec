@@ -40,19 +40,20 @@ import org.apache.calcite.schema.ModifiableTable;
 
 import java.util.*;
 
-public abstract class SqlRecKvTable extends SqlRecTable 
+public abstract class SqlRecKvTable extends SqlRecTable
     implements ModifiableTable, FilterableTable {
-    
+
     private Cache<Object, List<Object[]>> cache;
 
-    // 获取主键索引
-    public int getPrimaryKeyIndex() {
-        throw new UnsupportedOperationException("getPrimaryKeyIndex not support");
-    }
+    // 获取主键索引（抽象方法，子类必须实现）
+    public abstract int getPrimaryKeyIndex();
 
-    // 根据主键批量查询
+    // 按主键批量查询的具体实现（抽象方法，子类实现数据源访问逻辑）
+    public abstract Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet);
+
+    // 按主键批量查询（内置缓存，缓存未命中时调用 getByPrimaryKeyImpl）
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        throw new UnsupportedOperationException("getByPrimaryKey not support");
+        // ... 缓存命中则直接返回，未命中则调用 getByPrimaryKeyImpl 并写入缓存
     }
 
     // 初始化缓存
@@ -64,14 +65,6 @@ public abstract class SqlRecKvTable extends SqlRecTable
                 .maximumSize(maxSize)
                 .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
                 .build();
-    }
-
-    // 带缓存的主键查询
-    public Map<Object, List<Object[]>> getByPrimaryKeyWithCache(Set<Object> keySet) {
-        if (cache == null) {
-            return getByPrimaryKey(keySet);
-        }
-        // ... 缓存逻辑
     }
 
     // 是否只支持主键过滤
@@ -88,14 +81,14 @@ public abstract class SqlRecKvTable extends SqlRecTable
 
 **需要实现的方法**：
 - `getPrimaryKeyIndex()`：返回主键列的索引
-- `getByPrimaryKey(Set<Object> keySet)`：根据主键批量查询数据
+- `getByPrimaryKeyImpl(Set<Object> keySet)`：根据主键批量查询数据（由基类 `getByPrimaryKey` 内置缓存调用）
 - `getRowType(RelDataTypeFactory typeFactory)`：定义表结构
-- `scan(DataContext root, List<RexNode> filters)`：实现过滤查询
+- `scanImpl(List<RexNode> filters)`：实现过滤查询（由基类 `scan` 调用）
 - `getModifiableCollection()`：返回可修改的集合对象
 
-### SqlRecVectorTable
+### VectorSearchable 接口
 
-`SqlRecVectorTable` 继承自 `SqlRecKvTable`，增加了向量检索功能。
+`VectorSearchable` 是向量检索接口（不是类），由 `SqlRecKvTable` 子类实现，提供向量检索功能。
 
 ```java
 package com.sqlrec.common.schema;
@@ -103,18 +96,19 @@ package com.sqlrec.common.schema;
 import org.apache.calcite.rex.RexNode;
 import java.util.List;
 
-public abstract class SqlRecVectorTable extends SqlRecKvTable {
+public interface VectorSearchable {
 
-    // 向量相似度搜索
-    public List<Object[]> searchByEmbeddingWithScore(
+    // 向量相似度搜索（需实现）
+    List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,
             RexNode filterCondition,
             int limit,
-            List<Integer> projectColumns) {
-        throw new UnsupportedOperationException("searchByEmbeddingWithScore not support");
-    }
+            List<Integer> projectColumns);
+
+    // searchByEmbeddingWithScore 是默认方法，包装 searchByEmbeddingWithScoreImpl，
+    // 提供类型转换和指标统计
 }
 ```
 
@@ -123,8 +117,7 @@ public abstract class SqlRecVectorTable extends SqlRecKvTable {
 - 例如：Milvus 连接器
 
 **需要实现的方法**：
-- 继承 `SqlRecKvTable` 的所有方法
-- `searchByEmbeddingWithScore()`：实现向量搜索
+- 实现 `VectorSearchable` 接口的 `searchByEmbeddingWithScoreImpl()`：实现向量搜索
 
 ## 开发自定义连接器
 
@@ -270,7 +263,7 @@ public class ExampleCalciteTable extends SqlRecKvTable {
     }
 
     @Override
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+    public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
         return handler.batchGet(keySet);
     }
 
@@ -280,7 +273,7 @@ public class ExampleCalciteTable extends SqlRecKvTable {
     }
 
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         // 实现过滤查询逻辑
         List<Object[]> results = handler.scan(filters);
         return Linq4j.asEnumerable(results);
@@ -293,16 +286,17 @@ public class ExampleCalciteTable extends SqlRecKvTable {
 }
 ```
 
-#### 实现 SqlRecVectorTable
+#### 实现 VectorSearchable 接口
 
 ```java
 package com.sqlrec.connectors.example.calcite;
 
-import com.sqlrec.common.schema.SqlRecVectorTable;
+import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.VectorSearchable;
 import org.apache.calcite.rex.RexNode;
 import java.util.*;
 
-public class ExampleVectorTable extends SqlRecVectorTable {
+public class ExampleVectorTable extends SqlRecKvTable implements VectorSearchable {
     private final ExampleConfig config;
     private final ExampleHandler handler;
 
@@ -312,7 +306,7 @@ public class ExampleVectorTable extends SqlRecVectorTable {
     }
 
     @Override
-    public List<Object[]> searchByEmbeddingWithScore(
+    public List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,
             List<Float> embedding,
             String annFieldName,
@@ -405,9 +399,9 @@ SQLRec 中的 Table 对象是全局共享的，由 `HmsSchema` 统一管理。�
 ```java
 public class UnsafeCalciteTable extends SqlRecKvTable {
     private List<Object[]> queryResult;  // 危险：实例变量存储查询结果
-    
+
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         queryResult = handler.query(filters);  // 并发问题：多个查询会互相覆盖
         return Linq4j.asEnumerable(queryResult);
     }
@@ -419,9 +413,9 @@ public class UnsafeCalciteTable extends SqlRecKvTable {
 ```java
 public class SafeCalciteTable extends SqlRecKvTable {
     private final ExampleHandler handler;  // 安全：不可变的 handler 引用
-    
+
     @Override
-    public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
+    protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
         List<Object[]> queryResult = handler.query(filters);  // 安全：局部变量
         return Linq4j.asEnumerable(queryResult);
     }
@@ -495,5 +489,5 @@ sqlrec-connector-example/
 可以参考以下内置连接器的实现：
 
 - **Redis Connector**：`sqlrec-connector-redis` - `SqlRecKvTable` 的完整实现
-- **Milvus Connector**：`sqlrec-connector-milvus` - `SqlRecVectorTable` 的完整实现
+- **Milvus Connector**：`sqlrec-connector-milvus` - `VectorSearchable` 接口的完整实现
 - **Kafka Connector**：`sqlrec-connector-kafka` - `SqlRecTable` 的简单实现

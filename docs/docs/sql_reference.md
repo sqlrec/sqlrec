@@ -651,7 +651,7 @@ CACHE TABLE table_name AS
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
-| `ASYNC` | 可选。异步执行 |
+| `ASYNC` | 可选。异步执行（仅在独立的 CALL 语句中支持，CACHE TABLE 中暂不支持） |
 | `select_statement` | SELECT 查询语句 |
 
 **示例：**
@@ -670,14 +670,15 @@ CACHE TABLE cached_result AS
 CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CACHE TABLE cached_result AS
-CALL my_function('param1') ASYNC;
-
-CACHE TABLE cached_result AS
 CALL my_function(t1) PARTITION BY t1 SIZE 100;
 
 CACHE TABLE cached_result AS
-CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 ```
+
+::: warning 注意
+`ASYNC` 关键字在 `CACHE TABLE` 语法中会被解析，但运行时会抛出异常（`async function not support in cache`）。如需异步执行，请使用独立的 `CALL` 语句。
+:::
 
 
 ### IF

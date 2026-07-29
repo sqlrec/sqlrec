@@ -200,14 +200,14 @@ SQLRec 提供了两个内置的 UDF（用户定义函数）用于调用模型服
 **函数签名**：
 
 ```java
-public CacheTable eval(ExecuteContext context, String serviceName, CacheTable input)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
 ```
 
 **参数说明**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `context` | ExecuteContext | 执行上下文（自动注入） |
+| `context` | ReadonlyContext | 只读上下文（自动注入） |
 | `serviceName` | String | 服务名称 |
 | `input` | CacheTable | 输入数据表 |
 
@@ -259,14 +259,14 @@ CALL call_service('test_service', t1);
 **函数签名**：
 
 ```java
-public CacheTable eval(ExecuteContext context, String serviceName, CacheTable query, CacheTable value)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable query, CacheTable value)
 ```
 
 **参数说明**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `context` | ExecuteContext | 执行上下文（自动注入） |
+| `context` | ReadonlyContext | 只读上下文（自动注入） |
 | `serviceName` | String | 服务名称 |
 | `query` | CacheTable | 查询特征表，必须只有一行 |
 | `value` | CacheTable | 候选特征表，可以有多行 |

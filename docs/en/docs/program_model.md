@@ -12,7 +12,7 @@ SQLRec defines a table type hierarchy, where different types of tables have diff
 SqlRecTable (abstract base class)
 ├── CacheTable          -- Memory cache table
 └── SqlRecKvTable       -- KV table (supports primary key queries)
-    └── SqlRecVectorTable -- Vector table (supports vector search)
+    └── implements VectorSearchable -- vector search interface (supports vector search)
 ```
 
 ### SqlRecTable
@@ -58,10 +58,12 @@ SELECT * FROM source_table WHERE condition;
 
 | Method | Description |
 |--------|-------------|
-| `getPrimaryKeyIndex()` | Get primary key column index |
-| `getByPrimaryKey(Set<Object> keySet)` | Batch query by primary key |
-| `getByPrimaryKeyWithCache(Set<Object> keySet)` | Batch query with cache |
+| `getPrimaryKeyIndex()` | Get primary key column index (abstract, implemented by subclasses) |
+| `getByPrimaryKeyImpl(Set<Object> keySet)` | Batch query by primary key (abstract, implemented by subclasses for specific data source access) |
+| `getByPrimaryKey(Set<Object> keySet)` | Batch query by primary key (with built-in Caffeine cache; returns cached result on hit, calls `getByPrimaryKeyImpl` on miss) |
 | `initCache(int maxSize, long expireAfterWrite)` | Initialize query cache |
+| `onlyFilterByPrimaryKey()` | Whether only primary key filtering is supported (defaults to `true`) |
+| `invalidateCache(Object[] row)` | Invalidate cache entry for the primary key of the given row |
 
 **Cache Configuration:**
 
@@ -70,9 +72,9 @@ SELECT * FROM source_table WHERE condition;
 kvTable.initCache(10000, 60);
 ```
 
-### SqlRecVectorTable
+### VectorSearchable Interface
 
-`SqlRecVectorTable` inherits from `SqlRecKvTable` and adds vector search capabilities.
+`VectorSearchable` is a vector search interface, implemented by `SqlRecKvTable` subclasses, providing vector search capabilities.
 
 **Features:**
 - Inherits all capabilities of KV table
@@ -82,10 +84,8 @@ kvTable.initCache(10000, 60);
 **Core Methods:**
 
 ```java
-public abstract class SqlRecVectorTable extends SqlRecKvTable {
-    public abstract List<String> getFieldNames();
-    
-    public List<Object[]> searchByEmbeddingWithScore(
+public interface VectorSearchable {
+    List<Object[]> searchByEmbeddingWithScoreImpl(
             Object[] leftValue,      // Left table join value
             List<Float> embedding,   // Query vector
             String annFieldName,     // Vector field name
@@ -93,6 +93,9 @@ public abstract class SqlRecVectorTable extends SqlRecKvTable {
             int limit,               // Return count limit
             List<Integer> projectColumns  // Projection columns
     );
+
+    // searchByEmbeddingWithScore is a default method that wraps
+    // searchByEmbeddingWithScoreImpl with type conversion and metrics
 }
 ```
 
@@ -148,6 +151,8 @@ Parse SQL → Determine SQL type
 | `SqlDropSqlFunction` | Drop SQL function |
 | `SqlCache` | Cache table |
 | `SqlCallSqlFunction` | Call function |
+| `SqlAssert` | Assert |
+| `SqlIfCache` | Conditional cache |
 | `SqlSet` | Set variable |
 | `SqlShowTables` | Show table list |
 | `SqlShowSqlFunction` | Show function list |
@@ -163,7 +168,7 @@ Parse SQL → Determine SQL type
 For SELECT, INSERT, UPDATE, DELETE and other CRUD statements, the system checks all involved tables:
 
 ```java
-public static boolean isSqlTableRunable(SqlNode sqlNode, CalciteSchema schema, String defaultSchema) {
+public static boolean isSqlTableRunnable(SqlNode sqlNode, CalciteSchema schema, String defaultSchema) {
     List<String> tableNames = getTableFromSqlNode(sqlNode);
     for (String tableName : tableNames) {
         Table table = getTableObj(schema, defaultSchema, tableName);
@@ -207,7 +212,7 @@ SQLRec supports different SQL query capabilities based on different table types.
 |------------|--------------|-------------------|---------|---------------|
 | CacheTable | ✅ | ❌ | ❌ | ❌ |
 | SqlRecKvTable | ✅ | ✅ | ✅ | ❌ |
-| SqlRecVectorTable | ✅ | ✅ | ✅ | ✅ |
+| VectorSearchable | ✅ | ✅ | ✅ | ✅ |
 
 > **Write Operation Support**: Whether a table supports write operations (INSERT/UPDATE/DELETE) depends on whether it implements the `ModifiableTable` interface, not the table type itself. For example, both `SqlRecKvTable` and `KafkaCalciteTable` implement `ModifiableTable`, so they support write operations.
 
@@ -309,7 +314,7 @@ KV Join is a join method unique to SqlRecKvTable, implementing efficient associa
 // SqlRecKvJoinRule check conditions
 RexNode condition = join.getCondition();
 try {
-    KvJoinUtils.getJoinKeyColIndex(condition);
+    NodeUtils.getJoinKeyColIndex(condition);
 } catch (Exception e) {
     return; // Non-equality condition, don't apply this rule
 }
@@ -336,7 +341,7 @@ public static Enumerable kvJoin(
     
     // 2. Batch query right table data (using cache)
     Map<Object, List<Object[]>> rightValuesMap = 
-        rightTable.getByPrimaryKeyWithCache(joinKeys);
+        rightTable.getByPrimaryKey(joinKeys);
     
     // 3. Associate left and right table data
     // ...
@@ -361,25 +366,25 @@ LEFT JOIN user_kv_table u ON o.user_id = u.user_id;
 
 ### Vector Search Join
 
-Vector search Join is a join method unique to SqlRecVectorTable, associating via vector similarity.
+Vector search Join is a join method unique to tables implementing `VectorSearchable`, associating via vector similarity.
 
 #### Trigger Conditions
 
 1. **Left table must be CacheTable** (in-memory data, can be traversed)
 2. Project must contain **`ip()` function** (vector inner product)
 3. Join condition must be **true** (unconditional join)
-4. Right table must be `SqlRecVectorTable`
+4. Right table must implement `VectorSearchable`
 5. Must have **ORDER BY ... LIMIT** clause
 
 ```java
 // SqlRecVectorJoinRule check conditions
-if (!VectorJoinUtils.hasIpFunction(project)) {
+if (!NodeUtils.hasIpFunction(project)) {
     return; // Must have ip function
 }
-if (!VectorJoinUtils.isTrueCondition(join)) {
+if (!NodeUtils.isTrueCondition(join)) {
     return; // Join condition must be true
 }
-if (rightTable.unwrap(SqlRecVectorTable.class) == null) {
+if (rightTable.unwrap(VectorSearchable.class) == null) {
     return; // Right table must be vector table
 }
 ```
@@ -405,8 +410,8 @@ LIMIT 10;
 // VectorJoinUtils.vectorJoin
 public static Enumerable vectorJoin(
         Enumerable left,
-        SqlRecVectorTable rightTable,
-        RexNode filterCondition,      // Right table filter condition
+        VectorSearchable rightTable,
+        Object filterConditionObj,    // Right table filter condition (cast to RexNode internally)
         int leftEmbeddingColIndex,    // Left table vector column index
         String rightEmbeddingColName, // Right table vector column name
         int limit,                    // Return count
@@ -438,7 +443,7 @@ public static Enumerable vectorJoin(
 
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
-| `DEFAULT_VECTOR_SEARCH_LIMIT` | Default return count | Configuration item |
+| `DEFAULT_VECTOR_SEARCH_LIMIT` | Default return count | 100 |
 
 ### UNION Operation
 

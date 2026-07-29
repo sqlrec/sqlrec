@@ -545,6 +545,57 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 
 ---
 
+### call_sqlrec_api
+
+远程 SQLRec API 调用函数，用于调用远端 SQLRec 实例上已发布的 API（即通过 `CREATE API` 暴露的 SQL 函数），并将返回结果转换为 `CacheTable`。适用于跨集群/跨实例调用其他 SQLRec 服务的场景。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String url, CacheTable... tables)
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | ReadonlyContext | 只读上下文（自动注入），用于传递变量和指标标签 |
+| `url` | String | 远端 SQLRec API 地址，例如 `http://host:port/api/v1/function_name` |
+| `tables` | CacheTable... | 一个或多个输入表，表名作为远端函数的输入占位符 |
+
+**返回值**：返回包含远端函数执行结果的 `CacheTable`，列名和类型根据响应数据自动推断。
+
+**使用示例**：
+
+```sql
+-- 准备输入数据
+CACHE TABLE user_input AS
+SELECT 1001 AS user_id, 'Alice' AS user_name;
+
+-- 调用远端 SQLRec 实例上已发布的推荐 API
+CACHE TABLE remote_rec AS
+CALL call_sqlrec_api(
+    'http://remote-sqlrec:30301/api/v1/recommend',
+    user_input
+);
+
+SELECT * FROM remote_rec;
+```
+
+**工作原理**：
+1. 将每个输入表按表名序列化为 `Map<String, List<Map<String, Object>>>`，连同上下文变量一起发送到远端 API
+2. 远端 SQLRec 执行对应的 SQL 函数并返回结果数据
+3. 根据响应行推断输出字段类型（`BOOLEAN`、`DOUBLE`、`VARCHAR`、`ARRAY<...>` 等）
+4. 复杂值（`Map` 等）会被序列化为 JSON 字符串存储为 `VARCHAR`，`ARRAY` 类型保持为列表对象
+
+**注意事项**：
+- `url` 不能为空，且必须指向有效的 SQLRec API 端点
+- 至少需要传入一个输入表，且每个输入表必须有表名
+- 远端 API 调用失败（返回空数据或错误消息）时会抛出异常
+- 输入表的表名需与远端函数定义中的输入表占位符匹配
+
+---
+
 ### truncate_table
 
 表截取函数，从输入表中截取指定范围的行记录。
@@ -592,14 +643,14 @@ CALL truncate_table(recall_item, '0', '100');
 **函数签名**：
 
 ```java
-public CacheTable evaluate(ExecuteContext context)
+public CacheTable evaluate(ReadonlyContext context)
 ```
 
 **参数说明**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `context` | ExecuteContext | 执行上下文 |
+| `context` | ReadonlyContext | 只读上下文 |
 
 **返回值**：返回一个 2 列的 `CacheTable`，列名为 `key` 和 `value`，类型均为 `VARCHAR`。
 
@@ -675,14 +726,14 @@ SELECT `get`('user_id') AS user_id;
 **函数签名**：
 
 ```java
-public Void evaluate(ExecuteContext context, String metricsName, CacheTable... tables)
+public Void evaluate(ReadonlyContext context, String metricsName, CacheTable... tables)
 ```
 
 **参数说明**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `context` | ExecuteContext | 执行上下文 |
+| `context` | ReadonlyContext | 只读上下文 |
 | `metricsName` | String | 指标名称 |
 | `tables` | CacheTable... | 一个或多个输入表 |
 
@@ -1001,7 +1052,7 @@ L2 归一化函数，对向量进行 L2 归一化处理。
 **函数签名**：
 
 ```java
-public Object evaluate(Object vector)
+public List<Double> evaluate(Object vector)
 ```
 
 **参数说明**：
@@ -1037,7 +1088,7 @@ FROM user_features;
 **函数签名**：
 
 ```java
-public Object evaluate(Object emb1, Object emb2)
+public Double evaluate(Object emb1, Object emb2)
 ```
 
 **参数说明**：
@@ -1047,7 +1098,7 @@ public Object evaluate(Object emb1, Object emb2)
 | `emb1` | Object | 第一个向量，必须是数字列表 |
 | `emb2` | Object | 第二个向量，必须是数字列表 |
 
-**返回值**：返回两个向量的内积（`Float`）。
+**返回值**：返回两个向量的内积（`Double`）。
 
 **使用示例**：
 

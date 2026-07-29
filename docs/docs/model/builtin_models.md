@@ -133,9 +133,11 @@ TRAIN MODEL rec_model CHECKPOINT = 'v1.0'
         nproc_per_node = 4
     );
 
+EXPORT MODEL rec_model CHECKPOINT = 'v1.0';
+
 CREATE SERVICE rec_service
     ON MODEL rec_model
-    CHECKPOINT = 'v1.0'
+    CHECKPOINT = 'v1.0_export'
     WITH (
         replicas = 3,
         pod_cpu_cores = 4,
@@ -246,9 +248,21 @@ TRAIN MODEL dssm_model CHECKPOINT = 'v1.0'
 
 EXPORT MODEL dssm_model CHECKPOINT = 'v1.0';
 
-CREATE SERVICE dssm_service
+-- DSSM 为双塔模型，导出后会生成两个 export checkpoint：
+--   v1.0_export/item（物品塔）和 v1.0_export/user（用户塔）
+-- 创建服务时需指定具体的 tower checkpoint
+CREATE SERVICE dssm_item_service
     ON MODEL dssm_model
-    CHECKPOINT = 'v1.0'
+    CHECKPOINT = 'v1.0_export/item'
+    WITH (
+        replicas = 3,
+        pod_cpu_cores = 4,
+        pod_memory = '16Gi'
+    );
+
+CREATE SERVICE dssm_user_service
+    ON MODEL dssm_model
+    CHECKPOINT = 'v1.0_export/user'
     WITH (
         replicas = 3,
         pod_cpu_cores = 4,
@@ -337,7 +351,7 @@ EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
 
 CREATE SERVICE lgb_service
     ON MODEL lgb_model
-    CHECKPOINT = 'v1.0'
+    CHECKPOINT = 'v1.0_export'
     WITH (
         replicas = 3,
         pod_cpu_cores = 4,
@@ -424,7 +438,7 @@ EXPORT MODEL xgb_model CHECKPOINT = 'v1.0';
 
 CREATE SERVICE xgb_service
     ON MODEL xgb_model
-    CHECKPOINT = 'v1.0'
+    CHECKPOINT = 'v1.0_export'
     WITH (
         replicas = 3,
         pod_cpu_cores = 4,
@@ -506,7 +520,7 @@ EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
 
 CREATE SERVICE cb_service
     ON MODEL cb_model
-    CHECKPOINT = 'v1.0'
+    CHECKPOINT = 'v1.0_export'
     WITH (
         replicas = 3,
         pod_cpu_cores = 4,

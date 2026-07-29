@@ -651,7 +651,7 @@ CACHE TABLE table_name AS
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
-| `ASYNC` | Optional. Execute asynchronously |
+| `ASYNC` | Optional. Execute asynchronously (only supported in standalone CALL statements, not in CACHE TABLE) |
 | `select_statement` | SELECT query statement |
 
 **Examples:**
@@ -670,14 +670,15 @@ CACHE TABLE cached_result AS
 CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
 
 CACHE TABLE cached_result AS
-CALL my_function('param1') ASYNC;
-
-CACHE TABLE cached_result AS
 CALL my_function(t1) PARTITION BY t1 SIZE 100;
 
 CACHE TABLE cached_result AS
-CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 ```
+
+::: warning Note
+The `ASYNC` keyword is parsed in `CACHE TABLE` syntax but throws an exception at runtime (`async function not support in cache`). To execute asynchronously, use a standalone `CALL` statement.
+:::
 
 
 ### IF

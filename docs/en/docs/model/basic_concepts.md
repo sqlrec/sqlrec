@@ -201,14 +201,14 @@ SQLRec provides two built-in UDFs (User Defined Functions) for calling model ser
 **Function Signature**:
 
 ```java
-public CacheTable eval(ExecuteContext context, String serviceName, CacheTable input)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
 ```
 
 **Parameter Description**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `context` | ExecuteContext | Execution context (auto-injected) |
+| `context` | ReadonlyContext | Readonly context (auto-injected) |
 | `serviceName` | String | Service name |
 | `input` | CacheTable | Input data table |
 
@@ -260,14 +260,14 @@ CALL call_service('test_service', t1);
 **Function Signature**:
 
 ```java
-public CacheTable eval(ExecuteContext context, String serviceName, CacheTable query, CacheTable value)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable query, CacheTable value)
 ```
 
 **Parameter Description**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `context` | ExecuteContext | Execution context (auto-injected) |
+| `context` | ReadonlyContext | Readonly context (auto-injected) |
 | `serviceName` | String | Service name |
 | `query` | CacheTable | Query feature table, must have only one row |
 | `value` | CacheTable | Candidate feature table, can have multiple rows |

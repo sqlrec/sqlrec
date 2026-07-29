@@ -15,9 +15,18 @@ public interface ModelController {
     String checkModel(ModelConfig model);
     String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf);
     List<String> getExportCheckpoints(ModelExportConf exportConf);
+    String getExportCleanPath(ModelExportConf exportConf);
     String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf);
     String getServiceUrl(ModelConfig model, ServiceConfig serviceConf);
     String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf);
+
+    // 校验检查点类型是否可用于部署服务，返回 null 表示有效
+    default String validateServiceCheckpointType(String checkpointType) {
+        if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpointType)) {
+            return "service only supports export checkpoint";
+        }
+        return null;
+    }
 }
 ```
 
@@ -30,9 +39,11 @@ public interface ModelController {
 | `checkModel(ModelConfig)` | 检查模型配置是否有效，返回 null 表示有效 |
 | `genModelTrainK8sYaml(ModelConfig, ModelTrainConf)` | 生成训练任务的 Kubernetes YAML |
 | `getExportCheckpoints(ModelExportConf)` | 获取导出后的检查点名称列表 |
+| `getExportCleanPath(ModelExportConf)` | 获取导出任务的清理路径 |
 | `genModelExportK8sYaml(ModelConfig, ModelExportConf)` | 生成导出任务的 Kubernetes YAML |
 | `getServiceUrl(ModelConfig, ServiceConfig)` | 获取服务的访问 URL |
 | `getServiceK8sYaml(ModelConfig, ServiceConfig)` | 生成服务部署的 Kubernetes YAML |
+| `validateServiceCheckpointType(String)` | 校验检查点类型是否可用于部署服务，返回 null 表示有效（默认实现要求 `export` 类型；外部模型豁免） |
 
 ## 实现步骤
 

@@ -15,7 +15,7 @@ SqlRecTable (抽象基类)
     │
     ├── SqlRecKvTable (键值表，支持主键查询和缓存)
     │       │
-    │       └── SqlRecVectorTable (向量表，支持向量检索)
+    │       └── implements VectorSearchable (向量检索接口)
     │
     └── 其他表类型...
 ```
@@ -26,7 +26,7 @@ SqlRecTable (抽象基类)
 |--------|------|------|
 | `SqlRecTable` | 抽象基类，继承自 Calcite 的 `AbstractTable` | 提供基础表功能 |
 | `SqlRecKvTable` | 键值表，支持主键查询 | 支持主键索引、缓存机制、过滤查询、数据修改 |
-| `SqlRecVectorTable` | 向量表，支持向量检索 | 继承 `SqlRecKvTable`，支持向量相似度搜索 |
+| `VectorSearchable` | 向量检索接口 | 接口，由 `SqlRecKvTable` 子类实现，支持向量相似度搜索 |
 
 ## 内置连接器
 
@@ -94,7 +94,7 @@ Milvus 连接器用于连接 Milvus 向量数据库，支持向量相似度检�
 
 **连接器标识符**：`milvus`
 
-**继承类型**：`SqlRecVectorTable`
+**继承类型**：`SqlRecKvTable`（implements `VectorSearchable`）
 
 **特性**：
 - 支持向量相似度搜索（ANN）

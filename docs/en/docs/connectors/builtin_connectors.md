@@ -15,7 +15,7 @@ SqlRecTable (Abstract Base Class)
     │
     ├── SqlRecKvTable (Key-Value Table, supports primary key queries and caching)
     │       │
-    │       └── SqlRecVectorTable (Vector Table, supports vector retrieval)
+    │       └── implements VectorSearchable (vector search interface)
     │
     └── Other table types...
 ```
@@ -26,7 +26,7 @@ SqlRecTable (Abstract Base Class)
 |------------|-------------|----------|
 | `SqlRecTable` | Abstract base class, inherits from Calcite's `AbstractTable` | Provides basic table functionality |
 | `SqlRecKvTable` | Key-value table, supports primary key queries | Supports primary key indexing, caching mechanism, filter queries, data modification |
-| `SqlRecVectorTable` | Vector table, supports vector retrieval | Inherits `SqlRecKvTable`, supports vector similarity search |
+| `VectorSearchable` | Vector search interface | Interface, implemented by `SqlRecKvTable` subclasses, supports vector similarity search |
 
 ## Built-in Connectors
 
@@ -94,7 +94,7 @@ The Milvus connector is used to connect to Milvus vector databases, supporting v
 
 **Connector Identifier**: `milvus`
 
-**Inheritance Type**: `SqlRecVectorTable`
+**Inheritance Type**: `SqlRecKvTable` (implements `VectorSearchable`)
 
 **Features**:
 - Supports vector similarity search (ANN)
