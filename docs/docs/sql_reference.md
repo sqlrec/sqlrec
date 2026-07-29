@@ -730,6 +730,44 @@ IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
 ```
 
 
+### ASSERT
+
+执行 SELECT 查询并断言结果为真。如果查询结果的任何字段不为 `true`，则抛出异常中止执行。
+
+**语法：**
+
+```sql
+ASSERT select_statement
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `select_statement` | SELECT 查询语句，返回的字段必须全部为布尔类型 |
+
+**描述：**
+
+ASSERT 语句执行指定的 SELECT 查询，并对返回结果进行断言校验：
+1. 查询返回的字段必须全部为布尔（BOOLEAN）类型，否则在编译期抛出异常
+2. 查询必须至少返回一行数据，否则抛出异常
+3. 每一行、每一列的值必须为 `true`，若存在 `false` 或 `null` 值则抛出异常
+
+**注意：**
+- ASSERT 算子不支持并发执行
+- 断言失败时会抛出 `RuntimeException`，包含失败的具体行号和列号信息
+
+**示例：**
+
+```sql
+ASSERT SELECT COUNT(*) > 0 FROM source_table;
+
+ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
+
+ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
+```
+
+
 ## 函数调用
 
 ### CALL

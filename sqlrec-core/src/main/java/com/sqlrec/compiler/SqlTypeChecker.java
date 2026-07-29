@@ -2,6 +2,7 @@ package com.sqlrec.compiler;
 
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.sql.parser.SqlAssert;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
@@ -28,6 +29,9 @@ public class SqlTypeChecker {
                 return isSqlTableRunnable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
             }
             return true;
+        }
+        if (flinkSqlNode instanceof SqlAssert) {
+            return isSqlTableRunnable(((SqlAssert) flinkSqlNode).getSelect(), schema, defaultSchema);
         }
         if (flinkSqlNode instanceof SqlIfCache) {
             SqlIfCache sqlIfCache = (SqlIfCache) flinkSqlNode;

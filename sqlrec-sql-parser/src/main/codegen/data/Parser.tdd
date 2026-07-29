@@ -140,6 +140,7 @@
   # keyword, please also add it to 'nonReservedKeywords' section.
   # Please keep the keyword in alphabetical order if new keyword is added.
   keywords: [
+    "ASSERT"
     "SERVICE"
     "SERVICES"
     "EXPORT"
@@ -585,6 +586,7 @@
     "SqlIfCache()"
     "SqlCreateResource()"
     "SqlReturn()"
+    "SqlAssert()"
     "RichSqlInsert()"
     "SqlBeginStatementSet()"
     "SqlEndStatementSet()"

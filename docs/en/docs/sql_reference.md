@@ -730,6 +730,44 @@ IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
 ```
 
 
+### ASSERT
+
+Executes a SELECT query and asserts that the result is true. If any field of the query result is not `true`, an exception is thrown and execution is aborted.
+
+**Syntax:**
+
+```sql
+ASSERT select_statement
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `select_statement` | SELECT query statement. All returned fields must be of boolean type |
+
+**Description:**
+
+The ASSERT statement executes the specified SELECT query and validates the result:
+1. All returned fields must be of boolean (BOOLEAN) type, otherwise an exception is thrown at compile time
+2. The query must return at least one row, otherwise an exception is thrown
+3. Every value in every row and column must be `true`; if any `false` or `null` value exists, an exception is thrown
+
+**Notes:**
+- The ASSERT operator does not support parallel execution
+- On assertion failure, a `RuntimeException` is thrown containing the specific row and column index of the failure
+
+**Examples:**
+
+```sql
+ASSERT SELECT COUNT(*) > 0 FROM source_table;
+
+ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
+
+ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
+```
+
+
 ## Function Calls
 
 ### CALL

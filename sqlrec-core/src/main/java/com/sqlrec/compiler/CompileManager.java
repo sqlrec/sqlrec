@@ -11,6 +11,7 @@ import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
+import com.sqlrec.sql.parser.SqlAssert;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
@@ -92,6 +93,8 @@ public class CompileManager {
             bindable = getIfCacheBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlCache) {
             bindable = getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlAssert) {
+            bindable = getAssertBindable((SqlAssert) flinkSqlNode, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlSet) {
             bindable = getSetBindable((SqlSet) flinkSqlNode);
         } else {
@@ -161,6 +164,12 @@ public class CompileManager {
         }
 
         return new IfCacheBindable(conditionBindable, thenBindable, elseBindable, timein);
+    }
+
+    private BindableInterface getAssertBindable(SqlAssert assertStmt, CalciteSchema schema, String defaultSchema) throws Exception {
+        SqlNode select = assertStmt.getSelect();
+        BindableInterface selectBindable = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+        return new AssertBindable(selectBindable);
     }
 
     private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema, String defaultSchema) throws Exception {

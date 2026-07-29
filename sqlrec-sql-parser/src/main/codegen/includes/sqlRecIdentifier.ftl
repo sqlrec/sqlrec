@@ -19,6 +19,18 @@ SqlCache SqlCache() :
     }
 }
 
+SqlAssert SqlAssert() :
+{
+    SqlNode select = null;
+}
+{
+    <ASSERT>
+    select = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
+    {
+        return new SqlAssert(getPos(), select);
+    }
+}
+
 SqlCallSqlFunction SqlCallSqlFunction() :
 {
     SqlCallSqlFunction callSqlFunction = null;
