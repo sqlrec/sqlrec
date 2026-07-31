@@ -1,6 +1,6 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.entity.Checkpoint;
@@ -17,16 +17,16 @@ import java.util.Map;
 public class ModelUtils {
 
     public static void addModelInfo(List<List<String>> rows, Model model) throws Exception {
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
         addModelInfo(rows, modelConfig, model);
     }
 
     public static void addModelInfo(List<List<String>> rows, String modelDdl, Model model) throws Exception {
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelDdl);
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(modelDdl);
         addModelInfo(rows, modelConfig, model);
     }
 
-    public static void addModelInfo(List<List<String>> rows, ModelConfig modelConfig, Model model) throws Exception {
+    public static void addModelInfo(List<List<String>> rows, ModelConf modelConfig, Model model) throws Exception {
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
             throw new IllegalArgumentException("model controller not found for model: " + model.getName());
@@ -74,7 +74,7 @@ public class ModelUtils {
         rows.add(java.util.Arrays.asList("", ""));
 
         if (service.getModelDdl() != null) {
-            ModelConfig modelConfig = ModelEntityConverter.convertToModel(service.getModelDdl());
+            ModelConf modelConfig = ModelEntityConverter.convertToModel(service.getModelDdl());
             ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
             if (modelController == null) {
                 throw new IllegalArgumentException("model controller not found for model: " + service.getModelName());

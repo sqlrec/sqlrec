@@ -1,5 +1,6 @@
 package com.sqlrec.executor;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -52,7 +53,7 @@ public class ModelSqlProcessResult extends SqlProcessResult {
         }
 
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCheckTime < 1000) {
+        if (currentTime - lastCheckTime < SqlRecConfigs.COMPLETION_CHECK_CACHE_INTERVAL.getValue()) {
             return cachedCompleted;
         }
         lastCheckTime = currentTime;

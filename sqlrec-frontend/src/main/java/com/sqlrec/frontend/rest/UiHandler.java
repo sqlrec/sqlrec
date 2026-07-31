@@ -52,6 +52,21 @@ public class UiHandler {
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Resource path is empty");
         }
 
+        // Prevent path traversal: decode and reject absolute paths or any ".." segment that could
+        // escape the ui/static/ directory (e.g. /ui/static/../../config/database.properties would
+        // otherwise let ClassLoader.getResourceAsStream read arbitrary classpath resources).
+        try {
+            resourcePath = java.net.URLDecoder.decode(resourcePath, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid resource path encoding");
+        }
+        if (resourcePath.startsWith("/") || resourcePath.startsWith("\\")) {
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
+        }
+        if (resourcePath.contains("..")) {
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
+        }
+
         String actualPath = resourcePath;
         InputStream inputStream = UiHandler.class.getClassLoader()
                 .getResourceAsStream("ui/static/" + resourcePath);

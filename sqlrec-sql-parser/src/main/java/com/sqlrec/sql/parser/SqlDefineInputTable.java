@@ -56,20 +56,10 @@ public class SqlDefineInputTable extends SqlCall {
             writer.keyword("LIKE");
             likeTable.unparse(writer, leftPrec, rightPrec);
         } else {
-            writer.print("(\n");
-            for (int i = 0; i < columnList.size(); i++) {
-                writer.print("  ");
-                writer.setNeedWhitespace(false);
+            SqlUnparseUtils.unparseIndentedList(writer, columnList.size(), i -> {
                 columnList.get(i).unparse(writer, leftPrec, rightPrec);
                 columnTypeList.get(i).unparse(writer, leftPrec, rightPrec);
-                if (i < columnList.size() - 1) {
-                    writer.setNeedWhitespace(false);
-                    writer.print(",\n");
-                } else {
-                    writer.setNeedWhitespace(false);
-                    writer.print("\n)");
-                }
-            }
+            });
         }
     }
 

@@ -242,4 +242,12 @@ public class SqlRecConfigs {
             null,
             Long.class
     );
+
+    public static final ConfigOption<Long> COMPLETION_CHECK_CACHE_INTERVAL = new ConfigOption<>(
+            "COMPLETION_CHECK_CACHE_INTERVAL",
+            1000L,
+            "cache interval in milliseconds for checking operation completion status",
+            null,
+            Long.class
+    );
 }

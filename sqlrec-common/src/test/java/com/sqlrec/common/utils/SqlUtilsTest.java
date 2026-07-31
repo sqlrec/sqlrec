@@ -17,21 +17,23 @@ class SqlUtilsTest {
             new FieldSchema("age", "INTEGER")
     );
 
+    private static final String PG_URL = "jdbc:postgresql://localhost:5432/test";
+
     @Test
     void testBuildSelectSqlWithoutWhere() {
-        String sql = SqlUtils.buildSelectSql("users", fieldSchemas, null);
+        String sql = SqlUtils.buildSelectSql(PG_URL, "users", fieldSchemas, null);
         assertEquals("SELECT id, name, age FROM users", sql);
     }
 
     @Test
     void testBuildSelectSqlWithWhere() {
-        String sql = SqlUtils.buildSelectSql("users", fieldSchemas, "id = 1");
+        String sql = SqlUtils.buildSelectSql(PG_URL, "users", fieldSchemas, "id = 1");
         assertEquals("SELECT id, name, age FROM users WHERE id = 1", sql);
     }
 
     @Test
     void testBuildSelectSqlWithEmptyWhere() {
-        String sql = SqlUtils.buildSelectSql("users", fieldSchemas, "");
+        String sql = SqlUtils.buildSelectSql(PG_URL, "users", fieldSchemas, "");
         assertEquals("SELECT id, name, age FROM users", sql);
     }
 
@@ -91,7 +93,38 @@ class SqlUtilsTest {
 
     @Test
     void testBuildDeleteSql() {
-        String sql = SqlUtils.buildDeleteSql("users", "id");
+        String sql = SqlUtils.buildDeleteSql(PG_URL, "users", "id");
         assertEquals("DELETE FROM users WHERE id = ?", sql);
+    }
+
+    @Test
+    void testQuoteIdentifierEscapesInjectionAttempt() {
+        // A malicious identifier containing a double quote must be escaped so it cannot break out
+        // of the quoted identifier and inject SQL.
+        String quoted = SqlUtils.quoteIdentifier("col\"; DROP TABLE users; --", PG_URL);
+        assertEquals("\"col\"\"; DROP TABLE users; --\"", quoted);
+    }
+
+    @Test
+    void testQuoteIdentifierMysqlUsesBackticks() {
+        String quoted = SqlUtils.quoteIdentifier("col`x", "jdbc:mysql://localhost:3306/test");
+        assertEquals("`col``x`", quoted);
+    }
+
+    @Test
+    void testQuoteIdentifierSafeIdentifierNotQuoted() {
+        // Safe identifiers (alphanumeric + underscore) are returned as-is to preserve the
+        // database's default case-folding behavior.
+        assertEquals("users", SqlUtils.quoteIdentifier("users", PG_URL));
+        assertEquals("id", SqlUtils.quoteIdentifier("id", PG_URL));
+        assertEquals("_user_1", SqlUtils.quoteIdentifier("_user_1", PG_URL));
+    }
+
+    @Test
+    void testQuoteIdentifierUnsafeIdentifierQuoted() {
+        // Identifiers with special characters are quoted to prevent injection.
+        assertEquals("\"user table\"", SqlUtils.quoteIdentifier("user table", PG_URL));
+        assertEquals("\"user-name\"", SqlUtils.quoteIdentifier("user-name", PG_URL));
+        assertEquals("\"1col\"", SqlUtils.quoteIdentifier("1col", PG_URL));
     }
 }

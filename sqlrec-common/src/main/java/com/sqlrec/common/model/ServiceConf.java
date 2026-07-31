@@ -2,11 +2,11 @@ package com.sqlrec.common.model;
 
 import java.util.Map;
 
-public class ServiceConfig {
+public class ServiceConf {
     private String id;
     private String serviceName;
     private String modelName;
-    private ModelConfig modelConfig;
+    private ModelConf modelConfig;
     private String checkpointName;
     private String modelCheckpointDir;
     private Map<String, String> params;
@@ -36,11 +36,11 @@ public class ServiceConfig {
         this.modelName = modelName;
     }
 
-    public ModelConfig getModelConfig() {
+    public ModelConf getModelConfig() {
         return modelConfig;
     }
 
-    public void setModelConfig(ModelConfig modelConfig) {
+    public void setModelConfig(ModelConf modelConfig) {
         this.modelConfig = modelConfig;
     }
 

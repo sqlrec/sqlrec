@@ -1,27 +1,20 @@
 package com.sqlrec.model.gbdt;
 
 import com.sqlrec.common.config.ConfigOption;
-import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.model.common.ModelConfigBase;
 
 /**
  * Configuration class for GBDT (CatBoost / LightGBM) model-related parameters.
+ *
+ * <p>Inherits the shared options (image version, label columns, pod resources, replicas and the
+ * shell/pipeline-config file names) from {@link ModelConfigBase}. Only GBDT-specific training
+ * parameters and the GBDT image name are declared here.
  */
-public class Config {
-    public static final String SHELL_DIR = "/data";
-    public static final String PIPELINE_CONFIG_NAME = "pipeline.config";
-    public static final String START_SHELL_NAME = "start.sh";
+public class Config extends ModelConfigBase {
 
     public static final ConfigOption<String> IMAGE = new ConfigOption<>(
             "image",
             "sqlrec/gbdt", "Docker image", null, String.class);
-    public static final ConfigOption<String> VERSION = new ConfigOption<>(
-            "version",
-            SqlRecConfigs.SQLREC_VERSION.getValue() + "-cpu", "Docker image version", null, String.class);
-
-    // Label configuration
-    public static final ConfigOption<String> LABEL_COLUMNS = new ConfigOption<>(
-            "label_columns",
-            null, "Label columns", null, String.class);
 
     // Common GBDT training parameters
     public static final ConfigOption<String> OBJECTIVE = new ConfigOption<>(
@@ -74,24 +67,4 @@ public class Config {
     public static final ConfigOption<Double> CB_L2_LEAF_REG = new ConfigOption<>(
             "cb_l2_leaf_reg",
             3.0, "CatBoost L2 leaf regularization", null, Double.class);
-
-    public static final ConfigOption<Integer> POD_CPU_CORES = new ConfigOption<>(
-            "pod_cpu_cores",
-            1, "Number of CPU cores for pod (used as resource request)", null, Integer.class);
-
-    public static final ConfigOption<String> POD_MEMORY = new ConfigOption<>(
-            "pod_memory",
-            "2Gi", "Memory for pod (used as resource request)", null, String.class);
-
-    public static final ConfigOption<String> POD_CPU_LIMIT = new ConfigOption<>(
-            "pod_cpu_limit",
-            null, "CPU limit for pod (e.g. '2' or '2000m'). If not set, no CPU limit is configured.", null, String.class);
-
-    public static final ConfigOption<String> POD_MEMORY_LIMIT = new ConfigOption<>(
-            "pod_memory_limit",
-            null, "Memory limit for pod (e.g. '8Gi'). If not set, no memory limit is configured.", null, String.class);
-
-    public static final ConfigOption<Integer> REPLICAS = new ConfigOption<>(
-            "replicas",
-            1, "Number of replicas for deployment", null, Integer.class);
 }

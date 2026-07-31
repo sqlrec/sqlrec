@@ -13,6 +13,10 @@ public class JsonUtils {
             .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
             .create();
 
+    public static Gson getGson() {
+        return gson;
+    }
+
     public static String toJson(Object object) {
         return gson.toJson(object);
     }

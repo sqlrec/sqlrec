@@ -12,7 +12,7 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public List<FieldSchema> getOutputFields(ModelConfig model) {
+    public List<FieldSchema> getOutputFields(ModelConf model) {
         return Arrays.asList(
                 new FieldSchema("user_tower_emb", "ARRAY<FLOAT>"),
                 new FieldSchema("item_tower_emb", "ARRAY<FLOAT>")
@@ -20,7 +20,7 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public String checkModel(ModelConfig model) {
+    public String checkModel(ModelConf model) {
         Map<String, String> params = model.getParams();
         String userFeatures = params != null ? params.get(Config.USER_FEATURES.getKey()) : null;
         String itemFeatures = params != null ? params.get(Config.ITEM_FEATURES.getKey()) : null;
@@ -32,7 +32,7 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
+    public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
         String pipelineConfig = PipelineConfigUtils.generateDSSMTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainModelShell(model, trainConf);
         return K8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
@@ -50,7 +50,7 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
+    public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
         String exportDir = exportConf.getBaseModelDir() + "_export";
         String pipelineConfig = PipelineConfigUtils.generateDSSMExportConfig(model, exportConf);
         String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
@@ -58,12 +58,12 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
         return K8sYamlUtils.getServiceUrl(serviceConf);
     }
 
     @Override
-    public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
         return K8sYamlUtils.getServiceK8sYaml(serviceConf);
     }
 }

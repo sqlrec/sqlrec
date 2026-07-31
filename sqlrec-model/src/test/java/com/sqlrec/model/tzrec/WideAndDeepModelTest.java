@@ -1,9 +1,9 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ public class WideAndDeepModelTest {
     @Test
     public void testGetOutputFields() {
         WideAndDeepModel modelController = new WideAndDeepModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         List<FieldSchema> outputFields = modelController.getOutputFields(model);
         
@@ -38,7 +38,7 @@ public class WideAndDeepModelTest {
     @Test
     public void testCheckModel() {
         WideAndDeepModel modelController = new WideAndDeepModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         String result = modelController.checkModel(model);
         assertNull(result);
@@ -60,8 +60,8 @@ public class WideAndDeepModelTest {
     @Test
     public void testGetServiceUrl() {
         WideAndDeepModel modelController = new WideAndDeepModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("test-service-id");
         
         Map<String, String> params = new HashMap<>();
@@ -76,8 +76,8 @@ public class WideAndDeepModelTest {
     @Test
     public void testGetServiceUrlWithCustomNamespace() {
         WideAndDeepModel modelController = new WideAndDeepModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("my-service");
         
         Map<String, String> params = new HashMap<>();
@@ -91,7 +91,7 @@ public class WideAndDeepModelTest {
 
     @Test
     public void testGenModelTrainK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -294,7 +294,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithDefaultParams() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("default_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -454,7 +454,7 @@ spec:
 
     @Test
     public void testGenModelExportK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -562,7 +562,7 @@ data:
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         -m tzrec.export \\
         --pipeline_config_path /data/pipeline.config \\
-        --export_dir hdfs://data/test_model_dir_export
+        --export_dir 'hdfs://data/test_model_dir_export'
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -630,10 +630,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("test-service-id");
         serviceConf.setServiceName("test-service");
         serviceConf.setModelName("test_model");
@@ -710,10 +710,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYamlWithDefaultParams() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("default-service-id");
         serviceConf.setModelCheckpointDir("/model/checkpoint/default");
 
@@ -776,7 +776,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithIntFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("int_feature_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -959,7 +959,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithCustomFeatureConfig() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("custom_feature_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();

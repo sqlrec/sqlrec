@@ -1,9 +1,9 @@
 package com.sqlrec.model.external;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +24,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithEmptyParams() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setParams(new HashMap<>());
 
         assertThrows(IllegalArgumentException.class, () -> {
@@ -35,7 +35,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithSingleField() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("output_columns", "score:float");
@@ -52,7 +52,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithMultipleFields() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("output_columns", "score:float,category:string,count:int");
@@ -73,7 +73,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithSpaces() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("output_columns", " score : float , category : string ");
@@ -92,7 +92,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithInvalidFormat() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("output_columns", "score,category");
@@ -107,7 +107,7 @@ public class ExternalModelTest {
     @Test
     public void testGetOutputFieldsWithMixedFormat() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("output_columns", "score:float,invalid_field,category:string");
@@ -126,7 +126,7 @@ public class ExternalModelTest {
     @Test
     public void testCheckModel() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         String result = modelController.checkModel(model);
         assertNull(result);
@@ -135,7 +135,7 @@ public class ExternalModelTest {
     @Test
     public void testGenModelTrainK8sYamlThrowsException() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         ModelTrainConf trainConf = new ModelTrainConf();
 
         assertThrows(UnsupportedOperationException.class, () -> {
@@ -170,7 +170,7 @@ public class ExternalModelTest {
     @Test
     public void testGenModelExportK8sYamlThrowsException() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         ModelExportConf exportConf = new ModelExportConf();
 
         assertThrows(UnsupportedOperationException.class, () -> {
@@ -188,8 +188,8 @@ public class ExternalModelTest {
     @Test
     public void testGetServiceUrl() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("url", "http://external-service.example.com:8080/predict");
@@ -204,8 +204,8 @@ public class ExternalModelTest {
     @Test
     public void testGetServiceUrlWithNullParams() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
 
         assertThrows(IllegalArgumentException.class, () -> {
             modelController.getServiceUrl(model, serviceConf);
@@ -215,8 +215,8 @@ public class ExternalModelTest {
     @Test
     public void testGetServiceUrlWithEmptyParams() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setParams(new HashMap<>());
 
         assertThrows(IllegalArgumentException.class, () -> {
@@ -227,8 +227,8 @@ public class ExternalModelTest {
     @Test
     public void testGetServiceK8sYaml() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
 
         String k8sYaml = modelController.getServiceK8sYaml(model, serviceConf);
 
@@ -239,8 +239,8 @@ public class ExternalModelTest {
     @Test
     public void testGetServiceK8sYamlWithParams() {
         ExternalModel modelController = new ExternalModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
 
         Map<String, String> params = new HashMap<>();
         params.put("url", "http://external-service.example.com:8080/predict");

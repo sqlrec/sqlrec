@@ -14,7 +14,7 @@ public class ExternalModel implements ModelController {
     }
 
     @Override
-    public List<FieldSchema> getOutputFields(ModelConfig model) {
+    public List<FieldSchema> getOutputFields(ModelConf model) {
         List<FieldSchema> outputFields = new ArrayList<>();
         String outputFieldsStr = Config.OUTPUT_COLUMNS.getValue(model.getParams());
         if (StringUtils.isNotEmpty(outputFieldsStr)) {
@@ -30,12 +30,12 @@ public class ExternalModel implements ModelController {
     }
 
     @Override
-    public String checkModel(ModelConfig model) {
+    public String checkModel(ModelConf model) {
         return null;
     }
 
     @Override
-    public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
+    public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
         throw new UnsupportedOperationException("External model does not support training");
     }
 
@@ -50,17 +50,17 @@ public class ExternalModel implements ModelController {
     }
 
     @Override
-    public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
+    public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
         throw new UnsupportedOperationException("External model does not support export");
     }
 
     @Override
-    public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
         return Config.URL.getValue(serviceConf.getParams());
     }
 
     @Override
-    public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
         return "";
     }
 

@@ -1,5 +1,6 @@
 package com.sqlrec.executor;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.ServiceManager;
@@ -45,7 +46,7 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
     @Override
     public boolean isCompleted() {
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCheckTime < 1000) {
+        if (currentTime - lastCheckTime < SqlRecConfigs.COMPLETION_CHECK_CACHE_INTERVAL.getValue()) {
             return cachedCompleted;
         }
         lastCheckTime = currentTime;

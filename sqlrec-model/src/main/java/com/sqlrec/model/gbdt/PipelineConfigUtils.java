@@ -1,10 +1,11 @@
 package com.sqlrec.model.gbdt;
 
 import com.sqlrec.common.config.ConfigOption;
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.model.common.FieldTypeUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,7 +36,7 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateTrainConfig(ModelType modelType, ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateTrainConfig(ModelType modelType, ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
         config.append("{\n");
 
@@ -126,7 +127,7 @@ public class PipelineConfigUtils {
         return Collections.unmodifiableMap(merged);
     }
 
-    /** Three-tier precedence: primary if set → fallback if set → primary default. */
+    /** Three-tier precedence: primary if set -> fallback if set -> primary default. */
     private static int resolveInt(ConfigOption<Integer> primary, ConfigOption<Integer> fallback,
                                   Map<String, String> params) {
         if (primary.isSet(params)) {
@@ -155,7 +156,7 @@ public class PipelineConfigUtils {
      * Unsupported types are rejected by {@link GbdtModelBase#checkModel} beforehand;
      * the type filters here are defensive.
      */
-    private static List<String> getFeatureNames(ModelConfig model, ModelType modelType) {
+    private static List<String> getFeatureNames(ModelConf model, ModelType modelType) {
         List<String> features = new ArrayList<>();
         if (model.getInputFields() != null) {
             for (FieldSchema f : model.getInputFields()) {
@@ -163,10 +164,10 @@ public class PipelineConfigUtils {
                     continue;
                 }
                 // Defensive: skip types that checkModel should have rejected.
-                if (isArrayType(f.getType())) {
+                if (FieldTypeUtils.isArray(f.getType())) {
                     continue;
                 }
-                if ((modelType == ModelType.LIGHTGBM || modelType == ModelType.XGBOOST) && !isFloatType(f.getType())) {
+                if ((modelType == ModelType.LIGHTGBM || modelType == ModelType.XGBOOST) && !FieldTypeUtils.isFloat(f.getType())) {
                     continue;
                 }
                 features.add(f.getName());
@@ -177,10 +178,10 @@ public class PipelineConfigUtils {
 
     /**
      * Resolve categorical feature names.
-     * CatBoost: int/bigint/string → categorical; float/double → numeric.
+     * CatBoost: int/bigint/string -> categorical; float/double -> numeric.
      * LightGBM: no categoricals (only float features are included).
      */
-    private static List<String> resolveCategoricalFeatures(ModelConfig model, ModelType modelType) {
+    private static List<String> resolveCategoricalFeatures(ModelConf model, ModelType modelType) {
         if (modelType == ModelType.LIGHTGBM || modelType == ModelType.XGBOOST) {
             return Collections.emptyList();
         }
@@ -193,7 +194,7 @@ public class PipelineConfigUtils {
                 if (isLabelColumn(model, f.getName())) {
                     continue;
                 }
-                if (isArrayType(f.getType())) {
+                if (FieldTypeUtils.isArray(f.getType())) {
                     continue;
                 }
                 if (isAutoCategoricalCatBoost(f.getType())) {
@@ -205,45 +206,17 @@ public class PipelineConfigUtils {
         return new ArrayList<>(categorical);
     }
 
-    /** Returns true for CatBoost auto-categorical types: int, bigint, string. */
+    /** Returns true for CatBoost auto-categorical types: anything that is not float/double. */
     private static boolean isAutoCategoricalCatBoost(String fieldType) {
-        if (fieldType == null) {
-            return false;
-        }
-        String lower = fieldType.toLowerCase();
-        // float / double → numeric; everything else → categorical
-        return !lower.equals("float") && !lower.equals("double");
+        return fieldType != null && !FieldTypeUtils.isFloat(fieldType);
     }
 
-    /** Returns true for float/double types. */
-    private static boolean isFloatType(String fieldType) {
-        if (fieldType == null) {
-            return false;
-        }
-        String lower = fieldType.toLowerCase();
-        return lower.equals("float") || lower.equals("double");
-    }
-
-    /** Returns true for array types (array&lt;...&gt;). */
-    private static boolean isArrayType(String fieldType) {
-        return fieldType != null && fieldType.toLowerCase().startsWith("array<");
-    }
-
-    private static boolean isLabelColumn(ModelConfig model, String name) {
+    private static boolean isLabelColumn(ModelConf model, String name) {
         Map<String, String> params = model.getParams();
         if (params == null) {
             return false;
         }
-        String labels = params.get(Config.LABEL_COLUMNS.getKey());
-        if (labels == null || labels.isEmpty()) {
-            return false;
-        }
-        for (String l : labels.split(",")) {
-            if (l.trim().equals(name)) {
-                return true;
-            }
-        }
-        return false;
+        return FieldTypeUtils.parseCsvList(params.get(Config.LABEL_COLUMNS.getKey())).contains(name);
     }
 
     private static String joinPaths(List<String> paths) {

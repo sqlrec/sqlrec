@@ -7,15 +7,8 @@ import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
  */
 public class ShellUtils {
 
-    public static String genTrainModelShell(ModelType modelType) {
-        String module;
-        if (modelType == ModelType.CATBOOST) {
-            module = "gbdt.train_catboost";
-        } else if (modelType == ModelType.XGBOOST) {
-            module = "gbdt.train_xgboost";
-        } else {
-            module = "gbdt.train_lightgbm";
-        }
+    /** Train and export share the same template; only the module action differs. */
+    private static String genPythonModuleShell(String module) {
         return "#!/bin/bash\n" +
                 "set -ex\n" +
                 "export PYTHONPATH=/app:$PYTHONPATH\n" +
@@ -24,21 +17,16 @@ public class ShellUtils {
                 "    --pipeline_config_path " + Config.SHELL_DIR + "/" + Config.PIPELINE_CONFIG_NAME;
     }
 
+    private static String module(ModelType modelType, String action) {
+        return "gbdt." + action + "_" + modelType.getKey();
+    }
+
+    public static String genTrainModelShell(ModelType modelType) {
+        return genPythonModuleShell(module(modelType, "train"));
+    }
+
     public static String genExportModelShell(ModelType modelType) {
-        String module;
-        if (modelType == ModelType.CATBOOST) {
-            module = "gbdt.export_catboost";
-        } else if (modelType == ModelType.XGBOOST) {
-            module = "gbdt.export_xgboost";
-        } else {
-            module = "gbdt.export_lightgbm";
-        }
-        return "#!/bin/bash\n" +
-                "set -ex\n" +
-                "export PYTHONPATH=/app:$PYTHONPATH\n" +
-                "\n" +
-                "exec python -m " + module + " \\\n" +
-                "    --pipeline_config_path " + Config.SHELL_DIR + "/" + Config.PIPELINE_CONFIG_NAME;
+        return genPythonModuleShell(module(modelType, "export"));
     }
 
     /**

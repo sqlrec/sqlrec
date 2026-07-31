@@ -3,7 +3,7 @@ package com.sqlrec.model;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -23,14 +23,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ServiceManager {
     private static final Logger log = LoggerFactory.getLogger(ServiceManager.class);
 
-    private static final ConcurrentHashMap<String, ObjCache<ServiceConfig>> serviceConfigCacheMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ObjCache<ServiceConf>> serviceConfigCacheMap = new ConcurrentHashMap<>();
 
     public static void invalidateCache() {
         serviceConfigCacheMap.values().forEach(ObjCache::invalidate);
     }
 
-    public static ServiceConfig getServiceConfig(String serviceName) {
-        ObjCache<ServiceConfig> cache = serviceConfigCacheMap.computeIfAbsent(serviceName,
+    public static ServiceConf getServiceConfig(String serviceName) {
+        ObjCache<ServiceConf> cache = serviceConfigCacheMap.computeIfAbsent(serviceName,
                 name -> new ObjCache<>(
                         SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
                         SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
@@ -64,7 +64,7 @@ public class ServiceManager {
 
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
+        ServiceConf serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
         Service existingService = db.getService(serviceConfig.getServiceName());
         if (existingService != null) {
@@ -85,7 +85,7 @@ public class ServiceManager {
             boolean skipCheckpoint,
             boolean skipK8sYaml
     ) throws Exception {
-        ServiceConfig serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
+        ServiceConf serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
         Model modelEntity = db.getModel(serviceConfig.getModelName());
         if (modelEntity == null) {

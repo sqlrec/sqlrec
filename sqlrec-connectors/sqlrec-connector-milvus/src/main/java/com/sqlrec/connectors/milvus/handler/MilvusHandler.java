@@ -1,11 +1,10 @@
 package com.sqlrec.connectors.milvus.handler;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import com.google.gson.ToNumberPolicy;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.FilterUtils;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import io.milvus.pool.MilvusClientV2Pool;
 import io.milvus.pool.PoolConfig;
@@ -31,9 +30,7 @@ import java.util.stream.Collectors;
 public class MilvusHandler {
     private static final Logger logger = LoggerFactory.getLogger(MilvusHandler.class);
     private static Map<String, MilvusClientV2Pool> clientPools = new ConcurrentHashMap<>();
-    private static Gson gson = new GsonBuilder()
-            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-            .create();
+    private static Gson gson = JsonUtils.getGson();
 
     private MilvusConfig milvusConfig;
 

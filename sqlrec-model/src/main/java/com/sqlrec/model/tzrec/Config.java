@@ -1,23 +1,23 @@
 package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.config.ConfigOption;
-import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.model.common.ModelConfigBase;
 
 /**
- * Configuration class for model-related parameters
+ * Configuration class for TZRec model-related parameters.
+ *
+ * <p>Inherits the shared options (image version, label columns, pod resources, replicas and the
+ * shell/pipeline-config file names) from {@link ModelConfigBase}. Only TZRec-specific training
+ * parameters and the TZRec image name are declared here.
  */
-public class Config {
-    public static final String SHELL_DIR = "/data";
-    public static final String PIPELINE_CONFIG_NAME = "pipeline.config";
-    public static final String START_SHELL_NAME = "start.sh";
+public class Config extends ModelConfigBase {
+
+    /** Path of the serving entry shell baked into the tzrec image. */
     public static final String SERVICE_SHELL_PATH = "/app/server.sh";
 
     public static final ConfigOption<String> IMAGE = new ConfigOption<>(
             "image",
             "sqlrec/tzrec", "Docker image", null, String.class);
-    public static final ConfigOption<String> VERSION = new ConfigOption<>(
-            "version",
-            SqlRecConfigs.SQLREC_VERSION.getValue() + "-cpu", "Docker image version", null, String.class);
 
     // Training configuration
     public static final ConfigOption<Double> SPARSE_LR = new ConfigOption<>(
@@ -46,11 +46,6 @@ public class Config {
             "num_buckets",
             1000000, "Number of buckets for int features", null, Integer.class);
 
-    // Data configuration
-    public static final ConfigOption<String> LABEL_COLUMNS = new ConfigOption<>(
-            "label_columns",
-            null, "Label columns", null, String.class);
-
     // Model configuration
     public static final ConfigOption<String> HIDDEN_UNITS = new ConfigOption<>(
             "hidden_units",
@@ -78,26 +73,6 @@ public class Config {
     public static final ConfigOption<String> USE_FARM_HASH_TO_BUCKETIZE = new ConfigOption<>(
             "USE_FARM_HASH_TO_BUCKETIZE",
             "true", "Use farm hash to bucketize", null, String.class);
-
-    public static final ConfigOption<Integer> POD_CPU_CORES = new ConfigOption<>(
-            "pod_cpu_cores",
-            1, "Number of CPU cores for pod (used as resource request)", null, Integer.class);
-
-    public static final ConfigOption<String> POD_MEMORY = new ConfigOption<>(
-            "pod_memory",
-            "2Gi", "Memory for pod (used as resource request)", null, String.class);
-
-    public static final ConfigOption<String> POD_CPU_LIMIT = new ConfigOption<>(
-            "pod_cpu_limit",
-            null, "CPU limit for pod (e.g. '2' or '2000m'). If not set, no CPU limit is configured.", null, String.class);
-
-    public static final ConfigOption<String> POD_MEMORY_LIMIT = new ConfigOption<>(
-            "pod_memory_limit",
-            null, "Memory limit for pod (e.g. '8Gi'). If not set, no memory limit is configured.", null, String.class);
-
-    public static final ConfigOption<Integer> REPLICAS = new ConfigOption<>(
-            "replicas",
-            1, "Number of replicas for deployment", null, Integer.class);
 
     public static final ConfigOption<String> USER_FEATURES = new ConfigOption<>(
             "user_features",

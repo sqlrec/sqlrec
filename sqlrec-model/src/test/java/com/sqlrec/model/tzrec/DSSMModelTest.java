@@ -1,9 +1,9 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ public class DSSMModelTest {
     @Test
     public void testGetOutputFields() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         List<FieldSchema> outputFields = modelController.getOutputFields(model);
         
@@ -40,7 +40,7 @@ public class DSSMModelTest {
     @Test
     public void testCheckModelWithBothFeatures() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         Map<String, String> params = new HashMap<>();
         params.put("user_features", "user_id,cms_segid");
@@ -54,7 +54,7 @@ public class DSSMModelTest {
     @Test
     public void testCheckModelWithOnlyUserFeatures() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         Map<String, String> params = new HashMap<>();
         params.put("user_features", "user_id,cms_segid");
@@ -67,7 +67,7 @@ public class DSSMModelTest {
     @Test
     public void testCheckModelWithOnlyItemFeatures() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         
         Map<String, String> params = new HashMap<>();
         params.put("item_features", "item_id,cate_id");
@@ -80,7 +80,7 @@ public class DSSMModelTest {
     @Test
     public void testCheckModelWithNoFeatures() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setParams(new HashMap<>());
         
         String result = modelController.checkModel(model);
@@ -104,8 +104,8 @@ public class DSSMModelTest {
     @Test
     public void testGetServiceUrl() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("dssm-service-id");
         
         Map<String, String> params = new HashMap<>();
@@ -120,8 +120,8 @@ public class DSSMModelTest {
     @Test
     public void testGetServiceUrlWithCustomNamespace() {
         DSSMModel modelController = new DSSMModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("my-dssm-service");
         
         Map<String, String> params = new HashMap<>();
@@ -135,7 +135,7 @@ public class DSSMModelTest {
 
     @Test
     public void testGenModelTrainK8sYamlWithBothFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -359,7 +359,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithOnlyUserFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -557,7 +557,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithOnlyItemFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -755,7 +755,7 @@ spec:
 
     @Test
     public void testGenModelExportK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -861,7 +861,7 @@ data:
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         -m tzrec.export \\
         --pipeline_config_path /data/pipeline.config \\
-        --export_dir hdfs://data/dssm_model_dir_export
+        --export_dir 'hdfs://data/dssm_model_dir_export'
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -929,10 +929,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("dssm-service-id");
         serviceConf.setModelCheckpointDir("/model/checkpoint/v1");
 
@@ -1006,10 +1006,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYamlWithDefaultParams() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("dssm_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("dssm-default-service");
         serviceConf.setModelCheckpointDir("/model/checkpoint/default");
 

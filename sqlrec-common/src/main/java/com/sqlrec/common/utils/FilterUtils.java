@@ -18,7 +18,7 @@ public class FilterUtils {
         MILVUS {
             @Override
             String quoteString(String value) {
-                return "\"" + value + "\"";
+                return milvusQuote(value);
             }
 
             @Override
@@ -62,6 +62,15 @@ public class FilterUtils {
         abstract String formatArrayConstructor(String elements);
         abstract String formatOperator(String operator);
         abstract String formatArrayContains(String arrayField, String elementValue);
+    }
+
+    /**
+     * Quote a string literal for a Milvus filter expression, escaping backslash and double-quote so
+     * that values containing {@code "} or {@code \} cannot break the expression syntax or inject
+     * additional filter clauses.
+     */
+    private static String milvusQuote(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     public static Object extractPrimaryKeyValue(List<RexNode> filters, int primaryKeyIndex) {
@@ -307,10 +316,10 @@ public class FilterUtils {
             return "null";
         }
         if (value instanceof NlsString) {
-            return "\"" + ((NlsString) value).getValue() + "\"";
+            return milvusQuote(((NlsString) value).getValue());
         }
         if (value instanceof String) {
-            return "\"" + value + "\"";
+            return milvusQuote((String) value);
         }
         if (value instanceof List) {
             List<?> list = (List<?>) value;

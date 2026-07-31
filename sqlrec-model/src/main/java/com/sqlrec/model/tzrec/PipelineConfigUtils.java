@@ -1,16 +1,17 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.model.common.FieldTypeUtils;
 
 import java.util.List;
 import java.util.Map;
 
 public class PipelineConfigUtils {
 
-    public static String generateWideAndDeepTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
@@ -28,7 +29,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateWideAndDeepExportConfig(ModelConfig model, ModelExportConf exportConf) {
+    public static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, exportConf.getTrainDataPaths());
@@ -57,7 +58,7 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateTrainConfig(ModelConfig model, Map<String, String> params, String baseModelDir) {
+    public static String generateTrainConfig(ModelConf model, Map<String, String> params, String baseModelDir) {
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(params);
         double denseLr = Config.DENSE_LR.getValue(params);
@@ -86,7 +87,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDataConfig(ModelConfig model, Map<String, String> params) {
+    public static String generateDataConfig(ModelConf model, Map<String, String> params) {
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
         int numWorkers = Config.NUM_WORKERS.getValue(params);
@@ -102,7 +103,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateFeatureConfigs(ModelConfig model) {
+    public static String generateFeatureConfigs(ModelConf model) {
         StringBuilder config = new StringBuilder();
 
         if (model.getInputFields() != null) {
@@ -110,7 +111,7 @@ public class PipelineConfigUtils {
                 String featureName = fieldSchema.getName();
                 String fieldType = fieldSchema.getType();
 
-                if (isNumericFeature(fieldType)) {
+                if (FieldTypeUtils.isFloat(fieldType)) {
                     // skip numeric feature
 //                    config.append("feature_configs {\n");
 //                    config.append("    raw_feature {\n");
@@ -153,7 +154,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateModelConfig(ModelConfig model) {
+    public static String generateModelConfig(ModelConf model) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
@@ -188,20 +189,16 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    private static boolean isNumericFeature(String fieldType) {
-        return "float".equalsIgnoreCase(fieldType) || "double".equalsIgnoreCase(fieldType);
-    }
-
     private static boolean isIntFeature(String fieldType) {
         return "int".equalsIgnoreCase(fieldType) || "array<int>".equalsIgnoreCase(fieldType) ||
                 "bigint".equalsIgnoreCase(fieldType) || "array<bigint>".equalsIgnoreCase(fieldType);
     }
 
-    private static List<String> getFeatures(ModelConfig model) {
+    private static List<String> getFeatures(ModelConf model) {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
         if (model.getInputFields() != null) {
             for (FieldSchema fieldSchema : model.getInputFields()) {
-                if (isNumericFeature(fieldSchema.getType())) {
+                if (FieldTypeUtils.isFloat(fieldSchema.getType())) {
                     // skip numeric feature
                     continue;
                 }
@@ -217,7 +214,7 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateDSSMTrainConfig(ModelConfig model, ModelTrainConf trainConf) {
+    public static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
@@ -235,7 +232,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDSSMExportConfig(ModelConfig model, ModelExportConf exportConf) {
+    public static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, exportConf.getTrainDataPaths());
@@ -251,7 +248,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    public static String generateDSSMModelConfig(ModelConfig model) {
+    public static String generateDSSMModelConfig(ModelConf model) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
@@ -259,8 +256,8 @@ public class PipelineConfigUtils {
         String userFeatures = params != null ? params.get(Config.USER_FEATURES.getKey()) : null;
         String itemFeatures = params != null ? params.get(Config.ITEM_FEATURES.getKey()) : null;
 
-        List<String> userFeatureList = parseFeatureList(userFeatures);
-        List<String> itemFeatureList = parseFeatureList(itemFeatures);
+        List<String> userFeatureList = FieldTypeUtils.parseCsvList(userFeatures);
+        List<String> itemFeatureList = FieldTypeUtils.parseCsvList(itemFeatures);
 
         List<String> allFeatures = getFeatures(model);
 
@@ -329,19 +326,6 @@ public class PipelineConfigUtils {
 
         config.append("}\n");
         return config.toString();
-    }
-
-    private static List<String> parseFeatureList(String features) {
-        List<String> featureList = new java.util.ArrayList<>();
-        if (features != null && !features.isEmpty()) {
-            for (String feature : features.split(",")) {
-                String trimmed = feature.trim();
-                if (!trimmed.isEmpty()) {
-                    featureList.add(trimmed);
-                }
-            }
-        }
-        return featureList;
     }
 
     private static List<String> inferRemainingFeatures(List<String> allFeatures, List<String> specifiedFeatures) {

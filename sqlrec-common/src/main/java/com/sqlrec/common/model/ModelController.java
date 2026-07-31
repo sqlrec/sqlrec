@@ -7,13 +7,13 @@ import java.util.List;
 public interface ModelController {
     String getModelName();
 
-    List<FieldSchema> getOutputFields(ModelConfig model);
+    List<FieldSchema> getOutputFields(ModelConf model);
 
     // return null when model is valid
-    String checkModel(ModelConfig model);
+    String checkModel(ModelConf model);
 
     // return model train k8s yaml
-    String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf);
+    String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf);
 
     // return export checkpoint names (one export command may generate multiple partitions)
     List<String> getExportCheckpoints(ModelExportConf exportConf);
@@ -21,13 +21,13 @@ public interface ModelController {
     String getExportCleanPath(ModelExportConf exportConf);
 
     // return model export k8s yaml
-    String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf);
+    String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf);
 
     // return service url
-    String getServiceUrl(ModelConfig model, ServiceConfig serviceConf);
+    String getServiceUrl(ModelConf model, ServiceConf serviceConf);
 
     // return service k8s yaml
-    String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf);
+    String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf);
 
     // Validate whether the given checkpoint type can be used to serve the model.
     // Return null when valid, or an error message otherwise.

@@ -68,19 +68,7 @@ public class SqlCreateService extends SqlCreate {
         }
         if (propertyList != null && propertyList.size() > 0) {
             writer.keyword("WITH");
-            writer.print("(\n");
-            for (int i = 0; i < propertyList.size(); i++) {
-                writer.print("  ");
-                writer.setNeedWhitespace(false);
-                propertyList.get(i).unparse(writer, leftPrec, rightPrec);
-                if (i < propertyList.size() - 1) {
-                    writer.setNeedWhitespace(false);
-                    writer.print(",\n");
-                } else {
-                    writer.setNeedWhitespace(false);
-                    writer.print("\n)");
-                }
-            }
+            SqlUnparseUtils.unparseIndentedList(writer, propertyList, leftPrec, rightPrec);
         }
     }
 

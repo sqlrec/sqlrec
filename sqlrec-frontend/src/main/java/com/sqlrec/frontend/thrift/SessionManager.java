@@ -171,7 +171,13 @@ public class SessionManager {
             logger.info("Statement executed by remote client, operationGuid: {}", ThriftUtils.safeHandleId(resp.getOperationHandle().getOperationId()));
         }
 
-        operationId = resp.getOperationHandle().getOperationId();
+        TOperationHandle opHandle = resp.getOperationHandle();
+        if (opHandle == null) {
+            // Defensive guard: should not happen for the local-execution path, but avoid NPE if it does.
+            throw new TException("ExecuteStatement returned no operation handle, sessionGuid: "
+                    + ThriftUtils.safeHandleId(sessionId));
+        }
+        operationId = opHandle.getOperationId();
         operationToSessionMap.put(operationId, sessionId);
 
         MetricsUtils.getCompositeMeterRegistry()

@@ -5,7 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import java.util.List;
 import java.util.Map;
 
-public class ModelConfig {
+public class ModelConf {
     private String modelName;
     private List<FieldSchema> inputFields;
     private Map<String, String> params;

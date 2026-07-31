@@ -1,9 +1,9 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.model.ModelControllerFactory;
 import com.sqlrec.model.ServiceManager;
@@ -77,12 +77,12 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     @Override
-    public ServiceConfig getServiceConfig(String serviceName) {
+    public ServiceConf getServiceConfig(String serviceName) {
         return ServiceManager.getServiceConfig(serviceName);
     }
 
     @Override
-    public ModelController getModelController(ModelConfig modelConfig) {
+    public ModelController getModelController(ModelConf modelConfig) {
         return ModelControllerFactory.getModelController(modelConfig);
     }
 

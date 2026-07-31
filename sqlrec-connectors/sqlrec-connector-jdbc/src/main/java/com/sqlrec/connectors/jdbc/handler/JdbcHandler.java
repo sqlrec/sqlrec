@@ -24,7 +24,7 @@ public class JdbcHandler {
 
     public List<Object[]> scan(List<RexNode> filters) {
         String whereClause = SqlUtils.buildWhereClause(filters, jdbcConfig.fieldSchemas);
-        String sql = SqlUtils.buildSelectSql(jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
+        String sql = SqlUtils.buildSelectSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
@@ -40,8 +40,8 @@ public class JdbcHandler {
         }
 
         String placeholders = String.join(",", Collections.nCopies(keySet.size(), "?"));
-        String whereClause = jdbcConfig.primaryKey + " IN (" + placeholders + ")";
-        String sql = SqlUtils.buildSelectSql(jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
+        String whereClause = SqlUtils.quoteIdentifier(jdbcConfig.primaryKey, jdbcConfig.url) + " IN (" + placeholders + ")";
+        String sql = SqlUtils.buildSelectSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
 
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -74,7 +74,7 @@ public class JdbcHandler {
     }
 
     public boolean delete(Object[] data) {
-        String sql = SqlUtils.buildDeleteSql(jdbcConfig.tableName, jdbcConfig.primaryKey);
+        String sql = SqlUtils.buildDeleteSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setObject(1, data[jdbcConfig.primaryKeyIndex]);

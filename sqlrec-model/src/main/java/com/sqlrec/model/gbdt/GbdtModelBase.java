@@ -37,12 +37,12 @@ public abstract class GbdtModelBase implements ModelController {
     }
 
     @Override
-    public List<FieldSchema> getOutputFields(ModelConfig model) {
+    public List<FieldSchema> getOutputFields(ModelConf model) {
         return Collections.singletonList(new FieldSchema("probs", "FLOAT"));
     }
 
     @Override
-    public String checkModel(ModelConfig model) {
+    public String checkModel(ModelConf model) {
         Map<String, String> params = model.getParams();
         if (params == null || params.get(Config.LABEL_COLUMNS.getKey()) == null
                 || params.get(Config.LABEL_COLUMNS.getKey()).isEmpty()) {
@@ -125,7 +125,7 @@ public abstract class GbdtModelBase implements ModelController {
     }
 
     @Override
-    public String genModelTrainK8sYaml(ModelConfig model, ModelTrainConf trainConf) {
+    public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
         String pipelineConfig = PipelineConfigUtils.generateTrainConfig(modelType, model, trainConf);
         String shell = ShellUtils.genTrainModelShell(modelType);
         Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
@@ -148,7 +148,7 @@ public abstract class GbdtModelBase implements ModelController {
     }
 
     @Override
-    public String genModelExportK8sYaml(ModelConfig model, ModelExportConf exportConf) {
+    public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
         String pipelineConfig = PipelineConfigUtils.generateExportConfig(exportConf);
         String shell = ShellUtils.genExportModelShell(modelType);
         Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
@@ -157,12 +157,12 @@ public abstract class GbdtModelBase implements ModelController {
     }
 
     @Override
-    public String getServiceUrl(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
         return K8sYamlUtils.getServiceUrl(serviceConf);
     }
 
     @Override
-    public String getServiceK8sYaml(ModelConfig model, ServiceConfig serviceConf) {
+    public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
         return K8sYamlUtils.getServiceK8sYaml(modelType, serviceConf);
     }
 }

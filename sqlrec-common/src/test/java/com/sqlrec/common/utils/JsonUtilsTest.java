@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class JsonUtilsTest {
-    private static final Gson gson = new Gson();
+    private static final Gson gson = JsonUtils.getGson();
 
     @Test
     public void testToJsonArray() {
@@ -42,15 +42,15 @@ public class JsonUtilsTest {
         assertEquals(3, result.size());
         
         Map<String, Object> firstRow = result.get(0);
-        assertEquals(1.0, firstRow.get("id"));
+        assertEquals(1L, firstRow.get("id"));
         assertEquals("Zhang San", firstRow.get("name"));
-        assertEquals(20.0, firstRow.get("age"));
+        assertEquals(20L, firstRow.get("age"));
         assertEquals(true, firstRow.get("active"));
         
         Map<String, Object> secondRow = result.get(1);
-        assertEquals(2.0, secondRow.get("id"));
+        assertEquals(2L, secondRow.get("id"));
         assertEquals("Li Si", secondRow.get("name"));
-        assertEquals(21.0, secondRow.get("age"));
+        assertEquals(21L, secondRow.get("age"));
         assertEquals(false, secondRow.get("active"));
     }
 
@@ -75,9 +75,9 @@ public class JsonUtilsTest {
         
         assertEquals(1, result.size());
         Map<String, Object> row = result.get(0);
-        assertEquals(1.0, row.get("id"));
+        assertEquals(1L, row.get("id"));
         assertFalse(row.containsKey("name"));
-        assertEquals(20.0, row.get("age"));
+        assertEquals(20L, row.get("age"));
         assertFalse(row.containsKey("active"));
     }
 
@@ -124,9 +124,9 @@ public class JsonUtilsTest {
         assertEquals(true, result.get("is_vip").get(0));
         
         assertEquals(3, result.get("item_id").size());
-        assertEquals(1.0, result.get("item_id").get(0));
-        assertEquals(2.0, result.get("item_id").get(1));
-        assertEquals(3.0, result.get("item_id").get(2));
+        assertEquals(1L, result.get("item_id").get(0));
+        assertEquals(2L, result.get("item_id").get(1));
+        assertEquals(3L, result.get("item_id").get(2));
         
         assertEquals("Product A", result.get("item_name").get(0));
         assertEquals("Product B", result.get("item_name").get(1));
@@ -222,13 +222,13 @@ public class JsonUtilsTest {
         assertEquals(2, result.size());
         
         Map<String, Object> firstRow = result.get(0);
-        assertEquals(1.0, firstRow.get("id"));
+        assertEquals(1L, firstRow.get("id"));
         assertEquals("Zhang San", firstRow.get("name"));
         assertTrue(firstRow.get("tags") instanceof List);
         assertEquals(3, ((List<?>)firstRow.get("tags")).size());
         
         Map<String, Object> secondRow = result.get(1);
-        assertEquals(2.0, secondRow.get("id"));
+        assertEquals(2L, secondRow.get("id"));
         assertEquals("Li Si", secondRow.get("name"));
         assertTrue(secondRow.get("tags") instanceof List);
         assertEquals(2, ((List<?>)secondRow.get("tags")).size());
@@ -272,8 +272,8 @@ public class JsonUtilsTest {
         assertEquals(2, ((List<?>)result.get("user_tags").get(0)).size());
         
         assertEquals(2, result.get("item_id").size());
-        assertEquals(1.0, result.get("item_id").get(0));
-        assertEquals(2.0, result.get("item_id").get(1));
+        assertEquals(1L, result.get("item_id").get(0));
+        assertEquals(2L, result.get("item_id").get(1));
         
         assertTrue(result.get("scores").get(0) instanceof List);
         assertEquals(2, ((List<?>)result.get("scores").get(0)).size());

@@ -1,7 +1,7 @@
 package com.sqlrec.k8s;
 
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -339,7 +339,7 @@ public class K8sYamlUtils {
         }
     }
 
-    public static String injectPodConfig(String k8sYaml, ModelConfig model, Map<String, String> params) {
+    public static String injectPodConfig(String k8sYaml, ModelConf model, Map<String, String> params) {
         String namespace;
         if (params.containsKey(ModelConfigs.NAMESPACE.getKey())) {
             namespace = params.get(ModelConfigs.NAMESPACE.getKey());

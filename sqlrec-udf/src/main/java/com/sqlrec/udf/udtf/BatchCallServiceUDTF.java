@@ -1,6 +1,7 @@
 package com.sqlrec.udf.udtf;
 
 import com.google.gson.*;
+import com.sqlrec.common.utils.JsonUtils;
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
 import org.apache.flink.table.annotation.InputGroup;
@@ -28,9 +29,7 @@ import java.util.Map;
         "string_array_map MAP<STRING, ARRAY<STRING>>" +
         ">"))
 public class BatchCallServiceUDTF extends TableFunction<Row> {
-    private static final Gson gson = new GsonBuilder()
-            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-            .create();
+    private static final Gson gson = JsonUtils.getGson();
 
     private List<Map<String, Object>> buffer;
     private int batchSize;

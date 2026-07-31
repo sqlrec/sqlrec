@@ -1,10 +1,10 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -31,7 +31,7 @@ import java.util.List;
 public class ModelEntityConverter {
     private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
 
-    public static ModelConfig convertToModel(String modelDdl) throws Exception {
+    public static ModelConf convertToModel(String modelDdl) throws Exception {
         SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelDdl);
         if (!(modelSqlNode instanceof SqlCreateModel)) {
             throw new IllegalArgumentException("Invalid model DDL: " + modelDdl);
@@ -39,8 +39,8 @@ public class ModelEntityConverter {
         return convertToModel((SqlCreateModel) modelSqlNode);
     }
 
-    public static ModelConfig convertToModel(SqlCreateModel sqlCreateModel) {
-        ModelConfig modelConfig = new ModelConfig();
+    public static ModelConf convertToModel(SqlCreateModel sqlCreateModel) {
+        ModelConf modelConfig = new ModelConf();
         modelConfig.setModelName(sqlCreateModel.getModelName().toString());
         modelConfig.setInputFields(SchemaUtils.convertFieldList(sqlCreateModel.getFieldList()));
         modelConfig.setParams(SchemaUtils.convertPropertyList(sqlCreateModel.getPropertyList()));
@@ -91,8 +91,8 @@ public class ModelEntityConverter {
         return modelExportConf;
     }
 
-    public static ServiceConfig convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
-        ServiceConfig serviceConfig = new ServiceConfig();
+    public static ServiceConf convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
+        ServiceConf serviceConfig = new ServiceConf();
         serviceConfig.setId(K8sYamlUtils.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
         serviceConfig.setServiceName(sqlCreateService.getServiceName().toString());
         serviceConfig.setModelName(sqlCreateService.getModelName().toString());
@@ -104,12 +104,12 @@ public class ModelEntityConverter {
         return serviceConfig;
     }
 
-    public static ServiceConfig convertToServiceConfig(Service service) throws Exception {
+    public static ServiceConf convertToServiceConfig(Service service) throws Exception {
         SqlNode modelSqlNode = CompileManager.parseFlinkSql(service.getDdl());
         if (!(modelSqlNode instanceof SqlCreateService)) {
             throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
         }
-        ServiceConfig serviceConfig = convertToServiceConf((SqlCreateService) modelSqlNode);
+        ServiceConf serviceConfig = convertToServiceConf((SqlCreateService) modelSqlNode);
         serviceConfig.setUrl(service.getUrl());
         serviceConfig.setModelConfig(convertToModel(service.getModelDdl()));
         return serviceConfig;
@@ -133,7 +133,7 @@ public class ModelEntityConverter {
         return partitionPaths.stream().map(path -> path + "/*").toList();
     }
 
-    public static String getModelPath(ModelConfig modelConfig) {
+    public static String getModelPath(ModelConf modelConfig) {
         if (StringUtils.isEmpty(modelConfig.getModelName())) {
             throw new RuntimeException("modelName is empty");
         }
@@ -166,12 +166,12 @@ public class ModelEntityConverter {
             modelDdl = model.getDdl();
         }
 
-        ModelConfig modelConfig = convertToModel(modelDdl);
+        ModelConf modelConfig = convertToModel(modelDdl);
         return modelConfig.getPath() + "/" + checkpoint;
     }
 
     public static String getModelCheckpointPath(Checkpoint checkpointEntity) throws Exception {
-        ModelConfig modelConfig = convertToModel(checkpointEntity.getModelDdl());
+        ModelConf modelConfig = convertToModel(checkpointEntity.getModelDdl());
         return modelConfig.getPath() + "/" + checkpointEntity.getCheckpointName();
     }
 

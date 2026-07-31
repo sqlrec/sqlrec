@@ -57,36 +57,12 @@ public class SqlCreateModel extends SqlCreate {
         }
         modelName.unparse(writer, leftPrec, rightPrec);
         if (fieldList != null && fieldList.size() > 0) {
-            writer.print("(\n");
-            for (int i = 0; i < fieldList.size(); i++) {
-                writer.print("  ");
-                writer.setNeedWhitespace(false);
-                fieldList.get(i).unparse(writer, leftPrec, rightPrec);
-                if (i < fieldList.size() - 1) {
-                    writer.setNeedWhitespace(false);
-                    writer.print(",\n");
-                } else {
-                    writer.setNeedWhitespace(false);
-                    writer.print("\n)");
-                }
-            }
+            SqlUnparseUtils.unparseIndentedList(writer, fieldList, leftPrec, rightPrec);
             writer.setNeedWhitespace(true);
         }
         if (propertyList != null && propertyList.size() > 0) {
             writer.keyword("WITH");
-            writer.print("(\n");
-            for (int i = 0; i < propertyList.size(); i++) {
-                writer.print("  ");
-                writer.setNeedWhitespace(false);
-                propertyList.get(i).unparse(writer, leftPrec, rightPrec);
-                if (i < propertyList.size() - 1) {
-                    writer.setNeedWhitespace(false);
-                    writer.print(",\n");
-                } else {
-                    writer.setNeedWhitespace(false);
-                    writer.print("\n)");
-                }
-            }
+            SqlUnparseUtils.unparseIndentedList(writer, propertyList, leftPrec, rightPrec);
         }
     }
 

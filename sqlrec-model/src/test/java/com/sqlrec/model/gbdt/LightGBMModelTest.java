@@ -1,9 +1,9 @@
 package com.sqlrec.model.gbdt;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ public class LightGBMModelTest {
     @Test
     public void testGetOutputFields() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         List<FieldSchema> outputFields = modelController.getOutputFields(model);
 
@@ -38,7 +38,7 @@ public class LightGBMModelTest {
     @Test
     public void testCheckModelWithoutLabelColumns() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         String result = modelController.checkModel(model);
         assertEquals("label_columns is required for GBDT model", result);
@@ -47,7 +47,7 @@ public class LightGBMModelTest {
     @Test
     public void testCheckModelWithEmptyLabelColumns() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         Map<String, String> params = new HashMap<>();
         params.put("label_columns", "");
         model.setParams(params);
@@ -59,7 +59,7 @@ public class LightGBMModelTest {
     @Test
     public void testCheckModelWithLabelColumns() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("score", "double"));
         fields.add(new FieldSchema("label", "int"));
@@ -75,7 +75,7 @@ public class LightGBMModelTest {
     @Test
     public void testCheckModelRejectsIntFeature() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("age", "int"));
         fields.add(new FieldSchema("label", "int"));
@@ -93,7 +93,7 @@ public class LightGBMModelTest {
     @Test
     public void testCheckModelRejectsArrayFeature() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("embed", "array<float>"));
         fields.add(new FieldSchema("score", "double"));
@@ -132,8 +132,8 @@ public class LightGBMModelTest {
     @Test
     public void testGetServiceUrl() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("test-service-id");
 
         Map<String, String> params = new HashMap<>();
@@ -147,8 +147,8 @@ public class LightGBMModelTest {
     @Test
     public void testGetServiceUrlWithCustomNamespace() {
         LightGBMModel modelController = new LightGBMModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("my-service");
 
         Map<String, String> params = new HashMap<>();
@@ -161,7 +161,7 @@ public class LightGBMModelTest {
 
     @Test
     public void testGenModelTrainK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -255,7 +255,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithCategoricalFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cat_model");
 
         // LightGBM only accepts float/double features; int/string/array are excluded.
@@ -289,7 +289,7 @@ spec:
 
     @Test
     public void testGenModelExportK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -362,10 +362,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("test-service-id");
         serviceConf.setServiceName("test-service");
         serviceConf.setModelName("test_model");
@@ -442,10 +442,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYamlWithDefaultParams() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("default-service-id");
         serviceConf.setModelCheckpointDir("/model/checkpoint/default");
 

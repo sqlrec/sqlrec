@@ -1,9 +1,9 @@
 package com.sqlrec.model.gbdt;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ public class CatBoostModelTest {
     @Test
     public void testGetOutputFields() {
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         List<FieldSchema> outputFields = modelController.getOutputFields(model);
 
@@ -38,7 +38,7 @@ public class CatBoostModelTest {
     @Test
     public void testCheckModelWithoutLabelColumns() {
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
 
         String result = modelController.checkModel(model);
         assertEquals("label_columns is required for GBDT model", result);
@@ -47,7 +47,7 @@ public class CatBoostModelTest {
     @Test
     public void testCheckModelWithLabelColumns() {
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("age", "int"));
         fields.add(new FieldSchema("label", "int"));
@@ -63,7 +63,7 @@ public class CatBoostModelTest {
     @Test
     public void testCheckModelRejectsArrayFeature() {
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("embed", "array<float>"));
         fields.add(new FieldSchema("age", "int"));
@@ -83,7 +83,7 @@ public class CatBoostModelTest {
     public void testCheckModelAcceptsMixedTypes() {
         // CatBoost should accept int, bigint, string, float, double features.
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         List<FieldSchema> fields = new ArrayList<>();
         fields.add(new FieldSchema("age", "int"));
         fields.add(new FieldSchema("user_id", "bigint"));
@@ -116,8 +116,8 @@ public class CatBoostModelTest {
     @Test
     public void testGetServiceUrl() {
         CatBoostModel modelController = new CatBoostModel();
-        ModelConfig model = new ModelConfig();
-        ServiceConfig serviceConf = new ServiceConfig();
+        ModelConf model = new ModelConf();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("cb-service-id");
 
         Map<String, String> params = new HashMap<>();
@@ -130,7 +130,7 @@ public class CatBoostModelTest {
 
     @Test
     public void testGenModelTrainK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cb_test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -219,7 +219,7 @@ spec:
 
     @Test
     public void testGenModelTrainK8sYamlWithCategoricalFeatures() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cb_cat_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -251,7 +251,7 @@ spec:
 
     @Test
     public void testGenModelExportK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cb_test_model");
 
         List<FieldSchema> fieldSchemas = new ArrayList<>();
@@ -324,10 +324,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYaml() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cb_test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("cb-service-id");
         serviceConf.setServiceName("cb-service");
         serviceConf.setModelName("cb_test_model");
@@ -356,10 +356,10 @@ spec:
 
     @Test
     public void testGetServiceK8sYamlWithDefaultParams() {
-        ModelConfig model = new ModelConfig();
+        ModelConf model = new ModelConf();
         model.setModelName("cb_test_model");
 
-        ServiceConfig serviceConf = new ServiceConfig();
+        ServiceConf serviceConf = new ServiceConf();
         serviceConf.setId("cb-default-service-id");
         serviceConf.setModelCheckpointDir("/model/checkpoint/default");
 

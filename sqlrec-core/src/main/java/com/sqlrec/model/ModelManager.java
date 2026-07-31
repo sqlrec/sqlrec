@@ -24,9 +24,9 @@ import java.util.*;
 public class ModelManager {
     private static final Logger log = LoggerFactory.getLogger(ModelManager.class);
 
-    public static ModelConfig getAndCheckModel(SqlCreateModel sqlCreateModel) {
+    public static ModelConf getAndCheckModel(SqlCreateModel sqlCreateModel) {
         try {
-            ModelConfig model = ModelEntityConverter.convertToModel(sqlCreateModel);
+            ModelConf model = ModelEntityConverter.convertToModel(sqlCreateModel);
             ModelController modelController = ModelControllerFactory.getModelController(model);
             if (modelController == null) {
                 throw new IllegalArgumentException("Model controller not found for model name: " + model.getModelName());
@@ -54,7 +54,7 @@ public class ModelManager {
         }
     }
 
-    public static ModelConfig createModel(SqlCreateModel sqlCreateModel) {
+    public static ModelConf createModel(SqlCreateModel sqlCreateModel) {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         String modelName = sqlCreateModel.getModelName().getSimple();
         Model existingModel = db.getModel(modelName);
@@ -65,7 +65,7 @@ public class ModelManager {
             throw new IllegalArgumentException("Model already exists: " + modelName);
         }
 
-        ModelConfig modelConfig = getAndCheckModel(sqlCreateModel);
+        ModelConf modelConfig = getAndCheckModel(sqlCreateModel);
         if (db.hdfsPathExists(modelConfig.getPath())) {
             throw new IllegalArgumentException("Model path already exists: " + modelConfig.getPath());
         }
@@ -74,7 +74,7 @@ public class ModelManager {
         return modelConfig;
     }
 
-    public static void saveModel(ModelConfig modelConfig) {
+    public static void saveModel(ModelConf modelConfig) {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         Model model = new Model();
         model.setName(modelConfig.getModelName());
@@ -89,7 +89,7 @@ public class ModelManager {
         ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
 
         Model modelEntity = db.getModel(modelTrainConf.getModelName());
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
             throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
@@ -147,7 +147,7 @@ public class ModelManager {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
 
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
         if (modelController == null) {
             throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
@@ -234,7 +234,7 @@ public class ModelManager {
             }
         }
 
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(checkpoint.getModelDdl());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(checkpoint.getModelDdl());
         String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
         PathUtils.validateModelPath(checkpointPath, modelConfig.getPath());
         db.hdfsDeletePath(checkpointPath);
@@ -261,7 +261,7 @@ public class ModelManager {
             deleteCheckpoint(modelName, checkpoint.getCheckpointName());
         }
 
-        ModelConfig modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
         db.hdfsDeletePath(modelConfig.getPath());
 
         db.deleteModel(modelName);

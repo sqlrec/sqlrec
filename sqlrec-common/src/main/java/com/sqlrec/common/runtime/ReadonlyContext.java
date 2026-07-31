@@ -1,15 +1,15 @@
 package com.sqlrec.common.runtime;
 
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
-import com.sqlrec.common.model.ServiceConfig;
+import com.sqlrec.common.model.ServiceConf;
 
 import java.util.Map;
 
 public interface ReadonlyContext {
-    ServiceConfig getServiceConfig(String serviceName);
+    ServiceConf getServiceConfig(String serviceName);
 
-    ModelController getModelController(ModelConfig modelConfig);
+    ModelController getModelController(ModelConf modelConfig);
 
     String getVariable(String key);
 

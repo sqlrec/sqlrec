@@ -1,7 +1,7 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.common.model.ModelConfig;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +36,7 @@ public class ModelControllerFactory {
         return modelControllerMap.getOrDefault(modelName, null);
     }
 
-    public static ModelController getModelController(ModelConfig modelConfig) {
+    public static ModelController getModelController(ModelConf modelConfig) {
         String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.getParams());
         return ModelControllerFactory.getModelController(modelAlgorithmName);
     }

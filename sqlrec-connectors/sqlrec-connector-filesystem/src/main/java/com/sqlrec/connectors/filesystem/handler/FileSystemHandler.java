@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,7 +160,7 @@ public class FileSystemHandler {
     private List<Object[]> loadJson(Path filePath) throws IOException {
         List<Object[]> rows = new ArrayList<>();
         String content = Files.readString(filePath, StandardCharsets.UTF_8);
-        Gson gson = new Gson();
+        Gson gson = JsonUtils.getGson();
         JsonArray jsonArray;
 
         try {

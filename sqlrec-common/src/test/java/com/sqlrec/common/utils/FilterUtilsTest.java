@@ -412,6 +412,87 @@ public class FilterUtilsTest {
         assertEquals("id == 1", result);
     }
 
+    // --- Milvus special character escaping tests ---
+
+    @Test
+    public void testGetMilvusFilterSqlString_StringWithDoubleQuote() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("Tom\"in", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("name == \"Tom\\\"in\"", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_StringWithBackslash() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("C:\\path", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("name == \"C:\\\\path\"", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_StringWithBothSpecialChars() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("a\"b\\c", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("name == \"a\\\"b\\\\c\"", result);
+    }
+
+    @Test
+    public void testGetMilvusFilterSqlString_StringWithoutSpecialChars() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("plain_value", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas);
+        assertEquals("name == \"plain_value\"", result);
+    }
+
+    @Test
+    public void testBuildMilvusFilterExpression_StringWithDoubleQuote() {
+        Object[] leftValue = new Object[]{"Tom\"in", 100};
+        List<String> rightFieldNames = Arrays.asList("category", "price");
+
+        RexNode filterCondition = createEqualsCondition(0, 2);
+
+        String result = FilterUtils.buildMilvusFilterExpression(filterCondition, leftValue, rightFieldNames);
+
+        assertNotNull(result);
+        assertEquals("category == \"Tom\\\"in\"", result);
+    }
+
+    @Test
+    public void testBuildMilvusFilterExpression_StringWithBackslash() {
+        Object[] leftValue = new Object[]{"C:\\path", 100};
+        List<String> rightFieldNames = Arrays.asList("category", "price");
+
+        RexNode filterCondition = createEqualsCondition(0, 2);
+
+        String result = FilterUtils.buildMilvusFilterExpression(filterCondition, leftValue, rightFieldNames);
+
+        assertNotNull(result);
+        assertEquals("category == \"C:\\\\path\"", result);
+    }
+
+    @Test
+    public void testBuildMilvusFilterExpression_StringWithBothSpecialChars() {
+        Object[] leftValue = new Object[]{"a\"b\\c", 100};
+        List<String> rightFieldNames = Arrays.asList("category", "price");
+
+        RexNode filterCondition = createEqualsCondition(0, 2);
+
+        String result = FilterUtils.buildMilvusFilterExpression(filterCondition, leftValue, rightFieldNames);
+
+        assertNotNull(result);
+        assertEquals("category == \"a\\\"b\\\\c\"", result);
+    }
+
     // --- SQL filter tests ---
 
     private List<FieldSchema> sqlFieldSchemas = Arrays.asList(

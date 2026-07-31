@@ -58,10 +58,17 @@ public class ProxyAllBindable extends BindableInterface {
                         System.currentTimeMillis() - startTime);
             }
             return result;
-        } catch (Throwable e) {
+        } catch (Exception e) {
             status = "error";
             error = e;
             throw new RuntimeException("Node " + nodeName + " execution failed", e);
+        } catch (Error e) {
+            // Do not wrap JVM-fatal errors (OOM, StackOverflowError, etc.) as RuntimeException;
+            // let them propagate so the runtime can handle them appropriately. Metrics are still
+            // recorded in the finally block below.
+            status = "error";
+            error = e;
+            throw e;
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             TraceUtils.endSpan(span, logId, duration, count, status, error);

@@ -220,38 +220,38 @@ public class DataTypeUtils {
                 if (value instanceof Byte) {
                     return value;
                 }
-                return ((Number) value).byteValue();
+                return toNumber(value, sqlTypeName).byteValue();
             case SMALLINT:
                 if (value instanceof Short) {
                     return value;
                 }
-                return ((Number) value).shortValue();
+                return toNumber(value, sqlTypeName).shortValue();
             case INTEGER:
                 if (value instanceof Integer) {
                     return value;
                 }
-                return ((Number) value).intValue();
+                return toNumber(value, sqlTypeName).intValue();
             case BIGINT:
                 if (value instanceof Long) {
                     return value;
                 }
-                return ((Number) value).longValue();
+                return toNumber(value, sqlTypeName).longValue();
             case FLOAT:
             case REAL:
                 if (value instanceof Float) {
                     return value;
                 }
-                return ((Number) value).floatValue();
+                return toNumber(value, sqlTypeName).floatValue();
             case DOUBLE:
                 if (value instanceof Double) {
                     return value;
                 }
-                return ((Number) value).doubleValue();
+                return toNumber(value, sqlTypeName).doubleValue();
             case DECIMAL:
                 if (value instanceof BigDecimal) {
                     return value;
                 }
-                return BigDecimal.valueOf(((Number) value).doubleValue());
+                return toNumber(value, sqlTypeName);
             case BOOLEAN:
                 if (value instanceof Boolean) {
                     return value;
@@ -270,6 +270,41 @@ public class DataTypeUtils {
             default:
                 return value;
         }
+    }
+
+    private static Number toNumber(Object value, SqlTypeName target) {
+        if (value instanceof Number) {
+            return (Number) value;
+        }
+        if (value instanceof String) {
+            String s = (String) value;
+            try {
+                switch (target) {
+                    case TINYINT:
+                        return Byte.valueOf(s);
+                    case SMALLINT:
+                        return Short.valueOf(s);
+                    case INTEGER:
+                        return Integer.valueOf(s);
+                    case BIGINT:
+                        return Long.valueOf(s);
+                    case FLOAT:
+                    case REAL:
+                        return Float.valueOf(s);
+                    case DOUBLE:
+                        return Double.valueOf(s);
+                    case DECIMAL:
+                        return new BigDecimal(s);
+                    default:
+                        return Double.valueOf(s);
+                }
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        "Cannot parse '" + s + "' as " + target + " value", e);
+            }
+        }
+        throw new IllegalArgumentException(
+                "Cannot convert " + value.getClass().getName() + " to numeric type " + target);
     }
 
     public static Set<Object> convertKeySet(Set<Object> keySet, SqlTypeName sqlTypeName) {

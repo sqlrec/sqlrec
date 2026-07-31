@@ -92,6 +92,9 @@ public class HiveTableUtils {
 
     public static String getTablePrimaryKey(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> tableProperties = tableObj.getParameters();
+        if (tableProperties == null) {
+            throw new IllegalArgumentException("Table " + tableObj.getTableName() + " has no parameters (cannot resolve primary key)");
+        }
         String primaryKey = tableProperties.get("flink.schema.primary-key.columns");
         if (StringUtils.isEmpty(primaryKey)) {
             throw new IllegalArgumentException("Table " + tableObj.getTableName() + " has no primary key");
