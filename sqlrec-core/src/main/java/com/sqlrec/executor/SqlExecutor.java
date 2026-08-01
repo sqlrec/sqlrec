@@ -101,14 +101,10 @@ public class SqlExecutor {
             throw new RuntimeException("sql can not exec in filesystem meta");
         }
 
+        result = processResourceEdit(sqlNode);
         CacheManager.invalidateAll();
 
-        result = processResourceEdit(sqlNode);
-        if (result != null) {
-            return result;
-        }
-
-        return null;
+        return result;
     }
 
     public CacheTable executeSql(String sql) throws Exception {

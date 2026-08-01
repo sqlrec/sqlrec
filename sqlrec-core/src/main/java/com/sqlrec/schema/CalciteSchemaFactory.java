@@ -44,12 +44,11 @@ public class CalciteSchemaFactory {
             return rootSchema;
         }
 
-        MetadataAccess metadataAccess = MetadataAccessFactory.getInstance();
         try {
             List<String> databases = databaseListCache.getObj();
             for (String database : databases) {
                 HmsSchema hmsSchema = schemaMap.computeIfAbsent(database,
-                        db -> new HmsSchema(db, metadataAccess));
+                        db -> new HmsSchema(db, MetadataAccessFactory.getInstance()));
                 rootSchema.add(database, hmsSchema);
             }
         } catch (Exception e) {

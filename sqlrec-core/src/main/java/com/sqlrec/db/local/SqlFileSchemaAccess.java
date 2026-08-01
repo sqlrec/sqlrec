@@ -19,17 +19,12 @@ public class SqlFileSchemaAccess implements SchemaAccess {
     private final Set<String> databases;
     private final Map<String, List<Table>> databaseTables;
     private final Map<String, List<Function>> databaseFunctions;
-    private final Map<String, Long> tableLoadTime = new HashMap<>();
+    private final long loadTime = System.currentTimeMillis();
 
     public SqlFileSchemaAccess(List<SqlNode> tableNodes, List<SqlNode> udfFunctionNodes) {
         this.databases = new LinkedHashSet<>();
         this.databaseTables = buildDatabaseTables(tableNodes, this.databases);
         this.databaseFunctions = buildDatabaseFunctions(udfFunctionNodes, this.databases);
-        for (String database : this.databases) {
-            if (databaseTables.containsKey(database) || databaseFunctions.containsKey(database)) {
-                tableLoadTime.put(database, System.currentTimeMillis());
-            }
-        }
     }
 
     @Override
@@ -69,7 +64,7 @@ public class SqlFileSchemaAccess implements SchemaAccess {
 
     @Override
     public long getTableUpdateTime(String database, String table) {
-        return tableLoadTime.getOrDefault(database, 0L);
+        return loadTime;
     }
 
     @Override

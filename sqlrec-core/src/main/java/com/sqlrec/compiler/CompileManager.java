@@ -222,9 +222,9 @@ public class CompileManager {
     }
 
     public static SqlFunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlApi sqlApi = sqlApiCache.getIfPresent(apiName);
         if (sqlApi == null) {
+            MetadataAccess db = MetadataAccessFactory.getInstance();
             sqlApi = db.getSqlApi(apiName);
             if (sqlApi != null) {
                 sqlApiCache.put(apiName, sqlApi);

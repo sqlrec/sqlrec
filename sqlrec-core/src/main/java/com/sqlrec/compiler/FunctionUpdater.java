@@ -77,6 +77,8 @@ public class FunctionUpdater {
             for (Integer updateStatus : functionUpdateStatusMap.values()) {
                 if (updateStatus == UPDATE_SUCCESS) {
                     successCount++;
+                } else if (updateStatus == UPDATE_REMOVED) {
+                    removedCount++;
                 } else if (updateStatus == UPDATE_FAILED) {
                     failedCount++;
                 } else {
