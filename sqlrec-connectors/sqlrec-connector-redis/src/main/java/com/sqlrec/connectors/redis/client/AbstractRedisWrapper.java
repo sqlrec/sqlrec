@@ -11,6 +11,14 @@ public interface AbstractRedisWrapper {
 
     void close();
 
+    /**
+     * Close and discard the shared connection/client cached for this wrapper's URL,
+     * so the next command re-opens a fresh connection. Intended to be called after a
+     * connection-level failure so that subsequent calls recover instead of reusing a
+     * broken connection.
+     */
+    void invalidate();
+
     RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end);
 
     RedisFuture<byte[]> get(byte[] key);

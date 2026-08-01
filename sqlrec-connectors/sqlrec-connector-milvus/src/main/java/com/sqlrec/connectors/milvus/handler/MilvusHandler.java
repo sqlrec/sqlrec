@@ -6,6 +6,8 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.milvus.pool.MilvusClientV2Pool;
 import io.milvus.pool.PoolConfig;
 import io.milvus.v2.client.ConnectConfig;
@@ -32,6 +34,12 @@ public class MilvusHandler {
     private static Map<String, MilvusClientV2Pool> clientPools = new ConcurrentHashMap<>();
     private static Gson gson = JsonUtils.getGson();
 
+    static {
+        // Close every cached client pool on JVM exit so pooled MilvusClientV2 instances
+        // (each holding a gRPC channel) are not leaked when the process terminates.
+        Runtime.getRuntime().addShutdownHook(new Thread(MilvusHandler::closeAllClientPools, "MilvusHandler-shutdown"));
+    }
+
     private MilvusConfig milvusConfig;
 
     public MilvusHandler(MilvusConfig milvusConfig) {
@@ -39,6 +47,20 @@ public class MilvusHandler {
     }
 
     private <T> T withClient(Function<MilvusClientV2, T> action) {
+        String key = getClientPoolKey(milvusConfig);
+        try {
+            return doWithClient(action);
+        } catch (RuntimeException e) {
+            if (isConnectionFailure(e)) {
+                logger.warn("Milvus connection failure detected, invalidating pool and retrying once: {}", e.getMessage());
+                invalidatePool(key);
+                return doWithClient(action);
+            }
+            throw e;
+        }
+    }
+
+    private <T> T doWithClient(Function<MilvusClientV2, T> action) {
         MilvusClientV2 client = getClient(milvusConfig);
         if (client == null) {
             throw new RuntimeException("Failed to get Milvus client from pool after timeout");
@@ -46,8 +68,64 @@ public class MilvusHandler {
         try {
             return action.apply(client);
         } finally {
-            returnClient(client, milvusConfig);
+            try {
+                returnClient(client, milvusConfig);
+            } catch (Exception e) {
+                // Avoid masking the original failure from action.apply().
+                logger.warn("Failed to return Milvus client to pool: {}", e.getMessage());
+            }
         }
+    }
+
+    /**
+     * Returns true if the throwable (or any cause in its chain) is a gRPC transport-level
+     * failure (connection down, timeout, broken stream) rather than a semantic Milvus
+     * error. Such failures mean the pool may hold broken clients and should be discarded.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof StatusRuntimeException) {
+                Status.Code code = ((StatusRuntimeException) cur).getStatus().getCode();
+                return code == Status.Code.UNAVAILABLE
+                        || code == Status.Code.DEADLINE_EXCEEDED
+                        || code == Status.Code.UNKNOWN;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * Close and discard the cached client pool for {@code key} so the next call builds a
+     * fresh pool. Called after a transport-level failure (Milvus restart, network blip)
+     * so subsequent calls recover instead of reusing broken pooled clients.
+     */
+    public static synchronized void invalidatePool(String key) {
+        MilvusClientV2Pool pool = clientPools.remove(key);
+        if (pool != null) {
+            try {
+                pool.close();
+            } catch (Exception e) {
+                logger.warn("Failed to close Milvus client pool for {} during invalidation: {}", key, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Close every cached client pool and clear the cache. Registered as a JVM shutdown
+     * hook so pooled gRPC channels are released on exit.
+     */
+    public static synchronized void closeAllClientPools() {
+        for (Map.Entry<String, MilvusClientV2Pool> entry : new ArrayList<>(clientPools.entrySet())) {
+            try {
+                entry.getValue().close();
+            } catch (Exception e) {
+                logger.warn("Failed to close Milvus client pool for {} on shutdown: {}", entry.getKey(), e.getMessage());
+            }
+        }
+        clientPools.clear();
+        logger.info("Closed all Milvus client pools on shutdown");
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
@@ -244,7 +322,14 @@ public class MilvusHandler {
         if (!clientPools.containsKey(key)) {
             openClientPool(key, milvusConfig);
         }
-        return clientPools.get(key).getClient(key);
+        MilvusClientV2Pool pool = clientPools.get(key);
+        if (pool == null) {
+            // Pool was invalidated concurrently between containsKey and get (e.g. by a
+            // transport-failure retry); reopen so this call does not NPE.
+            openClientPool(key, milvusConfig);
+            pool = clientPools.get(key);
+        }
+        return pool.getClient(key);
     }
 
     private static String getClientPoolKey(MilvusConfig milvusConfig) {

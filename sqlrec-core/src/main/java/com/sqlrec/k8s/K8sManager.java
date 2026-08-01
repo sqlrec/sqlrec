@@ -5,10 +5,12 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -16,6 +18,12 @@ import java.util.List;
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
     private static volatile KubernetesClient kubernetesClient;
+
+    static {
+        // Close the cached KubernetesClient on JVM exit so its underlying OkHttp
+        // connection pool and watch threads are not leaked when the process terminates.
+        Runtime.getRuntime().addShutdownHook(new Thread(K8sManager::resetClient, "K8sManager-shutdown"));
+    }
 
     private static KubernetesClient getKubernetesClient() {
         if (kubernetesClient == null) {
@@ -28,6 +36,47 @@ public class K8sManager {
         return kubernetesClient;
     }
 
+    /**
+     * Close and discard the cached KubernetesClient so the next call builds a fresh one.
+     * Called after a client-level failure (API server blip, token expiry, broken state)
+     * so subsequent calls recover instead of failing forever on the broken client.
+     */
+    public static synchronized void resetClient() {
+        if (kubernetesClient != null) {
+            try {
+                kubernetesClient.close();
+            } catch (Exception e) {
+                log.warn("Failed to close stale KubernetesClient during reset: {}", e.getMessage());
+            }
+            kubernetesClient = null;
+        }
+    }
+
+    /**
+     * Returns true if the throwable indicates a Kubernetes client transport/server-level
+     * failure that warrants discarding the cached client. 4xx business errors (404 not
+     * found, 400 bad request, 409 conflict, ...) are excluded so a misapplied YAML does
+     * not needlessly tear down the shared client.
+     */
+    private static boolean isK8sClientFailure(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof KubernetesClientException) {
+                int code = ((KubernetesClientException) cur).getCode();
+                // code == 0: no HTTP response (pure connection failure, e.g. API server
+                //   unreachable, TLS/auth handshake failure). code >= 500: server error.
+                if (code == 0 || code >= 500) {
+                    return true;
+                }
+            } else if (cur instanceof IOException) {
+                // Transport-level IOException (socket reset, connection refused, etc.)
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
     public static void applyYaml(String yamlContent) {
         if (yamlContent == null || yamlContent.isEmpty()) {
             return;
@@ -37,6 +86,9 @@ public class K8sManager {
             getKubernetesClient().load(inputStream).serverSideApply();
         } catch (Exception e) {
             log.error("Failed to apply YAML: {}", e.getMessage(), e);
+            if (isK8sClientFailure(e)) {
+                resetClient();
+            }
             throw new RuntimeException("Failed to apply YAML: " + e.getMessage(), e);
         }
     }
@@ -75,6 +127,9 @@ public class K8sManager {
             }
         } catch (Exception e) {
             log.error("Failed to delete YAML: {}", e.getMessage(), e);
+            if (isK8sClientFailure(e)) {
+                resetClient();
+            }
             throw new RuntimeException("Failed to delete YAML: " + e.getMessage(), e);
         }
     }
@@ -126,6 +181,9 @@ public class K8sManager {
             return "running";
         } catch (Exception e) {
             log.error("Failed to check job status: {}", e.getMessage(), e);
+            if (isK8sClientFailure(e)) {
+                resetClient();
+            }
             return "running";
         }
     }
@@ -184,6 +242,9 @@ public class K8sManager {
             return false;
         } catch (Exception e) {
             log.error("Failed to check deployment status: {}", e.getMessage(), e);
+            if (isK8sClientFailure(e)) {
+                resetClient();
+            }
             return false;
         }
     }

@@ -7,14 +7,23 @@ import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisWrapper implements AbstractRedisWrapper {
+    private static final Logger LOG = LoggerFactory.getLogger(RedisWrapper.class);
     private static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
     private static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+
+    static {
+        // Close all shared clients/connections on JVM shutdown (the previous no-op close()
+        // relied on this but never registered a hook).
+        Runtime.getRuntime().addShutdownHook(new Thread(RedisWrapper::invalidateAll, "RedisWrapper-shutdown"));
+    }
 
     private String url;
 
@@ -30,10 +39,21 @@ public class RedisWrapper implements AbstractRedisWrapper {
 
         RedisURI redisURI = RedisURI.create(url);
         RedisClient redisClient = RedisClient.create(redisURI);
-        StatefulRedisConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
-
-        redisClientMap.put(url, redisClient);
-        connectionMap.put(url, connection);
+        try {
+            StatefulRedisConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
+            redisClientMap.put(url, redisClient);
+            connectionMap.put(url, connection);
+        } catch (RuntimeException e) {
+            // connect() failed: shut down the half-created client to avoid leaking its
+            // NioEventLoopGroup / file descriptors. The entry is not cached, so the next
+            // attempt will create a fresh client.
+            try {
+                redisClient.shutdown();
+            } catch (Exception shutdownEx) {
+                LOG.warn("Failed to shut down RedisClient after connect failure: {}", shutdownEx.getMessage());
+            }
+            throw e;
+        }
     }
 
     private RedisAsyncCommands<byte[], byte[]> getCommands() {
@@ -47,7 +67,43 @@ public class RedisWrapper implements AbstractRedisWrapper {
     public void close() {
         // Connection pool is shared across all instances with the same URL.
         // Do not close the connection here as other instances may still be using it.
-        // The connection pool will be closed when the JVM shuts down.
+        // Use invalidate() to force-close a broken connection, or rely on the JVM shutdown hook.
+    }
+
+    @Override
+    public void invalidate() {
+        invalidate(url);
+    }
+
+    /**
+     * Close and remove the shared client/connection cached for {@code url}. Idempotent.
+     */
+    public static synchronized void invalidate(String url) {
+        StatefulRedisConnection<byte[], byte[]> connection = connectionMap.remove(url);
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (Exception e) {
+                LOG.warn("Failed to close Redis connection for {}: {}", url, e.getMessage());
+            }
+        }
+        RedisClient redisClient = redisClientMap.remove(url);
+        if (redisClient != null) {
+            try {
+                redisClient.shutdown();
+            } catch (Exception e) {
+                LOG.warn("Failed to shut down RedisClient for {}: {}", url, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Close and remove all cached clients/connections.
+     */
+    public static synchronized void invalidateAll() {
+        for (String url : redisClientMap.keySet()) {
+            invalidate(url);
+        }
     }
 
     public RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end) {

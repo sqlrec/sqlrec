@@ -9,6 +9,8 @@ import com.sqlrec.connectors.redis.codec.StringCodec;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.KeyValue;
+import io.lettuce.core.RedisCommandTimeoutException;
+import io.lettuce.core.RedisConnectionException;
 import io.lettuce.core.RedisFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,10 +54,14 @@ public class RedisHandler {
     public CompletableFuture<List<Object[]>> scan(String rowKey) {
         if (isListMode()) {
             return redisClient.lrange(getKeyBytes(rowKey), 0, -1)
-                    .toCompletableFuture().thenApply(data -> decodeList(data, rowKey));
+                    .toCompletableFuture()
+                    .whenComplete((data, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+                    .thenApply(data -> decodeList(data, rowKey));
         }
         return redisClient.get(getKeyBytes(rowKey))
-                .toCompletableFuture().thenApply(bytes -> {
+                .toCompletableFuture()
+                .whenComplete((bytes, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+                .thenApply(bytes -> {
                     if (bytes == null) {
                         return Collections.emptyList();
                     }
@@ -70,6 +76,7 @@ public class RedisHandler {
                             key -> key,
                             key -> redisClient.lrange(getKeyBytes(key), 0, -1).toCompletableFuture()));
             return CompletableFuture.allOf(futureMap.values().toArray(new CompletableFuture[0]))
+                    .whenComplete((v, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
                     .thenApply(v -> {
                         Map<String, List<Object[]>> result = new HashMap<>();
                         futureMap.forEach((key, f) -> result.put(key, decodeList(f.join(), key)));
@@ -78,7 +85,9 @@ public class RedisHandler {
         }
 
         byte[][] keys = keySet.stream().map(this::getKeyBytes).toArray(byte[][]::new);
-        return redisClient.mget(keys).toCompletableFuture().thenApply(list -> {
+        return redisClient.mget(keys).toCompletableFuture()
+                .whenComplete((list, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+                .thenApply(list -> {
             Map<String, List<Object[]>> result = new HashMap<>();
             if (list == null) {
                 return result;
@@ -195,14 +204,53 @@ public class RedisHandler {
     }
 
     private void await(RedisFuture<?> future) throws Exception {
-        future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        try {
+            future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            maybeInvalidateOnFailure(e);
+            throw e;
+        }
     }
 
     private void awaitAll(List<RedisFuture<?>> futures) throws Exception {
-        CompletableFuture.allOf(futures.stream()
-                        .map(RedisFuture::toCompletableFuture)
-                        .toArray(CompletableFuture[]::new))
-                .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        try {
+            CompletableFuture.allOf(futures.stream()
+                            .map(RedisFuture::toCompletableFuture)
+                            .toArray(CompletableFuture[]::new))
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            maybeInvalidateOnFailure(e);
+            throw e;
+        }
+    }
+
+    /**
+     * Returns true if the throwable (or any cause in its chain) indicates a Redis
+     * connection-level failure (as opposed to a semantic error like WRONGTYPE).
+     * Such failures mean the shared connection should be discarded and re-opened.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof RedisConnectionException
+                    || cur instanceof RedisCommandTimeoutException) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
+    private void maybeInvalidateOnFailure(Throwable t) {
+        if (t != null && isConnectionFailure(t)) {
+            LOG.warn("Redis connection failure detected, invalidating shared connection for {}: {}",
+                    redisConfig.url, t.getMessage());
+            try {
+                redisClient.invalidate();
+            } catch (Exception ex) {
+                LOG.warn("Failed to invalidate Redis connection for {}: {}", redisConfig.url, ex.getMessage());
+            }
+        }
     }
 
     private void trimIfNeeded(byte[] key) throws Exception {

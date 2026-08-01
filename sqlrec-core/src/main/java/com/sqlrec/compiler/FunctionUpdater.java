@@ -24,6 +24,7 @@ public class FunctionUpdater {
     private static final int UPDATE_SUCCESS = 1;
     private static final int UPDATE_FAILED = -1;
     private static final int NOT_UPDATE = 0;
+    private static final int UPDATE_REMOVED = 2;
 
     private static final Logger log = LoggerFactory.getLogger(FunctionUpdater.class);
     private static ScheduledExecutorService executor;
@@ -58,16 +59,18 @@ public class FunctionUpdater {
         int successCount = 0;
         int failedCount = 0;
         int notUpdateCount = 0;
+        int removedCount = 0;
 
         try {
             log.info("starting function bindable update check");
             Map<String, Integer> functionUpdateStatusMap = new HashMap<>();
             Map<String, SqlFunctionBindable> functionBindableMap = CompileManager.getFunctionBindableMap();
             Set<String> functionNames = new HashSet<>(functionBindableMap.keySet());
+            Set<String> inProgress = new HashSet<>();
 
             log.info("total functions to check: {}", functionNames.size());
             for (String functionName : functionNames) {
-                tryFlushFunctionBindable(functionName, functionUpdateStatusMap, functionBindableMap);
+                tryFlushFunctionBindable(functionName, functionUpdateStatusMap, functionBindableMap, inProgress);
             }
             log.info("function update check completed");
 
@@ -103,16 +106,25 @@ public class FunctionUpdater {
             MetricsUtils.getCompositeMeterRegistry()
                     .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "not_update"))
                     .increment(notUpdateCount);
+
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", "removed"))
+                    .increment(removedCount);
         }
     }
 
     private static int tryFlushFunctionBindable(
             String functionName,
             Map<String, Integer> functionUpdateStatusMap,
-            Map<String, SqlFunctionBindable> functionBindableMap
+            Map<String, SqlFunctionBindable> functionBindableMap,
+            Set<String> inProgress
     ) {
         if (functionUpdateStatusMap.containsKey(functionName)) {
             return functionUpdateStatusMap.get(functionName);
+        }
+        if (!inProgress.add(functionName)) {
+            throw new RuntimeException(
+                    "circular dependency detected during function update check: " + functionName);
         }
 
         log.info("checking function: {}", functionName);
@@ -128,10 +140,11 @@ public class FunctionUpdater {
             Set<String> dependencySqlFunctions = functionBindable.getDependencySqlFunctions();
             for (String dependencySqlFunction : dependencySqlFunctions) {
                 int dependencyStatus = tryFlushFunctionBindable(
-                        dependencySqlFunction, functionUpdateStatusMap, functionBindableMap
+                        dependencySqlFunction, functionUpdateStatusMap, functionBindableMap, inProgress
                 );
-                if (dependencyStatus == UPDATE_SUCCESS) {
-                    log.info("dependency function {} updated, marking {} for flush", dependencySqlFunction, functionName);
+                if (dependencyStatus == UPDATE_SUCCESS || dependencyStatus == UPDATE_REMOVED) {
+                    log.info("dependency function {} updated/removed, marking {} for flush",
+                            dependencySqlFunction, functionName);
                     needFlush = true;
                 }
             }
@@ -139,9 +152,9 @@ public class FunctionUpdater {
             SqlFunction sqlFunction = db.getSqlFunction(functionBindable.getFunName());
             if (sqlFunction == null) {
                 functionBindableMap.remove(functionName);
-                functionUpdateStatusMap.put(functionName, UPDATE_SUCCESS);
+                functionUpdateStatusMap.put(functionName, UPDATE_REMOVED);
                 log.info("function bindable {} removed (not found in database)", functionName);
-                return UPDATE_SUCCESS;
+                return UPDATE_REMOVED;
             }
             if (sqlFunction.getUpdatedAt() > functionBindable.getCreateTime()) {
                 log.info("function {} updated in database (db: {}, cached: {}), marking for flush",
@@ -164,6 +177,8 @@ public class FunctionUpdater {
         } catch (Exception e) {
             log.error("try flush function bindable failed : {}", functionName, e);
             functionUpdateStatusMap.put(functionName, UPDATE_FAILED);
+        } finally {
+            inProgress.remove(functionName);
         }
 
         return functionUpdateStatusMap.get(functionName);
@@ -189,11 +204,11 @@ public class FunctionUpdater {
         Set<String> javaFunctions = functionBindable.getDependencyJavaFunctions();
         for (String javaFunction : javaFunctions) {
             // todo optimize java function update check
-            Object javaFunctionClass = JavaFunctionUtils.getTableFunctionClass(
-                    Consts.DEFAULT_SCHEMA_NAME, javaFunction);
-            long functionModificationTime = JavaFunctionUtils.getFunctionUpdateTime(
-                    Consts.DEFAULT_SCHEMA_NAME, javaFunction);
-            if (functionModificationTime > functionBindable.getCreateTime()) {
+            // Note: this only detects className changes in the metastore (which trigger a class
+            // reload) and missing functions; it cannot detect bytecode-only changes (same
+            // className, different JAR).
+            if (JavaFunctionUtils.isJavaFunctionModifiedSince(
+                    Consts.DEFAULT_SCHEMA_NAME, javaFunction, functionBindable.getCreateTime())) {
                 log.info("java function {} has been modified, need to flush function", javaFunction);
                 return true;
             }

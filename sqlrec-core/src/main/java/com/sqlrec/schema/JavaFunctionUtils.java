@@ -107,6 +107,27 @@ public class JavaFunctionUtils {
         return functionUpdateTime.getOrDefault(mapKey, 0L);
     }
 
+    /**
+     * Returns true if the java function's class has been (re)loaded after {@code baselineTime}
+     * (e.g. because its className changed in the metastore), or if the function can no longer be
+     * resolved (deleted / not found).
+     * <p>
+     * Note: this only detects className changes (which trigger a class reload inside
+     * {@link #getTableFunctionClass(String, String)}) and missing functions. It cannot detect
+     * bytecode-only changes (same className, different JAR) — see todo in caller.
+     */
+    public static boolean isJavaFunctionModifiedSince(String db, String funName, long baselineTime) {
+        // getTableFunctionClass may reload the class (and refresh functionUpdateTime) when the
+        // className in the metastore differs from the cached one.
+        Class<?> clazz = getTableFunctionClass(db, funName);
+        if (clazz == null) {
+            // function no longer resolvable (deleted or not found) — treat as modified so that
+            // dependents are refreshed and surface the failure rather than serving stale state.
+            return true;
+        }
+        return getFunctionUpdateTime(db, funName) > baselineTime;
+    }
+
     private static String getMapKey(String db, String funName) {
         return db + "." + funName;
     }

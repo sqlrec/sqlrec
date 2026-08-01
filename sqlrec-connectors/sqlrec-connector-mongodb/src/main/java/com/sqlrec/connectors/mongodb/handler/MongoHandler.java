@@ -1,5 +1,9 @@
 package com.sqlrec.connectors.mongodb.handler;
 
+import com.mongodb.MongoSecurityException;
+import com.mongodb.MongoServerUnavailableException;
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
@@ -25,6 +29,12 @@ public class MongoHandler implements Serializable {
     private static final Logger logger = LoggerFactory.getLogger(MongoHandler.class);
     private static final Map<String, MongoClient> mongoClients = new ConcurrentHashMap<>();
 
+    static {
+        // Close every cached MongoClient on JVM exit so connection pools and background
+        // monitoring threads are not leaked when the process terminates.
+        Runtime.getRuntime().addShutdownHook(new Thread(MongoHandler::closeAllMongoClients, "MongoHandler-shutdown"));
+    }
+
     private final MongoConfig mongoConfig;
 
     public MongoHandler(MongoConfig mongoConfig) {
@@ -32,15 +42,17 @@ public class MongoHandler implements Serializable {
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
-        MongoCollection<Document> collection = getCollection();
-        Bson query = buildQuery(filters);
-        List<Object[]> rows = new ArrayList<>();
-        try (MongoCursor<Document> cursor = collection.find(query).iterator()) {
-            while (cursor.hasNext()) {
-                rows.add(documentToRow(cursor.next()));
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            Bson query = buildQuery(filters);
+            List<Object[]> rows = new ArrayList<>();
+            try (MongoCursor<Document> cursor = collection.find(query).iterator()) {
+                while (cursor.hasNext()) {
+                    rows.add(documentToRow(cursor.next()));
+                }
             }
-        }
-        return rows;
+            return rows;
+        });
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
@@ -48,38 +60,44 @@ public class MongoHandler implements Serializable {
             return Collections.emptyMap();
         }
 
-        MongoCollection<Document> collection = getCollection();
-        String primaryKey = mongoConfig.primaryKey;
-        List<Object> keyList = new ArrayList<>(keySet);
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            String primaryKey = mongoConfig.primaryKey;
+            List<Object> keyList = new ArrayList<>(keySet);
 
-        Map<Object, List<Object[]>> result = new HashMap<>();
-        try (MongoCursor<Document> cursor = collection.find(Filters.in(primaryKey, keyList)).iterator()) {
-            while (cursor.hasNext()) {
-                Object[] row = documentToRow(cursor.next());
-                Object key = row[mongoConfig.primaryKeyIndex];
-                result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+            Map<Object, List<Object[]>> result = new HashMap<>();
+            try (MongoCursor<Document> cursor = collection.find(Filters.in(primaryKey, keyList)).iterator()) {
+                while (cursor.hasNext()) {
+                    Object[] row = documentToRow(cursor.next());
+                    Object key = row[mongoConfig.primaryKeyIndex];
+                    result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+                }
             }
-        }
-        return result;
+            return result;
+        });
     }
 
     public boolean upsert(Object[] data) {
-        MongoCollection<Document> collection = getCollection();
-        Document doc = rowToDocument(data);
-        Object primaryKeyValue = data[mongoConfig.primaryKeyIndex];
-        collection.replaceOne(
-                Filters.eq(mongoConfig.primaryKey, primaryKeyValue),
-                doc,
-                new ReplaceOptions().upsert(true)
-        );
-        return true;
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            Document doc = rowToDocument(data);
+            Object primaryKeyValue = data[mongoConfig.primaryKeyIndex];
+            collection.replaceOne(
+                    Filters.eq(mongoConfig.primaryKey, primaryKeyValue),
+                    doc,
+                    new ReplaceOptions().upsert(true)
+            );
+            return true;
+        });
     }
 
     public boolean delete(Object[] data) {
-        MongoCollection<Document> collection = getCollection();
-        Object primaryKeyValue = data[mongoConfig.primaryKeyIndex];
-        collection.deleteOne(Filters.eq(mongoConfig.primaryKey, primaryKeyValue));
-        return true;
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            Object primaryKeyValue = data[mongoConfig.primaryKeyIndex];
+            collection.deleteOne(Filters.eq(mongoConfig.primaryKey, primaryKeyValue));
+            return true;
+        });
     }
 
     private Bson buildQuery(List<RexNode> filters) {
@@ -202,7 +220,100 @@ public class MongoHandler implements Serializable {
         return database.getCollection(mongoConfig.collection);
     }
 
+    /**
+     * Return the cached MongoClient for this handler's URI, creating it on first use.
+     * Uses double-checked locking instead of {@code computeIfAbsent} so the expensive
+     * {@link MongoClients#create} (which builds a connection pool) does not hold the
+     * ConcurrentHashMap bin lock and block lookups for other URIs.
+     */
     private MongoClient getOrCreateMongoClient() {
-        return mongoClients.computeIfAbsent(mongoConfig.uri, MongoClients::create);
+        MongoClient client = mongoClients.get(mongoConfig.uri);
+        if (client != null) {
+            return client;
+        }
+        synchronized (mongoClients) {
+            client = mongoClients.get(mongoConfig.uri);
+            if (client == null) {
+                client = MongoClients.create(mongoConfig.uri);
+                mongoClients.put(mongoConfig.uri, client);
+            }
+            return client;
+        }
+    }
+
+    /**
+     * Close and discard the cached MongoClient for {@code uri} so the next call
+     * re-creates it. Intended to be called after a connection-level failure (MongoDB
+     * restart, network blip, credential rotation) so that subsequent calls recover
+     * instead of failing forever on the broken client.
+     */
+    public static synchronized void invalidateClient(String uri) {
+        MongoClient client = mongoClients.remove(uri);
+        if (client != null) {
+            try {
+                client.close();
+            } catch (Exception e) {
+                logger.warn("Failed to close MongoClient for {} during invalidation: {}", uri, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Close every cached MongoClient and clear the cache. Registered as a JVM shutdown
+     * hook so connection pools and background monitoring threads are released on exit.
+     */
+    public static synchronized void closeAllMongoClients() {
+        for (Map.Entry<String, MongoClient> entry : new ArrayList<>(mongoClients.entrySet())) {
+            try {
+                entry.getValue().close();
+            } catch (Exception e) {
+                logger.warn("Failed to close MongoClient for {} on shutdown: {}", entry.getKey(), e.getMessage());
+            }
+        }
+        mongoClients.clear();
+        logger.info("Closed all MongoDB clients on shutdown");
+    }
+
+    /**
+     * Returns true if the throwable (or any cause in its chain) indicates a MongoDB
+     * connection-level failure (as opposed to a semantic error like a bad query).
+     * Such failures mean the cached client should be discarded and re-created.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof MongoSocketException
+                    || cur instanceof MongoTimeoutException
+                    || cur instanceof MongoServerUnavailableException
+                    || cur instanceof MongoSecurityException) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
+    @FunctionalInterface
+    private interface MongoAction<T> {
+        T apply();
+    }
+
+    /**
+     * Run a MongoDB operation, and on a connection-level failure invalidate the broken
+     * client and retry once with a fresh client. Read operations are idempotent; upsert
+     * and delete are retried only when the failure is a transport-level error — the same
+     * resilience tradeoff the JDBC and Redis handlers already make.
+     */
+    private <T> T withRetry(MongoAction<T> action) {
+        try {
+            return action.apply();
+        } catch (RuntimeException e) {
+            if (isConnectionFailure(e)) {
+                logger.warn("MongoDB connection failure detected, invalidating client and retrying once: {}", e.getMessage());
+                invalidateClient(mongoConfig.uri);
+                return action.apply();
+            }
+            throw e;
+        }
     }
 }

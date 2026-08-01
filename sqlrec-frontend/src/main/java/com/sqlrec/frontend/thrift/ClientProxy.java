@@ -11,6 +11,7 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,12 +57,28 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     private synchronized void ensureConnected() throws TException {
-        if (connected) {
+        if (connected && transport != null && transport.isOpen()) {
             return;
         }
 
+        // Clean up any stale transport left over from a previous broken connection.
+        if (transport != null) {
+            try {
+                transport.close();
+            } catch (Exception ignore) {
+                // ignore
+            }
+            this.client = null;
+            this.transport = null;
+            this.remoteSessionId = null;
+        }
+        this.connected = false;
+
         if (ExecEnv.isFileSystemMeta()) {
             throw new TException("Remote connection is not allowed in file system meta mode");
+        }
+        if (pendingOpenSessionReq == null) {
+            throw new TException("Cannot (re)connect: OpenSession was never called");
         }
 
         TTransport transport = new TSocket(
@@ -77,11 +94,12 @@ public class ClientProxy implements TCLIService.Iface {
             TOpenSessionResp remoteResp = client.OpenSession(pendingOpenSessionReq);
             THandleIdentifier remoteSessionId = copyHandleId(remoteResp.getSessionHandle().getSessionId());
 
-            // All remote operations succeeded, commit state atomically
+            // All remote operations succeeded, commit state atomically.
+            // NOTE: pendingOpenSessionReq is intentionally retained so the session can be
+            // re-opened after a future transport failure (see markDisconnected).
             this.client = client;
             this.transport = transport;
             this.remoteSessionId = remoteSessionId;
-            this.pendingOpenSessionReq = null;
             this.connected = true;
 
             logger.info("Remote connection opened, localSessionGuid: {}, remoteSessionGuid: {}",
@@ -95,6 +113,45 @@ public class ClientProxy implements TCLIService.Iface {
             }
             this.client = null;
             this.transport = null;
+            throw e;
+        }
+    }
+
+    /**
+     * Tear down the current remote connection without dropping session identity, so the
+     * next call to {@link #ensureConnected()} re-opens the remote session. Used after a
+     * transport-level failure so the broken client/transport is not reused forever.
+     */
+    private synchronized void markDisconnected() {
+        if (transport != null) {
+            try {
+                transport.close();
+            } catch (Exception e) {
+                logger.warn("Failed to close transport after remote error", e);
+            }
+        }
+        this.client = null;
+        this.transport = null;
+        this.remoteSessionId = null;
+        this.connected = false;
+        // keep localSessionId and pendingOpenSessionReq for reconnect
+    }
+
+    @FunctionalInterface
+    private interface RemoteCall<T> {
+        T apply() throws TException;
+    }
+
+    /**
+     * Invoke a remote thrift call, and on a transport-level failure mark the connection
+     * disconnected so the next call re-opens it. The current call still fails (the
+     * connection is genuinely broken), but the proxy recovers instead of staying broken.
+     */
+    private <T> T invokeRemote(RemoteCall<T> call) throws TException {
+        try {
+            return call.apply();
+        } catch (TTransportException e) {
+            markDisconnected();
             throw e;
         }
     }
@@ -138,7 +195,7 @@ public class ClientProxy implements TCLIService.Iface {
             if (connected) {
                 THandleIdentifier originalSessionId = translateSessionHandle(req.getSessionHandle());
                 try {
-                    return client.CloseSession(req);
+                    return invokeRemote(() -> client.CloseSession(req));
                 } finally {
                     restoreSessionHandle(req.getSessionHandle(), originalSessionId);
                 }
@@ -205,7 +262,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tExecuteStatementReq.getSessionHandle());
         try {
-            return client.ExecuteStatement(tExecuteStatementReq);
+            return invokeRemote(() -> client.ExecuteStatement(tExecuteStatementReq));
         } finally {
             restoreSessionHandle(tExecuteStatementReq.getSessionHandle(), originalSessionId);
         }
@@ -217,7 +274,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTypeInfoReq.getSessionHandle());
         try {
-            return client.GetTypeInfo(tGetTypeInfoReq);
+            return invokeRemote(() -> client.GetTypeInfo(tGetTypeInfoReq));
         } finally {
             restoreSessionHandle(tGetTypeInfoReq.getSessionHandle(), originalSessionId);
         }
@@ -229,7 +286,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetCatalogsReq.getSessionHandle());
         try {
-            return client.GetCatalogs(tGetCatalogsReq);
+            return invokeRemote(() -> client.GetCatalogs(tGetCatalogsReq));
         } finally {
             restoreSessionHandle(tGetCatalogsReq.getSessionHandle(), originalSessionId);
         }
@@ -241,7 +298,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetSchemasReq.getSessionHandle());
         try {
-            return client.GetSchemas(tGetSchemasReq);
+            return invokeRemote(() -> client.GetSchemas(tGetSchemasReq));
         } finally {
             restoreSessionHandle(tGetSchemasReq.getSessionHandle(), originalSessionId);
         }
@@ -253,7 +310,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTablesReq.getSessionHandle());
         try {
-            return client.GetTables(tGetTablesReq);
+            return invokeRemote(() -> client.GetTables(tGetTablesReq));
         } finally {
             restoreSessionHandle(tGetTablesReq.getSessionHandle(), originalSessionId);
         }
@@ -265,7 +322,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTableTypesReq.getSessionHandle());
         try {
-            return client.GetTableTypes(tGetTableTypesReq);
+            return invokeRemote(() -> client.GetTableTypes(tGetTableTypesReq));
         } finally {
             restoreSessionHandle(tGetTableTypesReq.getSessionHandle(), originalSessionId);
         }
@@ -277,7 +334,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetColumnsReq.getSessionHandle());
         try {
-            return client.GetColumns(tGetColumnsReq);
+            return invokeRemote(() -> client.GetColumns(tGetColumnsReq));
         } finally {
             restoreSessionHandle(tGetColumnsReq.getSessionHandle(), originalSessionId);
         }
@@ -289,7 +346,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetFunctionsReq.getSessionHandle());
         try {
-            return client.GetFunctions(tGetFunctionsReq);
+            return invokeRemote(() -> client.GetFunctions(tGetFunctionsReq));
         } finally {
             restoreSessionHandle(tGetFunctionsReq.getSessionHandle(), originalSessionId);
         }
@@ -301,7 +358,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetPrimaryKeysReq.getSessionHandle());
         try {
-            return client.GetPrimaryKeys(tGetPrimaryKeysReq);
+            return invokeRemote(() -> client.GetPrimaryKeys(tGetPrimaryKeysReq));
         } finally {
             restoreSessionHandle(tGetPrimaryKeysReq.getSessionHandle(), originalSessionId);
         }
@@ -313,7 +370,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetCrossReferenceReq.getSessionHandle());
         try {
-            return client.GetCrossReference(tGetCrossReferenceReq);
+            return invokeRemote(() -> client.GetCrossReference(tGetCrossReferenceReq));
         } finally {
             restoreSessionHandle(tGetCrossReferenceReq.getSessionHandle(), originalSessionId);
         }
@@ -323,35 +380,35 @@ public class ClientProxy implements TCLIService.Iface {
     public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.GetOperationStatus(tGetOperationStatusReq);
+        return invokeRemote(() -> client.GetOperationStatus(tGetOperationStatusReq));
     }
 
     @Override
     public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.CancelOperation(tCancelOperationReq);
+        return invokeRemote(() -> client.CancelOperation(tCancelOperationReq));
     }
 
     @Override
     public TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.CloseOperation(tCloseOperationReq);
+        return invokeRemote(() -> client.CloseOperation(tCloseOperationReq));
     }
 
     @Override
     public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.GetResultSetMetadata(tGetResultSetMetadataReq);
+        return invokeRemote(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
     }
 
     @Override
     public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.FetchResults(tFetchResultsReq);
+        return invokeRemote(() -> client.FetchResults(tFetchResultsReq));
     }
 
     @Override
@@ -360,7 +417,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetDelegationTokenReq.getSessionHandle());
         try {
-            return client.GetDelegationToken(tGetDelegationTokenReq);
+            return invokeRemote(() -> client.GetDelegationToken(tGetDelegationTokenReq));
         } finally {
             restoreSessionHandle(tGetDelegationTokenReq.getSessionHandle(), originalSessionId);
         }
@@ -372,7 +429,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tCancelDelegationTokenReq.getSessionHandle());
         try {
-            return client.CancelDelegationToken(tCancelDelegationTokenReq);
+            return invokeRemote(() -> client.CancelDelegationToken(tCancelDelegationTokenReq));
         } finally {
             restoreSessionHandle(tCancelDelegationTokenReq.getSessionHandle(), originalSessionId);
         }
@@ -384,7 +441,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tRenewDelegationTokenReq.getSessionHandle());
         try {
-            return client.RenewDelegationToken(tRenewDelegationTokenReq);
+            return invokeRemote(() -> client.RenewDelegationToken(tRenewDelegationTokenReq));
         } finally {
             restoreSessionHandle(tRenewDelegationTokenReq.getSessionHandle(), originalSessionId);
         }
@@ -394,7 +451,7 @@ public class ClientProxy implements TCLIService.Iface {
     public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
         updateAccessTime();
         ensureConnected();
-        return client.GetQueryId(tGetQueryIdReq);
+        return invokeRemote(() -> client.GetQueryId(tGetQueryIdReq));
     }
 
     @Override
@@ -403,7 +460,7 @@ public class ClientProxy implements TCLIService.Iface {
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tSetClientInfoReq.getSessionHandle());
         try {
-            return client.SetClientInfo(tSetClientInfoReq);
+            return invokeRemote(() -> client.SetClientInfo(tSetClientInfoReq));
         } finally {
             restoreSessionHandle(tSetClientInfoReq.getSessionHandle(), originalSessionId);
         }
