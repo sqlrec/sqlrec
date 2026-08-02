@@ -48,10 +48,18 @@ COPY juicefs-*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/juicefs-*.whl \
     && rm -f /tmp/juicefs-*.whl
 
-# Install ONNX Runtime C++ SDK
+# Install ONNX Runtime C++ SDK. Asset name is arch-specific (x64 vs aarch64);
+# pick by the running image's dpkg architecture so the same Dockerfile works
+# for both amd64 and arm64 builds (and for local non-buildx builds).
 ENV ONNXRUNTIME_VERSION=1.17.1
-RUN wget -q -O /tmp/onnxruntime.tgz \
-        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz" \
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+         amd64) ONNX_ARCH=x64 ;; \
+         arm64) ONNX_ARCH=aarch64 ;; \
+         *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && wget -q -O /tmp/onnxruntime.tgz \
+        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
     && mkdir -p /opt/onnxruntime \
     && tar -xzf /tmp/onnxruntime.tgz -C /opt/onnxruntime --strip-components=1 \
     && rm -f /tmp/onnxruntime.tgz
@@ -62,11 +70,18 @@ ENV ONNXRUNTIME_LIB_DIR=/opt/onnxruntime/lib
 # Install CatBoost C++ library (libcatboostmodel) for native model serving.
 # The CatBoost pip wheel does NOT include libcatboostmodel.so; download the
 # prebuilt shared library and header from the CatBoost GitHub release that
-# matches the pip-installed version.
+# matches the pip-installed version. The shared library asset is arch-specific
+# (x86_64 vs aarch64); pick by the running image's dpkg architecture.
 RUN CB_VERSION=$(python -c "import catboost; print(catboost.__version__)") \
+    && ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+         amd64) CB_ARCH=x86_64 ;; \
+         arm64) CB_ARCH=aarch64 ;; \
+         *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+       esac \
     && mkdir -p /opt/catboost/lib /opt/catboost/include/catboost/libs/model_interface \
     && wget -q -O /opt/catboost/lib/libcatboostmodel.so \
-        "https://github.com/catboost/catboost/releases/download/v${CB_VERSION}/libcatboostmodel-linux-x86_64-${CB_VERSION}.so" \
+        "https://github.com/catboost/catboost/releases/download/v${CB_VERSION}/libcatboostmodel-linux-${CB_ARCH}-${CB_VERSION}.so" \
     && wget -q -O /opt/catboost/include/catboost/libs/model_interface/c_api.h \
         "https://raw.githubusercontent.com/catboost/catboost/v${CB_VERSION}/catboost/libs/model_interface/c_api.h"
 
