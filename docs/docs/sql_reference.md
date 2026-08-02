@@ -769,6 +769,36 @@ ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
 ```
 
 
+### FLUSH
+
+强制失效系统中的所有缓存。
+
+**语法：**
+
+```sql
+FLUSH
+```
+
+**描述：**
+
+`FLUSH` 语句会立即失效 SQLRec 进程内的全部缓存，强制后续查询重新从元数据库加载最新数据。该命令会失效以下缓存：
+
+- `CalciteSchemaFactory`：数据库列表与表结构（schema）缓存
+- `JavaFunctionUtils`：Java 函数不存在性缓存
+- `CompileManager`：已编译的 SQL 函数绑定（`SqlFunctionBindable`）与 API 缓存
+- `ServiceManager`：服务配置缓存
+
+**示例：**
+
+```sql
+FLUSH;
+```
+
+::: warning 注意
+`FLUSH` 会失效所有缓存，可能导致短时间内元数据重新加载带来的开销。通常在元数据变更（例如外部修改了表结构、函数或服务定义）后手动执行，以确保后续查询看到最新状态。
+:::
+
+
 ## 函数调用
 
 ### CALL

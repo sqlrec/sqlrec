@@ -82,6 +82,11 @@ public class SqlExecutor {
             return SqlProcessResult.msg("database changed to " + defaultSchema, "msg");
         }
 
+        if (sqlNode instanceof SqlFlush) {
+            CacheManager.invalidateAll();
+            return SqlProcessResult.msg("all caches flushed", "msg");
+        }
+
         result = processResourceQuery(sqlNode);
         if (result != null) {
             return result;

@@ -769,6 +769,36 @@ ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
 ```
 
 
+### FLUSH
+
+Forcefully invalidate all caches in the system.
+
+**Syntax:**
+
+```sql
+FLUSH
+```
+
+**Description:**
+
+The `FLUSH` statement immediately invalidates all in-process caches of SQLRec, forcing subsequent queries to reload the latest data from the metastore. The following caches are invalidated:
+
+- `CalciteSchemaFactory`: database list and table schema caches
+- `JavaFunctionUtils`: Java function non-existence cache
+- `CompileManager`: compiled SQL function bindings (`SqlFunctionBindable`) and API caches
+- `ServiceManager`: service configuration cache
+
+**Example:**
+
+```sql
+FLUSH;
+```
+
+::: warning Note
+`FLUSH` invalidates all caches, which may cause short-term overhead from reloading metadata. It is typically executed manually after metadata changes (e.g., external modifications to table schemas, functions, or service definitions) to ensure subsequent queries see the latest state.
+:::
+
+
 ## Function Calls
 
 ### CALL

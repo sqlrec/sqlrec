@@ -92,7 +92,8 @@ public class TestSqlParse {
                 "IF (SELECT count(*) > 0 FROM input1) THEN (cache table result1 as SELECT * FROM input1) ELSE (cache table result1 as SELECT 0 as id, 'empty' as name)",
                 "assert select count(1) > 0 from t1",
                 "assert select count(*) > 0 from t1 where id > 100",
-                "assert select count(1) > 0, count(*) > 5 from t1"
+                "assert select count(1) > 0, count(*) > 5 from t1",
+                "flush"
         );
 
         for (String sql : sqlList) {

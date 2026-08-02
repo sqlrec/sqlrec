@@ -215,6 +215,16 @@ SqlReturn SqlReturn() :
     }
 }
 
+SqlFlush SqlFlush() :
+{
+}
+{
+    <FLUSH>
+    {
+        return new SqlFlush(getPos());
+    }
+}
+
 SqlShowSqlFunction SqlShowSqlFunction() :
 {
 }
