@@ -75,6 +75,7 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 | `embedding_dim` | Integer | 16 | 嵌入维度 |
 | `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
 | `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
+| `mixed_precision` | String | - | 混合精度训练模式，可选 `BF16`/`FP16`，默认不开启 |
 
 **分布式训练参数**：
 
@@ -190,6 +191,7 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 | `user_hidden_units` | String | "512,256,128" | 用户塔隐藏层单元数 |
 | `item_hidden_units` | String | "512,256,128" | 物品塔隐藏层单元数 |
 | `output_dim` | Integer | 64 | 输出嵌入维度 |
+| `mixed_precision` | String | - | 混合精度训练模式，可选 `BF16`/`FP16`，默认不开启 |
 
 **分布式训练参数**：
 

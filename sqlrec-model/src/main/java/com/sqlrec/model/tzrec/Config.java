@@ -29,6 +29,10 @@ public class Config extends ModelConfigBase {
     public static final ConfigOption<Integer> NUM_EPOCHS = new ConfigOption<>(
             "num_epochs",
             1, "Number of training epochs", null, Integer.class);
+    public static final ConfigOption<String> MIXED_PRECISION = new ConfigOption<>(
+            "mixed_precision",
+            null, "Mixed precision training mode, e.g. BF16 or FP16, disabled by default",
+            null, String.class);
 
     // Data configuration
     public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(

@@ -46,6 +46,17 @@ public class ConfigOption<T> {
         return processValue(value);
     }
 
+    public T getValueOrNull(Map<String, String> options) {
+        String value = (options != null && options.containsKey(key))
+                ? options.get(key) : null;
+        T processedValue = getFromStr(value);
+        if (processedValue != null && validValues != null
+                && !validValues.contains(processedValue)) {
+            throw new IllegalArgumentException("Invalid value: " + value);
+        }
+        return processedValue;
+    }
+
     public boolean isSet(Map<String, String> options) {
         return options != null && options.containsKey(key) && options.get(key) != null;
     }

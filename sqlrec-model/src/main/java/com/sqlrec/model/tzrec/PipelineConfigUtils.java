@@ -80,6 +80,12 @@ public class PipelineConfigUtils {
         config.append("        }\n");
         config.append("    }\n");
         config.append("    num_epochs: " + numEpochs + "\n");
+        // getValueOrNull: unset + null default returns null (no throw), so mixed
+        // precision stays off by default; a non-null default would still apply.
+        String mixedPrecision = Config.MIXED_PRECISION.getValueOrNull(params);
+        if (mixedPrecision != null && !mixedPrecision.isEmpty()) {
+            config.append("    mixed_precision: \"" + mixedPrecision.trim().toUpperCase() + "\"\n");
+        }
         if (baseModelDir != null && !baseModelDir.isEmpty()) {
             config.append("    fine_tune_checkpoint: \"").append(baseModelDir).append("\"\n");
         }

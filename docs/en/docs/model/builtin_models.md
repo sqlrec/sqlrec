@@ -75,6 +75,7 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 | `embedding_dim` | Integer | 16 | Embedding dimension |
 | `num_buckets` | Integer | 1000000 | Integer feature bucket count |
 | `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
+| `mixed_precision` | String | - | Mixed precision training mode, `BF16` or `FP16`, disabled by default |
 
 **Distributed Training Parameters**:
 
@@ -190,6 +191,7 @@ DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemente
 | `user_hidden_units` | String | "512,256,128" | User tower hidden layer unit count |
 | `item_hidden_units` | String | "512,256,128" | Item tower hidden layer unit count |
 | `output_dim` | Integer | 64 | Output embedding dimension |
+| `mixed_precision` | String | - | Mixed precision training mode, `BF16` or `FP16`, disabled by default |
 
 **Distributed Training Parameters**:
 
