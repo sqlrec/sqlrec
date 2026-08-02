@@ -76,7 +76,7 @@ ENV CATBOOST_LIB_DIR=/opt/catboost/lib
 # Build both C++ servers
 COPY ./sqlrec-model/src/main/cpp/gbdt/ /build/gbdt/
 COPY ./sqlrec-model/src/main/cpp/common/ /build/common/
-RUN mkdir -p /build/gbdt/build \
+RUN mkdir -p /build/gbdt/build /app \
     && cd /build/gbdt/build \
     && cmake .. \
     && make -j$(nproc) \
