@@ -1,3 +1,4 @@
 deploy/
 .*
 juicefs-src/
+tzrec-src/

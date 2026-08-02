@@ -121,4 +121,4 @@ ENV LD_LIBRARY_PATH="${ONNXRUNTIME_LIB_DIR}:${CATBOOST_LIB_DIR}"
 COPY ./sqlrec-model/src/main/python/common/ /app/common/
 COPY ./sqlrec-model/src/main/python/gbdt/ /app/gbdt/
 
-WORKDIR /data
+WORKDIR /app

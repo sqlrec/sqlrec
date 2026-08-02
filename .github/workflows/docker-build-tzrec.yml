@@ -1,0 +1,115 @@
+name: Build and Push TZRec Model Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      juicefs_ref:
+        description: 'juicefs fork ref (branch/tag/SHA)'
+        required: false
+        default: 'feat/sqlrec'
+      tzrec_ref:
+        description: 'TorchEasyRec fork ref (branch/tag/SHA)'
+        required: false
+        default: 'feat/sqlrec'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/sqlrec-tzrec
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout sqlrec
+        uses: actions/checkout@v4
+
+      - name: Checkout juicefs fork
+        uses: actions/checkout@v4
+        with:
+          repository: sqlrec/juicefs
+          ref: ${{ github.event.inputs.juicefs_ref || 'feat/sqlrec' }}
+          path: juicefs-src
+          fetch-depth: 1
+
+      - name: Checkout TorchEasyRec fork
+        uses: actions/checkout@v4
+        with:
+          repository: sqlrec/TorchEasyRec
+          ref: ${{ github.event.inputs.tzrec_ref || 'feat/sqlrec' }}
+          path: tzrec-src
+          fetch-depth: 1
+
+      # Build the juicefs Python wheel from the fork using its own Makefile
+      # (sdk/python/Makefile): `make builder` creates the centos7 sdkbuilder
+      # image, `make juicefs` builds libjfs.so + the wheel inside it. The
+      # resulting wheel has a timestamped version (e.g. 1.3.0.<YYYYMMDDHHMM>),
+      # so the Dockerfile consumes it via a `juicefs-*.whl` wildcard.
+      - name: Build juicefs Python wheel
+        working-directory: juicefs-src/sdk/python
+        run: |
+          make builder
+          make juicefs
+          find juicefs/dist -name 'juicefs-*.whl' -exec cp {} "$GITHUB_WORKSPACE/" \;
+          ls -la "$GITHUB_WORKSPACE/"juicefs-*.whl
+
+      # Build the tzrec Python wheel from the fork. setup.py only imports
+      # codecs/os/setuptools (no torch at build time); install_requires is
+      # metadata-only. gen_proto.sh generates tzrec/protos/*_pb2.py (which are
+      # .py modules in a real package, so they are always packaged despite being
+      # gitignored). The resulting wheel is
+      # tzrec-<version>-py2.py3-none-any.whl (setup.cfg sets universal=1),
+      # consumed via a `tzrec-*.whl` wildcard and installed with --no-deps
+      # because the tzrec-devel base image already provides all runtime deps.
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build tzrec Python wheel
+        working-directory: tzrec-src
+        run: |
+          pip install -U "grpcio-tools<1.63.0" setuptools wheel
+          bash scripts/gen_proto.sh
+          python setup.py sdist bdist_wheel
+          cp dist/tzrec-*.whl "$GITHUB_WORKSPACE/"
+          ls -la "$GITHUB_WORKSPACE/"tzrec-*.whl
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # semver tags fire on `v*` tag pushes; `type=sha` covers manual
+          # workflow_dispatch runs (which have no semver tag).
+          tags: |
+            type=semver,pattern={{version}}-cpu
+            type=semver,pattern={{major}}.{{minor}}-cpu
+            type=sha,format=short
+
+      - name: Build and push TZRec image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/sqlrec-model-tzrec.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
