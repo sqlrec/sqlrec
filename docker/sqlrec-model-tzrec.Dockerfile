@@ -1,4 +1,4 @@
-FROM mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easyrec/tzrec-devel:1.0-cpu
+FROM mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easyrec/tzrec-devel:1.3-cpu
 
 COPY juicefs-*.whl /tmp/
 COPY tzrec-*.whl /tmp/
