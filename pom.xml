@@ -18,6 +18,7 @@
         <module>sqlrec-model</module>
         <module>sqlrec-ui</module>
         <module>sqlrec-demo</module>
+        <module>sqlrec-flink</module>
     </modules>
     
     <properties>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.sqlrec</groupId>
+        <artifactId>sqlrec-parent</artifactId>
+        <version>0.1.8</version>
+    </parent>
+
+    <artifactId>sqlrec-flink</artifactId>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- Flink connectors with DynamicTableFactory SPI -->
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-connector-milvus</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-connector-redis</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
+
+        <!-- UDF module (includes the Flink BatchCallServiceUDTF) -->
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-udf</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
+
+        <!-- Shared runtime utils used by connectors and UDFs -->
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-common</artifactId>
+            <version>${sqlrec.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <!-- Merge META-INF/services/* SPI files, in particular the
+                                     two org.apache.flink.table.factories.Factory registrations
+                                     from the milvus and redis connectors. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>**/Log4j2Plugins.dat</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
