@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 public class HmsClient {
     private static final Logger log = LoggerFactory.getLogger(HmsClient.class);
-    private static volatile HiveMetaStoreClient client;
+    static volatile HiveMetaStoreClient client;
 
     static {
         // Close the cached HMS client on JVM exit so the underlying Thrift transport to
@@ -58,6 +58,14 @@ public class HmsClient {
             }
             client = null;
         }
+    }
+
+    /**
+     * Test-only: inject a mock client. Clears the field first to avoid leaking prior client.
+     */
+    static void setClientForTest(HiveMetaStoreClient mockClient) {
+        invalidateClient();
+        client = mockClient;
     }
 
     @FunctionalInterface

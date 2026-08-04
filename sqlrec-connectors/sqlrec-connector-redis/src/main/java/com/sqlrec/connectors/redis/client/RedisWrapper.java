@@ -16,8 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class RedisWrapper implements AbstractRedisWrapper {
     private static final Logger LOG = LoggerFactory.getLogger(RedisWrapper.class);
-    private static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+    static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
+    static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
 
     static {
         // Close all shared clients/connections on JVM shutdown (the previous no-op close()
@@ -104,6 +104,18 @@ public class RedisWrapper implements AbstractRedisWrapper {
         for (String url : redisClientMap.keySet()) {
             invalidate(url);
         }
+    }
+
+    /**
+     * Test-only: inject a mock connection and client for a given url.
+     * Does not close existing entries; call {@link #invalidate(String)} beforehand if needed.
+     */
+    static void setConnectionForTest(
+            String url,
+            StatefulRedisConnection<byte[], byte[]> mockConn,
+            RedisClient mockClient) {
+        connectionMap.put(url, mockConn);
+        redisClientMap.put(url, mockClient);
     }
 
     public RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end) {

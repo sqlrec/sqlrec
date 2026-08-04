@@ -1,6 +1,6 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.TestTypeSupport;
+import com.sqlrec.utils.TypeSupportTest;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
@@ -29,7 +29,7 @@ public class FunctionProxyBindablePartitionTest {
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
-                return Collections.singletonMap("myTable", new TestTypeSupport.MyTable());
+                return Collections.singletonMap("myTable", new TypeSupportTest.MyTable());
             }
         });
         CalciteSchemaFactory.setGlobalSchema(schema);

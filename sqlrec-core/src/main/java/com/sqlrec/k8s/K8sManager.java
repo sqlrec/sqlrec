@@ -17,7 +17,7 @@ import java.util.List;
 
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
-    private static volatile KubernetesClient kubernetesClient;
+    static volatile KubernetesClient kubernetesClient;
 
     static {
         // Close the cached KubernetesClient on JVM exit so its underlying OkHttp
@@ -50,6 +50,14 @@ public class K8sManager {
             }
             kubernetesClient = null;
         }
+    }
+
+    /**
+     * Test-only: inject a mock client. Clears the field first to avoid leaking prior client.
+     */
+    static void setKubernetesClientForTest(KubernetesClient mockClient) {
+        resetClient();
+        kubernetesClient = mockClient;
     }
 
     /**

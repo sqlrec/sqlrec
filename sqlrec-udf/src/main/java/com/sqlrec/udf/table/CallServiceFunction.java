@@ -20,11 +20,18 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class CallServiceFunction {
-    private static final OkHttpClient httpClient = new OkHttpClient.Builder()
+    private static volatile OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
+
+    /**
+     * Test-only: inject a mock OkHttpClient.
+     */
+    static void setHttpClientForTest(OkHttpClient mockClient) {
+        httpClient = mockClient;
+    }
 
     public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input) {
         ServiceConf serviceConfig = context.getServiceConfig(serviceName);

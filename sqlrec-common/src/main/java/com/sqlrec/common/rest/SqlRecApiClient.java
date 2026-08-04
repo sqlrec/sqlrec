@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  */
 public final class SqlRecApiClient {
-    private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+    private static volatile OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -35,6 +35,13 @@ public final class SqlRecApiClient {
             MediaType.parse("application/json; charset=utf-8");
 
     private SqlRecApiClient() {
+    }
+
+    /**
+     * Test-only: inject a mock OkHttpClient.
+     */
+    static void setHttpClientForTest(OkHttpClient mockClient) {
+        HTTP_CLIENT = mockClient;
     }
 
     /**
