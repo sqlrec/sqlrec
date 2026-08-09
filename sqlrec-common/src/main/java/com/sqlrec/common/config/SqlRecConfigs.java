@@ -111,6 +111,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Boolean> IGNORE_JOIN_QUERY_EXCEPTION = new ConfigOption<>(
+            "IGNORE_JOIN_QUERY_EXCEPTION",
+            true,
+            "ignore query exception when querying external storage in join loops, continue with remaining keys",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
             "FUNCTION_UPDATE_INTERVAL",
             300,

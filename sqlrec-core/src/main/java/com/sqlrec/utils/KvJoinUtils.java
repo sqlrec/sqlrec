@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.MergeUtils;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -11,10 +12,14 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 public class KvJoinUtils {
+    private static final Logger log = LoggerFactory.getLogger(KvJoinUtils.class);
+
     public static Enumerable kvJoin(
             Enumerable left,
             SqlRecKvTable rightTable,
@@ -103,17 +108,25 @@ public class KvJoinUtils {
 
         Map<Object, List<Object[]>> rightValuesMap = new HashMap<>();
         for (Object key : joinKeys) {
-            RexNode inputRef = rexBuilder.makeInputRef(joinKeyField.getType(), rightJoinKeyColIndex);
-            RexNode literal = rexBuilder.makeLiteral(key, joinKeyField.getType());
-            RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, inputRef, literal);
+            try {
+                RexNode inputRef = rexBuilder.makeInputRef(joinKeyField.getType(), rightJoinKeyColIndex);
+                RexNode literal = rexBuilder.makeLiteral(key, joinKeyField.getType());
+                RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, inputRef, literal);
 
-            Enumerable<Object[]> result = rightTable.scan(null, Collections.singletonList(filter));
-            List<Object[]> rows = new ArrayList<>();
-            for (Object[] row : result) {
-                rows.add(row);
-            }
-            if (!rows.isEmpty()) {
-                rightValuesMap.put(key, rows);
+                Enumerable<Object[]> result = rightTable.scan(null, Collections.singletonList(filter));
+                List<Object[]> rows = new ArrayList<>();
+                for (Object[] row : result) {
+                    rows.add(row);
+                }
+                if (!rows.isEmpty()) {
+                    rightValuesMap.put(key, rows);
+                }
+            } catch (Exception e) {
+                if (SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue()) {
+                    log.warn("Failed to scan right table for join key: {}", key, e);
+                    continue;
+                }
+                throw e;
             }
         }
         return rightValuesMap;

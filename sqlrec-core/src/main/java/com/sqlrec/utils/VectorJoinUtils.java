@@ -17,11 +17,14 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.Table;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class VectorJoinUtils {
+    private static final Logger log = LoggerFactory.getLogger(VectorJoinUtils.class);
     public static Enumerable vectorJoin(
             Enumerable left,
             VectorSearchable rightTable,
@@ -100,20 +103,28 @@ public class VectorJoinUtils {
                 continue;
             }
             List<Float> embedding = DataTransformUtils.convertToFloatVec(leftEmbedding);
-            List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
-                    leftValue,
-                    embedding,
-                    rightEmbeddingColName,
-                    filterCondition,
-                    limit,
-                    vectorProjectColumns
-            );
-            if (rightValues != null) {
-                for (Object[] rightValue : rightValues) {
-                    Object[] joinRow = KvJoinUtils.copyValues(leftValue, rightValue, leftSize, rightSize);
-                    Object[] projectRow = buildProjectRow(joinRow, projectColumns, projectSize);
-                    result.add(projectRow);
+            try {
+                List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
+                        leftValue,
+                        embedding,
+                        rightEmbeddingColName,
+                        filterCondition,
+                        limit,
+                        vectorProjectColumns
+                );
+                if (rightValues != null) {
+                    for (Object[] rightValue : rightValues) {
+                        Object[] joinRow = KvJoinUtils.copyValues(leftValue, rightValue, leftSize, rightSize);
+                        Object[] projectRow = buildProjectRow(joinRow, projectColumns, projectSize);
+                        result.add(projectRow);
+                    }
                 }
+            } catch (Exception e) {
+                if (SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue()) {
+                    log.warn("Failed to search by embedding for left value", e);
+                    continue;
+                }
+                throw e;
             }
         }
         return Linq4j.asEnumerable(result);

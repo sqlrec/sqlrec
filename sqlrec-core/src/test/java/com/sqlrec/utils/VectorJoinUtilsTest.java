@@ -1,5 +1,16 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.schema.VectorSearchable;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -7,8 +18,95 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.*;
 
 public class VectorJoinUtilsTest {
+
+    private RelDataTypeFactory typeFactory;
+    private RelDataType rightRowType;
+    private boolean originalIgnoreJoinQueryException;
+
+    @BeforeEach
+    public void setUp() {
+        typeFactory = new JavaTypeFactoryImpl();
+        rightRowType = typeFactory.builder()
+                .add("id", SqlTypeName.INTEGER)
+                .add("name", SqlTypeName.VARCHAR)
+                .build();
+        originalIgnoreJoinQueryException = SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getDefaultValue();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(originalIgnoreJoinQueryException);
+    }
+
+    @Test
+    public void testVectorJoinIgnoreQueryExceptionWhenEnabled() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+
+        Object[] leftRow1 = new Object[]{1, Arrays.asList(0.1f, 0.2f)};
+        Object[] leftRow2 = new Object[]{2, Arrays.asList(0.3f, 0.4f)};
+        Enumerable left = Linq4j.asEnumerable(Arrays.asList(leftRow1, leftRow2));
+
+        VectorSearchable rightTable = mock(VectorSearchable.class, withSettings().extraInterfaces(Table.class));
+        when(((Table) rightTable).getRowType(any())).thenReturn(rightRowType);
+        doThrow(new RuntimeException("search failed")).when(rightTable)
+                .searchByEmbeddingWithScore(any(), any(), any(), any(), anyInt(), any());
+
+        Enumerable result = VectorJoinUtils.vectorJoin(left, rightTable, null, 1, "embedding", 10, null);
+
+        assertNotNull(result);
+        assertEquals(0, result.count());
+        verify(rightTable, atLeastOnce()).searchByEmbeddingWithScore(any(), any(), any(), any(), anyInt(), any());
+    }
+
+    @Test
+    public void testVectorJoinRethrowQueryExceptionWhenDisabled() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(false);
+
+        Object[] leftRow1 = new Object[]{1, Arrays.asList(0.1f, 0.2f)};
+        Enumerable left = Linq4j.asEnumerable(Collections.singletonList(leftRow1));
+
+        VectorSearchable rightTable = mock(VectorSearchable.class, withSettings().extraInterfaces(Table.class));
+        when(((Table) rightTable).getRowType(any())).thenReturn(rightRowType);
+        doThrow(new RuntimeException("search failed")).when(rightTable)
+                .searchByEmbeddingWithScore(any(), any(), any(), any(), anyInt(), any());
+
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> VectorJoinUtils.vectorJoin(left, rightTable, null, 1, "embedding", 10, null)
+        );
+        assertEquals("search failed", exception.getMessage());
+    }
+
+    @Test
+    public void testVectorJoinPartialFailureWhenIgnoreEnabled() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+
+        Object[] leftRow1 = new Object[]{1, Arrays.asList(0.1f, 0.2f)};
+        Object[] leftRow2 = new Object[]{2, Arrays.asList(0.3f, 0.4f)};
+        Enumerable left = Linq4j.asEnumerable(Arrays.asList(leftRow1, leftRow2));
+
+        VectorSearchable rightTable = mock(VectorSearchable.class, withSettings().extraInterfaces(Table.class));
+        when(((Table) rightTable).getRowType(any())).thenReturn(rightRowType);
+
+        Object[] rightRow = new Object[]{100, "match", 0.95f};
+        doThrow(new RuntimeException("search failed for first"))
+                .doReturn(Collections.singletonList(rightRow))
+                .when(rightTable).searchByEmbeddingWithScore(any(), any(), any(), any(), anyInt(), any());
+
+        Enumerable result = VectorJoinUtils.vectorJoin(left, rightTable, null, 1, "embedding", 10, null);
+
+        assertNotNull(result);
+        assertEquals(1, result.count());
+        Object[] row = (Object[]) result.first();
+        assertEquals(2, row[0]);
+        assertEquals(100, row[2]);
+        assertEquals("match", row[3]);
+    }
 
     @Test
     public void testBuildProjectRowWithNullProjectColumns() {
