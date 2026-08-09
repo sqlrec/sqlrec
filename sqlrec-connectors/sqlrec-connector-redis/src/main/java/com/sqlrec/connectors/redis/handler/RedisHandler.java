@@ -25,13 +25,18 @@ public class RedisHandler {
     private static final Logger LOG = LoggerFactory.getLogger(RedisHandler.class);
     private static final int TIMEOUT_SECONDS = 30;
 
-    private AbstractRedisWrapper redisClient;
+    AbstractRedisWrapper redisClient;
     private RedisConfig redisConfig;
     private AbstractCodec codec;
     private String keyPrefix;
 
     public RedisHandler(RedisConfig redisConfig) {
         this.redisConfig = redisConfig;
+    }
+
+    /** Test-only: inject a mock redis client. */
+    void setRedisClientForTest(AbstractRedisWrapper mockClient) {
+        this.redisClient = mockClient;
     }
 
     public void open() {

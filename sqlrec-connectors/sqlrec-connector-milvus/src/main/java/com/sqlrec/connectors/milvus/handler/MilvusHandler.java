@@ -42,8 +42,21 @@ public class MilvusHandler {
 
     private MilvusConfig milvusConfig;
 
+    /** Test-only: when non-null, doWithClient uses this directly instead of the pool. */
+    static volatile MilvusClientV2 testClient;
+
     public MilvusHandler(MilvusConfig milvusConfig) {
         this.milvusConfig = milvusConfig;
+    }
+
+    /** Test-only: inject a mock client. */
+    static void setClientForTest(MilvusClientV2 mockClient) {
+        testClient = mockClient;
+    }
+
+    /** Test-only: clear the injected mock client. */
+    static void clearTestClient() {
+        testClient = null;
     }
 
     private <T> T withClient(Function<MilvusClientV2, T> action) {
@@ -61,6 +74,9 @@ public class MilvusHandler {
     }
 
     private <T> T doWithClient(Function<MilvusClientV2, T> action) {
+        if (testClient != null) {
+            return action.apply(testClient);
+        }
         MilvusClientV2 client = getClient(milvusConfig);
         if (client == null) {
             throw new RuntimeException("Failed to get Milvus client from pool after timeout");

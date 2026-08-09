@@ -29,7 +29,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
-    private static final Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
+    static volatile Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
     private final KafkaConfig kafkaConfig;
 
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
@@ -81,6 +81,24 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
             props.put("linger.ms", String.valueOf(kafkaConfig.lingerMs));
             return new KafkaProducer<>(props);
         });
+    }
+
+    /** Test-only: inject a mock producer for the given config key. */
+    static void setKafkaProducerForTest(String configKey, KafkaProducer<String, String> mockProducer) {
+        kafkaProducerMap.put(configKey, mockProducer);
+    }
+
+    /** Test-only: remove and close the producer for the given config key. */
+    static void invalidateProducer(String configKey) {
+        KafkaProducer<String, String> producer = kafkaProducerMap.remove(configKey);
+        if (producer != null) {
+            producer.close();
+        }
+    }
+
+    /** Test-only: get the config key for a given config (so tests can match the injection key). */
+    static String getProducerConfigKeyForTest(KafkaConfig config) {
+        return getProducerConfigKey(config);
     }
 
     public static class KafkaCollection extends SqlRecCollection {
