@@ -9,12 +9,15 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
+import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class L2NormFunction extends GenericUDF {
     private ListObjectInspector vectorOI;
+    private PrimitiveObjectInspector vectorElementOI;
 
     public List<Double> evaluate(Object vector) {
         if (vector == null) {
@@ -40,6 +43,11 @@ public class L2NormFunction extends GenericUDF {
 
         this.vectorOI = (ListObjectInspector) arguments[0];
 
+        ObjectInspector elemOI = vectorOI.getListElementObjectInspector();
+        if (elemOI instanceof PrimitiveObjectInspector) {
+            this.vectorElementOI = (PrimitiveObjectInspector) elemOI;
+        }
+
         ObjectInspector doubleOI = PrimitiveObjectInspectorFactory.javaDoubleObjectInspector;
         return ObjectInspectorFactory.getStandardListObjectInspector(doubleOI);
     }
@@ -52,6 +60,14 @@ public class L2NormFunction extends GenericUDF {
 
         Object vector = arguments[0].get();
         List<?> vectorList = vectorOI.getList(vector);
+
+        if (vectorList != null && vectorElementOI != null) {
+            List<Object> javaList = new ArrayList<>(vectorList.size());
+            for (Object o : vectorList) {
+                javaList.add(o != null ? vectorElementOI.getPrimitiveJavaObject(o) : null);
+            }
+            vectorList = javaList;
+        }
 
         try {
             return evaluate(vectorList);

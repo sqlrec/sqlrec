@@ -5,6 +5,7 @@ import com.sqlrec.connectors.redis.handler.RedisHandler;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.functions.AsyncTableFunction;
 import org.apache.flink.table.functions.FunctionContext;
 
@@ -17,7 +18,7 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
     private static final long serialVersionUID = 1L;
 
     private RedisConfig redisConfig;
-    private ResolvedSchema tableSchema;
+    private transient ResolvedSchema tableSchema;
     private transient RedisHandler redisHandler;
 
     public RedisLookupTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
@@ -52,7 +53,12 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
                     for (Object[] objects : result) {
                         GenericRowData rowData = new GenericRowData(redisConfig.fieldSchemas.size());
                         for (int i = 0; i < redisConfig.fieldSchemas.size(); i++) {
-                            rowData.setField(i, objects[i]);
+                            Object val = objects[i];
+                            if (val instanceof String) {
+                                rowData.setField(i, StringData.fromString((String) val));
+                            } else {
+                                rowData.setField(i, val);
+                            }
                         }
                         rows.add(rowData);
                     }

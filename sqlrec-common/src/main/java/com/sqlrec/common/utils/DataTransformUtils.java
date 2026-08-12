@@ -72,16 +72,13 @@ public class DataTransformUtils {
     public static List<Double> l2NormalizeList(List<?> list) {
         double sum = 0;
         for (Object o : list) {
-            if (!(o instanceof Number)) {
-                throw new IllegalArgumentException("list contains non-number element");
-            }
-            sum += Math.pow(((Number) o).doubleValue(), 2);
+            sum += Math.pow(toDouble(o), 2);
         }
 
         if (sum <= 0) {
             List<Double> result = new ArrayList<>(list.size());
             for (Object o : list) {
-                result.add(((Number) o).doubleValue());
+                result.add(toDouble(o));
             }
             return result;
         }
@@ -89,7 +86,7 @@ public class DataTransformUtils {
         double norm = Math.sqrt(sum);
         List<Double> result = new ArrayList<>(list.size());
         for (Object o : list) {
-            result.add(((Number) o).doubleValue() / norm);
+            result.add(toDouble(o) / norm);
         }
         return result;
     }
@@ -103,12 +100,23 @@ public class DataTransformUtils {
         }
         double ip = 0.0;
         for (int i = 0; i < list1.size(); i++) {
-            if (!(list1.get(i) instanceof Number) || !(list2.get(i) instanceof Number)) {
-                throw new IllegalArgumentException("vectors must contain numbers only");
-            }
-            ip += ((Number) list1.get(i)).doubleValue() * ((Number) list2.get(i)).doubleValue();
+            ip += toDouble(list1.get(i)) * toDouble(list2.get(i));
         }
         return ip;
+    }
+
+    /**
+     * Converts an object to double, handling Number, Hadoop Writable, and String types.
+     */
+    private static double toDouble(Object o) {
+        if (o == null) {
+            throw new IllegalArgumentException("element is null");
+        }
+        if (o instanceof Number) {
+            return ((Number) o).doubleValue();
+        }
+        // Handle Hadoop Writable types (e.g. DoubleWritable) and other numeric types
+        return Double.parseDouble(o.toString());
     }
 
     public static List<Map<String, Object>> convertToMapList(List<Object[]> results, List<RelDataTypeField> fields) {

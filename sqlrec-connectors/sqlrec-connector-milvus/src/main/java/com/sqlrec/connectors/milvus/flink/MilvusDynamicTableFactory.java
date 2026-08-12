@@ -54,6 +54,14 @@ public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
 
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
-        return new HashSet<>();
+        final Set<ConfigOption<?>> options = new HashSet<>();
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.BATCH_SIZE));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.FLUSH_INTERVAL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_IDLE_PER_KEY));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_TOTAL_PER_KEY));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_TOTAL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_BLOCK_WAIT_DURATION));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MIN_EVICTABLE_IDLE_DURATION));
+        return options;
     }
 }

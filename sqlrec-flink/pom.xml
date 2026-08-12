@@ -35,6 +35,23 @@
             <groupId>org.sqlrec</groupId>
             <artifactId>sqlrec-udf</artifactId>
             <version>${sqlrec.version}</version>
+            <exclusions>
+                <!-- hive-exec is only used by 4 Hive UDFs (UuidFunction, RandomVecFunction,
+                     IpFunction, L2NormFunction) that extend GenericUDF. These are never
+                     loaded in the Flink runtime. Excluding hive-exec removes ~30MB+ of
+                     transitive deps: groovy-all, hadoop-yarn-server-*, zookeeper, curator,
+                     jetty, jersey, kerby, ant, ivy, calcite-druid, etc. -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-exec</artifactId>
+                </exclusion>
+                <!-- ejml-all is only used by L2NormFunction (a Hive UDF that extends
+                     GenericUDF). Not needed in Flink. -->
+                <exclusion>
+                    <groupId>org.ejml</groupId>
+                    <artifactId>ejml-all</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Shared runtime utils used by connectors and UDFs -->
@@ -42,18 +59,416 @@
             <groupId>org.sqlrec</groupId>
             <artifactId>sqlrec-common</artifactId>
             <version>${sqlrec.version}</version>
+            <exclusions>
+                <!-- hive-metastore pulls in many heavy transitive deps that are not needed
+                     at runtime. We only need the Thrift API POJO classes (Table, FieldSchema,
+                     StorageDescriptor) for the HmsTableFactory interface. The deps below are
+                     for running a full Hive Metastore server, which is not what this jar does. -->
+                <!-- hive-serde: pulls in arrow, avro, parquet, flatbuffers, snappy, opencsv -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-serde</artifactId>
+                </exclusion>
+                <!-- hbase-client: pulls in all HBase deps (~10MB) -->
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-client</artifactId>
+                </exclusion>
+                <!-- tephra: pulls in guice, twill, fastutil -->
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-hbase-compat-1.0</artifactId>
+                </exclusion>
+                <!-- derby: embedded database (~4MB) -->
+                <exclusion>
+                    <groupId>org.apache.derby</groupId>
+                    <artifactId>derby</artifactId>
+                </exclusion>
+                <!-- datanucleus: JDO persistence layer -->
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-api-jdo</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-rdbms</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-core</artifactId>
+                </exclusion>
+                <!-- sqlline: SQL line CLI tool -->
+                <exclusion>
+                    <groupId>sqlline</groupId>
+                    <artifactId>sqlline</artifactId>
+                </exclusion>
+                <!-- orc-core: ORC file format reader (pulls in hadoop-hdfs) -->
+                <exclusion>
+                    <groupId>org.apache.orc</groupId>
+                    <artifactId>orc-core</artifactId>
+                </exclusion>
+                <!-- dropwizard metrics: not needed in Flink (Flink has its own metrics) -->
+                <exclusion>
+                    <groupId>io.dropwizard.metrics</groupId>
+                    <artifactId>metrics-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.dropwizard.metrics</groupId>
+                    <artifactId>metrics-jvm</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.dropwizard.metrics</groupId>
+                    <artifactId>metrics-json</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <!-- connection pools: not needed (no DB connections in Flink connectors) -->
+                <exclusion>
+                    <groupId>com.jolbox</groupId>
+                    <artifactId>bonecp</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.zaxxer</groupId>
+                    <artifactId>HikariCP</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>commons-dbcp</groupId>
+                    <artifactId>commons-dbcp</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>commons-pool</groupId>
+                    <artifactId>commons-pool</artifactId>
+                </exclusion>
+                <!-- hive-storage-api: storage format abstractions not needed at runtime -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-storage-api</artifactId>
+                </exclusion>
+                <!-- javolution: XML/real-time parsing library, not needed -->
+                <exclusion>
+                    <groupId>javolution</groupId>
+                    <artifactId>javolution</artifactId>
+                </exclusion>
+                <!-- hive-shims: pulls in the entire Hadoop YARN server stack
+                     (resourcemanager, applicationhistoryservice, web-proxy, etc.).
+                     Not needed - we only use Thrift API POJOs. ~20MB savings. -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-shims</artifactId>
+                </exclusion>
+                <!-- hive-upgrade-acid: ACID transaction support, not needed -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-upgrade-acid</artifactId>
+                </exclusion>
+                <!-- log4j 2.x: provided by the Flink runtime -->
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-1.2-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-api</artifactId>
+                </exclusion>
+                <!-- JDO/JPA: persistence layer, not needed for Thrift API POJOs -->
+                <exclusion>
+                    <groupId>javax.jdo</groupId>
+                    <artifactId>jdo-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>javax.jdo</artifactId>
+                </exclusion>
+                <!-- libfb303: Facebook Base library, not needed -->
+                <exclusion>
+                    <groupId>org.apache.thrift</groupId>
+                    <artifactId>libfb303</artifactId>
+                </exclusion>
+                <!-- commons-cli: CLI parsing, not needed -->
+                <exclusion>
+                    <groupId>commons-cli</groupId>
+                    <artifactId>commons-cli</artifactId>
+                </exclusion>
+                <!-- antlr-runtime: parser runtime, not needed -->
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr-runtime</artifactId>
+                </exclusion>
+                <!-- commons-lang 2.x: legacy, commons-lang3 is already included -->
+                <exclusion>
+                    <groupId>commons-lang</groupId>
+                    <artifactId>commons-lang</artifactId>
+                </exclusion>
+                <!-- micrometer: Flink provides its own metrics system -->
+                <exclusion>
+                    <groupId>io.micrometer</groupId>
+                    <artifactId>micrometer-core</artifactId>
+                </exclusion>
+                <!-- calcite-core transitive deps not needed at runtime -->
+                <!-- JTS: geospatial library, not needed in a recommendation system -->
+                <exclusion>
+                    <groupId>org.locationtech.jts</groupId>
+                    <artifactId>jts-core</artifactId>
+                </exclusion>
+                <!-- jts-io-common groupId is org.locationtech.jts.io (not org.locationtech.jts) -->
+                <exclusion>
+                    <groupId>org.locationtech.jts.io</groupId>
+                    <artifactId>jts-io-common</artifactId>
+                </exclusion>
+                <!-- proj4j: coordinate projection, not needed -->
+                <exclusion>
+                    <groupId>org.locationtech.proj4j</groupId>
+                    <artifactId>proj4j</artifactId>
+                </exclusion>
+                <!-- uzaygezen: bitmap indexing, not needed -->
+                <exclusion>
+                    <groupId>com.google.uzaygezen</groupId>
+                    <artifactId>uzaygezen-core</artifactId>
+                </exclusion>
+                <!-- sketches-core: data sketches, not needed -->
+                <exclusion>
+                    <groupId>com.yahoo.datasketches</groupId>
+                    <artifactId>sketches-core</artifactId>
+                </exclusion>
+                <!-- aggdesigner-algorithm: aggregate designer, not needed -->
+                <exclusion>
+                    <groupId>net.hydromatic</groupId>
+                    <artifactId>aggdesigner-algorithm</artifactId>
+                </exclusion>
+                <!-- commons-dbcp2: connection pool, not needed -->
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-dbcp2</artifactId>
+                </exclusion>
+                <!-- avatica http components: not needed (we use calcite-core, not avatica server) -->
+                <exclusion>
+                    <groupId>org.apache.httpcomponents.client5</groupId>
+                    <artifactId>httpclient5</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents.core5</groupId>
+                    <artifactId>httpcore5</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents.core5</groupId>
+                    <artifactId>httpcore5-h2</artifactId>
+                </exclusion>
+                <!-- json-path: JSON path query, not needed at runtime -->
+                <exclusion>
+                    <groupId>com.jayway.jsonpath</groupId>
+                    <artifactId>json-path</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.calcite</groupId>
+                    <artifactId>calcite-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.5.2</version>
+            <version>5.10.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Flink test infrastructure for MiniCluster-based integration tests -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-planner_2.12</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-clients</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- hive-exec: test scope only (not in shaded jar).
+             Needed by IpFunction/L2NormFunction/RandomVecFunction/UuidFunction
+             which extend Hive's GenericUDF/UDF. In production, the Flink
+             cluster provides Hive support. -->
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-exec</artifactId>
+            <version>${hive.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.codehaus.groovy</groupId>
+                    <artifactId>groovy-all</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-server-applicationhistoryservice</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.calcite</groupId>
+                    <artifactId>calcite-druid</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.calcite.avatica</groupId>
+                    <artifactId>avatica</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.curator</groupId>
+                    <artifactId>curator-framework</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.groovy</groupId>
+                    <artifactId>groovy</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ivy</groupId>
+                    <artifactId>ivy</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ant</groupId>
+                    <artifactId>ant</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.ejml</groupId>
+            <artifactId>ejml-all</artifactId>
+            <version>0.45.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- HiveCatalog + HiveModule support for testing Hive UDFs -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-hive_2.12</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Embedded Derby for in-memory Hive Metastore -->
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+            <version>10.14.2.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- commons-io: needed by flink-test-utils (NullPrintStream) -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.16.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Hadoop client: needed by HiveCatalog (JobConf, Configuration, etc.) -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>3.1.0</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-core-asl</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Datanucleus/JDO: needed by embedded Hive Metastore (Derby backend) -->
+        <dependency>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-core</artifactId>
+            <version>4.1.17</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-rdbms</artifactId>
+            <version>4.1.19</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-api-jdo</artifactId>
+            <version>4.2.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>javax.jdo</artifactId>
+            <version>3.2.0-m3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                    </argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
