@@ -23,17 +23,83 @@
             <artifactId>sqlrec-core</artifactId>
             <version>${sqlrec.version}</version>
             <exclusions>
+                <!-- Heavy unused deps from hive-exec / hive-metastore transitives.
+                     Only deps confirmed unused at runtime AND >2MB are listed here.
+                     Smaller transitives are automatically removed by excluding their parents. -->
                 <exclusion>
-                    <artifactId>hbase-client</artifactId>
                     <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-client</artifactId>
                 </exclusion>
                 <exclusion>
-                    <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
                 </exclusion>
                 <exclusion>
-                    <artifactId>log4j</artifactId>
                     <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.groovy</groupId>
+                    <artifactId>groovy-all</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.groovy</groupId>
+                    <artifactId>groovy</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.calcite.avatica</groupId>
+                    <artifactId>avatica</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ivy</groupId>
+                    <artifactId>ivy</artifactId>
+                </exclusion>
+                <!-- hadoop-yarn-registry pulls in hadoop-auth + all kerby deps (~3MB) -->
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-registry</artifactId>
+                </exclusion>
+                <!-- hive-shims pulls in hadoop-yarn-server-* stack (~20MB) -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-shims</artifactId>
+                </exclusion>
+                <!-- tephra pulls in fastutil (10K+ classes) + guice + twill (~15MB) -->
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>co.cask.tephra</groupId>
+                    <artifactId>tephra-hbase-compat-1.0</artifactId>
+                </exclusion>
+                <!-- dropwizard-metrics-hadoop pulls in hadoop-common 2.6.0 (~5MB) -->
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <!-- hadoop-hdfs 2.2.0 from orc-core, not needed for HMS client -->
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-hdfs</artifactId>
+                </exclusion>
+                <!-- avro pulls in snappy, xz, paranamer, jackson 1.x (~2MB) -->
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro</artifactId>
+                </exclusion>
+                <!-- arrow pulls in flatbuffers (~1.5MB) -->
+                <exclusion>
+                    <groupId>org.apache.arrow</groupId>
+                    <artifactId>arrow-vector</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-hadoop-bundle</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -152,6 +218,27 @@
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>**/Log4j2Plugins.dat</exclude>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>**/*.proto</exclude>
+                                        <exclude>META-INF/versions/**</exclude>
+                                        <exclude>about.html</exclude>
+                                        <exclude>plugin/**</exclude>
+                                    </excludes>
+                                </filter>
+                                <!-- Remove classes bundled inside hive-exec fat jar
+                                     that are not used at runtime -->
+                                <filter>
+                                    <artifact>org.apache.hive:hive-exec</artifact>
+                                    <excludes>
+                                        <exclude>avro/shaded/**</exclude>
+                                        <exclude>javolution/**</exclude>
+                                        <exclude>jodd/**</exclude>
+                                        <exclude>groovyjarjarantlr/**</exclude>
+                                        <exclude>groovyjarjarasm/**</exclude>
+                                        <exclude>groovyjarjarcommonscli/**</exclude>
+                                        <exclude>groovyjarjarmultiline/**</exclude>
+                                        <exclude>groovyjarjar/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
