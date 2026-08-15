@@ -42,7 +42,7 @@ public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1,
 -- 获取用户已曝光的物品
 CACHE TABLE exposured_item AS
 SELECT item_id
-FROM user_info JOIN user_exposure_item ON user_id = user_info.id;
+FROM user_info JOIN exposure_item ON user_id = user_info.id;
 
 -- 从召回结果中排除已曝光物品
 CACHE TABLE dedup_recall AS

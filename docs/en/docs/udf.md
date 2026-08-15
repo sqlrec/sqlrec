@@ -42,7 +42,7 @@ public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1,
 -- Get items already exposed to user
 CACHE TABLE exposured_item AS
 SELECT item_id
-FROM user_info JOIN user_exposure_item ON user_id = user_info.id;
+FROM user_info JOIN exposure_item ON user_id = user_info.id;
 
 -- Exclude exposed items from recall results
 CACHE TABLE dedup_recall AS

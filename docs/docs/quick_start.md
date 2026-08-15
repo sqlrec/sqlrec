@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS `category1_hot_item` (
   'url' = 'redis://192.168.49.2:32379/0'
 );
 
-CREATE TABLE IF NOT EXISTS `user_exposure_item` (
+CREATE TABLE IF NOT EXISTS `exposure_item` (
   `user_id` BIGINT,
   `item_id` BIGINT,
   `bhv_time` BIGINT,
@@ -115,7 +115,7 @@ define input table user_info(id bigint);
 cache table exposured_item as
 select item_id
 from
-user_info join user_exposure_item on user_id = user_info.id;
+user_info join exposure_item on user_id = user_info.id;
 
 -- query user interest category1
 cache table cur_user_interest_category1 as
@@ -159,6 +159,11 @@ request_meta.req_time as req_time,
 request_meta.req_id as req_id
 from
 request_meta join final_recall_item on 1=1;
+
+-- write exposed item to exposure table for deduplication
+insert into exposure_item
+select user_id, item_id, req_time
+from final_rec_data;
 
 return final_rec_data;
 ```
