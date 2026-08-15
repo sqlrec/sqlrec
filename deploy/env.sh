@@ -1,5 +1,4 @@
-export SQLREC_VERSION="${SQLREC_VERSION:-0.1.8}"
-export SQLREC_JAR_NAME="sqlrec-frontend-${SQLREC_VERSION}.jar"
+export SQLREC_VERSION="${SQLREC_VERSION:-0.1.9}"
 
 export SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 export BASE_DIR=${BASE_DIR:-${SCRIPT_DIR}}
@@ -54,7 +53,7 @@ export HMS_POSTGRESQL_USER="${HMS_POSTGRESQL_USER:-metastore}"
 export HMS_POSTGRESQL_PASSWORD="${HMS_POSTGRESQL_PASSWORD:-abc123456}"
 export HMS_PORT="${HMS_PORT:-32083}"
 
-export KYUUBI_VERSION="${KYUUBI_VERSION:-1.9.0}"
+export KYUUBI_VERSION="${KYUUBI_VERSION:-1.9.0-spark}"
 export KYUUBI_PORT="${KYUUBI_PORT:-32009}"
 
 export FLINK_VERSION="${FLINK_VERSION:-1.19}"
@@ -160,6 +159,9 @@ export FLINK_HADOOP_JAR_URL=https://repo.maven.apache.org/maven2/org/apache/flin
 export FLINK_HADOOP_JAR_NAME=flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
 export FLINK_SQL_CONNECTOR_HIVE_JAR_URL=https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-hive-2.3.9_2.12/1.19.0/flink-sql-connector-hive-2.3.9_2.12-1.19.0.jar
 export FLINK_SQL_CONNECTOR_HIVE_JAR_NAME=flink-sql-connector-hive-2.3.9_2.12-1.19.0.jar
+
+export SQLREC_FLINK_JAR_URL="https://github.com/sqlrec/sqlrec/releases/download/v${SQLREC_VERSION}/sqlrec-flink-${SQLREC_VERSION}.jar"
+export SQLREC_FLINK_JAR_NAME=sqlrec-flink-${SQLREC_VERSION}.jar
 
 export POSTGRESQL_CONNECTOR_JAR_URL=https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar
 export POSTGRESQL_CONNECTOR_JAR_NAME=postgresql-42.7.8.jar

@@ -16,6 +16,7 @@ with (
 train model rank_model checkpoint='v1' on ml_sample
 with (
 'NAMESPACE'='sqlrec',
+'pod_cpu_cores'='4',
 'pod_memory'='8Gi',
 'batch_size'='1024'
 );
@@ -70,6 +71,7 @@ with (
 train model recall_model checkpoint='v1' on ml_recall_sample
 with (
 'NAMESPACE'='sqlrec',
+'pod_cpu_cores'='4',
 'pod_memory'='8Gi',
 'batch_size'='1024'
 );

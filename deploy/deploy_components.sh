@@ -22,8 +22,6 @@ fi
 envsubst < ${dir}/pv.yaml > ${dir}/pv.yaml.tmp
 kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
 
-bash ${dir}/sqlrec/copy_jar.sh
-
 # juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
 cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
