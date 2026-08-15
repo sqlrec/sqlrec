@@ -13,18 +13,12 @@ cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 hadoop fs -mkdir -p /spark/upload
 hadoop fs -mkdir -p /etc
 echo "supergroup:0:hdfs,root,${USER}" > groups
-hadoop fs -put groups /etc
+hadoop fs -put -f groups /etc
 rm groups
 sed -i 's/<!--//; s/-->//' ${CONF_DIR}/core-site.xml
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 
-if kubectl get configmap core-site -n "${NAMESPACE}"; then
-  kubectl delete configmap core-site -n "${NAMESPACE}"
-fi
-kubectl create configmap core-site --from-file="${CONF_DIR}/core-site.xml" -n "${NAMESPACE}"
+kubectl create configmap core-site --from-file="${CONF_DIR}/core-site.xml" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-if kubectl get configmap hdfs-site -n "${NAMESPACE}"; then
-  kubectl delete configmap hdfs-site -n "${NAMESPACE}"
-fi
-kubectl create configmap hdfs-site --from-file="${CONF_DIR}/hdfs-site.xml" -n "${NAMESPACE}"
+kubectl create configmap hdfs-site --from-file="${CONF_DIR}/hdfs-site.xml" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -

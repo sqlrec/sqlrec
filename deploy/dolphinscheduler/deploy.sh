@@ -12,22 +12,16 @@ bash ${dir}/../postgresql/deploy.sh ${DOLPHINSCHEDULER_DB} ${DOLPHINSCHEDULER_PO
 envsubst < ${dir}/dolphinscheduler-init.yaml > ${dir}/dolphinscheduler-init.yaml.tmp
 
 kubectl apply -f "${dir}/dolphinscheduler-init.yaml.tmp" -n "${NAMESPACE}"
-kubectl wait --for=condition=complete job/dolphinscheduler-init --timeout=3600s -n "${NAMESPACE}"
+wait_for_job dolphinscheduler-init "${NAMESPACE}" "${DEPLOY_TIMEOUT}"
 
-if kubectl get configmap dolphinscheduler-plugins-config -n "${NAMESPACE}"; then
-  kubectl delete configmap dolphinscheduler-plugins-config -n "${NAMESPACE}"
-fi
-kubectl create configmap dolphinscheduler-plugins-config --from-file="${dir}/plugins_config" -n "${NAMESPACE}"
+kubectl create configmap dolphinscheduler-plugins-config --from-file="${dir}/plugins_config" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-if kubectl get configmap dolphinscheduler-env -n "${NAMESPACE}"; then
-  kubectl delete configmap dolphinscheduler-env -n "${NAMESPACE}"
-fi
-envsubst < ${dir}/dolphinscheduler_env.sh.template > ${dir}/dolphinscheduler_env.sh
-kubectl create configmap dolphinscheduler-env --from-file="${dir}/dolphinscheduler_env.sh" -n "${NAMESPACE}"
+envsubst < ${dir}/dolphinscheduler_env.sh.template > ${CONF_DIR}/dolphinscheduler_env.sh
+kubectl create configmap dolphinscheduler-env --from-file="${CONF_DIR}/dolphinscheduler_env.sh" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 envsubst < ${dir}/dolphinscheduler-install-plugins.yaml > ${dir}/dolphinscheduler-install-plugins.yaml.tmp
 kubectl apply -f "${dir}/dolphinscheduler-install-plugins.yaml.tmp" -n "${NAMESPACE}"
-kubectl wait --for=condition=complete job/dolphinscheduler-install-plugins --timeout=3600s -n "${NAMESPACE}"
+wait_for_job dolphinscheduler-install-plugins "${NAMESPACE}" "${DEPLOY_TIMEOUT}"
 
 envsubst < ${dir}/dolphinscheduler.yaml > ${dir}/dolphinscheduler.yaml.tmp
 kubectl apply -f "${dir}/dolphinscheduler.yaml.tmp" -n "${NAMESPACE}"

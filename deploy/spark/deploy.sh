@@ -11,7 +11,4 @@ if ! kubectl get serviceaccount spark -n "${NAMESPACE}" >/dev/null 2>&1; then
 fi
 
 envsubst < ${dir}/spark-defaults.conf.template > ${CONF_DIR}/spark-defaults.conf
-if kubectl get configmap spark-defaults -n "${NAMESPACE}" >/dev/null 2>&1; then
-  kubectl delete configmap spark-defaults -n "${NAMESPACE}"
-fi
-kubectl create configmap spark-defaults --from-file="${CONF_DIR}/spark-defaults.conf" -n "${NAMESPACE}"
+kubectl create configmap spark-defaults --from-file="${CONF_DIR}/spark-defaults.conf" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -

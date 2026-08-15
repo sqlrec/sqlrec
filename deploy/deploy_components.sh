@@ -24,6 +24,10 @@ kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
 
 bash ${dir}/sqlrec/copy_jar.sh
 
+# juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
+cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
+cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
+
 bash ${dir}/minio/deploy.sh
 bash ${dir}/juicefs/deploy.sh
 bash ${dir}/hadoop/deploy.sh
@@ -45,9 +49,6 @@ bash ${dir}/milvus/deploy.sh
 #bash ${dir}/growthbook/deploy.sh
 #bash ${dir}/prometheus/deploy.sh
 #bash ${dir}/jaeger/deploy.sh
-
-cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
-cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/

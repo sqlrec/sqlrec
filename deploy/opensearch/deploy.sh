@@ -14,16 +14,14 @@ helm upgrade --install opensearch opensearch/opensearch \
   --namespace ${NAMESPACE} \
   --set image.tag=${OPENSEARCH_VERSION} \
   --set service.nodePort=${OPENSEARCH_HTTP_PORT} \
-  -f ${dir}/opensearch.yaml.rendered
-
-# Wait for OpenSearch to be ready
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=opensearch --timeout=600s -n ${NAMESPACE}
+  -f ${dir}/opensearch.yaml.rendered \
+  --wait \
+  --timeout ${DEPLOY_TIMEOUT}s
 
 # Deploy OpenSearch Dashboards
 envsubst < ${dir}/opensearch-dashboards.yaml > ${dir}/opensearch-dashboards.yaml.rendered
 helm upgrade --install opensearch-dashboards opensearch/opensearch-dashboards \
   --namespace ${NAMESPACE} \
-  -f ${dir}/opensearch-dashboards.yaml.rendered
-
-# Wait for OpenSearch Dashboards to be ready
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=opensearch-dashboards --timeout=600s -n ${NAMESPACE}
+  -f ${dir}/opensearch-dashboards.yaml.rendered \
+  --wait \
+  --timeout ${DEPLOY_TIMEOUT}s

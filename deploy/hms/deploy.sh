@@ -12,21 +12,15 @@ envsubst < ${dir}/hms-init.yaml > ${dir}/hms-init.yaml.tmp
 envsubst < ${dir}/hive-site-hms.template > ${CONF_DIR}/hive-site-hms.xml
 envsubst < ${dir}/hive-site.template > ${CONF_DIR}/hive-site.xml
 
-if kubectl get configmap hive-site-hms -n "${NAMESPACE}"; then
-  kubectl delete configmap hive-site-hms -n "${NAMESPACE}"
-fi
-kubectl create configmap hive-site-hms --from-file="${CONF_DIR}/hive-site-hms.xml" -n "${NAMESPACE}"
+kubectl create configmap hive-site-hms --from-file="${CONF_DIR}/hive-site-hms.xml" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-if kubectl get configmap hive-site -n "${NAMESPACE}"; then
-  kubectl delete configmap hive-site -n "${NAMESPACE}"
-fi
-kubectl create configmap hive-site --from-file="${CONF_DIR}/hive-site.xml" -n "${NAMESPACE}"
+kubectl create configmap hive-site --from-file="${CONF_DIR}/hive-site.xml" -n "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-if kubectl get job hms-init -n "${NAMESPACE}"; then
-  echo "hms-init job already exists, skip"
-else
+# re-run the init job when it does not exist or did not complete successfully
+if ! kubectl get job hms-init -n "${NAMESPACE}" >/dev/null 2>&1 || ! wait_for_job hms-init "${NAMESPACE}" 60; then
+  kubectl delete job hms-init -n "${NAMESPACE}" --ignore-not-found
   kubectl apply -f "${dir}/hms-init.yaml.tmp" -n "${NAMESPACE}"
-  kubectl wait --for=condition=complete job/hms-init --timeout=3600s -n "${NAMESPACE}"
+  wait_for_job hms-init "${NAMESPACE}" "${DEPLOY_TIMEOUT}"
 fi
 
 kubectl apply -f "${dir}/hms.yaml.tmp" -n "${NAMESPACE}"

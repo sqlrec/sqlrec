@@ -5,6 +5,8 @@ source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 source ${dir}/../env.sh
 
+export DOLPHINSCHEDULER_DB="dolphinscheduler"
+
 envsubst < ${dir}/dolphinscheduler.yaml > ${dir}/dolphinscheduler.yaml.tmp
 kubectl delete -f ${dir}/dolphinscheduler.yaml.tmp -n ${NAMESPACE} --ignore-not-found
 

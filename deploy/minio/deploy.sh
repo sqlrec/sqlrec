@@ -17,5 +17,5 @@ helm upgrade --install minio \
  --set consoleService.nodePort=${MINIO_CONSOLE_PORT} \
  --set buckets[0].name=bucket1,buckets[0].policy=none,buckets[0].purge=false \
  --wait \
- --timeout 3600s \
+ --timeout ${DEPLOY_TIMEOUT}s \
  minio/minio

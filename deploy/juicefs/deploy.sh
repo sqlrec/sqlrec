@@ -12,7 +12,9 @@ helm upgrade --install juicefs-valkey valkey/valkey \
   --set service.nodePort=${JUICEFS_REDIS_PORT} \
   --set dataStorage.enabled=true \
   --set dataStorage.requestedSize=128Gi \
-  --set valkeyConfig="appendonly yes"
+  --set valkeyConfig="appendonly yes" \
+  --wait \
+  --timeout ${DEPLOY_TIMEOUT}s
 
 juicefs format \
     --no-update \

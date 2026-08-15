@@ -8,6 +8,6 @@ source ${dir}/../env.sh
 envsubst < ${dir}/copy_jar_job.yaml > ${dir}/copy_jar_job.yaml.tmp
 kubectl apply -f ${dir}/copy_jar_job.yaml.tmp -n "${NAMESPACE}"
 
-kubectl wait --for=condition=complete job/sqlrec-copy-jar -n "${NAMESPACE}" --timeout=3600s
+wait_for_job sqlrec-copy-jar "${NAMESPACE}" "${DEPLOY_TIMEOUT}"
 
 kubectl delete job sqlrec-copy-jar -n "${NAMESPACE}" 2>/dev/null || true

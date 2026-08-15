@@ -12,4 +12,4 @@ export MONGODB_PASSWORD=$4
 
 envsubst < ${dir}/mongo.yaml > ${dir}/mongo.yaml.${MONGODB_NAME}
 kubectl apply -f ${dir}/mongo.yaml.${MONGODB_NAME} -n ${NAMESPACE}
-kubectl wait --for=condition=Ready pod -l app=${MONGODB_NAME} --timeout=3600s -n ${NAMESPACE}
+kubectl wait --for=condition=Available deployment/${MONGODB_NAME} --timeout=${DEPLOY_TIMEOUT}s -n ${NAMESPACE}
