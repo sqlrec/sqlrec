@@ -190,12 +190,12 @@ public class ProxyAllBindable extends BindableInterface {
     }
 
     @Override
-    public String getDependencyJavaFuncName() {
+    public Set<String> getDependencyJavaFuncName() {
         return delegate.getDependencyJavaFuncName();
     }
 
     @Override
-    public String getDependencySqlFuncName() {
+    public Set<String> getDependencySqlFuncName() {
         return delegate.getDependencySqlFuncName();
     }
 

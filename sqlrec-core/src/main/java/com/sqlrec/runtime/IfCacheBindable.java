@@ -16,8 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -228,5 +230,32 @@ public class IfCacheBindable extends BindableInterface {
 
     public List<RelDataTypeField> getCacheTableDataFields() {
         return thenClause.getCacheTableDataFields();
+    }
+
+    @Override
+    public Set<String> getDependencySqlFuncName() {
+        Set<String> dependencySqlFuncNames = new HashSet<>(thenClause.getDependencySqlFuncName());
+        if (elseClause != null) {
+            dependencySqlFuncNames.addAll(elseClause.getDependencySqlFuncName());
+        }
+        return dependencySqlFuncNames;
+    }
+
+    @Override
+    public Set<String> getDependencyJavaFuncName() {
+        Set<String> dependencyJavaFuncNames = new HashSet<>(thenClause.getDependencyJavaFuncName());
+        if (elseClause != null) {
+            dependencyJavaFuncNames.addAll(elseClause.getDependencyJavaFuncName());
+        }
+        return dependencyJavaFuncNames;
+    }
+
+    @Override
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        Map<String, String> dependSqlFunctionMap = new HashMap<>(thenClause.getAllDependSqlFunctionMap());
+        if (elseClause != null) {
+            dependSqlFunctionMap.putAll(elseClause.getAllDependSqlFunctionMap());
+        }
+        return dependSqlFunctionMap;
     }
 }

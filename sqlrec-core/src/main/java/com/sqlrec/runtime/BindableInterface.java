@@ -52,12 +52,12 @@ public abstract class BindableInterface {
         return ignoreException;
     }
 
-    public String getDependencyJavaFuncName() {
-        return null;
+    public Set<String> getDependencyJavaFuncName() {
+        return new HashSet<>();
     }
 
-    public String getDependencySqlFuncName() {
-        return null;
+    public Set<String> getDependencySqlFuncName() {
+        return new HashSet<>();
     }
 
     public Map<String, String> getAllDependSqlFunctionMap() {

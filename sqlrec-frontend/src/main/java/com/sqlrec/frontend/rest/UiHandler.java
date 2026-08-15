@@ -292,7 +292,7 @@ public class UiHandler {
             node.put("type", getBindableType(bindable));
             node.put("label", stripFunNamePrefix(originalName, funNamePrefix));
             node.put("sql", bindable.getSql());
-            node.put("dependencyFunction", bindable.getDependencySqlFuncName());
+            node.put("dependencyFunction", String.join(",", bindable.getDependencySqlFuncName()));
             node.put("avgExecTimeMs", getNodeAvgExecTime(originalName));
             node.put("avgDataCount", getNodeAvgDataCount(originalName));
             node.put("logicalPlan", bindable.getLogicalPlan());

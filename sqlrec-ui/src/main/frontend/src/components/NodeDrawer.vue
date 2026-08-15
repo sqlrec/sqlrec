@@ -17,9 +17,16 @@
                 <td class="prop-key">Avg Data Count</td>
                 <td class="prop-val">{{ formatMetric(nodeData?.avgDataCount, '') }}</td>
               </tr>
-              <tr v-if="nodeData?.type === 'function' && nodeData?.dependencyFunction">
+              <tr v-if="nodeData?.type === 'function' && dependencyFunctions.length">
                 <td class="prop-key">Call Function</td>
-                <td class="prop-val link" @click="onNavigateFunction">{{ nodeData.dependencyFunction }}</td>
+                <td class="prop-val">
+                  <span
+                    v-for="fn in dependencyFunctions"
+                    :key="fn"
+                    class="function-link"
+                    @click="onNavigateFunction(fn)"
+                  >{{ fn }}</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -82,12 +89,17 @@ const formatMetric = (value, unit) => {
   return unit ? `${formatted} ${unit}` : `${formatted}`
 }
 
+const dependencyFunctions = computed(() => {
+  if (!props.nodeData?.dependencyFunction) return []
+  return props.nodeData.dependencyFunction.split(',').map(s => s.trim()).filter(Boolean)
+})
+
 const close = () => {
   emit('close')
 }
 
-const onNavigateFunction = () => {
-  emit('navigate-function', props.nodeData.dependencyFunction)
+const onNavigateFunction = (functionName) => {
+  emit('navigate-function', functionName)
 }
 
 </script>
@@ -183,13 +195,15 @@ const onNavigateFunction = () => {
   word-break: break-all;
 }
 
-.prop-val.link {
+.function-link {
   color: #1890ff;
   cursor: pointer;
   text-decoration: underline;
+  margin-right: 12px;
+  display: inline-block;
 }
 
-.prop-val.link:hover {
+.function-link:hover {
   color: #40a9ff;
 }
 

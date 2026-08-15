@@ -105,8 +105,9 @@ public class CallSqlFunctionBindable extends BindableInterface {
         return tablePlaceholders.stream().map(Map.Entry::getKey).collect(Collectors.toList());
     }
 
-    public String getDependencySqlFuncName() {
-        return funName;
+    @Override
+    public Set<String> getDependencySqlFuncName() {
+        return Set.of(funName);
     }
 
     public Map<String, String> getAllDependSqlFunctionMap() {

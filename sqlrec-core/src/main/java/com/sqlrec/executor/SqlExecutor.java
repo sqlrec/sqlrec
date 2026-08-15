@@ -406,6 +406,9 @@ public class SqlExecutor {
         } else {
             db.insertSqlFunction(sqlFunction);
         }
+        // evict stale compiled bindable immediately, so next call uses the new version
+        // instead of waiting for the periodic FunctionUpdater check
+        CacheManager.invalidateAll();
     }
 
     public static void saveSqlApi(SqlCreateApi api) {

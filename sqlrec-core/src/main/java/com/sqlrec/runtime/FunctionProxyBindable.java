@@ -332,19 +332,19 @@ public class FunctionProxyBindable extends BindableInterface {
     }
 
     @Override
-    public String getDependencyJavaFuncName() {
+    public Set<String> getDependencyJavaFuncName() {
         if (delegate != null) {
             return delegate.getDependencyJavaFuncName();
         }
-        return null;
+        return new HashSet<>();
     }
 
     @Override
-    public String getDependencySqlFuncName() {
+    public Set<String> getDependencySqlFuncName() {
         if (delegate != null) {
             return delegate.getDependencySqlFuncName();
         }
-        return null;
+        return new HashSet<>();
     }
 
     @Override

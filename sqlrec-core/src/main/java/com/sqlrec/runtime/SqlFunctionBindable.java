@@ -202,8 +202,10 @@ public class SqlFunctionBindable extends BindableInterface {
     public Set<String> getDependencySqlFunctions() {
         Set<String> dependencySqlFunctions = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            if (StringUtils.isNotEmpty(bindable.getDependencySqlFuncName())) {
-                dependencySqlFunctions.add(bindable.getDependencySqlFuncName().toUpperCase());
+            for (String dependencySqlFuncName : bindable.getDependencySqlFuncName()) {
+                if (StringUtils.isNotEmpty(dependencySqlFuncName)) {
+                    dependencySqlFunctions.add(dependencySqlFuncName.toUpperCase());
+                }
             }
         }
         return dependencySqlFunctions;
@@ -212,8 +214,10 @@ public class SqlFunctionBindable extends BindableInterface {
     public Set<String> getDependencyJavaFunctions() {
         Set<String> dependencyJavaFunctions = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            if (StringUtils.isNotEmpty(bindable.getDependencyJavaFuncName())) {
-                dependencyJavaFunctions.add(bindable.getDependencyJavaFuncName());
+            for (String dependencyJavaFuncName : bindable.getDependencyJavaFuncName()) {
+                if (StringUtils.isNotEmpty(dependencyJavaFuncName)) {
+                    dependencyJavaFunctions.add(dependencyJavaFuncName);
+                }
             }
         }
         return dependencyJavaFunctions;
@@ -227,8 +231,10 @@ public class SqlFunctionBindable extends BindableInterface {
         allDependSqlFunctionMap = new HashMap<>();
 
         for (BindableInterface bindable : bindableList) {
-            String directDependencySqlFuncName = bindable.getDependencySqlFuncName();
-            if (StringUtils.isNotEmpty(directDependencySqlFuncName)) {
+            for (String directDependencySqlFuncName : bindable.getDependencySqlFuncName()) {
+                if (StringUtils.isEmpty(directDependencySqlFuncName)) {
+                    continue;
+                }
                 allDependSqlFunctionMap.put(directDependencySqlFuncName, directDependencySqlFuncName);
                 Map<String, String> aSqlFunctionAllDependSqlFunctionMap = bindable.getAllDependSqlFunctionMap();
                 for (Map.Entry<String, String> entry : aSqlFunctionAllDependSqlFunctionMap.entrySet()) {

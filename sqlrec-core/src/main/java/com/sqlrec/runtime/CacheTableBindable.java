@@ -134,8 +134,24 @@ public class CacheTableBindable extends BindableInterface {
         return bindable.isUnionSql();
     }
 
+    @Override
     public String getCacheTableName() {
         return tableName;
+    }
+
+    @Override
+    public Set<String> getDependencySqlFuncName() {
+        return bindable.getDependencySqlFuncName();
+    }
+
+    @Override
+    public Set<String> getDependencyJavaFuncName() {
+        return bindable.getDependencyJavaFuncName();
+    }
+
+    @Override
+    public Map<String, String> getAllDependSqlFunctionMap() {
+        return bindable.getAllDependSqlFunctionMap();
     }
 
     public List<RelDataTypeField> getCacheTableDataFields() {
