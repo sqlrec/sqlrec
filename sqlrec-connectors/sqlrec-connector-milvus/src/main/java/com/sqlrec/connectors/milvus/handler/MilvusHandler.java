@@ -360,6 +360,7 @@ public class MilvusHandler {
         ConnectConfig connectConfig = ConnectConfig.builder()
                 .uri(milvusConfig.url)
                 .token(milvusConfig.token)
+                .rpcDeadlineMs(milvusConfig.rpcDeadlineMs)
                 .build();
         PoolConfig poolConfig = PoolConfig.builder()
                 .maxIdlePerKey(milvusConfig.poolMaxIdlePerKey)

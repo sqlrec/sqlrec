@@ -1,11 +1,13 @@
 package com.sqlrec.flink;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.test.junit5.MiniClusterExtension;
 import org.apache.flink.types.Row;
+import org.apache.flink.types.RowKind;
 import org.apache.flink.util.CloseableIterator;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -189,6 +192,101 @@ class RedisConnectorTest {
 
         List<Row> rows = collectRows(result);
         assertEquals(2, rows.size(), "Should find 2 matching rows (excluding non-existent)");
+    }
+
+    // ---- Sink: retract stream (DELETE RowKind) drives the delete buffer ----
+
+    @Test
+    void testDeleteViaRetractStream() throws Exception {
+        // one shared env: fromChangelogStream requires the stream to come from
+        // the same StreamExecutionEnvironment as the table environment
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+
+        tEnv.executeSql(
+            "CREATE TABLE redis_retract (\n" +
+            "  user_id BIGINT,\n" +
+            "  gender STRING,\n" +
+            "  age BIGINT,\n" +
+            "  PRIMARY KEY (user_id) NOT ENFORCED\n" +
+            ") WITH (\n" +
+            "  'connector' = 'redis',\n" +
+            "  'url' = '" + REDIS_URL + "',\n" +
+            "  'data-structure' = 'json',\n" +
+            "  'batch-size' = '10',\n" +
+            "  'flush-interval' = '1'\n" +
+            ")"
+        );
+
+        long baseId = System.currentTimeMillis();
+
+        // Changelog stream: 3 inserts followed by a retract delete of baseId+1.
+        // This drives the sink's delete path (batchDelete -> DEL) end to end.
+        DataStream<Row> changelog = env.fromElements(
+            Row.ofKind(RowKind.INSERT, baseId, "F", 24L),
+            Row.ofKind(RowKind.INSERT, baseId + 1, "M", 32L),
+            Row.ofKind(RowKind.INSERT, baseId + 2, "F", 18L),
+            Row.ofKind(RowKind.DELETE, baseId + 1, "M", 32L)
+        );
+        tEnv.fromChangelogStream(changelog).executeInsert("redis_retract").await();
+
+        // All three ids were probed: only the two non-deleted should remain
+        createProbeView(tEnv, "probe_retract",
+            "  VALUES (" + baseId + "), (" + (baseId + 1) + "), (" + (baseId + 2) + ")");
+        TableResult result = tEnv.executeSql(
+            "SELECT u.id\n" +
+            "FROM probe_retract AS u\n" +
+            "JOIN redis_retract FOR SYSTEM_TIME AS OF u.proctime AS r\n" +
+            "ON u.id = r.user_id"
+        );
+
+        List<Long> foundIds = collectRows(result).stream()
+            .map(r -> (Long) r.getField(0))
+            .collect(Collectors.toList());
+        assertEquals(2, foundIds.size(), "2 of 3 ids should remain after the retract delete");
+        assertFalse(foundIds.contains(baseId + 1), "deleted id must no longer be in Redis");
+    }
+
+    // ---- Sink + Source: string codec mode with small batch-size flush ----
+
+    @Test
+    void testInsertAndLookupStringMode() throws Exception {
+        StreamTableEnvironment tEnv = createTableEnv();
+
+        tEnv.executeSql(
+            "CREATE TABLE redis_str (\n" +
+            "  user_id BIGINT,\n" +
+            "  name STRING,\n" +
+            "  PRIMARY KEY (user_id) NOT ENFORCED\n" +
+            ") WITH (\n" +
+            "  'connector' = 'redis',\n" +
+            "  'url' = '" + REDIS_URL + "',\n" +
+            "  'data-structure' = 'string',\n" +
+            "  'batch-size' = '2',\n" +
+            "  'flush-interval' = '1'\n" +
+            ")"
+        );
+
+        long baseId = System.currentTimeMillis();
+
+        tEnv.executeSql(
+            "INSERT INTO redis_str VALUES\n" +
+            "  (" + baseId + ", 'Alice'),\n" +
+            "  (" + (baseId + 1) + ", 'Bob')"
+        ).await();
+
+        createProbeView(tEnv, "probe_str",
+            "  VALUES (" + baseId + "), (" + (baseId + 1) + ")");
+        TableResult result = tEnv.executeSql(
+            "SELECT u.id, r.name\n" +
+            "FROM probe_str AS u\n" +
+            "JOIN redis_str FOR SYSTEM_TIME AS OF u.proctime AS r\n" +
+            "ON u.id = r.user_id"
+        );
+
+        List<Row> rows = collectRows(result);
+        assertEquals(2, rows.size(), "StringCodec round trip should return both rows");
     }
 
     // ---- Helpers ----

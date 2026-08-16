@@ -9,6 +9,8 @@ import io.lettuce.core.RedisFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -54,6 +56,18 @@ class RedisHandlerUnitTest {
     /** RedisFuture mock used by scan multi-keys (mget command) */
     @Mock
     RedisFuture<List<KeyValue<byte[], byte[]>>> mockMgetFuture;
+
+    /** RedisFuture mock used by lpush command (list mode) */
+    @Mock
+    RedisFuture<Long> mockLpushFuture;
+
+    /** RedisFuture mock used by ltrim command (list mode) */
+    @Mock
+    RedisFuture<String> mockLtrimFuture;
+
+    /** RedisFuture mock used by lrem command (list mode delete) */
+    @Mock
+    RedisFuture<Long> mockLremFuture;
 
     private RedisHandler handler;
 
@@ -138,26 +152,44 @@ class RedisHandlerUnitTest {
 
     @Test
     void testInsertKeyValue() throws Exception {
-        when(mockRedisClient.set(any(), any())).thenReturn(mockSetFuture);
-        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
         when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
-        when(mockExpireFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(true);
 
         handler.insert(new Object[]{"rowKey", "name_value"});
 
-        verify(mockRedisClient).set(any(), any());
-        verify(mockRedisClient).expire(any(), anyLong());
+        // insert must use a single SET ... EX command instead of SET + EXPIRE
+        verify(mockRedisClient).setex(any(), any(), anyLong());
+        verify(mockRedisClient, never()).set(any(), any());
+        verify(mockRedisClient, never()).expire(any(), anyLong());
     }
 
     @Test
     void testInsertThrowsWrappedException() throws Exception {
-        when(mockRedisClient.set(any(), any())).thenReturn(mockSetFuture);
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
         when(mockSetFuture.get(anyLong(), any(TimeUnit.class)))
                 .thenThrow(new ExecutionException(new RuntimeException("connection lost")));
 
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> handler.insert(new Object[]{"key", "val"}));
         assertTrue(ex.getMessage().contains("Failed to insert data to Redis"));
+    }
+
+    @Test
+    void testBatchInsertUsesPipelinedSetex() throws Exception {
+        // executePipelined must invoke the producer and return its futures
+        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.toCompletableFuture())
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture("OK"));
+
+        handler.batchInsert(Arrays.asList(
+                new Object[]{"key1", "v1"},
+                new Object[]{"key2", "v2"}));
+
+        // one SET ... EX per row, no EXPIRE
+        verify(mockRedisClient, times(2)).setex(any(), any(), anyLong());
+        verify(mockRedisClient, never()).expire(any(), anyLong());
     }
 
     @Test
@@ -202,5 +234,147 @@ class RedisHandlerUnitTest {
         Map<String, List<Object[]>> data = result.get();
 
         assertEquals(1, data.size());
+    }
+
+    // ------------------------------------------------------------------
+    // Key construction format: {database}:{tableName}:{primaryKey} as UTF-8 bytes
+    // ------------------------------------------------------------------
+
+    @Test
+    void testInsertKeyFormatAndTtl() throws Exception {
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
+
+        handler.insert(new Object[]{"rowKey", "name_value"});
+
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<Long> ttlCaptor = ArgumentCaptor.forClass(Long.class);
+        verify(mockRedisClient).setex(keyCaptor.capture(), any(), ttlCaptor.capture());
+        assertEquals("testdb:testtable:rowKey",
+                new String(keyCaptor.getValue(), StandardCharsets.UTF_8));
+        assertEquals(3600L, ttlCaptor.getValue());
+    }
+
+    @Test
+    void testDeleteKeyFormat() throws Exception {
+        when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        handler.delete(new Object[]{"rowKey", "ignored"});
+
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient).del(keyCaptor.capture());
+        assertEquals("testdb:testtable:rowKey",
+                new String(keyCaptor.getValue(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void testBatchInsertKeyFormat() throws Exception {
+        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+
+        handler.batchInsert(Arrays.asList(
+                new Object[]{"k1", "v1"},
+                new Object[]{"k2", "v2"}));
+
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient, times(2)).setex(keyCaptor.capture(), any(), anyLong());
+        List<String> keys = keyCaptor.getAllValues().stream()
+                .map(b -> new String(b, StandardCharsets.UTF_8))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(Arrays.asList("testdb:testtable:k1", "testdb:testtable:k2"), keys);
+    }
+
+    // ------------------------------------------------------------------
+    // List data structure mode
+    // ------------------------------------------------------------------
+
+    /** Build a handler configured for list mode (maxListSize=5, ttl=60). */
+    private RedisHandler newListModeHandler() {
+        RedisConfig config = new RedisConfig();
+        config.url = "redis://localhost:6379";
+        config.redisMode = RedisOptions.SINGLE_MODE;
+        config.dataStructure = RedisOptions.LIST_DATA_STRUCTURE;
+        config.database = "testdb";
+        config.tableName = "testtable";
+        config.primaryKeyIndex = 0;
+        config.primaryKey = "id";
+        config.fieldSchemas = Arrays.asList(
+                new FieldSchema("id", "string"),
+                new FieldSchema("name", "string"));
+        config.ttl = 60;
+        config.maxListSize = 5;
+        RedisHandler listHandler = new RedisHandler(config);
+        listHandler.open();
+        listHandler.setRedisClientForTest(mockRedisClient);
+        return listHandler;
+    }
+
+    @Test
+    void testListModeInsertIssuesLpushLtrimExpire() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(1L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        listHandler.insert(new Object[]{"rowKey", "v1"});
+
+        byte[] expectedKey = "testdb:testtable:rowKey".getBytes(StandardCharsets.UTF_8);
+        InOrder inOrder = inOrder(mockRedisClient);
+        inOrder.verify(mockRedisClient).lpush(eq(expectedKey), any(byte[][].class));
+        // ltrim keeps the newest maxListSize elements
+        inOrder.verify(mockRedisClient).ltrim(eq(expectedKey), eq(0L), eq(4L));
+        inOrder.verify(mockRedisClient).expire(eq(expectedKey), eq(60L));
+        // list mode must not use SET
+        verify(mockRedisClient, never()).setex(any(), any(), anyLong());
+    }
+
+    @Test
+    void testListModeBatchInsertAggregatesSameKey() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(2L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        listHandler.batchInsert(Arrays.asList(
+                new Object[]{"k1", "v1"},
+                new Object[]{"k1", "v2"},
+                new Object[]{"k2", "v3"}));
+
+        // 3 rows but only 2 distinct keys -> one LPUSH per key, same key aggregated
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient, times(2)).lpush(keyCaptor.capture(), any(byte[][].class));
+        List<String> keys = keyCaptor.getAllValues().stream()
+                .map(b -> new String(b, StandardCharsets.UTF_8))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(Arrays.asList("testdb:testtable:k1", "testdb:testtable:k2"), keys);
+        verify(mockRedisClient, times(2)).ltrim(any(), anyLong(), anyLong());
+        verify(mockRedisClient, times(2)).expire(any(), anyLong());
+    }
+
+    @Test
+    void testListModeDeleteUsesLrem() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.lrem(any(), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        listHandler.delete(new Object[]{"rowKey", "v1"});
+
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient).lrem(keyCaptor.capture(), any());
+        assertEquals("testdb:testtable:rowKey",
+                new String(keyCaptor.getValue(), StandardCharsets.UTF_8));
+        // list mode must not use DEL
+        verify(mockRedisClient, never()).del(any());
     }
 }

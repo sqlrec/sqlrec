@@ -13,6 +13,7 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexNode;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -85,6 +86,20 @@ public class JdbcCalciteTable extends SqlRecKvTable {
         @Override
         protected boolean removeImpl(Object[] objects) {
             return jdbcHandler.delete(objects);
+        }
+
+        @Override
+        protected boolean addAllImpl(Collection<? extends Object[]> c) {
+            return jdbcHandler.upsertBatch(c);
+        }
+
+        @Override
+        protected boolean removeAllImpl(Collection<?> c) {
+            List<Object[]> rows = new ArrayList<>(c.size());
+            for (Object o : c) {
+                rows.add((Object[]) o);
+            }
+            return jdbcHandler.deleteBatch(rows);
         }
     }
 }

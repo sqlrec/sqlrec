@@ -70,6 +70,8 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.DATA_STRUCTURE));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.TTL));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.CACHE_TTL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.BATCH_SIZE));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.FLUSH_INTERVAL));
         return options;
     }
 }

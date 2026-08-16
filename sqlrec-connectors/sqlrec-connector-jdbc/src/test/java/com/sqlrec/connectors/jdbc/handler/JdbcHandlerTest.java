@@ -180,6 +180,42 @@ class JdbcHandlerTest {
     }
 
     @Test
+    void testUpsertBatch() {
+        List<Object[]> rows = Arrays.asList(
+                new Object[]{4, "dave", 35},
+                new Object[]{5, "eve", 28},
+                // same primary key as an existing row -> update, not insert
+                new Object[]{1, "alice_updated", 21}
+        );
+        assertTrue(jdbcHandler.upsertBatch(rows));
+
+        // 2 new rows + 1 update on an existing row -> total 5
+        assertEquals(5, jdbcHandler.scan(Collections.emptyList()).size());
+        Map<Object, List<Object[]>> updated = jdbcHandler.getByPrimaryKey(Collections.singleton(1));
+        assertEquals("alice_updated", updated.get(1).get(0)[1].toString());
+        Map<Object, List<Object[]>> inserted = jdbcHandler.getByPrimaryKey(Collections.singleton(5));
+        assertEquals("eve", inserted.get(5).get(0)[1].toString());
+    }
+
+    @Test
+    void testUpsertBatchEmpty() {
+        assertTrue(jdbcHandler.upsertBatch(Collections.emptyList()));
+        assertEquals(3, jdbcHandler.scan(Collections.emptyList()).size());
+    }
+
+    @Test
+    void testDeleteBatch() {
+        List<Object[]> rows = Arrays.asList(
+                new Object[]{1, "alice", 20},
+                new Object[]{2, "bob", 25}
+        );
+        assertTrue(jdbcHandler.deleteBatch(rows));
+
+        assertEquals(1, jdbcHandler.scan(Collections.emptyList()).size());
+        assertTrue(jdbcHandler.getByPrimaryKey(new HashSet<>(Arrays.asList(1, 2))).isEmpty());
+    }
+
+    @Test
     void testWithConnectionPoolConfig() {
         jdbcConfig.connectionPoolSize = 5;
         jdbcConfig.connectionPoolMinIdle = 1;

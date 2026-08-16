@@ -45,7 +45,7 @@ public class SqlProcessorTest {
         testSqlFunctionCompile(schema);
 
         List<String> sqlList = Arrays.asList(
-                "create or replace sql function fun2",
+                "create or replace sql function fun1",
                 "define input table input1(id int, name string)",
                 "cache table t1 as SELECT NAME, count(*) as cnt FROM input1 where ID > 1 group by NAME",
                 "return t1",
@@ -55,7 +55,8 @@ public class SqlProcessorTest {
                 "select * from t2",
                 "call fun1(t1)",
                 "cache table t3 as call fun1(t1)",
-                "select * from t3"
+                "select * from t3",
+                "drop sql function fun1"
         );
 
         SqlExecutor executor = new SqlExecutor();

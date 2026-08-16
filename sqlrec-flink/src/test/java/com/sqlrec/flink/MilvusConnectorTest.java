@@ -1,13 +1,33 @@
 package com.sqlrec.flink;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.FlinkSchemaUtils;
+import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.handler.MilvusHandler;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
+import org.apache.flink.table.catalog.UniqueConstraint;
 import org.apache.flink.test.junit5.MiniClusterExtension;
+import org.apache.flink.types.Row;
+import org.apache.flink.types.RowKind;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Integration test for the Milvus Flink connector.
@@ -126,9 +146,120 @@ class MilvusConnectorTest {
         long id = System.currentTimeMillis();
 
         TableResult insertResult = tEnv.executeSql(
-                "INSERT INTO milvus_single VALUES\n" +
-                "  (" + id + ", 'Solo Movie', ARRAY['sci-fi'], " + generateEmbeddingLiteral(id) + ")"
+            "INSERT INTO milvus_single VALUES\n" +
+            "  (" + id + ", 'Solo Movie', ARRAY['sci-fi'], " + generateEmbeddingLiteral(id) + ")"
         );
         insertResult.await();
+    }
+
+    // ---- Helpers for read-back verification ----
+
+    /**
+     * Builds a MilvusHandler with the same config derivation as
+     * MilvusDynamicTableFactory, to read back rows by primary key.
+     */
+    private MilvusHandler createReadBackHandler() {
+        ResolvedSchema schema = new ResolvedSchema(
+                Arrays.asList(
+                        Column.physical("id", DataTypes.BIGINT()),
+                        Column.physical("title", DataTypes.STRING()),
+                        Column.physical("genres", DataTypes.ARRAY(DataTypes.STRING())),
+                        Column.physical("embedding", DataTypes.ARRAY(DataTypes.DOUBLE()))),
+                Collections.emptyList(),
+                UniqueConstraint.primaryKey("pk", Collections.singletonList("id")));
+
+        MilvusConfig config = new MilvusConfig();
+        config.url = MILVUS_URL;
+        config.token = MILVUS_TOKEN;
+        config.database = MILVUS_DB;
+        config.collection = "item_embedding";
+        config.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(schema);
+        config.primaryKey = FlinkSchemaUtils.getPrimaryKey(schema);
+        config.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
+                config.fieldSchemas, config.primaryKey);
+        return new MilvusHandler(config);
+    }
+
+    /**
+     * Generates a 64-dimensional embedding as Double[], using the same formula as
+     * {@link #generateEmbeddingLiteral(long)}.
+     */
+    private Double[] generateEmbeddingArray(long seed) {
+        Double[] values = new Double[EMBEDDING_DIM];
+        for (int i = 0; i < EMBEDDING_DIM; i++) {
+            values[i] = ((seed + i * 7) % 100) / 100.0;
+        }
+        return values;
+    }
+
+    /**
+     * Reads rows back by primary key, polling until the expected number of rows
+     * is visible. Milvus's default (bounded) consistency makes freshly written
+     * or deleted rows visible with a short delay.
+     */
+    private Map<Object, List<Object[]>> awaitRows(
+            MilvusHandler handler, Set<Object> ids, int expectedSize) throws Exception {
+        Map<Object, List<Object[]>> rows = handler.getByPrimaryKey(ids);
+        for (int i = 0; i < 20 && rows.size() != expectedSize; i++) {
+            Thread.sleep(500);
+            rows = handler.getByPrimaryKey(ids);
+        }
+        return rows;
+    }
+
+    // ---- Sink: INSERT verified by reading rows back from Milvus ----
+
+    @Test
+    void testInsertAndVerifyReadBack() throws Exception {
+        StreamTableEnvironment tEnv = createTableEnv();
+        createMilvusTable(tEnv, "milvus_verify");
+
+        long baseId = System.currentTimeMillis();
+
+        tEnv.executeSql(
+            "INSERT INTO milvus_verify VALUES\n" +
+            "  (" + baseId + ", 'Verify A', ARRAY['action'], " + generateEmbeddingLiteral(baseId) + "),\n" +
+            "  (" + (baseId + 1) + ", 'Verify B', ARRAY['drama'], " + generateEmbeddingLiteral(baseId + 1) + ")"
+        ).await();
+
+        MilvusHandler readHandler = createReadBackHandler();
+        Map<Object, List<Object[]>> rows = awaitRows(
+                readHandler, Set.of(baseId, baseId + 1), 2);
+
+        assertEquals(2, rows.size(), "Both inserted rows must be found in Milvus");
+        assertEquals("Verify A", String.valueOf(rows.get(baseId).get(0)[1]));
+        assertEquals("Verify B", String.valueOf(rows.get(baseId + 1).get(0)[1]));
+    }
+
+    // ---- Sink: retract stream (DELETE RowKind) drives the delete buffer ----
+
+    @Test
+    void testDeleteViaRetractStream() throws Exception {
+        // one shared env: fromChangelogStream requires the stream to come from
+        // the same StreamExecutionEnvironment as the table environment
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
+        createMilvusTable(tEnv, "milvus_retract");
+
+        long baseId = System.currentTimeMillis();
+
+        // Changelog stream: 3 inserts followed by a retract delete of baseId+1.
+        // This drives the sink's delete path (removeBatch -> delete) end to end.
+        DataStream<Row> changelog = env.fromElements(
+            Row.ofKind(RowKind.INSERT, baseId, "Del A", new String[]{"action"}, generateEmbeddingArray(baseId)),
+            Row.ofKind(RowKind.INSERT, baseId + 1, "Del B", new String[]{"drama"}, generateEmbeddingArray(baseId + 1)),
+            Row.ofKind(RowKind.INSERT, baseId + 2, "Del C", new String[]{"sci-fi"}, generateEmbeddingArray(baseId + 2)),
+            Row.ofKind(RowKind.DELETE, baseId + 1, "Del B", new String[]{"drama"}, generateEmbeddingArray(baseId + 1))
+        );
+        tEnv.fromChangelogStream(changelog).executeInsert("milvus_retract").await();
+
+        MilvusHandler readHandler = createReadBackHandler();
+        Map<Object, List<Object[]>> rows = awaitRows(
+                readHandler, Set.of(baseId, baseId + 1, baseId + 2), 2);
+
+        assertEquals(2, rows.size(), "2 of 3 ids should remain after the retract delete");
+        assertFalse(rows.containsKey(baseId + 1),
+                "deleted id must no longer be in Milvus");
     }
 }

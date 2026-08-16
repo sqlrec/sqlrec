@@ -4,6 +4,9 @@ import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
@@ -14,114 +17,196 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Serializable {
+public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements CheckpointedFunction, Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger logger = LoggerFactory.getLogger(MilvusSinkFunction.class);
+    /**
+     * Upper bound on submitted-but-unfinished batches. Without this bound a slow Milvus
+     * server would let the flush queue grow without limit (invoke never blocks, so Flink
+     * applies no backpressure) until the TaskManager runs out of memory.
+     */
+    private static final int MAX_PENDING_BATCHES = 4;
 
     private MilvusConfig milvusConfig;
     private List<org.apache.flink.table.types.DataType> dataTypes;
     private transient MilvusHandler milvusHandler;
-    private transient List<Object[]> insertBuffer;
+    // INSERT and UPDATE_AFTER rows both go through upsert (addBatch) so rows with an
+    // existing primary key are replaced, matching the original sink semantics.
+    private transient List<Object[]> upsertBuffer;
     private transient List<Object[]> deleteBuffer;
     private transient int batchSize;
     private transient long flushIntervalMs;
     private transient long lastFlushTime;
+    /**
+     * Single-thread executor draining flush tasks in submission order. Batches are
+     * executed one at a time while the invoke thread keeps buffering the next batch,
+     * overlapping network/server latency with buffering. Order is preserved, so rows
+     * with the same primary key are always applied in arrival order.
+     */
+    private transient ExecutorService flushExecutor;
+    private transient CompletableFuture<Void> pendingFlush;
+    private transient AtomicInteger pendingBatches;
 
     public MilvusSinkFunction(MilvusConfig milvusConfig, ResolvedSchema tableSchema) {
         this.milvusConfig = milvusConfig;
         this.dataTypes = tableSchema.getColumnDataTypes();
     }
 
-    @Override
-    public void open(Configuration parameters) throws Exception {
-        super.open(parameters);
-        this.milvusHandler = new MilvusHandler(milvusConfig);
-        this.insertBuffer = new ArrayList<>();
-        this.deleteBuffer = new ArrayList<>();
-        this.batchSize = milvusConfig.batchSize != null ? milvusConfig.batchSize : 1024;
-        this.flushIntervalMs = (milvusConfig.flushInterval != null ? milvusConfig.flushInterval : 5L) * 1000L;
-        this.lastFlushTime = System.currentTimeMillis();
-        
-        logger.info("MilvusSinkFunction initialized with batch size: {}, flush interval: {}ms", 
-                batchSize, flushIntervalMs);
+    /** Test-only: inject a mock handler so open() skips real connection setup. */
+    void setMilvusHandlerForTest(MilvusHandler handler) {
+        this.milvusHandler = handler;
     }
 
     @Override
-    public void close() throws Exception {
-        try {
-            flush();
-        } catch (Exception e) {
-            logger.error("Error flushing remaining records in close()", e);
-            throw e;
-        } finally {
-            super.close();
+    public void open(Configuration parameters) throws Exception {
+        super.open(parameters);
+        if (this.milvusHandler == null) {
+            this.milvusHandler = new MilvusHandler(milvusConfig);
         }
+        this.upsertBuffer = new ArrayList<>();
+        this.deleteBuffer = new ArrayList<>();
+        this.batchSize = milvusConfig.batchSize != null && milvusConfig.batchSize > 0
+                ? milvusConfig.batchSize : 4096;
+        this.flushIntervalMs = (milvusConfig.flushInterval != null && milvusConfig.flushInterval > 0
+                ? milvusConfig.flushInterval : 1L) * 1000L;
+        this.lastFlushTime = System.currentTimeMillis();
+        this.flushExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "milvus-sink-flusher");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.pendingFlush = CompletableFuture.completedFuture(null);
+        this.pendingBatches = new AtomicInteger(0);
+
+        logger.info("MilvusSinkFunction initialized with batch size: {}, flush interval: {}ms",
+                batchSize, flushIntervalMs);
     }
 
     @Override
     public void invoke(IN value, Context context) throws Exception {
         super.invoke(value, context);
+        rethrowAsyncFlushError();
+
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
 
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
-        
+
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            insertBuffer.add(objects);
-            if (insertBuffer.size() >= batchSize) {
-                flushInsertBuffer();
+            upsertBuffer.add(objects);
+            if (upsertBuffer.size() >= batchSize) {
+                submitUpsertFlush();
             }
         } else if (kind == RowKind.DELETE) {
             deleteBuffer.add(objects);
             if (deleteBuffer.size() >= batchSize) {
-                flushDeleteBuffer();
+                submitDeleteFlush();
             }
         }
-        
-        checkAndFlush();
-    }
 
-    private void checkAndFlush() throws Exception {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastFlushTime >= flushIntervalMs) {
-            flush();
-            lastFlushTime = currentTime;
+        if (System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
+            submitAllFlushes();
         }
     }
 
-    private void flush() throws Exception {
-        flushInsertBuffer();
-        flushDeleteBuffer();
+    /**
+     * Submits the non-empty buffers, in upsert -> delete order, as tasks appended to
+     * the flush chain.
+     */
+    private void submitAllFlushes() throws Exception {
+        submitUpsertFlush();
+        submitDeleteFlush();
+        lastFlushTime = System.currentTimeMillis();
     }
 
-    private void flushInsertBuffer() throws Exception {
-        if (insertBuffer.isEmpty()) {
+    private void submitUpsertFlush() throws Exception {
+        if (upsertBuffer.isEmpty()) {
             return;
         }
-        
-        try {
-            milvusHandler.addBatch(insertBuffer);
-            logger.debug("Flushed {} insert records to Milvus", insertBuffer.size());
-            insertBuffer.clear();
-        } catch (Exception e) {
-            logger.error("Error flushing insert buffer", e);
-            throw e;
-        }
+        List<Object[]> batch = upsertBuffer;
+        upsertBuffer = new ArrayList<>();
+        submit(() -> {
+            milvusHandler.addBatch(batch);
+            logger.debug("Flushed {} upsert records to Milvus", batch.size());
+        });
     }
 
-    private void flushDeleteBuffer() throws Exception {
+    private void submitDeleteFlush() throws Exception {
         if (deleteBuffer.isEmpty()) {
             return;
         }
-        
+        List<Object[]> batch = deleteBuffer;
+        deleteBuffer = new ArrayList<>();
+        submit(() -> {
+            milvusHandler.removeBatch(batch);
+            logger.debug("Flushed {} delete records to Milvus", batch.size());
+        });
+    }
+
+    private void submit(Runnable flushTask) throws Exception {
+        Runnable countedTask = () -> {
+            try {
+                flushTask.run();
+            } finally {
+                pendingBatches.decrementAndGet();
+            }
+        };
+        pendingBatches.incrementAndGet();
+        pendingFlush = pendingFlush.thenRunAsync(countedTask, flushExecutor);
+        if (pendingBatches.get() >= MAX_PENDING_BATCHES) {
+            // Backpressure: block until the in-flight batches finish (or fail) so the
+            // flush queue stays bounded while Milvus is slow.
+            awaitFlushComplete();
+        }
+    }
+
+    /**
+     * Propagates an asynchronous flush failure to the pipeline so the job fails over
+     * and the records are replayed from the last checkpoint.
+     */
+    private void rethrowAsyncFlushError() throws Exception {
+        if (pendingFlush != null && pendingFlush.isCompletedExceptionally()) {
+            pendingFlush.get();
+        }
+    }
+
+    private void awaitFlushComplete() throws Exception {
+        if (pendingFlush != null) {
+            pendingFlush.get();
+        }
+    }
+
+    @Override
+    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+        // Flush on checkpoint so buffered records are written before the barrier
+        // completes, keeping the sink at-least-once.
+        submitAllFlushes();
+        awaitFlushComplete();
+    }
+
+    @Override
+    public void initializeState(FunctionInitializationContext context) throws Exception {
+        // No state to restore: unflushed records are replayed from upstream on recovery.
+    }
+
+    @Override
+    public void close() throws Exception {
         try {
-            milvusHandler.removeBatch(deleteBuffer);
-            logger.debug("Flushed {} delete records to Milvus", deleteBuffer.size());
-            deleteBuffer.clear();
+            submitAllFlushes();
+            awaitFlushComplete();
         } catch (Exception e) {
-            logger.error("Error flushing delete buffer", e);
+            logger.error("Error flushing remaining records in close()", e);
             throw e;
+        } finally {
+            if (flushExecutor != null) {
+                flushExecutor.shutdown();
+            }
+            super.close();
         }
     }
 }

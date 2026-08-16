@@ -23,6 +23,8 @@ import org.apache.calcite.schema.Schemas;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.*;
@@ -102,6 +104,8 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     }
 
     public static class KafkaCollection extends SqlRecCollection {
+        private static final Logger logger = LoggerFactory.getLogger(KafkaCollection.class);
+
         private final KafkaCalciteTable table;
         private final KafkaConfig kafkaConfig;
 
@@ -120,7 +124,15 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         protected boolean addImpl(Object[] objects) {
             String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
             KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
-            producer.send(new ProducerRecord<>(kafkaConfig.topic, msg));
+            // Register a callback so async send failures (broker unavailable, record
+            // too large, ...) are at least visible in the logs instead of being
+            // silently dropped.
+            producer.send(new ProducerRecord<>(kafkaConfig.topic, msg), (metadata, exception) -> {
+                if (exception != null) {
+                    logger.error("Failed to send record to kafka topic {}: {}",
+                            kafkaConfig.topic, exception.getMessage(), exception);
+                }
+            });
             return true;
         }
 

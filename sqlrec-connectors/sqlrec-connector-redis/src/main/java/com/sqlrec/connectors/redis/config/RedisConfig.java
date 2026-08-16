@@ -20,4 +20,6 @@ public class RedisConfig implements Serializable {
     public List<FieldSchema> fieldSchemas;
     public String primaryKey;
     public Integer primaryKeyIndex;
+    public Integer batchSize;
+    public Long flushInterval;
 }

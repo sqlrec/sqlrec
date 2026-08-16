@@ -13,9 +13,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -146,14 +145,28 @@ class RedisWrapperUnitTest {
     }
 
     @Test
-    void testMset() {
+    void testSetex() {
         when(mockConn.async()).thenReturn(mockAsync);
-        Map<byte[], byte[]> kvMap = new HashMap<>();
-        kvMap.put("k1".getBytes(), "v1".getBytes());
 
-        wrapper.mset(kvMap);
+        wrapper.setex("key".getBytes(), "value".getBytes(), 60);
 
-        verify(mockAsync).mset(any());
+        // Verify the underlying async set command was called with SetArgs carrying the ttl
+        verify(mockAsync).set(any(), any(), any(io.lettuce.core.SetArgs.class));
+    }
+
+    @Test
+    void testExecutePipelined() {
+        when(mockConn.async()).thenReturn(mockAsync);
+
+        List<RedisFuture<?>> futures = wrapper.executePipelined(() ->
+                Collections.singletonList(wrapper.set("k".getBytes(), "v".getBytes())));
+
+        // Flushing must be suspended around the producer, commands flushed once, then resumed
+        verify(mockConn).setAutoFlushCommands(false);
+        verify(mockConn).flushCommands();
+        verify(mockConn).setAutoFlushCommands(true);
+        assertEquals(1, futures.size());
+        verify(mockAsync).set(any(), any());
     }
 
     @Test

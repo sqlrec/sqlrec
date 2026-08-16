@@ -4,6 +4,7 @@ import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.SetArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
@@ -13,11 +14,14 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 public class RedisWrapper implements AbstractRedisWrapper {
     private static final Logger LOG = LoggerFactory.getLogger(RedisWrapper.class);
     static Map<String, RedisClient> redisClientMap = new ConcurrentHashMap<>();
     static Map<String, StatefulRedisConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+    /** Locks serializing pipelined sections per url: autoFlush is connection-global. */
+    private static final Map<String, Object> pipelineLockMap = new ConcurrentHashMap<>();
 
     static {
         // Close all shared clients/connections on JVM shutdown (the previous no-op close()
@@ -56,11 +60,15 @@ public class RedisWrapper implements AbstractRedisWrapper {
         }
     }
 
-    private RedisAsyncCommands<byte[], byte[]> getCommands() {
+    private StatefulRedisConnection<byte[], byte[]> getConnection() {
         if (!connectionMap.containsKey(url)) {
             openRedisClient(url);
         }
-        return connectionMap.get(url).async();
+        return connectionMap.get(url);
+    }
+
+    private RedisAsyncCommands<byte[], byte[]> getCommands() {
+        return getConnection().async();
     }
 
     @Override
@@ -95,6 +103,7 @@ public class RedisWrapper implements AbstractRedisWrapper {
                 LOG.warn("Failed to shut down RedisClient for {}: {}", url, e.getMessage());
             }
         }
+        pipelineLockMap.remove(url);
     }
 
     /**
@@ -134,6 +143,30 @@ public class RedisWrapper implements AbstractRedisWrapper {
         return getCommands().set(key, value);
     }
 
+    @Override
+    public RedisFuture<String> setex(byte[] key, byte[] value, long ttlSeconds) {
+        return getCommands().set(key, value, SetArgs.Builder.ex(ttlSeconds));
+    }
+
+    @Override
+    public List<RedisFuture<?>> executePipelined(Supplier<List<RedisFuture<?>>> commandProducer) {
+        StatefulRedisConnection<byte[], byte[]> connection = getConnection();
+        Object lock = pipelineLockMap.computeIfAbsent(url, k -> new Object());
+        // autoFlush is global to the shared connection, so pipelined sections for the
+        // same url must not interleave: other threads' commands issued inside this
+        // window are simply buffered and sent by our flushCommands().
+        synchronized (lock) {
+            connection.setAutoFlushCommands(false);
+            try {
+                List<RedisFuture<?>> futures = commandProducer.get();
+                connection.flushCommands();
+                return futures;
+            } finally {
+                connection.setAutoFlushCommands(true);
+            }
+        }
+    }
+
     public RedisFuture<Long> del(byte[] key) {
         return getCommands().del(key);
     }
@@ -152,9 +185,5 @@ public class RedisWrapper implements AbstractRedisWrapper {
 
     public RedisFuture<Boolean> expire(byte[] key, long seconds) {
         return getCommands().expire(key, seconds);
-    }
-
-    public RedisFuture<String> mset(Map<byte[], byte[]> kvMap) {
-        return getCommands().mset(kvMap);
     }
 }

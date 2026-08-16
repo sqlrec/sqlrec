@@ -141,12 +141,18 @@ public class RedisHandler {
         byte[] value = codec.encode(data);
         try {
             if (isListMode()) {
-                await(redisClient.lpush(key, value));
-                trimIfNeeded(key);
-                await(redisClient.expire(key, redisConfig.ttl));
+                // Issue all commands first, then wait once: avoids serializing
+                // each round trip (lpush -> ltrim -> expire).
+                List<RedisFuture<?>> futures = new ArrayList<>(3);
+                futures.add(redisClient.lpush(key, value));
+                if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                    futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+                }
+                futures.add(redisClient.expire(key, redisConfig.ttl));
+                awaitAll(futures);
             } else {
-                await(redisClient.set(key, value));
-                await(redisClient.expire(key, redisConfig.ttl));
+                // SET key value EX ttl: one command instead of SET + EXPIRE.
+                await(redisClient.setex(key, value, redisConfig.ttl));
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to insert data to Redis", e);
@@ -155,30 +161,51 @@ public class RedisHandler {
 
     public void batchInsert(Collection<? extends Object[]> dataList) {
         try {
-            List<RedisFuture<?>> futures = new ArrayList<>();
+            // Compute keys and encode values before entering the pipeline section:
+            // a malformed row (e.g. null primary key) fails the whole batch before
+            // any command is issued, and JSON encoding does not hold the
+            // autoFlush-disabled window of the shared connection.
+            List<RedisFuture<?>> futures;
             if (isListMode()) {
-                Map<byte[], List<byte[]>> keyToValues = new LinkedHashMap<>();
+                // Aggregate rows by key: byte[] has reference equality, so the map key
+                // is the key string (UTF-8 encoded back to bytes when issuing commands).
+                Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();
                 for (Object[] data : dataList) {
-                    keyToValues.computeIfAbsent(getKey(data), k -> new ArrayList<>())
+                    byte[] key = getKey(data);
+                    keyToValues.computeIfAbsent(new String(key, StandardCharsets.UTF_8), k -> new ArrayList<>())
                             .add(codec.encode(data));
                 }
-                for (Map.Entry<byte[], List<byte[]>> entry : keyToValues.entrySet()) {
-                    byte[] key = entry.getKey();
-                    futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
-                    if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                        futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+                List<Map.Entry<String, List<byte[]>>> entries = new ArrayList<>(keyToValues.entrySet());
+                futures = redisClient.executePipelined(() -> {
+                    List<RedisFuture<?>> fs = new ArrayList<>();
+                    for (Map.Entry<String, List<byte[]>> entry : entries) {
+                        byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
+                        fs.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
+                        if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                            fs.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+                        }
+                        fs.add(redisClient.expire(key, redisConfig.ttl));
                     }
-                    futures.add(redisClient.expire(key, redisConfig.ttl));
-                }
+                    return fs;
+                });
             } else {
-                Map<byte[], byte[]> kvMap = new LinkedHashMap<>();
+                List<byte[]> keys = new ArrayList<>(dataList.size());
+                List<byte[]> values = new ArrayList<>(dataList.size());
                 for (Object[] data : dataList) {
-                    kvMap.put(getKey(data), codec.encode(data));
+                    keys.add(getKey(data));
+                    values.add(codec.encode(data));
                 }
-                futures.add(redisClient.mset(kvMap));
-                for (byte[] key : kvMap.keySet()) {
-                    futures.add(redisClient.expire(key, redisConfig.ttl));
-                }
+                // One SET ... EX per row, sent as a single pipeline. Unlike MSET +
+                // EXPIRE this halves the command count and also works in cluster
+                // mode (each SET is routed to the key's slot; MSET fails with
+                // CROSSSLOT for keys spanning multiple slots).
+                futures = redisClient.executePipelined(() -> {
+                    List<RedisFuture<?>> fs = new ArrayList<>(keys.size());
+                    for (int i = 0; i < keys.size(); i++) {
+                        fs.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
+                    }
+                    return fs;
+                });
             }
             awaitAll(futures);
         } catch (Exception e) {
@@ -188,16 +215,26 @@ public class RedisHandler {
 
     public void batchDelete(Collection<? extends Object[]> dataList) {
         try {
-            List<RedisFuture<?>> futures = new ArrayList<>();
-            if (isListMode()) {
-                for (Object[] data : dataList) {
-                    futures.add(redisClient.lrem(getKey(data), codec.encode(data)));
-                }
-            } else {
-                for (Object[] data : dataList) {
-                    futures.add(redisClient.del(getKey(data)));
+            boolean listMode = isListMode();
+            List<byte[]> keys = new ArrayList<>(dataList.size());
+            List<byte[]> values = listMode ? new ArrayList<>(dataList.size()) : null;
+            for (Object[] data : dataList) {
+                keys.add(getKey(data));
+                if (listMode) {
+                    values.add(codec.encode(data));
                 }
             }
+            List<RedisFuture<?>> futures = redisClient.executePipelined(() -> {
+                List<RedisFuture<?>> fs = new ArrayList<>(keys.size());
+                for (int i = 0; i < keys.size(); i++) {
+                    if (listMode) {
+                        fs.add(redisClient.lrem(keys.get(i), values.get(i)));
+                    } else {
+                        fs.add(redisClient.del(keys.get(i)));
+                    }
+                }
+                return fs;
+            });
             awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch delete data from Redis", e);
@@ -255,12 +292,6 @@ public class RedisHandler {
             } catch (Exception ex) {
                 LOG.warn("Failed to invalidate Redis connection for {}: {}", redisConfig.url, ex.getMessage());
             }
-        }
-    }
-
-    private void trimIfNeeded(byte[] key) throws Exception {
-        if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-            await(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
         }
     }
 

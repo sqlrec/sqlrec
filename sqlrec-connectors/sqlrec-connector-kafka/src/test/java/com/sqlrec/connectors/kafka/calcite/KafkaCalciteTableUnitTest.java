@@ -93,7 +93,7 @@ public class KafkaCalciteTableUnitTest {
 
         ArgumentCaptor<ProducerRecord<String, String>> captor =
                 ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(mockProducer, times(1)).send(captor.capture());
+        verify(mockProducer, times(1)).send(captor.capture(), any());
 
         ProducerRecord<String, String> record = captor.getValue();
         assertEquals("test_topic", record.topic());
@@ -111,7 +111,7 @@ public class KafkaCalciteTableUnitTest {
         collection.add(new Object[]{1, "alice"});
         collection.add(new Object[]{2, "bob"});
 
-        verify(mockProducer, times(2)).send(any());
+        verify(mockProducer, times(2)).send(any(), any());
     }
 
     @Test
@@ -128,7 +128,7 @@ public class KafkaCalciteTableUnitTest {
         KafkaCalciteTable.KafkaCollection collection =
                 new KafkaCalciteTable.KafkaCollection(table, config);
 
-        when(mockProducer.send(any())).thenThrow(new RuntimeException("send failed"));
+        when(mockProducer.send(any(), any())).thenThrow(new RuntimeException("send failed"));
 
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> collection.add(new Object[]{1, "test"}));
@@ -169,7 +169,7 @@ public class KafkaCalciteTableUnitTest {
 
         ArgumentCaptor<ProducerRecord<String, String>> captor =
                 ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(mockProducer, times(1)).send(captor.capture());
+        verify(mockProducer, times(1)).send(captor.capture(), any());
 
         ProducerRecord<String, String> record = captor.getValue();
         assertEquals("test_topic", record.topic());

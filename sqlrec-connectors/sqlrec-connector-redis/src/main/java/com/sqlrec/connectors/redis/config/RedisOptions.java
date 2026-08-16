@@ -71,6 +71,22 @@ public class RedisOptions {
             Integer.class
     );
 
+    public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(
+            "batch-size",
+            1000,
+            "batch size for sink writes, buffered records are flushed to redis when the buffer reaches this size",
+            null,
+            Integer.class
+    );
+
+    public static final ConfigOption<Long> FLUSH_INTERVAL = new ConfigOption<>(
+            "flush-interval",
+            1L,
+            "flush interval for sink buffer(seconds), buffered records are flushed at least once per interval",
+            null,
+            Long.class
+    );
+
     public static RedisConfig getRedisConfig(Map<String, String> options) {
         RedisConfig redisConfig = new RedisConfig();
         redisConfig.url = URL.getValue(options);

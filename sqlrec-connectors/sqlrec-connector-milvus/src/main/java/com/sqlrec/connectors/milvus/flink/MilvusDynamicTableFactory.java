@@ -62,6 +62,7 @@ public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
         options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_TOTAL));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MAX_BLOCK_WAIT_DURATION));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.POOL_MIN_EVICTABLE_IDLE_DURATION));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(MilvusOptions.RPC_DEADLINE_MS));
         return options;
     }
 }

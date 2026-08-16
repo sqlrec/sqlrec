@@ -91,6 +91,48 @@ public class JdbcHandler {
         }
     }
 
+    /**
+     * Batched upsert: one prepared statement + addBatch/executeBatch instead of one
+     * round trip per row. On MySQL, pairing this with
+     * {@code rewriteBatchedStatements=true} (via {@code jdbcProperties}) rewrites the
+     * batch into multi-values inserts for another order-of-magnitude gain.
+     */
+    public boolean upsertBatch(Collection<? extends Object[]> dataList) {
+        if (dataList == null || dataList.isEmpty()) {
+            return true;
+        }
+        String sql = SqlUtils.buildUpsertSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Object[] data : dataList) {
+                setStatementParameters(stmt, data);
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+            return true;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to batch upsert into table " + jdbcConfig.tableName, e);
+        }
+    }
+
+    public boolean deleteBatch(Collection<? extends Object[]> dataList) {
+        if (dataList == null || dataList.isEmpty()) {
+            return true;
+        }
+        String sql = SqlUtils.buildDeleteSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Object[] data : dataList) {
+                stmt.setObject(1, data[jdbcConfig.primaryKeyIndex]);
+                stmt.addBatch();
+            }
+            stmt.executeBatch();
+            return true;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to batch delete from table " + jdbcConfig.tableName, e);
+        }
+    }
+
     private void setStatementParameters(PreparedStatement stmt, Object[] data) throws SQLException {
         for (int i = 0; i < data.length; i++) {
             stmt.setObject(i + 1, data[i]);

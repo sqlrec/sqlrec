@@ -5,8 +5,11 @@ import com.mongodb.MongoServerUnavailableException;
 import com.mongodb.MongoSocketException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.*;
+import com.mongodb.client.model.DeleteOneModel;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.ReplaceOneModel;
 import com.mongodb.client.model.ReplaceOptions;
+import com.mongodb.client.model.WriteModel;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import org.apache.calcite.rex.RexCall;
@@ -96,6 +99,45 @@ public class MongoHandler implements Serializable {
             MongoCollection<Document> collection = getCollection();
             Object primaryKeyValue = data[mongoConfig.primaryKeyIndex];
             collection.deleteOne(Filters.eq(mongoConfig.primaryKey, primaryKeyValue));
+            return true;
+        });
+    }
+
+    /**
+     * Batched upsert via bulkWrite: one round trip for the whole batch instead of one
+     * per row. Ordered (default) execution keeps row-by-row semantics: rows before a
+     * failing row are committed and execution stops at the first failure.
+     */
+    public boolean upsertBatch(Collection<? extends Object[]> records) {
+        if (records == null || records.isEmpty()) {
+            return true;
+        }
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            List<WriteModel<Document>> writes = new ArrayList<>(records.size());
+            for (Object[] data : records) {
+                writes.add(new ReplaceOneModel<>(
+                        Filters.eq(mongoConfig.primaryKey, data[mongoConfig.primaryKeyIndex]),
+                        rowToDocument(data),
+                        new ReplaceOptions().upsert(true)));
+            }
+            collection.bulkWrite(writes);
+            return true;
+        });
+    }
+
+    public boolean deleteBatch(Collection<? extends Object[]> records) {
+        if (records == null || records.isEmpty()) {
+            return true;
+        }
+        return withRetry(() -> {
+            MongoCollection<Document> collection = getCollection();
+            List<WriteModel<Document>> writes = new ArrayList<>(records.size());
+            for (Object[] data : records) {
+                writes.add(new DeleteOneModel<>(
+                        Filters.eq(mongoConfig.primaryKey, data[mongoConfig.primaryKeyIndex])));
+            }
+            collection.bulkWrite(writes);
             return true;
         });
     }
@@ -215,9 +257,17 @@ public class MongoHandler implements Serializable {
     }
 
     private MongoCollection<Document> getCollection() {
-        MongoClient client = getOrCreateMongoClient();
+        MongoClient client = testMongoClient != null ? testMongoClient : getOrCreateMongoClient();
         MongoDatabase database = client.getDatabase(mongoConfig.database);
         return database.getCollection(mongoConfig.collection);
+    }
+
+    /** Test-only mock client, takes precedence over the shared client cache. */
+    private MongoClient testMongoClient;
+
+    /** Test-only: inject a mock client so getCollection() skips real connection setup. */
+    void setMongoClientForTest(MongoClient client) {
+        this.testMongoClient = client;
     }
 
     /**

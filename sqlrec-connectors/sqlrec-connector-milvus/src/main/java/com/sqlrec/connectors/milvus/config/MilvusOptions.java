@@ -38,7 +38,7 @@ public class MilvusOptions {
 
     public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(
             "batch-size",
-            1024,
+            4096,
             "Batch size for bulk insert operations",
             null,
             Integer.class
@@ -86,8 +86,16 @@ public class MilvusOptions {
 
     public static final ConfigOption<Long> FLUSH_INTERVAL = new ConfigOption<>(
             "flush-interval",
-            5L,
+            1L,
             "Flush interval in seconds for batch operations. Data will be flushed when buffer is full or this interval is reached",
+            null,
+            Long.class
+    );
+
+    public static final ConfigOption<Long> RPC_DEADLINE_MS = new ConfigOption<>(
+            "rpc-deadline-ms",
+            30000L,
+            "RPC deadline in milliseconds for Milvus gRPC calls, 0 means no deadline",
             null,
             Long.class
     );
@@ -105,6 +113,7 @@ public class MilvusOptions {
         milvusConfig.poolMaxBlockWaitDuration = POOL_MAX_BLOCK_WAIT_DURATION.getValue(options);
         milvusConfig.poolMinEvictableIdleDuration = POOL_MIN_EVICTABLE_IDLE_DURATION.getValue(options);
         milvusConfig.flushInterval = FLUSH_INTERVAL.getValue(options);
+        milvusConfig.rpcDeadlineMs = RPC_DEADLINE_MS.getValue(options);
 
         return milvusConfig;
     }
