@@ -18,6 +18,18 @@
     </properties>
 
     <dependencies>
+        <!-- Must stay FIRST: hive-exec (test scope) is a shaded jar that embeds
+             an old unrelocated com.google.common (guava 19). Since surefire
+             orders direct dependencies by declaration order and the Flink
+             MiniCluster task classloader follows java.class.path order, this
+             explicit guava dependency ensures grpc (via milvus-sdk-java) finds
+             Preconditions.checkArgument(boolean, String, char, Object),
+             which only exists in guava 26+. -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Flink connectors with DynamicTableFactory SPI -->
         <dependency>
             <groupId>org.sqlrec</groupId>

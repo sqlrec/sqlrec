@@ -379,7 +379,7 @@ public class IfCacheBindableTest {
                         Arrays.<Object[]>asList(new Object[]{"input_data", 3L})
                 ),
                 new SqlTestCase(
-                        "IF TIMEIN (SELECT 100) THEN (" +
+                        "IF TIMEIN (SELECT 10) THEN (" +
                                 "cache table result1 as call slow_func_udf(input_data)" +
                                 ") ELSE (" +
                                 "cache table result1 as SELECT 0 as id, 'timeout' as name" +

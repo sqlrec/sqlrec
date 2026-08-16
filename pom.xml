@@ -92,6 +92,15 @@
                 <version>${ejml.version}</version>
             </dependency>
 
+            <!-- Align Guava across modules: hive-metastore brings 19.0 while
+                 grpc (via milvus-sdk-java) needs 32+ for the fixed-arity
+                 Preconditions.checkArgument overloads. -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>32.1.3-jre</version>
+            </dependency>
+
             <!-- Dependencies previously version-pinned in multiple modules -->
             <dependency>
                 <groupId>com.github.ben-manes.caffeine</groupId>
