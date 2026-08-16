@@ -1,5 +1,9 @@
 package com.sqlrec.model.gbdt;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.sqlrec.common.config.ConfigOption;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
@@ -20,6 +24,11 @@ import java.util.Set;
  */
 public class PipelineConfigUtils {
 
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .create();
+
     public enum ModelType {
         LIGHTGBM("lightgbm"),
         XGBOOST("xgboost"),
@@ -37,29 +46,22 @@ public class PipelineConfigUtils {
     }
 
     public static String generateTrainConfig(ModelType modelType, ModelConf model, ModelTrainConf trainConf) {
-        StringBuilder config = new StringBuilder();
-        config.append("{\n");
+        JsonObject config = new JsonObject();
 
-        appendStringField(config, "model_type", modelType.getKey(), 1, true);
-        appendStringField(config, "train_input_path",
-                joinPaths(trainConf.getTrainDataPaths()), 1, true);
-        appendStringField(config, "model_dir", trainConf.getModelDir(), 1, true);
-        appendStringField(config, "base_model_dir", trainConf.getBaseModelDir(), 1, true);
+        config.addProperty("model_type", modelType.getKey());
+        config.addProperty("train_input_path", joinPaths(trainConf.getTrainDataPaths()));
+        config.addProperty("model_dir", orEmpty(trainConf.getModelDir()));
+        config.addProperty("base_model_dir", orEmpty(trainConf.getBaseModelDir()));
+        config.addProperty("label_columns", orEmpty(Config.LABEL_COLUMNS.getValue(model.getParams())));
 
-        appendStringField(config, "label_columns",
-                Config.LABEL_COLUMNS.getValue(model.getParams()), 1, true);
-
-        List<String> featureNames = getFeatureNames(model, modelType);
-        List<String> categoricalFeatures = resolveCategoricalFeatures(model, modelType);
-
-        appendListField(config, "feature_columns", featureNames, 1, true);
-        appendListField(config, "categorical_features", categoricalFeatures, 1, true);
+        config.add("feature_columns", toJsonArray(getFeatureNames(model, modelType)));
+        config.add("categorical_features", toJsonArray(resolveCategoricalFeatures(model, modelType)));
 
         Map<String, String> params = mergeParams(model.getParams(), trainConf.getParams());
-        appendParams(config, params, modelType);
+        config.add("params", buildParams(params, modelType));
 
-        config.append("}\n");
-        return config.toString();
+        // Trailing newline keeps the ConfigMap YAML block scalar a plain "|" (clip) block.
+        return GSON.toJson(config) + "\n";
     }
 
     public static String generateExportConfig(ModelExportConf exportConf) {
@@ -68,51 +70,49 @@ public class PipelineConfigUtils {
             throw new IllegalArgumentException("base_model_dir is required for GBDT export");
         }
         String exportDir = baseModelDir + "_export";
-        StringBuilder config = new StringBuilder();
-        config.append("{\n");
-        appendStringField(config, "base_model_dir", exportConf.getBaseModelDir(), 1, true);
-        appendStringField(config, "export_dir", exportDir, 1, false);
-        config.append("}\n");
-        return config.toString();
+        JsonObject config = new JsonObject();
+        config.addProperty("base_model_dir", baseModelDir);
+        config.addProperty("export_dir", exportDir);
+        return GSON.toJson(config) + "\n";
     }
 
-    private static void appendParams(StringBuilder config, Map<String, String> params, ModelType modelType) {
-        config.append("  \"params\": {\n");
-        appendStringField(config, "objective", Config.OBJECTIVE.getValue(params), 2, true);
-        appendStringField(config, "metric", Config.METRIC.getValue(params), 2, true);
+    private static JsonObject buildParams(Map<String, String> params, ModelType modelType) {
+        JsonObject json = new JsonObject();
+        json.addProperty("objective", Config.OBJECTIVE.getValue(params));
+        json.addProperty("metric", Config.METRIC.getValue(params));
 
         if (modelType == ModelType.CATBOOST) {
             // CatBoost uses its own param names; CB_* overrides generic GBDT params.
             int iterations = resolveInt(Config.CB_ITERATIONS, Config.NUM_ITERATIONS, params);
             int depth = resolveInt(Config.CB_DEPTH, Config.MAX_DEPTH, params);
             double l2LeafReg = resolveDouble(Config.CB_L2_LEAF_REG, Config.L2_REGULARIZATION, params);
-            appendIntField(config, "iterations", iterations, 2, true);
-            appendIntField(config, "depth", depth, 2, true);
-            appendDoubleField(config, "l2_leaf_reg", l2LeafReg, 2, true);
-            appendDoubleField(config, "learning_rate", Config.LEARNING_RATE.getValue(params), 2, false);
+            json.addProperty("iterations", iterations);
+            json.addProperty("depth", depth);
+            json.addProperty("l2_leaf_reg", l2LeafReg);
+            json.addProperty("learning_rate", Config.LEARNING_RATE.getValue(params));
         } else if (modelType == ModelType.XGBOOST) {
             // XGBoost params: reuse generic names where they align, but the Python
-            // side maps them to XGBoost-native names (e.g. bagging_fraction → subsample).
-            appendIntField(config, "num_iterations", Config.NUM_ITERATIONS.getValue(params), 2, true);
-            appendIntField(config, "max_depth", Config.MAX_DEPTH.getValue(params), 2, true);
-            appendDoubleField(config, "learning_rate", Config.LEARNING_RATE.getValue(params), 2, true);
-            appendDoubleField(config, "feature_fraction", Config.FEATURE_FRACTION.getValue(params), 2, true);
-            appendDoubleField(config, "bagging_fraction", Config.BAGGING_FRACTION.getValue(params), 2, true);
-            appendIntField(config, "min_child_weight", Config.MIN_CHILD_WEIGHT.getValue(params), 2, true);
-            appendDoubleField(config, "l2_regularization", Config.L2_REGULARIZATION.getValue(params), 2, false);
+            // side maps them to XGBoost-native names (e.g. bagging_fraction -> subsample).
+            json.addProperty("num_iterations", Config.NUM_ITERATIONS.getValue(params));
+            json.addProperty("max_depth", Config.MAX_DEPTH.getValue(params));
+            json.addProperty("learning_rate", Config.LEARNING_RATE.getValue(params));
+            json.addProperty("feature_fraction", Config.FEATURE_FRACTION.getValue(params));
+            json.addProperty("bagging_fraction", Config.BAGGING_FRACTION.getValue(params));
+            json.addProperty("min_child_weight", Config.MIN_CHILD_WEIGHT.getValue(params));
+            json.addProperty("l2_regularization", Config.L2_REGULARIZATION.getValue(params));
         } else {
             // LightGBM
-            appendIntField(config, "num_iterations", Config.NUM_ITERATIONS.getValue(params), 2, true);
-            appendIntField(config, "num_leaves", Config.NUM_LEAVES.getValue(params), 2, true);
-            appendIntField(config, "max_depth", Config.MAX_DEPTH.getValue(params), 2, true);
-            appendDoubleField(config, "learning_rate", Config.LEARNING_RATE.getValue(params), 2, true);
-            appendDoubleField(config, "feature_fraction", Config.FEATURE_FRACTION.getValue(params), 2, true);
-            appendDoubleField(config, "bagging_fraction", Config.BAGGING_FRACTION.getValue(params), 2, true);
-            appendIntField(config, "bagging_freq", Config.BAGGING_FREQ.getValue(params), 2, true);
-            appendIntField(config, "min_data_in_leaf", Config.MIN_DATA_IN_LEAF.getValue(params), 2, true);
-            appendDoubleField(config, "l2_regularization", Config.L2_REGULARIZATION.getValue(params), 2, false);
+            json.addProperty("num_iterations", Config.NUM_ITERATIONS.getValue(params));
+            json.addProperty("num_leaves", Config.NUM_LEAVES.getValue(params));
+            json.addProperty("max_depth", Config.MAX_DEPTH.getValue(params));
+            json.addProperty("learning_rate", Config.LEARNING_RATE.getValue(params));
+            json.addProperty("feature_fraction", Config.FEATURE_FRACTION.getValue(params));
+            json.addProperty("bagging_fraction", Config.BAGGING_FRACTION.getValue(params));
+            json.addProperty("bagging_freq", Config.BAGGING_FREQ.getValue(params));
+            json.addProperty("min_data_in_leaf", Config.MIN_DATA_IN_LEAF.getValue(params));
+            json.addProperty("l2_regularization", Config.L2_REGULARIZATION.getValue(params));
         }
-        config.append("  }\n");
+        return json;
     }
 
     /** Merge base params with overrides; overrides take precedence. Returns unmodifiable. */
@@ -226,88 +226,16 @@ public class PipelineConfigUtils {
         return String.join(",", paths);
     }
 
-    private static void appendStringField(StringBuilder sb, String key, String value,
-                                          int indent, boolean withComma) {
-        String ind = indent(indent);
-        if (value == null) {
-            value = "";
+    private static JsonArray toJsonArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        for (String value : values) {
+            array.add(value);
         }
-        sb.append(ind).append("\"").append(key).append("\": ")
-                .append("\"").append(escapeJson(value)).append("\"");
-        if (withComma) {
-            sb.append(",");
-        }
-        sb.append("\n");
+        return array;
     }
 
-    private static void appendIntField(StringBuilder sb, String key, int value,
-                                       int indent, boolean withComma) {
-        String ind = indent(indent);
-        sb.append(ind).append("\"").append(key).append("\": ").append(value);
-        if (withComma) {
-            sb.append(",");
-        }
-        sb.append("\n");
-    }
-
-    private static void appendDoubleField(StringBuilder sb, String key, double value,
-                                          int indent, boolean withComma) {
-        String ind = indent(indent);
-        sb.append(ind).append("\"").append(key).append("\": ").append(value);
-        if (withComma) {
-            sb.append(",");
-        }
-        sb.append("\n");
-    }
-
-    private static void appendListField(StringBuilder sb, String key, List<String> values,
-                                        int indent, boolean withComma) {
-        String ind = indent(indent);
-        sb.append(ind).append("\"").append(key).append("\": [");
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            sb.append("\"").append(escapeJson(values.get(i))).append("\"");
-        }
-        sb.append("]");
-        if (withComma) {
-            sb.append(",");
-        }
-        sb.append("\n");
-    }
-
-    private static String indent(int n) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < n; i++) {
-            sb.append("  ");
-        }
-        return sb.toString();
-    }
-
-    private static String escapeJson(String s) {
-        StringBuilder sb = new StringBuilder();
-        for (char c : s.toCharArray()) {
-            switch (c) {
-                case '"':
-                    sb.append("\\\"");
-                    break;
-                case '\\':
-                    sb.append("\\\\");
-                    break;
-                case '\n':
-                    sb.append("\\n");
-                    break;
-                case '\r':
-                    sb.append("\\r");
-                    break;
-                case '\t':
-                    sb.append("\\t");
-                    break;
-                default:
-                    sb.append(c);
-            }
-        }
-        return sb.toString();
+    /** Null string values serialize as {@code ""} (matching the Python side's expectations). */
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

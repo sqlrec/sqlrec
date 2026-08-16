@@ -130,7 +130,7 @@ public abstract class GbdtModelBase implements ModelController {
         String shell = ShellUtils.genTrainModelShell(modelType);
         Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
                 model.getParams(), trainConf.getParams());
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), mergedParams);
+        return GbdtK8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), mergedParams);
     }
 
     @Override
@@ -153,16 +153,16 @@ public abstract class GbdtModelBase implements ModelController {
         String shell = ShellUtils.genExportModelShell(modelType);
         Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
                 model.getParams(), exportConf.getParams());
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), mergedParams);
+        return GbdtK8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), mergedParams);
     }
 
     @Override
     public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceUrl(serviceConf);
+        return GbdtK8sYamlUtils.getServiceUrl(serviceConf);
     }
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceK8sYaml(modelType, serviceConf);
+        return GbdtK8sYamlUtils.getServiceK8sYaml(modelType, serviceConf);
     }
 }

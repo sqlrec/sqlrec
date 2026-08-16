@@ -2,29 +2,30 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
-import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceBuilder;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Kubernetes YAML generation for TZRec (DSSM / WideAndDeep) train, export and service.
  *
  * <p>Training runs as a distributed K8s Job (indexed completion + headless service for torchrun).
  * The container command runs the TZRec torchrun entry points and the image is {@code sqlrec/tzrec}.
- * Common YAML primitives (ConfigMap / Service / resource requirements / YAML merge / service URL)
- * are inherited from {@link K8sYamlBuilder}.
+ * Common YAML primitives (ConfigMap / Service / Deployment / resource requirements / YAML merge /
+ * service URL) are inherited from {@link K8sYamlBuilder}.
  */
-public class K8sYamlUtils extends K8sYamlBuilder {
+public class TzrecK8sYamlUtils extends K8sYamlBuilder {
 
     public static String createHeadlessServiceYaml(String jobName, String serviceName, int masterPort) {
         Map<String, String> selector = new HashMap<>();
@@ -116,39 +117,14 @@ public class K8sYamlUtils extends K8sYamlBuilder {
 
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
 
-        Deployment deployment = new DeploymentBuilder()
-                .withNewMetadata()
-                    .withName(deployName)
-                .endMetadata()
-                .withNewSpec()
-                    .withReplicas(Config.REPLICAS.getValue(params))
-                    .withNewSelector()
-                        .withMatchLabels(Map.of("app", deployName))
-                    .endSelector()
-                    .withNewTemplate()
-                        .withNewMetadata()
-                            .withLabels(Map.of("app", deployName))
-                        .endMetadata()
-                        .withNewSpec()
-                            .addNewContainer()
-                                .withName("tzrec-service")
-                                .withImage(image)
-                                .withCommand("bash", Config.SERVICE_SHELL_PATH, "--scripted_model_dir", modelCheckpointDir)
-                                .withPorts(
-                                        new ContainerPortBuilder()
-                                                .withName("http")
-                                                .withContainerPort(80)
-                                                .build()
-                                )
-                                .withEnv(buildRuntimeEnvVars())
-                                .withResources(buildResourceRequirements(params))
-                            .endContainer()
-                        .endSpec()
-                    .endTemplate()
-                .endSpec()
-                .build();
-
-        return Serialization.asYaml(deployment);
+        return createDeploymentYaml(
+                deployName,
+                "tzrec-service",
+                image,
+                List.of("bash", Config.SERVICE_SHELL_PATH, "--scripted_model_dir", modelCheckpointDir),
+                buildRuntimeEnvVars(),
+                params
+        );
     }
 
     /**

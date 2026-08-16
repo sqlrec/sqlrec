@@ -1,14 +1,25 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.model.*;
+import com.sqlrec.common.model.ModelConf;
+import com.sqlrec.common.model.ModelExportConf;
+import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
 
-public class WideAndDeepModel implements ModelController {
+/**
+ * WideAndDeep model based on TZRec.
+ *
+ * <p>Model name: {@code tzrec.wide_and_deep}. Training/export/serving YAML generation is
+ * delegated to {@link TzrecModelBase}; only the WideAndDeep-specific pipeline.config, output
+ * schema and export checkpoints live here.
+ */
+public class WideAndDeepModel extends TzrecModelBase {
+
     @Override
-    public String getModelName() {
-        return "tzrec.wide_and_deep";
+    protected String getModelNameSuffix() {
+        return "wide_and_deep";
     }
 
     @Override
@@ -22,10 +33,13 @@ public class WideAndDeepModel implements ModelController {
     }
 
     @Override
-    public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
-        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
-        String shell = ShellUtils.genTrainModelShell(model, trainConf);
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
+    protected String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        return PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
+    }
+
+    @Override
+    protected String generateExportConfig(ModelConf model, ModelExportConf exportConf) {
+        return PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
     }
 
     @Override
@@ -36,23 +50,5 @@ public class WideAndDeepModel implements ModelController {
     @Override
     public String getExportCleanPath(ModelExportConf exportConf) {
         return null;
-    }
-
-    @Override
-    public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
-        String exportDir = exportConf.getBaseModelDir() + "_export";
-        String pipelineConfig = PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
-        String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), exportConf.getParams());
-    }
-
-    @Override
-    public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceUrl(serviceConf);
-    }
-
-    @Override
-    public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceK8sYaml(serviceConf);
     }
 }

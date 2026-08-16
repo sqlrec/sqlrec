@@ -199,7 +199,10 @@ data:
       "model_dir": "hdfs://data/test_model_dir",
       "base_model_dir": "",
       "label_columns": "label",
-      "feature_columns": ["feature1", "feature2"],
+      "feature_columns": [
+        "feature1",
+        "feature2"
+      ],
       "categorical_features": [],
       "params": {
         "objective": "binary",
@@ -283,7 +286,7 @@ spec:
         String k8sYaml = modelController.genModelTrainK8sYaml(model, trainConf);
 
         // Only float/double features are included; int/string are filtered out.
-        assertTrue(k8sYaml.contains("\"feature_columns\": [\"f1\", \"f2\"]"));
+        assertTrue(k8sYaml.contains("\"feature_columns\": [\n        \"f1\",\n        \"f2\"\n      ]"));
         assertTrue(k8sYaml.contains("\"categorical_features\": []"));
     }
 

@@ -168,8 +168,14 @@ data:
       "model_dir": "hdfs://data/cb_test_model_dir",
       "base_model_dir": "",
       "label_columns": "label",
-      "feature_columns": ["feature1", "feature2"],
-      "categorical_features": ["feature1", "feature2"],
+      "feature_columns": [
+        "feature1",
+        "feature2"
+      ],
+      "categorical_features": [
+        "feature1",
+        "feature2"
+      ],
       "params": {
         "objective": "binary",
         "metric": "auc",
@@ -245,8 +251,9 @@ spec:
         String k8sYaml = modelController.genModelTrainK8sYaml(model, trainConf);
 
         // All three features (bigint, string, int) are auto-detected as categorical.
-        assertTrue(k8sYaml.contains("\"categorical_features\": [\"user_id\", \"user_country\", \"age\"]"));
-        assertTrue(k8sYaml.contains("\"feature_columns\": [\"user_id\", \"user_country\", \"age\"]"));
+        String expectedList = "[\n        \"user_id\",\n        \"user_country\",\n        \"age\"\n      ]";
+        assertTrue(k8sYaml.contains("\"categorical_features\": " + expectedList));
+        assertTrue(k8sYaml.contains("\"feature_columns\": " + expectedList));
     }
 
     @Test

@@ -1,14 +1,26 @@
 package com.sqlrec.model.tzrec;
 
-import com.sqlrec.common.model.*;
+import com.sqlrec.common.model.ModelConf;
+import com.sqlrec.common.model.ModelExportConf;
+import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
-public class DSSMModel implements ModelController {
+/**
+ * DSSM two-tower model based on TZRec.
+ *
+ * <p>Model name: {@code tzrec.dssm}. Training/export/serving YAML generation is delegated to
+ * {@link TzrecModelBase}; only the DSSM-specific pipeline.config, output schema and export
+ * checkpoints live here.
+ */
+public class DSSMModel extends TzrecModelBase {
+
     @Override
-    public String getModelName() {
-        return "tzrec.dssm";
+    protected String getModelNameSuffix() {
+        return "dssm";
     }
 
     @Override
@@ -32,10 +44,13 @@ public class DSSMModel implements ModelController {
     }
 
     @Override
-    public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
-        String pipelineConfig = PipelineConfigUtils.generateDSSMTrainConfig(model, trainConf);
-        String shell = ShellUtils.genTrainModelShell(model, trainConf);
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
+    protected String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        return PipelineConfigUtils.generateDSSMTrainConfig(model, trainConf);
+    }
+
+    @Override
+    protected String generateExportConfig(ModelConf model, ModelExportConf exportConf) {
+        return PipelineConfigUtils.generateDSSMExportConfig(model, exportConf);
     }
 
     @Override
@@ -47,23 +62,5 @@ public class DSSMModel implements ModelController {
     @Override
     public String getExportCleanPath(ModelExportConf exportConf) {
         return exportConf.getBaseModelDir() + "_export";
-    }
-
-    @Override
-    public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
-        String exportDir = exportConf.getBaseModelDir() + "_export";
-        String pipelineConfig = PipelineConfigUtils.generateDSSMExportConfig(model, exportConf);
-        String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
-        return K8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), exportConf.getParams());
-    }
-
-    @Override
-    public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceUrl(serviceConf);
-    }
-
-    @Override
-    public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        return K8sYamlUtils.getServiceK8sYaml(serviceConf);
     }
 }

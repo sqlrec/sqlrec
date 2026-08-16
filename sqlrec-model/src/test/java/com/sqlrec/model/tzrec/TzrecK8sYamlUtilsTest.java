@@ -7,15 +7,15 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class K8sYamlUtilsTest {
+public class TzrecK8sYamlUtilsTest {
 
     @Test
     public void testCreateConfigMapYamlWithSingleFile() {
         String configMapName = "test-configmap";
         Map<String, String> files = new HashMap<>();
         files.put("application.properties", "key1=value1\nkey2=value2");
-        String yaml = K8sYamlUtils.createConfigMapYaml(configMapName, files);
-        
+        String yaml = TzrecK8sYamlUtils.createConfigMapYaml(configMapName, files);
+
         String expectedYaml = """
 ---
 apiVersion: "v1"
@@ -35,9 +35,9 @@ data:
         String jobName = "test-job";
         String serviceName = "test-service";
         int masterPort = 29500;
-        
-        String yaml = K8sYamlUtils.createHeadlessServiceYaml(jobName, serviceName, masterPort);
-        
+
+        String yaml = TzrecK8sYamlUtils.createHeadlessServiceYaml(jobName, serviceName, masterPort);
+
         String expectedYaml = """
 ---
 apiVersion: "v1"
@@ -62,9 +62,9 @@ spec:
         int port = 80;
         String selectKey = "app";
         String selectValue = "test-app";
-        
-        String yaml = K8sYamlUtils.createServiceYaml(serviceName, port, selectKey, selectValue);
-        
+
+        String yaml = TzrecK8sYamlUtils.createServiceYaml(serviceName, port, selectKey, selectValue);
+
         String expectedYaml = """
 ---
 apiVersion: "v1"
@@ -98,10 +98,10 @@ spec:
         params.put("pod_cpu_limit", "4");
         params.put("pod_memory_limit", "16Gi");
 
-        String yaml = K8sYamlUtils.createJobYaml(
+        String yaml = TzrecK8sYamlUtils.createJobYaml(
                 jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
         );
-        
+
         String expectedYaml = """
 ---
 apiVersion: "batch/v1"
@@ -172,7 +172,7 @@ spec:
         params.put("pod_cpu_cores", "2");
         params.put("pod_memory", "8Gi");
 
-        String yaml = K8sYamlUtils.createJobYaml(
+        String yaml = TzrecK8sYamlUtils.createJobYaml(
                 jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
         );
 
@@ -243,10 +243,10 @@ spec:
         params.put("pod_cpu_cores", "8");
         params.put("pod_memory", "16Gi");
 
-        String yaml = K8sYamlUtils.createJobYaml(
+        String yaml = TzrecK8sYamlUtils.createJobYaml(
                 jobName, configMapName, serviceName, nnodes, nprocPerNode, masterPort, params
         );
-        
+
         String expectedYaml = """
 ---
 apiVersion: "batch/v1"
@@ -305,8 +305,8 @@ spec:
         String yaml1 = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n";
         String yaml2 = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm2\n";
 
-        String mergedYaml = K8sYamlUtils.mergeK8sYamls(yaml1, yaml2);
-        
+        String mergedYaml = TzrecK8sYamlUtils.mergeK8sYamls(yaml1, yaml2);
+
         String expectedYaml = """
 apiVersion: v1
 kind: ConfigMap
@@ -327,8 +327,8 @@ metadata:
         String yaml2 = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm2\n";
         String yaml3 = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm3\n";
 
-        String mergedYaml = K8sYamlUtils.mergeK8sYamls(yaml1, yaml2, yaml3);
-        
+        String mergedYaml = TzrecK8sYamlUtils.mergeK8sYamls(yaml1, yaml2, yaml3);
+
         String expectedYaml = """
 apiVersion: v1
 kind: ConfigMap
@@ -361,7 +361,7 @@ metadata:
         params.put("pod_memory_limit", "32Gi");
         params.put("replicas", "3");
 
-        String yaml = K8sYamlUtils.createDeploymentYaml(
+        String yaml = TzrecK8sYamlUtils.createDeploymentYaml(
                 deployName, modelCheckpointDir, params
         );
 
@@ -415,10 +415,10 @@ spec:
         String deployName = "default-deployment";
         String modelCheckpointDir = "/model/checkpoint/default";
 
-        String yaml = K8sYamlUtils.createDeploymentYaml(
+        String yaml = TzrecK8sYamlUtils.createDeploymentYaml(
                 deployName, modelCheckpointDir, new HashMap<>()
         );
-        
+
         String expectedYaml = """
 ---
 apiVersion: "apps/v1"

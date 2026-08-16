@@ -4,14 +4,12 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
 import com.sqlrec.model.common.ModelConfigBase;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
-import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -20,10 +18,10 @@ import java.util.TreeMap;
  *
  * <p>Training runs as a single-replica K8s Job (no distributed mode). The container command runs
  * the GBDT Python entry points and the image is {@code sqlrec/gbdt}. Common YAML primitives
- * (ConfigMap / Service / resource requirements / YAML merge / service URL) are inherited from
- * {@link K8sYamlBuilder}.
+ * (ConfigMap / Service / Deployment / resource requirements / YAML merge / service URL) are
+ * inherited from {@link K8sYamlBuilder}.
  */
-public class K8sYamlUtils extends K8sYamlBuilder {
+public class GbdtK8sYamlUtils extends K8sYamlBuilder {
 
     public static String createJobYaml(
             String jobName,
@@ -81,38 +79,14 @@ public class K8sYamlUtils extends K8sYamlBuilder {
         // launches the C++ server binary (catboost_server / lightgbm_server).
         String serveShell = ShellUtils.genServeModelShell(modelType, modelCheckpointDir);
 
-        Deployment deployment = new DeploymentBuilder()
-                .withNewMetadata()
-                    .withName(deployName)
-                .endMetadata()
-                .withNewSpec()
-                    .withReplicas(Config.REPLICAS.getValue(params))
-                    .withNewSelector()
-                        .withMatchLabels(Map.of("app", deployName))
-                    .endSelector()
-                    .withNewTemplate()
-                        .withNewMetadata()
-                            .withLabels(Map.of("app", deployName))
-                        .endMetadata()
-                        .withNewSpec()
-                            .addNewContainer()
-                                .withName("gbdt-service")
-                                .withImage(image)
-                                .withCommand("bash", "-c", serveShell)
-                                .withPorts(
-                                        new ContainerPortBuilder()
-                                                .withName("http")
-                                                .withContainerPort(80)
-                                                .build()
-                                )
-                                .withResources(buildResourceRequirements(params))
-                            .endContainer()
-                        .endSpec()
-                    .endTemplate()
-                .endSpec()
-                .build();
-
-        return Serialization.asYaml(deployment);
+        return createDeploymentYaml(
+                deployName,
+                "gbdt-service",
+                image,
+                List.of("bash", "-c", serveShell),
+                null,
+                params
+        );
     }
 
     public static String genJobYaml(String pipelineConfig, String shell, String id, Map<String, String> params) {
