@@ -43,3 +43,4 @@ node_modules/
 .node/
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
+.flattened-pom.xml

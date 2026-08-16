@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.sqlrec</groupId>
         <artifactId>sqlrec-parent</artifactId>
-        <version>0.1.9</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>sqlrec-demo</artifactId>
@@ -50,7 +50,6 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.5.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

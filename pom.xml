@@ -6,7 +6,7 @@
 
     <groupId>org.sqlrec</groupId>
     <artifactId>sqlrec-parent</artifactId>
-    <version>0.1.9</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
     <modules>
         <module>sqlrec-frontend</module>
@@ -20,18 +20,138 @@
         <module>sqlrec-demo</module>
         <module>sqlrec-flink</module>
     </modules>
-    
+
     <properties>
+        <revision>0.1.9</revision>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <calcite.version>1.32.0</calcite.version>
         <flink.version>1.19.0</flink.version>
         <hive.version>3.1.3</hive.version>
-        <sqlrec.version>0.1.9</sqlrec.version>
+        <sqlrec.version>${revision}</sqlrec.version>
         <opentelemetry.version>1.29.0</opentelemetry.version>
         <mockito.version>5.12.0</mockito.version>
+        <junit.version>5.10.1</junit.version>
+        <caffeine.version>2.9.3</caffeine.version>
+        <okhttp.version>4.12.0</okhttp.version>
+        <micrometer.version>1.16.5</micrometer.version>
+        <h2.version>2.2.224</h2.version>
+        <ejml.version>0.45.1</ejml.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Flink artifacts shared by connectors; scope (provided/test)
+                 stays declared by each module. -->
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-common</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-streaming-java</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-api-java-bridge</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+
+            <!-- Test dependencies shared by all modules -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${junit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.h2database</groupId>
+                <artifactId>h2</artifactId>
+                <version>${h2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.ejml</groupId>
+                <artifactId>ejml-all</artifactId>
+                <version>${ejml.version}</version>
+            </dependency>
+
+            <!-- Dependencies previously version-pinned in multiple modules -->
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-core</artifactId>
+                <version>${micrometer.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>${micrometer.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-java21</artifactId>
+                <version>${micrometer.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Resolves the CI-friendly ${revision} property into the
+                 installed/deployed pom, so consumers never see ${revision}. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
     <profiles>
         <profile>
