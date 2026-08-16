@@ -532,6 +532,16 @@ public class FilterUtilsTest {
     }
 
     @Test
+    public void testGetSqlFilterString_EscapesSingleQuote() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode literal = rexBuilder.makeLiteral("O'Brien", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, ref1, literal);
+
+        String result = FilterUtils.getSqlFilterString(Collections.singletonList(filter), sqlFieldSchemas);
+        assertEquals("name = 'O''Brien'", result);
+    }
+
+    @Test
     public void testGetSqlFilterString_GreaterThanOrEqual() {
         RexInputRef ref2 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
         RexNode literal = rexBuilder.makeExactLiteral(new java.math.BigDecimal(25));

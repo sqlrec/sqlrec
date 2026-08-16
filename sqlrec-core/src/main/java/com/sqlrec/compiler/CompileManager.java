@@ -178,8 +178,9 @@ public class CompileManager {
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
         functionName = functionName.toUpperCase();
-        if (functionBindableMap.containsKey(functionName)) {
-            return functionBindableMap.get(functionName);
+        SqlFunctionBindable bindable = functionBindableMap.get(functionName);
+        if (bindable != null) {
+            return bindable;
         }
         return compileSqlFunction(functionName);
     }

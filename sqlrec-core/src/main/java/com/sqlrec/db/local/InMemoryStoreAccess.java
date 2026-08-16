@@ -134,6 +134,9 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void insertSqlApi(SqlApi sqlApi) {
+        // keep function names upper-cased, consistent with DbStoreAccess (postgres is
+        // case-sensitive) so both backends store identical values
+        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         if (sqlApiMap.putIfAbsent(sqlApi.getName(), sqlApi) != null) {
             throw new RuntimeException("SqlApi already exists: " + sqlApi.getName());
         }
@@ -141,6 +144,7 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void upsertSqlApi(SqlApi sqlApi) {
+        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         sqlApiMap.put(sqlApi.getName(), sqlApi);
     }
 

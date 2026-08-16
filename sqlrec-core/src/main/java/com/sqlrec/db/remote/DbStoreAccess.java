@@ -115,11 +115,16 @@ public class DbStoreAccess implements StoreAccess {
 
     @Override
     public void insertSqlApi(SqlApi sqlApi) {
+        // queries filter on function_name with an upper-cased parameter (see
+        // getSqlApiListByFunctionName), so writes must normalize too: postgres string
+        // comparison is case-sensitive and a mixed-case value would never be found.
+        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.insertSqlApi(sqlApi));
     }
 
     @Override
     public void upsertSqlApi(SqlApi sqlApi) {
+        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.upsertSqlApi(sqlApi));
     }
 

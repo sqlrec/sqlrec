@@ -39,7 +39,10 @@ public class FilterUtils {
         SQL {
             @Override
             String quoteString(String value) {
-                return "'" + value + "'";
+                // SQL string literals escape a quote by doubling it.  Filter values
+                // are interpolated into the connector query, so this must be done
+                // before surrounding the value with quotes.
+                return "'" + value.replace("'", "''") + "'";
             }
 
             @Override

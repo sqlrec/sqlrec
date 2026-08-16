@@ -81,4 +81,77 @@ public class PathUtilsTest {
         assertThrows(IllegalArgumentException.class,
                 () -> PathUtils.validateModelPath("/models/xy/cp1", "/models/x"));
     }
+
+    // --- dot segment removal ---
+
+    @Test
+    public void testNormalizePathResolvesDotSegments() {
+        assertEquals("/models/y", PathUtils.normalizePath("/models/x/../y"));
+        // escaping above the root is invalid (FilenameUtils.normalize returns null)
+        // and collapses to "", so validateModelPath rejects it
+        assertEquals("", PathUtils.normalizePath("/a/../../b"));
+        assertEquals("/models/x", PathUtils.normalizePath("/models/./x/"));
+        assertEquals("/models/x/cp1", PathUtils.normalizePath("/models/x/cp1/."));
+    }
+
+    @Test
+    public void testNormalizePathRootAfterDotDots() {
+        // "/a/.." collapses all the way to the root (represented as "")
+        assertEquals("", PathUtils.normalizePath("/a/.."));
+        assertEquals("", PathUtils.normalizePath("/a/../"));
+    }
+
+    @Test
+    public void testValidateModelPathRejectsTraversalOutsideModelPath() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("/models/x/../../etc/passwd", "/models/x"));
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("/models/x/cp1/../../../user/other", "/models/x"));
+    }
+
+    @Test
+    public void testValidateModelPathAcceptsTraversalStayingInside() {
+        // "/models/x/cp1/.." resolves back to the model path itself, which is allowed
+        assertDoesNotThrow(() ->
+                PathUtils.validateModelPath("/models/x/cp1/..", "/models/x"));
+        assertDoesNotThrow(() ->
+                PathUtils.validateModelPath("/models/x/../x/cp1", "/models/x"));
+    }
+
+    @Test
+    public void testValidateModelPathRejectsTraversalWithProtocol() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("hdfs://nn:8020/models/x/../../etc", "hdfs://nn:8020/models/x"));
+    }
+
+    // --- authority checks ---
+
+    @Test
+    public void testValidateModelPathRejectsDifferentAuthority() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("hdfs://nn1:8020/models/x/cp1", "hdfs://nn2:8020/models/x"));
+    }
+
+    @Test
+    public void testValidateModelPathAcceptsMissingAuthorityOnOneSide() {
+        // scheme-less path against a scheme-ful model path stays allowed (compat)
+        assertDoesNotThrow(() ->
+                PathUtils.validateModelPath("/models/x/cp1", "hdfs://nn:8020/models/x"));
+        assertDoesNotThrow(() ->
+                PathUtils.validateModelPath("hdfs:///models/x/cp1", "hdfs://nn:8020/models/x"));
+    }
+
+    // --- blank path checks ---
+
+    @Test
+    public void testValidateModelPathRejectsBlankPaths() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("/models/x/cp1", ""));
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("/models/x/cp1", "   "));
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath(null, "/models/x"));
+        assertThrows(IllegalArgumentException.class,
+                () -> PathUtils.validateModelPath("  ", "/models/x"));
+    }
 }
