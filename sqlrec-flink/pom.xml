@@ -18,17 +18,25 @@
     </properties>
 
     <dependencies>
-        <!-- Must stay FIRST: hive-exec (test scope) is a shaded jar that embeds
-             an old unrelocated com.google.common (guava 19). Since surefire
-             orders direct dependencies by declaration order and the Flink
-             MiniCluster task classloader follows java.class.path order, this
-             explicit guava dependency ensures grpc (via milvus-sdk-java) finds
+        <!-- Must stay FIRST and be compile scope: hive-exec (test scope) is a
+             shaded jar that embeds an old unrelocated com.google.common
+             (guava 19). Since surefire orders direct dependencies by
+             declaration order and the Flink MiniCluster task classloader
+             follows java.class.path order, this explicit guava dependency
+             ensures grpc (via milvus-sdk-java) finds
              Preconditions.checkArgument(boolean, String, char, Object),
-             which only exists in guava 26+. -->
+             which only exists in guava 26+.
+
+             Scope MUST be compile (not test): guava is needed at runtime by
+             grpc (io.grpc.Metadata references com.google.common.io.BaseEncoding)
+             which is used by milvus-sdk-java in the shaded jar deployed to the
+             Flink cluster. With test scope, Maven's nearest-definition rule
+             downgrades the transitive compile-scoped guava from milvus-sdk-java
+             to test, excluding it from the shade plugin's uber-jar and causing
+             NoClassDefFoundError at runtime. -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <scope>test</scope>
         </dependency>
         <!-- Flink connectors with DynamicTableFactory SPI -->
         <dependency>

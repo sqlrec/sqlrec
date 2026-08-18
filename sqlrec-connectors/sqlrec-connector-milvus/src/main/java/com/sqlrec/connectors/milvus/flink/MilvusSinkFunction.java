@@ -149,6 +149,16 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
     }
 
     private void submit(Runnable flushTask) throws Exception {
+        // During Flink's operator-chain shutdown, operators are closed in reverse
+        // order (downstream first). This means close() shuts down the flush executor
+        // before upstream operators finish flushing. When the upstream operator's
+        // close() sends remaining records through the chain, invoke() is still called
+        // on this sink, but the executor is already terminated. In that case, run the
+        // flush task synchronously in the caller thread.
+        if (flushExecutor.isShutdown()) {
+            flushTask.run();
+            return;
+        }
         Runnable countedTask = () -> {
             try {
                 flushTask.run();
