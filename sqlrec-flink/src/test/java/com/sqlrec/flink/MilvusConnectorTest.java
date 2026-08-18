@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * focus on INSERT operations. The test uses unique IDs per run to avoid
  * data conflicts.
  *
- * Requires a running Milvus at {@code http://<DEFAULT_TEST_IP>:31530}
+ * Requires a running Milvus at {@code http://<DEFAULT_TEST_IP>:30022}
  * with a collection named {@code item_embedding} containing fields:
  * id (BIGINT), title (VARCHAR), genres (ARRAY<STRING>), embedding (ARRAY<DOUBLE>)
  * with embedding dimension = 64.
@@ -52,7 +52,7 @@ class MilvusConnectorTest {
     static final MiniClusterExtension MINI_CLUSTER = new MiniClusterExtension();
 
     private static final String MILVUS_URL =
-            "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":31530";
+            "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30022";
     private static final String MILVUS_TOKEN = "root:Milvus";
     private static final String MILVUS_DB = "default";
     private static final int EMBEDDING_DIM = 64;

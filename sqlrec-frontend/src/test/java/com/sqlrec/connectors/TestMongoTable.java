@@ -32,7 +32,7 @@ import java.util.Map;
 @Tag("integration")
 public class TestMongoTable {
 
-    private static final String MONGO_URI = "mongodb://sqlrec:abc123456@" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30281";
+    private static final String MONGO_URI = "mongodb://sqlrec:abc123456@" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30029";
 
     @Test
     public void testMongoTable() throws Exception {

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `item_embedding` (
   PRIMARY KEY (id)  NOT ENFORCED
 ) WITH (
   'connector' = 'milvus',
-  'url' = 'http://192.168.1.5:31530',
+  'url' = 'http://192.168.1.5:30022',
   'token' = 'root:Milvus',
   'database' = 'default',
   'collection' = 'item_embedding'

@@ -130,9 +130,9 @@ SQLRec service is deployed through Kubernetes Deployment with the following main
 
 | Port | Service | Description |
 |------|---------|-------------|
-| 30300 | Thrift Server | JDBC/Beeline connection port |
-| 30301 | REST Server | REST API port |
-| 30302 | Debug | Remote debugging port |
+| 30000 | Thrift Server | JDBC/Beeline connection port |
+| 30001 | REST Server | REST API port |
+| 30002 | Debug | Remote debugging port |
 
 **Kubernetes Permissions**:
 

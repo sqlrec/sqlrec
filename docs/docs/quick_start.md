@@ -17,7 +17,7 @@ cd deploy
 bash ./jupyter/deploy.sh
 # wait pod ready
 ```
-- 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30280`，使用env.sh中的账号密码登录
+- 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30028`，使用env.sh中的账号密码登录
 - 新建python3 notebook
 - 安装依赖
 ```bash
@@ -32,7 +32,7 @@ bash ./jupyter/deploy.sh
 from pyhive import hive
 import pandas as pd
 
-conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
+conn = hive.Connection(host='192.168.49.2',port=30000,auth='NOSASL')
 pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
 ```
 
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS `user_interest_category1` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0'
+  'url' = 'redis://192.168.49.2:30017/0'
 );
 
 CREATE TABLE IF NOT EXISTS `category1_hot_item` (
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS `category1_hot_item` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0'
+  'url' = 'redis://192.168.49.2:30017/0'
 );
 
 CREATE TABLE IF NOT EXISTS `exposure_item` (
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS `exposure_item` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0',
+  'url' = 'redis://192.168.49.2:30017/0',
   'cache-ttl' = '0'
 );
 
@@ -177,21 +177,21 @@ return final_rec_data;
 
 可以直接在beeline命令行测试函数，如下所示
 ```sql
-0: jdbc:hive2://192.168.49.2:30300/default> cache table t1 as select cast(1000001 as bigint) as id;
+0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
 +-------------+--------+
 | table_name  | count  |
 +-------------+--------+
 | t1          | 1      |
 +-------------+--------+
 1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> desc t1;
+0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
 +-------+---------+
 | name  |  type   |
 +-------+---------+
 | id    | BIGINT  |
 +-------+---------+
 1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> call test_rec(t1);
+0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 | user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
@@ -199,7 +199,7 @@ return final_rec_data;
 | 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> call test_rec(t1);
+0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 | user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
@@ -219,7 +219,7 @@ create or replace api test_rec with test_rec;
 ## 推荐测试
 使用下述命令进行推荐测试：
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
+yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
 -H "Content-Type: application/json" \
 -d '{"data":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
@@ -227,7 +227,7 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 
 ## 前端UI
 
-SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `http://192.168.49.2:30301/ui/static/index.html` 访问（请将IP地址替换为你的minikube节点IP）。
+SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `http://192.168.49.2:30001/ui/static/index.html` 访问（请将IP地址替换为你的minikube节点IP）。
 
 前端UI可以让你：
 - 查看SQL函数及其执行DAG（有向无环图）

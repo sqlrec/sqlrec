@@ -197,7 +197,7 @@ public class TestMilvusCalciteTable {
         fieldSchemas.add(new FieldSchema("embedding", "ARRAY<FLOAT>"));
 
         MilvusConfig milvusConfig = new MilvusConfig();
-        milvusConfig.url = "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":31530";
+        milvusConfig.url = "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30022";
         milvusConfig.token = "root:Milvus";
         milvusConfig.database = "default";
         milvusConfig.collection = "item_embedding";

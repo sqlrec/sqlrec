@@ -575,7 +575,7 @@ SELECT 1001 AS user_id, 'Alice' AS user_name;
 -- Call a recommendation API published on a remote SQLRec instance
 CACHE TABLE remote_rec AS
 CALL call_sqlrec_api(
-    'http://remote-sqlrec:30301/api/v1/recommend',
+    'http://remote-sqlrec:30001/api/v1/recommend',
     user_input
 );
 

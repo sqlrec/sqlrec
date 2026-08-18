@@ -47,7 +47,7 @@ public class TestKafkaTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         KafkaConfig kafkaConfig = new KafkaConfig();
-        kafkaConfig.bootstrapServers = SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32092";
+        kafkaConfig.bootstrapServers = SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30021";
         kafkaConfig.format = "json";
         kafkaConfig.topic = "t1";
         kafkaConfig.fieldSchemas = fieldSchemas;

@@ -220,7 +220,7 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30017/0";
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "json";
         redisConfig.ttl = 10000;
@@ -242,7 +242,7 @@ public class TestRedisTable {
         fieldSchemas.add(new FieldSchema("CNT", "INTEGER"));
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30017/0";
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "list";
         redisConfig.ttl = 10000;
@@ -269,7 +269,7 @@ public class TestRedisTable {
         }
 
         RedisConfig redisConfig = new RedisConfig();
-        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":32379/0";
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30017/0";
         redisConfig.redisMode = "single";
         redisConfig.dataStructure = "string";
         redisConfig.ttl = 10000;

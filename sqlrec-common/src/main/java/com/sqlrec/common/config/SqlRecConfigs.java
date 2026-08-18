@@ -40,14 +40,14 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<Integer> THRIFT_SERVER_PORT = new ConfigOption<>(
             "THRIFT_SERVER_PORT",
-            30300,
+            30000,
             "port of thrift server",
             null,
             Integer.class
     );
     public static final ConfigOption<Integer> REST_SERVER_PORT = new ConfigOption<>(
             "REST_SERVER_PORT",
-            30301,
+            30001,
             "port of rest server",
             null,
             Integer.class
@@ -164,7 +164,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
-            "jdbc:postgresql://" + DEFAULT_TEST_IP.getValue() + ":30308/sqlrec?sslmode=disable",
+            "jdbc:postgresql://" + DEFAULT_TEST_IP.getValue() + ":30005/sqlrec?sslmode=disable",
             "meta db url",
             null,
             String.class
@@ -192,7 +192,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> HIVE_METASTORE_URI = new ConfigOption<>(
             "HIVE_METASTORE_URI",
-            "thrift://" + DEFAULT_TEST_IP.getValue() + ":32083",
+            "thrift://" + DEFAULT_TEST_IP.getValue() + ":30008",
             "hive metastore uri",
             null,
             String.class
@@ -213,7 +213,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<Integer> FLINK_SQL_GATEWAY_PORT = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_PORT",
-            30000,
+            30018,
             "flink sql gateway port",
             null,
             Integer.class

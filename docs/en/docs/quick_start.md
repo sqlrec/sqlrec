@@ -24,7 +24,7 @@ bash ./jupyter/deploy.sh
 # wait pod ready
 ```
 
-- Open Jupyter Notebook in your browser, e.g., `http://127.0.0.1:30280`, and log in using the credentials from env.sh
+- Open Jupyter Notebook in your browser, e.g., `http://127.0.0.1:30028`, and log in using the credentials from env.sh
 - Create a new Python3 notebook
 - Install dependencies
 
@@ -42,7 +42,7 @@ bash ./jupyter/deploy.sh
 from pyhive import hive
 import pandas as pd
 
-conn = hive.Connection(host='192.168.49.2',port=30300,auth='NOSASL')
+conn = hive.Connection(host='192.168.49.2',port=30000,auth='NOSASL')
 pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
 ```
 
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS `user_interest_category1` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0'
+  'url' = 'redis://192.168.49.2:30017/0'
 );
 
 CREATE TABLE IF NOT EXISTS `category1_hot_item` (
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS `category1_hot_item` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0'
+  'url' = 'redis://192.168.49.2:30017/0'
 );
 
 CREATE TABLE IF NOT EXISTS `exposure_item` (
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `exposure_item` (
 ) WITH (
   'connector' = 'redis',
   'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:32379/0',
+  'url' = 'redis://192.168.49.2:30017/0',
   'cache-ttl' = '0'
 );
 
@@ -193,21 +193,21 @@ The SQL above defines the recommendation function `test_rec`. The SQL function d
 You can test the function directly in the beeline command line as follows:
 
 ```sql
-0: jdbc:hive2://192.168.49.2:30300/default> cache table t1 as select cast(1000001 as bigint) as id;
+0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
 +-------------+--------+
 | table_name  | count  |
 +-------------+--------+
 | t1          | 1      |
 +-------------+--------+
 1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> desc t1;
+0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
 +-------+---------+
 | name  |  type   |
 +-------+---------+
 | id    | BIGINT  |
 +-------+---------+
 1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> call test_rec(t1);
+0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 | user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
@@ -215,7 +215,7 @@ You can test the function directly in the beeline command line as follows:
 | 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30300/default> call test_rec(t1);
+0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
 | user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
 +----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
@@ -240,7 +240,7 @@ create or replace api test_rec with test_rec;
 Test recommendations using the following command:
 
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
+yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
 -H "Content-Type: application/json" \
 -d '{"data":{"user_info":[{"id": 1000001}]}}'
 {"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
@@ -248,7 +248,7 @@ yi@debian12:~$ curl -X POST http://192.168.49.2:30301/api/v1/test_rec \
 
 ## Frontend UI
 
-SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30301/ui/static/index.html` (replace the IP address with your minikube node IP).
+SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30001/ui/static/index.html` (replace the IP address with your minikube node IP).
 
 The frontend UI allows you to:
 - View SQL functions and their execution DAG (Directed Acyclic Graph)

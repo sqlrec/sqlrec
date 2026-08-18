@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("integration")
 class MongoHandlerTest {
 
-    private static final String MONGO_URI = "mongodb://sqlrec:abc123456@"+ SqlRecConfigs.DEFAULT_TEST_IP.getValue()+":30281";
+    private static final String MONGO_URI = "mongodb://sqlrec:abc123456@"+ SqlRecConfigs.DEFAULT_TEST_IP.getValue()+":30029";
     private static final String DATABASE = "sqlrec_test";
     private static final String COLLECTION = "test_collection";
 

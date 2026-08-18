@@ -50,7 +50,7 @@ public class TestShowCreate {
         assertEquals("redis", connector, "connector should be redis");
 
         String url = HiveTableUtils.getFlinkTableOptions(genreHotItem).get("url");
-        assertEquals("redis://192.168.1.5:32379/0", url);
+        assertEquals("redis://192.168.1.5:30017/0", url);
 
         String sourceContent = Files.readString(Paths.get(sqlDir, "table", "genre_hot_item.sql")).trim();
         SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));

@@ -128,7 +128,7 @@ end
 在 AMD Ryzen 5600H、32GB DDR4 内存机器上的测试结果：
 
 ```
-Running 30s test @ http://192.168.49.2:30301/api/v1/main_rec
+Running 30s test @ http://192.168.49.2:30001/api/v1/main_rec
   10 threads and 10 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
     Latency     9.23ms    5.04ms  48.96ms   90.50%

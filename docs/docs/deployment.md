@@ -130,9 +130,9 @@ SQLRec 服务通过 Kubernetes Deployment 部署，主要配置项如下：
 
 | 端口 | 服务 | 说明 |
 |------|------|------|
-| 30300 | Thrift Server | JDBC/Beeline 连接端口 |
-| 30301 | REST Server | REST API 端口 |
-| 30302 | Debug | 远程调试端口 |
+| 30000 | Thrift Server | JDBC/Beeline 连接端口 |
+| 30001 | REST Server | REST API 端口 |
+| 30002 | Debug | 远程调试端口 |
 
 **Kubernetes 权限**：
 

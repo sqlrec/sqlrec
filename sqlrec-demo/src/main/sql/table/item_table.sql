@@ -7,6 +7,6 @@ CREATE TABLE IF NOT EXISTS `item_table` (
   PRIMARY KEY (movie_id)  NOT ENFORCED
 ) WITH (
   'connector' = 'redis',
-  'url' = 'redis://192.168.1.5:32379/0'
+  'url' = 'redis://192.168.1.5:30017/0'
 );
 /* end of item_table definition */

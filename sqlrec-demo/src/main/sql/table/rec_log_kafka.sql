@@ -9,6 +9,6 @@ CREATE TABLE IF NOT EXISTS `rec_log_kafka` (
 ) WITH (
   'connector' = 'kafka',
   'topic' = 'rec_log',
-  'properties.bootstrap.servers' = '192.168.1.5:32092',
+  'properties.bootstrap.servers' = '192.168.1.5:30021',
   'format' = 'json'
 );
