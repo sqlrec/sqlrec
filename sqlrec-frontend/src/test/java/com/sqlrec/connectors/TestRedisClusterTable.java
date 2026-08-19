@@ -61,31 +61,54 @@ public class TestRedisClusterTable {
 
         new SqlTestCase("delete from ct1 where id = 1", null).test(schema);
         new SqlTestCase("insert into ct1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
-        new SqlTestCase("select * from ct1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from ct1 where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("update ct1 set name = 'a' where id = 1", null).test(schema);
-        new SqlTestCase("select * from ct1 where id = 1 and name = 'a'", null).test(schema);
+        new SqlTestCase("select * from ct1 where id = 1 and name = 'a'",
+                Collections.singletonList(new Object[]{1, "a", 1})).test(schema);
         new SqlTestCase("update ct1 set name = 'Alice1' where id = 1", null).test(schema);
-        new SqlTestCase("select * from ct1 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from ct1 where id = 1 and name = 'Alice1'",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("delete from ct1 where id = 1", null).test(schema);
-        new SqlTestCase("select * from ct1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from ct1 where id = 1",
+                Collections.emptyList()).test(schema);
 
         // List mode tests
         new SqlTestCase("delete from ct2 where id = 1", null).test(schema);
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
-        new SqlTestCase("select * from ct2 where id = 1", null).test(schema);
-        new SqlTestCase("select * from ct2 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from ct2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2},
+                        new Object[]{1, "Alice1", 1})).test(schema);
+        new SqlTestCase("select * from ct2 where id = 1 and name = 'Alice1'",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("delete from ct2 where id = 1 and name = 'Alice1'", null).test(schema);
-        new SqlTestCase("select * from ct2 where id = 1", null).test(schema);
+        new SqlTestCase("select * from ct2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2})).test(schema);
 
         // Join tests: cluster Redis table joined with in-memory table
-        new SqlTestCase("select * from ct3 left join ct1 on ct3.id = ct1.id", null).test(schema);
-        new SqlTestCase("select * from ct3 left join ct1 on ct3.id = ct1.id where ct3.name = 'Alice'", null).test(schema);
-        new SqlTestCase("select * from ct3 join ct1 on ct3.id = ct1.id", null).test(schema);
-        new SqlTestCase("select * from ct3 join ct2 on ct3.id = ct2.id", null).test(schema);
-        new SqlTestCase("select * from ct3 join ct2 on ct3.id = ct2.id where ct2.name = 'Alice2'", null).test(schema);
-        new SqlTestCase("select ct3.id id1, ct2.id id2 from ct3 join ct2 on ct3.id = ct2.id where ct2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select * from ct3 left join ct1 on ct3.id = ct1.id",
+                Arrays.asList(
+                        new Object[]{1, "Alice", null, null, null},
+                        new Object[]{2, "Bob", null, null, null},
+                        new Object[]{3, "Charlie", null, null, null})).test(schema);
+        new SqlTestCase("select * from ct3 left join ct1 on ct3.id = ct1.id where ct3.name = 'Alice'",
+                Collections.singletonList(new Object[]{1, "Alice", null, null, null})).test(schema);
+        new SqlTestCase("select * from ct3 join ct1 on ct3.id = ct1.id",
+                Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from ct3 join ct2 on ct3.id = ct2.id",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice3", 3},
+                        new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select * from ct3 join ct2 on ct3.id = ct2.id where ct2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select ct3.id id1, ct2.id id2 from ct3 join ct2 on ct3.id = ct2.id where ct2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, 1})).test(schema);
     }
 
     @Test
@@ -114,7 +137,18 @@ public class TestRedisClusterTable {
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice3', 9)", null).test(schema);
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice3', 10)", null).test(schema);
         new SqlTestCase("insert into ct2 (ID, NAME, CNT) values (1, 'Alice3', 11)", null).test(schema);
-        new SqlTestCase("select * from ct2 where id = 1", null).test(schema);
+        new SqlTestCase("select * from ct2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 11},
+                        new Object[]{1, "Alice3", 10},
+                        new Object[]{1, "Alice3", 9},
+                        new Object[]{1, "Alice3", 8},
+                        new Object[]{1, "Alice3", 7},
+                        new Object[]{1, "Alice3", 6},
+                        new Object[]{1, "Alice3", 5},
+                        new Object[]{1, "Alice3", 4},
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2})).test(schema);
     }
 
     @Test

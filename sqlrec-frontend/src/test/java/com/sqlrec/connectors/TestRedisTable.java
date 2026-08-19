@@ -47,21 +47,33 @@ public class TestRedisTable {
 
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
         new SqlTestCase("insert into t1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("update t1 set name = 'a' where id = 1", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1 and name = 'a'", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and name = 'a'",
+                Collections.singletonList(new Object[]{1, "a", 1})).test(schema);
         new SqlTestCase("update t1 set name = 'Alice1' where id = 1", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 and name = 'Alice1'",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("delete from t1 where id = 1", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 1",
+                Collections.emptyList()).test(schema);
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
-        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
-        new SqlTestCase("select * from t2 where id = 1 and name = 'Alice1'", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2},
+                        new Object[]{1, "Alice1", 1})).test(schema);
+        new SqlTestCase("select * from t2 where id = 1 and name = 'Alice1'",
+                Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
         new SqlTestCase("delete from t2 where id = 1 and name = 'Alice1'", null).test(schema);
-        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2})).test(schema);
 
         new SqlTestCase("select * from t3 join t3 as t on t3.id = t.id", null, """
                 LogicalProject(ID=[$0], NAME=[$1], ID0=[$2], NAME0=[$3])
@@ -85,25 +97,46 @@ public class TestRedisTable {
                   EnumerableSort(sort0=[$0], dir0=[ASC])
                     EnumerableTableScan(table=[[default, t4]])""", null).test(schema);
 
-        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id", null).test(schema);
-        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'", null).test(schema);
-        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id", null).test(schema);
-        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'", null).test(schema);
-        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice1'", null).test(schema);
-        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
-        new SqlTestCase("select t3.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
-        new SqlTestCase("select t3.*, t2.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
-        new SqlTestCase("select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'", null).test(schema);
+        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id order by t3.id, t2.name",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice2", 2},
+                        new Object[]{1, "Alice", 1, "Alice3", 3},
+                        new Object[]{2, "Bob", null, null, null},
+                        new Object[]{3, "Charlie", null, null, null})).test(schema);
+        new SqlTestCase("select * from t3 left join t2 on t3.id = t2.id where t3.name = 'Alice'",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice3", 3},
+                        new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice3", 3},
+                        new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t3.name = 'Alice'",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice3", 3},
+                        new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice1'",
+                Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select t3.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, "Alice"})).test(schema);
+        new SqlTestCase("select t3.*, t2.* from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, "Alice", 1, "Alice2", 2})).test(schema);
+        new SqlTestCase("select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'",
+                Collections.singletonList(new Object[]{1, 1})).test(schema);
         new SqlTestCase("select id1, count(id2) from ( " +
                 "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
-                ") group by id1 order by id1 limit 10", null).test(schema);
+                ") group by id1 order by id1 limit 10",
+                Collections.singletonList(new Object[]{1, 1L})).test(schema);
         new SqlTestCase("select * from ( " +
                 "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice2'" +
                 ") t " +
                 "union all " +
                 "select * from ( " +
                 "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice3'" +
-                ") t2 ", null).test(schema);
+                ") t2 ",
+                Arrays.asList(new Object[]{1, 1}, new Object[]{1, 1})).test(schema);
     }
 
     @Test
@@ -132,7 +165,18 @@ public class TestRedisTable {
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 9)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 10)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 11)", null).test(schema);
-        new SqlTestCase("select * from t2 where id = 1", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 1",
+                Arrays.asList(
+                        new Object[]{1, "Alice3", 11},
+                        new Object[]{1, "Alice3", 10},
+                        new Object[]{1, "Alice3", 9},
+                        new Object[]{1, "Alice3", 8},
+                        new Object[]{1, "Alice3", 7},
+                        new Object[]{1, "Alice3", 6},
+                        new Object[]{1, "Alice3", 5},
+                        new Object[]{1, "Alice3", 4},
+                        new Object[]{1, "Alice3", 3},
+                        new Object[]{1, "Alice2", 2})).test(schema);
     }
 
     @Test
