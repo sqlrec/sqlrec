@@ -9,6 +9,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlTypeChecker;
@@ -414,8 +415,8 @@ public class SqlExecutor {
     public static void saveSqlApi(SqlCreateApi api) {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlApi sqlApi = new SqlApi();
-        sqlApi.setName(api.getApiName());
-        sqlApi.setFunctionName(api.getFuncName());
+        sqlApi.setName(ResourceNames.normalize(api.getApiName()));
+        sqlApi.setFunctionName(ResourceNames.normalize(api.getFuncName()));
         sqlApi.setCreatedAt(System.currentTimeMillis());
         sqlApi.setUpdatedAt(System.currentTimeMillis());
         if (api.isOrReplace()) {

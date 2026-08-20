@@ -6,6 +6,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlApi;
@@ -177,7 +178,7 @@ public class CompileManager {
     }
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
-        functionName = functionName.toUpperCase();
+        functionName = ResourceNames.normalize(functionName);
         SqlFunctionBindable bindable = functionBindableMap.get(functionName);
         if (bindable != null) {
             return bindable;
@@ -187,7 +188,7 @@ public class CompileManager {
 
     public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        functionName = functionName.toUpperCase();
+        functionName = ResourceNames.normalize(functionName);
         SqlFunction sqlFunction = db.getSqlFunction(functionName);
         if (sqlFunction == null) {
             throw new Exception("function not fund : " + functionName);
@@ -197,7 +198,7 @@ public class CompileManager {
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
-        functionName = functionName.toUpperCase();
+        functionName = ResourceNames.normalize(functionName);
         if (compilingSqlFunctions.contains(functionName)) {
             throw new Exception("circular dependency: " + functionName + " trace: "
                     + String.join("->", compilingSqlFunctions));
@@ -213,7 +214,7 @@ public class CompileManager {
         }
 
         if (functionCompiler.isFunctionCompileFinish()) {
-            if (!functionName.equalsIgnoreCase(functionCompiler.getFunctionBindable().getFunName())) {
+            if (!functionName.equals(functionCompiler.getFunctionBindable().getFunName())) {
                 throw new RuntimeException("function name not match");
             }
             functionBindableMap.put(functionName, functionCompiler.getFunctionBindable());

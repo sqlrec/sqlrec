@@ -3,6 +3,7 @@ package com.sqlrec.model;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
@@ -56,7 +57,7 @@ public class ModelManager {
 
     public static ModelConf createModel(SqlCreateModel sqlCreateModel) {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        String modelName = sqlCreateModel.getModelName().getSimple();
+        String modelName = ResourceNames.of(sqlCreateModel.getModelName());
         Model existingModel = db.getModel(modelName);
         if (existingModel != null) {
             if (sqlCreateModel.isIfNotExists()) {

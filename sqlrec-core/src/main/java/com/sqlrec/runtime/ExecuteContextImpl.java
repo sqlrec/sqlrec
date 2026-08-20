@@ -87,7 +87,6 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     public void addFunNameToStack(String funName) {
-        funName = funName.toUpperCase();
         if (funNameStack.contains(funName)) {
             throw new RuntimeException("Circular dependency detected: " + funName +
                     " in stack: " + String.join("->", funNameStack));

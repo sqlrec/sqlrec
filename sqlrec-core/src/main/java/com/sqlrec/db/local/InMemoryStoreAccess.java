@@ -1,6 +1,7 @@
 package com.sqlrec.db.local;
 
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.StoreAccess;
 import com.sqlrec.entity.*;
@@ -45,7 +46,7 @@ public class InMemoryStoreAccess implements StoreAccess {
                 throw new RuntimeException("Expected SqlCreateSqlFunction but got " + firstNode.getClass().getSimpleName());
             }
             SqlCreateSqlFunction createFunc = (SqlCreateSqlFunction) firstNode;
-            String funcName = createFunc.getFuncName().getSimple().toUpperCase();
+            String funcName = ResourceNames.of(createFunc.getFuncName());
             List<String> sqlList = new ArrayList<>();
             for (SqlNode node : nodeGroup) {
                 sqlList.add(CompileManager.getSqlStr(node));
@@ -66,8 +67,8 @@ public class InMemoryStoreAccess implements StoreAccess {
             }
             SqlCreateApi createApi = (SqlCreateApi) node;
             SqlApi sqlApi = new SqlApi();
-            sqlApi.setName(createApi.getApiName());
-            sqlApi.setFunctionName(createApi.getFuncName().toUpperCase());
+            sqlApi.setName(ResourceNames.normalize(createApi.getApiName()));
+            sqlApi.setFunctionName(ResourceNames.normalize(createApi.getFuncName()));
             sqlApi.setCreatedAt(System.currentTimeMillis());
             sqlApi.setUpdatedAt(System.currentTimeMillis());
             sqlApiMap.put(sqlApi.getName(), sqlApi);
@@ -81,7 +82,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             }
             SqlCreateModel createModel = (SqlCreateModel) node;
             Model model = new Model();
-            model.setName(createModel.getModelName().getSimple());
+            model.setName(ResourceNames.of(createModel.getModelName()));
             model.setDdl(CompileManager.getSqlStr(node));
             model.setCreatedAt(System.currentTimeMillis());
             model.setUpdatedAt(System.currentTimeMillis());
@@ -100,12 +101,11 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public SqlFunction getSqlFunction(String name) {
-        return sqlFunctionMap.get(name.toUpperCase());
+        return sqlFunctionMap.get(name);
     }
 
     @Override
     public void insertSqlFunction(SqlFunction sqlFunction) {
-        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         if (sqlFunctionMap.putIfAbsent(sqlFunction.getName(), sqlFunction) != null) {
             throw new RuntimeException("SqlFunction already exists: " + sqlFunction.getName());
         }
@@ -113,13 +113,12 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void upsertSqlFunction(SqlFunction sqlFunction) {
-        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         sqlFunctionMap.put(sqlFunction.getName(), sqlFunction);
     }
 
     @Override
     public void deleteSqlFunction(String name) {
-        sqlFunctionMap.remove(name.toUpperCase());
+        sqlFunctionMap.remove(name);
     }
 
     @Override
@@ -134,9 +133,6 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void insertSqlApi(SqlApi sqlApi) {
-        // keep function names upper-cased, consistent with DbStoreAccess (postgres is
-        // case-sensitive) so both backends store identical values
-        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         if (sqlApiMap.putIfAbsent(sqlApi.getName(), sqlApi) != null) {
             throw new RuntimeException("SqlApi already exists: " + sqlApi.getName());
         }
@@ -144,7 +140,6 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     @Override
     public void upsertSqlApi(SqlApi sqlApi) {
-        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         sqlApiMap.put(sqlApi.getName(), sqlApi);
     }
 
@@ -156,7 +151,7 @@ public class InMemoryStoreAccess implements StoreAccess {
     @Override
     public List<SqlApi> getSqlApiListByFunctionName(String functionName) {
         return sqlApiMap.values().stream()
-                .filter(api -> api.getFunctionName().equalsIgnoreCase(functionName))
+                .filter(api -> api.getFunctionName().equals(functionName))
                 .collect(Collectors.toList());
     }
 

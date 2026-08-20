@@ -6,6 +6,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -29,6 +30,7 @@ public class RestFunctionExecutor {
         if (StringUtils.isEmpty(apiName)) {
             throw new IllegalArgumentException("apiName is null or empty");
         }
+        apiName = ResourceNames.normalize(apiName);
 
         SqlFunctionBindable sqlFunctionBindable = CompileManager.getApiBindSqlFunction(apiName);
         if (sqlFunctionBindable == null) {

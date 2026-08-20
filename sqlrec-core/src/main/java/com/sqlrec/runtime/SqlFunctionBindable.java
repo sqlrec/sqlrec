@@ -204,7 +204,7 @@ public class SqlFunctionBindable extends BindableInterface {
         for (BindableInterface bindable : bindableList) {
             for (String dependencySqlFuncName : bindable.getDependencySqlFuncName()) {
                 if (StringUtils.isNotEmpty(dependencySqlFuncName)) {
-                    dependencySqlFunctions.add(dependencySqlFuncName.toUpperCase());
+                    dependencySqlFunctions.add(dependencySqlFuncName);
                 }
             }
         }

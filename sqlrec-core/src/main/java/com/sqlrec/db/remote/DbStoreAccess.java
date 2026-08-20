@@ -83,24 +83,22 @@ public class DbStoreAccess implements StoreAccess {
 
     @Override
     public SqlFunction getSqlFunction(String name) {
-        return execute(dbMapper -> dbMapper.getSqlFunction(name.toUpperCase()));
+        return execute(dbMapper -> dbMapper.getSqlFunction(name));
     }
 
     @Override
     public void insertSqlFunction(SqlFunction sqlFunction) {
-        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.insertSqlFunction(sqlFunction));
     }
 
     @Override
     public void upsertSqlFunction(SqlFunction sqlFunction) {
-        sqlFunction.setName(sqlFunction.getName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.upsertSqlFunction(sqlFunction));
     }
 
     @Override
     public void deleteSqlFunction(String name) {
-        executeVoid(dbMapper -> dbMapper.deleteSqlFunction(name.toUpperCase()));
+        executeVoid(dbMapper -> dbMapper.deleteSqlFunction(name));
     }
 
     @Override
@@ -115,16 +113,11 @@ public class DbStoreAccess implements StoreAccess {
 
     @Override
     public void insertSqlApi(SqlApi sqlApi) {
-        // queries filter on function_name with an upper-cased parameter (see
-        // getSqlApiListByFunctionName), so writes must normalize too: postgres string
-        // comparison is case-sensitive and a mixed-case value would never be found.
-        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.insertSqlApi(sqlApi));
     }
 
     @Override
     public void upsertSqlApi(SqlApi sqlApi) {
-        sqlApi.setFunctionName(sqlApi.getFunctionName().toUpperCase());
         executeVoid(dbMapper -> dbMapper.upsertSqlApi(sqlApi));
     }
 
@@ -135,7 +128,7 @@ public class DbStoreAccess implements StoreAccess {
 
     @Override
     public List<SqlApi> getSqlApiListByFunctionName(String functionName) {
-        return execute(dbMapper -> dbMapper.getSqlApiListByFunctionName(functionName.toUpperCase()));
+        return execute(dbMapper -> dbMapper.getSqlApiListByFunctionName(functionName));
     }
 
     @Override

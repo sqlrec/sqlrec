@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -276,7 +277,7 @@ public class UiHandler {
 
     private static Map<String, Object> getFunctionDag(String functionName) throws Exception {
         SqlFunctionBindable sqlFunctionBindable = new CompileManager().getSqlFunction(functionName);
-        String funNamePrefix = functionName.toUpperCase() + ":";
+        String funNamePrefix = ResourceNames.normalize(functionName) + ":";
 
         List<BindableInterface> bindableList = sqlFunctionBindable.getBindableList();
         Map<Integer, Set<Integer>> bindableDependency = sqlFunctionBindable.getBindableDependency();

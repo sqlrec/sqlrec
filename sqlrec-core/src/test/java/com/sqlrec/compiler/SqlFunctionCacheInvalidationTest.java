@@ -126,7 +126,7 @@ class SqlFunctionCacheInvalidationTest {
                 "cache table t as call fun_dep_a()",
                 "return t"));
 
-        assertTrue(funDepB.getDependencySqlFunctions().contains("FUN_DEP_A"));
+        assertTrue(funDepB.getDependencySqlFunctions().contains("fun_dep_a"));
     }
 
     @Test
@@ -146,8 +146,8 @@ class SqlFunctionCacheInvalidationTest {
                 "return t"));
 
         Set<String> dependencies = funIfB.getDependencySqlFunctions();
-        assertTrue(dependencies.contains("FUN_IF_A"));
-        assertTrue(dependencies.contains("FUN_IF_C"));
+        assertTrue(dependencies.contains("fun_if_a"));
+        assertTrue(dependencies.contains("fun_if_c"));
     }
 
     private void createFunction(SqlExecutor executor, boolean orReplace, String name, int value) throws Exception {

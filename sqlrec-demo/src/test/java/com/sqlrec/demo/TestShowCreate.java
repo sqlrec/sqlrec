@@ -133,7 +133,7 @@ public class TestShowCreate {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlApi mainRecApi = db.getSqlApi("main_rec");
         assertNotNull(mainRecApi, "main_rec api should exist");
-        assertEquals("MAIN_REC", mainRecApi.getFunctionName(),
+        assertEquals("main_rec", mainRecApi.getFunctionName(),
                 "api function name should match");
 
         String sourceContent = Files.readString(Paths.get(sqlDir, "api", "main_rec.sql")).trim();

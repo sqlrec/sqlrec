@@ -46,7 +46,7 @@ public class SqlFunctionCompileIntegrationTest {
             e = ex;
         }
         assert e != null;
-        assert e.getMessage().contains("circular dependency: FUN2->FUN1");
+        assert e.getMessage().contains("circular dependency: fun2->fun1");
     }
 
     @Test
@@ -75,7 +75,7 @@ public class SqlFunctionCompileIntegrationTest {
             e = ex;
         }
         assert e != null;
-        assert e.getMessage().contains("circular dependency: TEST_COMPILE1 trace: TEST_COMPILE1->TEST_COMPILE2");
+        assert e.getMessage().contains("circular dependency: test_compile1 trace: test_compile1->test_compile2");
 
         db.deleteSqlFunction("test_compile1");
         db.deleteSqlFunction("test_compile2");
@@ -106,6 +106,6 @@ public class SqlFunctionCompileIntegrationTest {
             e = ex;
         }
         assert e != null;
-        assert ExceptionUtils.getRootCause(e).getMessage().contains("Circular dependency detected: FUN1 in stack: FUN1");
+        assert ExceptionUtils.getRootCause(e).getMessage().contains("Circular dependency detected: fun1 in stack: fun1");
     }
 }

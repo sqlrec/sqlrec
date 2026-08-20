@@ -59,6 +59,8 @@ public class TestRedisTable {
         new SqlTestCase("select * from t1 where id = 1",
                 Collections.emptyList()).test(schema);
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 2", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 3", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice2', 2)", null).test(schema);
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);

@@ -5,6 +5,7 @@ import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConf;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -41,7 +42,7 @@ public class ModelEntityConverter {
 
     public static ModelConf convertToModel(SqlCreateModel sqlCreateModel) {
         ModelConf modelConfig = new ModelConf();
-        modelConfig.setModelName(sqlCreateModel.getModelName().toString());
+        modelConfig.setModelName(ResourceNames.of(sqlCreateModel.getModelName()));
         modelConfig.setInputFields(SchemaUtils.convertFieldList(sqlCreateModel.getFieldList()));
         modelConfig.setParams(SchemaUtils.convertPropertyList(sqlCreateModel.getPropertyList()));
         modelConfig.setPath(getModelPath(modelConfig));
@@ -63,14 +64,14 @@ public class ModelEntityConverter {
 
     public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         ModelTrainConf modelTrainConf = new ModelTrainConf();
-        modelTrainConf.setModelName(sqlTrainModel.getModelName().toString());
-        modelTrainConf.setCheckpointName(SchemaUtils.removeQuotes(sqlTrainModel.getCheckpoint().toString()));
+        modelTrainConf.setModelName(ResourceNames.of(sqlTrainModel.getModelName()));
+        modelTrainConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlTrainModel.getCheckpoint().toString())));
         modelTrainConf.setModelDir(ModelEntityConverter.getModelCheckpointPath(
                 modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         if (sqlTrainModel.getExistingCheckpoint() != null) {
             modelTrainConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
                     modelTrainConf.getModelName(),
-                    SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString())
+                    ResourceNames.normalize(SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString()))
             ));
         }
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
@@ -81,8 +82,8 @@ public class ModelEntityConverter {
 
     public static ModelExportConf convertToModelExportConf(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
         ModelExportConf modelExportConf = new ModelExportConf();
-        modelExportConf.setModelName(sqlExportModel.getModelName().toString());
-        modelExportConf.setCheckpointName(SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString()));
+        modelExportConf.setModelName(ResourceNames.of(sqlExportModel.getModelName()));
+        modelExportConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString())));
         modelExportConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         modelExportConf.setParams(SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList()));
@@ -94,10 +95,10 @@ public class ModelEntityConverter {
     public static ServiceConf convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
         ServiceConf serviceConfig = new ServiceConf();
         serviceConfig.setId(K8sYamlUtils.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
-        serviceConfig.setServiceName(sqlCreateService.getServiceName().toString());
-        serviceConfig.setModelName(sqlCreateService.getModelName().toString());
+        serviceConfig.setServiceName(ResourceNames.of(sqlCreateService.getServiceName()));
+        serviceConfig.setModelName(ResourceNames.of(sqlCreateService.getModelName()));
         if (sqlCreateService.getCheckpoint() != null) {
-            serviceConfig.setCheckpointName(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString()));
+            serviceConfig.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString())));
             serviceConfig.setModelCheckpointDir(getModelCheckpointPath(serviceConfig.getModelName(), serviceConfig.getCheckpointName()));
         }
         serviceConfig.setParams(SchemaUtils.convertPropertyList(sqlCreateService.getPropertyList()));

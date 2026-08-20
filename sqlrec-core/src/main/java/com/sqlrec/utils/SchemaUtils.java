@@ -97,6 +97,12 @@ public class SchemaUtils {
     }
 
     public static SqlNodeList addConfigToPropertyList(SqlNodeList propertyList, String key, String value) {
+        // SqlNodeList.EMPTY is a shared static instance: adding to it would leak the
+        // option into every AST referencing EMPTY in the same JVM (e.g. a later
+        // SELECT's window lists), corrupting unrelated parses. Copy to a fresh list.
+        if (propertyList == null || propertyList == SqlNodeList.EMPTY) {
+            propertyList = new SqlNodeList(SqlParserPos.ZERO);
+        }
         SqlTableOption option = new SqlTableOption(
                 SqlLiteral.createCharString(key, SqlParserPos.ZERO),
                 SqlLiteral.createCharString(value, SqlParserPos.ZERO),

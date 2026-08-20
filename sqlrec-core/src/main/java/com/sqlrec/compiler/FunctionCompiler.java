@@ -3,6 +3,7 @@ package com.sqlrec.compiler;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
@@ -114,7 +115,7 @@ public class FunctionCompiler {
     private void compileFunctionDefinition(SqlNode flinkSqlNode) {
         if (flinkSqlNode instanceof SqlCreateSqlFunction) {
             SqlCreateSqlFunction sqlCreateFunction = (SqlCreateSqlFunction) flinkSqlNode;
-            sqlFunctionBindable.setFunName(sqlCreateFunction.getFuncName().getSimple().toUpperCase());
+            sqlFunctionBindable.setFunName(ResourceNames.of(sqlCreateFunction.getFuncName()));
             isOrReplace = sqlCreateFunction.isOrReplace();
             stage = FunctionCompileStage.FUNCTION_PARAM;
         } else {
