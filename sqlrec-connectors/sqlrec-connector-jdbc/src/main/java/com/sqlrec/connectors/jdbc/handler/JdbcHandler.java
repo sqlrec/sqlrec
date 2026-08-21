@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.jdbc.handler;
 
+import com.sqlrec.common.utils.SqlStatement;
 import com.sqlrec.common.utils.SqlUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.zaxxer.hikari.HikariConfig;
@@ -8,7 +9,10 @@ import org.apache.calcite.rex.RexNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,15 +33,9 @@ public class JdbcHandler {
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
-        String whereClause = SqlUtils.buildWhereClause(filters, jdbcConfig.fieldSchemas);
-        String sql = SqlUtils.buildSelectSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            return parseResultSet(rs);
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to scan table " + jdbcConfig.tableName, e);
-        }
+        SqlStatement statement = SqlUtils.select(
+                jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, filters);
+        return query(statement, "Failed to scan table " + jdbcConfig.tableName);
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
@@ -45,50 +43,31 @@ public class JdbcHandler {
             return Collections.emptyMap();
         }
 
-        String placeholders = String.join(",", Collections.nCopies(keySet.size(), "?"));
-        String whereClause = SqlUtils.quoteIdentifier(jdbcConfig.primaryKey, jdbcConfig.url) + " IN (" + placeholders + ")";
-        String sql = SqlUtils.buildSelectSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, whereClause);
+        SqlStatement statement = SqlUtils.selectByPrimaryKey(
+                        jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas,
+                        jdbcConfig.primaryKey, keySet.size())
+                .withParameters(new ArrayList<>(keySet));
+        List<Object[]> rows = query(statement,
+                "Failed to query by primary key from table " + jdbcConfig.tableName);
 
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            int idx = 1;
-            for (Object key : keySet) {
-                stmt.setObject(idx++, key);
-            }
-            try (ResultSet rs = stmt.executeQuery()) {
-                Map<Object, List<Object[]>> result = new HashMap<>();
-                for (Object[] row : parseResultSet(rs)) {
-                    result.computeIfAbsent(row[jdbcConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
-                }
-                return result;
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to query by primary key from table " + jdbcConfig.tableName, e);
+        Map<Object, List<Object[]>> result = new HashMap<>();
+        for (Object[] row : rows) {
+            result.computeIfAbsent(row[jdbcConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
         }
+        return result;
     }
 
     public boolean upsert(Object[] data) {
-        String sql = SqlUtils.buildUpsertSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            setStatementParameters(stmt, data);
-            stmt.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to upsert into table " + jdbcConfig.tableName, e);
-        }
+        SqlStatement statement = upsertTemplate().withParameters(Arrays.asList(data));
+        update(statement, "Failed to upsert into table " + jdbcConfig.tableName);
+        return true;
     }
 
     public boolean delete(Object[] data) {
-        String sql = SqlUtils.buildDeleteSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setObject(1, data[jdbcConfig.primaryKeyIndex]);
-            stmt.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to delete from table " + jdbcConfig.tableName, e);
-        }
+        SqlStatement statement = deleteTemplate()
+                .withParameters(Collections.singletonList(data[jdbcConfig.primaryKeyIndex]));
+        update(statement, "Failed to delete from table " + jdbcConfig.tableName);
+        return true;
     }
 
     /**
@@ -101,12 +80,11 @@ public class JdbcHandler {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        String sql = SqlUtils.buildUpsertSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
+        SqlStatement template = upsertTemplate();
         try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(template.getSql())) {
             for (Object[] data : dataList) {
-                setStatementParameters(stmt, data);
-                stmt.addBatch();
+                template.withParameters(Arrays.asList(data)).addToBatch(stmt);
             }
             stmt.executeBatch();
             return true;
@@ -119,12 +97,11 @@ public class JdbcHandler {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        String sql = SqlUtils.buildDeleteSql(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
+        SqlStatement template = deleteTemplate();
         try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(template.getSql())) {
             for (Object[] data : dataList) {
-                stmt.setObject(1, data[jdbcConfig.primaryKeyIndex]);
-                stmt.addBatch();
+                template.withParameters(Collections.singletonList(data[jdbcConfig.primaryKeyIndex])).addToBatch(stmt);
             }
             stmt.executeBatch();
             return true;
@@ -133,9 +110,39 @@ public class JdbcHandler {
         }
     }
 
-    private void setStatementParameters(PreparedStatement stmt, Object[] data) throws SQLException {
-        for (int i = 0; i < data.length; i++) {
-            stmt.setObject(i + 1, data[i]);
+    private SqlStatement upsertTemplate() {
+        return SqlUtils.upsert(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
+    }
+
+    private SqlStatement deleteTemplate() {
+        return SqlUtils.deleteByPrimaryKey(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
+    }
+
+    /**
+     * Execute a query statement and materialize all rows.
+     */
+    private List<Object[]> query(SqlStatement statement, String errorMessage) {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(statement.getSql())) {
+            statement.bindTo(stmt);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return parseResultSet(rs);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(errorMessage, e);
+        }
+    }
+
+    /**
+     * Execute an update statement (upsert/delete).
+     */
+    private void update(SqlStatement statement, String errorMessage) {
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(statement.getSql())) {
+            statement.bindTo(stmt);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(errorMessage, e);
         }
     }
 
