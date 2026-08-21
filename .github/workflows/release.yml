@@ -85,8 +85,11 @@ jobs:
           # (sqlrec-flink-<version>.jar). The unshaded original is renamed to
           # original-sqlrec-flink-<version>.jar by the shade plugin and is
           # not matched by this glob.
-          files: sqlrec-flink/target/sqlrec-flink-*.jar
-          # Fail loudly if the jar is missing, instead of silently uploading
+          # Also uploads the sqlrec-frontend jar (sqlrec-frontend-<version>.jar).
+          files: |
+            sqlrec-flink/target/sqlrec-flink-*.jar
+            sqlrec-frontend/target/sqlrec-frontend-*.jar
+          # Fail loudly if any jar is missing, instead of silently uploading
           # nothing.
           fail_on_unmatched_files: true
 
