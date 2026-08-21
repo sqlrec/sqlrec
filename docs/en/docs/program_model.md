@@ -152,7 +152,7 @@ Parse SQL → Determine SQL type
 | `SqlCache` | Cache table |
 | `SqlCallSqlFunction` | Call function |
 | `SqlAssert` | Assert |
-| `SqlIfCache` | Conditional cache |
+| `SqlIfCache` | Conditional statement |
 | `SqlSet` | Set variable |
 | `SqlShowTables` | Show table list |
 | `SqlShowSqlFunction` | Show function list |

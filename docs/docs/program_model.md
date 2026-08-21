@@ -152,7 +152,7 @@ SQL 请求
 | `SqlCache` | 缓存表 |
 | `SqlCallSqlFunction` | 调用函数 |
 | `SqlAssert` | 断言 |
-| `SqlIfCache` | 条件缓存 |
+| `SqlIfCache` | 条件执行语句 |
 | `SqlSet` | 设置变量 |
 | `SqlShowTables` | 显示表列表 |
 | `SqlShowSqlFunction` | 显示函数列表 |

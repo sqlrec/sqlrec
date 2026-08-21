@@ -145,6 +145,40 @@ public class DataTypeUtils {
         }
     }
 
+    /**
+     * Checks that two field lists describe the same schema: same field count,
+     * same field names and same types. String types (CHAR/VARCHAR/...) are
+     * interchangeable with each other, everything else must match exactly.
+     */
+    public static void checkTableSchemaSame(
+            List<RelDataTypeField> fields1,
+            List<RelDataTypeField> fields2
+    ) {
+        if (fields1.size() != fields2.size()) {
+            throw new RuntimeException(
+                    "field count not equal: " + fields1.size() + " != " + fields2.size());
+        }
+
+        for (int i = 0; i < fields1.size(); i++) {
+            RelDataTypeField field1 = fields1.get(i);
+            RelDataTypeField field2 = fields2.get(i);
+            if (!field1.getName().equalsIgnoreCase(field2.getName())) {
+                throw new RuntimeException(
+                        "field name not equal: " + field1.getName() + " != " + field2.getName());
+            }
+            if (SqlTypeName.STRING_TYPES.contains(field1.getType().getSqlTypeName()) &&
+                    SqlTypeName.STRING_TYPES.contains(field2.getType().getSqlTypeName())) {
+                continue;
+            }
+            if (!field1.getType().getSqlTypeName().equals(field2.getType().getSqlTypeName())) {
+                throw new RuntimeException(
+                        "field type not equal: "
+                                + field1.getType().getSqlTypeName() + " != "
+                                + field2.getType().getSqlTypeName());
+            }
+        }
+    }
+
     public static void checkTableSchemaIdentical(List<RelDataTypeField> referenceFields, List<RelDataTypeField> fields, int tableIndex) {
         if (referenceFields.size() != fields.size()) {
             throw new IllegalArgumentException("Table " + tableIndex + " has different column count than table 0");

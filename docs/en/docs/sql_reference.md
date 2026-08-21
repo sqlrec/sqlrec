@@ -683,12 +683,12 @@ The `ASYNC` keyword is parsed in `CACHE TABLE` syntax but throws an exception at
 
 ### IF
 
-Conditionally execute cache operations.
+Conditionally execute statements.
 
 **Syntax:**
 
 ```sql
-IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
+IF [TIMEIN] (condition) THEN (statement) [ELSE (statement)]
 ```
 
 **Parameters:**
@@ -697,7 +697,7 @@ IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
 |-----------|-------------|
 | `TIMEIN` | Optional. Specifies timeout mode, where the condition returns a timeout value in milliseconds |
 | `condition` | Condition expression. Returns a boolean in normal mode, or a numeric value (milliseconds) in timeout mode |
-| `cache_statement` | CACHE TABLE statement |
+| `statement` | Any executable statement: `CACHE TABLE`, `SELECT`/`INSERT`/`UPDATE`/`DELETE`, `ASSERT`, `CALL`, `SET`, nested `IF`, etc. |
 | `ELSE` | Optional. Optional in normal mode, required in timeout mode |
 
 **Description:**
@@ -710,9 +710,11 @@ The IF statement supports two execution modes:
    - If timeout <= 0, executes the THEN clause immediately
 
 **Notes:**
-- THEN and ELSE clauses must write to the same table name
-- THEN and ELSE clauses must have compatible table schemas
-- ELSE clause is required in timeout mode
+- THEN and ELSE clauses must be both CACHE statements or both non-CACHE statements; mixing is not allowed
+- When both branches are CACHE statements: they must write to the same table name with compatible table schemas
+- When both branches are non-CACHE statements: the return field structures of the two branches must be compatible
+- In timeout mode, an ELSE clause is required, and the THEN clause must be a CACHE statement
+- With no ELSE clause and a false condition: if the THEN clause is a CACHE statement, the corresponding cache table is registered as an empty table (if it does not already exist), so subsequent statements can reference it normally
 
 **Examples:**
 
@@ -727,6 +729,26 @@ IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
     CACHE TABLE result AS CALL slow_function('param')
 ) ELSE (
     CACHE TABLE result AS SELECT * FROM default_table
+);
+
+-- Branches as arbitrary executable statements
+IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
+    SELECT * FROM source_table
+) ELSE (
+    SELECT * FROM backup_table
+);
+
+IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
+    ASSERT SELECT COUNT(*) > 0 FROM source_table
+);
+
+-- Nested IF
+IF (SELECT flag FROM config_table) THEN (
+    IF (SELECT COUNT(*) > 10 FROM source_table) THEN (
+        SELECT 1 AS result
+    ) ELSE (
+        SELECT 2 AS result
+    )
 );
 ```
 

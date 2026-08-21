@@ -11,10 +11,10 @@ public class SqlIfCache extends SqlCall {
 
     private boolean timein;
     private SqlNode condition;
-    private SqlCache thenClause;
-    private SqlCache elseClause;
+    private SqlNode thenClause;
+    private SqlNode elseClause;
 
-    public SqlIfCache(SqlParserPos pos, boolean timein, SqlNode condition, SqlCache thenClause, SqlCache elseClause) {
+    public SqlIfCache(SqlParserPos pos, boolean timein, SqlNode condition, SqlNode thenClause, SqlNode elseClause) {
         super(pos);
         this.timein = timein;
         this.condition = condition;
@@ -69,11 +69,11 @@ public class SqlIfCache extends SqlCall {
         return condition;
     }
 
-    public SqlCache getThenClause() {
+    public SqlNode getThenClause() {
         return thenClause;
     }
 
-    public SqlCache getElseClause() {
+    public SqlNode getElseClause() {
         return elseClause;
     }
 

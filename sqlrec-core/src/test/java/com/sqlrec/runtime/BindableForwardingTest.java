@@ -152,7 +152,7 @@ public class BindableForwardingTest {
                 Collections.singletonMap("FUN_D", "FUN_B->FUN_D"),
                 null
         );
-        IfCacheBindable ifCache = new IfCacheBindable(
+        IfBindable ifCache = new IfBindable(
                 newConditionBindable(),
                 new CacheTableBindable("t", thenInner),
                 new CacheTableBindable("t", elseInner),
@@ -178,7 +178,7 @@ public class BindableForwardingTest {
                 Collections.emptyMap(),
                 null
         );
-        IfCacheBindable ifCache = new IfCacheBindable(
+        IfBindable ifCache = new IfBindable(
                 newConditionBindable(),
                 new CacheTableBindable("t", thenInner),
                 null,

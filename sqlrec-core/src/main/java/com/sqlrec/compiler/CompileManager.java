@@ -91,7 +91,7 @@ public class CompileManager {
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             bindable = getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
         } else if (flinkSqlNode instanceof SqlIfCache) {
-            bindable = getIfCacheBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
+            bindable = getIfBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlCache) {
             bindable = getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlAssert) {
@@ -139,32 +139,40 @@ public class CompileManager {
         throw new Exception("cache sql obj is invalid");
     }
 
-    private BindableInterface getIfCacheBindable(SqlIfCache ifCache, CalciteSchema schema, String defaultSchema) throws Exception {
+    private BindableInterface getIfBindable(SqlIfCache ifCache, CalciteSchema schema, String defaultSchema) throws Exception {
         SqlNode conditionNode = ifCache.getCondition();
-        SqlCache thenClause = ifCache.getThenClause();
-        SqlCache elseClause = ifCache.getElseClause();
+        SqlNode thenClause = ifCache.getThenClause();
+        SqlNode elseClause = ifCache.getElseClause();
         boolean timein = ifCache.isTimein();
 
         CalciteBindable conditionBindable = (CalciteBindable) getNormalSqlBindable(
                 getSqlStr(conditionNode), schema, defaultSchema
         );
 
-        CacheTableBindable thenBindable = (CacheTableBindable) getCacheBindable(thenClause, schema, defaultSchema);
+        BindableInterface thenBindable = compileIfBranch(thenClause, schema, defaultSchema);
 
-        CacheTableBindable elseBindable = null;
+        BindableInterface elseBindable = null;
         if (elseClause != null) {
-            elseBindable = (CacheTableBindable) getCacheBindable(elseClause, schema, defaultSchema);
-        } else {
-            CacheTable table = SchemaUtils.tryGetCacheTable(thenBindable.getTableName(), schema);
+            elseBindable = compileIfBranch(elseClause, schema, defaultSchema);
+        } else if (thenBindable instanceof CacheTableBindable) {
+            CacheTableBindable thenCache = (CacheTableBindable) thenBindable;
+            CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
             if (table != null) {
                 DataTypeUtils.checkTableSchemaCompatible(
-                        thenBindable.getCacheTableDataFields(),
+                        thenCache.getCacheTableDataFields(),
                         table.getDataFields()
                 );
             }
         }
 
-        return new IfCacheBindable(conditionBindable, thenBindable, elseBindable, timein);
+        return new IfBindable(conditionBindable, thenBindable, elseBindable, timein);
+    }
+
+    private BindableInterface compileIfBranch(SqlNode branch, CalciteSchema schema, String defaultSchema) throws Exception {
+        if (!SqlTypeChecker.isFlinkSqlCompilable(branch, schema, defaultSchema)) {
+            throw new Exception("IF branch statement is not executable: " + getSqlStr(branch));
+        }
+        return compileSql(branch, schema, defaultSchema, getSqlStr(branch));
     }
 
     private BindableInterface getAssertBindable(SqlAssert assertStmt, CalciteSchema schema, String defaultSchema) throws Exception {

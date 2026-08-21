@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
-public class IfCacheBindableTest {
+public class IfBindableTest {
 
     private CalciteSchema schema;
 
@@ -427,6 +427,116 @@ public class IfCacheBindableTest {
         for (SqlTestCase sqlTestCase : sqlList) {
             sqlTestCase.test(schema);
         }
+    }
+
+    @Test
+    public void testIfWithSelectBranch() throws Exception {
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase(
+                        "IF (SELECT true) THEN (SELECT * FROM myTable)",
+                        Arrays.asList(
+                                new Object[]{1, "Alice"},
+                                new Object[]{2, "Bob"},
+                                new Object[]{3, "Charlie"}
+                        )
+                )
+        );
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema);
+        }
+    }
+
+    @Test
+    public void testIfWithSelectBranchElse() throws Exception {
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase(
+                        "IF (SELECT false) THEN (SELECT * FROM myTable) ELSE (SELECT 1 as ID, 'x' as NAME)",
+                        Arrays.<Object[]>asList(new Object[]{1, "x"})
+                )
+        );
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema);
+        }
+    }
+
+    @Test
+    public void testIfWithAssertBranch() throws Exception {
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase("IF (SELECT true) THEN (ASSERT SELECT true)")
+        );
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema);
+        }
+    }
+
+    @Test
+    public void testIfConditionFalseNoElseWithNonCacheBranch() throws Exception {
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase("IF (SELECT false) THEN (SELECT * FROM myTable)")
+        );
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema);
+        }
+    }
+
+    @Test
+    public void testNestedIf() throws Exception {
+        List<SqlTestCase> sqlList = Arrays.asList(
+                new SqlTestCase(
+                        "IF (SELECT true) THEN (IF (SELECT false) THEN (SELECT 1 as ID, 'a' as NAME) ELSE (SELECT 2 as ID, 'b' as NAME))",
+                        Arrays.<Object[]>asList(new Object[]{2, "b"})
+                )
+        );
+        for (SqlTestCase sqlTestCase : sqlList) {
+            sqlTestCase.test(schema);
+        }
+    }
+
+    @Test
+    public void testIfCacheBranchFieldCountMismatch() throws Exception {
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table t1 as SELECT 1 as id, 'x' as name)"
+        );
+        sqlTestCase.expectedException = new RuntimeException("field count not equal");
+        sqlTestCase.test(schema);
+    }
+
+    @Test
+    public void testIfBranchFieldCountMismatch() throws Exception {
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF (SELECT true) THEN (SELECT 1 as id) ELSE (SELECT 1 as id, 'x' as name)"
+        );
+        sqlTestCase.expectedException = new RuntimeException("field count not equal");
+        sqlTestCase.test(schema);
+    }
+
+    @Test
+    public void testIfMixedCacheAndNonCacheBranch() throws Exception {
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF (SELECT true) THEN (cache table t1 as SELECT * FROM myTable) ELSE (SELECT 1 as ID, 'x' as NAME)"
+        );
+        sqlTestCase.expectedException = new RuntimeException(
+                "thenClause and elseClause must be both cache statements or both non-cache statements");
+        sqlTestCase.test(schema);
+    }
+
+    @Test
+    public void testIfBranchReturnFieldsMismatch() throws Exception {
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF (SELECT true) THEN (SELECT 1 as id) ELSE (SELECT 'x' as name)"
+        );
+        sqlTestCase.expectedException = new RuntimeException("desired field name not equal to given field name");
+        sqlTestCase.test(schema);
+    }
+
+    @Test
+    public void testIfTimeinWithNonCacheBranch() throws Exception {
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF TIMEIN (SELECT 1000) THEN (SELECT * FROM myTable) ELSE (SELECT * FROM myTable)"
+        );
+        sqlTestCase.expectedException = new RuntimeException(
+                "timein mode only supports cache statement in then clause");
+        sqlTestCase.test(schema);
     }
 
     public static class MyTable extends SqlRecTable implements ScannableTable {

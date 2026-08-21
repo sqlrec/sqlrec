@@ -345,7 +345,7 @@ public class UiHandler {
             return "cache";
         } else if (bindable instanceof CalciteBindable) {
             return "sql";
-        } else if (bindable instanceof IfCacheBindable) {
+        } else if (bindable instanceof IfBindable) {
             return "condition";
         } else if (bindable instanceof SetBindable) {
             return "set";

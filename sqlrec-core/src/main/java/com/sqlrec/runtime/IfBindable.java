@@ -25,18 +25,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class IfCacheBindable extends BindableInterface {
-    private static final Logger log = LoggerFactory.getLogger(IfCacheBindable.class);
+public class IfBindable extends BindableInterface {
+    private static final Logger log = LoggerFactory.getLogger(IfBindable.class);
 
     private CalciteBindable condition;
-    private CacheTableBindable thenClause;
-    private CacheTableBindable elseClause;
+    private BindableInterface thenClause;
+    private BindableInterface elseClause;
     private boolean timein;
 
-    public IfCacheBindable(
+    public IfBindable(
             CalciteBindable condition,
-            CacheTableBindable thenClause,
-            CacheTableBindable elseClause,
+            BindableInterface thenClause,
+            BindableInterface elseClause,
             boolean timein
     ) {
         this.condition = condition;
@@ -44,18 +44,45 @@ public class IfCacheBindable extends BindableInterface {
         this.elseClause = elseClause;
         this.timein = timein;
 
+        boolean thenIsCache = thenClause instanceof CacheTableBindable;
         if (elseClause != null) {
-            if (!thenClause.getTableName().equals(elseClause.getTableName())) {
-                throw new RuntimeException("thenClause and elseClause must have the same table name");
+            boolean elseIsCache = elseClause instanceof CacheTableBindable;
+            if (thenIsCache != elseIsCache) {
+                throw new RuntimeException(
+                        "thenClause and elseClause must be both cache statements or both non-cache statements");
             }
-            DataTypeUtils.checkTableSchemaCompatible(
-                    thenClause.getTableDataFields(),
-                    elseClause.getTableDataFields()
-            );
+            if (thenIsCache) {
+                if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
+                    throw new RuntimeException("thenClause and elseClause must have the same table name");
+                }
+                DataTypeUtils.checkTableSchemaSame(
+                        ((CacheTableBindable) thenClause).getTableDataFields(),
+                        ((CacheTableBindable) elseClause).getTableDataFields()
+                );
+            } else {
+                checkReturnFieldsCompatible();
+            }
         } else {
             if (timein) {
                 throw new RuntimeException("must contain else clause when in timein mode");
             }
+        }
+
+        if (timein && !thenIsCache) {
+            throw new RuntimeException("timein mode only supports cache statement in then clause");
+        }
+    }
+
+    private void checkReturnFieldsCompatible() {
+        List<RelDataTypeField> thenFields = thenClause.getReturnDataFields();
+        List<RelDataTypeField> elseFields = elseClause.getReturnDataFields();
+        boolean thenHasFields = thenFields != null && !thenFields.isEmpty();
+        boolean elseHasFields = elseFields != null && !elseFields.isEmpty();
+        if (thenHasFields != elseHasFields) {
+            throw new RuntimeException("thenClause and elseClause must return compatible data fields");
+        }
+        if (thenHasFields) {
+            DataTypeUtils.checkTableSchemaSame(thenFields, elseFields);
         }
     }
 
@@ -93,7 +120,7 @@ public class IfCacheBindable extends BindableInterface {
             conditionValue = (Boolean) value;
         }
 
-        CacheTableBindable selectedClause = conditionValue ? thenClause : elseClause;
+        BindableInterface selectedClause = conditionValue ? thenClause : elseClause;
 
         Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "branch", conditionValue ? "then" : "else");
         MetricsUtils.getCompositeMeterRegistry()
@@ -104,11 +131,15 @@ public class IfCacheBindable extends BindableInterface {
             return selectedClause.bind(schema, context);
         }
 
-        CacheTable table = SchemaUtils.tryGetCacheTable(thenClause.getTableName(), schema);
-        if (table == null) {
-            // add empty table
-            CacheTable cacheTable = new CacheTable(thenClause.getTableName(), Linq4j.emptyEnumerable(), thenClause.getTableDataFields());
-            schema.add(thenClause.getTableName(), cacheTable);
+        // no else clause and condition is false: keep the cache table visible as an empty table
+        if (thenClause instanceof CacheTableBindable) {
+            CacheTableBindable thenCache = (CacheTableBindable) thenClause;
+            CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
+            if (table == null) {
+                // add empty table
+                CacheTable cacheTable = new CacheTable(thenCache.getTableName(), Linq4j.emptyEnumerable(), thenCache.getTableDataFields());
+                schema.add(thenCache.getTableName(), cacheTable);
+            }
         }
         return Linq4j.emptyEnumerable();
     }
@@ -196,8 +227,10 @@ public class IfCacheBindable extends BindableInterface {
 
     @Override
     public Set<String> getWriteTables() {
-        Set<String> writeTables = new HashSet<>();
-        writeTables.add(thenClause.getTableName());
+        Set<String> writeTables = new HashSet<>(thenClause.getWriteTables());
+        if (elseClause != null) {
+            writeTables.addAll(elseClause.getWriteTables());
+        }
         return writeTables;
     }
 
@@ -205,11 +238,11 @@ public class IfCacheBindable extends BindableInterface {
         return condition;
     }
 
-    public CacheTableBindable getThenClause() {
+    public BindableInterface getThenClause() {
         return thenClause;
     }
 
-    public CacheTableBindable getElseClause() {
+    public BindableInterface getElseClause() {
         return elseClause;
     }
 
@@ -225,11 +258,17 @@ public class IfCacheBindable extends BindableInterface {
     }
 
     public String getCacheTableName() {
-        return thenClause.getTableName();
+        if (thenClause instanceof CacheTableBindable) {
+            return thenClause.getCacheTableName();
+        }
+        return super.getCacheTableName();
     }
 
     public List<RelDataTypeField> getCacheTableDataFields() {
-        return thenClause.getCacheTableDataFields();
+        if (thenClause instanceof CacheTableBindable) {
+            return thenClause.getCacheTableDataFields();
+        }
+        return super.getCacheTableDataFields();
     }
 
     @Override

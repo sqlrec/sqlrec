@@ -587,8 +587,8 @@ SqlIfCache SqlIfCache() :
     SqlParserPos startPos;
     boolean timein = false;
     SqlNode condition = null;
-    SqlCache thenClause = null;
-    SqlCache elseClause = null;
+    SqlNode thenClause = null;
+    SqlNode elseClause = null;
 }
 {
     <IF>
@@ -602,12 +602,12 @@ SqlIfCache SqlIfCache() :
     <RPAREN>
     <THEN>
     <LPAREN>
-    thenClause = SqlCache()
+    thenClause = SqlStmt()
     <RPAREN>
     [
         <ELSE>
         <LPAREN>
-        elseClause = SqlCache()
+        elseClause = SqlStmt()
         <RPAREN>
     ]
     {

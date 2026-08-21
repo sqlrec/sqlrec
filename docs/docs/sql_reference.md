@@ -683,12 +683,12 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 ### IF
 
-条件执行缓存操作。
+条件执行语句。
 
 **语法：**
 
 ```sql
-IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
+IF [TIMEIN] (condition) THEN (statement) [ELSE (statement)]
 ```
 
 **参数：**
@@ -697,7 +697,7 @@ IF [TIMEIN] (condition) THEN (cache_statement) [ELSE (cache_statement)]
 |------|------|
 | `TIMEIN` | 可选。指定为超时模式，条件返回超时时间（毫秒） |
 | `condition` | 条件表达式。普通模式返回布尔值，超时模式返回数值（毫秒） |
-| `cache_statement` | CACHE TABLE 语句 |
+| `statement` | 任意可执行语句：`CACHE TABLE`、`SELECT`/`INSERT`/`UPDATE`/`DELETE`、`ASSERT`、`CALL`、`SET`、嵌套 `IF` 等 |
 | `ELSE` | 可选。普通模式下可选，超时模式下必需 |
 
 **描述：**
@@ -710,9 +710,11 @@ IF 语句支持两种执行模式：
    - 如果超时时间 <= 0，立即执行 THEN 子句
 
 **注意：**
-- THEN 和 ELSE 子句必须写入相同的表名
-- THEN 和 ELSE 子句的表结构必须兼容
-- 超时模式下必须提供 ELSE 子句
+- THEN 和 ELSE 子句必须同为 CACHE 语句，或同为非 CACHE 语句，不允许混用
+- 两分支均为 CACHE 语句时：必须写入相同的表名，且表结构必须兼容
+- 两分支均为非 CACHE 语句时：两个分支的返回字段结构必须兼容
+- 超时模式下必须提供 ELSE 子句，且 THEN 子句必须是 CACHE 语句
+- 无 ELSE 子句且条件为 false 时：若 THEN 子句为 CACHE 语句，对应的缓存表会被注册为空表（若尚不存在），保证后续语句可正常引用
 
 **示例：**
 
@@ -727,6 +729,26 @@ IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
     CACHE TABLE result AS CALL slow_function('param')
 ) ELSE (
     CACHE TABLE result AS SELECT * FROM default_table
+);
+
+-- 分支为任意可执行语句
+IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
+    SELECT * FROM source_table
+) ELSE (
+    SELECT * FROM backup_table
+);
+
+IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
+    ASSERT SELECT COUNT(*) > 0 FROM source_table
+);
+
+-- 嵌套 IF
+IF (SELECT flag FROM config_table) THEN (
+    IF (SELECT COUNT(*) > 10 FROM source_table) THEN (
+        SELECT 1 AS result
+    ) ELSE (
+        SELECT 2 AS result
+    )
 );
 ```
 
