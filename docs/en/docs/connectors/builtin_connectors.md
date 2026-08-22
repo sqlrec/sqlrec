@@ -111,6 +111,14 @@ The Milvus connector is used to connect to Milvus vector databases, supporting v
 | `token` | String | - | Milvus authentication token |
 | `database` | String | `default` | Database name |
 | `collection` | String | - | Collection name |
+| `batch-size` | Integer | 4096 | Batch size for bulk insert |
+| `pool.max-idle-per-key` | Integer | 10 | Maximum idle connections per key in the connection pool |
+| `pool.max-total-per-key` | Integer | 100 | Maximum total connections per key in the connection pool |
+| `pool.max-total` | Integer | 100 | Maximum total connections in the connection pool |
+| `pool.max-block-wait-duration` | Long | 5 | Maximum blocking wait time (seconds) when acquiring a connection from the pool |
+| `pool.min-evictable-idle-duration` | Long | 10 | Minimum evictable idle duration (seconds) for connections in the pool |
+| `flush-interval` | Long | 1 | Flush interval (seconds) for bulk writes, flushed when the buffer is full or the interval is reached |
+| `rpc-deadline-ms` | Long | 30000 | Timeout (milliseconds) for Milvus gRPC calls, 0 means no limit |
 
 **Usage Example**:
 

@@ -111,6 +111,14 @@ Milvus 连接器用于连接 Milvus 向量数据库，支持向量相似度检�
 | `token` | String | - | Milvus 认证令牌 |
 | `database` | String | `default` | 数据库名称 |
 | `collection` | String | - | 集合名称 |
+| `batch-size` | Integer | 4096 | 批量写入（bulk insert）的批次大小 |
+| `pool.max-idle-per-key` | Integer | 10 | 连接池中每个 key 的最大空闲连接数 |
+| `pool.max-total-per-key` | Integer | 100 | 连接池中每个 key 的最大连接总数 |
+| `pool.max-total` | Integer | 100 | 连接池最大连接总数 |
+| `pool.max-block-wait-duration` | Long | 5 | 从连接池获取连接的最大阻塞等待时间（秒） |
+| `pool.min-evictable-idle-duration` | Long | 10 | 连接池中连接的最小可驱逐空闲时长（秒） |
+| `flush-interval` | Long | 1 | 批量写入的刷新间隔（秒），缓冲区满或到达间隔时触发刷新 |
+| `rpc-deadline-ms` | Long | 30000 | Milvus gRPC 调用的超时时间（毫秒），0 表示不限制 |
 
 **使用示例**：
 

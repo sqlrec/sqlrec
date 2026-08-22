@@ -200,31 +200,41 @@ bash ./bin/beeline.sh
 
 ## 镜像构建
 
-SQLRec 提供了构建脚本 `bin/build_docker.sh` 用于构建 Docker 镜像。
+SQLRec 提供了两个镜像构建脚本：
 
-**构建步骤**：
-
-**重要**：必须在项目根目录执行构建脚本。
-
-```bash
-# 进入项目根目录
-cd /path/to/sqlrec
-
-# 执行构建脚本
-bash ./bin/build_docker.sh
-```
+| 脚本 | 构建的镜像 |
+|------|-----------|
+| `bin/build_sqlrec_docker.sh` | SQLRec 服务相关镜像 |
+| `bin/build_model_docker.sh` | 模型训练/推理镜像 |
 
 **构建的镜像**：
 
 | 镜像 | Dockerfile | 说明 |
 |------|------------|------|
-| `sqlrec/sqlrec:${VERSION}` | `docker/Dockerfile` | SQLRec 服务镜像 |
-| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
-| `sqlrec/gbdt:${VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/CatBoost) 训练/推理镜像（CPU 版本） |
+| `sqlrec/sqlrec:${SQLREC_VERSION}` | `docker/Dockerfile` | SQLRec 服务镜像 |
+| `sqlrec/sqlrec-demo:${SQLREC_VERSION}` | `docker/demo.Dockerfile` | SQLRec Demo 镜像 |
+| `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
+| `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) 训练/推理镜像（CPU 版本） |
+
+镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`（默认 `0.1.9`），可在执行前通过环境变量覆盖。
+
+**构建步骤**：
+
+```bash
+# 构建 SQLRec 服务镜像
+bash ./bin/build_sqlrec_docker.sh
+
+# 构建模型镜像
+bash ./bin/build_model_docker.sh
+```
+
+::: tip 提示
+脚本会自动切换到项目根目录执行构建，无需手动 cd；脚本内部会 `source deploy/env.sh` 读取版本号等配置。
+:::
 
 **Minikube 环境**：
 
-如果在 Minikube 环境中部署，构建脚本会自动配置 Minikube 的 Docker 环境，使构建的镜像可以直接被 Minikube 使用：
+如果检测到 Minikube 环境，构建脚本会自动配置 Minikube 的 Docker 环境，使构建的镜像可以直接被 Minikube 使用：
 
 ```bash
 if command -v minikube >/dev/null 2>&1; then
@@ -241,8 +251,8 @@ fi
 cd /path/to/sqlrec
 
 # 构建 SQLRec 服务镜像
-docker build -t sqlrec/sqlrec:0.1.0 -f ./docker/Dockerfile .
+docker build -t sqlrec/sqlrec:0.1.9 -f ./docker/Dockerfile .
 
 # 构建模型镜像
-docker build -t sqlrec/tzrec:0.1.0-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+docker build -t sqlrec/tzrec:0.1.9-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
 ```

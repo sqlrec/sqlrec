@@ -1,6 +1,6 @@
 # Benchmark
 
-This document introduces SQLRec performance testing methods and results.
+This document introduces SQLRec performance testing methods and results. The test is based on the [MovieLens-1M](https://grouplens.org/datasets/movielens/) dataset, and the corresponding scripts are located in the `benchmark/movielens/` directory.
 
 ## Test Environment
 
@@ -15,73 +15,95 @@ This document introduces SQLRec performance testing methods and results.
 
 ## Test Data
 
-Default test configuration is as follows:
+The test uses the MovieLens-1M dataset. The default test configuration is as follows:
 
 | Configuration Item | Value |
 |-------------------|-------|
-| Number of Users | 100,000 |
-| Number of Items | 100,000 |
-| Vector Dimension | 8 dimensions |
-| User Embedding | Fixed value |
+| Dataset | MovieLens-1M |
+| Number of Users | 6040 |
+| Number of Items | 3706 (movies) |
+| Rating Records | ~1 million |
+| Vector Dimension | 64 dimensions |
+| User Embedding | Generated randomly via `random_vec` per request (when recall model service is not enabled) |
 
 ## Recommendation Pipeline
 
-The tested recommendation pipeline includes the following stages:
+The tested recommendation pipeline is the `main_rec` function (defined in `benchmark/movielens/init_sqlrec_sql.sql`), which includes the following stages:
 
 ### Recall Stage
 
 | Recall Strategy | Description | Recall Count |
 |----------------|-------------|--------------|
-| Global Hot Recall | Based on global item popularity ranking | 300 |
-| User Interest Category Recall | Recall hot items based on user interest categories | 300 |
-| ItemCF Recall | Recall based on item collaborative filtering | 300 |
-| Vector Search Recall | Based on vector similarity search | 300 |
+| Global Hot Recall | Based on global item popularity ranking (`global_hot_item`) | 300 |
+| User Interest Genre Recall | Recall hot items based on user interest genres (`user_interest_genre` + `genre_hot_item`) | 300 |
+| ItemCF Recall | Based on user's recent clicked items (`user_recent_click_item` + `itemcf_i2i`) | 300 |
+| Vector Search Recall | Based on the inner product similarity between user vectors and item vectors (Milvus) | 300 |
 
-### Filtering Stage
+### Filtering and Re-ranking Stage
 
-| Filtering Strategy | Description |
-|-------------------|-------------|
-| Exposure Deduplication | Filter items already exposed to users |
-| Category Diversification | Display at most N items per category |
+| Strategy | Description |
+|----------|-------------|
+| Exposure Deduplication | Filter items exposed to the user within the last 1 hour (`user_exposure_item`) |
+| Ranking | Uses `rank_fun_simple` by default to join item metadata; can specify the wide_and_deep model-based ranking function via the API parameter `rank_fun` |
+| Genre Diversification | `window_diversify`, window size 3, at most 1 item per genre within the window, finally returns 10 items |
+
+### Other Stages
+
+- Generate request metadata (`req_time`, `req_id`)
+- Asynchronously write recommendation logs to Kafka (`rec_log_kafka`)
+- Write recommendation results to the exposure table for subsequent deduplication
 
 ## Test Scripts
 
 ### Initialize Test Environment
 
 ```bash
-cd benchmark
+cd benchmark/movielens
 bash init.sh
 ```
 
 The `init.sh` script performs the following operations:
 
-1. **Create Milvus Vector Collection**
-   - Create `item_embedding` collection
-   - Define vector dimension as 8
-   - Create COSINE similarity index
+1. **Deploy Kyuubi**: used for subsequent offline feature computation
 
-2. **Create Data Tables**
-   - User table (`user_table`)
-   - Item table (`item_table`)
-   - Global hot items table (`global_hot_item`)
-   - User interest category table (`user_interest_category1`)
-   - Category hot items table (`category1_hot_item`)
-   - User recent clicks table (`user_recent_click_item`)
-   - User exposure table (`user_exposure_item`)
-   - ItemCF I2I table (`itemcf_i2i`)
-   - Item vector table (`item_embedding`)
-   - Recommendation log table (`rec_log_kafka`)
-
-3. **Generate Simulated Data**
-   - Use Python scripts to generate 100,000 users and 100,000 items data
-   - Generate user behavior data and upload to HDFS
-
-4. **Install Test Tools**
+2. **Install Test Tools**
    - Install wrk HTTP benchmarking tool
+
+3. **Create Milvus Vector Collection**
+   - Create `item_embedding` collection
+   - Define vector dimension as 64
+   - Create COSINE similarity index (AUTOINDEX)
+
+4. **Download and Process Test Data**
+   - Download the MovieLens-1M dataset
+   - Convert to Parquet format (users, movies, ratings)
+   - Upload to HDFS
+
+5. **Create Data Tables**
+   - User table (`user_table`), item table (`item_table`): Redis
+   - Global hot items table (`global_hot_item`): Redis
+   - User interest genre table (`user_interest_genre`): Redis
+   - Genre hot items table (`genre_hot_item`): Redis
+   - User recent clicks table (`user_recent_click_item`): Redis
+   - User exposure table (`user_exposure_item`): Redis
+   - ItemCF I2I table (`itemcf_i2i`): Redis
+   - Item vector table (`item_embedding`): Milvus
+   - Recommendation log table (`rec_log_kafka`): Kafka
+
+6. **Compute Offline Features**: execute Spark SQL via Kyuubi to compute offline feature tables such as global hot items, user interest genres, genre hot items, and ItemCF I2I
+
+7. **Train Models**: create and train the wide_and_deep ranking model (`rank_model`) and the DSSM two-tower recall model (`recall_model`), then export and deploy them as online services
+
+8. **Load Feature Data**: load offline features into Redis, and generate item vectors by calling the recall model service via `batch_call_service` and write them into Milvus
+
+9. **Register SQL Functions and API**: register SQL functions for recall, ranking, diversification, logging, etc., and create the `main_rec` API
+
+10. **Test Recommendation**: invoke `main_rec` via beeline to verify the recommendation pipeline
 
 ### Execute Performance Test
 
 ```bash
+cd benchmark/movielens
 bash benchmark.sh
 ```
 
@@ -98,30 +120,39 @@ The `benchmark.sh` script performs the following operations:
 
 ### Test Request Script
 
-`request.lua` is a custom request script for wrk:
+`request.lua` is a custom request script for wrk. It generates a random user ID for each request and randomly prints some responses for verification:
 
 ```lua
 -- Set random seed
 math.randomseed(os.time())
 
 function request()
-    -- Generate random ID between 0-99999
-    local random_id = math.random(0, 99999)
-    
+    -- Generate random ID between 0-5000
+    local random_id = math.random(0, 5000)
+
     -- Construct request body
-    local request_body = string.format(
-        '{"data":{"user_info":[{"id":%d}]},"params":{"recall_fun":"recall_fun"}}',
-        random_id
-    )
-    
+    local request_body = string.format('{"data":{"user_info":[{"user_id":%d}]},"params":{"recall_fun":"recall_fun"}}', random_id)
+
     -- Configure HTTP request
     wrk.method = "POST"
     wrk.headers["Content-Type"] = "application/json"
     wrk.body = request_body
-    
+
     return wrk.format()
 end
+
+-- Response handler to print response if the corresponding request was logged
+function response(status, headers, body)
+    current_request_log = (math.random(1, 100) == 1)
+    if current_request_log then
+        print("Response:")
+        print("Status: " .. status)
+        print("Body: " .. body)
+    end
+end
 ```
+
+The `params` in the request body are set as execution context variables, e.g. `recall_fun` specifies the recall function name and `rank_fun` specifies the ranking function name.
 
 ## Test Results
 
@@ -144,7 +175,7 @@ Transfer/sec:      1.93MB
 | Metric | Value |
 |--------|-------|
 | Average Latency | 9.23ms |
-| Latency Standard Deviation | 5.04ms |
+| Latency Std Dev | 5.04ms |
 | Max Latency | 48.96ms |
 | Average QPS | 111.59 |
 | Total Requests | 33,370 |

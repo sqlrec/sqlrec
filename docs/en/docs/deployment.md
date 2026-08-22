@@ -200,31 +200,41 @@ kubectl create clusterrolebinding sqlrec-role \
 
 ## Image Building
 
-SQLRec provides a build script `bin/build_docker.sh` for building Docker images.
+SQLRec provides two image build scripts:
 
-**Build Steps**:
-
-**Important**: The build script must be executed in the project root directory.
-
-```bash
-# Enter project root directory
-cd /path/to/sqlrec
-
-# Execute build script
-bash ./bin/build_docker.sh
-```
+| Script | Built Images |
+|--------|--------------|
+| `bin/build_sqlrec_docker.sh` | SQLRec service related images |
+| `bin/build_model_docker.sh` | Model training/inference images |
 
 **Built Images**:
 
 | Image | Dockerfile | Description |
 |-------|------------|-------------|
-| `sqlrec/sqlrec:${VERSION}` | `docker/Dockerfile` | SQLRec service image |
-| `sqlrec/tzrec:${VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
-| `sqlrec/gbdt:${VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/CatBoost) training/inference image (CPU version) |
+| `sqlrec/sqlrec:${SQLREC_VERSION}` | `docker/Dockerfile` | SQLRec service image |
+| `sqlrec/sqlrec-demo:${SQLREC_VERSION}` | `docker/demo.Dockerfile` | SQLRec Demo image |
+| `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
+| `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) training/inference image (CPU version) |
+
+The image version `SQLREC_VERSION` comes from `deploy/env.sh` (default `0.1.9`) and can be overridden via environment variables before execution.
+
+**Build Steps**:
+
+```bash
+# Build SQLRec service images
+bash ./bin/build_sqlrec_docker.sh
+
+# Build model images
+bash ./bin/build_model_docker.sh
+```
+
+::: tip Tip
+The scripts automatically switch to the project root directory to execute the build, no manual cd is needed; the scripts internally `source deploy/env.sh` to read the version number and other configurations.
+:::
 
 **Minikube Environment**:
 
-If deploying in a Minikube environment, the build script will automatically configure Minikube's Docker environment so that built images can be directly used by Minikube:
+If a Minikube environment is detected, the build scripts will automatically configure Minikube's Docker environment so that built images can be directly used by Minikube:
 
 ```bash
 if command -v minikube >/dev/null 2>&1; then
@@ -241,8 +251,8 @@ If you need to build images manually:
 cd /path/to/sqlrec
 
 # Build SQLRec service image
-docker build -t sqlrec/sqlrec:0.1.0 -f ./docker/Dockerfile .
+docker build -t sqlrec/sqlrec:0.1.9 -f ./docker/Dockerfile .
 
 # Build model image
-docker build -t sqlrec/tzrec:0.1.0-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+docker build -t sqlrec/tzrec:0.1.9-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
 ```
