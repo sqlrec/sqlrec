@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -39,6 +40,10 @@ public class CacheTableBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        if (context.isCancelled()) {
+            throw new RuntimeException("cache table " + tableName + " execution cancelled before start");
+        }
+
         Enumerable<Object[]> enumerable = null;
         long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT.getValue(context.getVariables());
         boolean needTimeout = timeout > 0 && isTimeoutAble(schema, context);
@@ -50,7 +55,8 @@ public class CacheTableBindable extends BindableInterface {
                 enumerable = bindable.bind(schema, context);
             }
         } catch (Exception e) {
-            if (isIgnoreException()) {
+            if (isIgnoreException() && !context.isCancelled()) {
+                // do not swallow exceptions while the subtree is cancelled: avoids polluting the ignore metric with cancellation traffic and pointless continued execution
                 log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
                 Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
                 MetricsUtils.getCompositeMeterRegistry()
@@ -64,6 +70,11 @@ public class CacheTableBindable extends BindableInterface {
             enumerable = Linq4j.emptyEnumerable();
         }
 
+        if (context.isCancelled()) {
+            // a cancelled branch no longer writes the cache table, avoiding side effects from zombie branches
+            throw new RuntimeException("cache table " + tableName + " execution cancelled");
+        }
+
         CacheTable cacheTable = new CacheTable(tableName, enumerable, bindable.getReturnDataFields());
         cacheTable.setCreateSql(getSql());
         schema.add(tableName, cacheTable);
@@ -75,16 +86,29 @@ public class CacheTableBindable extends BindableInterface {
     }
 
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
+        ExecuteContextImpl childContext = ((ExecuteContextImpl) context).clone();
         CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
+                () -> bindable.bind(schema, childContext), ExecutorServiceUtils.getExecutorService()
         );
         try {
             return future.get(timeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
+            childContext.cancel();
             future.cancel(true);
             throw new RuntimeException("Task execution timeout after " + timeout + "ms", e);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            childContext.cancel();
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Task execution interrupted", e);
+        } catch (ExecutionException e) {
+            childContext.cancel();
+            future.cancel(true);
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new RuntimeException(cause);
         }
     }
 

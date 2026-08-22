@@ -95,7 +95,7 @@ public class IfBindable extends BindableInterface {
         }
     }
 
-    private Enumerable<Object[]> bindWithCondition(CalciteSchema schema, ExecuteContext context) {
+    private Object getSingleConditionValue(CalciteSchema schema, ExecuteContext context) {
         Enumerable<Object[]> conditionResult = condition.bind(schema, context);
         List<Object[]> conditionList = new ArrayList<>();
         for (Object[] row : conditionResult) {
@@ -110,7 +110,11 @@ public class IfBindable extends BindableInterface {
         if (row.length != 1) {
             throw new RuntimeException("condition must return exactly one column");
         }
-        Object value = row[0];
+        return row[0];
+    }
+
+    private Enumerable<Object[]> bindWithCondition(CalciteSchema schema, ExecuteContext context) {
+        Object value = getSingleConditionValue(schema, context);
 
         boolean conditionValue = false;
         if (value != null) {
@@ -149,22 +153,7 @@ public class IfBindable extends BindableInterface {
             throw new RuntimeException("elseClause must exist when timein is set");
         }
 
-        Enumerable<Object[]> conditionResult = condition.bind(schema, context);
-        List<Object[]> conditionList = new ArrayList<>();
-        for (Object[] row : conditionResult) {
-            conditionList.add(row);
-        }
-
-        if (conditionList.size() != 1) {
-            throw new RuntimeException("condition must return exactly one row");
-        }
-
-        Object[] row = conditionList.get(0);
-        if (row.length != 1) {
-            throw new RuntimeException("condition must return exactly one column");
-        }
-
-        Object value = row[0];
+        Object value = getSingleConditionValue(schema, context);
         if (!(value instanceof Number)) {
             throw new RuntimeException("condition must return a numeric value for timein mode");
         }
@@ -178,30 +167,42 @@ public class IfBindable extends BindableInterface {
     }
 
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
+        ExecuteContextImpl thenContext = ((ExecuteContextImpl) context).clone();
         CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> thenClause.bind(schema, context),
+                () -> thenClause.bind(schema, thenContext),
                 ExecutorServiceUtils.getExecutorService()
         );
 
         try {
             return future.get(timeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
+            thenContext.cancel();
             future.cancel(true);
-            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_IF_CACHE_TIMEOUT, tags)
-                    .increment();
+            if (context.isCancelled()) {
+                // an ancestor has cancelled the whole subtree (including the else scope), do not fall back
+                throw new RuntimeException("if node " + getName() + " cancelled while waiting for thenClause");
+            }
+            log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
+            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_TIMEOUT);
             return elseClause.bind(schema, context);
         } catch (Exception e) {
-            log.error("Error executing thenClause, falling back to elseClause", e);
+            thenContext.cancel();
             future.cancel(true);
-            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK, tags)
-                    .increment();
+            if (context.isCancelled()) {
+                // an ancestor has cancelled the whole subtree, do not fall back, just abort
+                throw new RuntimeException("if node " + getName() + " cancelled", e);
+            }
+            log.error("Error executing thenClause, falling back to elseClause", e);
+            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
             return elseClause.bind(schema, context);
         }
+    }
+
+    private void incrementFallbackMetric(ExecuteContext context, String metricName) {
+        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(metricName, tags)
+                .increment();
     }
 
     @Override

@@ -6,4 +6,8 @@ public interface ExecuteContext extends ReadonlyContext {
     void setMetricsTag(String key, String value);
 
     void setTraceContext(Object context);
+
+    void cancel();
+
+    boolean isCancelled();
 }

@@ -58,12 +58,19 @@ public class SqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        if (SqlRecConfigs.PARALLELISM_EXEC.getValue()) {
-            execInParallel(schema, context);
-        } else {
-            for (BindableInterface bindable : bindableList) {
-                bindable.bind(schema, context);
+        ExecuteContextImpl functionContext = ((ExecuteContextImpl) context).clone();
+        try {
+            if (SqlRecConfigs.PARALLELISM_EXEC.getValue()) {
+                execInParallel(schema, functionContext);
+            } else {
+                for (BindableInterface bindable : bindableList) {
+                    bindable.bind(schema, functionContext);
+                }
             }
+        } catch (Exception e) {
+            // stop nested async tasks still running inside this function (timeout branches within nodes, partitions, async calls, etc.)
+            functionContext.cancel();
+            throw e;
         }
 
         if (returnTableName == null) {
@@ -78,11 +85,11 @@ public class SqlFunctionBindable extends BindableInterface {
         for (int i : sortedBindableList) {
             BindableInterface bindable = bindableList.get(i);
             Set<Integer> dependentBindableIndices = bindableDependency.get(i);
+            CompletableFuture<Object> bindFuture;
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
-                CompletableFuture<Object> bindFuture = CompletableFuture.supplyAsync(
+                bindFuture = CompletableFuture.supplyAsync(
                         () -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
                 );
-                bindFutures.put(i, bindFuture);
             } else {
                 List<CompletableFuture<Object>> dependentBindFutures = new ArrayList<>();
                 for (int dependentBindableIndex : dependentBindableIndices) {
@@ -91,11 +98,16 @@ public class SqlFunctionBindable extends BindableInterface {
                 CompletableFuture<Void> dependentBindFuturesAll = CompletableFuture.allOf(
                         dependentBindFutures.toArray(new CompletableFuture[0])
                 );
-                CompletableFuture<Object> bindFuture = dependentBindFuturesAll.thenApplyAsync(
+                bindFuture = dependentBindFuturesAll.thenApplyAsync(
                         (v) -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
                 );
-                bindFutures.put(i, bindFuture);
             }
+            bindFuture.whenComplete((result, ex) -> {
+                if (ex != null) {
+                    context.cancel();
+                }
+            });
+            bindFutures.put(i, bindFuture);
         }
         CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(
                 bindFutures.values().toArray(new CompletableFuture[0])
@@ -103,6 +115,7 @@ public class SqlFunctionBindable extends BindableInterface {
         try {
             allBindFutures.join();
         } catch (Exception e) {
+            context.cancel();
             bindFutures.values().forEach(f -> f.cancel(true));
             throw e;
         }

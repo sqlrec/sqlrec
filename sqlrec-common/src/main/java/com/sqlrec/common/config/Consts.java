@@ -12,6 +12,7 @@ public class Consts {
 
     public static final String METRICS_NODE_EXEC_DURATION = "sqlrec.node.exec.duration";
     public static final String METRICS_NODE_DATA_SIZE = "sqlrec.node.data.size";
+    public static final String METRICS_NODE_CANCELLED = "sqlrec.node.cancelled";
     public static final String METRICS_CACHE_TABLE_IGNORE_EXCEPTION = "sqlrec.cache.table.ignore.exception";
     public static final String METRICS_IF_CACHE_BRANCH = "sqlrec.if.cache.branch";
     public static final String METRICS_IF_CACHE_TIMEOUT = "sqlrec.if.cache.timeout";

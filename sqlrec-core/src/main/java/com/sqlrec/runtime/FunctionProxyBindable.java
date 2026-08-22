@@ -200,6 +200,8 @@ public class FunctionProxyBindable extends BindableInterface {
         partitionTable.scan(null).forEach(allRows::add);
         List<List<Object[]>> partitions = splitBySize(allRows, partitionSize);
 
+        ExecuteContextImpl partitionContext = ((ExecuteContextImpl) context).clone();
+
         // execute each partition concurrently and merge results
         List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();
         for (List<Object[]> partitionRows : partitions) {
@@ -216,7 +218,7 @@ public class FunctionProxyBindable extends BindableInterface {
                         }
                     }
                 }
-                return targetBindable.bind(partitionSchema, context);
+                return targetBindable.bind(partitionSchema, partitionContext);
             }, ExecutorServiceUtils.getExecutorService());
             futures.add(future);
         }
@@ -231,6 +233,7 @@ public class FunctionProxyBindable extends BindableInterface {
                 }
             }
         } catch (Exception e) {
+            partitionContext.cancel();
             for (CompletableFuture<Enumerable<Object[]>> f : futures) {
                 f.cancel(true);
             }

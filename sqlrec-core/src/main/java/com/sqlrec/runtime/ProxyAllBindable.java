@@ -34,6 +34,11 @@ public class ProxyAllBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+        if (context.isCancelled()) {
+            recordCancelled(context);
+            throw new RuntimeException("node " + getName() + " execution cancelled before start");
+        }
+
         long startTime = System.currentTimeMillis();
         long count = 0;
         String status = "success";
@@ -51,6 +56,9 @@ public class ProxyAllBindable extends BindableInterface {
         Throwable error = null;
         try {
             Enumerable<Object[]> result = delegate.bind(schema, traceContext);
+            if (context.isCancelled()) {
+                throw new RuntimeException("node " + nodeName + " execution cancelled");
+            }
             count = printAndCountResult(schema, context, debugPrint, result);
 
             if (debugPrint) {
@@ -59,6 +67,13 @@ public class ProxyAllBindable extends BindableInterface {
             }
             return result;
         } catch (Exception e) {
+            if (context.isCancelled()) {
+                // the whole subtree was cancelled by an ancestor: not a node failure, rethrow unwrapped and record a separate status
+                status = "cancelled";
+                error = e;
+                recordCancelled(context);
+                throw e;
+            }
             status = "error";
             error = e;
             throw new RuntimeException("Node " + nodeName + " execution failed", e);
@@ -80,6 +95,13 @@ public class ProxyAllBindable extends BindableInterface {
                     .summary(Consts.METRICS_NODE_DATA_SIZE, tags)
                     .record(count);
         }
+    }
+
+    private void recordCancelled(ExecuteContext context) {
+        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_NODE_CANCELLED, tags)
+                .increment();
     }
 
     private boolean isDebugPrintEnabled(ExecuteContext context) {

@@ -64,6 +64,7 @@ public class RestFunctionExecutor {
             }
         } catch (Exception e) {
             logger.error("execute function error", e);
+            executeContext.cancel();
             throw new RuntimeException("execute function error: " + e.getMessage(), e);
         }
         return executeData;

@@ -20,11 +20,15 @@ public class ExecuteContextImpl implements ExecuteContext {
     private List<String> funNameStack;
     private Object traceContext;
 
+    private final ExecuteContextImpl parent;
+    private volatile boolean cancelled = false;
+
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
         variableMap.put(Consts.LOG_ID, UUID.randomUUID().toString());
         metricsTagMap = new ConcurrentHashMap<>();
         funNameStack = new ArrayList<>();
+        parent = null;
     }
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
@@ -32,6 +36,7 @@ public class ExecuteContextImpl implements ExecuteContext {
         metricsTagMap = parentContext.metricsTagMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
         traceContext = parentContext.traceContext;
+        parent = parentContext;
     }
 
     public String getVariable(String key) {
@@ -100,6 +105,23 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     public List<String> getFunNameStack() {
         return funNameStack;
+    }
+
+    @Override
+    public void cancel() {
+        this.cancelled = true;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        ExecuteContextImpl current = this;
+        while (current != null) {
+            if (current.cancelled) {
+                return true;
+            }
+            current = current.parent;
+        }
+        return false;
     }
 
     @Override
