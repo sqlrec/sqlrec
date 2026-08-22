@@ -1,6 +1,7 @@
 package com.sqlrec.compiler;
 
 import com.sqlrec.runtime.SqlFunctionBindable;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  * compiled/looked up with any casing, and the normalized (lower case) name is
  * what flows through the system.
  */
+@Tag("integration")
 class ResourceNameCaseInsensitiveTest {
 
     private static final String UPPER_NAME = "Mixed_Case_Fun";
