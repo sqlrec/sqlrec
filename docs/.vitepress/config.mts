@@ -21,6 +21,7 @@ export default defineConfig({
           { text: '快速开始', link: '/docs/quick_start' },
           { text: '性能测试', link: '/docs/benchmark' },
           { text: '编程模型', link: '/docs/program_model' },
+          { text: '架构设计', link: '/docs/architecture' },
           { text: 'SQL语法', link: '/docs/sql_reference' },
           { text: '内置UDF', link: '/docs/udf' },
           {
@@ -69,6 +70,7 @@ export default defineConfig({
           { text: 'Quick Start', link: '/en/docs/quick_start' },
           { text: 'Benchmark', link: '/en/docs/benchmark' },
           { text: 'Programming Model', link: '/en/docs/program_model' },
+          { text: 'Architecture', link: '/en/docs/architecture' },
           { text: 'SQL Reference', link: '/en/docs/sql_reference' },
           { text: 'Built-in UDF', link: '/en/docs/udf' },
           {
