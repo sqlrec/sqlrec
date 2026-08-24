@@ -481,15 +481,11 @@ public class IfBindableTest {
 
     @Test
     public void testNestedIf() throws Exception {
-        List<SqlTestCase> sqlList = Arrays.asList(
-                new SqlTestCase(
-                        "IF (SELECT true) THEN (IF (SELECT false) THEN (SELECT 1 as ID, 'a' as NAME) ELSE (SELECT 2 as ID, 'b' as NAME))",
-                        Arrays.<Object[]>asList(new Object[]{2, "b"})
-                )
+        SqlTestCase sqlTestCase = new SqlTestCase(
+                "IF (SELECT true) THEN (IF (SELECT false) THEN (SELECT 1 as ID, 'a' as NAME) ELSE (SELECT 2 as ID, 'b' as NAME))"
         );
-        for (SqlTestCase sqlTestCase : sqlList) {
-            sqlTestCase.test(schema);
-        }
+        sqlTestCase.expectedException = new RuntimeException("if statement cannot be nested in then or else clause");
+        sqlTestCase.test(schema);
     }
 
     @Test

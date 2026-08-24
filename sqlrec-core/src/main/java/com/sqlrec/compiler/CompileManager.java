@@ -158,7 +158,7 @@ public class CompileManager {
             CacheTableBindable thenCache = (CacheTableBindable) thenBindable;
             CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
             if (table != null) {
-                DataTypeUtils.checkTableSchemaCompatible(
+                DataTypeUtils.checkTableSchemaSame(
                         thenCache.getCacheTableDataFields(),
                         table.getDataFields()
                 );

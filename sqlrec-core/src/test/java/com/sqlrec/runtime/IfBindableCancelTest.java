@@ -424,6 +424,32 @@ public class IfBindableCancelTest {
         assertTrue(ex.getMessage().contains("must contain else clause when in timein mode"));
     }
 
+    @Test
+    public void testNestedIfInThenClauseRejected() {
+        IfBindable nested = new IfBindable(
+                condition(Boolean.TRUE),
+                cacheClause("inner_t", returningRow()),
+                null,
+                false
+        );
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> new IfBindable(condition(Boolean.TRUE), nested, null, false));
+        assertEquals("if statement cannot be nested in then or else clause", ex.getMessage());
+    }
+
+    @Test
+    public void testNestedIfInElseClauseRejected() {
+        IfBindable nested = new IfBindable(
+                condition(Boolean.TRUE),
+                cacheClause("inner_t", returningRow()),
+                null,
+                false
+        );
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> new IfBindable(condition(Boolean.TRUE), cacheClause("t", returningRow()), nested, false));
+        assertEquals("if statement cannot be nested in then or else clause", ex.getMessage());
+    }
+
     // ==================== helpers ====================
 
     private static void sleepQuietly(long millis) {

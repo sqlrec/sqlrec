@@ -39,6 +39,9 @@ public class IfBindable extends BindableInterface {
             BindableInterface elseClause,
             boolean timein
     ) {
+        if (thenClause instanceof IfBindable || elseClause instanceof IfBindable) {
+            throw new RuntimeException("if statement cannot be nested in then or else clause");
+        }
         this.condition = condition;
         this.thenClause = thenClause;
         this.elseClause = elseClause;
@@ -143,6 +146,10 @@ public class IfBindable extends BindableInterface {
                 // add empty table
                 CacheTable cacheTable = new CacheTable(thenCache.getTableName(), Linq4j.emptyEnumerable(), thenCache.getTableDataFields());
                 schema.add(thenCache.getTableName(), cacheTable);
+            } else {
+                // the existing table must keep the exact same schema as the then clause,
+                // otherwise statements compiled against the then schema would read mismatched data
+                DataTypeUtils.checkTableSchemaSame(thenCache.getTableDataFields(), table.getDataFields());
             }
         }
         return Linq4j.emptyEnumerable();
