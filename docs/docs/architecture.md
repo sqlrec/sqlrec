@@ -270,14 +270,13 @@ BindableInterface
  ├─ CalciteBindable        普通 SQL：包装 Calcite Bindable；bind() 时创建 SqlRecDataContextImpl，
  │                          执行并把结果全量物化为 List（列宽自适应单列/多列）
  ├─ CacheTableBindable     CACHE 语句：执行子 Bindable → 结果注册为 schema 中的 CacheTable；
- │                          返回 (table_name, count) 一行；支持 NODE_EXEC_TIMEOUT 超时
- │                          （clone 子 context + CompletableFuture + cancel 传播）；
- │                          isIgnoreException() 时吞异常并计数（用于 union 降级）
+ │                          返回 (table_name, count) 一行
  ├─ FunctionProxyBindable  CALL 语句代理：静态绑定（delegate）或运行时按变量解析函数名；
  │                          支持 ASYNC（提交虚拟线程后返回 null）与 PARTITION BY t SIZE n
  │                          （按分区表行数切分，clone context，每分区独立 schema，并发执行合并）
  ├─ SqlFunctionBindable    SQL 函数本体：ProxyAllBindable 列表顺序执行 + 输入表 schema + 返回表
- ├─ ProxyAllBindable       函数体内单条语句的包装（命名、输入表注入）
+ ├─ ProxyAllBindable       节点执行包装：超时、取消、Trace、Metrics 和日志；
+ │                          根据 isIgnoreException() 和缓存表元数据统一恢复可忽略异常并计数
  ├─ CallSqlFunctionBindable 函数调用绑定（校验输入表存在性）
  ├─ JavaFunctionBindable   Java table UDF 绑定
  ├─ IfBindable             条件分支：条件是标量 SELECT，then/else 为任意 Bindable；
@@ -485,7 +484,7 @@ MovieLens 推荐链路（`src/main/sql/`）：
 | `REST_BUSINESS_MAX_PENDING_TASKS` | 32 | 每个 REST 业务 EventExecutor 的最大排队任务数，最小为 16 |
 | `ENABLE_REST_SERVER/SQL_API/UI_API/THRIFT_SERVER` | true | 入口开关 |
 | `PARALLELISM_EXEC` | true | 并行执行 |
-| `NODE_EXEC_TIMEOUT` | 0（不限） | CACHE 子任务超时（ms） |
+| `NODE_EXEC_TIMEOUT` | 0（不限） | 可超时节点的执行超时（ms） |
 | `FUNCTION_UPDATE_INTERVAL` | 300s | 函数热更新周期 |
 | `SCHEMA_CACHE_EXPIRE` / `ASYNC_SCHEMA_UPDATE` | 60s / true | schema 缓存 |
 | `SQL_SCHEMA_DIR` | 空（用 HMS） | 本地文件元数据模式 |

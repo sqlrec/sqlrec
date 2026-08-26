@@ -93,7 +93,7 @@ public class SqlRecConfigs {
     public static final ConfigOption<Long> NODE_EXEC_TIMEOUT = new ConfigOption<>(
             "NODE_EXEC_TIMEOUT",
             0L,
-            "node execution timeout in milliseconds, 0 means no timeout, only work in cache sql",
+            "node execution timeout in milliseconds, 0 means no timeout",
             null,
             Long.class
     );

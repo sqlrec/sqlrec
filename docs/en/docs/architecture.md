@@ -275,10 +275,7 @@ BindableInterface
  │                          executes and fully materializes results into a List (column-width
  │                          adaptive single/multi column)
  ├─ CacheTableBindable     CACHE statement: executes child Bindable → registers result as a
- │                          CacheTable in the schema; returns one row (table_name, count);
- │                          supports NODE_EXEC_TIMEOUT (clone child context + CompletableFuture
- │                          + cancel propagation); swallows and counts exceptions when
- │                          isIgnoreException() (for union degradation)
+ │                          CacheTable in the schema; returns one row (table_name, count)
  ├─ FunctionProxyBindable  CALL statement proxy: static binding (delegate) or runtime function
  │                          name resolution via variables; supports ASYNC (submit to virtual
  │                          thread and return null) and PARTITION BY t SIZE n (split by partition
@@ -286,8 +283,9 @@ BindableInterface
  │                          concurrent execution and merge)
  ├─ SqlFunctionBindable    SQL function body: sequential execution of ProxyAllBindable list +
  │                          input table schema + return table
- ├─ ProxyAllBindable       Wrapper for a single statement in the function body (naming, input
- │                          table injection)
+ ├─ ProxyAllBindable       Node execution wrapper for timeout, cancellation, tracing, metrics,
+ │                          and logging; uniformly recovers ignorable failures using
+ │                          isIgnoreException() and cache-table metadata
  ├─ CallSqlFunctionBindable Function call binding (validates input table existence)
  ├─ JavaFunctionBindable   Java table UDF binding
  ├─ IfBindable             Conditional branch: condition is a scalar SELECT, then/else are any
@@ -499,7 +497,7 @@ Static mutable state: `CompileManager.functionBindableMap/sqlApiCache`, `Calcite
 | `REST_BUSINESS_MAX_PENDING_TASKS` | 32 | Maximum pending tasks per REST business EventExecutor; minimum 16 |
 | `ENABLE_REST_SERVER/SQL_API/UI_API/THRIFT_SERVER` | true | Entry switches |
 | `PARALLELISM_EXEC` | true | Parallel execution |
-| `NODE_EXEC_TIMEOUT` | 0 (unlimited) | CACHE subtask timeout (ms) |
+| `NODE_EXEC_TIMEOUT` | 0 (unlimited) | Execution timeout for timeout-capable nodes (ms) |
 | `FUNCTION_UPDATE_INTERVAL` | 300s | Function hot-update period |
 | `SCHEMA_CACHE_EXPIRE` / `ASYNC_SCHEMA_UPDATE` | 60s / true | Schema cache |
 | `SQL_SCHEMA_DIR` | empty (use HMS) | Local file metadata mode |

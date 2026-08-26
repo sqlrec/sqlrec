@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,6 +64,18 @@ public class ProxyAllBindableCancelTest {
         public Enumerator<Object[]> enumerator() {
             throw new AssertionError("result should not be materialized after cancellation");
         }
+    }
+
+    @Test
+    public void testWrapIsIdempotent() {
+        ProxyAllBindable proxy = new ProxyAllBindable(new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                return Linq4j.emptyEnumerable();
+            }
+        });
+
+        assertSame(proxy, ProxyAllBindable.wrap(proxy));
     }
 
     @Test

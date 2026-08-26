@@ -1,30 +1,17 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.utils.ExecutorServiceUtils;
-import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class CacheTableBindable extends BindableInterface {
-    private static final Logger log = LoggerFactory.getLogger(CacheTableBindable.class);
-
     private String tableName;
     private BindableInterface bindable;
 
@@ -40,32 +27,7 @@ public class CacheTableBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        if (context.isCancelled()) {
-            throw new RuntimeException("cache table " + tableName + " execution cancelled before start");
-        }
-
-        Enumerable<Object[]> enumerable = null;
-        long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT.getValue(context.getVariables());
-        boolean needTimeout = timeout > 0 && isTimeoutAble(schema, context);
-
-        try {
-            if (needTimeout) {
-                enumerable = executeWithTimeout(schema, context, timeout);
-            } else {
-                enumerable = bindable.bind(schema, context);
-            }
-        } catch (Exception e) {
-            if (isIgnoreException() && !context.isCancelled()) {
-                // do not swallow exceptions while the subtree is cancelled: avoids polluting the ignore metric with cancellation traffic and pointless continued execution
-                log.warn("ignore exception when bind cache table {}: {}", tableName, e.getMessage(), e);
-                Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
-                MetricsUtils.getCompositeMeterRegistry()
-                        .counter(Consts.METRICS_CACHE_TABLE_IGNORE_EXCEPTION, tags)
-                        .increment();
-            } else {
-                throw e;
-            }
-        }
+        Enumerable<Object[]> enumerable = bindable.bind(schema, context);
         if (enumerable == null) {
             enumerable = Linq4j.emptyEnumerable();
         }
@@ -83,33 +45,6 @@ public class CacheTableBindable extends BindableInterface {
         List<Object[]> list = new ArrayList<>();
         list.add(new Object[]{tableName, (long) enumerable.count()});
         return Linq4j.asEnumerable(list);
-    }
-
-    private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
-        ExecuteContextImpl childContext = ((ExecuteContextImpl) context).clone();
-        CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> bindable.bind(schema, childContext), ExecutorServiceUtils.getExecutorService()
-        );
-        try {
-            return future.get(timeout, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            childContext.cancel();
-            future.cancel(true);
-            throw new RuntimeException("Task execution timeout after " + timeout + "ms", e);
-        } catch (InterruptedException e) {
-            childContext.cancel();
-            future.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Task execution interrupted", e);
-        } catch (ExecutionException e) {
-            childContext.cancel();
-            future.cancel(true);
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            throw new RuntimeException(cause);
-        }
     }
 
     @Override

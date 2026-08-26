@@ -6,22 +6,28 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TraceUtils;
 import io.micrometer.core.instrument.Tags;
 import io.opentelemetry.api.trace.Span;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class ProxyAllBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(ProxyAllBindable.class);
@@ -30,6 +36,13 @@ public class ProxyAllBindable extends BindableInterface {
 
     public ProxyAllBindable(BindableInterface delegate) {
         this.delegate = delegate;
+    }
+
+    public static BindableInterface wrap(BindableInterface bindable) {
+        if (bindable instanceof ProxyAllBindable) {
+            return bindable;
+        }
+        return new ProxyAllBindable(bindable);
     }
 
     @Override
@@ -46,7 +59,7 @@ public class ProxyAllBindable extends BindableInterface {
         String logId = context.getLogId();
         String nodeName = getName();
 
-        ExecuteContext traceContext = ((ExecuteContextImpl) context).clone();
+        ExecuteContextImpl traceContext = ((ExecuteContextImpl) context).clone();
         Span span = TraceUtils.startSpan(traceContext, nodeName);
 
         if (debugPrint) {
@@ -55,7 +68,7 @@ public class ProxyAllBindable extends BindableInterface {
 
         Throwable error = null;
         try {
-            Enumerable<Object[]> result = delegate.bind(schema, traceContext);
+            Enumerable<Object[]> result = executeWithRecovery(schema, context, traceContext);
             if (context.isCancelled()) {
                 throw new RuntimeException("node " + nodeName + " execution cancelled");
             }
@@ -66,24 +79,23 @@ public class ProxyAllBindable extends BindableInterface {
                         System.currentTimeMillis() - startTime);
             }
             return result;
-        } catch (Exception e) {
-            if (context.isCancelled()) {
-                // the whole subtree was cancelled by an ancestor: not a node failure, rethrow unwrapped and record a separate status
-                status = "cancelled";
-                error = e;
-                recordCancelled(context);
-                throw e;
+        } catch (Throwable failure) {
+            error = failure;
+            if (failure instanceof Error) {
+                status = "error";
+                throw (Error) failure;
             }
-            status = "error";
-            error = e;
-            throw new RuntimeException("Node " + nodeName + " execution failed", e);
-        } catch (Error e) {
-            // Do not wrap JVM-fatal errors (OOM, StackOverflowError, etc.) as RuntimeException;
-            // let them propagate so the runtime can handle them appropriately. Metrics are still
-            // recorded in the finally block below.
-            status = "error";
-            error = e;
-            throw e;
+            if (context.isCancelled()) {
+                status = "cancelled";
+                recordCancelled(context);
+                throw propagate(failure);
+            }
+            boolean timeout = failure instanceof TimeoutException;
+            status = timeout ? "timeout" : "error";
+            String message = timeout
+                    ? "Node " + nodeName + " execution timeout"
+                    : "Node " + nodeName + " execution failed";
+            throw new RuntimeException(message, failure);
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             TraceUtils.endSpan(span, logId, duration, count, status, error);
@@ -95,6 +107,103 @@ public class ProxyAllBindable extends BindableInterface {
                     .summary(Consts.METRICS_NODE_DATA_SIZE, tags)
                     .record(count);
         }
+    }
+
+    private Enumerable<Object[]> executeWithRecovery(
+            CalciteSchema schema,
+            ExecuteContext context,
+            ExecuteContextImpl nodeContext
+    ) throws Throwable {
+        try {
+            return executeDelegate(schema, nodeContext);
+        } catch (Throwable failure) {
+            Throwable cause = unwrapExecutionFailure(failure);
+            if (!(cause instanceof InterruptedException) && !(cause instanceof Error)) {
+                Enumerable<Object[]> recovered = recoverIgnoredCacheFailure(schema, context, cause);
+                if (recovered != null) {
+                    return recovered;
+                }
+            }
+            throw cause;
+        }
+    }
+
+    private Enumerable<Object[]> executeDelegate(CalciteSchema schema, ExecuteContextImpl nodeContext)
+            throws Throwable {
+        long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT.getValue(nodeContext.getVariables());
+        if (timeout <= 0 || !delegate.isTimeoutAble(schema, nodeContext)) {
+            return delegate.bind(schema, nodeContext);
+        }
+
+        CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
+                () -> delegate.bind(schema, nodeContext),
+                ExecutorServiceUtils.getExecutorService()
+        );
+        try {
+            return future.get(timeout, TimeUnit.MILLISECONDS);
+        } catch (Throwable failure) {
+            nodeContext.cancel();
+            future.cancel(true);
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            if (failure instanceof TimeoutException) {
+                TimeoutException timeoutException = new TimeoutException(
+                        "Task execution timeout after " + timeout + "ms"
+                );
+                timeoutException.initCause(failure);
+                throw timeoutException;
+            }
+            throw failure;
+        }
+    }
+
+    private Throwable unwrapExecutionFailure(Throwable failure) {
+        if (failure instanceof ExecutionException && failure.getCause() != null) {
+            return failure.getCause();
+        }
+        return failure;
+    }
+
+    private RuntimeException propagate(Throwable failure) {
+        if (failure instanceof RuntimeException) {
+            return (RuntimeException) failure;
+        }
+        return new RuntimeException(failure.getMessage(), failure);
+    }
+
+    private Enumerable<Object[]> recoverIgnoredCacheFailure(
+            CalciteSchema schema,
+            ExecuteContext context,
+            Throwable failure
+    ) {
+        if (!delegate.isIgnoreException() || context.isCancelled()) {
+            return null;
+        }
+
+        String cacheTableName = delegate.getCacheTableName();
+        List<RelDataTypeField> cacheTableDataFields = delegate.getCacheTableDataFields();
+        if (StringUtils.isEmpty(cacheTableName)
+                || cacheTableDataFields == null) {
+            return null;
+        }
+
+        log.warn("ignore exception when bind cache table {}: {}", cacheTableName, failure.getMessage(), failure);
+        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+        MetricsUtils.getCompositeMeterRegistry()
+                .counter(Consts.METRICS_CACHE_TABLE_IGNORE_EXCEPTION, tags)
+                .increment();
+
+        CacheTable cacheTable = new CacheTable(cacheTableName, Linq4j.emptyEnumerable(), cacheTableDataFields);
+        cacheTable.setCreateSql(delegate.getSql());
+        if (context.isCancelled()) {
+            throw new RuntimeException("node " + getName() + " execution cancelled");
+        }
+        schema.add(cacheTableName, cacheTable);
+
+        List<Object[]> rows = new ArrayList<>();
+        rows.add(new Object[]{cacheTableName, 0L});
+        return Linq4j.asEnumerable(rows);
     }
 
     private void recordCancelled(ExecuteContext context) {
@@ -136,7 +245,7 @@ public class ProxyAllBindable extends BindableInterface {
 
         boolean isSelect = delegate instanceof CalciteBindable
                 && ((CalciteBindable) delegate).getSqlNode() instanceof SqlSelect;
-        if (isSelect) {
+        if (debugPrint && isSelect) {
             printNodeResult(context, nodeName, result, delegate.getReturnDataFields());
         }
 

@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,7 +105,7 @@ public class CacheTableBindableCancelTest {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         long startTime = System.currentTimeMillis();
         RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> cacheTableBindable.bind(schema, context));
+                () -> bindWithProxy(cacheTableBindable, schema, context));
         long duration = System.currentTimeMillis() - startTime;
 
         assertTrue(duration < 5000, "should fail fast on timeout, took " + duration + "ms");
@@ -154,13 +155,14 @@ public class CacheTableBindableCancelTest {
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> cacheTableBindable.bind(schema, context));
+                () -> bindWithProxy(cacheTableBindable, schema, context));
         assertEquals("inner failed while cancelled", ex.getMessage());
     }
 
     @Test
-    public void testIgnoreExceptionStillSwallowsRegularException() {
+    public void testRegularExceptionRecoveryIsOwnedByProxy() {
         ExecuteContextImpl context = new ExecuteContextImpl();
+        context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable("t", new TestBindable() {
             @Override
@@ -170,17 +172,24 @@ public class CacheTableBindableCancelTest {
         });
         cacheTableBindable.setIgnoreException(true);
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        Enumerable<Object[]> result = cacheTableBindable.bind(schema, context);
+        CalciteSchema directSchema = CalciteSchema.createRootSchema(false);
+        RuntimeException directFailure = assertThrows(RuntimeException.class,
+                () -> cacheTableBindable.bind(directSchema, context));
+        assertEquals("regular failure", directFailure.getMessage());
+        assertNull(directSchema.getTable("t", false));
+
+        CalciteSchema proxySchema = CalciteSchema.createRootSchema(false);
+        Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, proxySchema, context);
         List<Object[]> rows = new ArrayList<>();
         result.forEach(rows::add);
         assertEquals(1, rows.size());
         assertEquals("t", rows.get(0)[0]);
         assertEquals(0L, rows.get(0)[1]);
+        assertNotNull(proxySchema.getTable("t", false));
     }
 
     @Test
-    public void testInnerExceptionThroughTimeoutPathIsUnwrapped() {
+    public void testInnerExceptionThroughProxyTimeoutPathPreservesCause() {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
 
@@ -193,8 +202,9 @@ public class CacheTableBindableCancelTest {
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> cacheTableBindable.bind(schema, context));
-        assertEquals("inner boom", ex.getMessage());
+                () -> bindWithProxy(cacheTableBindable, schema, context));
+        assertEquals("Node test_node execution failed", ex.getMessage());
+        assertEquals("inner boom", ex.getCause().getMessage());
     }
 
     @Test
@@ -229,8 +239,18 @@ public class CacheTableBindableCancelTest {
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> cacheTableBindable.bind(schema, context));
+                () -> bindWithProxy(cacheTableBindable, schema, context));
         assertEquals("child observed cancellation", ex.getMessage());
         assertTrue(inner.finished.await(5, TimeUnit.SECONDS));
+    }
+
+    private Enumerable<Object[]> bindWithProxy(
+            CacheTableBindable cacheTableBindable,
+            CalciteSchema schema,
+            ExecuteContext context
+    ) {
+        BindableInterface proxy = ProxyAllBindable.wrap(cacheTableBindable);
+        proxy.setName("test_node");
+        return proxy.bind(schema, context);
     }
 }
