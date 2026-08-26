@@ -17,6 +17,11 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.util.concurrent.EventExecutorGroup;
+import io.netty.util.concurrent.RejectedExecutionHandlers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,15 +30,28 @@ public class RestServer {
     private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
 
     public static void main(String[] args) throws InterruptedException {
+        int businessExecutorThreads = SqlRecConfigs.REST_BUSINESS_EXECUTOR_THREADS.getValue();
+        int businessMaxPendingTasks = SqlRecConfigs.REST_BUSINESS_MAX_PENDING_TASKS.getValue();
+        validateBusinessExecutorConfig(businessExecutorThreads, businessMaxPendingTasks);
+
         FunctionUpdater.initFunctionUpdateService();
         PrometheusMetricsUtils.initMetrics();
         CalciteSchemaFactory.createCalciteSchema();
 
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(
+                businessExecutorThreads,
+                new DefaultThreadFactory("rest-business"),
+                businessMaxPendingTasks,
+                RejectedExecutionHandlers.reject());
 
         try {
-            logger.info("RestServer is running on port {}", SqlRecConfigs.REST_SERVER_PORT.getValue());
+            logger.info(
+                    "RestServer is running on port {}, businessExecutorThreads={}, businessMaxPendingTasks={}",
+                    SqlRecConfigs.REST_SERVER_PORT.getValue(),
+                    businessExecutorThreads,
+                    businessMaxPendingTasks);
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
@@ -42,8 +60,11 @@ public class RestServer {
                         @Override
                         public void initChannel(SocketChannel ch) {
                             ch.pipeline().addLast(new HttpServerCodec());
-                            ch.pipeline().addLast(new HttpObjectAggregator(65536));
-                            ch.pipeline().addLast(new HttpServerHandler());
+                            ch.pipeline().addLast(new HttpObjectAggregator(
+                                    SqlRecConfigs.REST_MAX_CONTENT_LENGTH.getValue()));
+                            ch.pipeline().addLast(new IdleStateHandler(
+                                    SqlRecConfigs.REST_KEEP_ALIVE_IDLE_TIMEOUT.getValue(), 0, 0));
+                            ch.pipeline().addLast(businessGroup, new HttpServerHandler());
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
@@ -52,8 +73,18 @@ public class RestServer {
             ChannelFuture f = b.bind(SqlRecConfigs.REST_SERVER_PORT.getValue()).sync();
             f.channel().closeFuture().sync();
         } finally {
+            businessGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();
+        }
+    }
+
+    private static void validateBusinessExecutorConfig(int threads, int maxPendingTasks) {
+        if (threads <= 0) {
+            throw new IllegalArgumentException("REST_BUSINESS_EXECUTOR_THREADS must be greater than 0");
+        }
+        if (maxPendingTasks <= 0) {
+            throw new IllegalArgumentException("REST_BUSINESS_MAX_PENDING_TASKS must be greater than 0");
         }
     }
 }

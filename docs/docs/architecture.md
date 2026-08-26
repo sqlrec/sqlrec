@@ -481,6 +481,8 @@ MovieLens 推荐链路（`src/main/sql/`）：
 | 配置 | 默认 | 说明 |
 | --- | --- | --- |
 | `THRIFT_SERVER_PORT` / `REST_SERVER_PORT` | 30000 / 30001 | 服务端口 |
+| `REST_BUSINESS_EXECUTOR_THREADS` | 16 | REST 业务执行线程数 |
+| `REST_BUSINESS_MAX_PENDING_TASKS` | 32 | 每个 REST 业务 EventExecutor 的最大排队任务数，最小为 16 |
 | `ENABLE_REST_SERVER/SQL_API/UI_API/THRIFT_SERVER` | true | 入口开关 |
 | `PARALLELISM_EXEC` | true | 并行执行 |
 | `NODE_EXEC_TIMEOUT` | 0（不限） | CACHE 子任务超时（ms） |

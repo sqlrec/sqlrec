@@ -52,6 +52,34 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
+    public static final ConfigOption<Integer> REST_MAX_CONTENT_LENGTH = new ConfigOption<>(
+            "REST_MAX_CONTENT_LENGTH",
+            64 * 1024,
+            "maximum aggregated REST request content length in bytes",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Integer> REST_KEEP_ALIVE_IDLE_TIMEOUT = new ConfigOption<>(
+            "REST_KEEP_ALIVE_IDLE_TIMEOUT",
+            60,
+            "REST keep-alive read idle timeout in seconds",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Integer> REST_BUSINESS_EXECUTOR_THREADS = new ConfigOption<>(
+            "REST_BUSINESS_EXECUTOR_THREADS",
+            16,
+            "number of threads in the REST business executor group",
+            null,
+            Integer.class
+    );
+    public static final ConfigOption<Integer> REST_BUSINESS_MAX_PENDING_TASKS = new ConfigOption<>(
+            "REST_BUSINESS_MAX_PENDING_TASKS",
+            32,
+            "maximum pending tasks per REST business event executor",
+            null,
+            Integer.class
+    );
 
 
     // exec config

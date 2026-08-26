@@ -495,6 +495,8 @@ Static mutable state: `CompileManager.functionBindableMap/sqlApiCache`, `Calcite
 | Config | Default | Description |
 | --- | --- | --- |
 | `THRIFT_SERVER_PORT` / `REST_SERVER_PORT` | 30000 / 30001 | Service ports |
+| `REST_BUSINESS_EXECUTOR_THREADS` | 16 | Number of REST business executor threads |
+| `REST_BUSINESS_MAX_PENDING_TASKS` | 32 | Maximum pending tasks per REST business EventExecutor; minimum 16 |
 | `ENABLE_REST_SERVER/SQL_API/UI_API/THRIFT_SERVER` | true | Entry switches |
 | `PARALLELISM_EXEC` | true | Parallel execution |
 | `NODE_EXEC_TIMEOUT` | 0 (unlimited) | CACHE subtask timeout (ms) |

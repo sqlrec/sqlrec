@@ -14,6 +14,8 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,12 +50,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                 response = RestUtils.error(HttpResponseStatus.METHOD_NOT_ALLOWED, "only support POST and GET methods");
             }
 
-            writeResponse(ctx, response, path, method, startTime);
+            writeResponse(ctx, request, response, path, method, startTime);
         } catch (Exception e) {
             logger.error("Error processing request: uri={}", uri, e);
             String errorMsg = e.getMessage();
             FullHttpResponse response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, errorMsg != null ? errorMsg : "unknown error");
-            writeResponse(ctx, response, path, method, startTime);
+            writeResponse(ctx, request, response, path, method, startTime);
         }
     }
 
@@ -105,7 +107,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         return UiHandler.handleRequest(uri, method, postData);
     }
 
-    private void writeResponse(ChannelHandlerContext ctx, FullHttpResponse response, String path, HttpMethod method, long startTime) {
+    private void writeResponse(ChannelHandlerContext ctx, FullHttpRequest request, FullHttpResponse response,
+                               String path, HttpMethod method, long startTime) {
         long duration = System.currentTimeMillis() - startTime;
         Tags tags = Tags.of("path", path)
                 .and("method", method.name())
@@ -119,7 +122,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                 .counter(Consts.METRICS_HTTP_REQUEST_COUNT, tags)
                 .increment();
 
-        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        boolean keepAlive = HttpUtil.isKeepAlive(request);
+        if (keepAlive) {
+            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+            ctx.writeAndFlush(response);
+        } else {
+            ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        }
     }
 
     private String extractPath(String uri) {
@@ -133,6 +142,17 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         } else {
             return path;
         }
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent idleStateEvent
+                && idleStateEvent.state() == IdleState.READER_IDLE) {
+            logger.debug("Closing idle HTTP connection: remoteAddress={}", ctx.channel().remoteAddress());
+            ctx.close();
+            return;
+        }
+        super.userEventTriggered(ctx, evt);
     }
 
     @Override
