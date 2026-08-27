@@ -336,6 +336,25 @@ class FileSystemHandlerTest {
         assertEquals(1, rows.size());
     }
 
+    @Test
+    void testUpsertNormalizesRowTypes() {
+        FileSystemConfig config = new FileSystemConfig();
+        config.fieldSchemas = Arrays.asList(
+                new FieldSchema("id", "BIGINT"),
+                new FieldSchema("score", "FLOAT")
+        );
+        config.primaryKey = "id";
+        config.primaryKeyIndex = 0;
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        handler.upsert(new Object[]{1, 100.0D});
+
+        Map<Object, List<Object[]>> result = handler.getByPrimaryKey(Collections.singleton(1L));
+        assertEquals(1, result.get(1L).size());
+        assertEquals(1L, result.get(1L).get(0)[0]);
+        assertEquals(100.0F, result.get(1L).get(0)[1]);
+    }
+
     // ===== file:// URI Tests =====
 
     @Test

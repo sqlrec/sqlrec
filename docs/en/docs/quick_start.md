@@ -1,257 +1,154 @@
 # Quick Start
 
-This section introduces SQLRec usage through a simple demo. For deployment, refer to [Service Deployment](/en/docs/deployment).
+Docker is all you need to try SQLRec. The demo image includes the tables, SQL function, and API required by the quick start. Its example tables use the `filesystem` connector and keep data in process memory, so Redis, PostgreSQL, Hive Metastore, Flink, and Kubernetes are not required.
 
-## Connecting to SQLRec Service
-
-### Using beeline
-
-SQLRec implements the Hive Thrift interface. You can use beeline to connect to the SQLRec service and use it like Hive.
+## Start the Demo
 
 ```bash
-bash ./bin/beeline.sh
+docker run --rm -d --name sqlrec-demo \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  sqlrec/sqlrec-demo:latest
 ```
 
-### Using Python
-
-You can connect to the SQLRec service in Jupyter Notebook using Python and use Python tools to analyze recommendation data. Refer to the following code:
-
-- Deploy Jupyter using scripts in the deploy directory
+Follow the logs to confirm that the service has started:
 
 ```bash
-cd deploy
-bash ./jupyter/deploy.sh
-# wait pod ready
+docker logs -f sqlrec-demo
 ```
 
-- Open Jupyter Notebook in your browser, e.g., `http://127.0.0.1:30028`, and log in using the credentials from env.sh
-- Create a new Python3 notebook
-- Install dependencies
+After startup completes, press `Ctrl+C` to stop following the logs. The container continues running in the background.
+
+## Open the SQLRec CLI
+
+Run the bundled SQLRec CLI inside the container. Its usage is similar to connecting to SQLRec with beeline:
 
 ```bash
-%pip install pandas
-%pip install pyhive
-%pip install sasl
-%pip install thrift
-%pip install thrift-sasl
+docker exec -it sqlrec-demo sh /app/cli.sh
 ```
 
-- Connect to SQLRec service and run SQL statements
-
-```python
-from pyhive import hive
-import pandas as pd
-
-conn = hive.Connection(host='192.168.49.2',port=30000,auth='NOSASL')
-pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
-```
-
-## SQL Development
-
-Connect to the SQLRec service using beeline and develop the data tables, SQL functions, and API interfaces needed for recommendations following the process below:
-
-### Initialize Data Tables
-
-Refer to the following SQL. Note that you can get the minikube node IP address using the `kubectl get node -o wide` command. You may need to replace the IP address in the code below.
+Start by inspecting the objects loaded by the demo:
 
 ```sql
-SET table.sql-dialect = default;
-
-CREATE TABLE IF NOT EXISTS `user_interest_category1` (
-  `user_id` BIGINT,
-  `category1` STRING,
-  `score` FLOAT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
-);
-
-CREATE TABLE IF NOT EXISTS `category1_hot_item` (
-  `category1` STRING,
-  `item_id` BIGINT,
-  `score` FLOAT,
-  PRIMARY KEY (category1)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
-);
-
-CREATE TABLE IF NOT EXISTS `exposure_item` (
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `bhv_time` BIGINT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0',
-  'cache-ttl' = '0'
-);
-
+show tables;
+show functions;
+show apis;
 ```
 
-### Write Test Data
+## Insert Test Data
+
+The quick-start filesystem tables start empty. Insert one user preference and five hot items in the CLI:
 
 ```sql
-INSERT INTO `user_interest_category1` VALUES
-(1000001, 'pc', 100),
-(1000001, 'phone', 100);
+insert into user_interest_category1 values
+  (1000001, 'pc', 100);
 
-INSERT INTO `category1_hot_item` VALUES
-('pc', 1000001, 100),
-('pc', 1000002, 100),
-('pc', 1000003, 100),
-('pc', 1000004, 100),
-('pc', 1000005, 100),
-('phone', 1000011, 100),
-('phone', 1000012, 100),
-('phone', 1000013, 100),
-('phone', 1000014, 100),
-('phone', 1000015, 100);
+insert into category1_hot_item values
+  ('pc', 1000001, 100),
+  ('pc', 1000002, 90),
+  ('pc', 1000003, 80),
+  ('pc', 1000004, 70),
+  ('pc', 1000005, 60);
 
-select * from `user_interest_category1` where `user_id` = 1000001;
-
-select * from `category1_hot_item` where `category1` = 'pc';
+select * from user_interest_category1;
+select * from category1_hot_item;
 ```
 
-### Develop SQL Functions
+The data exists only in the current CLI process and is cleared when the CLI exits.
+
+## Get Recommendations
+
+The demo defines a `test_rec` SQL function. Continue in the same CLI session, create its input table, and call it:
 
 ```sql
--- define function test rec
-create or replace sql function test_rec;
+cache table quick_start_user as
+select cast(1000001 as bigint) as id;
 
--- define input param
-define input table user_info(id bigint);
-
--- query exposed item for deduplication
-cache table exposured_item as
-select item_id
-from
-user_info join exposure_item on user_id = user_info.id;
-
--- query user interest category1
-cache table cur_user_interest_category1 as
-select category1
-from
-user_info join user_interest_category1 on user_id = user_info.id
-limit 10;
-
--- query category1 hot item
-cache table category1_recall as
-select item_id as item_id, 'user_category1_interest_recall:' || cur_user_interest_category1.category1 as rec_reason
-from
-cur_user_interest_category1 join category1_hot_item
-on category1_hot_item.category1 = cur_user_interest_category1.category1
-limit 300;
-
--- dedup category1 recall
-cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
-
--- truncate to rec item num
-cache table final_recall_item as
-select item_id, rec_reason
-from dedup_category1_recall
-limit 2;
-
--- gen rec meta data
-cache table request_meta as select
-user_info.id as user_id,
-cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
-uuid() as req_id
-from user_info;
-
--- gen final rec data
-cache table final_rec_data as
-select
-request_meta.user_id as user_id,
-item_id,
-cast('XXX' as VARCHAR) as item_name,
-rec_reason,
-request_meta.req_time as req_time,
-request_meta.req_id as req_id
-from
-request_meta join final_recall_item on 1=1;
-
--- write exposed item to exposure table for deduplication
-insert into exposure_item
-select user_id, item_id, req_time
-from final_rec_data;
-
-return final_rec_data;
+call test_rec(quick_start_user);
 ```
 
-The SQL above defines the recommendation function `test_rec`. The SQL function definition syntax is:
-- Start with `create or replace sql function` followed by the function name
-- `define input table` defines input parameters, can be empty or define multiple
-- `cache table` caches intermediate calculation results, can cache SELECT statement and SQL function call execution results
-- `call` calls other functions, can use the `async` keyword for asynchronous calls
-- `return` returns calculation results, can be empty
+The function returns two hot items with their recommendation reasons, request timestamp, and request ID. Exposure records are written to the current process's in-memory `exposure_item` table; later calls use these records for deduplication.
 
-You can test the function directly in the beeline command line as follows:
+## Call the Recommendation API
 
-```sql
-0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
-+-------------+--------+
-| table_name  | count  |
-+-------------+--------+
-| t1          | 1      |
-+-------------+--------+
-1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
-+-------+---------+
-| name  |  type   |
-+-------+---------+
-| id    | BIGINT  |
-+-------+---------+
-1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000015  | XXX        | user_category1_interest_recall:phone  | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-| 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000014  | XXX        | user_category1_interest_recall:phone  | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-| 1000001  | 1000004  | XXX        | user_category1_interest_recall:pc     | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.003 seconds)
-```
-
-As you can see, recall, recommendation reasons, and deduplication are all working.
-
-### Create API Interface
-
-Refer to the following SQL to expose SQL functions as API interfaces:
-
-```sql
-create or replace api test_rec with test_rec;
-```
-
-## Recommendation Testing
-
-Test recommendations using the following command:
+The CLI and HTTP service run in separate processes inside the container, so each process maintains its own filesystem data in memory. The demo image enables the SQL API by default. First, use `/sql/v1` to insert test data into the HTTP service process:
 
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
--H "Content-Type: application/json" \
--d '{"data":{"user_info":[{"id": 1000001}]}}'
-{"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
+curl -X POST http://localhost:30001/sql/v1 \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "sqls": [
+    "insert into user_interest_category1 values (1000001, 'pc', 100)",
+    "insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90), ('pc', 1000003, 80)"
+  ]
+}
+JSON
 ```
 
-## Frontend UI
+Then call the `test_rec` recommendation API:
 
-SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30001/ui/static/index.html` (replace the IP address with your minikube node IP).
+```bash
+curl -X POST http://localhost:30001/api/v1/test_rec \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"id":1000001}]}}'
+```
 
-The frontend UI allows you to:
-- View SQL functions and their execution DAG (Directed Acyclic Graph)
-- Browse API configurations
-- Monitor model training status and checkpoints
-- View service statistics and metrics
+The endpoint returns the result of `test_rec`. Test data inserted through the SQL API and exposure data generated by recommendations remain in the HTTP service process until the container stops.
+
+## Open the UI
+
+Open [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) to inspect tables, APIs, SQL functions, and their execution DAGs.
+
+## Demo Directory Layout
+
+`SQL_SCHEMA_DIR` is consistently set to `/app/sql`, and SQLRec recursively loads both example directories. The two examples use distinct table, function, and API identifiers:
+
+```text
+sqlrec-demo/src/main/sql/
+├── quick_start/
+│   ├── api/test_rec.sql
+│   ├── function/test_rec.sql
+│   └── table/
+│       ├── category1_hot_item.sql
+│       ├── exposure_item.sql
+│       └── user_interest_category1.sql
+└── movielens/
+    ├── api/
+    ├── function/
+    ├── model/
+    ├── service/
+    ├── table/
+    └── udf/
+```
+
+The three quick-start tables configure only `'connector' = 'filesystem'`; no data file path is specified. The complete MovieLens example demonstrates a full pipeline involving Redis, Milvus, Kafka, model training, and online inference.
+
+## Developing DDL in Local Metadata Mode
+
+Local metadata mode recursively loads SQL files from `SQL_SCHEMA_DIR` when the process starts. It therefore does not allow DDL statements such as `CREATE TABLE`, `CREATE SQL FUNCTION`, or `CREATE API` to be executed through either the CLI or SQL API. The SQL API enabled by the demo is intended only for queries and test-data writes.
+
+To develop a new table, function, or API locally, write its definition in SQL files on the host, mount the complete directory into the container, and point `SQL_SCHEMA_DIR` to the mounted path. For example:
+
+```bash
+docker run --rm -d --name sqlrec-custom \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  -v "$(pwd)/sql:/workspace/sql:ro" \
+  -e SQL_SCHEMA_DIR=/workspace/sql \
+  sqlrec/sqlrec-demo:latest
+```
+
+The `./sql` directory must contain every SQL definition required for that run. Restart the container after changing a file so that SQLRec reloads the definitions.
+
+If you need to execute and persist DDL interactively like a database, follow [Service Deployment](/en/docs/deployment) to set up the complete cluster, then connect through beeline, JDBC, or another SQLRec client.
+
+## Stop the Demo
+
+```bash
+docker stop sqlrec-demo
+```
+
+Because the container was started with `--rm`, Docker removes it after it stops.
+
+For more datasource configuration, see [Built-in Connectors](/en/docs/connectors/builtin_connectors).

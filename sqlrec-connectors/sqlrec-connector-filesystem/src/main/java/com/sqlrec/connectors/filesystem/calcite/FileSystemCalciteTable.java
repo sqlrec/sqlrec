@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import com.sqlrec.connectors.filesystem.handler.FileSystemHandler;
 import org.apache.calcite.linq4j.Enumerable;
@@ -29,11 +30,26 @@ public class FileSystemCalciteTable extends SqlRecKvTable {
 
     @Override
     protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
+        List<Object[]> rows = fileSystemHandler.scan();
         if (filters == null || filters.isEmpty()) {
-            List<Object[]> rows = fileSystemHandler.scan();
             return Linq4j.asEnumerable(rows);
         }
-        throw new UnsupportedOperationException("scan by filter is not support by filesystem");
+
+        for (int fieldIndex = 0; fieldIndex < fileSystemConfig.fieldSchemas.size(); fieldIndex++) {
+            Object filterValue = FilterUtils.extractPrimaryKeyValue(filters, fieldIndex);
+            if (filterValue == null) {
+                continue;
+            }
+            Object normalizedValue = DataTypeUtils.convertType(
+                    filterValue,
+                    DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(fieldIndex).getType()).getSqlTypeName()
+            );
+            int index = fieldIndex;
+            rows.removeIf(row -> !java.util.Objects.equals(row[index], normalizedValue));
+            return Linq4j.asEnumerable(rows);
+        }
+
+        throw new UnsupportedOperationException("filesystem only supports a single equality filter");
     }
 
     @Override

@@ -52,7 +52,7 @@ public class TestShowCreate {
         String url = HiveTableUtils.getFlinkTableOptions(genreHotItem).get("url");
         assertEquals("redis://192.168.1.5:30017/0", url);
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "table", "genre_hot_item.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "table", "genre_hot_item.sql")).trim();
         SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
         String tableName = genreHotItem.getTableName();
@@ -73,7 +73,7 @@ public class TestShowCreate {
 
         assertEquals("com.sqlrec.demo.udf.DemoScalarUdf", demoScalarUdf.getClassName());
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "udf", "DemoScalarUdf.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "udf", "DemoScalarUdf.sql")).trim();
         assertTrue(sourceContent.contains(demoScalarUdf.getClassName()),
                 "source file should contain class name " + demoScalarUdf.getClassName());
     }
@@ -85,7 +85,7 @@ public class TestShowCreate {
         assertNotNull(rankModel, "rank_model should exist");
         assertNotNull(rankModel.getDdl(), "model ddl should not be null");
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "model", "rank_model.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "model", "rank_model.sql")).trim();
         SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
 
@@ -100,7 +100,7 @@ public class TestShowCreate {
         assertNotNull(rankService, "rank_service should exist");
         assertNotNull(rankService.getDdl(), "service ddl should not be null");
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "service", "rank_service.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "service", "rank_service.sql")).trim();
         SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
 
@@ -114,7 +114,7 @@ public class TestShowCreate {
         SqlFunction recallFun = db.getSqlFunction("RECALL_FUN");
         assertNotNull(recallFun, "recall_fun should exist");
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "function", "recall_fun.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "function", "recall_fun.sql")).trim();
         List<String> sourceSqlList = splitStatements(sourceContent);
         List<String> storedSqlList = JsonUtils.parseStringList(recallFun.getSqlList());
 
@@ -136,7 +136,7 @@ public class TestShowCreate {
         assertEquals("main_rec", mainRecApi.getFunctionName(),
                 "api function name should match");
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "api", "main_rec.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "api", "main_rec.sql")).trim();
         assertTrue(sourceContent.toLowerCase().contains("main_rec"),
                 "source file should contain api name");
     }

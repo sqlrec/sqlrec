@@ -5,6 +5,9 @@ import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,5 +64,24 @@ class FileSystemCalciteTableTest {
     void testScanEmptyTable() {
         List<Object[]> rows = table.scanImpl(Arrays.asList()).toList();
         assertTrue(rows.isEmpty());
+    }
+
+    @Test
+    void testScanByNonPrimaryKeyEqualityFilter() {
+        table.getModifiableCollection().add(new Object[]{1, "alice", 20});
+        table.getModifiableCollection().add(new Object[]{2, "bob", 25});
+
+        SqlTypeFactoryImpl typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+        RelDataType rowType = table.getRowType(typeFactory);
+        RexBuilder rexBuilder = new RexBuilder(typeFactory);
+        RexNode filter = rexBuilder.makeCall(
+                SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(rowType.getFieldList().get(1).getType(), 1),
+                rexBuilder.makeLiteral("alice")
+        );
+
+        List<Object[]> rows = table.scanImpl(List.of(filter)).toList();
+        assertEquals(1, rows.size());
+        assertEquals("alice", rows.get(0)[1]);
     }
 }

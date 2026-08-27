@@ -35,7 +35,55 @@ sqlRec有以下特点：
 
 ## 快速开始
 
-### 服务部署
+### 直接运行无外部依赖的 Docker Demo（推荐）
+
+Demo 镜像已经内置 `test_rec` API、SQL 函数和三张 filesystem 表。数据直接写入进程内存，因此不需要 Redis、PostgreSQL、Hive Metastore、Flink、Kubernetes 或其他外部组件。
+
+```bash
+docker run --rm -d --name sqlrec-demo \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  sqlrec/sqlrec-demo:latest
+```
+
+服务启动后，进入 CLI，写入测试数据并调用推荐函数：
+
+```bash
+docker exec -it sqlrec-demo sh /app/cli.sh
+```
+
+```sql
+insert into user_interest_category1 values (1000001, 'pc', 100);
+insert into category1_hot_item values
+  ('pc', 1000001, 100),
+  ('pc', 1000002, 90);
+cache table quick_start_user as select cast(1000001 as bigint) as id;
+call test_rec(quick_start_user);
+```
+
+Demo 默认开启 SQL API。由于 CLI 与 HTTP 服务使用不同的内存数据，需要先向 HTTP 进程写入测试数据，再调用推荐 API：
+
+```bash
+curl -X POST http://localhost:30001/sql/v1 \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{"sqls":["insert into user_interest_category1 values (1000001, 'pc', 100)","insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
+JSON
+
+curl -X POST http://localhost:30001/api/v1/test_rec \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"id":1000001}]}}'
+```
+
+可以打开 [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) 查看 UI。CLI 数据会在该进程退出时清除，HTTP 服务的数据会保留到容器停止。体验完成后执行 `docker stop sqlrec-demo`。
+
+本地元数据模式不允许通过 CLI 或 SQL API 执行 DDL。表、函数和 API 等定义需要写入本地 SQL 文件，将其目录挂载到容器并通过 `SQL_SCHEMA_DIR` 指向该目录；也可以部署完整集群后直接执行 DDL。
+
+表目录和更多 SQL 示例请参考[快速开始文档](https://sqlrec.github.io/sqlrec/docs/quick_start)。
+
+### 完整服务部署（可选）
+
+下面的步骤会部署持久化元数据，以及完整示例使用的外部数据和模型服务；它与上面的无外部依赖 Docker Demo 是两条独立的体验路径。
 
 SQLRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
 

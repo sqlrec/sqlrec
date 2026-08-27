@@ -48,6 +48,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-connector-filesystem</artifactId>
+            <version>${sqlrec.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <scope>test</scope>

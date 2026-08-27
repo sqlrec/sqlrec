@@ -84,7 +84,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | **sqlrec-connectors** | 6 个数据源连接器，双栈适配：Calcite 侧（`*CalciteTable(+Factory)` 实现 `HmsTableFactory` SPI）+ Flink 侧（`*DynamicTableFactory` 实现 Flink `Factory` SPI，仅 redis/milvus） |
 | **sqlrec-model** | 模型后端实现 `ModelController` SPI：GBDT 家族（XGBoost/LightGBM/CatBoost，Python 训练 + ONNX/CatBoost C++ serving）、TZRec 家族（DSSM/Wide&Deep）、External（透传外部 URL）。含 K8s YAML 生成（`K8sYamlBuilder`） |
 | **sqlrec-frontend** | 三种入口：Thrift（Hive2 协议，兼容 beeline/kyuubi/JDBC）、REST（Netty，`/sql/v1`、`/api/v1/*`、`/metrics`、`/ui/*`）、CLI（JLine REPL）。会话管理、操作生命周期、Prometheus 指标 |
-| **sqlrec-demo** | MovieLens 演示：完整召回→排序→多样化推荐链路的 SQL 定义 |
+| **sqlrec-demo** | 无外部依赖的 quick-start 演示，以及完整召回→排序→多样化链路的 MovieLens SQL 定义 |
 | **sqlrec-flink** | Flink 环境集成测试（connector、BatchCallServiceUDTF 等） |
 | **sqlrec-ui** | 前端静态资源（仅 pom 占位） |
 
@@ -438,7 +438,7 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 
 ## 12. Demo 与编程模型（sqlrec-demo）
 
-MovieLens 推荐链路（`src/main/sql/`）：
+`src/main/sql/quick_start/` 提供基于 filesystem connector 内存表的无外部依赖体验链路；MovieLens 完整推荐链路位于 `src/main/sql/movielens/`：
 
 1. **表**（table/）：`user_table`/`item_table`/`item_embedding`/`rec_log_kafka`（流式曝光日志）等；
 2. **特征**（function/）：`recall_fun`（多路召回：`itemcf_i2i` + `genre_hot_item` + `user_interest_genre`…）、`rank_fun`（join 特征 → `call_service('rank_service')`）、`diversify_fun`（`window_diversify`）、`main_rec`（编排：`get_or_default` 按变量选择分支 → 召回 → 排序 → 多样化 → 异步 `save_rec_item` 落盘）；

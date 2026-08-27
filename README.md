@@ -34,7 +34,55 @@ For detailed information, refer to the [SQLRec User Manual](https://sqlrec.githu
 
 ## Quick Start
 
-### Service Deployment
+### Run the Dependency-Free Docker Demo (Recommended)
+
+The demo image includes the `test_rec` API, its SQL function, and three filesystem tables. Data is written directly to process memory, so this path does not require Redis, PostgreSQL, Hive Metastore, Flink, Kubernetes, or any other external component.
+
+```bash
+docker run --rm -d --name sqlrec-demo \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  sqlrec/sqlrec-demo:latest
+```
+
+After the service starts, open the CLI, insert test data, and call the recommendation function:
+
+```bash
+docker exec -it sqlrec-demo sh /app/cli.sh
+```
+
+```sql
+insert into user_interest_category1 values (1000001, 'pc', 100);
+insert into category1_hot_item values
+  ('pc', 1000001, 100),
+  ('pc', 1000002, 90);
+cache table quick_start_user as select cast(1000001 as bigint) as id;
+call test_rec(quick_start_user);
+```
+
+The demo enables its SQL API by default. Since the CLI and HTTP service have separate in-memory data, insert test data into the HTTP process before calling the recommendation API:
+
+```bash
+curl -X POST http://localhost:30001/sql/v1 \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{"sqls":["insert into user_interest_category1 values (1000001, 'pc', 100)","insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
+JSON
+
+curl -X POST http://localhost:30001/api/v1/test_rec \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"id":1000001}]}}'
+```
+
+Open the UI at [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html). CLI data is discarded when that process exits, while HTTP service data remains until the container stops. Run `docker stop sqlrec-demo` when finished.
+
+Local metadata mode does not accept DDL statements from either the CLI or SQL API. Define tables, functions, and APIs in SQL files and mount their directory into the container with `SQL_SCHEMA_DIR` pointing to it, or deploy the complete cluster to execute DDL interactively.
+
+See the [Quick Start guide](https://sqlrec.github.io/sqlrec/en/docs/quick_start) for the table layout and more SQL examples.
+
+### Full Service Deployment (Optional)
+The steps below deploy persistent metadata and the external data/model services used by the complete examples. They are separate from the dependency-free Docker demo above.
+
 SQLRec currently supports AMD64 Linux systems, with MacOS support coming later. Note that deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
 
 Deploy the SQLRec system with the following commands:

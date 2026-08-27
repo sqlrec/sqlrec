@@ -214,6 +214,16 @@ public class FileSystemHandler {
         return row[fileSystemConfig.primaryKeyIndex];
     }
 
+    private void normalizeRowTypes(Object[] row) {
+        int fieldCount = Math.min(row.length, fileSystemConfig.fieldSchemas.size());
+        for (int i = 0; i < fieldCount; i++) {
+            row[i] = DataTypeUtils.convertType(
+                    row[i],
+                    DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName()
+            );
+        }
+    }
+
     public List<Object[]> scan() {
         return new ArrayList<>(ensureData());
     }
@@ -236,6 +246,7 @@ public class FileSystemHandler {
 
     public boolean upsert(Object[] data) {
         synchronized (lock) {
+            normalizeRowTypes(data);
             List<Object[]> allData = ensureData();
             Object primaryKeyValue = getKey(data);
 
@@ -253,6 +264,7 @@ public class FileSystemHandler {
 
     public boolean delete(Object[] data) {
         synchronized (lock) {
+            normalizeRowTypes(data);
             List<Object[]> allData = ensureData();
             Object primaryKeyValue = getKey(data);
             return allData.removeIf(row -> primaryKeyValue.equals(getKey(row)));

@@ -1,236 +1,154 @@
 # 快速开始
-这里通过个简单Demo介绍SQLRec的使用，部署可以参考[服务部署](/docs/deployment)。
 
-## 连接SQLRec服务
+只需要 Docker 即可体验 SQLRec。Demo 镜像包含快速开始所需的表、SQL 函数和 API；示例表使用 `filesystem` connector，数据保存在进程内存中，不依赖 Redis、PostgreSQL、Hive Metastore、Flink 或 Kubernetes。
 
-### 使用beeline
-SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
+## 启动 Demo
+
 ```bash
-bash ./bin/beeline.sh
+docker run --rm -d --name sqlrec-demo \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  sqlrec/sqlrec-demo:latest
 ```
 
-### 使用python
-可以在Jupyter Notebook中使用python连接SQLRec服务，并使用python工具分析推荐数据，参考下述代码：
-- 使用deploy目录的脚本部署Jupyter
+通过日志确认服务已经启动：
+
 ```bash
-cd deploy
-bash ./jupyter/deploy.sh
-# wait pod ready
+docker logs -f sqlrec-demo
 ```
-- 浏览器打开Jupyter Notebook，比如`http://127.0.0.1:30028`，使用env.sh中的账号密码登录
-- 新建python3 notebook
-- 安装依赖
+
+看到服务启动完成后按 `Ctrl+C` 退出日志查看，容器仍会在后台运行。
+
+## 进入 SQLRec CLI
+
+执行下面的命令进入容器内置的 SQLRec CLI，其使用方式与通过 beeline 连接 SQLRec 基本一致：
+
 ```bash
-%pip install pandas
-%pip install pyhive
-%pip install sasl
-%pip install thrift
-%pip install thrift-sasl
-```
-- 连接SQLRec服务，运行sql语句
-```python
-from pyhive import hive
-import pandas as pd
-
-conn = hive.Connection(host='192.168.49.2',port=30000,auth='NOSASL')
-pd.read_sql("select * from `user_interest_category1` where `user_id` = 1000001", conn)
+docker exec -it sqlrec-demo sh /app/cli.sh
 ```
 
-## SQL开发
-使用beeline连接SQLRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
+可以先查看 Demo 已经加载的对象：
 
-### 初始化数据表
-参考下述SQL，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述代码的ip地址
 ```sql
-SET table.sql-dialect = default;
-
-CREATE TABLE IF NOT EXISTS `user_interest_category1` (
-  `user_id` BIGINT,
-  `category1` STRING,
-  `score` FLOAT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
-);
-
-CREATE TABLE IF NOT EXISTS `category1_hot_item` (
-  `category1` STRING,
-  `item_id` BIGINT,
-  `score` FLOAT,
-  PRIMARY KEY (category1)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
-);
-
-CREATE TABLE IF NOT EXISTS `exposure_item` (
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `bhv_time` BIGINT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
-) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0',
-  'cache-ttl' = '0'
-);
-
+show tables;
+show functions;
+show apis;
 ```
 
-### 写入测试数据
+## 写入测试数据
+
+quick-start 的 filesystem 表启动时为空。在 CLI 中写入一条用户偏好和五条热门商品：
+
 ```sql
-INSERT INTO `user_interest_category1` VALUES
-(1000001, 'pc', 100),
-(1000001, 'phone', 100);
+insert into user_interest_category1 values
+  (1000001, 'pc', 100);
 
-INSERT INTO `category1_hot_item` VALUES
-('pc', 1000001, 100),
-('pc', 1000002, 100),
-('pc', 1000003, 100),
-('pc', 1000004, 100),
-('pc', 1000005, 100),
-('phone', 1000011, 100),
-('phone', 1000012, 100),
-('phone', 1000013, 100),
-('phone', 1000014, 100),
-('phone', 1000015, 100);
+insert into category1_hot_item values
+  ('pc', 1000001, 100),
+  ('pc', 1000002, 90),
+  ('pc', 1000003, 80),
+  ('pc', 1000004, 70),
+  ('pc', 1000005, 60);
 
-select * from `user_interest_category1` where `user_id` = 1000001;
-
-select * from `category1_hot_item` where `category1` = 'pc';
+select * from user_interest_category1;
+select * from category1_hot_item;
 ```
 
-### 开发sql函数
+数据只存在于当前 CLI 进程的内存中，退出 CLI 后会被清除。
+
+## 获取推荐结果
+
+Demo 已经定义 `test_rec` SQL 函数。继续在同一个 CLI 会话中创建输入表并调用函数：
+
 ```sql
--- define function test rec
-create or replace sql function test_rec;
+cache table quick_start_user as
+select cast(1000001 as bigint) as id;
 
--- define input param
-define input table user_info(id bigint);
-
--- query exposed item for deduplication
-cache table exposured_item as
-select item_id
-from
-user_info join exposure_item on user_id = user_info.id;
-
--- query user interest category1
-cache table cur_user_interest_category1 as
-select category1
-from
-user_info join user_interest_category1 on user_id = user_info.id
-limit 10;
-
--- query category1 hot item
-cache table category1_recall as
-select item_id as item_id, 'user_category1_interest_recall:' || cur_user_interest_category1.category1 as rec_reason
-from
-cur_user_interest_category1 join category1_hot_item
-on category1_hot_item.category1 = cur_user_interest_category1.category1
-limit 300;
-
--- dedup category1 recall
-cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
-
--- truncate to rec item num
-cache table final_recall_item as
-select item_id, rec_reason
-from dedup_category1_recall
-limit 2;
-
--- gen rec meta data
-cache table request_meta as select
-user_info.id as user_id,
-cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
-uuid() as req_id
-from user_info;
-
--- gen final rec data
-cache table final_rec_data as
-select
-request_meta.user_id as user_id,
-item_id,
-cast('XXX' as VARCHAR) as item_name,
-rec_reason,
-request_meta.req_time as req_time,
-request_meta.req_id as req_id
-from
-request_meta join final_recall_item on 1=1;
-
--- write exposed item to exposure table for deduplication
-insert into exposure_item
-select user_id, item_id, req_time
-from final_rec_data;
-
-return final_rec_data;
-```
-上面SQL定义了推荐函数test_rec，可以发现SQL函数定义语法是：
-- `create or replace sql function`加函数名开头
-- `define input table`定义输入参数，可以为空或者定义多个
-- `cache table`缓存中间计算结果，可以缓存SELECT语句、SQL函数调用的执行结果
-- `call`调用其他函数, 可以通过async关键字异步调用
-- `return`返回计算结果，可以为空
-
-
-可以直接在beeline命令行测试函数，如下所示
-```sql
-0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
-+-------------+--------+
-| table_name  | count  |
-+-------------+--------+
-| t1          | 1      |
-+-------------+--------+
-1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
-+-------+---------+
-| name  |  type   |
-+-------+---------+
-| id    | BIGINT  |
-+-------+---------+
-1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000015  | XXX        | user_category1_interest_recall:phone  | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-| 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000014  | XXX        | user_category1_interest_recall:phone  | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-| 1000001  | 1000004  | XXX        | user_category1_interest_recall:pc     | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.003 seconds)
-```
-可以发现，召回、推荐理由、去重都已经生效。
-
-### 创建API接口
-参考下述SQL将SQL函数暴露为API接口：
-```sql
-create or replace api test_rec with test_rec;
+call test_rec(quick_start_user);
 ```
 
-## 推荐测试
-使用下述命令进行推荐测试：
+函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。曝光结果会写入当前进程内存中的 `exposure_item` 表；再次调用时，`test_rec` 会使用这些记录进行去重。
+
+## 通过 API 调用推荐接口
+
+容器中的 CLI 和 HTTP 服务运行在不同进程中，因此它们各自维护独立的 filesystem 内存数据。Demo 镜像默认开启 SQL API，先通过 `/sql/v1` 向 HTTP 服务进程写入测试数据：
+
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
--H "Content-Type: application/json" \
--d '{"data":{"user_info":[{"id": 1000001}]}}'
-{"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
+curl -X POST http://localhost:30001/sql/v1 \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "sqls": [
+    "insert into user_interest_category1 values (1000001, 'pc', 100)",
+    "insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90), ('pc', 1000003, 80)"
+  ]
+}
+JSON
 ```
 
-## 前端UI
+然后调用 `test_rec` 推荐 API：
 
-SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `http://192.168.49.2:30001/ui/static/index.html` 访问（请将IP地址替换为你的minikube节点IP）。
+```bash
+curl -X POST http://localhost:30001/api/v1/test_rec \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"id":1000001}]}}'
+```
 
-前端UI可以让你：
-- 查看SQL函数及其执行DAG（有向无环图）
-- 浏览API配置
-- 监控模型训练状态和检查点
-- 查看服务统计信息和指标`
+接口会返回 `test_rec` 的推荐结果。通过 SQL API 写入的测试数据和推荐产生的曝光数据都会保留在 HTTP 服务进程内，直到容器停止。
+
+## 查看 UI
+
+浏览器访问 [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html)，可以查看表、API、SQL 函数及其执行 DAG。
+
+## Demo 目录结构
+
+`SQL_SCHEMA_DIR` 统一设置为 `/app/sql`，SQLRec 会递归加载两个示例目录。两套示例使用不同的表、函数和 API 标识符，互不冲突：
+
+```text
+sqlrec-demo/src/main/sql/
+├── quick_start/
+│   ├── api/test_rec.sql
+│   ├── function/test_rec.sql
+│   └── table/
+│       ├── category1_hot_item.sql
+│       ├── exposure_item.sql
+│       └── user_interest_category1.sql
+└── movielens/
+    ├── api/
+    ├── function/
+    ├── model/
+    ├── service/
+    ├── table/
+    └── udf/
+```
+
+quick-start 的三张表只配置 `'connector' = 'filesystem'`，不指定数据文件路径。完整的 MovieLens 示例用于展示 Redis、Milvus、Kafka、模型训练和在线推理等完整链路。
+
+## 在本地元数据模式开发 DDL
+
+本地元数据模式会在进程启动时从 `SQL_SCHEMA_DIR` 递归加载 SQL 文件，因此不允许通过 CLI 或 SQL API 直接执行 `CREATE TABLE`、`CREATE SQL FUNCTION`、`CREATE API` 等 DDL 语句。Demo 中默认开启的 SQL API 仅用于查询和写入测试数据。
+
+在本地开发新的表、函数或 API 时，将定义写入宿主机上的 SQL 文件，然后把整个目录挂载到容器，并将 `SQL_SCHEMA_DIR` 指向容器内的挂载路径。例如：
+
+```bash
+docker run --rm -d --name sqlrec-custom \
+  -p 30000:30000 \
+  -p 30001:30001 \
+  -v "$(pwd)/sql:/workspace/sql:ro" \
+  -e SQL_SCHEMA_DIR=/workspace/sql \
+  sqlrec/sqlrec-demo:latest
+```
+
+`./sql` 目录应包含本次启动需要的全部 SQL 定义。修改文件后需要重启容器，SQLRec 才会重新加载这些定义。
+
+如果希望像使用数据库一样在会话中直接执行和持久化 DDL，请按照[服务部署](/docs/deployment)搭建完整集群，再通过 beeline、JDBC 或其他客户端连接 SQLRec。
+
+## 停止 Demo
+
+```bash
+docker stop sqlrec-demo
+```
+
+由于启动时使用了 `--rm`，容器停止后会自动删除。
+
+更多数据源配置请参考[内置 Connector](/docs/connectors/builtin_connectors)。

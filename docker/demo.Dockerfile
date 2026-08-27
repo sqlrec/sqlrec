@@ -19,4 +19,4 @@ COPY --from=builder /app/sqlrec-demo/target/sqlrec-demo-*.jar ./
 COPY --from=builder /app/sqlrec-demo/src/main/sql ./sql
 
 ENV SQL_SCHEMA_DIR=/app/sql
-ENV ENABLE_REST_SQL_API=false
+ENV ENABLE_REST_SQL_API=true

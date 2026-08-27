@@ -85,7 +85,7 @@ Module responsibilities:
 | **sqlrec-connectors** | 6 datasource connectors with dual-stack adaptation: Calcite side (`*CalciteTable(+Factory)` implementing the `HmsTableFactory` SPI) + Flink side (`*DynamicTableFactory` implementing the Flink `Factory` SPI, redis/milvus only) |
 | **sqlrec-model** | Model backends implementing the `ModelController` SPI: GBDT family (XGBoost/LightGBM/CatBoost, Python training + ONNX/CatBoost C++ serving), TZRec family (DSSM/Wide&Deep), External (pass-through to external URLs). Includes K8s YAML generation (`K8sYamlBuilder`) |
 | **sqlrec-frontend** | Three entry points: Thrift (Hive2 protocol, compatible with beeline/kyuubi/JDBC), REST (Netty, `/sql/v1`, `/api/v1/*`, `/metrics`, `/ui/*`), CLI (JLine REPL). Session management, operation lifecycle, Prometheus metrics |
-| **sqlrec-demo** | MovieLens demo: SQL definitions for a complete recall → ranking → diversification recommendation pipeline |
+| **sqlrec-demo** | Dependency-free quick-start demo plus MovieLens SQL definitions for a complete recall → ranking → diversification pipeline |
 | **sqlrec-flink** | Flink environment integration tests (connector, BatchCallServiceUDTF, etc.) |
 | **sqlrec-ui** | Frontend static resources (pom placeholder only) |
 
@@ -451,7 +451,7 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 
 ## 12. Demo and Programming Model (sqlrec-demo)
 
-MovieLens recommendation pipeline (`src/main/sql/`):
+`src/main/sql/quick_start/` provides a dependency-free experience using in-memory filesystem connector tables. The complete MovieLens recommendation pipeline lives under `src/main/sql/movielens/`:
 
 1. **Tables** (table/): `user_table`/`item_table`/`item_embedding`/`rec_log_kafka` (streaming exposure logs), etc.;
 2. **Features** (function/): `recall_fun` (multi-way recall: `itemcf_i2i` + `genre_hot_item` + `user_interest_genre`...), `rank_fun` (join features → `call_service('rank_service')`), `diversify_fun` (`window_diversify`), `main_rec` (orchestration: `get_or_default` selects branch by variable → recall → ranking → diversification → async `save_rec_item` persistence);

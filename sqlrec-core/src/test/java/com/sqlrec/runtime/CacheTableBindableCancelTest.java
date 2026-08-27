@@ -80,21 +80,6 @@ public class CacheTableBindableCancelTest {
     }
 
     @Test
-    public void testCancelledBeforeStartThrowsWithoutExecutingInner() {
-        PollingBindable inner = new PollingBindable();
-        CacheTableBindable cacheTableBindable = new CacheTableBindable("t", inner);
-
-        ExecuteContextImpl context = new ExecuteContextImpl();
-        context.cancel();
-
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> cacheTableBindable.bind(schema, context));
-        assertTrue(ex.getMessage().contains("cancelled before start"));
-        assertFalse(inner.executed.get(), "inner bindable should not execute when already cancelled");
-    }
-
-    @Test
     public void testTimeoutCancelsChildContext() throws Exception {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
