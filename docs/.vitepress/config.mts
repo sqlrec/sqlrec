@@ -5,6 +5,7 @@ export default defineConfig({
   title: "SQLRec",
   description: "SQLRec docs",
   base: '/sqlrec/',
+  ignoreDeadLinks: 'localhostLinks',
   locales: {
     root: {
       label: '简体中文',
