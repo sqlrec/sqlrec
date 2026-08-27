@@ -1,3 +1,4 @@
+ARG SQLREC_IMAGE=sqlrec/sqlrec
 ARG SQLREC_VERSION=latest
 
 # Stage 1: Build stage
@@ -11,7 +12,7 @@ RUN --mount=type=cache,target=/root/.m2,rw \
     mvn clean package -DskipTests -pl sqlrec-demo -am
 
 # Stage 2: Runtime stage
-FROM sqlrec/sqlrec:${SQLREC_VERSION}
+FROM ${SQLREC_IMAGE}:${SQLREC_VERSION}
 
 WORKDIR /app
 
