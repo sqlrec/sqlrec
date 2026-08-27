@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,9 +95,11 @@ public class AssertBindableTest {
                 node, schema, Consts.DEFAULT_SCHEMA_NAME,
                 "assert select count(*) > 0 from myTable");
 
-        assertTrue(bindable instanceof AssertBindable,
-                "expected AssertBindable but got " + bindable.getClass());
-        AssertBindable assertBindable = (AssertBindable) bindable;
+        assertInstanceOf(ProxyAllBindable.class, bindable);
+        BindableInterface delegate = ((ProxyAllBindable) bindable).getDelegate();
+        assertTrue(delegate instanceof AssertBindable,
+                "expected proxied AssertBindable but got " + delegate.getClass());
+        AssertBindable assertBindable = (AssertBindable) delegate;
 
         assertTrue(!assertBindable.isParallelizable(),
                 "assert operator must not be parallelizable");

@@ -57,7 +57,7 @@ public class TestRedisClusterTable {
         });
         CalciteSchemaFactory.setGlobalSchema(schema);
 
-        new SqlTestCase("select * from ct1", null, new UnsupportedOperationException()).test(schema);
+        new SqlTestCase("select * from ct1", null, new RuntimeException()).test(schema);
 
         new SqlTestCase("delete from ct1 where id = 1", null).test(schema);
         new SqlTestCase("insert into ct1 (ID, NAME, CNT) values (1, 'Alice1', 1)", null).test(schema);

@@ -20,7 +20,6 @@ import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.*;
@@ -95,14 +94,9 @@ public class SqlExecutor {
         }
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
-            BindableInterface bindableInterface = ProxyAllBindable.wrap(
-                    new CompileManager().compileSql(sqlNode, schema, defaultSchema, sql)
+            BindableInterface bindableInterface = new CompileManager().compileSql(
+                    sqlNode, schema, defaultSchema, sql
             );
-            String nodeName = StringUtils.defaultIfEmpty(
-                    bindableInterface.getCacheTableName(),
-                    SchemaUtils.getSqlFirstWord(sql)
-            );
-            bindableInterface.setName(nodeName);
             Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
             if (enumerable == null) {
                 return SqlProcessResult.msg("sql run success without output", "msg");

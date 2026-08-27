@@ -5,7 +5,6 @@ import com.sqlrec.common.utils.DataCheckUtils;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -56,7 +55,7 @@ public class SqlTestCase {
         return this;
     }
 
-    public void checkBindable(CalciteBindable bindable) {
+    public void checkBindable(BindableInterface bindable) {
         if (expectedLogicalPlan != null) {
             String actualLogicalPlan = bindable.getLogicalPlan();
             if (!normalizeString(expectedLogicalPlan).equals(normalizeString(actualLogicalPlan))) {
@@ -107,17 +106,16 @@ public class SqlTestCase {
                     flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
             );
 
-            if (bindable instanceof CalciteBindable) {
-                CalciteBindable calciteBindable = (CalciteBindable) bindable;
+            if (bindable.getLogicalPlan() != null) {
                 if (debugOutput) {
                     log.info("=== Logical Plan ===");
-                    log.info(calciteBindable.getLogicalPlan());
+                    log.info(bindable.getLogicalPlan());
                     log.info("=== Physical Plan ===");
-                    log.info(calciteBindable.getPhysicalPlan());
+                    log.info(bindable.getPhysicalPlan());
                     log.info("=== Java Expression ===");
-                    log.info(calciteBindable.getJavaExpression());
+                    log.info(bindable.getJavaExpression());
                 }
-                checkBindable(calciteBindable);
+                checkBindable(bindable);
             }
             enumerable = bindable.bind(schema, executeContext);
         } catch (Exception e) {

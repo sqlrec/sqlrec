@@ -10,7 +10,6 @@ import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
-import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -52,8 +51,7 @@ public class RestFunctionExecutor {
 
         ExecuteData executeData = new ExecuteData();
         try {
-            BindableInterface proxyBindable = new ProxyAllBindable(sqlFunctionBindable);
-            proxyBindable.setName(sqlFunctionBindable.getFunName());
+            BindableInterface proxyBindable = CompileManager.prepareSqlFunctionForExecution(sqlFunctionBindable);
             Enumerable<Object[]> enumerable = proxyBindable.bind(schema, executeContext);
             executeData.setParams(executeContext.getVariables());
             if (enumerable != null) {

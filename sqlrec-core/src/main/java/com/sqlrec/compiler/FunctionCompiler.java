@@ -5,7 +5,6 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.runtime.BindableInterface;
-import com.sqlrec.runtime.ProxyAllBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
@@ -179,8 +178,7 @@ public class FunctionCompiler {
             stage = FunctionCompileStage.FUNCTION_RETURN;
         } else {
             BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
-            BindableInterface proxyBindable = new ProxyAllBindable(bindable);
-            sqlFunctionBindable.getBindableList().add(proxyBindable);
+            sqlFunctionBindable.getBindableList().add(bindable);
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
                 CacheTable tmpTable = new CacheTable(
                         bindable.getCacheTableName(),
@@ -190,13 +188,13 @@ public class FunctionCompiler {
                 schema.add(bindable.getCacheTableName(), tmpTable);
                 if (!cacheTableNames.contains(bindable.getCacheTableName())) {
                     cacheTableNames.add(bindable.getCacheTableName());
-                    proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
+                    bindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
                 } else {
-                    proxyBindable.setName(sqlFunctionBindable.getFunName() +
+                    bindable.setName(sqlFunctionBindable.getFunName() +
                             ":" + bindable.getCacheTableName() + ":" + sqlFunctionBindable.getBindableList().size());
                 }
             } else {
-                proxyBindable.setName(sqlFunctionBindable.getFunName() + ":" + SchemaUtils.getSqlFirstWord(sql) + ":" + sqlFunctionBindable.getBindableList().size());
+                bindable.setName(sqlFunctionBindable.getFunName() + ":" + SchemaUtils.getSqlFirstWord(sql) + ":" + sqlFunctionBindable.getBindableList().size());
             }
         }
     }

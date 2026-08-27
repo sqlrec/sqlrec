@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -25,8 +26,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
         this.funName = sqlFunctionBindable.getFunName();
         this.inputTables = inputTables;
-        this.sqlFunctionBindable = new ProxyAllBindable(sqlFunctionBindable);
-        this.sqlFunctionBindable.setName(sqlFunctionBindable.getFunName());
+        this.sqlFunctionBindable = CompileManager.prepareSqlFunctionForExecution(sqlFunctionBindable);
         this.tablePlaceholders = sqlFunctionBindable.getInputTables();
     }
 

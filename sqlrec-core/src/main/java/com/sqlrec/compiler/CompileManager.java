@@ -25,6 +25,7 @@ import org.apache.calcite.sql.SqlWriterConfig;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
@@ -78,6 +79,20 @@ public class CompileManager {
     }
 
     public BindableInterface compileSql(
+            SqlNode flinkSqlNode,
+            CalciteSchema schema,
+            String defaultSchema,
+            String originSql
+    ) throws Exception {
+        BindableInterface bindable = compileRawSql(flinkSqlNode, schema, defaultSchema, originSql);
+        bindable.setName(StringUtils.defaultIfEmpty(
+                bindable.getCacheTableName(),
+                SchemaUtils.getSqlFirstWord(originSql)
+        ));
+        return ProxyAllBindable.wrap(bindable);
+    }
+
+    private BindableInterface compileRawSql(
             SqlNode flinkSqlNode,
             CalciteSchema schema,
             String defaultSchema,
@@ -172,7 +187,9 @@ public class CompileManager {
         if (!SqlTypeChecker.isFlinkSqlCompilable(branch, schema, defaultSchema)) {
             throw new Exception("IF branch statement is not executable: " + getSqlStr(branch));
         }
-        return compileSql(branch, schema, defaultSchema, getSqlStr(branch));
+        // IF assembly relies on the concrete branch type for validation and cache-table handling.
+        // Only the completed IF node is exposed as an executable proxy.
+        return compileRawSql(branch, schema, defaultSchema, getSqlStr(branch));
     }
 
     private BindableInterface getAssertBindable(SqlAssert assertStmt, CalciteSchema schema, String defaultSchema) throws Exception {
@@ -192,6 +209,16 @@ public class CompileManager {
             return bindable;
         }
         return compileSqlFunction(functionName);
+    }
+
+    public BindableInterface getExecutableSqlFunction(String functionName) throws Exception {
+        return prepareSqlFunctionForExecution(getSqlFunction(functionName));
+    }
+
+    public static BindableInterface prepareSqlFunctionForExecution(SqlFunctionBindable sqlFunctionBindable) {
+        BindableInterface executable = ProxyAllBindable.wrap(sqlFunctionBindable);
+        executable.setName(sqlFunctionBindable.getFunName());
+        return executable;
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
