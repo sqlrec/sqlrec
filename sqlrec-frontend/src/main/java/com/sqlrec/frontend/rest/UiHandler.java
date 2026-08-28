@@ -1,539 +1,303 @@
 package com.sqlrec.frontend.rest;
 
-import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.common.utils.ResourceNames;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
-import com.sqlrec.entity.*;
 import com.sqlrec.frontend.utils.RestUtils;
-import com.sqlrec.runtime.*;
-import com.sqlrec.utils.ModelUtils;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.QueryStringDecoder;
-import org.apache.calcite.rel.type.RelDataTypeField;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class UiHandler {
-    private static final Logger logger = LoggerFactory.getLogger(UiHandler.class);
+    private static final String STATIC_ROOT = "ui/static/";
+    private static final int DEFAULT_PAGE = 1;
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 100;
 
-    public static FullHttpResponse handleRequest(String uri, HttpMethod method, String postData) {
+    private final UiApiService apiService;
+    private final ClassLoader classLoader;
+    private final Map<String, StaticResource> staticResourceCache = new ConcurrentHashMap<>();
+
+    public UiHandler() {
+        this(new UiApiService(), UiHandler.class.getClassLoader());
+    }
+
+    UiHandler(MetadataAccess metadataAccess) {
+        this(new UiApiService(metadataAccess), UiHandler.class.getClassLoader());
+    }
+
+    UiHandler(MetadataAccess metadataAccess, ClassLoader classLoader) {
+        this(new UiApiService(metadataAccess), classLoader);
+    }
+
+    UiHandler(UiApiService apiService, ClassLoader classLoader) {
+        this.apiService = Objects.requireNonNull(apiService, "apiService");
+        this.classLoader = Objects.requireNonNull(classLoader, "classLoader");
+    }
+
+    public FullHttpResponse handleRequest(String uri) throws Exception {
+        QueryStringDecoder decoder = new QueryStringDecoder(uri);
+        return handleRequest(decoder.rawPath(), decoder.parameters());
+    }
+
+    FullHttpResponse handleRequest(String path, Map<String, List<String>> queryParameters) throws Exception {
         try {
-            String path = new QueryStringDecoder(uri).rawPath();
             if (path.startsWith(HttpServerHandler.UI_STATIC_PREFIX)) {
                 return handleStaticResource(path);
-            } else if (path.startsWith(HttpServerHandler.UI_API_PREFIX)) {
-                return handleApiRequest(path, uri, method, postData);
-            } else {
-                return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
             }
-        } catch (Exception e) {
-            logger.error("Error handling UI request: {}", uri, e);
-            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
-        }
-    }
-
-    private static FullHttpResponse handleStaticResource(String uri) {
-        String resourcePath = uri.substring(HttpServerHandler.UI_STATIC_PREFIX.length());
-        if (resourcePath.isEmpty()) {
-            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Resource path is empty");
-        }
-
-        // Prevent path traversal: decode and reject absolute paths or any ".." segment that could
-        // escape the ui/static/ directory (e.g. /ui/static/../../config/database.properties would
-        // otherwise let ClassLoader.getResourceAsStream read arbitrary classpath resources).
-        try {
-            resourcePath = java.net.URLDecoder.decode(resourcePath, java.nio.charset.StandardCharsets.UTF_8);
+            if (path.startsWith(HttpServerHandler.UI_API_PREFIX)) {
+                return handleApiRequest(path, queryParameters);
+            }
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
         } catch (IllegalArgumentException e) {
-            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid resource path encoding");
-        }
-        if (resourcePath.startsWith("/") || resourcePath.startsWith("\\")) {
-            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
-        }
-        if (resourcePath.contains("..")) {
-            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
-        }
-
-        String actualPath = resourcePath;
-        InputStream inputStream = UiHandler.class.getClassLoader()
-                .getResourceAsStream("ui/static/" + resourcePath);
-        if (inputStream == null) {
-            logger.warn("Static resource not found: {}, returning index.html", resourcePath);
-            inputStream = UiHandler.class.getClassLoader().getResourceAsStream("ui/static/index.html");
-            actualPath = "index.html";
-        }
-        if (inputStream == null) {
-            logger.error("index.html not found in jar");
-            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "index.html not found");
-        }
-
-        try (InputStream is = inputStream) {
-            byte[] content = is.readAllBytes();
-            String cacheControl = actualPath.equals("index.html") ? "no-cache" : "max-age=86400";
-            return RestUtils.ok(content, getContentType(actualPath), Map.of("Cache-Control", cacheControl));
-        } catch (Exception e) {
-            logger.error("Error reading static resource: {}", resourcePath, e);
-            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to read resource");
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, errorMessage(e, "invalid request"));
         }
     }
 
-    private static FullHttpResponse handleApiRequest(String path, String uri, HttpMethod method, String postData) {
-        String apiPath = path.substring(HttpServerHandler.UI_API_PREFIX.length());
+    // Static resources
 
-        if (apiPath.isEmpty()) {
+    private FullHttpResponse handleStaticResource(String path) throws Exception {
+        String resourcePath = decodeResourcePath(
+                path.substring(HttpServerHandler.UI_STATIC_PREFIX.length()));
+        if (isForbiddenResourcePath(resourcePath)) {
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
+        }
+
+        String requestedPath = resourcePath.isEmpty() ? "index.html" : resourcePath;
+        StaticResource resource = loadStaticResource(requestedPath);
+        if (resource == null && isSpaRoute(requestedPath)) {
+            resource = loadStaticResource("index.html");
+        }
+        if (resource == null) {
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Static resource not found");
+        }
+
+        return RestUtils.ok(
+                Arrays.copyOf(resource.content(), resource.content().length),
+                resource.contentType(),
+                Map.of("Cache-Control", resource.cacheControl()));
+    }
+
+    private StaticResource loadStaticResource(String resourcePath) throws Exception {
+        StaticResource cached = staticResourceCache.get(resourcePath);
+        if (cached != null) {
+            return cached;
+        }
+
+        try (InputStream input = classLoader.getResourceAsStream(STATIC_ROOT + resourcePath)) {
+            if (input == null) {
+                return null;
+            }
+            StaticResource loaded = new StaticResource(
+                    input.readAllBytes(),
+                    getContentType(resourcePath),
+                    getCacheControl(resourcePath));
+            staticResourceCache.put(resourcePath, loaded);
+            return loaded;
+        }
+    }
+
+    private String decodeResourcePath(String resourcePath) {
+        try {
+            return QueryStringDecoder.decodeComponent(resourcePath);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid resource path encoding", e);
+        }
+    }
+
+    private boolean isForbiddenResourcePath(String resourcePath) {
+        if (resourcePath.startsWith("/") || resourcePath.startsWith("\\")
+                || resourcePath.indexOf('\0') >= 0 || resourcePath.contains("\\")) {
+            return true;
+        }
+        return Arrays.stream(resourcePath.split("/", -1))
+                .anyMatch(segment -> segment.equals(".") || segment.equals(".."));
+    }
+
+    private boolean isSpaRoute(String resourcePath) {
+        int slashIndex = resourcePath.lastIndexOf('/');
+        String fileName = slashIndex >= 0 ? resourcePath.substring(slashIndex + 1) : resourcePath;
+        return !fileName.contains(".");
+    }
+
+    // UI APIs
+
+    private FullHttpResponse handleApiRequest(
+            String path, Map<String, List<String>> queryParameters) throws Exception {
+        List<String> segments = decodePathSegments(
+                path.substring(HttpServerHandler.UI_API_PREFIX.length()));
+        if (segments.isEmpty()) {
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "API path is empty");
         }
 
+        return switch (segments.get(0)) {
+            case "functions" -> handleFunctions(segments);
+            case "functions-dag" -> handleFunctionDag(segments);
+            case "tables" -> handleTables(segments);
+            case "apis" -> handleApis(segments);
+            case "models" -> handleModels(segments, queryParameters);
+            case "services" -> handleServices(segments);
+            default -> RestUtils.error(HttpResponseStatus.NOT_FOUND,
+                    "API not found: " + String.join("/", segments));
+        };
+    }
+
+    private FullHttpResponse handleFunctions(List<String> segments) {
+        if (segments.size() == 1) {
+            return ok(apiService.listFunctions());
+        }
+        if (segments.size() == 2) {
+            String name = segments.get(1);
+            List<Map<String, String>> detail = apiService.getFunction(name);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name)
+                    : ok(detail);
+        }
+        return invalidApiPath(segments);
+    }
+
+    private FullHttpResponse handleFunctionDag(List<String> segments) throws Exception {
+        if (segments.size() != 2) {
+            return invalidApiPath(segments);
+        }
+
+        String name = segments.get(1);
+        Map<String, Object> dag = apiService.getFunctionDag(name);
+        return dag == null
+                ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name)
+                : ok(dag);
+    }
+
+    private FullHttpResponse handleTables(List<String> segments) throws Exception {
+        if (segments.size() == 2 && "databases".equals(segments.get(1))) {
+            return ok(apiService.listDatabases());
+        }
+        if (segments.size() == 2) {
+            return ok(apiService.listTables(segments.get(1)));
+        }
+        if (segments.size() == 3) {
+            String database = segments.get(1);
+            String tableName = segments.get(2);
+            Map<String, Object> detail = apiService.getTable(database, tableName);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND,
+                    "Table not found: " + database + "." + tableName)
+                    : ok(detail);
+        }
+        return invalidApiPath(segments);
+    }
+
+    private FullHttpResponse handleApis(List<String> segments) {
+        if (segments.size() == 1) {
+            return ok(apiService.listApis());
+        }
+        if (segments.size() == 2) {
+            String name = segments.get(1);
+            Map<String, Object> detail = apiService.getApi(name);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + name)
+                    : ok(detail);
+        }
+        return invalidApiPath(segments);
+    }
+
+    private FullHttpResponse handleModels(
+            List<String> segments, Map<String, List<String>> queryParameters) throws Exception {
+        if (segments.size() == 1) {
+            return ok(apiService.listModels());
+        }
+
+        String modelName = segments.get(1);
+        if (segments.size() == 2) {
+            Map<String, Object> detail = apiService.getModel(modelName);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName)
+                    : ok(detail);
+        }
+        if (segments.size() == 3 && "checkpoints".equals(segments.get(2))) {
+            int page = queryInteger(queryParameters, "page", DEFAULT_PAGE, Integer.MAX_VALUE);
+            int pageSize = queryInteger(
+                    queryParameters, "pageSize", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+            return ok(apiService.listCheckpoints(modelName, page, pageSize));
+        }
+        if (segments.size() == 4 && "checkpoints".equals(segments.get(2))) {
+            String checkpointName = segments.get(3);
+            Map<String, Object> detail = apiService.getCheckpoint(modelName, checkpointName);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND,
+                    "Checkpoint not found: " + modelName + "/" + checkpointName)
+                    : ok(detail);
+        }
+        return invalidApiPath(segments);
+    }
+
+    private FullHttpResponse handleServices(List<String> segments) throws Exception {
+        if (segments.size() == 1) {
+            return ok(apiService.listServices());
+        }
+        if (segments.size() == 2) {
+            String name = segments.get(1);
+            Map<String, Object> detail = apiService.getService(name);
+            return detail == null
+                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Service not found: " + name)
+                    : ok(detail);
+        }
+        return invalidApiPath(segments);
+    }
+
+    // Request helpers
+
+    private List<String> decodePathSegments(String path) {
         try {
-            MetadataAccess db = MetadataAccessFactory.getInstance();
-            Object result = null;
-
-            if (apiPath.equals("functions")) {
-                result = toItems(db.getSqlFunctionList(), SqlFunction::getName);
-            } else if (apiPath.startsWith("functions/")) {
-                String name = apiPath.substring("functions/".length());
-                SqlFunction function = db.getSqlFunction(name);
-                if (function == null) {
-                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name);
-                }
-                result = convertFunctionToTable(function);
-            } else if (apiPath.startsWith("functions-dag/")) {
-                String name = apiPath.substring("functions-dag/".length());
-                result = getFunctionDag(name);
-            } else if (apiPath.equals("tables/databases")) {
-                result = toItems(db.getDatabases(), Function.identity());
-            } else if (apiPath.startsWith("tables/")) {
-                String subPath = apiPath.substring("tables/".length());
-                int slashIndex = subPath.indexOf('/');
-                if (slashIndex < 0) {
-                    return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid table path, expected: tables/{database} or tables/{database}/{tableName}");
-                }
-                String database = subPath.substring(0, slashIndex);
-                String tableName = subPath.substring(slashIndex + 1);
-                if (tableName.isEmpty()) {
-                    result = getTableList(db, database);
-                } else {
-                    result = getTableDetail(db, database, tableName);
-                }
-            } else if (apiPath.equals("apis")) {
-                result = toItems(db.getSqlApiList(), SqlApi::getName);
-            } else if (apiPath.startsWith("apis/")) {
-                String name = apiPath.substring("apis/".length());
-                SqlApi api = db.getSqlApi(name);
-                if (api == null) {
-                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + name);
-                }
-                result = convertApiToDetail(api);
-            } else if (apiPath.equals("models")) {
-                result = toItems(db.getModelList(), Model::getName);
-            } else if (apiPath.startsWith("models/")) {
-                String subPath = apiPath.substring("models/".length());
-                if (subPath.contains("/checkpoints/")) {
-                    String[] parts = subPath.split("/checkpoints/");
-                    if (parts.length == 2) {
-                        String modelName = parts[0];
-                        String checkpointName = parts[1];
-                        result = getCheckpointDetail(modelName, checkpointName);
-                    } else {
-                        return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid checkpoint path");
-                    }
-                } else if (subPath.endsWith("/checkpoints")) {
-                    String modelName = subPath.replace("/checkpoints", "");
-                    result = getCheckpointListPaged(modelName, uri);
-                } else {
-                    Model model = db.getModel(subPath);
-                    if (model == null) {
-                        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + subPath);
-                    }
-                    result = convertModelToDetail(model);
-                }
-            } else if (apiPath.equals("services")) {
-                result = toItems(db.getServiceList(), Service::getName);
-            } else if (apiPath.startsWith("services/")) {
-                String name = apiPath.substring("services/".length());
-                Service service = db.getService(name);
-                if (service == null) {
-                    return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Service not found: " + name);
-                }
-                result = convertServiceToDetail(service);
-            } else {
-                return RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + apiPath);
-            }
-
-            return RestUtils.ok(JsonUtils.toJson(result));
-        } catch (Exception e) {
-            logger.error("Error handling API request: {}", apiPath, e);
-            return RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to process request: " + e.getMessage());
+            return Arrays.stream(path.split("/", -1))
+                    .filter(segment -> !segment.isEmpty())
+                    .map(QueryStringDecoder::decodeComponent)
+                    .toList();
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid API path encoding", e);
         }
     }
 
-    private static <T> List<Map<String, Object>> toItems(List<T> list, Function<T, String> nameFn) {
-        return list.stream()
-                .map(t -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", nameFn.apply(t));
-                    item.put("name", nameFn.apply(t));
-                    return item;
-                })
-                .collect(Collectors.toList());
-    }
-
-    private static List<Map<String, Object>> getTableList(MetadataAccess db, String database) throws Exception {
-        List<org.apache.hadoop.hive.metastore.api.Table> tables = db.getTables(database);
-        return tables.stream()
-                .map(t -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", t.getTableName());
-                    item.put("name", t.getTableName());
-                    item.put("database", t.getDbName());
-                    item.put("owner", t.getOwner());
-                    item.put("tableType", t.getTableType());
-                    item.put("createTime", formatTimestamp(t.getCreateTime() * 1000L));
-                    return item;
-                })
-                .collect(Collectors.toList());
-    }
-
-    private static Map<String, Object> getTableDetail(MetadataAccess db, String database, String tableName) throws Exception {
-        org.apache.hadoop.hive.metastore.api.Table table = db.getTable(database, tableName);
-        if (table == null) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Table not found: " + database + "." + tableName);
-            return error;
+    private int queryInteger(Map<String, List<String>> queryParameters,
+                             String name, int defaultValue, int maxValue) {
+        List<String> values = queryParameters.get(name);
+        if (values == null || values.isEmpty()) {
+            return defaultValue;
         }
 
-        List<Map<String, String>> rows = new ArrayList<>();
-        List<FieldSchema> columns = HiveTableUtils.parse(table);
-        rows.add(createRow("# Columns", ""));
-        rows.add(createRow("Name", "Type"));
-        for (FieldSchema col : columns) {
-            rows.add(createRow(col.getName(), col.getType()));
-        }
-        rows.add(createRow("", ""));
-
-        if (table.getPartitionKeys() != null && !table.getPartitionKeys().isEmpty()) {
-            rows.add(createRow("# Partition Keys", ""));
-            rows.add(createRow("Name", "Type"));
-            for (org.apache.hadoop.hive.metastore.api.FieldSchema pk : table.getPartitionKeys()) {
-                rows.add(createRow(pk.getName(), pk.getType()));
-            }
-            rows.add(createRow("", ""));
-        }
-
-//        Map<String, String> flinkOptions = HiveTableUtils.getFlinkTableOptions(table);
-//        if (!flinkOptions.isEmpty()) {
-//            rows.add(createRow("# Parameters", ""));
-//            rows.add(createRow("Key", "Value"));
-//            for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
-//                if (entry.getKey().startsWith("schema.")) {
-//                    continue;
-//                }
-//                rows.add(createRow(entry.getKey(), entry.getValue()));
-//            }
-//            rows.add(createRow("", ""));
-//        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", rows);
-        return result;
-    }
-
-    private static List<Map<String, String>> convertFunctionToTable(SqlFunction function) {
-        List<Map<String, String>> rows = new ArrayList<>();
-        rows.add(createRow("# Function Information", ""));
-        rows.add(createRow("Function Name:", function.getName()));
-        rows.add(createRow("Created At:", formatTimestamp(function.getCreatedAt())));
-        rows.add(createRow("Updated At:", formatTimestamp(function.getUpdatedAt())));
-        rows.add(createRow("", ""));
-        rows.add(createRow("# SQL Statements", ""));
-        if (function.getSqlList() != null && !function.getSqlList().isEmpty()) {
-            String[] sqls = function.getSqlList().split(";");
-            for (int i = 0; i < sqls.length; i++) {
-                if (!sqls[i].trim().isEmpty()) {
-                    rows.add(createRow("SQL " + (i + 1) + ":", sqls[i].trim()));
-                }
-            }
-        } else {
-            rows.add(createRow("(none)", ""));
-        }
-        return rows;
-    }
-
-    private static Map<String, Object> getFunctionDag(String functionName) throws Exception {
-        SqlFunctionBindable sqlFunctionBindable = new CompileManager().getSqlFunction(functionName);
-        String funNamePrefix = ResourceNames.normalize(functionName) + ":";
-
-        List<BindableInterface> bindableList = sqlFunctionBindable.getBindableList();
-        Map<Integer, Set<Integer>> bindableDependency = sqlFunctionBindable.getBindableDependency();
-
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        List<Map<String, Object>> edges = new ArrayList<>();
-
-        for (int i = 0; i < bindableList.size(); i++) {
-            BindableInterface bindable = bindableList.get(i);
-            String originalName = getBindableLabel(bindable, i);
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", String.valueOf(i));
-            node.put("type", getBindableType(bindable));
-            node.put("label", stripFunNamePrefix(originalName, funNamePrefix));
-            node.put("sql", bindable.getSql());
-            node.put("dependencyFunction", String.join(",", bindable.getDependencySqlFuncName()));
-            node.put("avgExecTimeMs", getNodeAvgExecTime(originalName));
-            node.put("avgDataCount", getNodeAvgDataCount(originalName));
-            node.put("logicalPlan", bindable.getLogicalPlan());
-            node.put("physicalPlan", bindable.getPhysicalPlan());
-            node.put("javaExpression", bindable.getJavaExpression());
-
-            String cacheTableName = bindable.getCacheTableName();
-            List<RelDataTypeField> cacheTableDataFields = bindable.getCacheTableDataFields();
-            if (cacheTableName != null && !cacheTableName.isEmpty() && cacheTableDataFields != null && !cacheTableDataFields.isEmpty()) {
-                node.put("cacheTableName", cacheTableName);
-                List<Map<String, String>> fields = new ArrayList<>();
-                for (RelDataTypeField field : cacheTableDataFields) {
-                    Map<String, String> fieldMap = new HashMap<>();
-                    fieldMap.put("name", field.getName());
-                    fieldMap.put("type", field.getType().getFullTypeString());
-                    fields.add(fieldMap);
-                }
-                node.put("cacheTableDataFields", fields);
-            }
-
-            nodes.add(node);
-        }
-
-        if (bindableDependency != null) {
-            for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
-                int targetId = entry.getKey();
-                for (int sourceId : entry.getValue()) {
-                    Map<String, Object> edge = new HashMap<>();
-                    edge.put("id", sourceId + "-" + targetId);
-                    edge.put("source", String.valueOf(sourceId));
-                    edge.put("target", String.valueOf(targetId));
-                    edges.add(edge);
-                }
-            }
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("nodes", nodes);
-        result.put("edges", edges);
-        return result;
-    }
-
-    private static String getBindableType(BindableInterface bindable) {
-        if (bindable instanceof ProxyAllBindable) {
-            return getBindableType(((ProxyAllBindable) bindable).getDelegate());
-        } else if (bindable instanceof FunctionProxyBindable) {
-            return "function";
-        } else if (bindable instanceof CacheTableBindable) {
-            return "cache";
-        } else if (bindable instanceof CalciteBindable) {
-            return "sql";
-        } else if (bindable instanceof IfBindable) {
-            return "condition";
-        } else if (bindable instanceof SetBindable) {
-            return "set";
-        }
-        return "unknown";
-    }
-
-    private static String getBindableLabel(BindableInterface bindable, int index) {
-        String name = bindable.getName();
-        if (name != null && !name.isEmpty()) {
-            return name;
-        }
-
-        String cacheTableName = bindable.getCacheTableName();
-        if (cacheTableName != null && !cacheTableName.isEmpty()) {
-            return cacheTableName;
-        }
-
-        if (bindable instanceof CacheTableBindable) {
-            return ((CacheTableBindable) bindable).getTableName();
-        } else if (bindable instanceof SetBindable) {
-            return "SET";
-        }
-
-        return "Node " + index;
-    }
-
-    private static String stripFunNamePrefix(String name, String prefix) {
-        if (name == null || name.isEmpty()) {
-            return name;
-        }
-        if (name.startsWith(prefix)) {
-            return name.substring(prefix.length());
-        }
-        return name;
-    }
-
-    private static double getNodeAvgExecTime(String nodeName) {
+        final int parsed;
         try {
-            Tags tags = Tags.of("name", nodeName, "status", "success");
-            Timer timer = MetricsUtils.getCompositeMeterRegistry()
-                    .find(Consts.METRICS_NODE_EXEC_DURATION)
-                    .tags(tags)
-                    .timer();
-            if (timer != null && timer.count() > 0) {
-                return timer.mean(TimeUnit.MILLISECONDS);
-            }
-        } catch (Exception e) {
-            logger.debug("Failed to get avg exec time for node: {}", nodeName);
+            parsed = Integer.parseInt(values.get(0));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(name + " must be an integer", e);
         }
-        return -1;
-    }
-
-    private static double getNodeAvgDataCount(String nodeName) {
-        try {
-            Tags tags = Tags.of("name", nodeName, "status", "success");
-            DistributionSummary summary = MetricsUtils.getCompositeMeterRegistry()
-                    .find(Consts.METRICS_NODE_DATA_SIZE)
-                    .tags(tags)
-                    .summary();
-            if (summary != null && summary.count() > 0) {
-                return summary.mean();
-            }
-        } catch (Exception e) {
-            logger.debug("Failed to get avg data count for node: {}", nodeName);
+        if (parsed < 1 || parsed > maxValue) {
+            throw new IllegalArgumentException(name + " must be between 1 and " + maxValue);
         }
-        return -1;
+        return parsed;
     }
 
-    private static Map<String, Object> convertApiToDetail(SqlApi api) {
-        List<Map<String, String>> rows = new ArrayList<>();
-        rows.add(createRow("# API Information", ""));
-        rows.add(createRow("API Name:", api.getName()));
-        rows.add(createRow("Function Name:", api.getFunctionName()));
-        rows.add(createRow("Created At:", formatTimestamp(api.getCreatedAt())));
-        rows.add(createRow("Updated At:", formatTimestamp(api.getUpdatedAt())));
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", rows);
-        return result;
+    private FullHttpResponse invalidApiPath(List<String> segments) {
+        return RestUtils.error(HttpResponseStatus.NOT_FOUND,
+                "API not found: " + String.join("/", segments));
     }
 
-    private static Map<String, Object> convertModelToDetail(Model model) throws Exception {
-        List<List<String>> rows = new ArrayList<>();
-        ModelUtils.addModelInfo(rows, model);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", convertRowsToMap(rows));
-        if (model.getDdl() != null) {
-            result.put("ddl", model.getDdl());
-        }
-        return result;
+    private FullHttpResponse ok(Object result) {
+        return RestUtils.ok(JsonUtils.toJson(result));
     }
 
-    private static Map<String, Object> getCheckpointListPaged(String modelName, String uri) {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
-        int page = 1;
-        int pageSize = 10;
-
-        int queryIndex = uri.indexOf('?');
-        if (queryIndex > 0) {
-            for (String param : uri.substring(queryIndex + 1).split("&")) {
-                String[] kv = param.split("=", 2);
-                if (kv.length == 2 && kv[0].equals("page")) {
-                    page = Integer.parseInt(kv[1]);
-                } else if (kv.length == 2 && kv[0].equals("pageSize")) {
-                    pageSize = Integer.parseInt(kv[1]);
-                }
-            }
-        }
-
-        int total = db.getCheckpointCountByModelName(modelName);
-        List<Checkpoint> checkpoints = db.getCheckpointListByModelNamePaged(modelName, page, pageSize);
-
-        List<Map<String, Object>> items = checkpoints.stream()
-                .map(c -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("checkpointName", c.getCheckpointName());
-                    item.put("checkpointType", c.getCheckpointType());
-                    item.put("status", c.getStatus());
-                    item.put("createdAt", formatTimestamp(c.getCreatedAt()));
-                    item.put("updatedAt", formatTimestamp(c.getUpdatedAt()));
-                    return item;
-                })
-                .collect(Collectors.toList());
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("items", items);
-        result.put("total", total);
-        result.put("page", page);
-        result.put("pageSize", pageSize);
-        result.put("totalPages", (int) Math.ceil((double) total / pageSize));
-        return result;
+    private String errorMessage(Exception exception, String fallback) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? fallback : message;
     }
 
-    private static Map<String, Object> getCheckpointDetail(String modelName, String checkpointName) {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
-        Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
-        if (checkpoint == null) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Checkpoint not found: " + modelName + "/" + checkpointName);
-            return error;
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("modelName", checkpoint.getModelName());
-        result.put("checkpointName", checkpoint.getCheckpointName());
-        result.put("checkpointType", checkpoint.getCheckpointType());
-        result.put("status", checkpoint.getStatus());
-        result.put("ddl", checkpoint.getDdl());
-        result.put("modelDdl", checkpoint.getModelDdl());
-        result.put("yaml", checkpoint.getYaml());
-        result.put("createdAt", formatTimestamp(checkpoint.getCreatedAt()));
-        result.put("updatedAt", formatTimestamp(checkpoint.getUpdatedAt()));
-        return result;
-    }
-
-    private static Map<String, Object> convertServiceToDetail(Service service) throws Exception {
-        List<List<String>> rows = new ArrayList<>();
-        ModelUtils.addServiceInfo(rows, service);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", convertRowsToMap(rows));
-        if (service.getYaml() != null) {
-            result.put("yaml", service.getYaml());
-        }
-        if (service.getDdl() != null) {
-            result.put("ddl", service.getDdl());
-        }
-        return result;
-    }
-
-    private static List<Map<String, String>> convertRowsToMap(List<List<String>> rows) {
-        return rows.stream()
-                .map(row -> createRow(row.get(0), row.size() > 1 ? row.get(1) : ""))
-                .collect(Collectors.toList());
-    }
-
-    private static Map<String, String> createRow(String colName, String dataType) {
-        Map<String, String> row = new HashMap<>();
-        row.put("col_name", colName);
-        row.put("data_type", dataType);
-        return row;
-    }
-
-    private static String formatTimestamp(long timestamp) {
-        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(timestamp));
-    }
+    // Static resource metadata
 
     private static String getContentType(String path) {
         if (path.endsWith(".html")) {
@@ -556,8 +320,20 @@ public class UiHandler {
             return "font/woff2";
         } else if (path.endsWith(".ttf")) {
             return "font/ttf";
-        } else {
-            return "application/octet-stream";
         }
+        return "application/octet-stream";
+    }
+
+    private static String getCacheControl(String path) {
+        if ("index.html".equals(path)) {
+            return "no-cache";
+        }
+        if (path.matches(".*-[A-Za-z0-9_-]{8,}\\.[^.]+$")) {
+            return "public, max-age=31536000, immutable";
+        }
+        return "public, max-age=86400";
+    }
+
+    private record StaticResource(byte[] content, String contentType, String cacheControl) {
     }
 }
