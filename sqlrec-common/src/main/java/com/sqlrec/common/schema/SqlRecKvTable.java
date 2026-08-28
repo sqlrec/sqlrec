@@ -52,7 +52,15 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
         try {
             Enumerable<Object[]> result;
-            Object primaryKeyValue = FilterUtils.extractPrimaryKeyValue(filters, getPrimaryKeyIndex());
+            List<RexNode> candidateFilters = filters;
+            if (onlyFilterByPrimaryKey() && filters != null) {
+                // The scan node receives the complete predicate, but primary-key-only
+                // stores must use only a safe PK equality to obtain candidate rows.
+                // The planner's outer LogicalCalc evaluates the complete predicate.
+                candidateFilters = FilterUtils.getPrimaryKeyFilters(filters, getPrimaryKeyIndex());
+            }
+            Object primaryKeyValue =
+                    FilterUtils.extractPrimaryKeyValue(candidateFilters, getPrimaryKeyIndex());
             if (primaryKeyValue != null) {
                 SqlTypeName primaryKeyType = getPrimaryKeyType();
                 primaryKeyValue = DataTypeUtils.convertType(primaryKeyValue, primaryKeyType);
@@ -60,7 +68,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
                 result = Linq4j.asEnumerable(rows);
             } else {
-                result = scanImpl(filters);
+                result = scanImpl(candidateFilters);
                 if (result != null) {
                     List<Object[]> rows = result.toList();
                     DataTypeUtils.convertRowTypes(rows, getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList());

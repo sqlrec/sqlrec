@@ -50,5 +50,11 @@
             <artifactId>mockito-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.sqlrec</groupId>
+            <artifactId>sqlrec-core</artifactId>
+            <version>${sqlrec.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

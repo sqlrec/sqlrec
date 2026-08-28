@@ -4,28 +4,34 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.mongodb.calcite.MongoCalciteTable;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
-import org.apache.calcite.jdbc.CalciteConnection;
+import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.schema.Table;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** End-to-end coverage for Calcite's FilterableTable residual-filter contract. */
+/** End-to-end coverage for SQLRec's custom FilterableTableScan residual-filter contract. */
 @Tag("integration")
 class MongoCalciteResidualFilterTest {
 
@@ -80,21 +86,29 @@ class MongoCalciteResidualFilterTest {
 
     @Test
     void unsupportedMixedOrIsAppliedAsCalciteResidualFilter() throws Exception {
-        List<Integer> ids = new ArrayList<>();
-        try (Connection connection = DriverManager.getConnection("jdbc:calcite:")) {
-            CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
-            calciteConnection.getRootSchema().add("users", table);
-            try (Statement statement = connection.createStatement();
-                 ResultSet resultSet = statement.executeQuery(
-                         "SELECT \"id\" FROM \"users\" "
-                                 + "WHERE \"id\" = 1 OR \"name\" SIMILAR TO 'A%' "
-                                 + "ORDER BY \"id\"")) {
-                while (resultSet.next()) {
-                    ids.add(resultSet.getInt(1));
-                }
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return Collections.singletonMap("users", table);
             }
+        });
+
+        BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(
+                "SELECT id FROM users "
+                        + "WHERE id = 1 OR name SIMILAR TO 'A%' "
+                        + "ORDER BY id",
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME);
+
+        List<Integer> ids = new ArrayList<>();
+        Enumerable<Object[]> result = bindable.bind(schema, new ExecuteContextImpl());
+        for (Object[] row : result) {
+            ids.add(((Number) row[0]).intValue());
         }
 
+        assertTrue(bindable.getPhysicalPlan().contains("FilterableTableScan"));
+        assertTrue(bindable.getPhysicalPlan().contains("EnumerableCalc"));
         // id=2 proves the unsupported OR branch was not lost during MongoDB pushdown;
         // absence of id=3 proves Calcite evaluated the original residual predicate.
         assertEquals(Arrays.asList(1, 2), ids);

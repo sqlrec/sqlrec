@@ -1,16 +1,11 @@
 package com.sqlrec.rules;
 
 import com.google.common.collect.ImmutableList;
-import com.sqlrec.common.schema.SqlRecKvTable;
-import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.node.FilterableTableScan;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpreter;
-import org.apache.calcite.interpreter.Bindables;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelRule;
-import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalCalc;
@@ -22,8 +17,6 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.Mappings;
 import org.immutables.value.Value;
-
-import java.util.List;
 
 @Value.Enclosing
 public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule.Config> {
@@ -57,70 +50,25 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
     }
 
     protected void apply(RelOptRuleCall call, Filter filter, TableScan scan) {
-        final ImmutableIntList projects;
+        final ImmutableIntList projects = scan.identity();
         final ImmutableList.Builder<RexNode> filters = ImmutableList.builder();
-        if (scan instanceof Bindables.BindableTableScan) {
-//            final Bindables.BindableTableScan bindableScan =
-//                    (Bindables.BindableTableScan) scan;
-//            filters.addAll(bindableScan.filters);
-//            projects = bindableScan.projects;
-            return;
-        } else {
-            projects = scan.identity();
-        }
-
         final Mapping mapping = Mappings.target(projects,
                 scan.getTable().getRowType().getFieldCount());
         filters.add(
                 RexUtil.apply(mapping.inverse(), filter.getCondition()));
-        List<RexNode> finalFilters = filters.build();
-
-        RelOptTable table = scan.getTable();
-        SqlRecTable sqlRecTable = table.unwrap(SqlRecTable.class);
-        if (shouldFilterByPrimaryKey(sqlRecTable)) {
-            RelNode calc = getTableScanWithPrimaryKeyFilter(
-                    (SqlRecKvTable) sqlRecTable, finalFilters, filter, scan, projects
-            );
-            call.transformTo(calc);
-        } else {
-            call.transformTo(
-                    FilterableTableScan.create(scan.getCluster(), scan.getTable(), ImmutableList.copyOf(finalFilters), projects)
-            );
-        }
-    }
-
-    private boolean shouldFilterByPrimaryKey(SqlRecTable sqlRecTable) {
-        if (sqlRecTable == null) {
-            return false;
-        }
-        if (!(sqlRecTable instanceof SqlRecKvTable)) {
-            return false;
-        }
-        SqlRecKvTable kvTable = (SqlRecKvTable) sqlRecTable;
-        return kvTable.onlyFilterByPrimaryKey();
-    }
-
-    private RelNode getTableScanWithPrimaryKeyFilter(
-            SqlRecKvTable sqlRecTable,
-            List<RexNode> finalFilters,
-            Filter filter,
-            TableScan scan,
-            ImmutableIntList projects
-    ) {
-        List<RexNode> kvTableFilters = FilterUtils.getPrimaryKeyFilters(
-                finalFilters,
-                sqlRecTable.getPrimaryKeyIndex()
-        );
         TableScan kvTableScan = FilterableTableScan.create(
-                scan.getCluster(), scan.getTable(), ImmutableList.copyOf(kvTableFilters), projects
+                scan.getCluster(), scan.getTable(), filters.build(), projects
         );
+        // FilterableTableScan is an Enumerable-native custom node and does not perform
+        // Calcite's runtime "remaining mutable filters" negotiation. Keep the complete
+        // original predicate as a residual condition for every connector.
         final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
         final RelDataType inputRowType = kvTableScan.getRowType();
         final RexProgramBuilder programBuilder = new RexProgramBuilder(inputRowType, rexBuilder);
         programBuilder.addIdentity();
         programBuilder.addCondition(filter.getCondition());
         final RexProgram program = programBuilder.getProgram();
-        return LogicalCalc.create(kvTableScan, program);
+        call.transformTo(LogicalCalc.create(kvTableScan, program));
     }
 
     @Value.Immutable
