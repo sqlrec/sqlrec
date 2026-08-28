@@ -1,5 +1,8 @@
 package com.sqlrec.connectors.mongodb.handler;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -7,8 +10,10 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUnknownAs;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.Sarg;
 import org.bson.BsonDocument;
 import org.bson.conversions.Bson;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +47,8 @@ class MongoHandlerBuildQueryTest {
         mongoConfig.fieldSchemas = Arrays.asList(
                 new FieldSchema("id", "INTEGER"),
                 new FieldSchema("name", "VARCHAR"),
-                new FieldSchema("age", "INTEGER")
+                new FieldSchema("age", "INTEGER"),
+                new FieldSchema("active", "BOOLEAN")
         );
     }
 
@@ -235,6 +241,197 @@ class MongoHandlerBuildQueryTest {
         String json = toJson(result);
 
         assertEquals("{\"$or\": [{\"id\": 1}, {\"name\": \"Alice\"}]}", json);
+    }
+
+    @Test
+    void testMixedSupportedAndUnsupportedOrIsNotPushedDown() throws Exception {
+        RexInputRef idRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode idLiteral = rexBuilder.makeExactLiteral(new BigDecimal(1));
+        RexNode supported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, idRef, idLiteral);
+
+        RexInputRef nameRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode pattern = rexBuilder.makeLiteral("A%", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.SIMILAR_TO, nameRef, pattern);
+
+        RexNode orFilter = rexBuilder.makeCall(SqlStdOperatorTable.OR, supported, unsupported);
+
+        Bson result = invokeBuildQuery(Collections.singletonList(orFilter));
+
+        assertEquals(new BsonDocument(), toBsonDocument(result));
+    }
+
+    @Test
+    void testAndStillPushesSafeSiblingWhenNestedOrIsUnsupported() throws Exception {
+        RexInputRef idRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode idLiteral = rexBuilder.makeExactLiteral(new BigDecimal(1));
+        RexNode idEquals = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, idRef, idLiteral);
+
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode ageLiteral = rexBuilder.makeExactLiteral(new BigDecimal(18));
+        RexNode ageGreaterThan = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN, ageRef, ageLiteral);
+
+        RexInputRef nameRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode pattern = rexBuilder.makeLiteral("A%", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode unsupportedSimilar = rexBuilder.makeCall(SqlStdOperatorTable.SIMILAR_TO, nameRef, pattern);
+        RexNode unsafeOr = rexBuilder.makeCall(SqlStdOperatorTable.OR, ageGreaterThan, unsupportedSimilar);
+
+        RexNode andFilter = rexBuilder.makeCall(SqlStdOperatorTable.AND, idEquals, unsafeOr);
+
+        Bson result = invokeBuildQuery(Collections.singletonList(andFilter));
+
+        assertEquals("{\"$and\": [{\"id\": 1}]}", toJson(result));
+    }
+
+    @Test
+    void testLikeAndNotLike() throws Exception {
+        RexInputRef nameRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode pattern = rexBuilder.makeLiteral("Al_%", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+
+        Bson like = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.LIKE, nameRef, pattern)));
+        RexNode likeCall = rexBuilder.makeCall(SqlStdOperatorTable.LIKE, nameRef, pattern);
+        Bson notLike = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.NOT, likeCall)));
+
+        assertEquals("^Al..*$", toBsonDocument(like).getRegularExpression("name").getPattern());
+        assertEquals("s", toBsonDocument(like).getRegularExpression("name").getOptions());
+        assertTrue(toJson(notLike).contains("\"$nor\""));
+        assertTrue(toJson(notLike).contains("^Al..*$"));
+    }
+
+    @Test
+    void testLikeWithEscapeCharacter() throws Exception {
+        RexInputRef nameRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode pattern = rexBuilder.makeLiteral("A\\_%", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode escape = rexBuilder.makeLiteral("\\", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.LIKE, nameRef, pattern, escape);
+
+        Bson result = invokeBuildQuery(Collections.singletonList(filter));
+
+        assertEquals("^A_.*$", toBsonDocument(result).getRegularExpression("name").getPattern());
+    }
+
+    @Test
+    void testSearchPointSetAndComplement() throws Exception {
+        RexInputRef idRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RangeSet<BigDecimal> points = TreeRangeSet.create();
+        points.add(Range.singleton(BigDecimal.ONE));
+        points.add(Range.singleton(BigDecimal.valueOf(2)));
+        Sarg<BigDecimal> inSarg = Sarg.of(RexUnknownAs.UNKNOWN, points);
+        Sarg<BigDecimal> notInSarg = Sarg.of(RexUnknownAs.UNKNOWN, points.complement());
+
+        Bson in = invokeBuildQuery(Collections.singletonList(rexBuilder.makeCall(
+                SqlStdOperatorTable.SEARCH, idRef,
+                rexBuilder.makeSearchArgumentLiteral(inSarg, idRef.getType()))));
+        Bson notIn = invokeBuildQuery(Collections.singletonList(rexBuilder.makeCall(
+                SqlStdOperatorTable.SEARCH, idRef,
+                rexBuilder.makeSearchArgumentLiteral(notInSarg, idRef.getType()))));
+
+        assertEquals("{\"id\": {\"$in\": [1, 2]}}", toJson(in));
+        assertEquals("{\"id\": {\"$nin\": [1, 2]}}", toJson(notIn));
+    }
+
+    @Test
+    void testBetweenAndNotBetweenRewrittenForms() throws Exception {
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode lower = rexBuilder.makeExactLiteral(BigDecimal.valueOf(18));
+        RexNode upper = rexBuilder.makeExactLiteral(BigDecimal.valueOf(30));
+
+        RexNode betweenCall = rexBuilder.makeCall(SqlStdOperatorTable.AND,
+                rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN_OR_EQUAL, ageRef, lower),
+                rexBuilder.makeCall(SqlStdOperatorTable.LESS_THAN_OR_EQUAL, ageRef, upper));
+        RexNode notBetweenCall = rexBuilder.makeCall(SqlStdOperatorTable.OR,
+                rexBuilder.makeCall(SqlStdOperatorTable.LESS_THAN, ageRef, lower),
+                rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN, ageRef, upper));
+        Bson between = invokeBuildQuery(Collections.singletonList(betweenCall));
+        Bson notBetween = invokeBuildQuery(Collections.singletonList(notBetweenCall));
+
+        assertEquals("{\"$and\": [{\"age\": {\"$gte\": 18}}, {\"age\": {\"$lte\": 30}}]}",
+                toJson(between));
+        assertEquals("{\"$or\": [{\"age\": {\"$lt\": 18}}, {\"age\": {\"$gt\": 30}}]}",
+                toJson(notBetween));
+    }
+
+    @Test
+    void testBooleanPredicates() throws Exception {
+        RexInputRef activeRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.BOOLEAN), 3);
+
+        Bson bareBoolean = invokeBuildQuery(Collections.singletonList(activeRef));
+        Bson isFalse = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.IS_FALSE, activeRef)));
+        Bson isNotTrue = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_TRUE, activeRef)));
+
+        assertEquals("{\"active\": true}", toJson(bareBoolean));
+        assertEquals("{\"active\": false}", toJson(isFalse));
+        assertEquals("{\"active\": {\"$ne\": true}}", toJson(isNotTrue));
+    }
+
+    @Test
+    void testBooleanConstants() throws Exception {
+        Bson alwaysTrue = invokeBuildQuery(Collections.singletonList(rexBuilder.makeLiteral(true)));
+        Bson alwaysFalse = invokeBuildQuery(Collections.singletonList(rexBuilder.makeLiteral(false)));
+
+        assertEquals(new BsonDocument(), toBsonDocument(alwaysTrue));
+        assertEquals("{\"$expr\": false}", toJson(alwaysFalse));
+    }
+
+    @Test
+    void testDistinctFromAndFieldToFieldComparison() throws Exception {
+        RexInputRef idRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode one = rexBuilder.makeExactLiteral(BigDecimal.ONE);
+
+        Bson distinct = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.IS_DISTINCT_FROM, idRef, one)));
+        Bson fieldComparison = invokeBuildQuery(Collections.singletonList(
+                rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN, ageRef, idRef)));
+
+        assertEquals("{\"id\": {\"$ne\": 1}}", toJson(distinct));
+        assertEquals("{\"$expr\": {\"$gt\": [\"$age\", \"$id\"]}}", toJson(fieldComparison));
+    }
+
+    @Test
+    void testSearchRange() throws Exception {
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RangeSet<BigDecimal> ranges = TreeRangeSet.create();
+        ranges.add(Range.closedOpen(BigDecimal.valueOf(18), BigDecimal.valueOf(30)));
+        Sarg<BigDecimal> sarg = Sarg.of(RexUnknownAs.UNKNOWN, ranges);
+        RexNode sargLiteral = rexBuilder.makeSearchArgumentLiteral(sarg, ageRef.getType());
+        RexNode search = rexBuilder.makeCall(SqlStdOperatorTable.SEARCH, ageRef, sargLiteral);
+
+        Bson result = invokeBuildQuery(Collections.singletonList(search));
+
+        assertEquals("{\"$and\": [{\"age\": {\"$gte\": 18}}, {\"age\": {\"$lt\": 30}}]}",
+                toJson(result));
+    }
+
+    @Test
+    void testSearchIncludesNullWhenSargRequiresIt() throws Exception {
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RangeSet<BigDecimal> ranges = TreeRangeSet.create();
+        ranges.add(Range.singleton(BigDecimal.valueOf(18)));
+        Sarg<BigDecimal> sarg = Sarg.of(RexUnknownAs.TRUE, ranges);
+        RexNode search = rexBuilder.makeCall(SqlStdOperatorTable.SEARCH, ageRef,
+                rexBuilder.makeSearchArgumentLiteral(sarg, ageRef.getType()));
+
+        Bson result = invokeBuildQuery(Collections.singletonList(search));
+
+        assertEquals("{\"$or\": [{\"age\": {\"$in\": [18]}}, {\"age\": null}]}",
+                toJson(result));
+    }
+
+    @Test
+    void testNotSimpleComparison() throws Exception {
+        RexInputRef ageRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode eighteen = rexBuilder.makeExactLiteral(BigDecimal.valueOf(18));
+        RexNode greaterThan = rexBuilder.makeCall(SqlStdOperatorTable.GREATER_THAN, ageRef, eighteen);
+        RexNode not = rexBuilder.makeCall(SqlStdOperatorTable.NOT, greaterThan);
+
+        Bson result = invokeBuildQuery(Collections.singletonList(not));
+
+        assertTrue(toJson(result).contains("\"$nor\""));
+        assertTrue(toJson(result).contains("\"$gt\": 18"));
     }
 
     // --- Multiple filters (implicit AND) ---
