@@ -35,44 +35,45 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         long startTime = System.currentTimeMillis();
         String uri = request.uri();
         HttpMethod method = request.method();
-        String path = extractPath(uri);
+        String path = uri;
 
         try {
+            path = new QueryStringDecoder(uri).rawPath();
             ByteBuf content = request.content();
             String postData = (content != null) ? content.toString(CharsetUtil.UTF_8) : "";
 
             FullHttpResponse response;
             if (HttpMethod.POST.equals(method)) {
-                response = handlePost(uri, postData);
+                response = handlePost(path, postData);
             } else if (HttpMethod.GET.equals(method)) {
-                response = handleGet(uri, method, postData);
+                response = handleGet(path, uri, method, postData);
             } else {
                 response = RestUtils.error(HttpResponseStatus.METHOD_NOT_ALLOWED, "only support POST and GET methods");
             }
 
-            writeResponse(ctx, request, response, path, method, startTime);
+            writeResponse(ctx, request, response, normalizeMetricsPath(path), method, startTime);
         } catch (Exception e) {
             logger.error("Error processing request: uri={}", uri, e);
             String errorMsg = e.getMessage();
             FullHttpResponse response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, errorMsg != null ? errorMsg : "unknown error");
-            writeResponse(ctx, request, response, path, method, startTime);
+            writeResponse(ctx, request, response, normalizeMetricsPath(path), method, startTime);
         }
     }
 
-    private FullHttpResponse handlePost(String uri, String postData) throws Exception {
-        if (uri.equals(SQL_V1_PATH) || uri.startsWith(SQL_V1_PATH + "/")) {
+    private FullHttpResponse handlePost(String path, String postData) throws Exception {
+        if (path.equals(SQL_V1_PATH) || path.startsWith(SQL_V1_PATH + "/")) {
             return handleSql(postData);
-        } else if (uri.startsWith(API_V1_PREFIX)) {
-            return handleApi(uri, postData);
+        } else if (path.startsWith(API_V1_PREFIX)) {
+            return handleApi(path, postData);
         } else {
             return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
         }
     }
 
-    private FullHttpResponse handleGet(String uri, HttpMethod method, String postData) {
-        if (uri.equals(METRICS_PATH)) {
+    private FullHttpResponse handleGet(String path, String uri, HttpMethod method, String postData) {
+        if (path.equals(METRICS_PATH)) {
             return handleMetrics();
-        } else if (uri.startsWith(UI_STATIC_PREFIX) || uri.startsWith(UI_API_PREFIX)) {
+        } else if (path.startsWith(UI_STATIC_PREFIX) || path.startsWith(UI_API_PREFIX)) {
             return handleUi(uri, method, postData);
         } else {
             return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
@@ -87,8 +88,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         return RestUtils.ok(JsonUtils.toJson(executeDataList));
     }
 
-    private FullHttpResponse handleApi(String uri, String postData) throws Exception {
-        String apiName = uri.substring(API_V1_PREFIX.length());
+    private FullHttpResponse handleApi(String path, String postData) throws Exception {
+        String apiName = path.substring(API_V1_PREFIX.length());
         if (apiName.isEmpty()) {
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "api name is required");
         }
@@ -131,10 +132,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         }
     }
 
-    private String extractPath(String uri) {
-        int queryIndex = uri.indexOf('?');
-        String path = (queryIndex > 0) ? uri.substring(0, queryIndex) : uri;
-
+    private String normalizeMetricsPath(String path) {
         if (path.equals(SQL_V1_PATH) || path.startsWith(SQL_V1_PATH + "/")) {
             return SQL_V1_PATH;
         } else if (path.startsWith(UI_STATIC_PREFIX)) {

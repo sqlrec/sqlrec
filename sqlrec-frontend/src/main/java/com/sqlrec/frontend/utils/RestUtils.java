@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.utils;
 
+import com.sqlrec.common.utils.JsonUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
 
@@ -25,7 +26,8 @@ public class RestUtils {
     }
 
     public static FullHttpResponse error(HttpResponseStatus status, String msg) {
-        return build(status, ("{\"msg\":\"" + msg + "\"}").getBytes(StandardCharsets.UTF_8), "application/json", null);
+        String content = JsonUtils.toJson(Map.of("msg", String.valueOf(msg)));
+        return build(status, content.getBytes(StandardCharsets.UTF_8), "application/json", null);
     }
 
     public static FullHttpResponse error(HttpResponseStatus status, byte[] content, String contentType) {

@@ -19,6 +19,7 @@ import io.micrometer.core.instrument.Timer;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.QueryStringDecoder;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,10 +35,11 @@ public class UiHandler {
 
     public static FullHttpResponse handleRequest(String uri, HttpMethod method, String postData) {
         try {
-            if (uri.startsWith(HttpServerHandler.UI_STATIC_PREFIX)) {
-                return handleStaticResource(uri);
-            } else if (uri.startsWith(HttpServerHandler.UI_API_PREFIX)) {
-                return handleApiRequest(uri, method, postData);
+            String path = new QueryStringDecoder(uri).rawPath();
+            if (path.startsWith(HttpServerHandler.UI_STATIC_PREFIX)) {
+                return handleStaticResource(path);
+            } else if (path.startsWith(HttpServerHandler.UI_API_PREFIX)) {
+                return handleApiRequest(path, uri, method, postData);
             } else {
                 return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
             }
@@ -91,8 +93,8 @@ public class UiHandler {
         }
     }
 
-    private static FullHttpResponse handleApiRequest(String uri, HttpMethod method, String postData) {
-        String apiPath = uri.substring(HttpServerHandler.UI_API_PREFIX.length());
+    private static FullHttpResponse handleApiRequest(String path, String uri, HttpMethod method, String postData) {
+        String apiPath = path.substring(HttpServerHandler.UI_API_PREFIX.length());
 
         if (apiPath.isEmpty()) {
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "API path is empty");
@@ -142,10 +144,8 @@ public class UiHandler {
                 result = toItems(db.getModelList(), Model::getName);
             } else if (apiPath.startsWith("models/")) {
                 String subPath = apiPath.substring("models/".length());
-                int queryIndex = subPath.indexOf('?');
-                String pathWithoutQuery = queryIndex > 0 ? subPath.substring(0, queryIndex) : subPath;
-                if (pathWithoutQuery.contains("/checkpoints/")) {
-                    String[] parts = pathWithoutQuery.split("/checkpoints/");
+                if (subPath.contains("/checkpoints/")) {
+                    String[] parts = subPath.split("/checkpoints/");
                     if (parts.length == 2) {
                         String modelName = parts[0];
                         String checkpointName = parts[1];
@@ -153,13 +153,13 @@ public class UiHandler {
                     } else {
                         return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "Invalid checkpoint path");
                     }
-                } else if (pathWithoutQuery.endsWith("/checkpoints")) {
-                    String modelName = pathWithoutQuery.replace("/checkpoints", "");
+                } else if (subPath.endsWith("/checkpoints")) {
+                    String modelName = subPath.replace("/checkpoints", "");
                     result = getCheckpointListPaged(modelName, uri);
                 } else {
-                    Model model = db.getModel(pathWithoutQuery);
+                    Model model = db.getModel(subPath);
                     if (model == null) {
-                        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + pathWithoutQuery);
+                        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + subPath);
                     }
                     result = convertModelToDetail(model);
                 }
