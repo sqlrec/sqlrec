@@ -340,29 +340,31 @@ SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `h
 
 ## 性能测试
 
-benchmark目录下有测试脚本，可以参考如下命令进行测试：
+性能测试基于 MovieLens-1M 数据集，脚本位于 `benchmark/movielens/` 目录。执行以下命令初始化测试环境并运行压测：
 
 ```bash
+cd benchmark/movielens
 bash init.sh
 bash benchmark.sh
 ```
 
-默认的测试配置如下：
+默认的测试数据和推荐流程如下：
 
-- 10W用户、10W物品数据
-- 推荐流程包含4路召回：全局高热、用户兴趣类目高热、itemcf、向量检索（8维，user embedding固定），以及曝光去重、类目打散
-- 使用10并发测试单个SQLRec实例
+- MovieLens-1M 数据集：6040 个用户、3706 部电影、约 100 万条评分记录
+- 测试 `main_rec` 推荐流程，包含 4 路召回：全局高热、用户兴趣类目高热、ItemCF 和 Milvus 向量检索，每路最多召回 300 条
+- 向量维度为 64；本测试未启用召回模型服务，每次请求通过 `random_vec` 生成用户向量
+- 召回后进行近 1 小时曝光去重、`rank_fun_simple` 排序和类目打散，最终返回 10 条结果；推荐日志异步写入 Kafka，同时记录曝光结果
+- 单 SQLRec 实例部署；先以 1 线程、1 连接预热 10 秒，再以 10 线程、10 连接压测 30 秒
 
-在AMD Ryzen 5600H、32GB DDR4内存机器上测试结果如下：
+在 AMD Ryzen 5600H、32GB DDR4 内存、Debian 12 和 Minikube 环境下的测试结果如下：
 
 ```
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     9.23ms    5.04ms  48.96ms   90.50%
-    Req/Sec   111.59     17.07   151.00     59.47%
-  33370 requests in 30.02s, 57.91MB read
-  Socket errors: connect 0, read 33369, write 0, timeout 0
-Requests/sec:   1111.47
-Transfer/sec:      1.93MB
+    Latency     6.73ms    3.16ms  90.29ms   94.46%
+    Req/Sec   151.20     16.58   191.00     73.67%
+  45231 requests in 30.02s, 87.90MB read
+Requests/sec:   1506.47
+Transfer/sec:      2.93MB
 ```
 
 ## 路线图

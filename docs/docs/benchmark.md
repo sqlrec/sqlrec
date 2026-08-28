@@ -162,22 +162,21 @@ end
 Running 30s test @ http://192.168.49.2:30001/api/v1/main_rec
   10 threads and 10 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     9.23ms    5.04ms  48.96ms   90.50%
-    Req/Sec   111.59     17.07   151.00     59.47%
-  33370 requests in 30.02s, 57.91MB read
-  Socket errors: connect 0, read 33369, write 0, timeout 0
-Requests/sec:   1111.47
-Transfer/sec:      1.93MB
+    Latency     6.73ms    3.16ms  90.29ms   94.46%
+    Req/Sec   151.20     16.58   191.00     73.67%
+  45231 requests in 30.02s, 87.90MB read
+Requests/sec:   1506.47
+Transfer/sec:      2.93MB
 ```
 
 **性能指标**：
 
 | 指标 | 值 |
 |------|-----|
-| 平均延迟 | 9.23ms |
-| 延迟标准差 | 5.04ms |
-| 最大延迟 | 48.96ms |
-| 平均 QPS | 111.59 |
-| 总请求数 | 33,370 |
-| 总 QPS | 1111.47 |
-| 吞吐量 | 1.93MB/s |
+| 平均延迟 | 6.73ms |
+| 延迟标准差 | 3.16ms |
+| 最大延迟 | 90.29ms |
+| 平均 QPS | 151.20 |
+| 总请求数 | 45,231 |
+| 总 QPS | 1506.47 |
+| 吞吐量 | 2.93MB/s |

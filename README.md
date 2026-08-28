@@ -319,25 +319,32 @@ The frontend UI allows you to:
 - View service statistics and metrics
 
 ## Performance Testing
-There are test scripts in the benchmark directory. You can refer to the following commands for testing:
+
+The benchmark uses the MovieLens-1M dataset, and its scripts are located in `benchmark/movielens/`. Initialize the environment and run the benchmark with:
+
 ```bash
+cd benchmark/movielens
 bash init.sh
 bash benchmark.sh
 ```
-The default test configuration is as follows:
-- 100K users, 100K items data
-- The recommendation process includes 4 recall paths: global hot items, user interest category hot items, itemcf, vector retrieval (8 dimensions, user embedding fixed), as well as exposure deduplication and category diversification
-- Test a single SQLRec instance with 10 concurrent connections
 
-Test results on AMD Ryzen 5600H, 32GB DDR4 memory machine:
+The default dataset and recommendation pipeline are as follows:
+
+- MovieLens-1M: 6,040 users, 3,706 movies, and approximately 1 million rating records
+- The benchmark exercises the `main_rec` pipeline with four recall paths: global hot items, user-interest genre hot items, ItemCF, and Milvus vector search, each recalling up to 300 items
+- Vectors have 64 dimensions; because the recall model service is disabled for this benchmark, `random_vec` generates a user vector for each request
+- Recall is followed by one-hour exposure deduplication, `rank_fun_simple` ranking, and genre diversification; the pipeline returns 10 results, writes recommendation logs to Kafka asynchronously, and records the exposures
+- A single SQLRec instance is tested: one thread and one connection warm up the system for 10 seconds, followed by a 30-second run with 10 threads and 10 connections
+
+Results on AMD Ryzen 5600H, 32GB DDR4, Debian 12, and Minikube:
+
 ```
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     9.23ms    5.04ms  48.96ms   90.50%
-    Req/Sec   111.59     17.07   151.00     59.47%
-  33370 requests in 30.02s, 57.91MB read
-  Socket errors: connect 0, read 33369, write 0, timeout 0
-Requests/sec:   1111.47
-Transfer/sec:      1.93MB
+    Latency     6.73ms    3.16ms  90.29ms   94.46%
+    Req/Sec   151.20     16.58   191.00     73.67%
+  45231 requests in 30.02s, 87.90MB read
+Requests/sec:   1506.47
+Transfer/sec:      2.93MB
 ```
 
 ## Roadmap
