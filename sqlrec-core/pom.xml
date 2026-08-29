@@ -35,6 +35,17 @@
             <version>${hive.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>3.1.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>org.sqlrec</groupId>
             <artifactId>sqlrec-sql-parser</artifactId>
             <version>${sqlrec.version}</version>

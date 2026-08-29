@@ -48,7 +48,7 @@ docker run --rm -d --name sqlrec-demo \
 After the service starts, open the CLI, insert test data, and call the recommendation function:
 
 ```bash
-docker exec -it sqlrec-demo sh /app/cli.sh
+docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 ```sql

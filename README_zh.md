@@ -49,7 +49,7 @@ docker run --rm -d --name sqlrec-demo \
 服务启动后，进入 CLI，写入测试数据并调用推荐函数：
 
 ```bash
-docker exec -it sqlrec-demo sh /app/cli.sh
+docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 ```sql

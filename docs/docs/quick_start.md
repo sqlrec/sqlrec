@@ -24,7 +24,7 @@ docker logs -f sqlrec-demo
 执行下面的命令进入容器内置的 SQLRec CLI，其使用方式与通过 beeline 连接 SQLRec 基本一致：
 
 ```bash
-docker exec -it sqlrec-demo sh /app/cli.sh
+docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 可以先查看 Demo 已经加载的对象：

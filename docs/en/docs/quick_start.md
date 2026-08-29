@@ -24,7 +24,7 @@ After startup completes, press `Ctrl+C` to stop following the logs. The containe
 Run the bundled SQLRec CLI inside the container. Its usage is similar to connecting to SQLRec with beeline:
 
 ```bash
-docker exec -it sqlrec-demo sh /app/cli.sh
+docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 Start by inspecting the objects loaded by the demo:
