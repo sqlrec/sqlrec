@@ -4,7 +4,7 @@
 
 一个支持使用 SQL 进行开发的推荐引擎，目标是让懂数据科学的人，包括数据分析师、数据工程师、后端开发等，都能快速搭建生产可用的推荐系统。系统架构参考下图，SQLRec 将底层的组件访问、模型训练、推理等流程使用 SQL 封装，上层推荐业务逻辑仅使用 SQL 进行描述即可。
 
-![system_architecture](/sqlrec_arch.png)
+![system_architecture](/sqlrec_arch.svg)
 
 SQLRec 有以下特点：
 - 云原生，自带基于 minikube 的部署脚本，可以一键部署 SQLRec 系统和相关的依赖服务

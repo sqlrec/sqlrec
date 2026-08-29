@@ -21,7 +21,7 @@
 
 A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SQLRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
 
-![system_architecture](docs/public/sqlrec_arch.png)
+![system_architecture](docs/public/sqlrec_arch.svg)
 
 SQLRec has the following features:
 - Cloud-native, comes with minikube-based deployment scripts for one-click deployment of the SQLRec system and related dependency services
