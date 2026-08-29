@@ -311,6 +311,11 @@ public class ProxyAllBindable extends BindableInterface {
     }
 
     @Override
+    public boolean containsReturn() {
+        return delegate.containsReturn();
+    }
+
+    @Override
     public void setIgnoreException(boolean ignoreException) {
         delegate.setIgnoreException(ignoreException);
     }

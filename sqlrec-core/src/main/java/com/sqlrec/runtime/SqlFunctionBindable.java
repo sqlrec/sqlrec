@@ -2,9 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.utils.ExecutorServiceUtils;
-import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -19,7 +17,6 @@ public class SqlFunctionBindable extends BindableInterface {
     private String funName;
     private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;
     private List<BindableInterface> bindableList;
-    private String returnTableName;
     private List<RelDataTypeField> returnDataFields;
 
     private Set<String> readTables;
@@ -32,12 +29,10 @@ public class SqlFunctionBindable extends BindableInterface {
     public SqlFunctionBindable(
             List<Map.Entry<String, List<RelDataTypeField>>> inputTables,
             List<BindableInterface> bindableList,
-            String returnTableName,
             List<RelDataTypeField> returnDataFields
     ) {
         this.inputTables = inputTables;
         this.bindableList = bindableList;
-        this.returnTableName = returnTableName;
         this.returnDataFields = returnDataFields;
     }
 
@@ -58,12 +53,15 @@ public class SqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        ExecuteContextImpl functionContext = ((ExecuteContextImpl) context).clone();
+        ExecuteContextImpl functionContext = ((ExecuteContextImpl) context).createFunctionContext();
         try {
             if (SqlRecConfigs.PARALLELISM_EXEC.getValue()) {
                 execInParallel(schema, functionContext);
             } else {
                 for (BindableInterface bindable : bindableList) {
+                    if (functionContext.hasReturnedFromFunction()) {
+                        break;
+                    }
                     bindable.bind(schema, functionContext);
                 }
             }
@@ -73,11 +71,10 @@ public class SqlFunctionBindable extends BindableInterface {
             throw e;
         }
 
-        if (returnTableName == null) {
-            return null;
+        if (functionContext.hasReturnedFromFunction()) {
+            return functionContext.getFunctionReturnResult();
         }
-        CacheTable cacheTable = SchemaUtils.getCacheTable(returnTableName, schema);
-        return cacheTable.scan(null);
+        throw new IllegalStateException("SQL function completed without executing a RETURN statement");
     }
 
     private void execInParallel(CalciteSchema schema, ExecuteContext context) {
@@ -88,7 +85,7 @@ public class SqlFunctionBindable extends BindableInterface {
             CompletableFuture<Object> bindFuture;
             if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
                 bindFuture = CompletableFuture.supplyAsync(
-                        () -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
+                        () -> bindUnlessReturned(bindable, schema, context), ExecutorServiceUtils.getExecutorService()
                 );
             } else {
                 List<CompletableFuture<Object>> dependentBindFutures = new ArrayList<>();
@@ -99,7 +96,7 @@ public class SqlFunctionBindable extends BindableInterface {
                         dependentBindFutures.toArray(new CompletableFuture[0])
                 );
                 bindFuture = dependentBindFuturesAll.thenApplyAsync(
-                        (v) -> bindable.bind(schema, context), ExecutorServiceUtils.getExecutorService()
+                        (v) -> bindUnlessReturned(bindable, schema, context), ExecutorServiceUtils.getExecutorService()
                 );
             }
             bindFuture.whenComplete((result, ex) -> {
@@ -119,6 +116,18 @@ public class SqlFunctionBindable extends BindableInterface {
             bindFutures.values().forEach(f -> f.cancel(true));
             throw e;
         }
+    }
+
+    private Enumerable<Object[]> bindUnlessReturned(
+            BindableInterface bindable,
+            CalciteSchema schema,
+            ExecuteContext context
+    ) {
+        ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
+        if (functionContext.hasReturnedFromFunction()) {
+            return null;
+        }
+        return bindable.bind(schema, context);
     }
 
     @Override
@@ -192,14 +201,6 @@ public class SqlFunctionBindable extends BindableInterface {
         this.bindableList = bindableList;
     }
 
-    public String getReturnTableName() {
-        return returnTableName;
-    }
-
-    public void setReturnTableName(String returnTableName) {
-        this.returnTableName = returnTableName;
-    }
-
     public void setReturnDataFields(List<RelDataTypeField> returnDataFields) {
         this.returnDataFields = returnDataFields;
     }
@@ -267,9 +268,7 @@ public class SqlFunctionBindable extends BindableInterface {
     private void initExceptionIgnore() {
         Map<Integer, Boolean> isUnionSource = TopologicalSortUtils.getIsUnionSource(
                 bindableList,
-                bindableDependency,
-                sortedBindableList,
-                returnTableName
+                sortedBindableList
         );
         for (int i = 0; i < bindableList.size(); i++) {
             BindableInterface bindable = bindableList.get(i);

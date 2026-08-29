@@ -19,6 +19,10 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.sqlrec</groupId>
             <artifactId>sqlrec-core</artifactId>
             <version>${sqlrec.version}</version>

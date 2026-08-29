@@ -534,26 +534,54 @@ DEFINE INPUT TABLE input_data LIKE source_table;
 
 ### RETURN
 
-从函数中返回结果。
+从 SQL 函数中返回结果并提前结束本次函数执行。`RETURN` 可以直接返回缓存表，也可以执行 `SELECT` 或同步 `CALL` 并返回其结果。
 
 **语法：**
 
 ```sql
-RETURN [table_name]
+RETURN
+RETURN table_name
+RETURN select_statement
+RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
 ```
 
 **参数：**
 
 | 参数 | 描述 |
 |------|------|
-| `table_name` | 可选。要返回的表名 |
+| `table_name` | 要返回的缓存表（`CacheTable`）名称，不能是普通外部表 |
+| `select_statement` | 作为函数结果返回的 SELECT 查询 |
+| `CALL ...` | 调用 SQL/Java 函数并返回其结果；动态调用仍需通过 `LIKE` 指定返回模式 |
+
+**规则：**
+
+- `RETURN;` 表示函数正常结束但不返回数据。
+- 顶层 `RETURN` 是 SQL 函数定义的结束标志；即使函数体中的 `IF` 已包含提前返回，函数定义末尾仍需提供顶层 `RETURN`。顶层 `RETURN` 之后不能再定义其他函数体语句。
+- `IF` 分支内的 `RETURN` 只在运行时提前结束函数，不会在编译时结束函数定义。
+- 函数内所有可能执行的 `RETURN` 必须具有一致的返回模式：要么全部为空返回，要么全部返回列数、列名和列类型一致的数据。
+- `RETURN CALL ... ASYNC` 不受支持，因为异步调用无法作为当前函数的同步返回值。
 
 **示例：**
 
 ```sql
+-- 空返回
 RETURN;
 
+-- 返回已有缓存表
 RETURN result_table;
+
+-- 直接返回查询结果，无需先创建匿名缓存表
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+
+-- 返回函数调用结果
+RETURN CALL rerank(candidates);
+
+-- IF 中提前返回；最后一条顶层 RETURN 仍是函数定义结束标志，
+-- 并在条件为 false 时作为后备返回
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+);
+RETURN SELECT id FROM candidates;
 ```
 
 
@@ -697,7 +725,7 @@ IF [TIMEIN] (condition) THEN (statement) [ELSE (statement)]
 |------|------|
 | `TIMEIN` | 可选。指定为超时模式，条件返回超时时间（毫秒） |
 | `condition` | 条件表达式。普通模式返回布尔值，超时模式返回数值（毫秒） |
-| `statement` | 任意可执行语句：`CACHE TABLE`、`SELECT`/`INSERT`/`UPDATE`/`DELETE`、`ASSERT`、`CALL`、`SET`、嵌套 `IF` 等 |
+| `statement` | 可执行语句：`CACHE TABLE`、`SELECT`/`INSERT`/`UPDATE`/`DELETE`、`ASSERT`、`CALL`、`SET` 或 `RETURN` |
 | `ELSE` | 可选。普通模式下可选，超时模式下必需 |
 
 **描述：**
@@ -708,12 +736,18 @@ IF 语句支持两种执行模式：
 2. **超时模式**（TIMEIN）：条件表达式必须返回数值类型的超时时间（毫秒）
    - 如果超时时间 > 0，执行 THEN 子句并设置超时；如果超时则回退到 ELSE 子句
    - 如果超时时间 <= 0，立即执行 THEN 子句
+   - 当超时时间 > 0 时，THEN 执行超时或抛出异常会丢弃其临时 `RETURN` 状态，再执行 ELSE，因而不会把失败分支的结果提交给函数
 
 **注意：**
+- 条件查询必须恰好返回一行一列。普通模式下该值必须是 BOOLEAN（NULL 按 false 处理）；TIMEIN 模式下必须是数值。
 - THEN 和 ELSE 子句必须同为 CACHE 语句，或同为非 CACHE 语句，不允许混用
 - 两分支均为 CACHE 语句时：必须写入相同的表名，且表结构必须兼容
 - 两分支均为非 CACHE 语句时：两个分支的返回字段结构必须兼容
-- 超时模式下必须提供 ELSE 子句，且 THEN 子句必须是 CACHE 语句
+- IF 包含 `RETURN` 时，仅支持两种结构：THEN 返回且没有 ELSE；或者 THEN 和 ELSE 都返回。不能只在 ELSE 返回，也不能将返回分支与非返回 ELSE 混用
+- 两个分支都返回时，返回模式必须兼容；函数中其他返回点也必须采用相同模式
+- THEN 返回且没有 ELSE 时，如果条件为 false，函数继续执行 IF 后面的语句
+- TIMEIN 模式必须提供 ELSE；两个分支必须同为 CACHE，或同为 RETURN
+- 当前不支持在 THEN 或 ELSE 中直接嵌套另一个 IF
 - 无 ELSE 子句且条件为 false 时：若 THEN 子句为 CACHE 语句，对应的缓存表会被注册为空表（若尚不存在），保证后续语句可正常引用
 
 **示例：**
@@ -742,14 +776,28 @@ IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
     ASSERT SELECT COUNT(*) > 0 FROM source_table
 );
 
--- 嵌套 IF
-IF (SELECT flag FROM config_table) THEN (
-    IF (SELECT COUNT(*) > 10 FROM source_table) THEN (
-        SELECT 1 AS result
-    ) ELSE (
-        SELECT 2 AS result
-    )
+-- SQL 函数中提前返回：无 ELSE 时，条件为 false 会继续执行
+IF (SELECT COUNT(*) = 0 FROM source_table) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
 );
+RETURN SELECT id FROM source_table;
+
+-- 两个分支都返回，且返回模式一致
+IF (SELECT use_primary FROM config_table) THEN (
+    RETURN SELECT id, score FROM primary_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+-- 即使两个分支都会返回，仍需使用顶层 RETURN 结束函数定义
+RETURN SELECT id, score FROM fallback_result;
+
+-- TIMEIN 同样支持 RETURN；超时或异常时执行 ELSE
+IF TIMEIN (SELECT 1000) THEN (
+    RETURN SELECT id, score FROM slow_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+RETURN SELECT id, score FROM fallback_result;
 ```
 
 

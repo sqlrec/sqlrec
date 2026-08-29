@@ -16,6 +16,7 @@ import com.sqlrec.sql.parser.SqlAssert;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
+import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -103,7 +104,9 @@ public class CompileManager {
         }
 
         BindableInterface bindable;
-        if (flinkSqlNode instanceof SqlCallSqlFunction) {
+        if (flinkSqlNode instanceof SqlReturn) {
+            bindable = getReturnBindable((SqlReturn) flinkSqlNode, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlCallSqlFunction) {
             bindable = getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
         } else if (flinkSqlNode instanceof SqlIfCache) {
             bindable = getIfBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
@@ -119,6 +122,41 @@ public class CompileManager {
 
         bindable.setSql(originSql);
         return bindable;
+    }
+
+    private BindableInterface getReturnBindable(
+            SqlReturn sqlReturn,
+            CalciteSchema schema,
+            String defaultSchema
+    ) throws Exception {
+        ReturnBindable returnBindable;
+        if (sqlReturn.getTableName() != null) {
+            String tableName = sqlReturn.getTableName().getSimple();
+            CalciteSchema.TableEntry tableEntry = schema.getTable(tableName, false);
+            if (tableEntry == null) {
+                throw new Exception("return table not found: " + tableName);
+            }
+            if (!(tableEntry.getTable() instanceof CacheTable)) {
+                throw new Exception("return table is not cache table");
+            }
+            CacheTable cacheTable = (CacheTable) tableEntry.getTable();
+            returnBindable = new ReturnBindable(tableName, cacheTable.getDataFields());
+        } else if (sqlReturn.getCallSqlFunction() != null) {
+            SqlCallSqlFunction call = sqlReturn.getCallSqlFunction();
+            if (call.isAsync()) {
+                throw new Exception("async function is not supported in return statement");
+            }
+            returnBindable = new ReturnBindable(getCallSqlFunctionBindable(call, schema));
+        } else if (sqlReturn.getSelect() != null) {
+            BindableInterface selectBindable = getNormalSqlBindable(
+                    getSqlStr(sqlReturn.getSelect()), schema, defaultSchema
+            );
+            returnBindable = new ReturnBindable(selectBindable);
+        } else {
+            returnBindable = new ReturnBindable((BindableInterface) null);
+        }
+
+        return returnBindable;
     }
 
     private BindableInterface getCallSqlFunctionBindable(
@@ -154,7 +192,11 @@ public class CompileManager {
         throw new Exception("cache sql obj is invalid");
     }
 
-    private BindableInterface getIfBindable(SqlIfCache ifCache, CalciteSchema schema, String defaultSchema) throws Exception {
+    private BindableInterface getIfBindable(
+            SqlIfCache ifCache,
+            CalciteSchema schema,
+            String defaultSchema
+    ) throws Exception {
         SqlNode conditionNode = ifCache.getCondition();
         SqlNode thenClause = ifCache.getThenClause();
         SqlNode elseClause = ifCache.getElseClause();
@@ -183,10 +225,11 @@ public class CompileManager {
         return new IfBindable(conditionBindable, thenBindable, elseBindable, timein);
     }
 
-    private BindableInterface compileIfBranch(SqlNode branch, CalciteSchema schema, String defaultSchema) throws Exception {
-        if (!SqlTypeChecker.isFlinkSqlCompilable(branch, schema, defaultSchema)) {
-            throw new Exception("IF branch statement is not executable: " + getSqlStr(branch));
-        }
+    private BindableInterface compileIfBranch(
+            SqlNode branch,
+            CalciteSchema schema,
+            String defaultSchema
+    ) throws Exception {
         // IF assembly relies on the concrete branch type for validation and cache-table handling.
         // Only the completed IF node is exposed as an executable proxy.
         return compileRawSql(branch, schema, defaultSchema, getSqlStr(branch));

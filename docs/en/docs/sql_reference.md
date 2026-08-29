@@ -534,26 +534,54 @@ DEFINE INPUT TABLE input_data LIKE source_table;
 
 ### RETURN
 
-Return result from a function.
+Return a result from a SQL function and finish the current invocation early. `RETURN` can return a cache table directly, or execute a `SELECT` or synchronous `CALL` and return its result.
 
 **Syntax:**
 
 ```sql
-RETURN [table_name]
+RETURN
+RETURN table_name
+RETURN select_statement
+RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
 ```
 
 **Parameters:**
 
 | Parameter | Description |
 |-----------|-------------|
-| `table_name` | Optional. Table name to return |
+| `table_name` | Name of a cache table (`CacheTable`) to return; ordinary external tables are not accepted |
+| `select_statement` | SELECT query whose result becomes the function result |
+| `CALL ...` | Invoke a SQL/Java function and return its result; dynamic calls still require `LIKE` to declare the result schema |
+
+**Rules:**
+
+- `RETURN;` completes the function normally without returning data.
+- A top-level `RETURN` terminates the SQL function definition. Even when an `IF` in the body can return early, the definition must still end with a top-level `RETURN`. No function-body statement may follow it.
+- A `RETURN` inside an `IF` only exits the invocation at runtime; it does not terminate the function definition at compile time.
+- Every possible `RETURN` in a function must use one consistent result schema: either all returns are empty, or all return the same column count, names, and types.
+- `RETURN CALL ... ASYNC` is not supported because an asynchronous invocation cannot provide the synchronous result of the current function.
 
 **Examples:**
 
 ```sql
+-- Empty return
 RETURN;
 
+-- Return an existing cache table
 RETURN result_table;
+
+-- Return a query directly without creating an anonymous cache table
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+
+-- Return a function invocation
+RETURN CALL rerank(candidates);
+
+-- Return early from IF. The final top-level RETURN still terminates the
+-- function definition and is the fallback when the condition is false.
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+);
+RETURN SELECT id FROM candidates;
 ```
 
 
@@ -697,7 +725,7 @@ IF [TIMEIN] (condition) THEN (statement) [ELSE (statement)]
 |-----------|-------------|
 | `TIMEIN` | Optional. Specifies timeout mode, where the condition returns a timeout value in milliseconds |
 | `condition` | Condition expression. Returns a boolean in normal mode, or a numeric value (milliseconds) in timeout mode |
-| `statement` | Any executable statement: `CACHE TABLE`, `SELECT`/`INSERT`/`UPDATE`/`DELETE`, `ASSERT`, `CALL`, `SET`, nested `IF`, etc. |
+| `statement` | An executable statement: `CACHE TABLE`, `SELECT`/`INSERT`/`UPDATE`/`DELETE`, `ASSERT`, `CALL`, `SET`, or `RETURN` |
 | `ELSE` | Optional. Optional in normal mode, required in timeout mode |
 
 **Description:**
@@ -708,12 +736,18 @@ The IF statement supports two execution modes:
 2. **Timeout Mode** (TIMEIN): The condition expression must return a numeric timeout value in milliseconds
    - If timeout > 0, executes the THEN clause with the specified timeout; falls back to the ELSE clause if timeout occurs
    - If timeout <= 0, executes the THEN clause immediately
+   - When timeout > 0, if THEN times out or throws, its temporary `RETURN` state is discarded before ELSE runs, so a failed branch cannot publish a function result
 
 **Notes:**
+- The condition query must return exactly one row and one column. In normal mode the value must be BOOLEAN (NULL is treated as false); in TIMEIN mode it must be numeric.
 - THEN and ELSE clauses must be both CACHE statements or both non-CACHE statements; mixing is not allowed
 - When both branches are CACHE statements: they must write to the same table name with compatible table schemas
 - When both branches are non-CACHE statements: the return field structures of the two branches must be compatible
-- In timeout mode, an ELSE clause is required, and the THEN clause must be a CACHE statement
+- An IF containing `RETURN` has only two valid shapes: a returning THEN with no ELSE, or both THEN and ELSE returning. An ELSE-only return and a returning THEN paired with a non-returning ELSE are rejected
+- When both branches return, their result schemas must be compatible; every other return point in the function must use the same schema
+- When THEN returns and ELSE is omitted, a false condition continues with the statements following the IF
+- TIMEIN requires ELSE; both branches must be CACHE statements or both must be RETURN statements
+- Directly nesting another IF in THEN or ELSE is currently unsupported
 - With no ELSE clause and a false condition: if the THEN clause is a CACHE statement, the corresponding cache table is registered as an empty table (if it does not already exist), so subsequent statements can reference it normally
 
 **Examples:**
@@ -742,14 +776,28 @@ IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
     ASSERT SELECT COUNT(*) > 0 FROM source_table
 );
 
--- Nested IF
-IF (SELECT flag FROM config_table) THEN (
-    IF (SELECT COUNT(*) > 10 FROM source_table) THEN (
-        SELECT 1 AS result
-    ) ELSE (
-        SELECT 2 AS result
-    )
+-- Early return in a SQL function. With no ELSE, false continues execution.
+IF (SELECT COUNT(*) = 0 FROM source_table) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
 );
+RETURN SELECT id FROM source_table;
+
+-- Both branches return the same schema
+IF (SELECT use_primary FROM config_table) THEN (
+    RETURN SELECT id, score FROM primary_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+-- A top-level RETURN is still required to terminate the function definition
+RETURN SELECT id, score FROM fallback_result;
+
+-- TIMEIN also supports RETURN; timeout or failure selects ELSE
+IF TIMEIN (SELECT 1000) THEN (
+    RETURN SELECT id, score FROM slow_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+RETURN SELECT id, score FROM fallback_result;
 ```
 
 

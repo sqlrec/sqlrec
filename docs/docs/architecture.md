@@ -180,10 +180,10 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | `CREATE SERVICE s OF m CHECKPOINT c` | `SqlCreateService` | 部署在线推理 Deployment |
 | `CREATE SQL FUNCTION f ...` | `SqlCreateSqlFunction` | 开始多语句函数定义 |
 | `DEFINE INPUT TABLE t LIKE other / (col type...)` | `SqlDefineInputTable` | 声明函数入参表 schema |
-| `RETURN TABLE t` | `SqlReturn` | 结束函数定义，指定返回表 |
+| `RETURN [t / SELECT ... / CALL ...]` | `SqlReturn` | 返回空值、缓存表、查询或同步函数调用；顶层 RETURN 结束函数定义，IF 内 RETURN 可提前结束执行 |
 | `CALL f(t1, t2) [LIKE ...] [ASYNC] [PARTITION BY t SIZE n]` | `SqlCallSqlFunction` | 调用 SQL/Java 函数，支持异步与分区并行 |
 | `CACHE TABLE t AS SELECT ... / CALL ...` | `SqlCache` | 物化缓存表 |
-| `IF (cond) CACHE ... [ELSE ...]` | `SqlIfCache` | 条件缓存（`timein` 支持时间窗内复用） |
+| `IF [TIMEIN] (cond) THEN (stmt) [ELSE (stmt)]` | `SqlIfCache` | 条件执行 CACHE、CRUD、ASSERT、CALL、SET 或 RETURN；TIMEIN 为正超时值时在超时/异常后回退 ELSE |
 | `ASSERT SELECT ...` | `SqlAssert` | 非空断言（数据质量门禁） |
 | `CREATE API a WITH f` | `SqlCreateApi` | 把函数发布为 REST API |
 | `FLUSH` | `SqlFlush` | 失效全部缓存 |
@@ -213,12 +213,14 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 ```
 FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
    → FUNCTION_PARAM (0..n 条 DEFINE INPUT TABLE)
-   → FUNCTION_BODY (任意 SQL / CACHE / CALL，编译为 ProxyAllBindable 加入列表)
-   → FUNCTION_RETURN (RETURN TABLE t) → isFunctionCompileFinish
+   → FUNCTION_BODY (任意 SQL / CACHE / CALL / IF，包括 IF 内提前 RETURN)
+   → FUNCTION_RETURN (顶层 RETURN / RETURN t / RETURN SELECT / RETURN CALL)
+   → isFunctionCompileFinish
 ```
 
 - 输入表若无 `LIKE`，用占位 `CacheTable(enumerable=null)` 注册进临时 schema，使函数体 SQL 能通过校验；
 - 函数体内 `CACHE` 语句的表同样以占位 CacheTable 注册（同名重复时以序号命名 proxyBindable）；
+- IF 内 RETURN 参与返回模式校验但不推进状态机；只有顶层 RETURN 才结束函数定义，且所有返回点必须同为空返回或具有相同 schema；
 - 完成后由 `SqlExecutor.saveSqlFunction()` 持久化（JSON 语句列表）到元数据库，并 `CacheManager.invalidateAll()` 立即驱逐旧编译产物。
 
 ### 5.3 NormalSqlCompiler（Calcite 编译全流程）
@@ -274,13 +276,14 @@ BindableInterface
  ├─ FunctionProxyBindable  CALL 语句代理：静态绑定（delegate）或运行时按变量解析函数名；
  │                          支持 ASYNC（提交虚拟线程后返回 null）与 PARTITION BY t SIZE n
  │                          （按分区表行数切分，clone context，每分区独立 schema，并发执行合并）
- ├─ SqlFunctionBindable    SQL 函数本体：ProxyAllBindable 列表顺序执行 + 输入表 schema + 返回表
+ ├─ SqlFunctionBindable    SQL 函数本体：按依赖串行/并行执行节点；RETURN 后跳过尚未执行的节点
+ ├─ ReturnBindable         RETURN 语句：返回缓存表或委托 SELECT/CALL，并写入当前函数帧的 ReturnState
  ├─ ProxyAllBindable       节点执行包装：超时、取消、Trace、Metrics 和日志；
  │                          根据 isIgnoreException() 和缓存表元数据统一恢复可忽略异常并计数
  ├─ CallSqlFunctionBindable 函数调用绑定（校验输入表存在性）
  ├─ JavaFunctionBindable   Java table UDF 绑定
- ├─ IfBindable             条件分支：条件是标量 SELECT，then/else 为任意 Bindable；
- │                          else 缺省时校验 then 缓存表与已有表 schema 兼容（增量更新语义）
+ ├─ IfBindable             条件分支：条件是单行单列 SELECT；支持 CACHE、CRUD、CALL、SET、ASSERT、RETURN；
+ │                          TIMEIN 在隔离 ReturnState 中执行 THEN，超时/异常时丢弃临时结果并回退 ELSE
  ├─ AssertBindable         断言：SELECT 结果为空则抛异常
  └─ SetBindable            变量设置（context.setVariable）
 ```
@@ -446,7 +449,7 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 4. **服务**（service/）：`recall_service_user/item`、`rank_service`（绑定导出 checkpoint 部署）；
 5. **API**（api/）：`main_rec` 发布为 REST API。
 
-编程模型要点：`IF + CACHE` 表达"时间窗内复用缓存"；`CALL ... ASYNC` 表达旁路落盘；`ASSERT` 做数据门禁；变量（`get_or_default`/`SET`）做请求级参数传递。
+编程模型要点：`IF` 表达条件执行，`IF TIMEIN` 在超时值大于 0 时为 THEN 设置毫秒级超时并在失败时回退 ELSE，`IF + RETURN` 支持函数提前返回；`CALL ... ASYNC` 表达旁路落盘；`ASSERT` 做数据门禁；变量（`get_or_default`/`SET`）做请求级参数传递。
 
 ## 13. 可观测性
 

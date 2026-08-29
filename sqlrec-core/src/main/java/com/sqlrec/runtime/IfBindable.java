@@ -47,31 +47,42 @@ public class IfBindable extends BindableInterface {
         this.elseClause = elseClause;
         this.timein = timein;
 
-        boolean thenIsCache = thenClause instanceof CacheTableBindable;
-        if (elseClause != null) {
-            boolean elseIsCache = elseClause instanceof CacheTableBindable;
-            if (thenIsCache != elseIsCache) {
-                throw new RuntimeException(
-                        "thenClause and elseClause must be both cache statements or both non-cache statements");
-            }
-            if (thenIsCache) {
-                if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
-                    throw new RuntimeException("thenClause and elseClause must have the same table name");
-                }
-                DataTypeUtils.checkTableSchemaSame(
-                        ((CacheTableBindable) thenClause).getTableDataFields(),
-                        ((CacheTableBindable) elseClause).getTableDataFields()
-                );
-            } else {
-                checkReturnFieldsCompatible();
-            }
-        } else {
-            if (timein) {
-                throw new RuntimeException("must contain else clause when in timein mode");
-            }
+        boolean thenReturns = thenClause.containsReturn();
+        boolean elseReturns = elseClause != null && elseClause.containsReturn();
+        boolean containsReturn = thenReturns || elseReturns;
+        if (containsReturn && (!thenReturns || (elseClause != null && !elseReturns))) {
+            throw new RuntimeException(
+                    "IF with RETURN must either omit ELSE or return from both THEN and ELSE branches"
+            );
         }
 
-        if (timein && !thenIsCache) {
+        boolean thenIsCache = thenClause instanceof CacheTableBindable;
+        if (elseClause != null) {
+            if (containsReturn) {
+                checkReturnFieldsCompatible();
+            } else {
+                boolean elseIsCache = elseClause instanceof CacheTableBindable;
+                if (thenIsCache != elseIsCache) {
+                    throw new RuntimeException(
+                            "thenClause and elseClause must be both cache statements or both non-cache statements");
+                }
+                if (thenIsCache) {
+                    if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
+                        throw new RuntimeException("thenClause and elseClause must have the same table name");
+                    }
+                    DataTypeUtils.checkTableSchemaSame(
+                            ((CacheTableBindable) thenClause).getTableDataFields(),
+                            ((CacheTableBindable) elseClause).getTableDataFields()
+                    );
+                } else {
+                    checkReturnFieldsCompatible();
+                }
+            }
+        } else if (elseClause == null && timein) {
+            throw new RuntimeException("must contain else clause when in timein mode");
+        }
+
+        if (timein && !thenIsCache && !thenReturns) {
             throw new RuntimeException("timein mode only supports cache statement in then clause");
         }
     }
@@ -174,14 +185,19 @@ public class IfBindable extends BindableInterface {
     }
 
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
-        ExecuteContextImpl thenContext = ((ExecuteContextImpl) context).clone();
+        ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
+        boolean containsReturn = containsReturn();
+        ExecuteContextImpl thenContext = containsReturn
+                ? functionContext.createIsolatedReturnContext()
+                : functionContext.clone();
         CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
                 () -> thenClause.bind(schema, thenContext),
                 ExecutorServiceUtils.getExecutorService()
         );
 
+        Enumerable<Object[]> result;
         try {
-            return future.get(timeout, TimeUnit.MILLISECONDS);
+            result = future.get(timeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             thenContext.cancel();
             future.cancel(true);
@@ -203,6 +219,11 @@ public class IfBindable extends BindableInterface {
             incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
             return elseClause.bind(schema, context);
         }
+
+        if (containsReturn) {
+            functionContext.commitFunctionReturnFrom(thenContext);
+        }
+        return result;
     }
 
     private void incrementFallbackMetric(ExecuteContext context, String metricName) {
@@ -221,6 +242,11 @@ public class IfBindable extends BindableInterface {
     public boolean isParallelizable() {
         return condition.isParallelizable() && thenClause.isParallelizable() &&
                 (elseClause == null || elseClause.isParallelizable());
+    }
+
+    @Override
+    public boolean containsReturn() {
+        return thenClause.containsReturn();
     }
 
     @Override

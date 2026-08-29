@@ -5,6 +5,7 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CacheTableBindable;
 import com.sqlrec.runtime.IfBindable;
 import com.sqlrec.runtime.ProxyAllBindable;
+import com.sqlrec.runtime.ReturnBindable;
 import com.sqlrec.runtime.SetBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompileManagerProxyTest {
 
@@ -75,7 +77,7 @@ class CompileManagerProxyTest {
         ));
         SqlFunctionBindable function = compiler.getFunctionBindable();
 
-        assertEquals(1, function.getBindableList().size());
+        assertEquals(2, function.getBindableList().size());
         ProxyAllBindable statement = assertInstanceOf(
                 ProxyAllBindable.class,
                 function.getBindableList().get(0)
@@ -88,5 +90,21 @@ class CompileManagerProxyTest {
         ProxyAllBindable functionProxy = assertInstanceOf(ProxyAllBindable.class, executableFunction);
         assertSame(function, functionProxy.getDelegate());
         assertEquals("proxy_test", executableFunction.getName());
+    }
+
+    @Test
+    void compileReturnProducesAProxyThatPreservesReturnSemantics() throws Exception {
+        String sql = "RETURN SELECT 1 AS id";
+        BindableInterface bindable = new CompileManager().compileSql(
+                CompileManager.parseFlinkSql(sql),
+                CalciteSchema.createRootSchema(false),
+                Consts.DEFAULT_SCHEMA_NAME,
+                sql
+        );
+
+        ProxyAllBindable proxy = assertInstanceOf(ProxyAllBindable.class, bindable);
+        assertInstanceOf(ReturnBindable.class, proxy.getDelegate());
+        assertTrue(proxy.containsReturn());
+        assertEquals("return", proxy.getName());
     }
 }

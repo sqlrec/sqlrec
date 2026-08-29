@@ -598,23 +598,51 @@ CALL my_function(input_table) ASYNC;
 
 ### 函数返回结果
 
-函数通过 `RETURN` 语句返回结果。
+函数通过 `RETURN` 语句返回结果。RETURN 一旦在运行时执行，当前函数会立即结束，尚未执行的后续节点不会再执行。
 
-#### 基本返回
+#### 支持的返回形式
 
 ```sql
+-- 返回已有缓存表
 RETURN result_table;
-```
 
-返回的必须是 CacheTable，通常是函数体中创建的某个缓存表。
+-- 直接返回查询结果
+RETURN SELECT id, score FROM result_table;
 
-#### 空返回
+-- 返回同步函数调用结果
+RETURN CALL post_process(result_table);
 
-```sql
+-- 不返回数据
 RETURN;
 ```
 
-函数可以不返回任何结果，此时函数仅执行副作用（如写入数据）。
+表名形式要求目标是 `CacheTable`，通常是函数体中通过 `CACHE TABLE` 创建的缓存表。`RETURN SELECT` 和 `RETURN CALL` 会直接把对应语句的结果作为函数结果，不需要创建内部匿名缓存表。`RETURN CALL ... ASYNC` 不受支持。
+
+#### 顶层结束标志与提前返回
+
+```sql
+CREATE SQL FUNCTION find_candidates;
+DEFINE INPUT TABLE candidates (id BIGINT, score DOUBLE);
+
+-- IF 内的 RETURN 是运行时提前返回，不结束函数定义
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT id, score FROM candidates
+);
+
+-- 顶层 RETURN 仍是函数定义的结束标志，也处理 IF 条件为 false 的路径
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+```
+
+函数定义必须以顶层 `RETURN` 结束，之后不能再出现函数体语句。IF 中的 RETURN 不作为定义结束标志；它只在该分支实际执行时提前结束函数。
+
+IF 使用 RETURN 时，必须满足以下分支结构之一：
+
+- THEN 返回且没有 ELSE；条件为 false 时继续执行 IF 后面的语句。
+- THEN 和 ELSE 都返回；两个分支的返回模式必须兼容。
+
+不能只在 ELSE 返回，也不能让 THEN 返回而 ELSE 执行普通语句。函数内所有可能的返回点必须全部为空返回，或者具有相同的列数、列名和列类型。
+
+`IF TIMEIN` 也可以在两个分支中使用 RETURN。当超时时间大于 0 时，THEN 超时或抛出异常会丢弃其临时返回状态，然后由 ELSE 设置最终返回值；超时时间小于等于 0 时直接执行 THEN。
 
 #### 返回值的使用
 

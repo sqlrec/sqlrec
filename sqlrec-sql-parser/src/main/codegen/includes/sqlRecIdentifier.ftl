@@ -204,14 +204,24 @@ SqlCall SqlCreateResource() :
 SqlReturn SqlReturn() :
 {
     SqlIdentifier tableName = null;
+    SqlNode select = null;
+    SqlCallSqlFunction callSqlFunction = null;
 }
 {
     <RETURN>
     [
-        tableName = SimpleIdentifier()
+        (
+            <CALL>
+            callSqlFunction = GetCallSqlFunction()
+        |
+            LOOKAHEAD(<SELECT>)
+            select = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
+        |
+            tableName = SimpleIdentifier()
+        )
     ]
     {
-        return new SqlReturn(getPos(), tableName);
+        return new SqlReturn(getPos(), tableName, select, callSqlFunction);
     }
 }
 

@@ -42,6 +42,8 @@ public class FunctionCompiler {
     private List<String> sqlList;
     private Set<String> cacheTableNames;
     private CompileManager compileManager;
+    private List<RelDataTypeField> returnDataFields;
+    private boolean returnDataFieldsInitialized;
 
     public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
         this.isOrReplace = false;
@@ -54,7 +56,6 @@ public class FunctionCompiler {
         this.sqlFunctionBindable = new SqlFunctionBindable(
                 new ArrayList<>(),
                 new ArrayList<>(),
-                null,
                 null
         );
         sqlList = new ArrayList<>();
@@ -64,6 +65,8 @@ public class FunctionCompiler {
             this.compileManager = new CompileManager();
         }
         cacheTableNames = new HashSet<>();
+        returnDataFields = null;
+        returnDataFieldsInitialized = false;
     }
 
     public SqlFunctionBindable getFunctionBindable() {
@@ -155,47 +158,72 @@ public class FunctionCompiler {
 
     private void compileFunctionBody(SqlNode flinkSqlNode, String sql) throws Exception {
         if (flinkSqlNode instanceof SqlReturn) {
-            SqlReturn sqlReturn = (SqlReturn) flinkSqlNode;
-            if (sqlReturn.getTableName() != null) {
-                String returnTableName = sqlReturn.getTableName().getSimple();
-                CalciteSchema.TableEntry tableEntry = schema.getTable(returnTableName, false);
-                if (tableEntry == null) {
-                    throw new Exception("return table not found: " + returnTableName);
-                }
-
-                CacheTable table;
-                if (tableEntry.getTable() instanceof CacheTable) {
-                    table = (CacheTable) tableEntry.getTable();
-                } else {
-                    throw new Exception("return table is not cache table");
-                }
-
-                sqlFunctionBindable.setReturnTableName(returnTableName);
-                sqlFunctionBindable.setReturnDataFields(table.getDataFields());
-            }
-
-            sqlFunctionBindable.init();
-            stage = FunctionCompileStage.FUNCTION_RETURN;
+            compileTopLevelReturn((SqlReturn) flinkSqlNode, sql);
         } else {
-            BindableInterface bindable = compileManager.compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
-            sqlFunctionBindable.getBindableList().add(bindable);
-            if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
-                CacheTable tmpTable = new CacheTable(
-                        bindable.getCacheTableName(),
-                        null,
-                        bindable.getCacheTableDataFields()
-                );
-                schema.add(bindable.getCacheTableName(), tmpTable);
-                if (!cacheTableNames.contains(bindable.getCacheTableName())) {
-                    cacheTableNames.add(bindable.getCacheTableName());
-                    bindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
-                } else {
-                    bindable.setName(sqlFunctionBindable.getFunName() +
-                            ":" + bindable.getCacheTableName() + ":" + sqlFunctionBindable.getBindableList().size());
-                }
+            BindableInterface bindable = compileManager.compileSql(
+                    flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
+            );
+            collectReturnDataFields(bindable);
+            addBodyBindable(bindable, sql, false);
+        }
+    }
+
+    private void compileTopLevelReturn(SqlReturn sqlReturn, String sql) throws Exception {
+        BindableInterface returnBindable = compileManager.compileSql(
+                sqlReturn, schema, Consts.DEFAULT_SCHEMA_NAME, sql
+        );
+        collectReturnDataFields(returnBindable);
+        addBodyBindable(returnBindable, sql, true);
+        sqlFunctionBindable.setReturnDataFields(returnDataFields);
+        sqlFunctionBindable.init();
+        stage = FunctionCompileStage.FUNCTION_RETURN;
+    }
+
+    private void addBodyBindable(BindableInterface bindable, String sql, boolean returnNode) {
+        sqlFunctionBindable.getBindableList().add(bindable);
+        int bindableIndex = sqlFunctionBindable.getBindableList().size();
+        if (returnNode) {
+            bindable.setName(sqlFunctionBindable.getFunName() + ":RETURN");
+        } else if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
+            CacheTable tmpTable = new CacheTable(
+                    bindable.getCacheTableName(),
+                    null,
+                    bindable.getCacheTableDataFields()
+            );
+            schema.add(bindable.getCacheTableName(), tmpTable);
+            if (!cacheTableNames.contains(bindable.getCacheTableName())) {
+                cacheTableNames.add(bindable.getCacheTableName());
+                bindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
             } else {
-                bindable.setName(sqlFunctionBindable.getFunName() + ":" + SchemaUtils.getSqlFirstWord(sql) + ":" + sqlFunctionBindable.getBindableList().size());
+                bindable.setName(sqlFunctionBindable.getFunName() +
+                        ":" + bindable.getCacheTableName() + ":" + bindableIndex);
             }
+        } else {
+            bindable.setName(sqlFunctionBindable.getFunName() + ":" +
+                    SchemaUtils.getSqlFirstWord(sql) + ":" + bindableIndex);
+        }
+    }
+
+    private void collectReturnDataFields(BindableInterface bindable) {
+        if (bindable.containsReturn()) {
+            registerReturnDataFields(bindable.getReturnDataFields());
+        }
+    }
+
+    private void registerReturnDataFields(List<RelDataTypeField> dataFields) {
+        boolean hasDataFields = dataFields != null && !dataFields.isEmpty();
+        if (!returnDataFieldsInitialized) {
+            returnDataFields = hasDataFields ? dataFields : null;
+            returnDataFieldsInitialized = true;
+            return;
+        }
+
+        boolean returnHasDataFields = returnDataFields != null && !returnDataFields.isEmpty();
+        if (returnHasDataFields != hasDataFields) {
+            throw new RuntimeException("return statements must either all return data or all return empty");
+        }
+        if (hasDataFields) {
+            DataTypeUtils.checkTableSchemaSame(returnDataFields, dataFields);
         }
     }
 

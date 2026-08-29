@@ -44,6 +44,10 @@ public abstract class BindableInterface {
         return false;
     }
 
+    public boolean containsReturn() {
+        return false;
+    }
+
     public void setIgnoreException(boolean ignoreException) {
         this.ignoreException = ignoreException;
     }

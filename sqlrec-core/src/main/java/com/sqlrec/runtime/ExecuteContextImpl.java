@@ -7,6 +7,7 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.model.ModelControllerFactory;
 import com.sqlrec.model.ServiceManager;
+import org.apache.calcite.linq4j.Enumerable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ public class ExecuteContextImpl implements ExecuteContext {
     private Map<String, String> metricsTagMap;
     private List<String> funNameStack;
     private Object traceContext;
+    private FunctionReturnState functionReturnState;
 
     private final ExecuteContextImpl parent;
     private volatile boolean cancelled = false;
@@ -28,6 +30,7 @@ public class ExecuteContextImpl implements ExecuteContext {
         variableMap.put(Consts.LOG_ID, UUID.randomUUID().toString());
         metricsTagMap = new ConcurrentHashMap<>();
         funNameStack = new ArrayList<>();
+        functionReturnState = null;
         parent = null;
     }
 
@@ -36,7 +39,15 @@ public class ExecuteContextImpl implements ExecuteContext {
         metricsTagMap = parentContext.metricsTagMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
         traceContext = parentContext.traceContext;
+        functionReturnState = parentContext.functionReturnState;
         parent = parentContext;
+    }
+
+    private ExecuteContextImpl(ExecuteContextImpl parentContext, boolean newFunctionFrame) {
+        this(parentContext);
+        if (newFunctionFrame) {
+            functionReturnState = new FunctionReturnState();
+        }
     }
 
     public String getVariable(String key) {
@@ -107,6 +118,44 @@ public class ExecuteContextImpl implements ExecuteContext {
         return funNameStack;
     }
 
+    public ExecuteContextImpl createFunctionContext() {
+        return new ExecuteContextImpl(this, true);
+    }
+
+    public ExecuteContextImpl createIsolatedReturnContext() {
+        return new ExecuteContextImpl(this, true);
+    }
+
+    public void commitFunctionReturnFrom(ExecuteContextImpl isolatedContext) {
+        if (isolatedContext == null || isolatedContext.functionReturnState == null) {
+            throw new IllegalArgumentException("isolated return context is not available");
+        }
+        if (isolatedContext.functionReturnState == functionReturnState) {
+            throw new IllegalArgumentException("return context is not isolated");
+        }
+        if (isolatedContext.functionReturnState.hasReturned()) {
+            returnFromFunction(isolatedContext.functionReturnState.getResult());
+        }
+    }
+
+    public void returnFromFunction(Enumerable<Object[]> result) {
+        if (functionReturnState == null) {
+            throw new RuntimeException("return statement must execute inside a SQL function");
+        }
+        functionReturnState.complete(result);
+    }
+
+    public boolean hasReturnedFromFunction() {
+        return functionReturnState != null && functionReturnState.hasReturned();
+    }
+
+    public Enumerable<Object[]> getFunctionReturnResult() {
+        if (functionReturnState == null) {
+            throw new IllegalStateException("SQL function return state is not available");
+        }
+        return functionReturnState.getResult();
+    }
+
     @Override
     public void cancel() {
         this.cancelled = true;
@@ -127,5 +176,29 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public ExecuteContextImpl clone() {
         return new ExecuteContextImpl(this);
+    }
+
+    private static class FunctionReturnState {
+        private volatile boolean returned;
+        private Enumerable<Object[]> result;
+
+        private synchronized void complete(Enumerable<Object[]> result) {
+            if (returned) {
+                throw new IllegalStateException("SQL function has already returned");
+            }
+            this.result = result;
+            returned = true;
+        }
+
+        private boolean hasReturned() {
+            return returned;
+        }
+
+        private Enumerable<Object[]> getResult() {
+            if (!returned) {
+                throw new IllegalStateException("SQL function has not returned");
+            }
+            return result;
+        }
     }
 }

@@ -6,6 +6,7 @@ import com.sqlrec.sql.parser.SqlAssert;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
+import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -21,6 +22,9 @@ public class SqlTypeChecker {
     private static final Logger log = LoggerFactory.getLogger(SqlTypeChecker.class);
 
     public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
+        if (flinkSqlNode instanceof SqlReturn) {
+            return true;
+        }
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return true;
         }

@@ -153,6 +153,89 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
+    public void testReturnNodeIsAnExecutionBarrier() {
+        List<BindableInterface> bindableList = List.of(
+                createTestBindable(true, Set.of(), Set.of("left")),
+                createTestBindable(true, Set.of(), Set.of("right")),
+                createReturnBindable(Set.of()),
+                createTestBindable(true, Set.of(), Set.of("after"))
+        );
+
+        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
+
+        assertEquals(Set.of(0, 1), dependency.get(2));
+        assertTrue(dependency.get(3).contains(2));
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(
+                TopologicalSortUtils.optimizeDependency(dependency)
+        );
+        assertTrue(sorted.indexOf(0) < sorted.indexOf(2));
+        assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
+        assertTrue(sorted.indexOf(2) < sorted.indexOf(3));
+    }
+
+    @Test
+    public void testProxyWrappedReturnStillActsAsExecutionBarrier() {
+        List<BindableInterface> bindableList = List.of(
+                createTestBindable(true, Set.of(), Set.of("before")),
+                new com.sqlrec.runtime.ProxyAllBindable(createReturnBindable(Set.of("before"))),
+                createTestBindable(true, Set.of(), Set.of("after"))
+        );
+
+        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
+
+        assertEquals(Set.of(0), dependency.get(1));
+        assertEquals(Set.of(1), dependency.get(2));
+    }
+
+    @Test
+    public void testExceptionAnalysisIgnoresReturnControlEdges() {
+        List<BindableInterface> bindableList = List.of(
+                createTestBindable(true, Set.of(), Set.of("unused")),
+                createTestBindable(true, Set.of(), Set.of("result")),
+                createReturnBindable(Set.of("result"))
+        );
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0), "unused node may recover to an empty cache");
+        assertFalse(unionSources.get(1), "the actual result producer must not hide failures");
+        assertFalse(unionSources.get(2), "RETURN is the result sink");
+    }
+
+    @Test
+    public void testExceptionAnalysisAllowsSourcesFeedingReturnedUnion() {
+        List<BindableInterface> bindableList = List.of(
+                createTestBindable(true, Set.of(), Set.of("left")),
+                createTestBindable(true, Set.of(), Set.of("right")),
+                createTestBindable(true, Set.of("left", "right"), Set.of("result"), true),
+                createReturnBindable(Set.of("result"))
+        );
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0));
+        assertTrue(unionSources.get(1));
+        assertFalse(unionSources.get(2));
+        assertFalse(unionSources.get(3));
+    }
+
+    @Test
+    public void testExceptionAnalysisTreatsEmptyReturnAsHavingNoDataProducer() {
+        List<BindableInterface> bindableList = List.of(
+                createTestBindable(true, Set.of(), Set.of("unused")),
+                createReturnBindable(Set.of())
+        );
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0));
+        assertFalse(unionSources.get(1));
+    }
+
+    @Test
     public void testTopologicalSortWithBindableList() {
         List<BindableInterface> bindableList = new ArrayList<>();
         bindableList.add(createTestBindable(true, Set.of(), Set.of("t1")));
@@ -579,6 +662,15 @@ public class TopologicalSortUtilsTest {
     }
 
     private BindableInterface createTestBindable(boolean parallelizable, Set<String> readTables, Set<String> writeTables) {
+        return createTestBindable(parallelizable, readTables, writeTables, false);
+    }
+
+    private BindableInterface createTestBindable(
+            boolean parallelizable,
+            Set<String> readTables,
+            Set<String> writeTables,
+            boolean union
+    ) {
         return new BindableInterface() {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, com.sqlrec.common.runtime.ExecuteContext context) {
@@ -603,6 +695,45 @@ public class TopologicalSortUtilsTest {
             @Override
             public Set<String> getWriteTables() {
                 return writeTables;
+            }
+
+            @Override
+            public boolean isUnionSql() {
+                return union;
+            }
+        };
+    }
+
+    private BindableInterface createReturnBindable(Set<String> readTables) {
+        return new BindableInterface() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, com.sqlrec.common.runtime.ExecuteContext context) {
+                return null;
+            }
+
+            @Override
+            public List<RelDataTypeField> getReturnDataFields() {
+                return null;
+            }
+
+            @Override
+            public boolean isParallelizable() {
+                return true;
+            }
+
+            @Override
+            public boolean containsReturn() {
+                return true;
+            }
+
+            @Override
+            public Set<String> getReadTables() {
+                return readTables;
+            }
+
+            @Override
+            public Set<String> getWriteTables() {
+                return Set.of();
             }
         };
     }

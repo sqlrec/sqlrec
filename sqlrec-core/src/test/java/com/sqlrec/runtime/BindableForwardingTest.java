@@ -226,4 +226,70 @@ public class BindableForwardingTest {
         assertEquals(Collections.singleton("JF_X"), node.getDependencyJavaFuncName());
         assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"), node.getAllDependSqlFunctionMap());
     }
+
+    @Test
+    void returnBindableForwardsDependencyAndPlanMetadata() {
+        StubBindable inner = new StubBindable(
+                Collections.singleton("FUN_A"),
+                Collections.singleton("JF_X"),
+                Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
+                "logical-a"
+        );
+        ReturnBindable returnBindable = new ReturnBindable(inner);
+
+        assertTrue(returnBindable.containsReturn());
+        assertEquals(Collections.singleton("FUN_A"), returnBindable.getDependencySqlFuncName());
+        assertEquals(Collections.singleton("JF_X"), returnBindable.getDependencyJavaFuncName());
+        assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
+                returnBindable.getAllDependSqlFunctionMap());
+        assertEquals(Collections.singleton("SRC"), returnBindable.getReadTables());
+        assertEquals("logical-a", returnBindable.getLogicalPlan());
+        assertEquals("logical-a-physical", returnBindable.getPhysicalPlan());
+        assertEquals("logical-a-java", returnBindable.getJavaExpression());
+    }
+
+    @Test
+    void ifReturnMergesDependenciesFromBothBranches() {
+        ReturnBindable thenReturn = new ReturnBindable(new StubBindable(
+                Collections.singleton("FUN_A"),
+                Collections.singleton("JF_X"),
+                Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
+                null
+        ));
+        ReturnBindable elseReturn = new ReturnBindable(new StubBindable(
+                Collections.singleton("FUN_B"),
+                Collections.singleton("JF_Y"),
+                Collections.singletonMap("FUN_D", "FUN_B->FUN_D"),
+                null
+        ));
+        IfBindable ifReturn = new IfBindable(
+                newConditionBindable(),
+                thenReturn,
+                elseReturn,
+                false
+        );
+
+        assertTrue(ifReturn.containsReturn());
+        assertEquals(new HashSet<>(Arrays.asList("FUN_A", "FUN_B")),
+                ifReturn.getDependencySqlFuncName());
+        assertEquals(new HashSet<>(Arrays.asList("JF_X", "JF_Y")),
+                ifReturn.getDependencyJavaFuncName());
+        assertEquals(new HashSet<>(Collections.singletonList("SRC")), ifReturn.getReadTables());
+        Map<String, String> expected = new HashMap<>();
+        expected.put("FUN_C", "FUN_A->FUN_C");
+        expected.put("FUN_D", "FUN_B->FUN_D");
+        assertEquals(expected, ifReturn.getAllDependSqlFunctionMap());
+    }
+
+    @Test
+    void proxyForwardsContainsReturn() {
+        ProxyAllBindable proxy = new ProxyAllBindable(new ReturnBindable(new StubBindable(
+                Collections.emptySet(),
+                Collections.emptySet(),
+                Collections.emptyMap(),
+                null
+        )));
+
+        assertTrue(proxy.containsReturn());
+    }
 }

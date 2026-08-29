@@ -184,10 +184,10 @@ Reuses the Flink parser codegen pipeline: `config.fmpp` + `Parser.tdd` (declares
 | `CREATE SERVICE s OF m CHECKPOINT c` | `SqlCreateService` | Deploy an online inference Deployment |
 | `CREATE SQL FUNCTION f ...` | `SqlCreateSqlFunction` | Begin a multi-statement function definition |
 | `DEFINE INPUT TABLE t LIKE other / (col type...)` | `SqlDefineInputTable` | Declare a function input table schema |
-| `RETURN TABLE t` | `SqlReturn` | Finish the function definition, specify the return table |
+| `RETURN [t / SELECT ... / CALL ...]` | `SqlReturn` | Return no data, a cache table, query, or synchronous call; top-level RETURN terminates the definition, while RETURN in IF exits early |
 | `CALL f(t1, t2) [LIKE ...] [ASYNC] [PARTITION BY t SIZE n]` | `SqlCallSqlFunction` | Invoke a SQL/Java function, supports async and partitioned parallelism |
 | `CACHE TABLE t AS SELECT ... / CALL ...` | `SqlCache` | Materialize a cache table |
-| `IF (cond) CACHE ... [ELSE ...]` | `SqlIfCache` | Conditional cache (`timein` supports reuse within a time window) |
+| `IF [TIMEIN] (cond) THEN (stmt) [ELSE (stmt)]` | `SqlIfCache` | Conditionally execute CACHE, CRUD, ASSERT, CALL, SET, or RETURN; with a positive timeout, TIMEIN falls back to ELSE on timeout or failure |
 | `ASSERT SELECT ...` | `SqlAssert` | Non-empty assertion (data quality gate) |
 | `CREATE API a WITH f` | `SqlCreateApi` | Publish a function as a REST API |
 | `FLUSH` | `SqlFlush` | Invalidate all caches |
@@ -217,12 +217,14 @@ All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREA
 ```
 FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
    → FUNCTION_PARAM (0..n DEFINE INPUT TABLE)
-   → FUNCTION_BODY (any SQL / CACHE / CALL, compiled into ProxyAllBindable and added to the list)
-   → FUNCTION_RETURN (RETURN TABLE t) → isFunctionCompileFinish
+   → FUNCTION_BODY (any SQL / CACHE / CALL / IF, including early RETURN inside IF)
+   → FUNCTION_RETURN (top-level RETURN / RETURN t / RETURN SELECT / RETURN CALL)
+   → isFunctionCompileFinish
 ```
 
 - Input tables without `LIKE` are registered into a temporary schema as placeholder `CacheTable(enumerable=null)` so that function body SQL passes validation;
 - Tables of `CACHE` statements inside the function body are likewise registered as placeholder CacheTables (named with sequence numbers when duplicated);
+- RETURN inside IF participates in result-schema validation but does not advance the state machine. Only a top-level RETURN terminates the definition, and all return points must be either empty or use the same schema;
 - Upon completion, `SqlExecutor.saveSqlFunction()` persists it (JSON statement list) to the metadata database and `CacheManager.invalidateAll()` immediately evicts old compilation artifacts.
 
 ### 5.3 NormalSqlCompiler (Full Calcite Compilation Pipeline)
@@ -281,17 +283,18 @@ BindableInterface
  │                          thread and return null) and PARTITION BY t SIZE n (split by partition
  │                          table row count, clone context, independent schema per partition,
  │                          concurrent execution and merge)
- ├─ SqlFunctionBindable    SQL function body: sequential execution of ProxyAllBindable list +
- │                          input table schema + return table
+ ├─ SqlFunctionBindable    SQL function body: dependency-aware serial/parallel node execution;
+ │                          nodes not yet executed are skipped after RETURN
+ ├─ ReturnBindable         RETURN statement: returns a cache table or delegates SELECT/CALL,
+ │                          then writes the result to the current function frame's ReturnState
  ├─ ProxyAllBindable       Node execution wrapper for timeout, cancellation, tracing, metrics,
  │                          and logging; uniformly recovers ignorable failures using
  │                          isIgnoreException() and cache-table metadata
  ├─ CallSqlFunctionBindable Function call binding (validates input table existence)
  ├─ JavaFunctionBindable   Java table UDF binding
- ├─ IfBindable             Conditional branch: condition is a scalar SELECT, then/else are any
- │                          Bindable; when else is absent, validates that the then cache table
- │                          schema is compatible with existing tables (incremental update
- │                          semantics)
+ ├─ IfBindable             Conditional branch: condition is a one-row, one-column SELECT;
+ │                          supports CACHE, CRUD, CALL, SET, ASSERT, and RETURN; TIMEIN runs THEN
+ │                          with isolated ReturnState and discards it before fallback on failure
  ├─ AssertBindable         Assertion: throws an exception if the SELECT result is empty
  └─ SetBindable            Variable setting (context.setVariable)
 ```
@@ -459,7 +462,7 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 4. **Services** (service/): `recall_service_user/item`, `rank_service` (deployed bound to exported checkpoint);
 5. **APIs** (api/): `main_rec` published as a REST API.
 
-Programming model essentials: `IF + CACHE` expresses "reuse cache within a time window"; `CALL ... ASYNC` expresses side-effect persistence; `ASSERT` for data gating; variables (`get_or_default`/`SET`) for request-level parameter passing.
+Programming model essentials: `IF` expresses conditional execution; for a positive timeout, `IF TIMEIN` applies a millisecond timeout to THEN and falls back to ELSE on failure; `IF + RETURN` supports early function exit; `CALL ... ASYNC` expresses side-effect persistence; `ASSERT` provides data gating; variables (`get_or_default`/`SET`) provide request-level parameter passing.
 
 ## 13. Observability
 

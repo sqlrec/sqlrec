@@ -598,23 +598,51 @@ Asynchronous calls return immediately, and the function executes in a background
 
 ### Function Return Results
 
-Functions return results through the `RETURN` statement.
+Functions return results through the `RETURN` statement. Once a RETURN executes at runtime, the current function finishes immediately and later nodes that have not started are skipped.
 
-#### Basic Return
+#### Supported Return Forms
 
 ```sql
+-- Return an existing cache table
 RETURN result_table;
-```
 
-The return must be a CacheTable, usually a cache table created in the function body.
+-- Return a query directly
+RETURN SELECT id, score FROM result_table;
 
-#### Empty Return
+-- Return a synchronous function invocation
+RETURN CALL post_process(result_table);
 
-```sql
+-- Return no data
 RETURN;
 ```
 
-Functions can return no result, in which case the function only executes side effects (like writing data).
+The table-name form requires a `CacheTable`, usually created with `CACHE TABLE` in the function body. `RETURN SELECT` and `RETURN CALL` use the statement result directly and do not create an internal anonymous cache table. `RETURN CALL ... ASYNC` is not supported.
+
+#### Top-level Terminator and Early Return
+
+```sql
+CREATE SQL FUNCTION find_candidates;
+DEFINE INPUT TABLE candidates (id BIGINT, score DOUBLE);
+
+-- RETURN inside IF exits at runtime but does not terminate the definition
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT id, score FROM candidates
+);
+
+-- The top-level RETURN still terminates the definition and handles false
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+```
+
+A function definition must end with a top-level `RETURN`, and no function-body statement may follow it. A RETURN inside IF is not the definition terminator; it exits only when that branch executes.
+
+An IF that uses RETURN must have one of these branch shapes:
+
+- THEN returns and ELSE is omitted; a false condition continues after the IF.
+- Both THEN and ELSE return, with compatible result schemas.
+
+An ELSE-only return and a returning THEN paired with an ordinary ELSE statement are rejected. Across the whole function, all possible return points must either be empty, or have identical column counts, names, and types.
+
+`IF TIMEIN` can also use RETURN in both branches. When the timeout is positive, a timeout or exception in THEN discards its temporary return state and ELSE supplies the final result; a non-positive timeout executes THEN directly.
 
 #### Using Return Values
 

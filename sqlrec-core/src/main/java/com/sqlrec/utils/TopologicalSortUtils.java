@@ -1,7 +1,6 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.runtime.BindableInterface;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
 
@@ -112,6 +111,13 @@ public class TopologicalSortUtils {
     }
 
     public static Map<Integer, Set<Integer>> buildBindableDependency(List<BindableInterface> bindableList) {
+        return buildBindableDependency(bindableList, false);
+    }
+
+    private static Map<Integer, Set<Integer>> buildBindableDependency(
+            List<BindableInterface> bindableList,
+            boolean returnAsDataSink
+    ) {
         Map<String, Set<Integer>> readTableToBindableIndex = new HashMap<>();
         Map<String, Set<Integer>> writeTableToBindableIndex = new HashMap<>();
         Map<Integer, Set<Integer>> bindableDependency = new HashMap<>();
@@ -123,7 +129,8 @@ public class TopologicalSortUtils {
         for (int i = 0; i < bindableList.size(); i++) {
             BindableInterface bindable = bindableList.get(i);
 
-            if (!bindable.isParallelizable()) {
+            boolean executionBarrier = !bindable.isParallelizable() || bindable.containsReturn();
+            if (executionBarrier && !(returnAsDataSink && bindable.containsReturn())) {
                 for (int j = 0; j < i; j++) {
                     bindableDependency.get(i).add(j);
                 }
@@ -177,19 +184,30 @@ public class TopologicalSortUtils {
      */
     public static Map<Integer, Boolean> getIsUnionSource(
             List<BindableInterface> bindableList,
-            Map<Integer, Set<Integer>> bindableDependency,
-            List<Integer> sortedBindableList,
-            String returnTableName
+            List<Integer> sortedBindableList
     ) {
         Map<Integer, Boolean> isUnionSource = new HashMap<>();
         Map<Integer, Boolean> isUnionNode = new HashMap<>();
 
-        Map<Integer, Set<Integer>> reverseBindableDependency = getReverseBindableDependency(bindableDependency);
+        // RETURN is an execution barrier, so the execution graph makes it depend on every
+        // preceding node. Exception-ignore analysis needs only its real table dependencies;
+        // otherwise unused failed nodes are incorrectly considered part of the return path.
+        Map<Integer, Set<Integer>> exceptionDependency = optimizeDependency(
+                buildBindableDependency(bindableList, true)
+        );
+        Map<Integer, Set<Integer>> reverseBindableDependency = getReverseBindableDependency(exceptionDependency);
 
         for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
             int bindableIndex = sortedBindableList.get(i);
             BindableInterface bindable = bindableList.get(bindableIndex);
             isUnionNode.put(bindableIndex, bindable.isUnionSql());
+
+            // A RETURN node is a result sink. Keep its non-UNION inputs on the result path
+            // from being treated as ignorable UNION-only sources.
+            if (bindable.containsReturn()) {
+                isUnionSource.put(bindableIndex, false);
+                continue;
+            }
 
             if (reverseBindableDependency.containsKey(bindableIndex)) {
                 Set<Integer> dependBindableSet = reverseBindableDependency.get(bindableIndex);
@@ -203,14 +221,6 @@ public class TopologicalSortUtils {
             }
             if (isUnionSource.containsKey(bindableIndex)) {
                 continue;
-            }
-
-            if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
-                String cacheTableName = bindable.getCacheTableName();
-                if (cacheTableName.equals(returnTableName)) {
-                    isUnionSource.put(bindableIndex, false);
-                    continue;
-                }
             }
 
             isUnionSource.put(bindableIndex, true);

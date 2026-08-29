@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 public class SqlParseTest {
     @Test
     public void testCalciteSql() throws Exception {
@@ -15,8 +17,18 @@ public class SqlParseTest {
                 "set param=test",
                 "set 'param'='test'",
                 "use default",
+                "show databases",
                 "show tables from default",
                 "show tables in default",
+                "describe t1",
+                "show create table t1",
+                "select id, name from t1 where id > 0",
+                "select * from t1 order by id fetch next 10 rows only",
+                "select id from t1 union all select id from t2",
+                "insert into t1 (id, name) values row(1, 'Alice')",
+                "insert into t1 (id, name) (select id, name from t2)",
+                "update t1 set name='Alice' where id=1",
+                "delete from t1 where id=1",
                 "call fun1(get('id'), t1, '10')",
                 "call get('fun1')()",
                 "call get('fun1')(get('id'), t1, '10')",
@@ -47,6 +59,13 @@ public class SqlParseTest {
                 "define input table t1 like t2",
                 "define input table t1 like db1.t2",
                 "return t1",
+                "return select * from t1",
+                "return select id, name from t1 where id > 0 order by id",
+                "return call fun1(t1)",
+                "return call get('fun1')(get('id'), t1, '10')",
+                "return call fun1(t1) like t1",
+                "return call fun1(t1) like function 'fun2' partition by t1 size 100",
+                "return call fun1(t1) async",
                 "return",
                 "create model `test_model` (id bigint, name string) with ('param'='value')",
                 "create model if not exists `test_model` (id bigint, name string, price float) with ('param1'='value1', 'param2'='value2')",
@@ -92,10 +111,23 @@ public class SqlParseTest {
                 "IF (SELECT count(*) > 0 FROM input1) THEN (cache table result1 as SELECT * FROM input1) ELSE (cache table result1 as SELECT 0 as id, 'empty' as name)",
                 "if (select true) then (select * from t2)",
                 "if (select true) then (select 1) else (select 2)",
+                "if (select true) then (insert into t1 (id, name) values row(1, 'Alice'))",
+                "if (select true) then (update t1 set name='Alice' where id=1)",
+                "if (select true) then (delete from t1 where id=1)",
                 "if (select true) then (assert select count(1) > 0 from t1)",
                 "if (select true) then (call fun1(t1))",
                 "if (select true) then (set 'k'='v')",
                 "if (select true) then (if (select true) then (select 1) else (select 2))",
+                "if (select true) then (return)",
+                "if (select true) then (return t1)",
+                "if (select true) then (return select * from t1)",
+                "if (select true) then (return call fun1(t1))",
+                "if (select true) then (return) else (return)",
+                "if (select true) then (return t1) else (return t2)",
+                "if (select true) then (return select 1 as id) else (return select 2 as id)",
+                "if (select true) then (return call fun1(t1)) else (return call fun2(t2))",
+                "if timein (select 1000) then (return select * from t1) else (return select * from t2)",
+                "if (select true) then (if (select false) then (return select 1) else (return select 2))",
                 "assert select count(1) > 0 from t1",
                 "assert select count(*) > 0 from t1 where id > 100",
                 "assert select count(1) > 0, count(*) > 5 from t1",
@@ -106,8 +138,9 @@ public class SqlParseTest {
             SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
             System.out.println(sqlNode.getClass());
             System.out.println(sql);
-            System.out.println(sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql());
-            assert getPlainSql(sql).equals(getPlainSql(sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql()));
+            String unparsedSql = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
+            System.out.println(unparsedSql);
+            assertEquals(getPlainSql(sql), getPlainSql(unparsedSql), "round-trip SQL: " + sql);
         }
     }
 

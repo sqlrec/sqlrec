@@ -51,8 +51,9 @@ public class SqlFunctionBindableCancelTest {
     }
 
     private static SqlFunctionBindable newFunction(List<BindableInterface> bindableList) throws Exception {
+        bindableList.add(new ReturnBindable((BindableInterface) null));
         SqlFunctionBindable sqlFunctionBindable = new SqlFunctionBindable(
-                Collections.emptyList(), bindableList, null, null
+                Collections.emptyList(), bindableList, null
         );
         sqlFunctionBindable.setFunName("test_fn");
         sqlFunctionBindable.init();
@@ -87,7 +88,7 @@ public class SqlFunctionBindableCancelTest {
         assertTrue(firstExecuted.get());
         assertTrue(secondExecuted.get());
         assertFalse(context.isCancelled());
-        // returns null when returnTableName is null
+        // explicit empty RETURN produces a null result
         assertNull(result);
     }
 
