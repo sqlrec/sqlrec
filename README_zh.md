@@ -37,7 +37,7 @@ sqlRec有以下特点：
 
 ### 直接运行无外部依赖的 Docker Demo（推荐）
 
-Demo 镜像已经内置 `test_rec` API、SQL 函数和三张 filesystem 表。数据直接写入进程内存，因此不需要 Redis、PostgreSQL、Hive Metastore、Flink、Kubernetes 或其他外部组件。
+Demo 镜像已经内置 `demo_rec` API、SQL 函数和三张以 `demo_` 开头的 filesystem 表。数据直接写入进程内存，因此不需要 Redis、PostgreSQL、Hive Metastore、Flink、Kubernetes 或其他外部组件。
 
 ```bash
 docker run --rm -d --name sqlrec-demo \
@@ -53,12 +53,12 @@ docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 ```sql
-insert into user_interest_category1 values (1000001, 'pc', 100);
-insert into category1_hot_item values
+insert into demo_user_interest_category values (1000001, 'pc', 100);
+insert into demo_category_hot_item values
   ('pc', 1000001, 100),
   ('pc', 1000002, 90);
-cache table quick_start_user as select cast(1000001 as bigint) as id;
-call test_rec(quick_start_user);
+cache table quick_start_user as select cast(1000001 as bigint) as user_id;
+call demo_rec(quick_start_user);
 ```
 
 Demo 默认开启 SQL API。由于 CLI 与 HTTP 服务使用不同的内存数据，需要先向 HTTP 进程写入测试数据，再调用推荐 API：
@@ -67,12 +67,12 @@ Demo 默认开启 SQL API。由于 CLI 与 HTTP 服务使用不同的内存数�
 curl -X POST http://localhost:30001/sql/v1 \
   -H "Content-Type: application/json" \
   -d @- <<'JSON'
-{"sqls":["insert into user_interest_category1 values (1000001, 'pc', 100)","insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
+{"sqls":["insert into demo_user_interest_category values (1000001, 'pc', 100)","insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
 JSON
 
-curl -X POST http://localhost:30001/api/v1/test_rec \
+curl -X POST http://localhost:30001/api/v1/demo_rec \
   -H "Content-Type: application/json" \
-  -d '{"data":{"user_info":[{"id":1000001}]}}'
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
 可以打开 [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) 查看 UI。CLI 数据会在该进程退出时清除，HTTP 服务的数据会保留到容器停止。体验完成后执行 `docker stop sqlrec-demo`。

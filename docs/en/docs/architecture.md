@@ -454,7 +454,7 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 
 ## 12. Demo and Programming Model (sqlrec-demo)
 
-`src/main/sql/quick_start/` provides a dependency-free experience using in-memory filesystem connector tables. The complete MovieLens recommendation pipeline lives under `src/main/sql/movielens/`:
+`src/main/sql/quick_start/` provides a dependency-free experience using in-memory filesystem connector tables. Its global objects consistently use the `demo_` prefix (`demo_user_interest_category`, `demo_category_hot_item`, `demo_exposure_item`, and `demo_rec`). The complete MovieLens recommendation pipeline lives under `src/main/sql/movielens/`:
 
 1. **Tables** (table/): `user_table`/`item_table`/`item_embedding`/`rec_log_kafka` (streaming exposure logs), etc.;
 2. **Features** (function/): `recall_fun` (multi-way recall: `itemcf_i2i` + `genre_hot_item` + `user_interest_genre`...), `rank_fun` (join features → `call_service('rank_service')`), `diversify_fun` (`window_diversify`), `main_rec` (orchestration: `get_or_default` selects branch by variable → recall → ranking → diversification → async `save_rec_item` persistence);

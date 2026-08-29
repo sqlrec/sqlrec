@@ -40,34 +40,34 @@ show apis;
 quick-start 的 filesystem 表启动时为空。在 CLI 中写入一条用户偏好和五条热门商品：
 
 ```sql
-insert into user_interest_category1 values
+insert into demo_user_interest_category values
   (1000001, 'pc', 100);
 
-insert into category1_hot_item values
+insert into demo_category_hot_item values
   ('pc', 1000001, 100),
   ('pc', 1000002, 90),
   ('pc', 1000003, 80),
   ('pc', 1000004, 70),
   ('pc', 1000005, 60);
 
-select * from user_interest_category1;
-select * from category1_hot_item;
+select * from demo_user_interest_category;
+select * from demo_category_hot_item;
 ```
 
 数据只存在于当前 CLI 进程的内存中，退出 CLI 后会被清除。
 
 ## 获取推荐结果
 
-Demo 已经定义 `test_rec` SQL 函数。继续在同一个 CLI 会话中创建输入表并调用函数：
+Demo 已经定义 `demo_rec` SQL 函数。继续在同一个 CLI 会话中创建输入表并调用函数：
 
 ```sql
 cache table quick_start_user as
-select cast(1000001 as bigint) as id;
+select cast(1000001 as bigint) as user_id;
 
-call test_rec(quick_start_user);
+call demo_rec(quick_start_user);
 ```
 
-函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。曝光结果会写入当前进程内存中的 `exposure_item` 表；再次调用时，`test_rec` 会使用这些记录进行去重。
+函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。曝光结果会写入当前进程内存中的 `demo_exposure_item` 表；再次调用时，`demo_rec` 会使用这些记录进行去重。
 
 ## 通过 API 调用推荐接口
 
@@ -79,22 +79,22 @@ curl -X POST http://localhost:30001/sql/v1 \
   -d @- <<'JSON'
 {
   "sqls": [
-    "insert into user_interest_category1 values (1000001, 'pc', 100)",
-    "insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90), ('pc', 1000003, 80)"
+    "insert into demo_user_interest_category values (1000001, 'pc', 100)",
+    "insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90), ('pc', 1000003, 80)"
   ]
 }
 JSON
 ```
 
-然后调用 `test_rec` 推荐 API：
+然后调用 `demo_rec` 推荐 API：
 
 ```bash
-curl -X POST http://localhost:30001/api/v1/test_rec \
+curl -X POST http://localhost:30001/api/v1/demo_rec \
   -H "Content-Type: application/json" \
-  -d '{"data":{"user_info":[{"id":1000001}]}}'
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-接口会返回 `test_rec` 的推荐结果。通过 SQL API 写入的测试数据和推荐产生的曝光数据都会保留在 HTTP 服务进程内，直到容器停止。
+接口会返回 `demo_rec` 的推荐结果。通过 SQL API 写入的测试数据和推荐产生的曝光数据都会保留在 HTTP 服务进程内，直到容器停止。
 
 ## 查看 UI
 
@@ -107,12 +107,12 @@ curl -X POST http://localhost:30001/api/v1/test_rec \
 ```text
 sqlrec-demo/src/main/sql/
 ├── quick_start/
-│   ├── api/test_rec.sql
-│   ├── function/test_rec.sql
+│   ├── api/demo_rec.sql
+│   ├── function/demo_rec.sql
 │   └── table/
-│       ├── category1_hot_item.sql
-│       ├── exposure_item.sql
-│       └── user_interest_category1.sql
+│       ├── demo_category_hot_item.sql
+│       ├── demo_exposure_item.sql
+│       └── demo_user_interest_category.sql
 └── movielens/
     ├── api/
     ├── function/

@@ -441,7 +441,7 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 
 ## 12. Demo 与编程模型（sqlrec-demo）
 
-`src/main/sql/quick_start/` 提供基于 filesystem connector 内存表的无外部依赖体验链路；MovieLens 完整推荐链路位于 `src/main/sql/movielens/`：
+`src/main/sql/quick_start/` 提供基于 filesystem connector 内存表的无外部依赖体验链路，其全局对象统一使用 `demo_` 前缀（`demo_user_interest_category`、`demo_category_hot_item`、`demo_exposure_item`、`demo_rec`）；MovieLens 完整推荐链路位于 `src/main/sql/movielens/`：
 
 1. **表**（table/）：`user_table`/`item_table`/`item_embedding`/`rec_log_kafka`（流式曝光日志）等；
 2. **特征**（function/）：`recall_fun`（多路召回：`itemcf_i2i` + `genre_hot_item` + `user_interest_genre`…）、`rank_fun`（join 特征 → `call_service('rank_service')`）、`diversify_fun`（`window_diversify`）、`main_rec`（编排：`get_or_default` 按变量选择分支 → 召回 → 排序 → 多样化 → 异步 `save_rec_item` 落盘）；

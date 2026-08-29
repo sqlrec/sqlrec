@@ -24,9 +24,9 @@ public class TestQuickStart {
         );
 
         sqlExecutor = new SqlExecutor();
-        sqlExecutor.executeSql("insert into user_interest_category1 values (1000001, 'pc', 100)");
+        sqlExecutor.executeSql("insert into demo_user_interest_category values (1000001, 'pc', 100)");
         sqlExecutor.executeSql("""
-                insert into category1_hot_item values
+                insert into demo_category_hot_item values
                 ('pc', 1000001, 100),
                 ('pc', 1000002, 90),
                 ('pc', 1000003, 80),
@@ -35,13 +35,13 @@ public class TestQuickStart {
                 """);
 
         DataCheckUtils.check(
-                sqlExecutor.executeSql("select category1 from user_interest_category1 where user_id = 1000001"),
+                sqlExecutor.executeSql("select category from demo_user_interest_category where user_id = 1000001"),
                 List.<Object[]>of(new Object[]{"pc"})
         );
 
-        sqlExecutor.executeSql("cache table quick_start_user as select cast(1000001 as bigint) as id");
+        sqlExecutor.executeSql("cache table quick_start_user as select cast(1000001 as bigint) as user_id");
 
-        CacheTable result = sqlExecutor.executeSql("call test_rec(quick_start_user)");
+        CacheTable result = sqlExecutor.executeSql("call demo_rec(quick_start_user)");
         List<Object[]> rows = result.scan(null).toList();
 
         List<String> lines = DataTransformUtils.formatAsTable(result.scan(null), result.getDataFields());

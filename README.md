@@ -36,7 +36,7 @@ For detailed information, refer to the [SQLRec User Manual](https://sqlrec.githu
 
 ### Run the Dependency-Free Docker Demo (Recommended)
 
-The demo image includes the `test_rec` API, its SQL function, and three filesystem tables. Data is written directly to process memory, so this path does not require Redis, PostgreSQL, Hive Metastore, Flink, Kubernetes, or any other external component.
+The demo image includes the `demo_rec` API, its SQL function, and three `demo_`-prefixed filesystem tables. Data is written directly to process memory, so this path does not require Redis, PostgreSQL, Hive Metastore, Flink, Kubernetes, or any other external component.
 
 ```bash
 docker run --rm -d --name sqlrec-demo \
@@ -52,12 +52,12 @@ docker exec -it sqlrec-demo bash /app/cli.sh
 ```
 
 ```sql
-insert into user_interest_category1 values (1000001, 'pc', 100);
-insert into category1_hot_item values
+insert into demo_user_interest_category values (1000001, 'pc', 100);
+insert into demo_category_hot_item values
   ('pc', 1000001, 100),
   ('pc', 1000002, 90);
-cache table quick_start_user as select cast(1000001 as bigint) as id;
-call test_rec(quick_start_user);
+cache table quick_start_user as select cast(1000001 as bigint) as user_id;
+call demo_rec(quick_start_user);
 ```
 
 The demo enables its SQL API by default. Since the CLI and HTTP service have separate in-memory data, insert test data into the HTTP process before calling the recommendation API:
@@ -66,12 +66,12 @@ The demo enables its SQL API by default. Since the CLI and HTTP service have sep
 curl -X POST http://localhost:30001/sql/v1 \
   -H "Content-Type: application/json" \
   -d @- <<'JSON'
-{"sqls":["insert into user_interest_category1 values (1000001, 'pc', 100)","insert into category1_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
+{"sqls":["insert into demo_user_interest_category values (1000001, 'pc', 100)","insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"]}
 JSON
 
-curl -X POST http://localhost:30001/api/v1/test_rec \
+curl -X POST http://localhost:30001/api/v1/demo_rec \
   -H "Content-Type: application/json" \
-  -d '{"data":{"user_info":[{"id":1000001}]}}'
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
 Open the UI at [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html). CLI data is discarded when that process exits, while HTTP service data remains until the container stops. Run `docker stop sqlrec-demo` when finished.
