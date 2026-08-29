@@ -873,7 +873,7 @@ FLUSH;
 
 ### CALL
 
-Call a SQL function.
+Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
 
 **Syntax:**
 
@@ -891,6 +891,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously |
+
+`ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.
 
 **Examples:**
 

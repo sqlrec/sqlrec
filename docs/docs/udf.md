@@ -174,6 +174,14 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 模型服务调用函数，用于调用已部署的模型服务进行推理。详见 [模型文档](./model/basic_concepts.md#call_service)。
 
+**函数签名**：
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+```
+
+`context` 由 SQLRec 自动注入；SQL 调用只需传入服务名和输入 `CacheTable`。返回表包含输入列以及模型输出列。HTTP 请求超时默认为连接、读写各 30 秒。
+
 ---
 
 ### batch_call_service
@@ -183,6 +191,8 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 ::: warning 注意
 此函数只能在 Flink SQL 中使用，不支持 SQLRec 的 CACHE TABLE 语法。
 :::
+
+该函数是 Flink `TableFunction`，通过 `LATERAL TABLE` 调用；每条输入记录先进入缓冲区，达到 `batchSize` 后批量 POST JSON 数组，算子关闭时还会刷新不足一批的记录。服务响应必须是 JSON 对象；数组值按输入行序映射。
 
 **函数签名**：
 
@@ -509,7 +519,7 @@ public CacheTable evaluate(String primaryKey, String weights, String limit, Cach
 | `primaryKey` | String | 主键列名，用于去重 |
 | `weights` | String | 各表权重，逗号分隔，如 `"2,1,1"` |
 | `limit` | String | 最大返回记录数 |
-| `tables` | CacheTable... | 两个或多个输入表，所有表结构必须相同 |
+| `tables` | CacheTable... | 一个或多个输入表，所有表结构必须相同 |
 
 **返回值**：返回合并后的 `CacheTable`，结构与输入表相同。
 
@@ -533,6 +543,7 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 
 **注意事项**：
 - 所有输入表的结构（列名和类型）必须完全相同
+- `primaryKey` 为空字符串时不去重；指定主键时按该列的字符串值去重
 - 权重数量必须与表的数量一致
 - 权重和 limit 必须为正整数
 - 主键列必须存在于所有表中
@@ -542,6 +553,15 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 ### call_service_with_qv
 
 带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。
+
+**函数签名**：
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String serviceName,
+                           CacheTable query, CacheTable value)
+```
+
+`query` 必须恰好一行，`value` 可包含多行；返回值保留 Value 表列并追加模型输出列。服务输入字段会按模型定义自动拆分为 Query 和 Value 两部分。
 
 ---
 

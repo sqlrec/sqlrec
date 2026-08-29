@@ -4,12 +4,9 @@ This document introduces how to deploy the SQLRec system.
 
 ## System Requirements
 
-SQLRec currently supports AMD64 Linux systems, with MacOS support coming soon.
+The deployment scripts target AMD64 Linux and require Bash, Docker, kubectl, and Helm. The Minikube flow can install missing Docker, Minikube, and Helm components; production environments should manage them centrally.
 
-**Hardware Requirements**:
-- Memory: At least 32GB
-- Disk: At least 256GB
-- Network: Reliable internet connection (if using an accelerator, note to use tun mode)
+The Minikube example allocates a 256GB disk and starts several dependencies. Actual memory and disk needs depend on enabled components and data volume; 32GB/256GB should not be treated as a fixed production size. The first deployment needs access to image/Helm repositories and download URLs.
 
 ## Quick Deployment (Minikube)
 
@@ -25,7 +22,7 @@ cd ./sqlrec/deploy
 
 # verify pod status, wait all pod ready
 alias kubectl="minikube kubectl --"
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # download resource
 ./download_resource.sh
@@ -34,7 +31,7 @@ kubectl get pod --ALL
 ./deploy_components.sh
 
 # verify pod status, wait all pod ready
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # verify sqlrec service
 cd ..
@@ -45,11 +42,12 @@ bash ./bin/beeline.sh
 - The Minikube-based deployment solution above is for testing only
 - If you need to redeploy, you can first delete the cluster via `minikube delete`
 - Some components are not deployed by default, such as Kyuubi, Jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory
-- You can customize passwords, network ports, and other parameters in `env.sh`
+- Deployment scripts read `deploy/env.sh`; override values before execution, for example `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`
+- `deploy_components.sh` deploys PostgreSQL, MinIO/JuiceFS, Hadoop, HMS, Flink, Spark, SQLRec, and by default Kafka, Redis, and Milvus. HDFS, MongoDB, Kyuubi, Jupyter, and observability components require their own scripts
 
 ## Production Environment Deployment
 
-For production environments, you need to first deploy reliable big data infrastructure, then refer to the scripts under deploy to initialize the database and deploy SQLRec Deployment.
+Do not copy the Minikube flow directly into production. Prepare Kubernetes, storage, PostgreSQL, Hive Metastore, and Flink SQL Gateway first, then adapt the YAML for your network, storage classes, and security policy. The repository manifests use `hostPath` and NodePort and are primarily intended for single-node/test environments.
 
 ### Core Dependency Services
 
@@ -82,24 +80,14 @@ SQLRec relies on Kubernetes PersistentVolume (PV) to store client components and
 
 | PV Name | Purpose | Size Recommendation |
 |---------|---------|---------------------|
-| `sqlrec-lib-pv` | Store dependency JAR packages (JuiceFS Hadoop JAR, etc.) | 128Gi |
-| `sqlrec-client-pv` | Store client components (Hadoop, Hive, Spark, Java) | 128Gi |
+| `sqlrec-lib-pv` / `sqlrec-lib-pvc` | Dependency JARs such as the JuiceFS Hadoop JAR | 128Gi (example default) |
+| `sqlrec-client-pv` / `sqlrec-client-pvc` | Hadoop, Hive, Spark, Java clients and configuration | 128Gi (example default) |
 
-**Hadoop Configuration File Requirements**:
+`deploy/pv.yaml` defines `hostPath`, `ReadWriteOnce` PVs with a `Retain` reclaim policy. Replace them with a cluster-backed StorageClass/PV in production and verify how SQLRec, Flink, Spark, and HMS access the client files.
 
-SQLRec needs to load Hadoop configuration at startup. The startup script `bin/sqlrec` is as follows:
+**Client files and Hadoop configuration**:
 
-```bash
-#!/bin/bash
-set -ex
-
-export PATH=$PATH:${HADOOP_HOME}/bin
-export HADOOP_CLASSPATH=`hadoop classpath`
-export CLASSPATH=$CLASSPATH:${HADOOP_CLASSPATH}
-export HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-${HADOOP_HOME}/etc/hadoop}
-
-java -cp ./*:${CLASSPATH} com.sqlrec.frontend.Main
-```
+The SQLRec container uses `HADOOP_HOME`, `HADOOP_CONF_DIR`, and `CLASSPATH` to access the clients. Deployment scripts copy files from `deploy/data/conf` into the Hadoop, Hive, and Spark client directories; manual deployments must make these clients and configurations readable from the mounted volume.
 
 **Key Configuration Files**:
 
@@ -107,7 +95,7 @@ java -cp ./*:${CLASSPATH} com.sqlrec.frontend.Main
 |------|-------------|------------------------------|
 | `core-site.xml` | Hadoop core configuration | `fs.defaultFS`, JuiceFS related configurations |
 | `hdfs-site.xml` | HDFS configuration | Replication factor, block size, etc. |
-| `hive-site.xml` | Hive configuration | `hive.metastore.uris` |
+| `hive-site.xml` | Hive configuration | `hive.metastore.uris` (when Hive tables are used) |
 
 ### SQLRec Service Configuration
 
@@ -118,7 +106,7 @@ SQLRec service is deployed through Kubernetes Deployment with the following main
 | Environment Variable | Description |
 |---------------------|-------------|
 | `NAMESPACE` | Kubernetes namespace |
-| `MODEL_BASE_PATH` | Model storage base path |
+| `MODEL_BASE_PATH` | Model storage base path; the example YAML currently fixes it to `/user/sqlrec/models`, so change the YAML for production |
 | `META_DB_URL` | PostgreSQL connection URL |
 | `META_DB_USER` | PostgreSQL username |
 | `META_DB_PASSWORD` | PostgreSQL password |
@@ -162,9 +150,6 @@ kubectl create clusterrolebinding sqlrec-role \
 3. **Deploy PostgreSQL**
 
    ```bash
-   # Create database
-   psql -c "CREATE DATABASE sqlrec;"
-   
    # Initialize table structure
    psql -d sqlrec -f deploy/sql/master.sql
    ```
@@ -184,9 +169,11 @@ kubectl create clusterrolebinding sqlrec-role \
 7. **Deploy SQLRec**
 
    ```bash
-   # Apply Kubernetes configuration
-   envsubst < deploy/sqlrec/sqlrec.yaml | kubectl apply -f - -n ${NAMESPACE}
+   # Initialize metadata, permissions, and the SQLRec Deployment
+   bash deploy/sqlrec/deploy.sh
    ```
+
+   Do not run only `envsubst`: `deploy/sqlrec/deploy.sh` also initializes PostgreSQL, imports `deploy/sql/master.sql`, creates the ServiceAccount, and renders the temporary YAML. Production users may reuse the steps after reviewing database addresses, permissions, NodePorts, and storage.
 
 8. **Verify Deployment**
 
@@ -216,7 +203,7 @@ SQLRec provides two image build scripts:
 | `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
 | `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) training/inference image (CPU version) |
 
-The image version `SQLREC_VERSION` comes from `deploy/env.sh` (default `0.1.9`) and can be overridden via environment variables before execution.
+The image version `SQLREC_VERSION` comes from `deploy/env.sh` (default `0.1.10`) and can be overridden via environment variables before execution.
 
 **Build Steps**:
 
@@ -251,8 +238,8 @@ If you need to build images manually:
 cd /path/to/sqlrec
 
 # Build SQLRec service image
-docker build -t sqlrec/sqlrec:0.1.9 -f ./docker/Dockerfile .
+docker build -t sqlrec/sqlrec:0.1.10 -f ./docker/Dockerfile .
 
 # Build model image
-docker build -t sqlrec/tzrec:0.1.9-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+docker build -t sqlrec/tzrec:0.1.10-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
 ```

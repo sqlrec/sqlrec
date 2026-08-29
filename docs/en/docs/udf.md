@@ -174,6 +174,14 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 Model service call function used to call deployed model services for inference. See [Models documentation](./model/basic_concepts.md#call_service) for details.
 
+**Function Signature**:
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+```
+
+`context` is injected by SQLRec; SQL only supplies the service name and input `CacheTable`. The result contains the input columns followed by model output columns. HTTP connect/read/write timeouts default to 30 seconds.
+
 ---
 
 ### batch_call_service
@@ -183,6 +191,8 @@ Batch model service call function used in Flink SQL to batch call deployed model
 ::: warning Note
 This function can only be used in Flink SQL and does not support SQLRec's CACHE TABLE syntax.
 :::
+
+This is a Flink `TableFunction` invoked with `LATERAL TABLE`. Each input row is buffered; a JSON-array POST is sent when `batchSize` is reached, and a final partial batch is flushed when the operator closes. The service must return a JSON object; array values are aligned to input rows.
 
 **Function Signature**:
 
@@ -509,7 +519,7 @@ public CacheTable evaluate(String primaryKey, String weights, String limit, Cach
 | `primaryKey` | String | Primary key column name for deduplication |
 | `weights` | String | Weights for each table, comma-separated, e.g. `"2,1,1"` |
 | `limit` | String | Maximum number of records to return |
-| `tables` | CacheTable... | Two or more input tables, all must have the same schema |
+| `tables` | CacheTable... | One or more input tables; all must have the same schema |
 
 **Return Value**: Returns merged `CacheTable` with same structure as input tables.
 
@@ -533,6 +543,7 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 
 **Notes**:
 - All input tables must have identical schema (column names and types)
+- An empty `primaryKey` disables deduplication; when specified, rows are deduplicated by that column's string value
 - Number of weights must match the number of tables
 - Weights and limit must be positive integers
 - Primary key column must exist in all tables
@@ -542,6 +553,15 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 ### call_service_with_qv
 
 Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.
+
+**Function Signature**:
+
+```java
+public CacheTable evaluate(ReadonlyContext context, String serviceName,
+                           CacheTable query, CacheTable value)
+```
+
+`query` must contain exactly one row; `value` may contain multiple rows. The result keeps Value columns and appends model output columns. Model input fields are automatically split between Query and Value based on the model definition.
 
 ---
 

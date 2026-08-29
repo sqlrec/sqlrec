@@ -17,7 +17,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | **Calcite 作为在线执行引擎** | 自研 SQL 引擎基于 Apache Calcite 1.32 的 Enumerable 执行层（Janino 动态编译为 Java 字节码），满足推荐在线场景的实时性要求 |
 | **Flink Parser 作为语法前端** | 复用 Flink 1.19 的 parser codegen（`FlinkSqlParserImpl`），在其上扩展自定义 DDL/DML AST 节点，保证与 Flink SQL 语法兼容 |
 | **双执行栈** | 在线路径走 Calcite（本进程内执行）；流式/离线路径把语句透传给远端 Flink SQL Gateway |
-| **HMS 作为元数据中枢** | 表/函数元数据存 Hive Metastore；模型/服务/API/SQL 函数定义存 PostgreSQL（MyBatis）；模型产物与数据存 HDFS |
+| **双元数据模式** | 远程模式下表/Java UDF 元数据来自 Hive Metastore，模型/服务/API/SQL 函数定义存 PostgreSQL；设置 `SQL_SCHEMA_DIR` 后可使用本地 SQL 文件 + 内存存储，不依赖 HMS/PG |
 | **K8s 作为算力底座** | 模型训练/导出是 K8s Job，推理服务是 K8s Deployment，由引擎生成 YAML 并 serverSideApply |
 | **全内存执行模型** | 所有中间结果（CacheTable）物化为内存 List，不做落盘/流式，依赖控制流（cache/if/assert）管理数据规模 |
 
@@ -77,7 +77,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 
 | 模块 | 职责 |
 | --- | --- |
-| **sqlrec-common** | 零 Calcite 重依赖的基础层：配置体系（`ConfigOption`）、表抽象体系（`SqlRecTable`/`SqlRecKvTable`/`CacheTable`/`VectorSearchable`）、执行上下文（`ExecuteContext`/`ReadonlyContext`）、远程 REST client（`SqlRecApiClient`）、通用工具（类型/JSON/SQL/合并等） |
+| **sqlrec-common** | 共享基础层：配置体系（`ConfigOption`）、依赖 Calcite 类型的表抽象（`SqlRecTable`/`SqlRecKvTable`/`CacheTable`/`VectorSearchable`）、执行上下文、远程 REST client 和通用工具 |
 | **sqlrec-sql-parser** | 通过 FMPP + Freemarker codegen 扩展 Flink parser，产出 `CREATE/DROP MODEL`、`TRAIN/EXPORT MODEL`、`CREATE/DROP SERVICE`、`CREATE/DROP SQL FUNCTION`、`CREATE/DROP API`、`CACHE`、`IF...CACHE`、`ASSERT`、`CALL`、`RETURN`、`FLUSH`、`SET` 等 AST 节点（`com.sqlrec.sql.parser.Sql*`） |
 | **sqlrec-core** | 引擎核心：编译器（compiler）、执行器（executor）、运行时 Bindable 体系（runtime）、Calcite 优化规则（rules）与物理节点（node）、schema 组装（schema）、元数据访问（db）、K8s 管理（k8s）、模型/服务管理（model） |
 | **sqlrec-udf** | 内置 UDF：scalar（`get`/`get_or_default`/`l2_norm`/`ip`/`random_vec`/`uuid`/`array_contains*`）与 table（`call_service`/`call_sqlrec_api`/`window_diversify`/`dpp_diversity`/`rule_diversity`/`dedup`/`shuffle`/`weighted_merge`/`json_to_table`/`add_col`/`truncate_table`/`tag_to_vec`/`sleep`/`get_variables`/`set_variables`/`get_growthbook_features`/`feature_coverage_metrics` 等） |
@@ -175,9 +175,9 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | --- | --- | --- |
 | `CREATE MODEL ... / DROP MODEL` | `SqlCreateModel` / `SqlDropModel` | 定义模型（输入输出字段、算法参数、路径） |
 | `TRAIN MODEL m CHECKPOINT c FROM table WHERE ...` | `SqlTrainModel` | 触发 K8s 训练 Job |
-| `EXPORT MODEL m CHECKPOINT c TO c2` | `SqlExportModel` | 训练 checkpoint → 导出 checkpoint（可 serving） |
+| `EXPORT MODEL m CHECKPOINT = c [ON table] [WHERE ...]` | `SqlExportModel` | 从训练 checkpoint 触发导出 Job |
 | `ALTER MODEL m DROP CHECKPOINT c` | `SqlAlterModelDropCheckpoint` | 清理 checkpoint |
-| `CREATE SERVICE s OF m CHECKPOINT c` | `SqlCreateService` | 部署在线推理 Deployment |
+| `CREATE SERVICE s ON MODEL m [CHECKPOINT = c]` | `SqlCreateService` | 部署在线推理 Deployment |
 | `CREATE SQL FUNCTION f ...` | `SqlCreateSqlFunction` | 开始多语句函数定义 |
 | `DEFINE INPUT TABLE t LIKE other / (col type...)` | `SqlDefineInputTable` | 声明函数入参表 schema |
 | `RETURN [t / SELECT ... / CALL ...]` | `SqlReturn` | 返回空值、缓存表、查询或同步函数调用；顶层 RETURN 结束函数定义，IF 内 RETURN 可提前结束执行 |

@@ -4,12 +4,9 @@
 
 ## 系统要求
 
-SQLRec 目前支持 AMD64 的 Linux 系统，后续会支持 MacOS。
+部署脚本面向 AMD64 Linux；脚本依赖 Bash、Docker、kubectl 和 Helm。Minikube 方案会自动安装缺少的 Docker、Minikube 和 Helm，但生产环境应由运维统一管理这些组件。
 
-**硬件要求**：
-- 内存：至少 32GB
-- 磁盘：至少 256GB
-- 网络：可靠的互联网连接（如果使用加速器，注意使用 tun 模式）
+Minikube 示例把磁盘配额设为 256GB，并且会同时启动多个依赖服务；实际内存和磁盘需求取决于启用的组件及数据量，不能把 32GB/256GB 视为生产环境的固定规格。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
 
 ## 快速部署（Minikube）
 
@@ -25,7 +22,7 @@ cd ./sqlrec/deploy
 
 # verify pod status, wait all pod ready
 alias kubectl="minikube kubectl --"
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # download resource
 ./download_resource.sh
@@ -34,7 +31,7 @@ kubectl get pod --ALL
 ./deploy_components.sh
 
 # verify pod status, wait all pod ready
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # verify sqlrec service
 cd ..
@@ -45,11 +42,12 @@ bash ./bin/beeline.sh
 - 上述基于 Minikube 的部署方案仅用于测试
 - 如果需要重新部署，可以先通过 `minikube delete` 删除集群
 - 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
-- 可以在 `env.sh` 自定义密码、网络端口等参数
+- 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`
+- `deploy_components.sh` 默认部署 PostgreSQL、MinIO/JuiceFS、Hadoop、HMS、Flink、Spark、SQLRec，以及 Kafka、Redis、Milvus；HDFS、MongoDB、Kyuubi、Jupyter、监控等组件需单独启用对应脚本
 
 ## 生产环境部署
 
-生产环境需要先部署可靠的大数据基础设施，然后参考 deploy 下的脚本初始化数据库、部署 SQLRec Deployment。
+生产环境不要直接照搬 Minikube 脚本。应先准备 Kubernetes、对象/分布式存储、PostgreSQL、Hive Metastore 和 Flink SQL Gateway，再按实际网络、存储类和安全策略改写相应 YAML。仓库中的 `deploy/*.yaml` 使用 `hostPath` 和 NodePort，主要用于单节点/测试环境。
 
 ### 核心依赖服务
 
@@ -82,24 +80,14 @@ SQLRec 依赖 Kubernetes PersistentVolume (PV) 来存储客户端组件和配置
 
 | PV 名称 | 用途 | 大小建议 |
 |---------|------|----------|
-| `sqlrec-lib-pv` | 存储依赖 JAR 包（JuiceFS Hadoop JAR 等） | 128Gi |
-| `sqlrec-client-pv` | 存储客户端组件（Hadoop、Hive、Spark、Java） | 128Gi |
+| `sqlrec-lib-pv` / `sqlrec-lib-pvc` | 依赖 JAR（例如 JuiceFS Hadoop JAR） | 128Gi（示例默认值） |
+| `sqlrec-client-pv` / `sqlrec-client-pvc` | Hadoop、Hive、Spark、Java 客户端及配置 | 128Gi（示例默认值） |
 
-**Hadoop 配置文件要求**：
+`deploy/pv.yaml` 中的 PV 是 `hostPath`、`ReadWriteOnce`，并使用 `Retain` 回收策略；生产环境应替换为集群可用的 StorageClass/PV，并确认 SQLRec、Flink、Spark、HMS 对客户端文件和配置的访问方式。
 
-SQLRec 启动时需要加载 Hadoop 配置，启动脚本 `bin/sqlrec` 如下：
+**客户端文件和 Hadoop 配置**：
 
-```bash
-#!/bin/bash
-set -ex
-
-export PATH=$PATH:${HADOOP_HOME}/bin
-export HADOOP_CLASSPATH=`hadoop classpath`
-export CLASSPATH=$CLASSPATH:${HADOOP_CLASSPATH}
-export HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-${HADOOP_HOME}/etc/hadoop}
-
-java -cp ./*:${CLASSPATH} com.sqlrec.frontend.Main
-```
+SQLRec 容器通过 `HADOOP_HOME`、`HADOOP_CONF_DIR` 和 `CLASSPATH` 访问客户端。部署脚本会把 `deploy/data/conf` 中的配置复制到 Hadoop、Hive 和 Spark 客户端目录；手工部署时至少要保证这些客户端和配置在挂载卷中可读。
 
 **关键配置文件**：
 
@@ -107,7 +95,7 @@ java -cp ./*:${CLASSPATH} com.sqlrec.frontend.Main
 |------|------|------------|
 | `core-site.xml` | Hadoop 核心配置 | `fs.defaultFS`、JuiceFS 相关配置 |
 | `hdfs-site.xml` | HDFS 配置 | 副本数、块大小等 |
-| `hive-site.xml` | Hive 配置 | `hive.metastore.uris` |
+| `hive-site.xml` | Hive 配置 | `hive.metastore.uris`（使用 Hive 表时） |
 
 ### SQLRec 服务配置
 
@@ -118,7 +106,7 @@ SQLRec 服务通过 Kubernetes Deployment 部署，主要配置项如下：
 | 环境变量 | 说明 |
 |----------|------|
 | `NAMESPACE` | Kubernetes 命名空间 |
-| `MODEL_BASE_PATH` | 模型存储基础路径 |
+| `MODEL_BASE_PATH` | 模型存储基础路径；仓库示例 YAML 当前固定为 `/user/sqlrec/models`，生产环境应按存储后端修改 YAML |
 | `META_DB_URL` | PostgreSQL 连接 URL |
 | `META_DB_USER` | PostgreSQL 用户名 |
 | `META_DB_PASSWORD` | PostgreSQL 密码 |
@@ -136,7 +124,7 @@ SQLRec 服务通过 Kubernetes Deployment 部署，主要配置项如下：
 
 **Kubernetes 权限**：
 
-SQLRec 需要以下 Kubernetes 权限来管理模型训练和服务部署：
+SQLRec 需要在目标命名空间创建/管理模型训练 Job 和服务 Deployment。`deploy/sqlrec/deploy.sh` 会创建名为 `sqlrec` 的 ServiceAccount，并绑定集群级 `edit` 角色；生产环境应按最小权限原则改为命名空间级、资源范围受限的 Role/RoleBinding。
 
 ```bash
 # 创建 ServiceAccount
@@ -162,9 +150,6 @@ kubectl create clusterrolebinding sqlrec-role \
 3. **部署 PostgreSQL**
 
 ```bash
-# 创建数据库
-psql -c "CREATE DATABASE sqlrec;"
-
 # 初始化表结构
 psql -d sqlrec -f deploy/sql/master.sql
 ```
@@ -185,8 +170,10 @@ psql -d sqlrec -f deploy/sql/master.sql
 
 ```bash
 # 应用 Kubernetes 配置
-envsubst < deploy/sqlrec/sqlrec.yaml | kubectl apply -f - -n ${NAMESPACE}
+bash deploy/sqlrec/deploy.sh
 ```
+
+不要只执行 `envsubst`：`deploy/sqlrec/deploy.sh` 还负责初始化 PostgreSQL、导入 `deploy/sql/master.sql`、创建 ServiceAccount 和渲染临时 YAML。生产环境可复用这些步骤，但应先审查脚本中的数据库地址、权限、NodePort 和存储配置。
 
 8. **验证部署**
 
@@ -216,7 +203,7 @@ SQLRec 提供了两个镜像构建脚本：
 | `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
 | `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) 训练/推理镜像（CPU 版本） |
 
-镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`（默认 `0.1.9`），可在执行前通过环境变量覆盖。
+镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`（默认 `0.1.10`），可在执行前通过环境变量覆盖。
 
 **构建步骤**：
 
@@ -251,8 +238,8 @@ fi
 cd /path/to/sqlrec
 
 # 构建 SQLRec 服务镜像
-docker build -t sqlrec/sqlrec:0.1.9 -f ./docker/Dockerfile .
+docker build -t sqlrec/sqlrec:0.1.10 -f ./docker/Dockerfile .
 
 # 构建模型镜像
-docker build -t sqlrec/tzrec:0.1.9-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+docker build -t sqlrec/tzrec:0.1.10-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
 ```

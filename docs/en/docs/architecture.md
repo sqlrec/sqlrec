@@ -17,7 +17,7 @@ SQLRec is a recommendation engine that **describes the entire business logic of 
 | **Calcite as the online execution engine** | The self-developed SQL engine is built on Apache Calcite 1.32's Enumerable execution layer (Janino dynamic compilation to Java bytecode), meeting the real-time requirements of online recommendation scenarios |
 | **Flink Parser as the syntax frontend** | Reuses Flink 1.19's parser codegen (`FlinkSqlParserImpl`), extending custom DDL/DML AST nodes on top of it, ensuring compatibility with Flink SQL syntax |
 | **Dual execution stacks** | The online path goes through Calcite (in-process execution); the streaming/offline path passes statements through to a remote Flink SQL Gateway |
-| **HMS as the metadata hub** | Table/function metadata is stored in Hive Metastore; model/service/API/SQL function definitions are stored in PostgreSQL (MyBatis); model artifacts and data are stored in HDFS |
+| **Dual metadata modes** | In remote mode, table/Java-UDF metadata comes from Hive Metastore and model/service/API/SQL-function definitions from PostgreSQL; setting `SQL_SCHEMA_DIR` selects local SQL-file + in-memory metadata and removes the HMS/PG dependency |
 | **K8s as the compute foundation** | Model training/export runs as K8s Jobs, inference services as K8s Deployments; the engine generates YAML and applies it via serverSideApply |
 | **Full in-memory execution model** | All intermediate results (CacheTable) are materialized as in-memory Lists, without disk persistence/streaming; data scale is managed via control flow (cache/if/assert) |
 
@@ -78,7 +78,7 @@ Module responsibilities:
 
 | Module | Responsibilities |
 | --- | --- |
-| **sqlrec-common** | Foundation layer with no heavy Calcite dependency: configuration system (`ConfigOption`), table abstraction system (`SqlRecTable`/`SqlRecKvTable`/`CacheTable`/`VectorSearchable`), execution context (`ExecuteContext`/`ReadonlyContext`), remote REST client (`SqlRecApiClient`), general utilities (types/JSON/SQL/merge, etc.) |
+| **sqlrec-common** | Shared foundation layer: configuration, Calcite-type-dependent table abstractions (`SqlRecTable`/`SqlRecKvTable`/`CacheTable`/`VectorSearchable`), execution contexts, REST client, and general utilities |
 | **sqlrec-sql-parser** | Extends the Flink parser via FMPP + Freemarker codegen, producing AST nodes (`com.sqlrec.sql.parser.Sql*`) for `CREATE/DROP MODEL`, `TRAIN/EXPORT MODEL`, `CREATE/DROP SERVICE`, `CREATE/DROP SQL FUNCTION`, `CREATE/DROP API`, `CACHE`, `IF...CACHE`, `ASSERT`, `CALL`, `RETURN`, `FLUSH`, `SET`, etc. |
 | **sqlrec-core** | Engine core: compiler, executor, runtime Bindable system, Calcite optimization rules and physical nodes, schema assembly, metadata access, K8s management, model/service management |
 | **sqlrec-udf** | Built-in UDFs: scalar (`get`/`get_or_default`/`l2_norm`/`ip`/`random_vec`/`uuid`/`array_contains*`) and table (`call_service`/`call_sqlrec_api`/`window_diversify`/`dpp_diversity`/`rule_diversity`/`dedup`/`shuffle`/`weighted_merge`/`json_to_table`/`add_col`/`truncate_table`/`tag_to_vec`/`sleep`/`get_variables`/`set_variables`/`get_growthbook_features`/`feature_coverage_metrics`, etc.) |
@@ -179,9 +179,9 @@ Reuses the Flink parser codegen pipeline: `config.fmpp` + `Parser.tdd` (declares
 | --- | --- | --- |
 | `CREATE MODEL ... / DROP MODEL` | `SqlCreateModel` / `SqlDropModel` | Define a model (input/output fields, algorithm params, paths) |
 | `TRAIN MODEL m CHECKPOINT c FROM table WHERE ...` | `SqlTrainModel` | Trigger a K8s training Job |
-| `EXPORT MODEL m CHECKPOINT c TO c2` | `SqlExportModel` | Training checkpoint → exported checkpoint (servable) |
+| `EXPORT MODEL m CHECKPOINT = c [ON table] [WHERE ...]` | `SqlExportModel` | Triggers an export Job from a training checkpoint |
 | `ALTER MODEL m DROP CHECKPOINT c` | `SqlAlterModelDropCheckpoint` | Clean up a checkpoint |
-| `CREATE SERVICE s OF m CHECKPOINT c` | `SqlCreateService` | Deploy an online inference Deployment |
+| `CREATE SERVICE s ON MODEL m [CHECKPOINT = c]` | `SqlCreateService` | Deploys an online inference Deployment |
 | `CREATE SQL FUNCTION f ...` | `SqlCreateSqlFunction` | Begin a multi-statement function definition |
 | `DEFINE INPUT TABLE t LIKE other / (col type...)` | `SqlDefineInputTable` | Declare a function input table schema |
 | `RETURN [t / SELECT ... / CALL ...]` | `SqlReturn` | Return no data, a cache table, query, or synchronous call; top-level RETURN terminates the definition, while RETURN in IF exits early |

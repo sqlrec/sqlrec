@@ -873,7 +873,7 @@ FLUSH;
 
 ### CALL
 
-调用一个 SQL 函数。
+调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量或通过 `GET()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
 
 **语法：**
 
@@ -891,6 +891,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行 |
+
+`ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
 
 **示例：**
 

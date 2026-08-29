@@ -2,6 +2,10 @@
 
 SQLRec is a SQL-based data processing and machine learning programming framework. It extends standard SQL by introducing programming concepts such as variables, functions, and cached tables, enabling SQL to have programming language-like capabilities.
 
+This document serves both SQL authors and SQLRec developers. SQL syntax, constraints, and examples describe the observable usage contract; Java class names and implementation snippets explain the internals and do not imply additional SQL capabilities. In this document, an "SQL function" is a function defined by multiple SQL statements, while a "Java UDF" is a table or scalar function registered through a Java `evaluate` method.
+
+This document describes the language and runtime model. Whether business SQL is executable also depends on the deployed table schemas, primary keys, connector capabilities, and exact signatures and return schemas of registered functions. Examples use single quotes for strings and backticks for identifiers that require quoting; top-level statements in a multi-statement function are separated by semicolons.
+
 ## Table Type System
 
 SQLRec defines a table type hierarchy, where different types of tables have different access characteristics.
@@ -10,9 +14,12 @@ SQLRec defines a table type hierarchy, where different types of tables have diff
 
 ```
 SqlRecTable (abstract base class)
-├── CacheTable          -- Memory cache table
-└── SqlRecKvTable       -- KV table (supports primary key queries)
-    └── implements VectorSearchable -- vector search interface (supports vector search)
+├── CacheTable          -- In-memory cache table
+├── SqlRecKvTable       -- KV table (supports primary-key lookup)
+└── Other connector tables -- for example, KafkaCalciteTable
+
+VectorSearchable (interface)
+└── Currently implemented by MilvusCalciteTable, which also extends SqlRecKvTable
 ```
 
 ### SqlRecTable
@@ -30,8 +37,8 @@ public abstract class SqlRecTable extends AbstractTable {
 
 **Features:**
 - Data stored in memory
-- Supports fast random access
-- Session-level lifecycle
+- Supports repeated scans through `scan()`; it does not provide keyed random access
+- Its lifecycle follows the current `SqlExecutor`/request context; a table created inside a function is scoped to that invocation
 - Created via `CACHE TABLE` statement
 
 **Use Cases:**
@@ -51,7 +58,7 @@ SELECT * FROM source_table WHERE condition;
 
 **Features:**
 - Supports efficient queries by primary key
-- Built-in Caffeine cache
+- Can enable a Caffeine query cache through connector configuration; no cache is used unless `initCache` is called
 - Supports batch primary key queries
 
 **Core Methods:**
@@ -60,9 +67,9 @@ SELECT * FROM source_table WHERE condition;
 |--------|-------------|
 | `getPrimaryKeyIndex()` | Get primary key column index (abstract, implemented by subclasses) |
 | `getByPrimaryKeyImpl(Set<Object> keySet)` | Batch query by primary key (abstract, implemented by subclasses for specific data source access) |
-| `getByPrimaryKey(Set<Object> keySet)` | Batch query by primary key (with built-in Caffeine cache; returns cached result on hit, calls `getByPrimaryKeyImpl` on miss) |
+| `getByPrimaryKey(Set<Object> keySet)` | Batch lookup by primary key; when the Caffeine cache is initialized, returns hits first and calls `getByPrimaryKeyImpl` for misses |
 | `initCache(int maxSize, long expireAfterWrite)` | Initialize query cache |
-| `onlyFilterByPrimaryKey()` | Whether only primary key filtering is supported (defaults to `true`) |
+| `onlyFilterByPrimaryKey()` | Whether connector candidate predicates retain only safe primary-key filters (defaults to `true`) |
 | `invalidateCache(Object[] row)` | Invalidate cache entry for the primary key of the given row |
 
 **Cache Configuration:**
@@ -74,10 +81,10 @@ kvTable.initCache(10000, 60);
 
 ### VectorSearchable Interface
 
-`VectorSearchable` is a vector search interface, implemented by `SqlRecKvTable` subclasses, providing vector search capabilities.
+`VectorSearchable` is an independent vector-search interface. The current Milvus table both extends `SqlRecKvTable` and implements this interface, so it provides both KV lookup and vector search; the interface itself does not inherit KV-table capabilities.
 
 **Features:**
-- Inherits all capabilities of KV table
+- An implementation may also provide KV-table capabilities; this is not guaranteed by the interface itself
 - Supports vector similarity search
 - Supports ANN (Approximate Nearest Neighbor) queries
 
@@ -135,7 +142,9 @@ Parse SQL → Determine SQL type
     └─── Other SQL ──→ Forward to Flink
 ```
 
-### Locally Executed SQL Types
+### Major SQL Types Handled Directly by SQLRec
+
+The following list helps developers understand execution dispatch; it is not a complete user-facing syntax list. See the later sections and the [SQL Syntax Reference](sql_reference.md) for authoritative syntax.
 
 | SQL Type | Description |
 |----------|-------------|
@@ -143,6 +152,7 @@ Parse SQL → Determine SQL type
 | `SqlDropModel` | Drop model |
 | `SqlTrainModel` | Train model |
 | `SqlExportModel` | Export model |
+| `SqlAlterModelDropCheckpoint` | Drop a model checkpoint |
 | `SqlCreateService` | Create service |
 | `SqlDropService` | Drop service |
 | `SqlCreateApi` | Create API |
@@ -153,7 +163,10 @@ Parse SQL → Determine SQL type
 | `SqlCallSqlFunction` | Call function |
 | `SqlAssert` | Assert |
 | `SqlIfCache` | Conditional statement |
+| `SqlReturn` | Return from an SQL function |
+| `SqlDefineInputTable` | Define an SQL-function input table |
 | `SqlSet` | Set variable |
+| `SqlFlush` | Invalidate system caches |
 | `SqlShowTables` | Show table list |
 | `SqlShowSqlFunction` | Show function list |
 | `SqlShowApi` | Show API list |
@@ -162,6 +175,8 @@ Parse SQL → Determine SQL type
 | `SqlShowCheckpoint` | Show checkpoint list |
 | `SqlRichDescribeTable` | Describe table structure |
 | `SqlShowCreateTable` | Show create table statement |
+
+Statements such as `USE` and `SHOW DATABASES` reuse Flink AST classes and may also be handled directly by SQLRec. Do not infer SQL availability solely from this Java class list.
 
 ### CRUD SQL Routing Decision
 
@@ -183,6 +198,8 @@ public static boolean isSqlTableRunnable(SqlNode sqlNode, CalciteSchema schema, 
 **Decision Rules:**
 - All tables are `SqlRecTable` subclasses → Local execution
 - Contains non-`SqlRecTable` (like Hive tables) → Forward to Flink
+
+Do not mix a `CacheTable` created by the current execution with an external table that only Flink can access in one CRUD statement. The entire statement is forwarded to Flink, which cannot see the in-process cache table. Convert the required data into a SQLRec-accessible table first, or split processing across an explicit execution boundary.
 
 ### UNION Statement Special Handling
 
@@ -208,13 +225,13 @@ SQLRec supports different SQL query capabilities based on different table types.
 
 ### Table Type and Query Capability Matrix
 
-| Table Type | Filter Query | Primary Key Query | KV Join | Vector Search |
+| Table type/capability | SQL filtering | Filter pushdown | KV Join right side | Vector Join right side |
 |------------|--------------|-------------------|---------|---------------|
-| CacheTable | ✅ | ❌ | ❌ | ❌ |
-| SqlRecKvTable | ✅ | ✅ | ✅ | ❌ |
-| VectorSearchable | ✅ | ✅ | ✅ | ✅ |
+| CacheTable | ✅, after scanning | ❌ | ❌ | ❌ |
+| SqlRecKvTable | ✅ | ✅, connector-dependent | ✅ | ❌ |
+| A table implementing VectorSearchable | ✅ | ✅, connector-dependent | ✅ if it is also a KV table | ✅ |
 
-> **Write Operation Support**: Whether a table supports write operations (INSERT/UPDATE/DELETE) depends on whether it implements the `ModifiableTable` interface, not the table type itself. For example, both `SqlRecKvTable` and `KafkaCalciteTable` implement `ModifiableTable`, so they support write operations.
+"Right side" describes the role of an optimized operator, not general SQL Join support. A `CacheTable` is commonly used as the left input of a KV Join or Vector Join. Whether INSERT/UPDATE/DELETE works depends on the concrete implementation's `ModifiableTable` operations and cannot be inferred solely from the abstract table type.
 
 ### CACHE TABLE Statement
 
@@ -236,9 +253,10 @@ This line of code means:
 
 Cache tables can be viewed as "table variables" with the following features:
 
-- **Scope**: Globally visible in the current session
-- **Lifecycle**: Automatically destroyed when the session ends
+- **Scope**: A top-level cache table is visible in the current `SqlExecutor`; a cache table created inside a function is visible only in that invocation's temporary schema and must be passed explicitly to another function
+- **Lifecycle**: Destroyed with the current executor/request and never persisted as metadata
 - **Type**: Table type, containing column definitions and data rows
+- **Same-name replacement**: Running `CACHE TABLE` with the same name replaces that table in the current schema; function read/write dependencies ensure consumers of the previous result finish first
 
 #### Chain Processing
 
@@ -262,9 +280,47 @@ CACHE TABLE processed_data AS
 CALL process_function(raw_data, config_table);
 ```
 
+`CACHE TABLE ... AS CALL ... ASYNC` can be parsed but is rejected at runtime because an asynchronous call cannot synchronously provide a result to cache. Use a standalone `CALL ... ASYNC` instead.
+
+### IF and ASSERT
+
+`IF` evaluates one query or expression and executes one branch. Each branch can contain exactly one statement:
+
+```sql
+IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
+    CACHE TABLE result AS SELECT * FROM source_table
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM fallback_table
+);
+```
+
+The following constraints apply:
+
+- The condition must return exactly one row and one column. Normal mode requires BOOLEAN; NULL is treated as false.
+- Directly nesting another IF in THEN or ELSE is not supported, and a branch cannot contain multiple statements.
+- If both branches use `CACHE TABLE`, they must write the same table name with identical column count, names, and types.
+- If ELSE is omitted and the condition is false, a CACHE branch causes an empty cache table with the same schema to be registered.
+- A branch may contain CRUD, `CACHE TABLE`, `CALL`, `SET`, `ASSERT`, or `RETURN`; `RETURN` is valid only inside an SQL function and follows the rules in “Function Return Results.”
+
+The condition of `IF TIMEIN` returns milliseconds. For a positive timeout, a timeout or exception in THEN falls back to ELSE. A non-positive timeout executes THEN directly, and exceptions do not fall back in that case. TIMEIN requires ELSE, and both branches must either be CACHE statements or RETURN statements:
+
+```sql
+IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
+    CACHE TABLE result AS CALL slow_function(input_table)
+) ELSE (
+    CACHE TABLE result AS SELECT * FROM fallback_table
+);
+```
+
+`ASSERT` runs a query and validates every returned value. The query must return at least one row, every column must be BOOLEAN, and every value must be true; false or NULL terminates execution.
+
+```sql
+ASSERT SELECT COUNT(*) > 0 FROM source_table;
+```
+
 ### Filter Query
 
-All SqlRecTable subclasses support filter queries. The system implements filter condition pushdown through the `FilterableTableScan` node.
+Every scannable `SqlRecTable` can express SQL `WHERE` filtering, but this does not mean every table can push a predicate into its data source. `CacheTable` filters after an in-memory scan; connector tables implementing `FilterableTable` or `ProjectableFilterableTable` can use `FilterableTableScan` to attempt pushdown.
 
 #### Filter Condition Pushdown Rules
 
@@ -279,24 +335,28 @@ public static boolean test(TableScan scan) {
 
 #### KV Table Primary Key Filter Optimization
 
-For `SqlRecKvTable`, if `onlyFilterByPrimaryKey()` is set to true, only primary key filtering is supported:
+For `SqlRecKvTable`, `onlyFilterByPrimaryKey()` controls candidate predicates sent to the connector; it does not determine whether the SQL predicate is legal. When true, only a safe primary-key equality is used to retrieve candidate rows, while an outer `LogicalCalc` evaluates the complete original predicate to preserve SQL semantics:
 
 ```java
-private boolean shouldFilterByPrimaryKey(SqlRecTable sqlRecTable) {
-    if (sqlRecTable == null) return false;
-    if (!(sqlRecTable instanceof SqlRecKvTable)) return false;
-    SqlRecKvTable kvTable = (SqlRecKvTable) sqlRecTable;
-    return kvTable.onlyFilterByPrimaryKey();
+// SqlRecKvTable.scan
+List<RexNode> candidateFilters = filters;
+if (onlyFilterByPrimaryKey() && filters != null) {
+    candidateFilters = FilterUtils.getPrimaryKeyFilters(
+        filters, getPrimaryKeyIndex()
+    );
 }
+
+// SqlRecFilterTableScanRule keeps the complete predicate in an outer LogicalCalc
 ```
 
 **Example:**
 
 ```sql
--- For KV tables with onlyFilterByPrimaryKey=true, the following query is valid
+-- A primary-key predicate enables efficient candidate lookup
 SELECT * FROM kv_table WHERE primary_key = 'key123';
 
--- The following query is invalid (non-primary key filter)
+-- A non-primary-key predicate remains semantically valid but may scan more rows;
+-- a connector that cannot scan without a primary key may fail at runtime
 SELECT * FROM kv_table WHERE other_column = 'value';
 ```
 
@@ -306,9 +366,10 @@ KV Join is a join method unique to SqlRecKvTable, implementing efficient associa
 
 #### Trigger Conditions
 
-1. **Left table must be CacheTable** (in-memory data, can be traversed)
-2. Join condition must be **equality condition** (`=`)
-3. Right table must be `SqlRecKvTable`
+1. The left side must be a locally enumerable relation; materializing it with `CACHE TABLE` is recommended to avoid repeated external access
+2. The Join condition must be one **equality** (`=`) between two column references, not a compound predicate
+3. The right side must be a `SqlRecKvTable`, and its primary-key column should participate in the equality
+4. Use only INNER JOIN or LEFT JOIN; RIGHT/FULL JOIN is unsupported
 
 ```java
 // SqlRecKvJoinRule check conditions
@@ -370,11 +431,13 @@ Vector search Join is a join method unique to tables implementing `VectorSearcha
 
 #### Trigger Conditions
 
-1. **Left table must be CacheTable** (in-memory data, can be traversed)
-2. Project must contain **`ip()` function** (vector inner product)
-3. Join condition must be **true** (unconditional join)
-4. Right table must implement `VectorSearchable`
-5. Must have **ORDER BY ... LIMIT** clause
+1. The left side must be a locally enumerable relation and should normally be materialized as a `CacheTable`
+2. The SELECT projection must directly contain **`ip(left_embedding, right_embedding)`**, whose operands are column references from opposite sides
+3. The Join condition must be constant true, such as `ON TRUE` or `ON 1 = 1`
+4. The right table must implement `VectorSearchable`
+5. An **ORDER BY ... LIMIT** clause is required; inner-product similarity normally uses DESC
+6. Use INNER JOIN; the current vector executor does not null-extend misses for LEFT/RIGHT/FULL JOIN
+7. WHERE should contain only filters handled by the vector right side; filter the left input before the Join
 
 ```java
 // SqlRecVectorJoinRule check conditions
@@ -398,11 +461,13 @@ SELECT
     left.*,
     ip(left.embedding, right.embedding) as score
 FROM left_table left
-JOIN vector_table right ON true
+INNER JOIN vector_table right ON true
 WHERE right.category = 'electronics'  -- Optional filter condition
 ORDER BY score DESC
 LIMIT 10;
 ```
+
+LIMIT is passed to ANN search **for each left input row**. With multiple left rows, the total result count may exceed LIMIT; it is not a normal global SQL limit.
 
 #### Implementation Principle
 
@@ -447,12 +512,12 @@ public static Enumerable vectorJoin(
 
 ### UNION Operation
 
-UNION operation is implemented through `EnumerableUnion`, using snake merge algorithm.
+Local UNION is implemented through `SqlrecEnumerableUnion`, using a snake merge algorithm.
 
 #### Implementation
 
 ```java
-// EnumerableUnion.implement
+// SqlrecEnumerableUnion.implement
 Expression unionExp = Expressions.call(
     MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class), 
     inputExps
@@ -461,14 +526,19 @@ Expression unionExp = Expressions.call(
 
 #### Snake Merge Algorithm
 
-Snake merge is an efficient streaming merge algorithm suitable for merging multiple data sources:
+Snake merge polls the input sources and alternates one row from each, then materializes all rows into a `List`. It is not lazy streaming output:
 
 ```java
 // MergeUtils.snakeMergeEnumerable
-public static List<Object[]> snakeMergeEnumerable(Iterable<Object[]>... iterables) {
-    // Snake traverse all input sources, output alternately
+public static <T> Enumerable<T> snakeMergeEnumerable(Iterable<T>... sources) {
+    List<T> merged = snakeMerge(sources); // snakeMerge materializes an ArrayList
+    return Linq4j.asEnumerable(merged);
 }
 ```
+
+Local set-operation routing currently recognizes only UNION. Do not assume INTERSECT or EXCEPT can execute locally together with an in-process `CacheTable`.
+
+The current implementation does not deduplicate according to the `UNION` ALL flag, so local SQLRec queries should explicitly use `UNION ALL`. If deduplication is required, apply `SELECT DISTINCT` or `GROUP BY` after merging. Never rely on merge output order; add an outermost `ORDER BY` when stable ordering is required.
 
 ## Variable System
 
@@ -476,7 +546,7 @@ SQLRec manages runtime variables through `ExecuteContext`, providing programming
 
 ### Variable Setting
 
-Use `SET` statement or API to set variables:
+Use `SET` or the API to set variables. In SQL syntax, both key and value must be string literals; queries and arbitrary expressions are not accepted directly:
 
 ```sql
 SET 'my_var' = 'my_value';
@@ -488,11 +558,21 @@ context.setVariable("my_var", "my_value");
 
 ### Variable Retrieval
 
-Use `GET()` expression to get variables:
+In a `CALL` function-name or string-argument position, use `GET()` to retrieve a variable or `GET_OR_DEFAULT()` to provide a fallback:
 
 ```sql
--- Use in function call
-CALL my_function(GET('table_name'));
+-- A string argument of a Java table function
+CALL my_java_function(GET('config_value'));
+
+-- Dynamic function name; LIKE is required to declare the return schema
+CALL GET_OR_DEFAULT('function_name', 'default_function')(input_table)
+LIKE FUNCTION 'default_function';
+```
+
+`GET()`/`GET_OR_DEFAULT()` cannot turn a string variable into an SQL-function table argument; SQL-function arguments must still be cache-table identifiers. When invoking the scalar UDF with the same name in a normal SELECT expression, backticks are recommended because the name is also an extension keyword:
+
+```sql
+SELECT `get_or_default`('experiment_group', 'control') AS experiment_group;
 ```
 
 ### Variable Scope
@@ -500,8 +580,9 @@ CALL my_function(GET('table_name'));
 | Feature | Description |
 |---------|-------------|
 | **Storage** | `ConcurrentHashMap` (thread-safe) |
-| **Visibility** | Globally visible in current session |
-| **Isolation** | Variables isolated between different sessions |
+| **Visibility** | Visible to the current `SqlExecutor`/request and nested function calls |
+| **Isolation** | Isolated between executors or requests |
+| **Value type** | String; setting null removes the variable |
 
 ### Variables During Function Calls
 
@@ -514,19 +595,20 @@ finalContext.addFunNameToStack(funName);
 
 - **Variable Sharing**: Cloned context shares variable mapping
 - **Call Stack Isolation**: Each function call has an independent call stack
+- **Execution order**: `SET` and Java UDFs accepting `ExecuteContext` are not parallelized, preventing variable side effects from being reordered with other nodes
 
 
 ## Function System
 
-SQLRec supports custom SQL functions. Functions are encapsulations of a group of SQL statements, similar to function definitions in programming languages.
+SQLRec supports custom SQL functions, which encapsulate a group of SQL statements. They differ from the Java UDFs described later: explicit SQL-function parameters are tables only, whereas a Java table UDF can accept cache tables, strings, and automatically injected contexts.
 
 ### Function Definition
 
 A complete function definition includes the following parts:
 
 ```sql
--- 1. Function declaration
-CREATE SQL FUNCTION my_function;
+-- 1. Function declaration; use OR REPLACE to overwrite an existing definition
+CREATE OR REPLACE SQL FUNCTION my_function;
 
 -- 2. Parameter definition (optional, can define multiple)
 DEFINE INPUT TABLE input_data (
@@ -550,9 +632,16 @@ SELECT id, name, score FROM filtered ORDER BY score DESC;
 RETURN result;
 ```
 
+A function definition is submitted as multiple independent SQL statements in this strict stage order:
+
+1. One `CREATE [OR REPLACE] SQL FUNCTION` statement.
+2. Zero or more consecutive `DEFINE INPUT TABLE` statements; `DEFINE INPUT TABLE input_data LIKE existing_table` is also supported.
+3. Function-body statements. DEFINE cannot be added after the body has started.
+4. One top-level `RETURN` terminates the definition. It is still required when every IF branch returns.
+
 ### Function Parameter Passing
 
-SQLRec functions use **pass-by-value**, where parameters are tables (CacheTable) or variables.
+Explicit parameters of an SQLRec SQL function are tables. Every argument must be a `CacheTable` identifier. The caller's table is bound to the corresponding `DEFINE INPUT TABLE` name in a temporary schema without copying the entire table, and the function uses the input as a read-only data source.
 
 #### Basic Call
 
@@ -562,7 +651,12 @@ CALL my_function(table1, table2);
 
 #### Parameter Matching
 
-The tables passed during the call must be compatible with the input table structure defined by the function:
+Passed tables must be compatible with the input schema declared by the function. Compatibility means:
+
+- The actual table may have more columns than the declaration, but not fewer.
+- The first N columns are compared by position; names are case-insensitive but must match.
+- SQL types must match, except that CHAR/VARCHAR and other string types are mutually compatible.
+- Columns are not reordered by name, so order matters.
 
 ```sql
 -- Function definition
@@ -571,17 +665,21 @@ DEFINE INPUT TABLE input_data (id INT, value DOUBLE);
 ...
 RETURN result;
 
--- When calling, my_table structure must be compatible with input_data
+-- The first two columns of my_table must be id and value, compatible with INT and DOUBLE
 CALL process_data(my_table);
 ```
 
 #### Dynamic Function Name
 
-Use `GET()` expression to dynamically get function name:
+Use `GET()` or `GET_OR_DEFAULT()` to obtain a function name dynamically:
 
 ```sql
 -- Get function name from variable
 CALL GET('function_name')(table1, table2) LIKE template_table;
+
+-- Call default_function when the variable is absent
+CALL GET_OR_DEFAULT('function_name', 'default_function')(table1, table2)
+LIKE FUNCTION 'default_function';
 ```
 
 When calling functions dynamically, you need to use the `LIKE` clause to specify the result table schema, because the function being called cannot be known at compile time, so the type cannot be inferred.
@@ -594,7 +692,19 @@ Use the `ASYNC` keyword to execute functions asynchronously:
 CALL my_function(input_table) ASYNC;
 ```
 
-Asynchronous calls return immediately, and the function executes in a background thread. Suitable for scenarios where immediate results are not needed.
+An asynchronous call only submits work to a background thread and returns immediately; it exposes no synchronously consumable result. Use it for side-channel writes or logging. It cannot appear in `CACHE TABLE ... AS CALL` or `RETURN CALL`, and later SQL must not assume its data or side effects have completed.
+
+#### Partitioned Call
+
+`PARTITION BY` splits a cache table into fixed-size row groups, invokes the function concurrently, and merges partition results:
+
+```sql
+CALL my_function(input_table)
+LIKE FUNCTION 'my_function'
+PARTITION BY input_table SIZE 100;
+```
+
+The partition table must also be an argument of CALL. SIZE must be an integer literal and should be positive. `LIKE` must precede `PARTITION BY`, and `ASYNC` must be last. Partition merging does not guarantee business ordering; cache the result and apply a separate `ORDER BY` when stable ordering is needed.
 
 ### Function Return Results
 
@@ -640,7 +750,7 @@ An IF that uses RETURN must have one of these branch shapes:
 - THEN returns and ELSE is omitted; a false condition continues after the IF.
 - Both THEN and ELSE return, with compatible result schemas.
 
-An ELSE-only return and a returning THEN paired with an ordinary ELSE statement are rejected. Across the whole function, all possible return points must either be empty, or have identical column counts, names, and types.
+An ELSE-only return and a returning THEN paired with an ordinary ELSE statement are rejected. Across the whole function, all possible return points must either be empty, or have identical column counts, names, and types; CHAR/VARCHAR and other string types are mutually compatible.
 
 `IF TIMEIN` can also use RETURN in both branches. When the timeout is positive, a timeout or exception in THEN discards its temporary return state and ELSE supplies the final result; a non-positive timeout executes THEN directly.
 
@@ -661,9 +771,11 @@ CALL my_function(input_table);
 
 SQLRec has built-in automatic parallel execution capabilities, automatically analyzing dependencies between SQL statements and executing them in parallel.
 
+This behavior is controlled by `PARALLELISM_EXEC` and is enabled by default. When disabled, the function body runs in definition order. When enabled, textual order alone is not a dependency; SQLRec builds an execution graph mainly from table reads/writes and non-parallelizable nodes:
+
 - **Read Dependency**: Statement reads a table
 - **Write Dependency**: Statement writes to a table (like CACHE TABLE)
-- **Variable Dependency**: Variable dependency exists between SET statements, UDFs using ExecuteContext, and function calls using variables
+- **Execution Barrier**: `SET`, UDFs accepting `ExecuteContext`, ASSERT, and an IF containing RETURN constrain ordering around non-parallelizable nodes
 
 ```sql
 -- These two statements can be executed in parallel (no dependency)
@@ -674,9 +786,11 @@ CACHE TABLE b AS SELECT * FROM source2;
 CACHE TABLE c AS SELECT * FROM a UNION ALL SELECT * FROM b;
 ```
 
+Statements that require ordering should therefore express it through explicit table read/write dependencies rather than source order alone. Completion of `CALL ... ASYNC` is not part of the subsequent synchronous dependency graph.
+
 ## Circular Dependency Detection
 
-The system detects circular dependencies between functions through the call stack, preventing infinite recursion. 
+Static SQL-function calls are checked in the compile-time dependency graph. A dynamic function name cannot be resolved at compile time, so the runtime call stack also prevents infinite recursion.
 
 When a function is called, the function name is pushed onto the call stack:
 
@@ -697,12 +811,15 @@ if (funNameStack.contains(funName)) {
 
 SQLRec supports implementing user-defined functions (UDF) through Java, which can be called directly in SQL.
 
+This section explains the UDF invocation and development model. When writing business SQL with built-in UDFs, also consult [Built-in UDFs](udf.md) for exact signatures, parameter meanings, and output schemas; a function name alone is not enough to infer a valid call.
+
 ### UDF Definition
 
 A UDF is a regular Java class that needs to meet the following conditions:
 
 1. **Must have one or more `evaluate` methods**: This is the UDF entry point
-2. **Parameter type restrictions**: Supports `CacheTable`, `String`, `ExecuteContext`, `ReadonlyContext` and other types
+2. **Table-UDF parameter restrictions**: Explicit SQL arguments support only `CacheTable` and `String`; `ExecuteContext` or `ReadonlyContext` may be injected automatically
+3. **Return type**: A UDF producing table data returns `CacheTable`; a side-effect-only UDF may return `Void`, but its result cannot be used by CACHE or RETURN
 
 ```java
 public class MyTableFunction {
@@ -827,7 +944,7 @@ CALL my_function('prefix', table1, table2);
 **Notes**:
 - Varargs can accept 0 to multiple arguments
 - Varargs must be the last parameter of the method
-- Varargs type can be `String`, `CacheTable`, or any other type
+- The SQL invocation layer currently supports only `String...` or `CacheTable...`; other vararg types are rejected
 
 ### Parameter Injection
 
@@ -839,7 +956,7 @@ SQLRec automatically injects corresponding values based on the `evaluate` method
 | `String` | String literal or variable | `'value'` or `GET('var')` | Table function, Scalar function |
 | `ExecuteContext` | Execution context | Auto-injected, no need to specify in SQL | Table function |
 | `ReadonlyContext` | Readonly context | Auto-injected, no need to specify in SQL | Table function |
-| `SqlRecDataContext` | SQLRec data context | Auto-injected, no need to specify in SQL | Scalar function |
+| `DataContext` (a `SqlRecDataContext` at runtime) | SQLRec data context | Injected by Calcite, no need to specify in SQL | Scalar function |
 
 `SqlRecDataContext` is an interface specifically designed for scalar UDFs, inheriting from Calcite's `DataContext`. It provides the ability to access execution context variables:
 
@@ -922,27 +1039,29 @@ if (likeFunctionName != null) {
 
 #### 3. Infer via Executing evaluate Method
 
-If there's no LIKE clause, the system executes the `evaluate` method once at compile time to infer the return schema:
+If there is no LIKE clause and `evaluate` returns `CacheTable`, the system executes that method once at compile time to infer the return schema:
 
 ```java
-if (!isAsync && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
+if (CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
     Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
     returnDataFields = ((CacheTable) outputTable).getDataFields();
 }
 ```
 
-**Note**: This method requires the UDF to execute normally at compile time and cannot be an asynchronous call.
+**Note**: This requires the UDF to run successfully with an empty execution context and placeholder inputs, and compilation may trigger network requests or other side effects. For dynamic functions, asynchronous calls, functions that depend on real data, or side-effecting UDFs, explicitly use `LIKE table` or `LIKE FUNCTION 'function_name'` to avoid executing real logic solely for schema inference.
 
 ### UDF Registration
 
-UDFs need to be registered in Hive Metastore (HMS) before they can be called. When registering, you need to specify the function name and the corresponding Java class fully qualified name:
+UDFs must be registered in SQLRec's active metadata mode before they can be called. With Hive Metastore (HMS), specify the function name and fully qualified Java class name:
 
 ```sql
 -- Register UDF in HMS
 CREATE FUNCTION my_function AS 'com.example.MyFunction';
 ```
 
-When the system calls a function, it gets the function's class name via HMS and then dynamically loads it:
+With `SQL_SCHEMA_DIR` local metadata mode, place the same `CREATE FUNCTION` in an SQL file under that directory so SQLRec loads it at startup. This mode does not require HMS and does not allow the running CLI/API session to persist this kind of DDL directly.
+
+In HMS mode, the system gets the function's class name from HMS and dynamically loads it:
 
 ```java
 // Get function object from HMS
@@ -964,14 +1083,15 @@ When calling a function, the system looks up in the following order:
 
 | Concept | Traditional Programming Analogy | SQLRec Implementation |
 |---------|--------------------------------|----------------------|
-| Variable | Variable assignment | `CACHE TABLE` |
+| Table variable | Intermediate-result assignment | `CACHE TABLE` |
+| String variable | Request-level configuration | `SET`, `GET()`, `GET_OR_DEFAULT()` |
 | Function | Function definition | `CREATE SQL FUNCTION` |
 | Parameter | Function parameters | `DEFINE INPUT TABLE` |
 | Return value | return statement | `RETURN` |
 | Function call | Function call | `CALL` |
-| Dynamic dispatch | Reflection/dynamic loading | `GET()` |
-| Concurrency | Multi-threading | Auto parallelism + virtual threads |
-| Scope | Variable scope | Session level |
+| Dynamic dispatch | Reflection/dynamic loading | `GET()` / `GET_OR_DEFAULT()` + `LIKE` |
+| Concurrency | Multi-threading | Configurable auto parallelism + virtual threads |
+| Scope | Variable scope | Current executor/request; function cache tables are invocation-scoped |
 | Type system | Static typing | Table structure checking |
 | UDF | External libraries/plugins | Java class + `evaluate` method |
 | Table type | Data structure | `SqlRecTable` hierarchy |
@@ -979,6 +1099,6 @@ When calling a function, the system looks up in the following order:
 | Filter query | Conditional filtering | `FilterableTableScan` + rule optimization |
 | KV Join | Primary key association query | `SqlRecKvJoinRule` + batch primary key query |
 | Vector search | Similarity matching | `SqlRecVectorJoinRule` + `ip()` function |
-| UNION | Data merging | `EnumerableUnion` + snake merge algorithm |
+| UNION ALL | Data merging | `SqlrecEnumerableUnion` + snake merge algorithm |
 
-SQLRec extends SQL from a declarative query language to a language with complete programming capabilities while maintaining SQL's simplicity and declarative nature.
+SQLRec adds table variables, multi-statement functions, control flow, runtime variables, and parallel execution to declarative SQL. SQL authors must still follow the table-type, function-argument, control-flow, and execution-routing constraints described in this document.
