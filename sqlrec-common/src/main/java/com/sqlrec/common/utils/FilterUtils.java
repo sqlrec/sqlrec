@@ -382,6 +382,107 @@ public class FilterUtils {
         );
     }
 
+    /**
+     * Returns whether a join filter can be represented completely by Milvus.
+     * A partial predicate must never be pushed because filtering after ANN top-K
+     * can return fewer or different rows.
+     */
+    public static boolean canBuildMilvusJoinFilter(
+            RexNode filterCondition,
+            int leftFieldCount,
+            int rightFieldCount) {
+        if (filterCondition == null || leftFieldCount < 0 || rightFieldCount < 0) {
+            return false;
+        }
+        if (!(filterCondition instanceof RexCall)) {
+            return false;
+        }
+
+        RexCall call = (RexCall) filterCondition;
+        if (call.isA(SqlKind.AND) || call.isA(SqlKind.OR)) {
+            return !call.getOperands().isEmpty()
+                    && call.getOperands().stream().allMatch(
+                            operand -> canBuildMilvusJoinFilter(
+                                    operand, leftFieldCount, rightFieldCount));
+        }
+        if (call.getOperator().getName().toLowerCase().startsWith("array_contains")) {
+            return canBuildMilvusArrayJoinFilter(call, leftFieldCount, rightFieldCount);
+        }
+        if (!isMilvusComparison(call.getKind()) || call.getOperands().size() != 2) {
+            return false;
+        }
+
+        RexNode first = call.getOperands().get(0);
+        RexNode second = call.getOperands().get(1);
+        if (first instanceof RexInputRef && second instanceof RexInputRef) {
+            int firstIndex = ((RexInputRef) first).getIndex();
+            int secondIndex = ((RexInputRef) second).getIndex();
+            return isValidJoinInput(firstIndex, leftFieldCount, rightFieldCount)
+                    && isValidJoinInput(secondIndex, leftFieldCount, rightFieldCount)
+                    && (firstIndex >= leftFieldCount || secondIndex >= leftFieldCount);
+        }
+        if (first instanceof RexInputRef && second instanceof RexLiteral) {
+            return isRightInput(
+                    ((RexInputRef) first).getIndex(), leftFieldCount, rightFieldCount);
+        }
+        if (first instanceof RexLiteral && second instanceof RexInputRef) {
+            return isRightInput(
+                    ((RexInputRef) second).getIndex(), leftFieldCount, rightFieldCount);
+        }
+        return false;
+    }
+
+    private static boolean canBuildMilvusArrayJoinFilter(
+            RexCall call,
+            int leftFieldCount,
+            int rightFieldCount) {
+        if (call.getOperands().size() != 2
+                || !(call.getOperands().get(0) instanceof RexInputRef)
+                || !isRightInput(
+                        ((RexInputRef) call.getOperands().get(0)).getIndex(),
+                        leftFieldCount,
+                        rightFieldCount)) {
+            return false;
+        }
+
+        RexNode value = call.getOperands().get(1);
+        if (value instanceof RexLiteral) {
+            return true;
+        }
+        if (value instanceof RexInputRef) {
+            return isValidJoinInput(
+                    ((RexInputRef) value).getIndex(), leftFieldCount, rightFieldCount);
+        }
+        if (!(value instanceof RexCall)
+                || !value.isA(SqlKind.ARRAY_VALUE_CONSTRUCTOR)) {
+            return false;
+        }
+        for (RexNode element : ((RexCall) value).getOperands()) {
+            if (element instanceof RexLiteral) {
+                continue;
+            }
+            if (!(element instanceof RexInputRef)
+                    || !isValidJoinInput(
+                            ((RexInputRef) element).getIndex(),
+                            leftFieldCount,
+                            rightFieldCount)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isValidJoinInput(
+            int index, int leftFieldCount, int rightFieldCount) {
+        return index >= 0 && index < leftFieldCount + rightFieldCount;
+    }
+
+    private static boolean isRightInput(
+            int index, int leftFieldCount, int rightFieldCount) {
+        return index >= leftFieldCount
+                && index < leftFieldCount + rightFieldCount;
+    }
+
     private static String buildFilterExpressionRecursive(
             RexNode node,
             Object[] leftValue,

@@ -1,7 +1,15 @@
 package com.sqlrec.connectors.milvus.handler;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.VectorSearchRequest;
+import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.SqlTypeName;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.milvus.v2.client.MilvusClientV2;
@@ -263,6 +271,134 @@ public class MilvusHandlerUnitTest {
         Map<Object, List<Object[]>> result = handler.getByPrimaryKey(new HashSet<>(Arrays.asList(1)));
 
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testVectorSearchPushesCorrelatedFilterBeforeTopK() {
+        SearchResp searchResp = mock(SearchResp.class);
+        when(searchResp.getSearchResults()).thenReturn(Collections.emptyList());
+        when(mockClient.search(any(SearchReq.class))).thenReturn(searchResp);
+
+        JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl();
+        RexBuilder rexBuilder = new RexBuilder(typeFactory);
+        RelDataType joinedType = typeFactory.builder()
+                .add("preferred_category", SqlTypeName.VARCHAR)
+                .add("id", SqlTypeName.BIGINT)
+                .add("name", SqlTypeName.VARCHAR)
+                .add("embedding", SqlTypeName.ANY)
+                .build();
+        RexNode leftCategory = rexBuilder.makeInputRef(
+                joinedType.getFieldList().get(0).getType(), 0);
+        RexNode rightName = rexBuilder.makeInputRef(
+                joinedType.getFieldList().get(2).getType(), 2);
+        RexNode filter = rexBuilder.makeCall(
+                SqlStdOperatorTable.EQUALS, rightName, leftCategory);
+        VectorSearchRequest request = new VectorSearchRequest(
+                new Object[]{"book"},
+                Arrays.asList(0.1f, 0.2f),
+                "embedding",
+                filter,
+                5);
+
+        List<VectorSearchResult> results = handler.searchByEmbedding(request);
+
+        assertTrue(results.isEmpty());
+        org.mockito.ArgumentCaptor<SearchReq> captor =
+                org.mockito.ArgumentCaptor.forClass(SearchReq.class);
+        verify(mockClient).search(captor.capture());
+        SearchReq actual = captor.getValue();
+        assertEquals("name == \"book\"", actual.getFilter());
+        assertEquals(5, actual.getTopK());
+        assertEquals(Arrays.asList("id", "name", "embedding"), actual.getOutputFields());
+    }
+
+    @Test
+    public void testVectorSearchParsesFullRowsScoresAndMultipleResultGroups() {
+        SearchResp.SearchResult first = mock(SearchResp.SearchResult.class);
+        Map<String, Object> firstEntity = new HashMap<>();
+        firstEntity.put("id", 11L);
+        firstEntity.put("name", "book");
+        firstEntity.put("embedding", Arrays.asList(0.1f, 0.2f));
+        when(first.getEntity()).thenReturn(firstEntity);
+        when(first.getScore()).thenReturn(0.91f);
+
+        SearchResp.SearchResult second = mock(SearchResp.SearchResult.class);
+        Map<String, Object> secondEntity = new HashMap<>();
+        secondEntity.put("id", 12L);
+        secondEntity.put("name", "movie");
+        secondEntity.put("embedding", Arrays.asList(0.3f, 0.4f));
+        when(second.getEntity()).thenReturn(secondEntity);
+        when(second.getScore()).thenReturn(0.82f);
+
+        SearchResp searchResp = mock(SearchResp.class);
+        when(searchResp.getSearchResults()).thenReturn(Arrays.asList(
+                Collections.singletonList(first),
+                Collections.singletonList(second)));
+        when(mockClient.search(any(SearchReq.class))).thenReturn(searchResp);
+
+        List<VectorSearchResult> results = handler.searchByEmbedding(
+                new VectorSearchRequest(
+                        new Object[]{1L},
+                        Arrays.asList(0.5f, 0.6f),
+                        "embedding",
+                        null,
+                        2));
+
+        assertEquals(2, results.size());
+        assertArrayEquals(
+                new Object[]{11L, "book", Arrays.asList(0.1f, 0.2f)},
+                results.get(0).getRow());
+        assertEquals(0.91d, results.get(0).getScore(), 0.0001d);
+        assertArrayEquals(
+                new Object[]{12L, "movie", Arrays.asList(0.3f, 0.4f)},
+                results.get(1).getRow());
+
+        org.mockito.ArgumentCaptor<SearchReq> captor =
+                org.mockito.ArgumentCaptor.forClass(SearchReq.class);
+        verify(mockClient).search(captor.capture());
+        SearchReq actual = captor.getValue();
+        assertEquals("embedding", actual.getAnnsField());
+        assertEquals(2, actual.getTopK());
+        assertTrue(actual.getFilter() == null || actual.getFilter().isEmpty());
+    }
+
+    @Test
+    public void testVectorSearchHandlesNullResponseAndNullResults() {
+        when(mockClient.search(any(SearchReq.class))).thenReturn(null);
+        VectorSearchRequest request = new VectorSearchRequest(
+                new Object[]{1L},
+                Arrays.asList(0.1f, 0.2f),
+                "embedding",
+                null,
+                1);
+
+        assertTrue(handler.searchByEmbedding(request).isEmpty());
+
+        SearchResp response = mock(SearchResp.class);
+        when(response.getSearchResults()).thenReturn(null);
+        when(mockClient.search(any(SearchReq.class))).thenReturn(response);
+        assertTrue(handler.searchByEmbedding(request).isEmpty());
+    }
+
+    @Test
+    public void testVectorSearchRetriesOnConnectionFailure() {
+        SearchResp response = mock(SearchResp.class);
+        when(response.getSearchResults()).thenReturn(Collections.emptyList());
+        when(mockClient.search(any(SearchReq.class)))
+                .thenThrow(new StatusRuntimeException(
+                        Status.UNAVAILABLE.withDescription("connection refused")))
+                .thenReturn(response);
+
+        List<VectorSearchResult> results = handler.searchByEmbedding(
+                new VectorSearchRequest(
+                        new Object[]{1L},
+                        Collections.singletonList(0.1f),
+                        "embedding",
+                        null,
+                        1));
+
+        assertTrue(results.isEmpty());
+        verify(mockClient, times(2)).search(any(SearchReq.class));
     }
 
     @Test

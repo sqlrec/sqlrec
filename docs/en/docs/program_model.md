@@ -92,17 +92,9 @@ kvTable.initCache(10000, 60);
 
 ```java
 public interface VectorSearchable {
-    List<Object[]> searchByEmbeddingWithScoreImpl(
-            Object[] leftValue,      // Left table join value
-            List<Float> embedding,   // Query vector
-            String annFieldName,     // Vector field name
-            RexNode filterCondition, // Filter condition
-            int limit,               // Return count limit
-            List<Integer> projectColumns  // Projection columns
-    );
+    List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request);
 
-    // searchByEmbeddingWithScore is a default method that wraps
-    // searchByEmbeddingWithScoreImpl with type conversion and metrics
+    // searchByEmbedding wraps the implementation with type conversion and metrics.
 }
 ```
 
@@ -472,33 +464,25 @@ LIMIT is passed to ANN search **for each left input row**. With multiple left ro
 #### Implementation Principle
 
 ```java
-// VectorJoinUtils.vectorJoin
-public static Enumerable vectorJoin(
+// VectorJoinExecutor.execute
+public static Enumerable<Object[]> execute(
         Enumerable left,
         VectorSearchable rightTable,
-        Object filterConditionObj,    // Right table filter condition (cast to RexNode internally)
-        int leftEmbeddingColIndex,    // Left table vector column index
-        String rightEmbeddingColName, // Right table vector column name
-        int limit,                    // Return count
-        List<Integer> projectColumns  // Projection columns
+        Object pushedFilter,
+        int leftEmbeddingIndex,
+        String rightEmbeddingField,
+        int topKPerLeftRow
 ) {
-    for (Object[] leftValue : leftValues) {
+    for (Object[] leftRow : left) {
         // 1. Extract query vector from left table
-        List<Float> embedding = DataTransformUtils.convertToFloatVec(
-            leftValue[leftEmbeddingColIndex]
-        );
+        List<Float> embedding = DataTransformUtils.convertToFloatVec(leftRow[leftEmbeddingIndex]);
         
-        // 2. Vector similarity search
-        List<Object[]> rightValues = rightTable.searchByEmbeddingWithScore(
-            leftValue,
-            embedding,
-            rightEmbeddingColName,
-            filterCondition,
-            limit,
-            vectorProjectColumns
-        );
+        // 2. Milvus applies the pushed filter before ANN top-K.
+        VectorSearchRequest request = new VectorSearchRequest(
+            leftRow, embedding, rightEmbeddingField, (RexNode) pushedFilter, topKPerLeftRow);
+        List<VectorSearchResult> rightValues = rightTable.searchByEmbedding(request);
         
-        // 3. Associate results
+        // 3. Join the full right row and score with the left row.
         // ...
     }
 }

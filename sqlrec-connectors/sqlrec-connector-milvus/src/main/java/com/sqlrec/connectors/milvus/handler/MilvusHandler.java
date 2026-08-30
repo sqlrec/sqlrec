@@ -3,6 +3,8 @@ package com.sqlrec.connectors.milvus.handler;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.VectorSearchRequest;
+import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
@@ -172,60 +174,42 @@ public class MilvusHandler {
         return rowsMap;
     }
 
-    public List<Object[]> searchByEmbeddingWithScore(
-            String fieldName,
-            List<Float> embedding,
-            RexNode filterCondition,
-            Object[] leftValue,
-            int limit,
-            List<Integer> projectColumns) {
-        int topK = limit == 0 ? 100 : limit;
-
+    public List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {
         String filterExpression = FilterUtils.buildMilvusFilterExpression(
-                filterCondition,
-                leftValue,
+                request.getFilterCondition(),
+                request.getLeftRow(),
                 milvusConfig.fieldSchemas.stream().map(FieldSchema::getName).collect(Collectors.toList())
         );
 
         SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
-                .annsField(fieldName)
-                .data(Collections.singletonList(new FloatVec(embedding)))
-                .outputFields(getOutputFields(projectColumns))
-                .topK(topK);
+                .annsField(request.getVectorField())
+                .data(Collections.singletonList(new FloatVec(request.getEmbedding())))
+                .outputFields(milvusConfig.fieldSchemas.stream()
+                        .map(FieldSchema::getName)
+                        .collect(Collectors.toList()))
+                .topK(request.getTopK());
         if (filterExpression != null && !filterExpression.isEmpty()) {
             builder.filter(filterExpression);
         }
 
         SearchResp searchResp = withClient(client -> client.search(builder.build()));
-        return parseSearchRespWithScore(searchResp);
+        return parseSearchResults(searchResp);
     }
 
-    private List<String> getOutputFields(List<Integer> projectColumns) {
-        if (projectColumns == null || projectColumns.isEmpty()) {
-            return milvusConfig.fieldSchemas.stream()
-                    .map(FieldSchema::getName)
-                    .collect(Collectors.toList());
-        }
-        return projectColumns.stream()
-                .filter(i -> i >= 0 && i < milvusConfig.fieldSchemas.size())
-                .map(i -> milvusConfig.fieldSchemas.get(i).getName())
-                .collect(Collectors.toList());
-    }
-
-    private List<Object[]> parseSearchRespWithScore(SearchResp searchResp) {
+    private List<VectorSearchResult> parseSearchResults(SearchResp searchResp) {
         if (searchResp == null || searchResp.getSearchResults() == null) {
             return Collections.emptyList();
         }
 
-        List<Object[]> rows = new ArrayList<>();
+        List<VectorSearchResult> rows = new ArrayList<>();
         for (List<SearchResp.SearchResult> results : searchResp.getSearchResults()) {
             for (SearchResp.SearchResult result : results) {
                 Map<String, Object> entity = result.getEntity();
-                float score = result.getScore();
-                Object[] row = toRowWithScore(entity, milvusConfig.fieldSchemas, score);
-                rows.add(row);
+                rows.add(new VectorSearchResult(
+                        toRow(entity, milvusConfig.fieldSchemas),
+                        result.getScore()));
             }
         }
         return rows;
@@ -311,15 +295,6 @@ public class MilvusHandler {
         for (int i = 0; i < fieldSchemas.size(); i++) {
             row[i] = entity.get(fieldSchemas.get(i).getName());
         }
-        return row;
-    }
-
-    private Object[] toRowWithScore(Map<String, Object> entity, List<FieldSchema> fieldSchemas, float score) {
-        Object[] row = new Object[fieldSchemas.size() + 1];
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            row[i] = entity.get(fieldSchemas.get(i).getName());
-        }
-        row[fieldSchemas.size()] = score;
         return row;
     }
 

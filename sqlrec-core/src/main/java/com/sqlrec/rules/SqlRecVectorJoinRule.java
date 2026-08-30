@@ -1,22 +1,21 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.common.schema.VectorSearchable;
-import com.sqlrec.node.SqlrecEnumerableVectorJoin;
-import com.sqlrec.utils.NodeUtils;
-import com.sqlrec.utils.VectorJoinUtils;
+import com.sqlrec.node.SqlrecEnumerableVectorLookupJoin;
+import com.sqlrec.utils.VectorJoinPlanExtractor;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableProject;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalSort;
+import org.apache.calcite.rex.RexNode;
 import org.immutables.value.Value;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Value.Enclosing
 public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
@@ -41,47 +40,50 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
             join = call.rel(2);
         }
 
-        if (!NodeUtils.hasIpFunction(project)) {
+        Optional<VectorJoinPlanExtractor.VectorLookupPlan> extracted =
+                VectorJoinPlanExtractor.extract(sort, project, filter, join);
+        if (!extracted.isPresent()) {
             return;
         }
-        if (!NodeUtils.isTrueCondition(join)) {
-            return;
+        VectorJoinPlanExtractor.VectorLookupPlan plan = extracted.get();
+
+        RelNode logicalLeft = join.getLeft();
+        if (plan.getLeftFilter() != null) {
+            logicalLeft = LogicalFilter.create(logicalLeft, plan.getLeftFilter());
         }
-        RelOptTable rightTable = NodeUtils.getScanTable(join.getRight());
-        if (rightTable == null || rightTable.unwrap(VectorSearchable.class) == null) {
-            return;
-        }
+        RelNode left = convert(
+                logicalLeft,
+                logicalLeft.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        RelNode logicalRight = plan.getRightScan();
+        RelNode right = convert(
+                logicalRight,
+                logicalRight.getTraitSet().replace(EnumerableConvention.INSTANCE));
 
-        VectorJoinUtils.VectorJoinConfig joinConfig = VectorJoinUtils.extractVectorJoinConfig(
-                sort, project, filter, join
-        );
+        SqlrecEnumerableVectorLookupJoin lookupJoin =
+                SqlrecEnumerableVectorLookupJoin.create(
+                        left,
+                        right,
+                        plan.getPushedFilter(),
+                        plan.getLeftEmbeddingIndex(),
+                        plan.getRightEmbeddingField(),
+                        plan.getTopKPerLeftRow(),
+                        plan.getScoreType());
 
-        List<RelNode> newInputs = new ArrayList<>();
-        for (RelNode input : join.getInputs()) {
-            if (!(input.getConvention() instanceof EnumerableConvention)) {
-                input = convert(input, input.getTraitSet().replace(EnumerableConvention.INSTANCE));
-            }
-            newInputs.add(input);
-        }
-        final RelNode left = newInputs.get(0);
-        final RelNode right = newInputs.get(1);
+        List<RexNode> rewrittenProjects =
+                plan.rewriteProjects(lookupJoin.getRowType().getFieldCount() - 1);
+        EnumerableProject enumerableProject = EnumerableProject.create(
+                lookupJoin, rewrittenProjects, plan.getProjectRowType());
 
-        SqlrecEnumerableVectorJoin newJoin = SqlrecEnumerableVectorJoin.create(
-                left,
-                right,
-                join.getCondition(),
-                join.getVariablesSet(),
-                join.getJoinType(),
-                joinConfig.filterCondition,
-                joinConfig.leftEmbeddingColIndex,
-                joinConfig.rightEmbeddingColName,
-                joinConfig.limit,
-                joinConfig.projectColumns,
-                joinConfig.projectRowType,
-                joinConfig.collation
-        );
-
-        call.transformTo(newJoin);
+        // ORDER BY ... LIMIT is SQLRec's vector lookup syntax. The connector defines
+        // ANN ranking and returns top-K rows per left row, so consuming the Sort is
+        // intentional. Preserve the requested collation trait to prevent Calcite from
+        // adding a global Sort/Limit.
+        RelNode result = enumerableProject.copy(
+                enumerableProject.getTraitSet().replace(plan.getCollation()),
+                lookupJoin,
+                rewrittenProjects,
+                plan.getProjectRowType());
+        call.transformTo(result);
     }
 
     @Value.Immutable

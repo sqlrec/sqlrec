@@ -905,6 +905,75 @@ public class FilterUtilsTest {
                 filterCondition, new Object[]{1}, Collections.singletonList("value")));
     }
 
+    @Test
+    public void testBuildMilvusFilterExpression_MixedJoinConjunction() {
+        RexInputRef leftCategory = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.VARCHAR), 0);
+        RexInputRef rightId = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.INTEGER), 1);
+        RexInputRef rightCategory = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.VARCHAR), 2);
+        RexNode correlated = rexBuilder.makeCall(
+                SqlStdOperatorTable.EQUALS, rightCategory, leftCategory);
+        RexNode rightOnly = rexBuilder.makeCall(
+                SqlStdOperatorTable.GREATER_THAN,
+                rightId,
+                rexBuilder.makeExactLiteral(new java.math.BigDecimal(10)));
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.AND, correlated, rightOnly);
+
+        assertTrue(FilterUtils.canBuildMilvusJoinFilter(condition, 1, 2));
+        assertEquals(
+                "(category == \"book\" and id > 10)",
+                FilterUtils.buildMilvusFilterExpression(
+                        condition,
+                        new Object[]{"book"},
+                        Arrays.asList("id", "category")));
+    }
+
+    @Test
+    public void testBuildMilvusFilterExpression_CorrelatedArrayCondition() {
+        RexInputRef leftTags = rexBuilder.makeInputRef(
+                typeFactory.createArrayType(
+                        typeFactory.createSqlType(SqlTypeName.VARCHAR), -1),
+                0);
+        RexInputRef rightTags = rexBuilder.makeInputRef(
+                typeFactory.createArrayType(
+                        typeFactory.createSqlType(SqlTypeName.VARCHAR), -1),
+                1);
+        RexNode condition = rexBuilder.makeCall(
+                ARRAY_CONTAINS_ALL, rightTags, leftTags);
+
+        assertTrue(FilterUtils.canBuildMilvusJoinFilter(condition, 1, 1));
+        assertEquals(
+                "ARRAY_CONTAINS_ALL(tags, [\"Action\", \"Drama\"])",
+                FilterUtils.buildMilvusFilterExpression(
+                        condition,
+                        new Object[]{Arrays.asList("Action", "Drama")},
+                        Collections.singletonList("tags")));
+    }
+
+    @Test
+    public void testCanBuildMilvusJoinFilter_RejectsMixedOr() {
+        RexInputRef leftId = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexInputRef rightId = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.INTEGER), 1);
+        RexNode leftOnly = rexBuilder.makeCall(
+                SqlStdOperatorTable.GREATER_THAN,
+                leftId,
+                rexBuilder.makeExactLiteral(java.math.BigDecimal.ZERO));
+        RexNode rightOnly = rexBuilder.makeCall(
+                SqlStdOperatorTable.GREATER_THAN,
+                rightId,
+                rexBuilder.makeExactLiteral(java.math.BigDecimal.ZERO));
+
+        assertFalse(FilterUtils.canBuildMilvusJoinFilter(
+                rexBuilder.makeCall(SqlStdOperatorTable.OR, leftOnly, rightOnly),
+                1,
+                1));
+    }
+
     /** Stand-in for the sqlrec-udf array_contains function operator. */
     private static final SqlOperator ARRAY_CONTAINS = new SqlFunction(
             "ARRAY_CONTAINS",

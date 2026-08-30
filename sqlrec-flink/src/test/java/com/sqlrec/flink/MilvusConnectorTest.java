@@ -5,6 +5,12 @@ import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
+import io.milvus.v2.client.ConnectConfig;
+import io.milvus.v2.client.MilvusClientV2;
+import io.milvus.v2.common.DataType;
+import io.milvus.v2.common.IndexParam;
+import io.milvus.v2.service.collection.request.CreateCollectionReq;
+import io.milvus.v2.service.collection.request.DropCollectionReq;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
@@ -16,6 +22,8 @@ import org.apache.flink.table.catalog.UniqueConstraint;
 import org.apache.flink.test.junit5.MiniClusterExtension;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -25,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,13 +45,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * Uses MiniCluster for real Flink job execution.
  *
  * Milvus connector is sink-only in Flink (no DynamicTableSource), so tests
- * focus on INSERT operations. The test uses unique IDs per run to avoid
- * data conflicts.
+ * focus on INSERT operations. Every test class run creates an isolated collection
+ * so test rows can never pollute benchmark data.
  *
  * Requires a running Milvus at {@code http://<DEFAULT_TEST_IP>:30022}
- * with a collection named {@code item_embedding} containing fields:
- * id (BIGINT), title (VARCHAR), genres (ARRAY<STRING>), embedding (ARRAY<DOUBLE>)
- * with embedding dimension = 64.
  * Tagged "integration" to skip in regular builds.
  */
 @Tag("integration")
@@ -56,6 +62,75 @@ class MilvusConnectorTest {
     private static final String MILVUS_TOKEN = "root:Milvus";
     private static final String MILVUS_DB = "default";
     private static final int EMBEDDING_DIM = 64;
+    private static final String TEST_COLLECTION = "sqlrec_milvus_connector_test_"
+            + UUID.randomUUID().toString().replace("-", "");
+
+    private static MilvusClientV2 collectionClient;
+
+    @BeforeAll
+    static void createTestCollection() {
+        collectionClient = new MilvusClientV2(ConnectConfig.builder()
+                .uri(MILVUS_URL)
+                .token(MILVUS_TOKEN)
+                .dbName(MILVUS_DB)
+                .build());
+
+        CreateCollectionReq.CollectionSchema schema = CreateCollectionReq.CollectionSchema.builder()
+                .enableDynamicField(false)
+                .fieldSchemaList(Arrays.asList(
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("id")
+                                .dataType(DataType.Int64)
+                                .isPrimaryKey(true)
+                                .autoID(false)
+                                .build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("title")
+                                .dataType(DataType.VarChar)
+                                .maxLength(512)
+                                .build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("genres")
+                                .dataType(DataType.Array)
+                                .elementType(DataType.VarChar)
+                                .maxCapacity(64)
+                                .maxLength(256)
+                                .build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("embedding")
+                                .dataType(DataType.FloatVector)
+                                .dimension(EMBEDDING_DIM)
+                                .build()))
+                .build();
+        IndexParam embeddingIndex = IndexParam.builder()
+                .fieldName("embedding")
+                .indexName("embedding")
+                .indexType(IndexParam.IndexType.AUTOINDEX)
+                .metricType(IndexParam.MetricType.COSINE)
+                .build();
+
+        collectionClient.createCollection(CreateCollectionReq.builder()
+                .databaseName(MILVUS_DB)
+                .collectionName(TEST_COLLECTION)
+                .collectionSchema(schema)
+                .indexParams(Collections.singletonList(embeddingIndex))
+                .build());
+    }
+
+    @AfterAll
+    static void dropTestCollection() {
+        if (collectionClient == null) {
+            return;
+        }
+        try {
+            collectionClient.dropCollection(DropCollectionReq.builder()
+                    .databaseName(MILVUS_DB)
+                    .collectionName(TEST_COLLECTION)
+                    .build());
+        } finally {
+            collectionClient.close();
+        }
+    }
 
     private StreamTableEnvironment createTableEnv() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -76,7 +151,7 @@ class MilvusConnectorTest {
                 "  'url' = '" + MILVUS_URL + "',\n" +
                 "  'token' = '" + MILVUS_TOKEN + "',\n" +
                 "  'database' = '" + MILVUS_DB + "',\n" +
-                "  'collection' = 'item_embedding',\n" +
+                "  'collection' = '" + TEST_COLLECTION + "',\n" +
                 "  'batch-size' = '100',\n" +
                 "  'flush-interval' = '5'\n" +
                 ")"
@@ -172,7 +247,7 @@ class MilvusConnectorTest {
         config.url = MILVUS_URL;
         config.token = MILVUS_TOKEN;
         config.database = MILVUS_DB;
-        config.collection = "item_embedding";
+        config.collection = TEST_COLLECTION;
         config.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(schema);
         config.primaryKey = FlinkSchemaUtils.getPrimaryKey(schema);
         config.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(

@@ -93,22 +93,12 @@ public abstract class SqlRecKvTable extends SqlRecTable
 ```java
 package com.sqlrec.common.schema;
 
-import org.apache.calcite.rex.RexNode;
 import java.util.List;
 
 public interface VectorSearchable {
+    List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request);
 
-    // Vector similarity search (must implement)
-    List<Object[]> searchByEmbeddingWithScoreImpl(
-            Object[] leftValue,
-            List<Float> embedding,
-            String annFieldName,
-            RexNode filterCondition,
-            int limit,
-            List<Integer> projectColumns);
-
-    // searchByEmbeddingWithScore is a default method that wraps
-    // searchByEmbeddingWithScoreImpl with type conversion and metrics
+    // searchByEmbedding wraps the implementation with type conversion and metrics.
 }
 ```
 
@@ -117,7 +107,7 @@ public interface VectorSearchable {
 - Example: Milvus connector
 
 **Methods to Implement**:
-- Implement the `VectorSearchable` interface's `searchByEmbeddingWithScoreImpl()`: Implement vector search
+- Implement `VectorSearchable.searchByEmbeddingImpl()` to perform vector search.
 
 ## Developing Custom Connectors
 
@@ -243,7 +233,6 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexNode;
 import java.util.*;
 
 public class ExampleCalciteTable extends SqlRecKvTable {
@@ -306,14 +295,8 @@ public class ExampleVectorTable extends SqlRecKvTable implements VectorSearchabl
     }
 
     @Override
-    public List<Object[]> searchByEmbeddingWithScoreImpl(
-            Object[] leftValue,
-            List<Float> embedding,
-            String annFieldName,
-            RexNode filterCondition,
-            int limit,
-            List<Integer> projectColumns) {
-        return handler.vectorSearch(embedding, annFieldName, filterCondition, limit);
+    public List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request) {
+        return handler.vectorSearch(request);
     }
 
     // ... other necessary method implementations

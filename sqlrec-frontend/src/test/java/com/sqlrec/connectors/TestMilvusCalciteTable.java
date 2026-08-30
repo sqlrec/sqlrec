@@ -13,6 +13,7 @@ import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.ScannableTable;
@@ -85,9 +86,10 @@ public class TestMilvusCalciteTable {
                               LogicalTableScan(table=[[default, t2]])
                               LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6, 7, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
         new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
                 """
@@ -97,9 +99,10 @@ public class TestMilvusCalciteTable {
                               LogicalTableScan(table=[[default, t2]])
                               LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], limit=[10], projects=[[4, 5, 6, 7, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], id=[$t4], title=[$t5], genres=[$t6], embedding=[$t7], EXPR$4=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
         new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null,
                 """
@@ -109,9 +112,10 @@ public class TestMilvusCalciteTable {
                               LogicalTableScan(table=[[default, t2]])
                               LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], projects=[[0, 4, 5, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
         new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
                 """
@@ -121,9 +125,10 @@ public class TestMilvusCalciteTable {
                               LogicalTableScan(table=[[default, t2]])
                               LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 4, 5, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
         new SqlTestCase("select * from t2 join t1 on 1=1 where t2.title = t1.title order by ip(t2.embedding, t1.embedding) limit 10", null,
                 """
@@ -134,9 +139,10 @@ public class TestMilvusCalciteTable {
                                 LogicalTableScan(table=[[default, t2]])
                                 LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], filterCondition=[=($1, $5)], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6, 7, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(pushedFilter=[=($1, $5)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
         new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null,
                 """
@@ -147,14 +153,19 @@ public class TestMilvusCalciteTable {
                                 LogicalTableScan(table=[[default, t2]])
                                 LogicalTableScan(table=[[default, t1]])""",
                 """
-                        SqlrecEnumerableVectorJoin(condition=[true], joinType=[INNER], filterCondition=[>=($4, 1)], leftEmbeddingColIndex=[3], rightEmbeddingColName=[embedding], limit=[10], projects=[[0, 1, 2, 3, 4, 5, 6, 7, 8]])
-                          EnumerableTableScan(table=[[default, t2]])
-                          EnumerableTableScan(table=[[default, t1]])""",
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(pushedFilter=[>=($4, 1)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
-        // An unsupported child must disable Milvus filter pushdown for the whole
-        // compound predicate, allowing Calcite to evaluate the residual condition.
+        // An unsupported right-side predicate must prevent the vector lookup rule
+        // from firing, so the original Calcite plan keeps the complete condition.
         new SqlTestCase("select * from t2 join t1 on 1=1 " +
                 "where t2.title = t1.title and t1.id + 1 > 1 " +
+                "order by ip(t2.embedding, t1.embedding) limit 10", null,
+                new RelOptPlanner.CannotPlanException("Unsupported vector filter")).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 " +
+                "where t2.ID > 1 and t1.title = 'Movie Title 1' " +
                 "order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
         new SqlTestCase("select * from t1 where array_contains(genres, 'Action') limit 10", null).test(schema);
         new SqlTestCase("select * from t1 where array_contains(genres, 'Comedy') limit 10", null).test(schema);

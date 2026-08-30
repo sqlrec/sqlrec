@@ -315,7 +315,7 @@ BindableInterface
 | --- | --- |
 | `FilterableTableScan` | 携带下推谓词的表扫描（KV/向量表的过滤入口） |
 | `SqlrecEnumerableKvJoin` | KV join：左表全量收集 join key → 右表 `SqlRecKvTable.getByPrimaryKey()` 批量点查（或非主键时逐 key 带 filter scan）→ 字符串 key map 合并（`MergeUtils.snakeMerge`）；支持 LEFT join 补 null |
-| `SqlrecEnumerableVectorJoin` | 向量 join：右表实现 `VectorSearchable`（如 Milvus），按左表向量列做 ANN 检索（`DEFAULT_VECTOR_SEARCH_LIMIT` 默认 100） |
+| `SqlrecEnumerableVectorLookupJoin` | 双输入向量 lookup join：遍历左表，使用右侧 `VectorSearchable` 表执行带过滤条件的 ANN 检索（`DEFAULT_VECTOR_SEARCH_LIMIT` 默认 100） |
 | `SqlrecEnumerableUnion` | union 合并（配合 `IGNORE_UNION_EXCEPTION` 分支降级） |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE 写路径：分发到 connector 的写接口（批量 upsert/delete） |
 

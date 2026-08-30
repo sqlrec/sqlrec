@@ -3,6 +3,8 @@ package com.sqlrec.connectors.milvus.calcite;
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.common.schema.VectorSearchRequest;
+import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
@@ -39,20 +41,8 @@ public class MilvusCalciteTable extends SqlRecKvTable implements VectorSearchabl
     }
 
     @Override
-    public List<Object[]> searchByEmbeddingWithScoreImpl(
-            Object[] leftValue,
-            List<Float> embedding,
-            String annFieldName,
-            RexNode filterCondition,
-            int limit,
-            List<Integer> projectColumns) {
-        return milvusHandler.searchByEmbeddingWithScore(
-                annFieldName,
-                embedding,
-                filterCondition,
-                leftValue,
-                limit,
-                projectColumns);
+    public List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request) {
+        return milvusHandler.searchByEmbedding(request);
     }
 
     @Override

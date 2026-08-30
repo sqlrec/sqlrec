@@ -326,7 +326,7 @@ BindableInterface
 | --- | --- |
 | `FilterableTableScan` | Table scan carrying pushed-down predicates (filter entry for KV/vector tables) |
 | `SqlrecEnumerableKvJoin` | KV join: left table fully collected join keys → right table `SqlRecKvTable.getByPrimaryKey()` batch point lookup (or per-key filter scan for non-primary keys) → string key map merge (`MergeUtils.snakeMerge`); supports LEFT join null padding |
-| `SqlrecEnumerableVectorJoin` | Vector join: right table implements `VectorSearchable` (e.g. Milvus), performs ANN retrieval by the left table's vector column (`DEFAULT_VECTOR_SEARCH_LIMIT` default 100) |
+| `SqlrecEnumerableVectorLookupJoin` | Two-input vector lookup join: enumerates the left input and performs filtered ANN lookups against the right `VectorSearchable` table (`DEFAULT_VECTOR_SEARCH_LIMIT` default 100) |
 | `SqlrecEnumerableUnion` | Union merge (with `IGNORE_UNION_EXCEPTION` branch degradation) |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE write path: dispatched to connector write interfaces (batch upsert/delete) |
 
