@@ -2,3 +2,5 @@ deploy/
 .*
 juicefs-src/
 tzrec-src/
+**/__pycache__/
+**/*.py[cod]

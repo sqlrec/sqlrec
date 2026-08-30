@@ -1,6 +1,7 @@
 package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.ResourceNames;
@@ -110,6 +111,12 @@ public class ModelManager {
                         modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
                 deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
             }
+        }
+
+        if (modelController.requiresTrainingData()
+                && (modelTrainConf.getTrainDataPaths() == null || modelTrainConf.getTrainDataPaths().isEmpty())) {
+            throw new IllegalArgumentException("TRAIN MODEL ON data source is required for model type: "
+                    + ModelConfigs.MODEL.getValue(modelConfig.getParams()));
         }
 
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);

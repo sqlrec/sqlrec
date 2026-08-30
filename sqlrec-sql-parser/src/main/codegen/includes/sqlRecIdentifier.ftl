@@ -399,7 +399,7 @@ SqlNode SqlTrainModel() : {
     SqlParserPos pos;
     SqlIdentifier modelName;
     SqlNode checkpoint = null;
-    SqlIdentifier dataSource;
+    SqlIdentifier dataSource = null;
     SqlNode whereCondition = null;
     SqlNode existingCheckpoint = null;
     SqlNodeList propertyList = null;
@@ -411,11 +411,13 @@ SqlNode SqlTrainModel() : {
     modelName = SimpleIdentifier()
     <CHECKPOINT> <EQ>
     checkpoint = StringLiteral()
-    <ON>
-    dataSource = CompoundIdentifier()
     [
-        <WHERE>
-        whereCondition = Expression(ExprContext.ACCEPT_NON_QUERY)
+        <ON>
+        dataSource = CompoundIdentifier()
+        [
+            <WHERE>
+            whereCondition = Expression(ExprContext.ACCEPT_NON_QUERY)
+        ]
     ]
     [
         <FROM>

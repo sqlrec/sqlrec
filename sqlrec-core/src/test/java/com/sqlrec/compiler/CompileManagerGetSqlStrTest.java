@@ -204,6 +204,15 @@ TRAIN MODEL `rank_model` checkpoint= 'v1' ON `ml_sample` WITH (
     }
 
     @Test
+    void testTrainModelWithoutDataSource() throws Exception {
+        String result = formatSql("train model hf_model checkpoint='v1' with ('revision'='abc123')");
+        assertEquals("""
+TRAIN MODEL `hf_model` checkpoint= 'v1' WITH (
+  'revision' = 'abc123'
+)""", result);
+    }
+
+    @Test
     void testExportModel() throws Exception {
         String result = formatSql("export model rank_model checkpoint='v1' on ml_sample with ('NAMESPACE'='sqlrec')");
         assertEquals("""

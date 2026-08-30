@@ -529,3 +529,38 @@ CREATE SERVICE cb_service
         pod_memory = '16Gi'
     );
 ```
+
+### 7. Hugging Face Transformers Model
+
+**Model name**: `huggingface.transformers`
+
+For this backend, `TRAIN MODEL` downloads a selected Hugging Face Hub revision and stores it through the Hadoop CLI as an origin checkpoint that can be served directly. `EXPORT MODEL` is not supported yet.
+
+The initial tasks are `text-classification`, `text-generation`, `embedding`, and `image-embedding`. Text generation accepts plain prompts only; image embedding accepts HTTP/HTTPS URLs only.
+
+```sql
+CREATE MODEL text_embedding_model (
+    text STRING
+) WITH (
+    model = 'huggingface.transformers',
+    task = 'embedding',
+    repo_id = 'intfloat/multilingual-e5-small',
+    text_column = 'text',
+    pooling = 'mean',
+    normalize = 'true'
+);
+
+TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
+    revision = 'main'
+);
+
+CREATE SERVICE text_embedding_service
+    ON MODEL text_embedding_model
+    CHECKPOINT = 'v1'
+    WITH (
+        device = 'auto',
+        inference_batch_size = '32'
+    );
+```
+
+Private repositories can reference a Kubernetes Secret with `hf_token_secret` and `hf_token_secret_key` in the TRAIN parameters. Serving reads only from the checkpoint and does not contact the Hub.

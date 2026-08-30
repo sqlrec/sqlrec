@@ -41,6 +41,8 @@ dependency-reduced-pom.xml
 
 node_modules/
 .node/
+__pycache__/
+*.py[cod]
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
 .flattened-pom.xml

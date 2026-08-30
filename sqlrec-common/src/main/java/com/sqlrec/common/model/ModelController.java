@@ -15,6 +15,11 @@ public interface ModelController {
     // return model train k8s yaml
     String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf);
 
+    // Most trainable backends consume an ON data source. Snapshot-based backends may opt out.
+    default boolean requiresTrainingData() {
+        return true;
+    }
+
     // return export checkpoint names (one export command may generate multiple partitions)
     List<String> getExportCheckpoints(ModelExportConf exportConf);
 

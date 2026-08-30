@@ -529,3 +529,38 @@ CREATE SERVICE cb_service
         pod_memory = '16Gi'
     );
 ```
+
+### 7. Hugging Face Transformers 模型
+
+**模型名称**：`huggingface.transformers`
+
+该模型类型把 `TRAIN MODEL` 定义为从 Hugging Face Hub 下载指定 revision，并通过 Hadoop CLI 将快照保存为可直接部署的 origin checkpoint。暂不支持 `EXPORT MODEL`。
+
+首期任务包括 `text-classification`、`text-generation`、`embedding` 和 `image-embedding`。文本生成仅接受普通 prompt；图片 embedding 仅接受 HTTP/HTTPS URL。
+
+```sql
+CREATE MODEL text_embedding_model (
+    text STRING
+) WITH (
+    model = 'huggingface.transformers',
+    task = 'embedding',
+    repo_id = 'intfloat/multilingual-e5-small',
+    text_column = 'text',
+    pooling = 'mean',
+    normalize = 'true'
+);
+
+TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
+    revision = 'main'
+);
+
+CREATE SERVICE text_embedding_service
+    ON MODEL text_embedding_model
+    CHECKPOINT = 'v1'
+    WITH (
+        device = 'auto',
+        inference_batch_size = '32'
+    );
+```
+
+私有仓库可在 TRAIN 参数中通过 `hf_token_secret` 和 `hf_token_secret_key` 引用 Kubernetes Secret。服务仅从 checkpoint 加载模型，不访问 Hub。

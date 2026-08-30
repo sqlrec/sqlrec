@@ -76,7 +76,12 @@ public class ModelEntityConverter {
         }
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
         modelTrainConf.setId(K8sYamlUtils.convertToValidK8sName(modelTrainConf.getModelName() + "-" + modelTrainConf.getCheckpointName()));
-        modelTrainConf.setTrainDataPaths(getHivePartitionPaths(sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
+        if (sqlTrainModel.getDataSource() == null) {
+            modelTrainConf.setTrainDataPaths(Collections.emptyList());
+        } else {
+            modelTrainConf.setTrainDataPaths(getHivePartitionPaths(
+                    sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
+        }
         return modelTrainConf;
     }
 
@@ -88,7 +93,12 @@ public class ModelEntityConverter {
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         modelExportConf.setParams(SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList()));
         modelExportConf.setId(K8sYamlUtils.convertToValidK8sName(modelExportConf.getModelName() + "-" + modelExportConf.getCheckpointName() + "-export"));
-        modelExportConf.setTrainDataPaths(getHivePartitionPaths(sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema));
+        if (sqlExportModel.getDataSource() == null) {
+            modelExportConf.setTrainDataPaths(Collections.emptyList());
+        } else {
+            modelExportConf.setTrainDataPaths(getHivePartitionPaths(
+                    sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema));
+        }
         return modelExportConf;
     }
 

@@ -4,3 +4,4 @@ com.sqlrec.model.gbdt.LightGBMModel
 com.sqlrec.model.gbdt.XGBoostModel
 com.sqlrec.model.gbdt.CatBoostModel
 com.sqlrec.model.external.ExternalModel
+com.sqlrec.model.huggingface.HuggingFaceTransformersModel

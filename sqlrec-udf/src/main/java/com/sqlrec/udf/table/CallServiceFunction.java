@@ -61,7 +61,8 @@ public class CallServiceFunction {
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
         String jsonData = JsonUtils.toJsonArray(inputData, inputFields, input.getDataFields());
 
-        Map<String, Object> predictions = callPredictionService(serviceConfig.getUrl(), jsonData);
+        Map<String, Object> predictions = callPredictionService(
+                serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
 
         List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
 
@@ -69,6 +70,11 @@ public class CallServiceFunction {
     }
 
     public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
+        return callPredictionService(serviceUrl, jsonData, null);
+    }
+
+    public static Map<String, Object> callPredictionService(
+            String serviceUrl, String jsonData, Map<String, String> serviceParams) {
         try {
             RequestBody body = RequestBody.create(
                     jsonData,
@@ -81,7 +87,8 @@ public class CallServiceFunction {
                     .addHeader("Accept", "application/json")
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            OkHttpClient client = clientWithServiceTimeouts(serviceParams);
+            try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
                     throw new RuntimeException("HTTP request failed with response code: " + response.code());
                 }
@@ -92,6 +99,42 @@ public class CallServiceFunction {
         } catch (IOException e) {
             throw new RuntimeException("Failed to call prediction service: " + e.getMessage(), e);
         }
+    }
+
+    private static OkHttpClient clientWithServiceTimeouts(Map<String, String> params) {
+        if (params == null || params.isEmpty()) {
+            return httpClient;
+        }
+        boolean hasOverride = params.containsKey("connect_timeout_ms")
+                || params.containsKey("read_timeout_ms")
+                || params.containsKey("write_timeout_ms");
+        if (!hasOverride) {
+            return httpClient;
+        }
+        OkHttpClient.Builder builder = httpClient.newBuilder();
+        if (params.containsKey("connect_timeout_ms")) {
+            builder.connectTimeout(parsePositiveTimeout(params, "connect_timeout_ms"), TimeUnit.MILLISECONDS);
+        }
+        if (params.containsKey("read_timeout_ms")) {
+            builder.readTimeout(parsePositiveTimeout(params, "read_timeout_ms"), TimeUnit.MILLISECONDS);
+        }
+        if (params.containsKey("write_timeout_ms")) {
+            builder.writeTimeout(parsePositiveTimeout(params, "write_timeout_ms"), TimeUnit.MILLISECONDS);
+        }
+        return builder.build();
+    }
+
+    private static long parsePositiveTimeout(Map<String, String> params, String key) {
+        long value;
+        try {
+            value = Long.parseLong(params.get(key));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(key + " must be a positive integer", e);
+        }
+        if (value <= 0) {
+            throw new IllegalArgumentException(key + " must be a positive integer");
+        }
+        return value;
     }
 
     public static List<Object[]> mergePredictions(List<Object[]> inputData, Map<String, Object> predictions, List<FieldSchema> outputFields) {

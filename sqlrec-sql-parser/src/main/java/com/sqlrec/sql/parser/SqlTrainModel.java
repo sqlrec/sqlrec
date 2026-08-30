@@ -67,11 +67,13 @@ public class SqlTrainModel extends SqlCreate {
             writer.literal("checkpoint=");
             checkpoint.unparse(writer, leftPrec, rightPrec);
         }
-        writer.keyword("ON");
-        dataSource.unparse(writer, leftPrec, rightPrec);
-        if (whereCondition != null) {
-            writer.keyword("WHERE");
-            whereCondition.unparse(writer, leftPrec, rightPrec);
+        if (dataSource != null) {
+            writer.keyword("ON");
+            dataSource.unparse(writer, leftPrec, rightPrec);
+            if (whereCondition != null) {
+                writer.keyword("WHERE");
+                whereCondition.unparse(writer, leftPrec, rightPrec);
+            }
         }
         if (existingCheckpoint != null) {
             writer.keyword("FROM");
@@ -90,7 +92,9 @@ public class SqlTrainModel extends SqlCreate {
         if (checkpoint != null) {
             operands.add(checkpoint);
         }
-        operands.add(dataSource);
+        if (dataSource != null) {
+            operands.add(dataSource);
+        }
         if (whereCondition != null) {
             operands.add(whereCondition);
         }

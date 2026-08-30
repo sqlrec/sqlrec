@@ -13,3 +13,4 @@ fi
 docker image prune -f
 docker build -t sqlrec/tzrec:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
 docker build -t sqlrec/gbdt:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-gbdt.Dockerfile .
+docker build -t sqlrec/transformers:${SQLREC_VERSION} -f ./docker/sqlrec-model-transformers.Dockerfile .
