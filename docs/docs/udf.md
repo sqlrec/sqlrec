@@ -13,6 +13,52 @@ SQLRec 提供了丰富的内置 UDF，用于推荐系统开发中的常见操作
 | Table Function | 表函数，接收表作为输入，返回表 | `CacheTable` |
 | Scalar Function | 标量函数，接收标量值，返回标量值 | 单个值 |
 
+## Calcite 内置函数
+
+除 SQLRec 自身提供的 UDF 外，普通 `SELECT` 查询还可以直接使用 Apache Calcite 的标准内置函数。这些函数来自 Calcite 1.32.0 的 `SqlStdOperatorTable`，无需通过 `CREATE FUNCTION` 注册。
+
+```sql
+SELECT ABS(-10), POWER(2, 3), UPPER('sqlrec');
+
+SELECT category,
+       COUNT(*) AS item_count,
+       ROW_NUMBER() OVER (PARTITION BY category ORDER BY score DESC) AS row_num
+FROM candidates
+GROUP BY category, score;
+
+SELECT JSON_VALUE('{"item_id": 1001}', 'strict $.item_id');
+```
+
+SQLRec 当前已经验证支持的主要函数如下。表格中的函数名是代表性清单，同一函数支持的参数类型和具体语法请参考 Calcite SQL 文档。
+
+| 分类 | 函数 |
+|------|------|
+| 数值函数 | `ABS`、`ACOS`、`ASIN`、`ATAN`、`ATAN2`、`CBRT`、`CEIL`、`COS`、`COT`、`DEGREES`、`EXP`、`FLOOR`、`LN`、`LOG10`、`MOD`、`PI`、`POWER`、`RADIANS`、`RAND`、`RAND_INTEGER`、`ROUND`、`SIGN`、`SIN`、`SQRT`、`TAN`、`TRUNCATE` |
+| 字符串函数 | `ASCII`、`CHAR_LENGTH`、`CHARACTER_LENGTH`、`UPPER`、`LOWER`、`INITCAP`、`POSITION`、`OVERLAY`、`REPLACE`、`SUBSTRING`、`TRIM`，以及字符串连接运算符 `\|\|` |
+| 空值和类型转换 | `COALESCE`、`NULLIF`、`CAST`、`CASE` |
+| 日期时间函数 | `CURRENT_DATE`、`CURRENT_TIME`、`CURRENT_TIMESTAMP`、`EXTRACT`、`YEAR`、`QUARTER`、`MONTH`、`WEEK`、`DAYOFYEAR`、`DAYOFMONTH`、`DAYOFWEEK`、`HOUR`、`MINUTE`、`SECOND`、`LAST_DAY`、`TIMESTAMPADD`、`TIMESTAMPDIFF` |
+| 集合函数 | `ARRAY`、`MAP`、`MULTISET` 构造器，集合下标访问，以及 `CARDINALITY`、`ELEMENT` |
+| 聚合函数 | `COUNT`、`SUM`、`AVG`、`MIN`、`MAX`、`EVERY`、`SOME`、`ANY_VALUE`、`SINGLE_VALUE`、`MODE`、`APPROX_COUNT_DISTINCT`、`BIT_AND`、`BIT_OR`、`BIT_XOR`、`COLLECT`、`LISTAGG`、`FUSION`、`INTERSECTION` |
+| 统计聚合函数 | `STDDEV`、`STDDEV_POP`、`STDDEV_SAMP`、`VARIANCE`、`VAR_POP`、`VAR_SAMP`、`COVAR_POP`、`COVAR_SAMP`、`REGR_COUNT`、`REGR_SXX`、`REGR_SYY` |
+| 分组和窗口函数 | `GROUPING`、`GROUPING_ID`、`GROUP_ID`、`ROW_NUMBER`、`RANK`、`DENSE_RANK`、`NTILE`、`FIRST_VALUE`、`LAST_VALUE`、`NTH_VALUE`、`LEAD`、`LAG` |
+| JSON 函数 | `JSON_EXISTS`、`JSON_VALUE`、`JSON_QUERY`、`JSON_OBJECT`、`JSON_ARRAY`、`JSON_OBJECTAGG`、`JSON_ARRAYAGG`、`JSON_TYPE`、`JSON_DEPTH`、`JSON_LENGTH`、`JSON_KEYS`、`JSON_PRETTY`、`JSON_REMOVE`、`JSON_STORAGE_SIZE` |
+
+使用时请注意以下限制：
+
+- `PI` 是无参数函数，语法为 `SELECT PI`，而不是 `PI()`。
+- SQLRec 当前只接入 Calcite 标准函数表，没有接入 MySQL、PostgreSQL、Oracle、Spark 或 BigQuery 等 `SqlLibrary` 方言扩展。使用 MySQL 风格词法解析并不表示 `IFNULL`、`DATE_FORMAT`、`NVL` 等方言函数自动可用。
+- `CUME_DIST`、`PERCENT_RANK`、`PERCENTILE_CONT` 和 `PERCENTILE_DISC` 当前无法生成可执行的 Enumerable 计划。
+- `LOCALTIME`、`LOCALTIMESTAMP`、`USER`、`CURRENT_USER`、`SESSION_USER`、`SYSTEM_USER` 和 `CURRENT_SCHEMA` 依赖的运行上下文尚未完整提供。
+- `OCTET_LENGTH` 对普通 `VARCHAR` 不可用；Calcite 的当前实现要求二进制字符串。
+- `TUMBLE`、`HOP`、`SESSION` 以及 `MATCH_RECOGNIZE` 专用函数不属于普通标量 UDF，目前没有 SQLRec 端到端支持保证。
+
+相关参考：
+
+- [Apache Calcite SQL 语言和内置函数参考](https://calcite.apache.org/docs/reference.html)
+- [Calcite `SqlStdOperatorTable` API](https://calcite.apache.org/javadocAggregate/org/apache/calcite/sql/fun/SqlStdOperatorTable.html)
+
+Calcite 官方参考页可能对应比 SQLRec 依赖更新的版本，并且包含方言扩展。判断函数是否可用于 SQLRec 时，应以上述已验证清单和项目实际依赖版本为准。
+
 ## 表函数（Table Function）
 
 ### dedup

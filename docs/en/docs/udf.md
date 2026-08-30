@@ -13,6 +13,52 @@ SQLRec provides rich built-in UDFs for common operations in recommendation syste
 | Table Function | Table functions that take tables as input and return tables | `CacheTable` |
 | Scalar Function | Scalar functions that take scalar values and return scalar values | Single value |
 
+## Calcite Built-in Functions
+
+In addition to SQLRec's own UDFs, regular `SELECT` queries can directly use Apache Calcite standard built-in functions. These functions come from Calcite 1.32.0's `SqlStdOperatorTable` and do not need to be registered with `CREATE FUNCTION`.
+
+```sql
+SELECT ABS(-10), POWER(2, 3), UPPER('sqlrec');
+
+SELECT category,
+       COUNT(*) AS item_count,
+       ROW_NUMBER() OVER (PARTITION BY category ORDER BY score DESC) AS row_num
+FROM candidates
+GROUP BY category, score;
+
+SELECT JSON_VALUE('{"item_id": 1001}', 'strict $.item_id');
+```
+
+The following table lists the main functions currently verified by SQLRec. The function names are representative; refer to the Calcite SQL documentation for accepted argument types and exact syntax.
+
+| Category | Functions |
+|----------|-----------|
+| Numeric | `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATAN2`, `CBRT`, `CEIL`, `COS`, `COT`, `DEGREES`, `EXP`, `FLOOR`, `LN`, `LOG10`, `MOD`, `PI`, `POWER`, `RADIANS`, `RAND`, `RAND_INTEGER`, `ROUND`, `SIGN`, `SIN`, `SQRT`, `TAN`, `TRUNCATE` |
+| String | `ASCII`, `CHAR_LENGTH`, `CHARACTER_LENGTH`, `UPPER`, `LOWER`, `INITCAP`, `POSITION`, `OVERLAY`, `REPLACE`, `SUBSTRING`, `TRIM`, and the `\|\|` concatenation operator |
+| Null handling and conversion | `COALESCE`, `NULLIF`, `CAST`, `CASE` |
+| Date and time | `CURRENT_DATE`, `CURRENT_TIME`, `CURRENT_TIMESTAMP`, `EXTRACT`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAYOFYEAR`, `DAYOFMONTH`, `DAYOFWEEK`, `HOUR`, `MINUTE`, `SECOND`, `LAST_DAY`, `TIMESTAMPADD`, `TIMESTAMPDIFF` |
+| Collections | `ARRAY`, `MAP`, and `MULTISET` constructors, collection item access, `CARDINALITY`, and `ELEMENT` |
+| Aggregate | `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `EVERY`, `SOME`, `ANY_VALUE`, `SINGLE_VALUE`, `MODE`, `APPROX_COUNT_DISTINCT`, `BIT_AND`, `BIT_OR`, `BIT_XOR`, `COLLECT`, `LISTAGG`, `FUSION`, `INTERSECTION` |
+| Statistical aggregate | `STDDEV`, `STDDEV_POP`, `STDDEV_SAMP`, `VARIANCE`, `VAR_POP`, `VAR_SAMP`, `COVAR_POP`, `COVAR_SAMP`, `REGR_COUNT`, `REGR_SXX`, `REGR_SYY` |
+| Grouping and window | `GROUPING`, `GROUPING_ID`, `GROUP_ID`, `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `NTILE`, `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`, `LEAD`, `LAG` |
+| JSON | `JSON_EXISTS`, `JSON_VALUE`, `JSON_QUERY`, `JSON_OBJECT`, `JSON_ARRAY`, `JSON_OBJECTAGG`, `JSON_ARRAYAGG`, `JSON_TYPE`, `JSON_DEPTH`, `JSON_LENGTH`, `JSON_KEYS`, `JSON_PRETTY`, `JSON_REMOVE`, `JSON_STORAGE_SIZE` |
+
+Be aware of the following limitations:
+
+- `PI` is a niladic function. Use `SELECT PI`, not `PI()`.
+- SQLRec currently registers only Calcite's standard operator table. It does not register the MySQL, PostgreSQL, Oracle, Spark, or BigQuery `SqlLibrary` extensions. MySQL-style lexical parsing does not automatically enable dialect-specific functions such as `IFNULL`, `DATE_FORMAT`, or `NVL`.
+- `CUME_DIST`, `PERCENT_RANK`, `PERCENTILE_CONT`, and `PERCENTILE_DISC` currently cannot be converted to an executable Enumerable plan.
+- The runtime context required by `LOCALTIME`, `LOCALTIMESTAMP`, `USER`, `CURRENT_USER`, `SESSION_USER`, `SYSTEM_USER`, and `CURRENT_SCHEMA` is not fully provided yet.
+- `OCTET_LENGTH` does not work with a regular `VARCHAR`; the current Calcite implementation expects a binary string.
+- `TUMBLE`, `HOP`, `SESSION`, and functions specific to `MATCH_RECOGNIZE` are not ordinary scalar UDFs and do not currently have an end-to-end SQLRec support guarantee.
+
+References:
+
+- [Apache Calcite SQL language and built-in function reference](https://calcite.apache.org/docs/reference.html)
+- [Calcite `SqlStdOperatorTable` API](https://calcite.apache.org/javadocAggregate/org/apache/calcite/sql/fun/SqlStdOperatorTable.html)
+
+The Calcite reference may describe a newer version than the one used by SQLRec and also includes dialect extensions. Use the verified list above and the project's actual Calcite dependency version when determining whether a function is available in SQLRec.
+
 ## Table Functions
 
 ### dedup
