@@ -7,6 +7,8 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.util.NlsString;
+import org.apache.calcite.util.Sarg;
+import com.google.common.collect.Range;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -207,9 +209,17 @@ public class FilterUtils {
         if (filters == null || filters.isEmpty()) {
             return "";
         }
-        return filters.stream()
-                .map(filter -> getFilterString(filter, fieldSchemas, ctx))
-                .collect(Collectors.joining(" AND "));
+        List<String> expressions = new ArrayList<>(filters.size());
+        for (RexNode filter : filters) {
+            String expression = getFilterString(filter, fieldSchemas, ctx);
+            // An unsupported Milvus predicate must remain a residual Calcite filter;
+            // never stringify Java null into a Milvus expression.
+            if (expression == null && ctx.dialect == FilterDialect.MILVUS) {
+                return null;
+            }
+            expressions.add(expression);
+        }
+        return expressions.stream().collect(Collectors.joining(" AND "));
     }
 
     private static String getFilterString(RexNode filter, List<FieldSchema> fieldSchemas, FilterContext ctx) {
@@ -235,6 +245,25 @@ public class FilterUtils {
             return convertArrayFunctionFilter(filter, fieldSchemas, operator.toLowerCase(), ctx);
         }
 
+        if (filter.isA(SqlKind.SEARCH)) {
+            return convertSearchFilter(filter, fieldSchemas, ctx);
+        }
+
+        if (filter.getOperands().size() == 1) {
+            String field = convertOperand(filter.getOperands().get(0), fieldSchemas, ctx);
+            switch (filter.getKind()) {
+                case IS_NULL:
+                case IS_UNKNOWN:
+                    return ctx.dialect == FilterDialect.SQL ? field + " IS NULL" : null;
+                case IS_NOT_NULL:
+                    return ctx.dialect == FilterDialect.SQL ? field + " IS NOT NULL" : null;
+                case NOT:
+                    return ctx.dialect == FilterDialect.SQL ? "NOT (" + field + ")" : null;
+                default:
+                    break;
+            }
+        }
+
         if (filter.getOperands().size() != 2) {
             throw new IllegalArgumentException("Unsupported filter: " + filter);
         }
@@ -242,6 +271,51 @@ public class FilterUtils {
         String firstOperand = convertOperand(filter.getOperands().get(0), fieldSchemas, ctx);
         String secondOperand = convertOperand(filter.getOperands().get(1), fieldSchemas, ctx);
         return firstOperand + " " + ctx.dialect.formatOperator(operator) + " " + secondOperand;
+    }
+
+    private static String convertSearchFilter(RexCall filter, List<FieldSchema> fieldSchemas, FilterContext ctx) {
+        if (filter.getOperands().size() != 2
+                || !(filter.getOperands().get(0) instanceof RexInputRef)
+                || !(filter.getOperands().get(1) instanceof RexLiteral)) {
+            throw new IllegalArgumentException("Unsupported SEARCH filter: " + filter);
+        }
+
+        String field = convertOperand(filter.getOperands().get(0), fieldSchemas, ctx);
+        Sarg<?> sarg = ((RexLiteral) filter.getOperands().get(1)).getValueAs(Sarg.class);
+        if (sarg == null || (!sarg.isPoints() && !sarg.isComplementedPoints())) {
+            throw new IllegalArgumentException("Unsupported SEARCH range: " + filter);
+        }
+
+        List<String> values = new ArrayList<>();
+        for (Range<?> range : sarg.rangeSet.asRanges()) {
+            if (!range.hasLowerBound() || !range.hasUpperBound()
+                    || range.lowerBoundType() != com.google.common.collect.BoundType.CLOSED
+                    || range.upperBoundType() != com.google.common.collect.BoundType.CLOSED
+                    || !range.lowerEndpoint().equals(range.upperEndpoint())) {
+                throw new IllegalArgumentException("Unsupported SEARCH point range: " + filter);
+            }
+            if (ctx.dialect == FilterDialect.SQL) {
+                ctx.parameters.add(range.lowerEndpoint());
+                values.add("?");
+            } else {
+                values.add(formatMilvusSargValue(range.lowerEndpoint()));
+            }
+        }
+        if (values.isEmpty()) {
+            return ctx.dialect == FilterDialect.SQL ? "1 = 0" : "false";
+        }
+        String operator = sarg.isComplementedPoints() ? " NOT IN " : " IN ";
+        String joined = String.join(", ", values);
+        String open = ctx.dialect == FilterDialect.SQL ? "(" : "[";
+        String close = ctx.dialect == FilterDialect.SQL ? ")" : "]";
+        return field + operator + open + joined + close;
+    }
+
+    private static String formatMilvusSargValue(Object value) {
+        if (value instanceof NlsString) {
+            return milvusQuote(((NlsString) value).getValue());
+        }
+        return formatValue(value);
     }
 
     private static String convertArrayFunctionFilter(RexCall filter, List<FieldSchema> fieldSchemas, String functionName, FilterContext ctx) {
@@ -322,8 +396,15 @@ public class FilterUtils {
                 String joiner = opName.equalsIgnoreCase("AND") ? " and " : " or ";
                 StringBuilder sb = new StringBuilder("(");
                 for (int i = 0; i < call.getOperands().size(); i++) {
+                    String operandExpression = buildFilterExpressionRecursive(
+                            call.getOperands().get(i), leftValue, leftSize, rightFieldNames);
+                    // A compound expression is pushable only when every child is
+                    // representable. Partial expressions can change join results.
+                    if (operandExpression == null) {
+                        return null;
+                    }
                     if (i > 0) sb.append(joiner);
-                    sb.append(buildFilterExpressionRecursive(call.getOperands().get(i), leftValue, leftSize, rightFieldNames));
+                    sb.append(operandExpression);
                 }
                 sb.append(")");
                 return sb.toString();
@@ -331,6 +412,10 @@ public class FilterUtils {
 
             if (opName.toLowerCase().startsWith("array_contains")) {
                 return buildArrayFunctionFilterExpression(call, opName, leftValue, leftSize, rightFieldNames);
+            }
+
+            if (!isMilvusComparison(call.getKind())) {
+                return null;
             }
 
             if (call.getOperands().size() == 2) {
@@ -384,6 +469,20 @@ public class FilterUtils {
         }
 
         return null;
+    }
+
+    private static boolean isMilvusComparison(SqlKind kind) {
+        switch (kind) {
+            case EQUALS:
+            case NOT_EQUALS:
+            case GREATER_THAN:
+            case GREATER_THAN_OR_EQUAL:
+            case LESS_THAN:
+            case LESS_THAN_OR_EQUAL:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static String formatValue(Object value) {

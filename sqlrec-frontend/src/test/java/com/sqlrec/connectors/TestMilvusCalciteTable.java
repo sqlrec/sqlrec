@@ -71,6 +71,9 @@ public class TestMilvusCalciteTable {
         new SqlTestCase("select * from t2 join t1 on t2.ID = t1.id", null).test(schema);
         new SqlTestCase("delete from t1 where id = 3", null).test(schema);
         new SqlTestCase("select * from t1 where title like 'Movie%'", null).test(schema);
+        new SqlTestCase("select * from t1 where title IS NULL", null).test(schema);
+        new SqlTestCase("select * from t1 where title IS NOT NULL and id >= 1", null).test(schema);
+        new SqlTestCase("select * from t1 where (id = 1 or id = 2) and NOT (id = 3)", null).test(schema);
         new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
         new SqlTestCase("cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
         new SqlTestCase("select * from tmp", null).test(schema);
@@ -148,6 +151,11 @@ public class TestMilvusCalciteTable {
                           EnumerableTableScan(table=[[default, t2]])
                           EnumerableTableScan(table=[[default, t1]])""",
                 null).test(schema);
+        // An unsupported child must disable Milvus filter pushdown for the whole
+        // compound predicate, allowing Calcite to evaluate the residual condition.
+        new SqlTestCase("select * from t2 join t1 on 1=1 " +
+                "where t2.title = t1.title and t1.id + 1 > 1 " +
+                "order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
         new SqlTestCase("select * from t1 where array_contains(genres, 'Action') limit 10", null).test(schema);
         new SqlTestCase("select * from t1 where array_contains(genres, 'Comedy') limit 10", null).test(schema);
         new SqlTestCase("select * from t1 where id = 1 and array_contains(genres, 'Comedy') limit 10", null).test(schema);

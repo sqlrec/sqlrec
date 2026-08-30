@@ -64,6 +64,8 @@ public class KvJoinUtils {
             rightValuesMap = scanRightTableByJoinKey(rightTable, rightJoinKeyColIndex, joinKeys);
         }
 
+        // Keep the historical stringified-key matching behavior for compatibility with existing
+        // KV table implementations; this intentionally does not preserve strict key type semantics.
         Map<String, List<Object[]>> stringKeyMap = new HashMap<>();
         for (Map.Entry<Object, List<Object[]>> entry : rightValuesMap.entrySet()) {
             stringKeyMap.put(entry.getKey().toString(), entry.getValue());
@@ -73,6 +75,11 @@ public class KvJoinUtils {
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
             if (leftJoinKey == null) {
+                // SQL LEFT JOIN preserves the left row when its join key is NULL; it simply has
+                // no matching right row because NULL never equals NULL in the join predicate.
+                if (joinType == JoinRelType.LEFT) {
+                    rowList.add(Collections.singletonList(copyValues(leftValue, null, leftSize, rightSize)));
+                }
                 continue;
             }
             List<Object[]> rightValues = stringKeyMap.getOrDefault(leftJoinKey.toString(), new ArrayList<>());

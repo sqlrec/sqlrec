@@ -187,6 +187,27 @@ class SqlUtilsTest {
     }
 
     @Test
+    void testSelectQuotesQualifiedTableNameByPart() {
+        SqlStatement statement = SqlUtils.select(PG_URL, "public.users", fieldSchemas, null);
+        assertEquals("SELECT id, name, age FROM public.users", statement.getSql());
+
+        SqlStatement unsafeParts = SqlUtils.select(PG_URL, "public schema.user table", fieldSchemas, null);
+        assertEquals("SELECT id, name, age FROM \"public schema\".\"user table\"", unsafeParts.getSql());
+    }
+
+    @Test
+    void testRejectsEmptyFieldSchemas() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SqlUtils.select(PG_URL, "users", Collections.emptyList(), null));
+    }
+
+    @Test
+    void testRejectsMalformedQualifiedTableName() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SqlUtils.select(PG_URL, "public.", fieldSchemas, null));
+    }
+
+    @Test
     void testQuoteIdentifierEscapesInjectionAttempt() {
         // A malicious identifier containing a double quote must be escaped so it cannot break out
         // of the quoted identifier and inject SQL.

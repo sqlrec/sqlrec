@@ -54,8 +54,9 @@ public class TestJdbcTable {
     @Test
     public void testJdbcTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
-        tableMap.put("t1", getUsersTable());
-        tableMap.put("t2", getProductsTable());
+            tableMap.put("t1", getUsersTable());
+            tableMap.put("qualified_users", getQualifiedUsersTable());
+            tableMap.put("t2", getProductsTable());
         tableMap.put("t3", new MyTable());
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -84,6 +85,25 @@ public class TestJdbcTable {
         // select with filter
         new SqlTestCase("select * from t1 where age > 25",
                 Arrays.asList(new Object[]{1, "Alice", 30}, new Object[]{3, "Charlie", 35})).test(schema);
+
+        // Exercise NULL predicates through the complete Calcite -> JDBC -> H2 path.
+        // The Calcite row type is non-nullable, so this verifies both empty and non-empty
+        // NULL predicate results against the real JDBC table.
+        new SqlTestCase("select * from t1 where name IS NULL",
+                Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t1 where name IS NOT NULL and age >= 30",
+                Arrays.asList(new Object[]{1, "Alice", 30}, new Object[]{3, "Charlie", 35})).test(schema);
+
+        // Exercise boolean composition, negation, LIKE escaping, and an empty result.
+        new SqlTestCase("select id from t1 where (age < 30 or name = 'Alice') and NOT (id = 2)",
+                Collections.singletonList(new Object[]{1})).test(schema);
+        new SqlTestCase("select * from t1 where name LIKE 'A%'",
+                Collections.singletonList(new Object[]{1, "Alice", 30})).test(schema);
+        new SqlTestCase("select * from t1 where name = 'nobody'", Collections.emptyList()).test(schema);
+
+        // A qualified table name must be resolved as schema + table, not one identifier.
+        new SqlTestCase("select * from qualified_users where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice", 30})).test(schema);
 
         // select with multiple filters
         new SqlTestCase("select * from t1 where id = 2 and name = 'Bob'",
@@ -154,6 +174,24 @@ public class TestJdbcTable {
         jdbcConfig.maxCacheSize = 100000;
         jdbcConfig.cacheTtl = 30;
 
+        return new JdbcCalciteTable(jdbcConfig);
+    }
+
+    public static Table getQualifiedUsersTable() {
+        List<FieldSchema> fieldSchemas = Arrays.asList(
+                new FieldSchema("id", "INTEGER"),
+                new FieldSchema("name", "VARCHAR"),
+                new FieldSchema("age", "INTEGER"));
+
+        JdbcConfig jdbcConfig = new JdbcConfig();
+        jdbcConfig.url = JDBC_URL;
+        jdbcConfig.username = JDBC_USERNAME;
+        jdbcConfig.password = JDBC_PASSWORD;
+        jdbcConfig.driver = "org.h2.Driver";
+        jdbcConfig.tableName = "PUBLIC.users";
+        jdbcConfig.fieldSchemas = fieldSchemas;
+        jdbcConfig.primaryKey = "id";
+        jdbcConfig.primaryKeyIndex = 0;
         return new JdbcCalciteTable(jdbcConfig);
     }
 

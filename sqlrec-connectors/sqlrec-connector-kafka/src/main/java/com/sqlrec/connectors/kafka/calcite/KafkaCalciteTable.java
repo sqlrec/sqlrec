@@ -34,6 +34,11 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     static volatile Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
     private final KafkaConfig kafkaConfig;
 
+    static {
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(KafkaCalciteTable::closeAllProducers, "KafkaCalciteTable-shutdown"));
+    }
+
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
         this.kafkaConfig = kafkaConfig;
     }
@@ -85,6 +90,21 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         });
     }
 
+    /** Close every cached Kafka producer and clear the cache. */
+    public static synchronized void closeAllProducers() {
+        for (Map.Entry<String, KafkaProducer<String, String>> entry
+                : new ArrayList<>(kafkaProducerMap.entrySet())) {
+            try {
+                entry.getValue().close();
+            } catch (Exception e) {
+                LoggerFactory.getLogger(KafkaCalciteTable.class).warn(
+                        "Failed to close Kafka producer for key {}: {}",
+                        entry.getKey(), e.getMessage(), e);
+            }
+        }
+        kafkaProducerMap.clear();
+    }
+
     /** Test-only: inject a mock producer for the given config key. */
     static void setKafkaProducerForTest(String configKey, KafkaProducer<String, String> mockProducer) {
         kafkaProducerMap.put(configKey, mockProducer);
@@ -124,9 +144,8 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         protected boolean addImpl(Object[] objects) {
             String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
             KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
-            // Register a callback so async send failures (broker unavailable, record
-            // too large, ...) are at least visible in the logs instead of being
-            // silently dropped.
+            // Kafka writes are intentionally fire-and-forget. The callback reports asynchronous
+            // send failures, while the collection operation returns after enqueueing the record.
             producer.send(new ProducerRecord<>(kafkaConfig.topic, msg), (metadata, exception) -> {
                 if (exception != null) {
                     logger.error("Failed to send record to kafka topic {}: {}",

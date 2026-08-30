@@ -128,6 +128,30 @@ public class KvJoinUtilsTest {
     }
 
     @Test
+    public void testLeftJoinKeepsLeftRowWithNullJoinKey() {
+        Object[] leftNullKey = new Object[]{null, "Alice"};
+        Enumerable left = Linq4j.asEnumerable(Collections.singletonList(leftNullKey));
+
+        SqlRecKvTable rightTable = mock(SqlRecKvTable.class);
+        when(rightTable.getRowType(any())).thenReturn(rightRowType);
+        when(rightTable.getPrimaryKeyIndex()).thenReturn(0);
+        when(rightTable.getByPrimaryKey(any())).thenReturn(Collections.emptyMap());
+
+        RexInputRef leftRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexInputRef rightRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2);
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+
+        Enumerable result = KvJoinUtils.kvJoin(left, rightTable, condition, JoinRelType.LEFT);
+
+        assertEquals(1, result.count());
+        Object[] row = (Object[]) result.first();
+        assertNull(row[0]);
+        assertEquals("Alice", row[1]);
+        assertNull(row[2]);
+        assertNull(row[3]);
+    }
+
+    @Test
     public void testCopyValuesWithBothValues() {
         Object[] leftValue = new Object[]{1, "Alice"};
         Object[] rightValue = new Object[]{100, "Engineer"};

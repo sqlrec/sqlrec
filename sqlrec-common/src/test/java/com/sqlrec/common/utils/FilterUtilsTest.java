@@ -746,6 +746,25 @@ public class FilterUtilsTest {
     }
 
     @Test
+    public void testBuildSqlFilter_IsNull() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, ref1);
+
+        SqlStatement result = FilterUtils.buildSqlFilter(Collections.singletonList(filter), sqlFieldSchemas, PG_URL);
+        assertEquals("name IS NULL", result.getSql());
+        assertTrue(result.getParameters().isEmpty());
+    }
+
+    @Test
+    public void testBuildSqlFilter_IsNotNull() {
+        RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, ref1);
+
+        SqlStatement result = FilterUtils.buildSqlFilter(Collections.singletonList(filter), sqlFieldSchemas, PG_URL);
+        assertEquals("name IS NOT NULL", result.getSql());
+    }
+
+    @Test
     public void testBuildSqlFilter_ArrayContainsParameterized() {
         List<FieldSchema> arrayFieldSchemas = Collections.singletonList(
                 new FieldSchema("tags", "ARRAY")
@@ -824,13 +843,13 @@ public class FilterUtilsTest {
     }
 
     @Test
-    public void testBuildSqlFilter_RejectsNonBinaryFilter() {
-        // NOT is a unary operator: no meaningful SQL rendering, must fail fast
+    public void testBuildSqlFilter_NotBooleanField() {
+        // Unary NOT is rendered as a SQL predicate instead of being treated as a binary filter.
         RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.BOOLEAN), 0);
         RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.NOT, ref0);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> FilterUtils.buildSqlFilter(Collections.singletonList(filter), sqlFieldSchemas, PG_URL));
+        SqlStatement result = FilterUtils.buildSqlFilter(Collections.singletonList(filter), sqlFieldSchemas, PG_URL);
+        assertEquals("NOT (id)", result.getSql());
     }
 
     @Test
@@ -871,6 +890,19 @@ public class FilterUtilsTest {
 
         assertEquals("name == null",
                 FilterUtils.getMilvusFilterSqlString(Collections.singletonList(filter), milvusFieldSchemas));
+    }
+
+    @Test
+    public void testBuildMilvusFilterExpression_UnsupportedCompoundChildReturnsNull() {
+        RexInputRef leftRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexInputRef rightRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 1);
+        RexNode supported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.PLUS, rightRef,
+                rexBuilder.makeExactLiteral(new java.math.BigDecimal(1)));
+        RexNode filterCondition = rexBuilder.makeCall(SqlStdOperatorTable.AND, supported, unsupported);
+
+        assertNull(FilterUtils.buildMilvusFilterExpression(
+                filterCondition, new Object[]{1}, Collections.singletonList("value")));
     }
 
     /** Stand-in for the sqlrec-udf array_contains function operator. */

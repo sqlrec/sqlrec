@@ -20,10 +20,11 @@ public class SqlUtils {
      * Calcite filter conditions (see {@link FilterUtils#buildSqlFilter}).
      */
     public static SqlStatement select(String url, String tableName, List<FieldSchema> fieldSchemas, List<RexNode> filters) {
+        validateFieldSchemas(fieldSchemas);
         SqlStatement where = FilterUtils.buildSqlFilter(filters, fieldSchemas, url);
         StringBuilder sql = new StringBuilder("SELECT ");
         appendColumnNames(sql, fieldSchemas, url);
-        sql.append(" FROM ").append(quoteIdentifier(tableName, url));
+        sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
         if (!where.getSql().isEmpty()) {
             sql.append(" WHERE ").append(where.getSql());
         }
@@ -37,12 +38,13 @@ public class SqlUtils {
      */
     public static SqlStatement selectByPrimaryKey(String url, String tableName, List<FieldSchema> fieldSchemas,
                                                   String primaryKey, int keyCount) {
+        validateFieldSchemas(fieldSchemas);
         if (keyCount <= 0) {
             throw new IllegalArgumentException("keyCount must be positive: " + keyCount);
         }
         StringBuilder sql = new StringBuilder("SELECT ");
         appendColumnNames(sql, fieldSchemas, url);
-        sql.append(" FROM ").append(quoteIdentifier(tableName, url));
+        sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
         sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" IN (");
         appendPlaceholders(sql, keyCount);
         sql.append(")");
@@ -56,6 +58,7 @@ public class SqlUtils {
      * {@link SqlStatement#withParameters(List)}.
      */
     public static SqlStatement upsert(String url, String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+        validateFieldSchemas(fieldSchemas);
         String lowerUrl = url.toLowerCase();
         if (lowerUrl.startsWith("jdbc:mysql:")) {
             return mysqlUpsert(tableName, fieldSchemas, primaryKey);
@@ -71,7 +74,7 @@ public class SqlUtils {
     private static SqlStatement postgresUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = null;
         StringBuilder sql = new StringBuilder("INSERT INTO ");
-        sql.append(quoteIdentifier(tableName, url)).append(" (");
+        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
         appendColumnNames(sql, fieldSchemas, url);
         sql.append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
@@ -84,7 +87,7 @@ public class SqlUtils {
     private static SqlStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = "jdbc:mysql:";
         StringBuilder sql = new StringBuilder("INSERT INTO ");
-        sql.append(quoteIdentifier(tableName, url)).append(" (");
+        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
         appendColumnNames(sql, fieldSchemas, url);
         sql.append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
@@ -97,7 +100,7 @@ public class SqlUtils {
     private static SqlStatement h2Upsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = "jdbc:h2:";
         StringBuilder sql = new StringBuilder("MERGE INTO ");
-        sql.append(quoteIdentifier(tableName, url)).append(" KEY (");
+        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" KEY (");
         sql.append(quoteIdentifier(primaryKey, url)).append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
         sql.append(")");
@@ -109,7 +112,7 @@ public class SqlUtils {
      * the caller supplies the key value via {@link SqlStatement#withParameters(List)}.
      */
     public static SqlStatement deleteByPrimaryKey(String url, String tableName, String primaryKey) {
-        String sql = "DELETE FROM " + quoteIdentifier(tableName, url)
+        String sql = "DELETE FROM " + quoteQualifiedIdentifier(tableName, url)
                 + " WHERE " + quoteIdentifier(primaryKey, url) + " = ?";
         return new SqlStatement(sql, Collections.emptyList());
     }
@@ -174,6 +177,37 @@ public class SqlUtils {
             return "`" + identifier.replace("`", "``") + "`";
         }
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
+    /**
+     * Quote each part of a possibly qualified table name independently.
+     * Quoting the whole value would turn {@code schema.table} into one identifier
+     * named {@code schema.table}, which is not the same object in SQL.
+     */
+    public static String quoteQualifiedIdentifier(String identifier, String url) {
+        if (identifier == null || identifier.isEmpty()) {
+            return identifier;
+        }
+        String[] parts = identifier.split("\\.", -1);
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                throw new IllegalArgumentException("Invalid qualified identifier: " + identifier);
+            }
+        }
+        StringBuilder result = new StringBuilder(identifier.length() + parts.length * 2);
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                result.append('.');
+            }
+            result.append(quoteIdentifier(parts[i], url));
+        }
+        return result.toString();
+    }
+
+    private static void validateFieldSchemas(List<FieldSchema> fieldSchemas) {
+        if (fieldSchemas == null || fieldSchemas.isEmpty()) {
+            throw new IllegalArgumentException("fieldSchemas must not be null or empty");
+        }
     }
 
     /**

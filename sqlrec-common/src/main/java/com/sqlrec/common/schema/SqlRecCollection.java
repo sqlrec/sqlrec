@@ -14,6 +14,13 @@ import java.util.concurrent.TimeUnit;
 public abstract class SqlRecCollection implements Collection<Object[]> {
     private static final Logger log = LoggerFactory.getLogger(SqlRecCollection.class);
 
+    /**
+     * Number of rows accepted by the current modification operation.
+     *
+     * <p>This is deliberately not the remote table cardinality. A remote table may not
+     * support an efficient or consistent count query, while Calcite only uses the value
+     * before and after a TableModify operation to calculate the affected-row count.</p>
+     */
     protected int size = 0;
     protected final String tableName;
 
@@ -87,7 +94,9 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
         try {
             boolean result = addImpl(objects);
-            size += 1;
+            if (result) {
+                size += 1;
+            }
             invalidateCacheIfNeeded(objects);
             return result;
         } catch (Throwable e) {
@@ -113,7 +122,12 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
         try {
             boolean result = removeImpl((Object[]) o);
-            size += 1;
+            // Keep the counter monotonic. Calcite compares the collection size before and
+            // after TableModify; decrementing from the operation-local zero baseline would
+            // produce a negative intermediate value for remote deletes.
+            if (result) {
+                size += 1;
+            }
             invalidateCacheIfNeeded((Object[]) o);
             return result;
         } catch (Throwable e) {
@@ -140,7 +154,11 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
         try {
             boolean result = addAllImpl(c);
-            size += c.size();
+            if (result) {
+                // A successful batch is counted as accepted rows. Individual remote
+                // affected-row counts are not required by this compatibility layer.
+                size += c.size();
+            }
             for (Object[] row : c) {
                 invalidateCacheIfNeeded(row);
             }
@@ -170,7 +188,11 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
         try {
             boolean result = removeAllImpl(c);
-            size += c.size();
+            if (result) {
+                // A successful batch is counted as accepted rows. The counter remains
+                // operation-local and monotonic because remote table cardinality is unknown.
+                size += c.size();
+            }
             for (Object o : c) {
                 invalidateCacheIfNeeded((Object[]) o);
             }

@@ -141,6 +141,7 @@ public class RedisHandler {
         byte[] value = codec.encode(data);
         try {
             if (isListMode()) {
+                // LPUSH is intentional: list mode keeps the newest record at the head of the list.
                 // Issue all commands first, then wait once: avoids serializing
                 // each round trip (lpush -> ltrim -> expire).
                 List<RedisFuture<?>> futures = new ArrayList<>(3);
@@ -167,6 +168,7 @@ public class RedisHandler {
             // autoFlush-disabled window of the shared connection.
             List<RedisFuture<?>> futures;
             if (isListMode()) {
+                // LPUSH is intentional: list mode keeps the newest record at the head of the list.
                 // Aggregate rows by key: byte[] has reference equality, so the map key
                 // is the key string (UTF-8 encoded back to bytes when issuing commands).
                 Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();

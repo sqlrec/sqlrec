@@ -186,4 +186,11 @@ public class KafkaCalciteTableUnitTest {
 
         verify(mockProducer, times(1)).close();
     }
+
+    @Test
+    public void testCloseAllProducers() {
+        KafkaCalciteTable.closeAllProducers();
+
+        verify(mockProducer, times(1)).close();
+    }
 }

@@ -1,6 +1,10 @@
 package com.sqlrec.common.utils;
 
 import org.junit.jupiter.api.Test;
+import org.apache.flink.table.data.GenericArrayData;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.IntType;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -74,6 +78,17 @@ public class DataTransformUtilsTest {
     public void testToDoubleArrayUnsupportedThrows() {
         assertThrows(IllegalArgumentException.class,
                 () -> DataTransformUtils.toDoubleArray("string"));
+    }
+
+    @Test
+    public void testFlinkArrayConversionPreservesNullElements() {
+        GenericRowData rowData = new GenericRowData(1);
+        rowData.setField(0, new GenericArrayData(new Integer[]{1, null, 3}));
+
+        Object result = FlinkSchemaUtils.typeConversion(
+                new ArrayType(new IntType()), rowData, 0);
+
+        assertEquals(Arrays.asList(1, null, 3), result);
     }
 
     // --- l2Normalize ---

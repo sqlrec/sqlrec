@@ -5,4 +5,6 @@ source ~/.bash_profile
 dir=$(dirname $(realpath $0))
 source ${dir}/../env.sh
 
-kubectl delete -f ${dir}/kyuubi.yaml -n ${NAMESPACE} --ignore-not-found
+envsubst < ${dir}/kyuubi.yaml > ${dir}/kyuubi.yaml.tmp
+kubectl delete -f "${dir}/kyuubi.yaml.tmp" -n "${NAMESPACE}" --ignore-not-found
+rm -f "${dir}/kyuubi.yaml.tmp"

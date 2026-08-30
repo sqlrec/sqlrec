@@ -249,9 +249,10 @@ public class FileSystemHandler {
             normalizeRowTypes(data);
             List<Object[]> allData = ensureData();
             Object primaryKeyValue = getKey(data);
+            validatePrimaryKey(primaryKeyValue);
 
             for (int i = 0; i < allData.size(); i++) {
-                if (primaryKeyValue.equals(getKey(allData.get(i)))) {
+                if (Objects.equals(primaryKeyValue, getKey(allData.get(i)))) {
                     allData.set(i, data);
                     return true;
                 }
@@ -267,7 +268,15 @@ public class FileSystemHandler {
             normalizeRowTypes(data);
             List<Object[]> allData = ensureData();
             Object primaryKeyValue = getKey(data);
-            return allData.removeIf(row -> primaryKeyValue.equals(getKey(row)));
+            validatePrimaryKey(primaryKeyValue);
+            return allData.removeIf(row -> Objects.equals(primaryKeyValue, getKey(row)));
+        }
+    }
+
+    private void validatePrimaryKey(Object primaryKeyValue) {
+        if (primaryKeyValue == null) {
+            throw new IllegalArgumentException("Primary key at index "
+                    + fileSystemConfig.primaryKeyIndex + " is null");
         }
     }
 }

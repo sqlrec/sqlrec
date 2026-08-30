@@ -11,4 +11,6 @@ helm upgrade --install valkey valkey/valkey \
   --set service.type=NodePort \
   --set service.nodePort=${REDIS_PORT} \
   --set dataStorage.enabled=true \
-  --set dataStorage.requestedSize=128Gi
+  --set dataStorage.requestedSize=128Gi \
+  --wait \
+  --timeout ${DEPLOY_TIMEOUT}s

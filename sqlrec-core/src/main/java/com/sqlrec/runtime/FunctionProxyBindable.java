@@ -176,6 +176,8 @@ public class FunctionProxyBindable extends BindableInterface {
 
         if (partitionBy != null) {
             if (isAsync) {
+                // Async calls are intentionally fire-and-forget; failures are reported by the
+                // existing logging and metrics instrumentation instead of being propagated synchronously.
                 ExecutorServiceUtils.getExecutorService().submit(() -> bindWithPartition(schema, context, targetBindable));
                 return null;
             }
@@ -183,6 +185,8 @@ public class FunctionProxyBindable extends BindableInterface {
         }
 
         if (isAsync) {
+            // Async calls are intentionally fire-and-forget; failures are reported by the
+            // existing logging and metrics instrumentation instead of being propagated synchronously.
             ExecutorServiceUtils.getExecutorService().submit(() -> targetBindable.bind(schema, context));
             return null;
         } else {

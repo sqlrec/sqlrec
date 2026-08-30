@@ -115,7 +115,9 @@ public class FlinkSchemaUtils {
                 List<Object> list = new ArrayList<>((int) arrayData.size());
 
                 for (int i = 0; i < arrayData.size(); i++) {
-                    if (elementType instanceof IntType) {
+                    if (arrayData.isNullAt(i)) {
+                        list.add(null);
+                    } else if (elementType instanceof IntType) {
                         list.add(arrayData.getInt(i));
                     } else if (elementType instanceof BigIntType) {
                         list.add(arrayData.getLong(i));

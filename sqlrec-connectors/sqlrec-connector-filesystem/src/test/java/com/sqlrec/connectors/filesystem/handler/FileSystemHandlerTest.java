@@ -337,6 +337,19 @@ class FileSystemHandlerTest {
     }
 
     @Test
+    void testUpsertRejectsNullPrimaryKey() {
+        FileSystemConfig config = createConfig(null, "csv");
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> handler.upsert(new Object[]{null, "alice", 20})
+        );
+
+        assertTrue(exception.getMessage().contains("Primary key"));
+    }
+
+    @Test
     void testUpsertNormalizesRowTypes() {
         FileSystemConfig config = new FileSystemConfig();
         config.fieldSchemas = Arrays.asList(
