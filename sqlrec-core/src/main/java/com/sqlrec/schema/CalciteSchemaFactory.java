@@ -35,7 +35,7 @@ public class CalciteSchemaFactory {
     }
 
     public static CalciteSchema createCalciteSchema() {
-        CalciteSchema rootSchema = CalciteSchema.createRootSchema(false);
+        CalciteSchema rootSchema = ConcurrentCalciteSchema.createRootSchema();
 
         if (globalSchema != null) {
             globalSchema.getSubSchemaMap().forEach((k, v) -> {

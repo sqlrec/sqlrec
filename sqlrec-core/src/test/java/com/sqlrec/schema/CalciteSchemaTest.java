@@ -19,12 +19,92 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CalciteSchemaTest {
+    @Test
+    public void testConcurrentCalciteSchemaLookup() {
+        CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
+        MyTable table = new MyTable("MixedCase", new Object[][]{{1, "Alice"}});
+
+        schema.add("MixedCase", table);
+
+        assertSame(table, schema.getTable("MixedCase", true).getTable());
+        assertNull(schema.getTable("mixedcase", true));
+        assertSame(table, schema.getTable("mixedcase", false).getTable());
+        assertTrue(schema.getTableNames().contains("MixedCase"));
+
+        CalciteSchema child = schema.add("MyDatabase", new AbstractSchema());
+        assertSame(child, schema.getSubSchema("mydatabase", false));
+        assertNull(schema.getSubSchema("mydatabase", true));
+    }
+
+    @Test
+    public void testConcurrentTableAddAndRead() throws Exception {
+        CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
+        int writerCount = 8;
+        int readerCount = 4;
+        int tablesPerWriter = 250;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(writerCount + readerCount);
+        List<Future<?>> futures = new ArrayList<>();
+
+        try {
+            for (int writer = 0; writer < writerCount; writer++) {
+                int writerIndex = writer;
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    for (int tableIndex = 0; tableIndex < tablesPerWriter; tableIndex++) {
+                        String tableName = "table_" + writerIndex + "_" + tableIndex;
+                        schema.add(tableName,
+                                new MyTable(tableName, new Object[][]{{tableIndex, tableName}}));
+                    }
+                    return null;
+                }));
+            }
+
+            for (int reader = 0; reader < readerCount; reader++) {
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    for (int iteration = 0; iteration < 500; iteration++) {
+                        for (String tableName : schema.getTableNames()) {
+                            assertNotNull(schema.getTable(tableName, true));
+                        }
+                    }
+                    return null;
+                }));
+            }
+
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(writerCount * tablesPerWriter, schema.getTableNames().size());
+        for (int writer = 0; writer < writerCount; writer++) {
+            for (int tableIndex = 0; tableIndex < tablesPerWriter; tableIndex++) {
+                assertNotNull(schema.getTable("TABLE_" + writer + "_" + tableIndex, false));
+            }
+        }
+    }
+
     @Test
     public void testTablePriority() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
