@@ -12,7 +12,6 @@ import org.apache.calcite.rel.logical.LogicalCalc;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.FilterableTable;
-import org.apache.calcite.schema.ProjectableFilterableTable;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.Mappings;
@@ -42,11 +41,10 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
     }
 
     public static boolean test(TableScan scan) {
-        // We can only push filters into a FilterableTable or
-        // ProjectableFilterableTable.
+        // The custom scan implementation only supports FilterableTable. Do not
+        // match ProjectableFilterableTable until projection pushdown is implemented.
         final RelOptTable table = scan.getTable();
-        return table.unwrap(FilterableTable.class) != null
-                || table.unwrap(ProjectableFilterableTable.class) != null;
+        return table.unwrap(FilterableTable.class) != null;
     }
 
     protected void apply(RelOptRuleCall call, Filter filter, TableScan scan) {

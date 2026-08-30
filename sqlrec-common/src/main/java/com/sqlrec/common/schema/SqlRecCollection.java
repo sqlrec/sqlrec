@@ -64,6 +64,9 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
     @Override
     public boolean isEmpty() {
+        // This is a Calcite TableModify compatibility adapter, not a view of
+        // remote table cardinality. The value is intentionally fixed because
+        // the remote store may not expose a reliable empty-state query.
         return false;
     }
 

@@ -35,6 +35,7 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
     private String rightEmbeddingColName;
     private int limit;
     private List<Integer> projectList;
+    private final RelDataType projectRowType;
 
     protected SqlrecEnumerableVectorJoin(
             RelOptCluster cluster,
@@ -62,13 +63,12 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
         this.rightEmbeddingColName = rightEmbeddingColName;
         this.limit = limit;
         this.projectList = projectList;
-        try {
-            java.lang.reflect.Field rowTypeField = AbstractRelNode.class.getDeclaredField("rowType");
-            rowTypeField.setAccessible(true);
-            rowTypeField.set(this, projectRowType);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to set rowType", e);
-        }
+        this.projectRowType = projectRowType;
+    }
+
+    @Override
+    protected RelDataType deriveRowType() {
+        return projectRowType;
     }
 
     public static SqlrecEnumerableVectorJoin create(
@@ -157,6 +157,8 @@ public class SqlrecEnumerableVectorJoin extends AbstractRelNode implements Enume
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        // This zero cost is intentional. The planner cannot see the remote
+        // connector cost, and SQLRec must prefer this specialized implementation.
         return planner.getCostFactory().makeZeroCost();
     }
 

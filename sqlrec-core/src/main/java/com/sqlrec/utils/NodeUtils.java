@@ -132,6 +132,9 @@ public class NodeUtils {
     }
 
     public static List<String> getTableFromSqlNode(SqlNode flinkSqlNode) {
+        // This intentionally follows the existing lightweight AST traversal.
+        // It may miss tables hidden behind subqueries, CTEs, aliases, table
+        // functions, nested set operations, or other FROM-clause wrappers.
         List<String> tableNames = new ArrayList<>();
         if (flinkSqlNode == null) {
             return tableNames;

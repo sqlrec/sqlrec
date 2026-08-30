@@ -125,12 +125,16 @@ public class NormalSqlCompiler {
                             rel.getTraitSet().equals(requiredOutputTraits)
                                     ? rel
                                     : planner.changeTraits(rel, requiredOutputTraits);
-                    assert rootRel2 != null;
+                    if (rootRel2 == null) {
+                        throw new IllegalStateException("Planner could not apply required root traits");
+                    }
 
                     planner.setRoot(rootRel2);
                     final RelOptPlanner planner2 = planner.chooseDelegate();
                     final RelNode rootRel3 = planner2.findBestExp();
-                    assert rootRel3 != null : "could not implement exp";
+                    if (rootRel3 == null) {
+                        throw new IllegalStateException("Planner could not implement relational expression");
+                    }
                     return rootRel3;
                 };
 

@@ -70,6 +70,8 @@ public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        // This zero cost is intentional. The planner cannot see the remote
+        // connector cost, and SQLRec must prefer this specialized implementation.
         return planner.getCostFactory().makeZeroCost();
     }
 

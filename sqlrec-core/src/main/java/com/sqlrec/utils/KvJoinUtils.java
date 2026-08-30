@@ -64,8 +64,9 @@ public class KvJoinUtils {
             rightValuesMap = scanRightTableByJoinKey(rightTable, rightJoinKeyColIndex, joinKeys);
         }
 
-        // Keep the historical stringified-key matching behavior for compatibility with existing
-        // KV table implementations; this intentionally does not preserve strict key type semantics.
+        // Keep the historical stringified-key matching behavior for compatibility
+        // with existing KV table implementations. This is intentional and does
+        // not preserve strict SQL key type semantics.
         Map<String, List<Object[]>> stringKeyMap = new HashMap<>();
         for (Map.Entry<Object, List<Object[]>> entry : rightValuesMap.entrySet()) {
             stringKeyMap.put(entry.getKey().toString(), entry.getValue());

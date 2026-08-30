@@ -17,7 +17,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-// update will perform as insert
+// UPDATE is intentionally emitted as an insert-like operation. Downstream
+// storage guarantees UPSERT semantics, so rows with the same key replace the
+// existing rows instead of creating duplicates.
 public class SqlrecEnumerableTableModify extends EnumerableTableModify {
     public SqlrecEnumerableTableModify(
             RelOptCluster cluster,
@@ -67,9 +69,13 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                 Expressions.parameter(Collection.class,
                         builder.newName("collection"));
         final Expression expression = table.getExpression(ModifiableTable.class);
-        assert expression != null; // TODO: user error in validator
-        assert ModifiableTable.class.isAssignableFrom(
-                Types.toClass(expression.getType())) : expression.getType();
+        if (expression == null) {
+            throw new IllegalStateException("ModifiableTable expression is missing");
+        }
+        if (!ModifiableTable.class.isAssignableFrom(Types.toClass(expression.getType()))) {
+            throw new IllegalStateException(
+                    "Expected a ModifiableTable expression, got " + expression.getType());
+        }
         builder.add(
                 Expressions.declare(
                         Modifier.FINAL,
@@ -181,6 +187,8 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        // Table modification is deliberately zero-cost because connector cost
+        // is not visible to the planner.
         return planner.getCostFactory().makeZeroCost();
     }
 }

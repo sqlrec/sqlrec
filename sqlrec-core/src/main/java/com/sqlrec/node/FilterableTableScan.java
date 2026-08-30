@@ -117,6 +117,8 @@ public class FilterableTableScan extends EnumerableTableScan {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        // Custom SQLRec physical nodes intentionally have zero planner cost so
+        // connector-specific rules are preferred over generic fallbacks.
         return planner.getCostFactory().makeZeroCost();
     }
 }
