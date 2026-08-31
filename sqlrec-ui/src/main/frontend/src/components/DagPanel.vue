@@ -17,19 +17,7 @@
         <Background />
         <Controls />
         
-        <template #node-cache="nodeProps">
-          <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
-        </template>
-        <template #node-sql="nodeProps">
-          <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
-        </template>
-        <template #node-function="nodeProps">
-          <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
-        </template>
-        <template #node-condition="nodeProps">
-          <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
-        </template>
-        <template #node-set="nodeProps">
+        <template #node-dag="nodeProps">
           <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
         </template>
       </VueFlow>
@@ -47,6 +35,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import DagNode from './DagNode.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const props = defineProps({
   functionName: {
@@ -160,7 +149,7 @@ const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
     
     return {
       id: node.id,
-      type: node.type,
+      type: 'dag',
       position: {
         x: nodeWithPosition.x - 90,
         y: nodeWithPosition.y - 25
@@ -192,7 +181,7 @@ const fetchDagData = async () => {
   error.value = null
   
   try {
-    const response = await fetch(`/ui/api/functions-dag/${props.functionName}`)
+    const response = await fetch(`/ui/api/functions-dag/${encodePathSegment(props.functionName)}`)
     if (!response.ok) {
       throw new Error('Failed to fetch DAG data')
     }
@@ -283,11 +272,7 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
   font-weight: bold;
 }
 
-.vue-flow__node-cache,
-.vue-flow__node-sql,
-.vue-flow__node-function,
-.vue-flow__node-condition,
-.vue-flow__node-set {
+.vue-flow__node-dag {
   color: var(--vf-node-text);
   border: none;
   border-radius: 6px;
@@ -297,11 +282,7 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
   font-weight: bold;
 }
 
-.vue-flow__node-cache:hover,
-.vue-flow__node-sql:hover,
-.vue-flow__node-function:hover,
-.vue-flow__node-condition:hover,
-.vue-flow__node-set:hover {
+.vue-flow__node-dag:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 

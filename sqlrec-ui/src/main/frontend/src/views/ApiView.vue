@@ -17,6 +17,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/Sidebar.vue'
 import DetailPanel from '../components/DetailPanel.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,7 +44,7 @@ const fetchApis = async () => {
 
 const loadApiDetail = async (item) => {
   try {
-    const response = await fetch(`/ui/api/apis/${item.name}`)
+    const response = await fetch(`/ui/api/apis/${encodePathSegment(item.name)}`)
     if (response.ok) {
       const data = await response.json()
       selectedApi.value = {

@@ -68,6 +68,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const props = defineProps({
   modelName: {
@@ -92,7 +93,7 @@ const fetchCheckpoints = async () => {
   loading.value = true
   try {
     const response = await fetch(
-      `/ui/api/models/${props.modelName}/checkpoints?page=${page.value}&pageSize=${pageSize.value}`
+      `/ui/api/models/${encodePathSegment(props.modelName)}/checkpoints?page=${page.value}&pageSize=${pageSize.value}`
     )
     if (response.ok) {
       const data = await response.json()

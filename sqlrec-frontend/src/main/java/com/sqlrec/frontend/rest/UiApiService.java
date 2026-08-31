@@ -19,6 +19,7 @@ import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.runtime.FunctionProxyBindable;
 import com.sqlrec.runtime.IfBindable;
 import com.sqlrec.runtime.ProxyAllBindable;
+import com.sqlrec.runtime.ReturnBindable;
 import com.sqlrec.runtime.SetBindable;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.utils.ModelUtils;
@@ -339,6 +340,9 @@ final class UiApiService {
         }
         if (bindable instanceof SetBindable) {
             return "set";
+        }
+        if (bindable instanceof ReturnBindable) {
+            return "return";
         }
         return "unknown";
     }

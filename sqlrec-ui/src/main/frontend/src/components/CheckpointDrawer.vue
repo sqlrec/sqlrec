@@ -52,6 +52,7 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
 import CodeBlock from './CodeBlock.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const props = defineProps({
   visible: {
@@ -76,7 +77,9 @@ const fetchCheckpointDetail = async () => {
   if (!props.modelName || !props.checkpointName) return
   
   try {
-    const response = await fetch(`/ui/api/models/${props.modelName}/checkpoints/${props.checkpointName}`)
+    const response = await fetch(
+      `/ui/api/models/${encodePathSegment(props.modelName)}/checkpoints/${encodePathSegment(props.checkpointName)}`
+    )
     if (response.ok) {
       checkpointData.value = await response.json()
     }

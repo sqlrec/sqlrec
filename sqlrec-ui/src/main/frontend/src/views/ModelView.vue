@@ -37,6 +37,7 @@ import DetailPanel from '../components/DetailPanel.vue'
 import CheckpointList from '../components/CheckpointList.vue'
 import CheckpointDrawer from '../components/CheckpointDrawer.vue'
 import CodeBlock from '../components/CodeBlock.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,7 +66,7 @@ const fetchModels = async () => {
 
 const loadModelDetail = async (item) => {
   try {
-    const response = await fetch(`/ui/api/models/${item.name}`)
+    const response = await fetch(`/ui/api/models/${encodePathSegment(item.name)}`)
     if (response.ok) {
       const data = await response.json()
       selectedModel.value = {

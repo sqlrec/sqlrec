@@ -30,6 +30,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/Sidebar.vue'
 import DetailPanel from '../components/DetailPanel.vue'
 import CodeBlock from '../components/CodeBlock.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,7 +57,7 @@ const fetchServices = async () => {
 
 const loadServiceDetail = async (item) => {
   try {
-    const response = await fetch(`/ui/api/services/${item.name}`)
+    const response = await fetch(`/ui/api/services/${encodePathSegment(item.name)}`)
     if (response.ok) {
       const data = await response.json()
       selectedService.value = {

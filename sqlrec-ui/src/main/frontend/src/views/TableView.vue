@@ -35,6 +35,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DetailPanel from '../components/DetailPanel.vue'
+import { encodePathSegment } from '../utils/url.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -72,7 +73,7 @@ const expandDatabase = async (dbName) => {
   expandedDatabase.value = dbName
   selectedTable.value = null
   try {
-    const response = await fetch(`/ui/api/tables/${dbName}/`)
+    const response = await fetch(`/ui/api/tables/${encodePathSegment(dbName)}/`)
     if (response.ok) {
       tables.value = await response.json()
     }
@@ -93,7 +94,9 @@ const toggleDatabase = async (dbName) => {
 
 const loadTableDetail = async (item) => {
   try {
-    const response = await fetch(`/ui/api/tables/${expandedDatabase.value}/${item.name}`)
+    const response = await fetch(
+      `/ui/api/tables/${encodePathSegment(expandedDatabase.value)}/${encodePathSegment(item.name)}`
+    )
     if (response.ok) {
       const data = await response.json()
       selectedTable.value = {
