@@ -401,8 +401,8 @@ The six connectors share the same structure: `config/` (Options parsing of table
 
 ### HTTP UDFs (Online Inference Core)
 
-- `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): `ServiceManager.getServiceConfig()` gets the service URL (ObjCache cached) → input table serialized as JSON array → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
-- `CallServiceWithQVFunction`, `BatchCallServiceUDTF` (Flink UDTF, JDK HttpURLConnection, batched by batchSize), `CallSqlRecApiFunction` (cross-instance sqlrec invocation via `SqlRecApiClient`).
+- `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): overloaded for both regular and Query-Value inputs; `ServiceManager.getServiceConfig()` gets the service URL (ObjCache cached) → input serialized as a row-wise JSON array or Query-Value column-wise JSON → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
+- `BatchCallServiceUDTF` (Flink UDTF, JDK HttpURLConnection, batched by batchSize), `CallSqlRecApiFunction` (cross-instance sqlrec invocation via `SqlRecApiClient`).
 - **Diversification family**: `WindowDiversify` (tag quota within sliding window), `DppDiversity` (determinantal point process), `RuleDiversity`, `WeightedMerge`, `DedupFunction`, `ShuffleFunction`.
 - **Feature family**: `TagToVecFunction`, `RandomVecFunction`, `FeatureCoverageMetricsFunction`, `GetGrowthbookFeaturesFunction` (GrowthBook SDK), `Get/SetVariablesFunction` (variable propagation).
 - Others: `JsonToTableFunction`, `AddColFunction`, `TruncateTableFunction`, `SleepFunction` (for testing).

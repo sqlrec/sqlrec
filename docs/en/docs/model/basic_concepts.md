@@ -192,7 +192,7 @@ The `ModelConfigs` class defines general configuration parameters for the model 
 
 ## Built-in Model Call UDF
 
-SQLRec provides two built-in UDFs (User Defined Functions) for calling model services for inference.
+SQLRec provides the built-in `call_service` UDF (User Defined Function) for model-service inference, overloaded for regular and Query-Value inputs.
 
 ### call_service
 
@@ -202,6 +202,8 @@ SQLRec provides two built-in UDFs (User Defined Functions) for calling model ser
 
 ```java
 public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item)
 ```
 
 **Parameter Description**:
@@ -253,14 +255,14 @@ SELECT
 CALL call_service('test_service', t1);
 ```
 
-### call_service_with_qv
+### Query-Value Call Form
 
-`call_service_with_qv` is a service call function with Query-Value mode, suitable for recommendation system scenarios. It divides input into Query (query features, single row) and Value (candidate features, multiple rows), used for batch prediction of multiple candidates.
+The three-argument overload of `call_service` supports Query-Value mode for recommendation scenarios. It divides input into Query (query features, single row) and Value (candidate features, multiple rows) to predict multiple candidates in one request.
 
 **Function Signature**:
 
 ```java
-public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable query, CacheTable value)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item)
 ```
 
 **Parameter Description**:
@@ -269,8 +271,8 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTab
 |-----------|------|-------------|
 | `context` | ReadonlyContext | Readonly context (auto-injected) |
 | `serviceName` | String | Service name |
-| `query` | CacheTable | Query feature table, must have only one row |
-| `value` | CacheTable | Candidate feature table, can have multiple rows |
+| `user` | CacheTable | User feature table, must have only one row |
+| `item` | CacheTable | Item feature table, can have multiple rows |
 
 **Return Value**: Returns a new `CacheTable` containing Value table columns and model output columns.
 
@@ -297,7 +299,7 @@ WHERE category = 'Electronics'
 LIMIT 100;
 
 -- Batch predict user preference for all candidate items
-CALL call_service_with_qv('rec_service', user_query, item_candidates);
+CALL call_service('rec_service', user_query, item_candidates);
 ```
 
 ## Service Call Data Protocol
@@ -346,16 +348,16 @@ Accept: application/json
 ]
 ```
 
-#### Column-wise JSON Format (call_service_with_qv)
+#### Column-wise JSON Format (call_service Query-Value Overload)
 
-`call_service_with_qv` uses column-wise JSON format, combining Query and Value data:
+The Query-Value overload of `call_service` uses column-wise JSON format, combining Query and Value data:
 
 ```json
 {
-    "user_id": [1001, 1001, 1001],
-    "user_name": ["Alice", "Alice", "Alice"],
-    "user_country": ["USA", "USA", "USA"],
-    "user_age": [25, 25, 25],
+    "user_id": [1001],
+    "user_name": ["Alice"],
+    "user_country": ["USA"],
+    "user_age": [25],
     "item_id": [1, 2, 3],
     "item_name": ["Phone", "Tablet", "Laptop"],
     "item_category": ["Electronics", "Electronics", "Electronics"]
@@ -363,7 +365,7 @@ Accept: application/json
 ```
 
 **Format Description**:
-- Query table field values are copied and extended to match Value table row count
+- Each Query table field is represented by a single-element array
 - Value table fields keep original values
 - All fields stored column-wise, each field corresponds to an array
 
@@ -388,7 +390,7 @@ Prediction results returned by service are in JSON object format:
 UDF merges input data with prediction results:
 
 1. **call_service**: Appends prediction results to the end of input rows
-2. **call_service_with_qv**: Appends prediction results to the end of Value table rows
+2. **call_service Query-Value overload**: Appends prediction results to the end of Value table rows
 
 **Merge Example**:
 

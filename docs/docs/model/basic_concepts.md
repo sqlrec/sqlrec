@@ -191,7 +191,7 @@ http://{service_id}.{namespace}.svc.cluster.local:80/predict
 
 ## 内置模型调用 UDF
 
-SQLRec 提供了两个内置的 UDF（用户定义函数）用于调用模型服务进行推理。
+SQLRec 提供内置的 `call_service` UDF（用户定义函数）用于调用模型服务进行推理，并通过重载支持普通输入和 Query-Value 输入。
 
 ### call_service
 
@@ -201,6 +201,8 @@ SQLRec 提供了两个内置的 UDF（用户定义函数）用于调用模型服
 
 ```java
 public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item)
 ```
 
 **参数说明**：
@@ -252,14 +254,14 @@ SELECT
 CALL call_service('test_service', t1);
 ```
 
-### call_service_with_qv
+### Query-Value 调用方式
 
-`call_service_with_qv` 是带 Query-Value 模式的服务调用函数，适用于推荐系统场景。它将输入分为 Query（查询特征，单行）和 Value（候选特征，多行），用于批量预测多个候选项。
+`call_service` 的三参数重载支持 Query-Value 模式，适用于推荐系统场景。它将输入分为 Query（查询特征，单行）和 Value（候选特征，多行），用于批量预测多个候选项。
 
 **函数签名**：
 
 ```java
-public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable query, CacheTable value)
+public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item)
 ```
 
 **参数说明**：
@@ -268,8 +270,8 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTab
 |------|------|------|
 | `context` | ReadonlyContext | 只读上下文（自动注入） |
 | `serviceName` | String | 服务名称 |
-| `query` | CacheTable | 查询特征表，必须只有一行 |
-| `value` | CacheTable | 候选特征表，可以有多行 |
+| `user` | CacheTable | 用户特征表，必须只有一行 |
+| `item` | CacheTable | 物品特征表，可以有多行 |
 
 **返回值**：返回一个新的 `CacheTable`，包含 Value 表的列和模型输出列。
 
@@ -296,7 +298,7 @@ WHERE category = 'Electronics'
 LIMIT 100;
 
 -- 批量预测用户对所有候选物品的偏好
-CALL call_service_with_qv('rec_service', user_query, item_candidates);
+CALL call_service('rec_service', user_query, item_candidates);
 ```
 
 ## 服务调用数据协议
@@ -345,16 +347,16 @@ Accept: application/json
 ]
 ```
 
-#### 列式 JSON 格式（call_service_with_qv）
+#### 列式 JSON 格式（call_service Query-Value 重载）
 
-`call_service_with_qv` 使用列式 JSON 格式，将 Query 和 Value 数据组合发送：
+`call_service` 的 Query-Value 重载使用列式 JSON 格式，将 Query 和 Value 数据组合发送：
 
 ```json
 {
-    "user_id": [1001, 1001, 1001],
-    "user_name": ["Alice", "Alice", "Alice"],
-    "user_country": ["USA", "USA", "USA"],
-    "user_age": [25, 25, 25],
+    "user_id": [1001],
+    "user_name": ["Alice"],
+    "user_country": ["USA"],
+    "user_age": [25],
     "item_id": [1, 2, 3],
     "item_name": ["Phone", "Tablet", "Laptop"],
     "item_category": ["Electronics", "Electronics", "Electronics"]
@@ -362,7 +364,7 @@ Accept: application/json
 ```
 
 **格式说明**：
-- Query 表的字段值会复制扩展到与 Value 表行数相同
+- Query 表的每个字段对应一个单元素数组
 - Value 表的字段保持原值
 - 所有字段以列式存储，每个字段对应一个数组
 
@@ -387,7 +389,7 @@ Accept: application/json
 UDF 会将输入数据与预测结果合并：
 
 1. **call_service**：将预测结果追加到输入行的末尾
-2. **call_service_with_qv**：将预测结果追加到 Value 表行的末尾
+2. **call_service Query-Value 重载**：将预测结果追加到 Value 表行的末尾
 
 **合并示例**：
 

@@ -224,9 +224,17 @@ Model service call function used to call deployed model services for inference. 
 
 ```java
 public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+
+public CacheTable evaluate(ReadonlyContext context, String serviceName,
+                           CacheTable user, CacheTable item)
 ```
 
-`context` is injected by SQLRec; SQL only supplies the service name and input `CacheTable`. The result contains the input columns followed by model output columns. HTTP connect/read/write timeouts default to 30 seconds.
+`context` is injected by SQLRec. SQL supports these two call forms:
+
+- `CALL call_service(serviceName, input)`: calls the service with row-wise JSON. The result contains the input columns followed by model output columns.
+- `CALL call_service(serviceName, user, item)`: calls the service in Query-Value mode. `user` must contain exactly one row and `item` may contain multiple rows. The result keeps the Item columns and appends model output columns. Model input fields are automatically split between User and Item based on the model definition.
+
+HTTP connect/read/write timeouts default to 30 seconds. See the [model documentation](./model/basic_concepts.md#call_service) for the protocol and examples.
 
 ---
 
@@ -593,21 +601,6 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 - Number of weights must match the number of tables
 - Weights and limit must be positive integers
 - Primary key column must exist in all tables
-
----
-
-### call_service_with_qv
-
-Model service call function with Query-Value mode. See [Models documentation](./model/basic_concepts.md#call_service_with_qv) for details.
-
-**Function Signature**:
-
-```java
-public CacheTable evaluate(ReadonlyContext context, String serviceName,
-                           CacheTable query, CacheTable value)
-```
-
-`query` must contain exactly one row; `value` may contain multiple rows. The result keeps Value columns and appends model output columns. Model input fields are automatically split between Query and Value based on the model definition.
 
 ---
 

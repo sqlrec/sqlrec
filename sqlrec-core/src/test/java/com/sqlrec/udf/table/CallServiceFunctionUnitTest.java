@@ -1,10 +1,22 @@
 package com.sqlrec.udf.table;
 
+import com.sqlrec.common.model.ModelConf;
+import com.sqlrec.common.model.ModelController;
+import com.sqlrec.common.model.ServiceConf;
+import com.sqlrec.common.runtime.ReadonlyContext;
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.schema.FieldSchema;
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +25,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -200,5 +215,53 @@ public class CallServiceFunctionUnitTest {
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 CallServiceFunction.callPredictionService("http://test", "{\"input\":[1,2]}"));
         assertTrue(ex.getMessage().contains("Failed to connect"));
+    }
+
+    @Test
+    public void testQueryValueOverload() throws IOException {
+        ReadonlyContext context = org.mockito.Mockito.mock(ReadonlyContext.class);
+        ModelController controller = org.mockito.Mockito.mock(ModelController.class);
+        ModelConf modelConf = new ModelConf();
+        modelConf.setInputFields(Arrays.asList(
+                new FieldSchema("user_id", "BIGINT"),
+                new FieldSchema("item_id", "BIGINT")));
+
+        ServiceConf serviceConf = new ServiceConf();
+        serviceConf.setUrl("http://test");
+        serviceConf.setModelConfig(modelConf);
+
+        when(context.getServiceConfig("rec_service")).thenReturn(serviceConf);
+        when(context.getModelController(modelConf)).thenReturn(controller);
+        when(controller.getOutputFields(modelConf))
+                .thenReturn(Collections.singletonList(new FieldSchema("score", "DOUBLE")));
+        when(mockHttpClient.newCall(any(Request.class))).thenReturn(mockCall);
+        when(mockCall.execute()).thenReturn(mockResponse);
+        when(mockResponse.isSuccessful()).thenReturn(true);
+        when(mockResponse.body()).thenReturn(mockBody);
+        when(mockBody.string()).thenReturn("{\"score\":[0.9,0.8]}");
+
+        CacheTable user = new CacheTable(
+                "user",
+                Linq4j.asEnumerable(Collections.singletonList(new Object[]{1001L})),
+                Collections.singletonList(field("user_id", SqlTypeName.BIGINT)));
+        CacheTable item = new CacheTable(
+                "item",
+                Linq4j.asEnumerable(Arrays.asList(new Object[]{11L}, new Object[]{12L})),
+                Collections.singletonList(field("item_id", SqlTypeName.BIGINT)));
+
+        CacheTable result = new CallServiceFunction().evaluate(context, "rec_service", user, item);
+        List<Object[]> rows = result.scan(null).toList();
+
+        assertEquals(2, rows.size());
+        assertEquals(11L, rows.get(0)[0]);
+        assertEquals(0.9, rows.get(0)[1]);
+        assertEquals(12L, rows.get(1)[0]);
+        assertEquals(0.8, rows.get(1)[1]);
+        assertEquals("score", result.getDataFields().get(1).getName());
+    }
+
+    private static RelDataTypeField field(String name, SqlTypeName typeName) {
+        return new RelDataTypeFieldImpl(
+                name, 0, new BasicSqlType(RelDataTypeSystem.DEFAULT, typeName));
     }
 }

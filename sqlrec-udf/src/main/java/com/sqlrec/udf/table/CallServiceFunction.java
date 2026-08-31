@@ -69,6 +69,72 @@ public class CallServiceFunction {
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
     }
 
+    public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item) {
+        ServiceConf serviceConfig = context.getServiceConfig(serviceName);
+        if (serviceConfig == null) {
+            throw new RuntimeException("Service " + serviceName + " not exist or formate error");
+        }
+        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
+            throw new RuntimeException("Service " + serviceName + " url is empty");
+        }
+        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
+        if (controller == null) {
+            throw new RuntimeException("model controller not exist for " + serviceName);
+        }
+
+        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
+
+        Enumerable<Object[]> userEnumerable = user.scan(null);
+        List<Object[]> userData = new ArrayList<>();
+        if (userEnumerable != null) {
+            for (Object[] row : userEnumerable) {
+                userData.add(row);
+            }
+        }
+        if (userData.size() != 1) {
+            throw new RuntimeException("User table must have exactly one row");
+        }
+
+        Enumerable<Object[]> itemEnumerable = item.scan(null);
+        if (itemEnumerable == null || itemEnumerable.count() == 0) {
+            List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(item.getDataFields(), modelOutputFields);
+            return new CacheTable("output", Linq4j.asEnumerable(new ArrayList<>()), newDataFields);
+        }
+
+        List<Object[]> itemData = new ArrayList<>();
+        for (Object[] row : itemEnumerable) {
+            itemData.add(row);
+        }
+
+        List<FieldSchema> allInputFields = serviceConfig.getModelConfig().getInputFields();
+        List<FieldSchema> userFields = new ArrayList<>();
+        List<FieldSchema> itemFields = new ArrayList<>();
+        for (FieldSchema field : allInputFields) {
+            boolean foundInUser = false;
+            for (RelDataTypeField dataField : user.getDataFields()) {
+                if (dataField.getName().equalsIgnoreCase(field.getName())) {
+                    foundInUser = true;
+                    break;
+                }
+            }
+            if (foundInUser) {
+                userFields.add(field);
+            } else {
+                itemFields.add(field);
+            }
+        }
+
+        String jsonData = JsonUtils.toColumnarJson(userData, itemData, userFields, itemFields,
+                user.getDataFields(), item.getDataFields());
+
+        Map<String, Object> predictions = callPredictionService(
+                serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
+        List<Object[]> newData = mergePredictions(itemData, predictions, modelOutputFields);
+        List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(item.getDataFields(), modelOutputFields);
+
+        return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
+    }
+
     public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
         return callPredictionService(serviceUrl, jsonData, null);
     }

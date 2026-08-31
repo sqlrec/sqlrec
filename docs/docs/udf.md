@@ -224,9 +224,17 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 
 ```java
 public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input)
+
+public CacheTable evaluate(ReadonlyContext context, String serviceName,
+                           CacheTable user, CacheTable item)
 ```
 
-`context` 由 SQLRec 自动注入；SQL 调用只需传入服务名和输入 `CacheTable`。返回表包含输入列以及模型输出列。HTTP 请求超时默认为连接、读写各 30 秒。
+`context` 由 SQLRec 自动注入。SQL 调用支持以下两种形式：
+
+- `CALL call_service(serviceName, input)`：使用行式 JSON 调用服务，返回表包含输入列以及模型输出列。
+- `CALL call_service(serviceName, user, item)`：使用 Query-Value 模式调用服务。`user` 必须恰好一行，`item` 可包含多行；返回表保留 Item 表列并追加模型输出列。服务输入字段会按模型定义自动拆分为 User 和 Item 两部分。
+
+HTTP 请求超时默认为连接、读写各 30 秒。详细协议和示例参见[模型文档](./model/basic_concepts.md#call_service)。
 
 ---
 
@@ -593,21 +601,6 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 - 权重数量必须与表的数量一致
 - 权重和 limit 必须为正整数
 - 主键列必须存在于所有表中
-
----
-
-### call_service_with_qv
-
-带 Query-Value 模式的模型服务调用函数。详见 [模型文档](./model/basic_concepts.md#call_service_with_qv)。
-
-**函数签名**：
-
-```java
-public CacheTable evaluate(ReadonlyContext context, String serviceName,
-                           CacheTable query, CacheTable value)
-```
-
-`query` 必须恰好一行，`value` 可包含多行；返回值保留 Value 表列并追加模型输出列。服务输入字段会按模型定义自动拆分为 Query 和 Value 两部分。
 
 ---
 
