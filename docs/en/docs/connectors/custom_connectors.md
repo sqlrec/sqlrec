@@ -6,108 +6,7 @@ This document introduces how to develop custom connectors to extend SQLRec's dat
 
 SQLRec provides a flexible connector extension mechanism that allows developers to implement custom data source connectors. By implementing specific interfaces and inheriting base classes, new data storage systems can be quickly integrated.
 
-## Table Type System
-
-### SqlRecTable
-
-`SqlRecTable` is the abstract base class for all SQLRec tables, inheriting from Calcite's `AbstractTable`.
-
-```java
-package com.sqlrec.common.schema;
-
-import org.apache.calcite.schema.impl.AbstractTable;
-
-public abstract class SqlRecTable extends AbstractTable {
-}
-```
-
-**Use Cases**:
-- Scenarios that don't require primary key queries
-- Scenarios that only need basic table functionality
-- Example: Kafka connector (write-only)
-
-### SqlRecKvTable
-
-`SqlRecKvTable` inherits from `SqlRecTable`, implements `ModifiableTable` and `FilterableTable` interfaces, providing key-value table functionality.
-
-```java
-package com.sqlrec.common.schema;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import org.apache.calcite.schema.FilterableTable;
-import org.apache.calcite.schema.ModifiableTable;
-
-import java.util.*;
-
-public abstract class SqlRecKvTable extends SqlRecTable
-    implements ModifiableTable, FilterableTable {
-
-    private Cache<Object, List<Object[]>> cache;
-
-    // Get primary key index (abstract, subclasses must implement)
-    public abstract int getPrimaryKeyIndex();
-
-    // Batch query by primary key implementation (abstract, subclasses implement data source access)
-    public abstract Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet);
-
-    // Batch query by primary key (with built-in cache; calls getByPrimaryKeyImpl on cache miss)
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        // ... returns cached result on hit, calls getByPrimaryKeyImpl and caches on miss
-    }
-
-    // Initialize cache
-    public void initCache(int maxSize, long expireAfterWrite) {
-        if (maxSize <= 0 || expireAfterWrite <= 0) {
-            return;
-        }
-        cache = Caffeine.newBuilder()
-                .maximumSize(maxSize)
-                .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
-                .build();
-    }
-
-    // Whether only primary key filtering is supported
-    public boolean onlyFilterByPrimaryKey() {
-        return true;
-    }
-}
-```
-
-**Use Cases**:
-- Scenarios requiring primary key queries
-- Scenarios requiring local cache acceleration
-- Example: Redis connector
-
-**Methods to Implement**:
-- `getPrimaryKeyIndex()`: Returns the index of the primary key column
-- `getByPrimaryKeyImpl(Set<Object> keySet)`: Batch query data by primary key (called by base class `getByPrimaryKey` which provides built-in caching)
-- `getRowType(RelDataTypeFactory typeFactory)`: Define table structure
-- `scanImpl(List<RexNode> filters)`: Implement filter queries (called by base class `scan`)
-- `getModifiableCollection()`: Return a modifiable collection object
-
-### VectorSearchable Interface
-
-`VectorSearchable` is a vector search interface (not a class), implemented by `SqlRecKvTable` subclasses to provide vector retrieval functionality.
-
-```java
-package com.sqlrec.common.schema;
-
-import java.util.List;
-
-public interface VectorSearchable {
-    List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request);
-
-    // searchByEmbedding wraps the implementation with type conversion and metrics.
-}
-```
-
-**Use Cases**:
-- Scenarios requiring vector similarity search
-- Example: Milvus connector
-
-**Methods to Implement**:
-- Implement `VectorSearchable.searchByEmbeddingImpl()` to perform vector search.
+Before developing a connector, read [Connector Basic Concepts](./basic_concepts.md) and choose `SqlRecTable`, `SqlRecKvTable`, and the optional `VectorSearchable` capability according to the access pattern.
 
 ## Developing Custom Connectors
 
@@ -311,25 +210,32 @@ Create a table factory class for creating table instances:
 package com.sqlrec.connectors.example.calcite;
 
 import com.sqlrec.common.schema.HmsTableFactory;
-import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.example.config.ExampleConfig;
 import com.sqlrec.connectors.example.config.ExampleOptions;
+import org.apache.calcite.plan.RelOptRule;
 import org.apache.hadoop.hive.metastore.api.Table;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class ExampleCalciteTableFactory implements HmsTableFactory {
     @Override
-    public String getIdentifier() {
-        return ExampleOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public SqlRecTable createTable(Table table) {
+    public org.apache.calcite.schema.Table getTableFromHmsTable(Table table) {
         Map<String, String> parameters = table.getParameters();
         ExampleConfig config = ExampleOptions.getExampleConfig(parameters);
         config.fieldSchemas = table.getSd().getCols();
         config.primaryKeyIndex = getPrimaryKeyIndex(table);
         return new ExampleCalciteTable(config);
+    }
+
+    @Override
+    public String getConnectorName() {
+        return ExampleOptions.CONNECTOR_IDENTIFIER;
+    }
+
+    @Override
+    public List<RelOptRule> getRules() {
+        return new ArrayList<>();
     }
 
     private int getPrimaryKeyIndex(Table table) {

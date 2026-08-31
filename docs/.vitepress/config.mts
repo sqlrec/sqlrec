@@ -29,6 +29,7 @@ export default defineConfig({
             text: 'Connectors',
             collapsed: true,
             items: [
+              { text: '基础概念', link: '/docs/connectors/basic_concepts' },
               { text: '内置Connectors', link: '/docs/connectors/builtin_connectors' },
               { text: '自定义Connectors', link: '/docs/connectors/custom_connectors' }
             ]
@@ -78,6 +79,7 @@ export default defineConfig({
             text: 'Connectors',
             collapsed: true,
             items: [
+              { text: 'Basic Concepts', link: '/en/docs/connectors/basic_concepts' },
               { text: 'Built-in Connectors', link: '/en/docs/connectors/builtin_connectors' },
               { text: 'Custom Connectors', link: '/en/docs/connectors/custom_connectors' }
             ]

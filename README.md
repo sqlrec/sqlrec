@@ -81,7 +81,7 @@ Local metadata mode does not accept DDL statements from either the CLI or SQL AP
 See the [Quick Start guide](https://sqlrec.github.io/sqlrec/en/docs/quick_start) for the table layout and more SQL examples.
 
 ### Full Service Deployment (Optional)
-The steps below deploy persistent metadata and the external data/model services used by the complete examples. They are separate from the dependency-free Docker demo above.
+The steps below deploy persistent metadata and the external data, compute, and model infrastructure used by the complete examples. After deployment, you can reproduce the exact same quick-start tables, SQL function, and API as the Docker demo above.
 
 SQLRec currently supports AMD64 Linux systems, with MacOS support coming later. Note that deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
 
@@ -96,7 +96,7 @@ cd ./sqlrec/deploy
 
 # verify pod status, wait all pod ready
 alias kubectl="minikube kubectl --"
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # download resource
 ./download_resource.sh
@@ -105,7 +105,7 @@ kubectl get pod --ALL
 ./deploy_components.sh
 
 # verify pod status, wait all pod ready
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
 # verify sqlrec service
 cd ..
@@ -125,189 +125,138 @@ bash ./bin/beeline.sh
 ```
 
 ### SQL Development
-Execute the `bash ./bin/beeline.sh` command to connect to the SQLRec service, and refer to the following process to develop data tables, SQL functions, API interfaces, etc. needed for recommendations:
 
-1. Initialize data tables. Note that you can get the IP address of the minikube node via the `kubectl get node -o wide` command, you may need to replace IP address below
+Run `bash ./bin/beeline.sh` to connect to SQLRec. The table names, field names, SQL function name, and API name below match the quick-start example in the `sqlrec/sqlrec-demo` image. Their source definitions are under [`sqlrec-demo/src/main/sql/quick_start/`](sqlrec-demo/src/main/sql/quick_start/).
+
+1. Create the three quick-start tables:
+
 ```sql
 SET table.sql-dialect = default;
 
-CREATE TABLE IF NOT EXISTS `user_interest_category1` (
+CREATE TABLE IF NOT EXISTS `demo_user_interest_category` (
   `user_id` BIGINT,
-  `category1` STRING,
+  `category` STRING,
   `score` FLOAT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
+  PRIMARY KEY (user_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
+  'connector' = 'filesystem'
 );
 
-CREATE TABLE IF NOT EXISTS `category1_hot_item` (
-  `category1` STRING,
+CREATE TABLE IF NOT EXISTS `demo_category_hot_item` (
+  `category` STRING,
   `item_id` BIGINT,
   `score` FLOAT,
-  PRIMARY KEY (category1)  NOT ENFORCED
+  PRIMARY KEY (item_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
+  'connector' = 'filesystem'
 );
 
-CREATE TABLE IF NOT EXISTS `exposure_item` (
+CREATE TABLE IF NOT EXISTS `demo_exposure_item` (
   `user_id` BIGINT,
   `item_id` BIGINT,
   `bhv_time` BIGINT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
+  PRIMARY KEY (item_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0',
-  'cache-ttl' = '0'
+  'connector' = 'filesystem'
 );
-
 ```
-2. Write test data
-```sql
-INSERT INTO `user_interest_category1` VALUES
-(1000001, 'pc', 100),
-(1000001, 'phone', 100);
 
-INSERT INTO `category1_hot_item` VALUES
+The `filesystem` connector is intentional: it keeps this example semantically identical to the demo image. Table data remains in the SQLRec service process, while the cluster persists metadata. Use a persistent connector such as Redis for production data.
+
+2. Insert test data:
+
+```sql
+INSERT INTO `demo_user_interest_category` VALUES
+(1000001, 'pc', 100);
+
+INSERT INTO `demo_category_hot_item` VALUES
 ('pc', 1000001, 100),
-('pc', 1000002, 100),
-('pc', 1000003, 100),
-('pc', 1000004, 100),
-('pc', 1000005, 100),
-('phone', 1000011, 100),
-('phone', 1000012, 100),
-('phone', 1000013, 100),
-('phone', 1000014, 100),
-('phone', 1000015, 100);
-
-select * from `user_interest_category1` where `user_id` = 1000001;
-
-select * from `category1_hot_item` where `category1` = 'pc';
+('pc', 1000002, 90);
 ```
-3. Develop SQL functions
+3. Create the same `demo_rec` SQL function used by the demo image:
+
 ```sql
--- define function test rec
-create or replace sql function test_rec;
+create or replace sql function demo_rec;
 
--- define input param
-define input table user_info(id bigint);
+define input table user_info(user_id bigint);
 
--- query exposed item for deduplication
-cache table exposured_item as
+cache table exposed_item as
 select item_id
-from
-user_info join exposure_item on user_id = user_info.id;
+from user_info join demo_exposure_item
+on demo_exposure_item.user_id = user_info.user_id;
 
--- query user interest category1
-cache table cur_user_interest_category1 as
-select category1
-from
-user_info join user_interest_category1 on user_id = user_info.id
+cache table cur_user_interest_category as
+select category
+from user_info join demo_user_interest_category
+on demo_user_interest_category.user_id = user_info.user_id
 limit 10;
 
--- query category1 hot item
-cache table category1_recall as
-select item_id as item_id, 'user_category1_interest_recall:' || cur_user_interest_category1.category1 as rec_reason
-from
-cur_user_interest_category1 join category1_hot_item
-on category1_hot_item.category1 = cur_user_interest_category1.category1
+cache table category_recall as
+select
+  item_id,
+  'user_category_interest_recall:' || cur_user_interest_category.category as rec_reason
+from cur_user_interest_category join demo_category_hot_item
+on demo_category_hot_item.category = cur_user_interest_category.category
 limit 300;
 
--- dedup category1 recall
-cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
+cache table dedup_category_recall as
+call dedup(category_recall, exposed_item, 'item_id', 'item_id');
 
 -- truncate to rec item num
 cache table final_recall_item as
 select item_id, rec_reason
-from dedup_category1_recall
+from dedup_category_recall
 limit 2;
 
 -- gen rec meta data
-cache table request_meta as select
-user_info.id as user_id,
-cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
-uuid() as req_id
+cache table request_meta as
+select
+  user_info.user_id,
+  cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
+  uuid() as req_id
 from user_info;
 
 -- gen final rec data
 cache table final_rec_data as
 select
-request_meta.user_id as user_id,
-item_id,
-cast('XXX' as VARCHAR) as item_name,
-rec_reason,
-request_meta.req_time as req_time,
-request_meta.req_id as req_id
-from
-request_meta join final_recall_item on 1=1;
+  request_meta.user_id as user_id,
+  item_id,
+  cast('XXX' as VARCHAR) as item_name,
+  rec_reason,
+  request_meta.req_time as req_time,
+  request_meta.req_id as req_id
+from request_meta join final_recall_item on 1=1;
 
 -- write exposed item to exposure table for deduplication
-insert into exposure_item
+insert into demo_exposure_item
 select user_id, item_id, req_time
 from final_rec_data;
 
 return final_rec_data;
 ```
-The SQL above defines the recommendation function test_rec. You can see the SQL function definition syntax is:
-- Start with `create or replace sql function` followed by the function name
-- `define input table` defines input parameters, which can be empty or define multiple
-- `cache table` caches intermediate calculation results, can cache execution results of SELECT statements and SQL function calls
-- `call` calls other functions, can call asynchronously via the async keyword
-- `return` returns calculation results, can be empty
+This function recalls hot items from the user's preferred categories, removes exposed items, and records the new exposures. Verify it with:
 
-
-You can test the function directly in the beeline command line as shown below
 ```sql
-0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
-+-------------+--------+
-| table_name  | count  |
-+-------------+--------+
-| t1          | 1      |
-+-------------+--------+
-1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
-+-------+---------+
-| name  |  type   |
-+-------+---------+
-| id    | BIGINT  |
-+-------+---------+
-1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000015  | XXX        | user_category1_interest_recall:phone  | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-| 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000014  | XXX        | user_category1_interest_recall:phone  | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-| 1000001  | 1000004  | XXX        | user_category1_interest_recall:pc     | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.003 seconds)
+cache table quick_start_user as select cast(1000001 as bigint) as user_id;
+call demo_rec(quick_start_user);
 ```
-You can see that recall, recommendation reasons, and deduplication are all working.
 
-4. Create API Interface
-Refer to the following SQL to expose the SQL function as an API interface:
+4. Expose the SQL function as an API with the same name:
+
 ```sql
-create or replace api test_rec with test_rec;
+create or replace api demo_rec with demo_rec;
 ```
+
 ### Recommendation Testing
-Use the following command for recommendation testing:
+
+Get the minikube node IP, then call `demo_rec`:
+
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
--H "Content-Type: application/json" \
--d '{"data":{"user_info":[{"id": 1000001}]}}'
-{"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
-````
+MINIKUBE_NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+curl -X POST "http://${MINIKUBE_NODE_IP}:30001/api/v1/demo_rec" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
+```
 
 ### Frontend UI
 SQLRec provides a web-based frontend UI for monitoring and management. You can access it at `http://192.168.49.2:30001/ui/static/index.html` (replace the IP address with your minikube node IP).

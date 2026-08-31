@@ -6,27 +6,7 @@
 
 SQLRec 提供了多种内置连接器，用于连接不同的数据存储系统。连接器基于 Calcite 表抽象实现，支持 SQL 查询和数据写入操作。
 
-### 表类型层次结构
-
-SQLRec 的连接器基于以下表类型层次结构：
-
-```
-SqlRecTable (抽象基类)
-    │
-    ├── SqlRecKvTable (键值表，支持主键查询和缓存)
-    │       │
-    │       └── implements VectorSearchable (向量检索接口)
-    │
-    └── 其他表类型...
-```
-
-**表类型说明**：
-
-| 表类型 | 说明 | 特性 |
-|--------|------|------|
-| `SqlRecTable` | 抽象基类，继承自 Calcite 的 `AbstractTable` | 提供基础表功能 |
-| `SqlRecKvTable` | 键值表，支持主键查询 | 支持主键索引、缓存机制、过滤查询、数据修改 |
-| `VectorSearchable` | 向量检索接口 | 接口，由 `SqlRecKvTable` 子类实现，支持向量相似度搜索 |
+有关 Connector 的加载流程、表类型体系及扩展机制，请先阅读 [Connector 基础概念](./basic_concepts.md)。
 
 ## 内置连接器
 

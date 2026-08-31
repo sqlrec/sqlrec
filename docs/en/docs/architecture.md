@@ -1,8 +1,8 @@
 # SQLRec Architecture
 
-## 1. Project Overview
+## Project Overview
 
-### 1.1 Positioning
+### Positioning
 
 SQLRec is a recommendation engine that **describes the entire business logic of a recommendation system in SQL**. The goal is to enable data analysts, data engineers, and backend developers (not necessarily proficient in Java/Python engineering) to quickly build production-ready recommendation systems. It encapsulates the following capabilities uniformly into SQL:
 
@@ -10,7 +10,7 @@ SQLRec is a recommendation engine that **describes the entire business logic of 
 - Model training, export, and online inference service deployment (XGBoost / LightGBM / CatBoost / DSSM / Wide&Deep / external services)
 - Recommendation business orchestration (recall → ranking → diversification → persistence)
 
-### 1.2 Core Design Decisions
+### Core Design Decisions
 
 | Decision | Description |
 | --- | --- |
@@ -21,7 +21,7 @@ SQLRec is a recommendation engine that **describes the entire business logic of 
 | **K8s as the compute foundation** | Model training/export runs as K8s Jobs, inference services as K8s Deployments; the engine generates YAML and applies it via serverSideApply |
 | **Full in-memory execution model** | All intermediate results (CacheTable) are materialized as in-memory Lists, without disk persistence/streaming; data scale is managed via control flow (cache/if/assert) |
 
-### 1.3 Technology Stack
+### Technology Stack
 
 | Category | Components |
 | --- | --- |
@@ -36,9 +36,9 @@ SQLRec is a recommendation engine that **describes the entire business logic of 
 | Cache | Caffeine 2.9, in-house `ObjCache` |
 | Model serving | C++ (catboost_server / onnx_server / tzrec server, embedding cpp-httplib), Python (training scripts) |
 
-## 2. Overall Architecture
+## Overall Architecture
 
-### 2.1 Module Division and Dependencies
+### Module Division and Dependencies
 
 ```
                         ┌──────────────────────────────────────────┐
@@ -89,7 +89,7 @@ Module responsibilities:
 | **sqlrec-flink** | Flink environment integration tests (connector, BatchCallServiceUDTF, etc.) |
 | **sqlrec-ui** | Frontend static resources (pom placeholder only) |
 
-### 2.2 Runtime Panorama (Journey of a SQL Statement)
+### Runtime Panorama (Journey of a SQL Statement)
 
 ```
  Client (beeline / kyuubi / curl / cli.sh)
@@ -131,9 +131,9 @@ Module responsibilities:
  ThriftUtils.convertObjectArrayToTRowSet / JsonUtils.toJson → return to client
 ```
 
-## 3. Service Entry Layer (sqlrec-frontend)
+## Service Entry Layer (sqlrec-frontend)
 
-### 3.1 Startup Flow
+### Startup Flow
 
 `Main.main()` (`sqlrec-frontend/src/main/java/com/sqlrec/frontend/Main.java`):
 
@@ -142,7 +142,7 @@ Module responsibilities:
 
 Both servers perform the same three-step initialization at startup: `FunctionUpdater.initFunctionUpdateService()` (periodic function hot-update, remote metadata mode only), `PrometheusMetricsUtils.initMetrics()`, and `CalciteSchemaFactory.createCalciteSchema()` (schema warm-up).
 
-### 3.2 Thrift Service (Hive Protocol Compatible)
+### Thrift Service (Hive Protocol Compatible)
 
 - `ThriftServer.java`: `TThreadPoolServer` + `TBinaryProtocol`, exposing the Hive `TCLIService` (port 30000). **One thread per connection**; worker limit not explicitly configured.
 - `TCLIServiceImpl` delegates to `SessionManager`. Sessions use four `ConcurrentHashMap`s: `clientMap` (remote Flink Gateway proxy), `sqlExecutorMap` (one `SqlExecutor` per session), `operationMap`, `operationToSessionMap`.
@@ -153,7 +153,7 @@ Both servers perform the same three-step initialization at startup: `FunctionUpd
 - `SessionTimeoutChecker`: single-threaded scheduled executor that scans `getLastAccessTime()` at `SESSION_CHECK_INTERVAL` (default 5 minutes); sessions exceeding `SESSION_IDLE_TIMEOUT` (default 30 minutes) are closed by `cleanupSession`.
 - Result fetching: `FetchResults` returns all rows at once (`hasMoreRows` always false); after fetching, `setEnumerable(null)`.
 
-### 3.3 REST Service
+### REST Service
 
 - `RestServer.java`: Netty `NioEventLoopGroup(1)` + default worker group, `HttpServerCodec` + `HttpObjectAggregator(65536)` + `HttpServerHandler` (port 30001).
 - Routing (`HttpServerHandler.java`):
@@ -163,17 +163,17 @@ Both servers perform the same three-step initialization at startup: `FunctionUpd
   - `/ui/*` → UI static resources and UI API.
 - Each request records micrometer timer/counter (tagged by path/method/status).
 
-### 3.4 CLI
+### CLI
 
 `Cli` supports `-e` (execute statement), `-f` (execute file), and interactive REPL (JLine3, `SqlLineParser` for multi-line SQL assembly, `SqlHighlighter` for syntax highlighting, `SqlOutputFormatter` for tabular output).
 
-## 4. SQL Language Layer (sqlrec-sql-parser)
+## SQL Language Layer (sqlrec-sql-parser)
 
-### 4.1 Extension Mechanism
+### Extension Mechanism
 
 Reuses the Flink parser codegen pipeline: `config.fmpp` + `Parser.tdd` (declares the generated class as `FlinkSqlParserImpl`, imports `com.sqlrec.sql.parser.*`) + `parserImpls.ftl` (grammar production templates) + `compoundIdentifier.ftl`/`sqlRecIdentifier.ftl`. Extended keywords: `FLUSH`, `ASSERT`, `SERVICE`, `MODEL`, `TRAIN`, `EXPORT`, `CHECKPOINT`, `CACHE`, `PARTITION`, `LIKE`, `FUNCTION`, `API`, etc.
 
-### 4.2 Extended Statements
+### Extended Statements
 
 | Statement | AST Class | Semantics |
 | --- | --- | --- |
@@ -194,13 +194,13 @@ Reuses the Flink parser codegen pipeline: `config.fmpp` + `Parser.tdd` (declares
 
 All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREATE` round-trip and normalized storage.
 
-### 4.3 Preprocessing (SqlPreProcesser)
+### Preprocessing (SqlPreProcesser)
 
 `SqlPreProcesser.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlPreProcesser.java`) performs dialect compatibility before parsing: `use default` casing, `set k=v` → `set 'k'='v'`, etc.
 
-## 5. Compilation Subsystem (sqlrec-core/compiler)
+## Compilation Subsystem (sqlrec-core/compiler)
 
-### 5.1 CompileManager (Compilation Entry and Dispatch)
+### CompileManager (Compilation Entry and Dispatch)
 
 `CompileManager.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/CompileManager.java`):
 
@@ -210,7 +210,7 @@ All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREA
 - **Circular dependency detection**: instance field `compilingSqlFunctions` (ArrayList chain) records the compilation stack; `compileSqlFunction()` detects cycles during recursive compilation.
 - `getApiBindSqlFunction()`: API name → SqlApi → function name → `getSqlFunction()` (cache hit or compile).
 
-### 5.2 FunctionCompiler (Multi-Statement Function Compilation State Machine)
+### FunctionCompiler (Multi-Statement Function Compilation State Machine)
 
 `FunctionCompiler.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionCompiler.java`). SQL functions are submitted **as multiple independent statements** in a session, driven by a state machine:
 
@@ -227,7 +227,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - RETURN inside IF participates in result-schema validation but does not advance the state machine. Only a top-level RETURN terminates the definition, and all return points must be either empty or use the same schema;
 - Upon completion, `SqlExecutor.saveSqlFunction()` persists it (JSON statement list) to the metadata database and `CacheManager.invalidateAll()` immediately evicts old compilation artifacts.
 
-### 5.3 NormalSqlCompiler (Full Calcite Compilation Pipeline)
+### NormalSqlCompiler (Full Calcite Compilation Pipeline)
 
 `NormalSqlCompiler.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/NormalSqlCompiler.java`):
 
@@ -239,11 +239,11 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 6. `EnumerableRelImplementor.implementRoot()` generates the Java expression tree;
 7. `EnumerableInterpretable.toBindable()` (Janino compilation) produces `CalciteBindable`, while retaining logical plan / physical plan / Java source for logging and debugging.
 
-### 5.4 SqlTypeChecker (Compilability Determination)
+### SqlTypeChecker (Compilability Determination)
 
 `SqlTypeChecker.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlTypeChecker.java`): recursively determines whether a statement can execute on local Calcite — the top level must be SELECT/INSERT/UPDATE/DELETE/ORDER BY/UNION (or control-flow nodes recursively determined), and all referenced tables must resolve to `SqlRecTable` (Calcite tables provided by connectors). This determination also decides "local execution vs forwarding to Flink Gateway".
 
-### 5.5 FunctionUpdater (Function Hot-Update)
+### FunctionUpdater (Function Hot-Update)
 
 `FunctionUpdater.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionUpdater.java`): single-threaded scheduled executor (default 300s period), traverses the dependency graph for each function in `functionBindableMap` (`inProgress` set prevents cycles):
 
@@ -252,9 +252,9 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - Dependent tables' (minus function input placeholder tables) HMS update time later than `createTime` → recompile;
 - Dependent Java UDF class name changed/missing → recompile (todo: cannot detect bytecode changes with the same class name).
 
-## 6. Execution Subsystem (executor + runtime)
+## Execution Subsystem (executor + runtime)
 
-### 6.1 SqlExecutor (Statement Dispatch Hub)
+### SqlExecutor (Statement Dispatch Hub)
 
 `SqlExecutor.java` (`sqlrec-core/src/main/java/com/sqlrec/executor/SqlExecutor.java`). One instance per session/REST request, holding:
 
@@ -267,7 +267,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 
 `executeSql()`: synchronous wrapper, polls `result.isCompleted()` + `SQL_SYNC_EXECUTE_TIMEOUT` (default 180s) timeout.
 
-### 6.2 Bindable System (Runtime Execution Tree)
+### Bindable System (Runtime Execution Tree)
 
 All executable units implement `BindableInterface` (`bind(schema, context)` returns `Enumerable<Object[]>`, exposing metadata such as return fields/read-write tables/cache table names/dependent functions):
 
@@ -303,15 +303,15 @@ BindableInterface
 
 **Parallel execution**: `ExecutorServiceUtils` provides a **global virtual thread pool** (`newVirtualThreadPerTaskExecutor`), used for CACHE timeout control, ASYNC CALL, and partition parallelism.
 
-### 6.3 Execution Results and CacheTable
+### Execution Results and CacheTable
 
 - `SqlProcessResult{enumerable, fields}` + `isCompleted()`;
 - `CacheTable` (common) = `ScannableTable` + in-memory `Enumerable` + field list + createSql; once registered into the session schema, subsequent SQL can directly reference it via `SELECT * FROM cache_table`;
 - `FLUSH` / any resource editing / function save → `CacheManager.invalidateAll()` uniformly invalidates the four major caches (CalciteSchemaFactory, JavaFunctionUtils, CompileManager, ServiceManager).
 
-## 7. Calcite Integration (rules + node)
+## Calcite Integration (rules + node)
 
-### 7.1 Optimization Rules
+### Optimization Rules
 
 `RuleManager.java` (`sqlrec-core/src/main/java/com/sqlrec/rules/RuleManager.java`) `createPlanner(boolean addKvTableRules)`:
 
@@ -320,7 +320,7 @@ BindableInterface
 - **When KV tables present**, additionally adds: `FILTER_SCAN/FILTER_INTERPRETER_SCAN` (predicate pushdown to table scan), `FILTER_INTO_JOIN`, `KV_JOIN` (replaces EnumerableJoin/MergeJoin and removes interfering rules like JOIN_COMMUTE), `VECTOR_JOIN` (two variants with/without filter);
 - Connectors can inject custom rules via `HmsTableFactory.getRules()` (`addTableFactoryRules`).
 
-### 7.2 Physical Operators (node package)
+### Physical Operators (node package)
 
 | Operator | Description |
 | --- | --- |
@@ -330,7 +330,7 @@ BindableInterface
 | `SqlrecEnumerableUnion` | Union merge (with `IGNORE_UNION_EXCEPTION` branch degradation) |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE write path: dispatched to connector write interfaces (batch upsert/delete) |
 
-### 7.3 KV Join Data Flow (KvJoinUtils)
+### KV Join Data Flow (KvJoinUtils)
 
 `KvJoinUtils.kvJoin()` (`sqlrec-core/src/main/java/com/sqlrec/utils/KvJoinUtils.java`):
 
@@ -339,9 +339,9 @@ BindableInterface
 3. Right table results build a HashMap keyed by `key.toString()` (avoids Integer/Long equals semantic differences, but introduces cross-type string collisions);
 4. Assembled by join type (LEFT pads null on no match), merged output via `snakeMerge`.
 
-## 8. Metadata Subsystem (db + schema)
+## Metadata Subsystem (db + schema)
 
-### 8.1 Dual-Mode Architecture
+### Dual-Mode Architecture
 
 `MetadataAccessFactory.java` (`sqlrec-core/src/main/java/com/sqlrec/db/MetadataAccessFactory.java`) selects based on whether `SQL_SCHEMA_DIR` is empty:
 
@@ -353,17 +353,17 @@ BindableInterface
 
 `MetadataAccess = SchemaAccess + StoreAccess + HdfsAccess` aggregated facade, all static singletons (DCL).
 
-### 8.2 HmsClient
+### HmsClient
 
 `HmsClient.java` (`sqlrec-core/src/main/java/com/sqlrec/db/remote/HmsClient.java`): `HiveMetaStoreClient` static cache (DCL + volatile + JVM shutdown hook); `withRetry()` rebuilds the client after invalidation on `TTransportException` and retries once (read idempotent); **all public methods are `synchronized static`** — HMS access is globally serialized within the process.
 
-### 8.3 Schema Assembly and Caching
+### Schema Assembly and Caching
 
 - `CalciteSchemaFactory.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`): `createCalciteSchema()` builds the root schema: in remote mode, attaches an `HmsSchema` per database based on `databaseListCache` (`ObjCache`, TTL 60s, async refresh); when `globalSchema` (set at server startup) exists, directly reuses its subSchema mapping (fast path).
 - `HmsSchema.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`): per-db two-level `ObjCache` — `tableMapCache` (incremental: only rebuilds `Table` objects whose `getTableUpdateTime` changed, reuses old instances otherwise) and `functionMapCache` (HMS functions + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` built-in UDFs → `UdfManager.createScalarFunction` reflection).
 - **`ObjCache`** (`sqlrec-core/src/main/java/com/sqlrec/utils/ObjCache.java`): minimal cache with TTL + optional async refresh. `getObj()` triggers `updateObj()` on expiry (synchronized): first load synchronous; afterwards submitted to a **global single-thread** executor for async refresh and immediately returns the old value; `invalidate()` clears.
 
-### 8.4 Table Abstraction System (common/schema)
+### Table Abstraction System (common/schema)
 
 ```
 AbstractTable
@@ -377,7 +377,7 @@ AbstractTable
 
 `HmsTableFactory` (SPI, registered via `META-INF/services`): maps an HMS table's storage handler / serde / parameters to the corresponding connector's Calcite Table + optional custom optimization rules + Flink DynamicTableFactory. Connectors are discovered via SPI (`TableFactoryUtils`).
 
-## 9. Storage Connector Layer (sqlrec-connectors)
+## Storage Connector Layer (sqlrec-connectors)
 
 The six connectors share the same structure: `config/` (Options parsing of table properties) + `calcite/` (CalciteTable + Factory) + `handler/` (storage access) + (redis/milvus) `flink/` (Flink DynamicTable Source/Sink).
 
@@ -392,14 +392,14 @@ The six connectors share the same structure: `config/` (Options parsing of table
 
 **Guava version alignment**: root pom unifies to 32.1.3 (hive-metastore brings 19.0 which conflicts with milvus/grpc).
 
-## 10. UDF Subsystem (sqlrec-udf + core/udf)
+## UDF Subsystem (sqlrec-udf + core/udf)
 
-### 10.1 Registration and Loading
+### Registration and Loading
 
 - **Built-in UDFs**: `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` statically registers scalar function names → class names; table functions are looked up via `JavaFunctionUtils.getTableFunction()` (Java functions registered in HMS or built-in).
 - **Dynamic Java UDFs**: `UdfManager`/`JavaFunctionUtils` load from the HMS function registry by className via reflection; `isJavaFunctionModifiedSince` supports hot-update (class name level).
 
-### 10.2 HTTP UDFs (Online Inference Core)
+### HTTP UDFs (Online Inference Core)
 
 - `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): `ServiceManager.getServiceConfig()` gets the service URL (ObjCache cached) → input table serialized as JSON array → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
 - `CallServiceWithQVFunction`, `BatchCallServiceUDTF` (Flink UDTF, JDK HttpURLConnection, batched by batchSize), `CallSqlRecApiFunction` (cross-instance sqlrec invocation via `SqlRecApiClient`).
@@ -407,9 +407,9 @@ The six connectors share the same structure: `config/` (Options parsing of table
 - **Feature family**: `TagToVecFunction`, `RandomVecFunction`, `FeatureCoverageMetricsFunction`, `GetGrowthbookFeaturesFunction` (GrowthBook SDK), `Get/SetVariablesFunction` (variable propagation).
 - Others: `JsonToTableFunction`, `AddColFunction`, `TruncateTableFunction`, `SleepFunction` (for testing).
 
-## 11. Model Subsystem (sqlrec-model + core/model + k8s)
+## Model Subsystem (sqlrec-model + core/model + k8s)
 
-### 11.1 Lifecycle State Machine
+### Lifecycle State Machine
 
 ```
 CREATE MODEL ──► validation (ModelController.checkModel: fields/params/input-output duplicates)
@@ -436,7 +436,7 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 - **Checkpoint protection**: checkpoints/models referenced by a Service cannot be deleted (`deleteCheckpoint`/`deleteModel` pre-validation).
 - **Path safety**: `PathUtils.validateModelPath` prevents out-of-bound deletion.
 
-### 11.2 ModelController SPI and Backends
+### ModelController SPI and Backends
 
 `ModelController` (common, SPI: `META-INF/services`) is dispatched by `ModelControllerFactory` based on `engine`:
 
@@ -448,11 +448,11 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 
 `K8sYamlBuilder` (model/common) uniformly generates ConfigMap/Service/Deployment (container ports, resource request/limit, replicas, `REPLICAS`/`LABEL_COLUMNS` etc. env); `GbdtK8sYamlUtils`/`TzrecK8sYamlUtils` generate training/export Job YAML (including HDFS mounts, Python images).
 
-### 11.3 K8sManager
+### K8sManager
 
 `K8sManager.java` (`sqlrec-core/src/main/java/com/sqlrec/k8s/K8sManager.java`): fabric8 client static cache (DCL + shutdown hook); `applyYaml` (serverSideApply), `deleteYaml` (check existence before delete, supports Deployment/Service/ConfigMap/Secret/Pod/Job), `checkJobsStatusFromYaml`, `isDeploymentReadyFromYaml`; transport-level/5xx failures automatically `resetClient()` rebuild (4xx business errors do not rebuild).
 
-## 12. Demo and Programming Model (sqlrec-demo)
+## Demo and Programming Model (sqlrec-demo)
 
 `src/main/sql/quick_start/` provides a dependency-free experience using in-memory filesystem connector tables. Its global objects consistently use the `demo_` prefix (`demo_user_interest_category`, `demo_category_hot_item`, `demo_exposure_item`, and `demo_rec`). The complete MovieLens recommendation pipeline lives under `src/main/sql/movielens/`:
 
@@ -464,13 +464,13 @@ Online inference ─► call_service('service_name', input_table) UDF → HTTP P
 
 Programming model essentials: `IF` expresses conditional execution; for a positive timeout, `IF TIMEIN` applies a millisecond timeout to THEN and falls back to ELSE on failure; `IF + RETURN` supports early function exit; `CALL ... ASYNC` expresses side-effect persistence; `ASSERT` provides data gating; variables (`get_or_default`/`SET`) provide request-level parameter passing.
 
-## 13. Observability
+## Observability
 
 - **Metrics**: Micrometer composite registry + Prometheus `/metrics` (HTTP request timer/counter, session/operation gauges, operation switch counters, cache-table ignored-exception counters, function update timers, etc.); deploy/prometheus provides ServiceMonitor + Grafana JSON.
 - **Trace**: OpenTelemetry (OTLP gRPC → Jaeger), `DEBUG_TRACE` switch + `TRACE_ENDPOINT/HEADERS/SERVICE_NAME`; `TraceUtils` instruments at node execution points.
 - **Logging**: log4j2; the compilation pipeline logs the complete logical/physical plan and generated Java source at INFO level.
 
-## 14. Thread Model and Concurrency Design Summary
+## Thread Model and Concurrency Design Summary
 
 | Thread Resource | Type | Purpose |
 | --- | --- | --- |
@@ -484,14 +484,14 @@ Programming model essentials: `IF` expresses conditional execution; for a positi
 
 Static mutable state: `CompileManager.functionBindableMap/sqlApiCache`, `CalciteSchemaFactory.schemaMap/globalSchema`, `ServiceManager.serviceConfigCacheMap`, connector static connection pools, `HmsClient.client`, `K8sManager.kubernetesClient`.
 
-## 15. Deployment Architecture (deploy/ + bin/ + docker/)
+## Deployment Architecture (deploy/ + bin/ + docker/)
 
 - `deploy_minikube.sh` + `deploy_components.sh`: minikube one-stop deployment (HMS, PostgreSQL, Redis (standalone/cluster), Milvus, MongoDB, Kafka, HDFS, Flink SQL Gateway, Kyuubi, GrowthBook, Jaeger, Prometheus/Grafana, DolphinScheduler, ClickHouse, OpenSearch, Jupyter...), each component with independent `deploy.sh/uninstall.sh` + PVC.
 - `deploy/sqlrec/sqlrec.yaml`: sqlrec engine Deployment (image built by `build_sqlrec_docker.sh`, Dockerfile based on the release package).
 - `bin/`: `beeline.sh` (Thrift client), `kyuubi.sh`, `server.sh`, `cli.sh`, `sqlrec.cmd`.
 - `benchmark/`: movielens (end-to-end recall pipeline + wrk load test request.lua) and criteo1m benchmarks.
 
-## Appendix A: Key Configurations (SqlRecConfigs)
+## Key Configurations (SqlRecConfigs)
 
 | Config | Default | Description |
 | --- | --- | --- |

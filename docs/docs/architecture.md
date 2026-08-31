@@ -1,8 +1,8 @@
 # SQLRec 架构设计
 
-## 1. 项目概述
+## 项目概述
 
-### 1.1 定位
+### 定位
 
 SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎。目标是让数据分析师、数据工程师、后端开发（不必然精通 Java/Python 工程化）都能快速搭建生产可用的推荐系统。它把以下能力统一封装进 SQL：
 
@@ -10,7 +10,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 - 模型训练、导出、在线推理服务部署（XGBoost / LightGBM / CatBoost / DSSM / Wide&Deep / 外部服务）
 - 推荐业务编排（召回 → 排序 → 多样化 → 落盘）
 
-### 1.2 核心设计决策
+### 核心设计决策
 
 | 决策 | 说明 |
 | --- | --- |
@@ -21,7 +21,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | **K8s 作为算力底座** | 模型训练/导出是 K8s Job，推理服务是 K8s Deployment，由引擎生成 YAML 并 serverSideApply |
 | **全内存执行模型** | 所有中间结果（CacheTable）物化为内存 List，不做落盘/流式，依赖控制流（cache/if/assert）管理数据规模 |
 
-### 1.3 技术栈
+### 技术栈
 
 | 类别 | 组件 |
 | --- | --- |
@@ -36,9 +36,9 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | 缓存 | Caffeine 2.9、自研 `ObjCache` |
 | 模型 Serving | C++（catboost_server / onnx_server / tzrec server，内嵌 cpp-httplib）、Python（训练脚本） |
 
-## 2. 总体架构
+## 总体架构
 
-### 2.1 模块划分与依赖关系
+### 模块划分与依赖关系
 
 ```
                         ┌──────────────────────────────────────────┐
@@ -88,7 +88,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 | **sqlrec-flink** | Flink 环境集成测试（connector、BatchCallServiceUDTF 等） |
 | **sqlrec-ui** | 前端静态资源（仅 pom 占位） |
 
-### 2.2 运行时全景（一条 SQL 的旅程）
+### 运行时全景（一条 SQL 的旅程）
 
 ```
  客户端 (beeline / kyuubi / curl / cli.sh)
@@ -127,9 +127,9 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
  ThriftUtils.convertObjectArrayToTRowSet / JsonUtils.toJson → 返回客户端
 ```
 
-## 3. 服务入口层（sqlrec-frontend）
+## 服务入口层（sqlrec-frontend）
 
-### 3.1 启动流程
+### 启动流程
 
 `Main.main()`（`sqlrec-frontend/src/main/java/com/sqlrec/frontend/Main.java`）：
 
@@ -138,7 +138,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 
 两个 server 启动时都执行相同的三步初始化：`FunctionUpdater.initFunctionUpdateService()`（周期函数热更新，仅远程元数据模式）、`PrometheusMetricsUtils.initMetrics()`、`CalciteSchemaFactory.createCalciteSchema()`（预热 schema）。
 
-### 3.2 Thrift 服务（兼容 Hive 协议）
+### Thrift 服务（兼容 Hive 协议）
 
 - `ThriftServer.java`：`TThreadPoolServer` + `TBinaryProtocol`，暴露 Hive `TCLIService`（端口 30000）。**每连接一线程**，worker 上限未显式配置。
 - `TCLIServiceImpl` 委托 `SessionManager`。会话四张 `ConcurrentHashMap`：`clientMap`（远端 Flink Gateway 代理）、`sqlExecutorMap`（每会话一个 `SqlExecutor`）、`operationMap`、`operationToSessionMap`。
@@ -149,7 +149,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 - `SessionTimeoutChecker`：单线程 scheduled executor，按 `SESSION_CHECK_INTERVAL`（默认 5 分钟）扫描 `getLastAccessTime()`，超 `SESSION_IDLE_TIMEOUT`（默认 30 分钟）的会话由 `cleanupSession` 关闭。
 - 结果获取：`FetchResults` 一次性返回全部行（`hasMoreRows` 恒 false），取完即 `setEnumerable(null)`。
 
-### 3.3 REST 服务
+### REST 服务
 
 - `RestServer.java`：Netty `NioEventLoopGroup(1)` + 默认 worker 组，`HttpServerCodec` + `HttpObjectAggregator(65536)` + `HttpServerHandler`（端口 30001）。
 - 路由（`HttpServerHandler.java`）：
@@ -159,17 +159,17 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
   - `/ui/*` → UI 静态资源与 UI API。
 - 每个请求记录 micrometer timer/counter（按 path/method/status 打标）。
 
-### 3.4 CLI
+### CLI
 
 `Cli` 支持 `-e`（执行语句）、`-f`（执行文件）、交互式 REPL（JLine3，`SqlLineParser` 实现多行 SQL 拼接、`SqlHighlighter` 语法高亮、`SqlOutputFormatter` 表格输出）。
 
-## 4. SQL 语言层（sqlrec-sql-parser）
+## SQL 语言层（sqlrec-sql-parser）
 
-### 4.1 扩展机制
+### 扩展机制
 
 复用 Flink parser 的 codegen 流水线：`config.fmpp` + `Parser.tdd`（声明生成类为 `FlinkSqlParserImpl`，import `com.sqlrec.sql.parser.*`）+ `parserImpls.ftl`（语法产生式模板）+ `compoundIdentifier.ftl`/`sqlRecIdentifier.ftl`。扩展关键字：`FLUSH`、`ASSERT`、`SERVICE`、`MODEL`、`TRAIN`、`EXPORT`、`CHECKPOINT`、`CACHE`、`PARTITION`、`LIKE`、`FUNCTION`、`API` 等。
 
-### 4.2 扩展语句一览
+### 扩展语句一览
 
 | 语句 | AST 类 | 语义 |
 | --- | --- | --- |
@@ -190,13 +190,13 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 
 所有 AST 节点实现 `unparse`（经 `SqlUnparseUtils`），支持 `SHOW CREATE` 回显与规范化存储。
 
-### 4.3 预处理（SqlPreProcesser）
+### 预处理（SqlPreProcesser）
 
 `SqlPreProcesser.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlPreProcesser.java`）在解析前做方言兼容：`use default` 大小写、`set k=v` → `set 'k'='v'` 等。
 
-## 5. 编译子系统（sqlrec-core/compiler）
+## 编译子系统（sqlrec-core/compiler）
 
-### 5.1 CompileManager（编译入口与分发）
+### CompileManager（编译入口与分发）
 
 `CompileManager.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/CompileManager.java`）：
 
@@ -206,7 +206,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 - **循环依赖检测**：实例字段 `compilingSqlFunctions`（ArrayList 链）记录编译栈，`compileSqlFunction()` 递归编译时检测环。
 - `getApiBindSqlFunction()`：API 名 → SqlApi → 函数名 → `getSqlFunction()`（缓存命中或编译）。
 
-### 5.2 FunctionCompiler（多语句函数编译状态机）
+### FunctionCompiler（多语句函数编译状态机）
 
 `FunctionCompiler.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionCompiler.java`）。SQL 函数以**多条独立语句**的形式在会话中逐条提交，状态机驱动：
 
@@ -223,7 +223,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - IF 内 RETURN 参与返回模式校验但不推进状态机；只有顶层 RETURN 才结束函数定义，且所有返回点必须同为空返回或具有相同 schema；
 - 完成后由 `SqlExecutor.saveSqlFunction()` 持久化（JSON 语句列表）到元数据库，并 `CacheManager.invalidateAll()` 立即驱逐旧编译产物。
 
-### 5.3 NormalSqlCompiler（Calcite 编译全流程）
+### NormalSqlCompiler（Calcite 编译全流程）
 
 `NormalSqlCompiler.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/NormalSqlCompiler.java`）：
 
@@ -235,11 +235,11 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 6. `EnumerableRelImplementor.implementRoot()` 生成 Java 表达式树；
 7. `EnumerableInterpretable.toBindable()`（Janino 编译）产出 `CalciteBindable`，同时保留 logical plan / physical plan / java 源码用于日志与调试。
 
-### 5.4 SqlTypeChecker（可编译性判定）
+### SqlTypeChecker（可编译性判定）
 
 `SqlTypeChecker.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlTypeChecker.java`）：递归判定语句是否可在本地 Calcite 执行——顶层必须是 SELECT/INSERT/UPDATE/DELETE/ORDER BY/UNION（或控制流节点递归判定），且引用的所有表解析为 `SqlRecTable`（connector 提供的 Calcite 表）。该判定同时决定"本地执行 vs 转发 Flink Gateway"。
 
-### 5.5 FunctionUpdater（函数热更新）
+### FunctionUpdater（函数热更新）
 
 `FunctionUpdater.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionUpdater.java`）：单线程 scheduled executor（默认 300s 周期），对 `functionBindableMap` 中每个函数做依赖图遍历（`inProgress` 集合防环）：
 
@@ -248,9 +248,9 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - 依赖表（减去函数入参占位表）的 HMS 更新时间晚于 `createTime` → 重编译；
 - 依赖 Java UDF 类名变更/缺失 → 重编译（todo：无法感知同类名字节码变更）。
 
-## 6. 执行子系统（executor + runtime）
+## 执行子系统（executor + runtime）
 
-### 6.1 SqlExecutor（语句分发中枢）
+### SqlExecutor（语句分发中枢）
 
 `SqlExecutor.java`（`sqlrec-core/src/main/java/com/sqlrec/executor/SqlExecutor.java`）。每会话/每 REST 请求一个实例，持有：
 
@@ -263,7 +263,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 
 `executeSql()`：同步包装，轮询 `result.isCompleted()` + `SQL_SYNC_EXECUTE_TIMEOUT`（默认 180s）超时。
 
-### 6.2 Bindable 体系（运行时执行树）
+### Bindable 体系（运行时执行树）
 
 所有可执行单元实现 `BindableInterface`（`bind(schema, context)` 返回 `Enumerable<Object[]>`，暴露返回字段/读写表/缓存表名/依赖函数等元信息）：
 
@@ -292,15 +292,15 @@ BindableInterface
 
 **并行执行**：`ExecutorServiceUtils` 提供**全局虚拟线程池**（`newVirtualThreadPerTaskExecutor`），用于 CACHE 超时控制、ASYNC CALL、分区并行。
 
-### 6.3 执行结果与 CacheTable
+### 执行结果与 CacheTable
 
 - `SqlProcessResult{enumerable, fields}` + `isCompleted()`；
 - `CacheTable`（common）= `ScannableTable` + 内存 `Enumerable` + 字段列表 + createSql；注册进会话 schema 后，后续 SQL 即可直接 `SELECT * FROM cache_table` 引用；
 - `FLUSH` / 任何资源编辑 / 函数保存 → `CacheManager.invalidateAll()` 统一失效四大缓存（CalciteSchemaFactory、JavaFunctionUtils、CompileManager、ServiceManager）。
 
-## 7. Calcite 集成（rules + node）
+## Calcite 集成（rules + node）
 
-### 7.1 优化规则
+### 优化规则
 
 `RuleManager.java`（`sqlrec-core/src/main/java/com/sqlrec/rules/RuleManager.java`）`createPlanner(boolean addKvTableRules)`：
 
@@ -309,7 +309,7 @@ BindableInterface
 - **含 KV 表时**追加：`FILTER_SCAN/FILTER_INTERPRETER_SCAN`（谓词下推到表扫描）、`FILTER_INTO_JOIN`、`KV_JOIN`（替换 EnumerableJoin/MergeJoin，并移除 JOIN_COMMUTE 等干扰规则）、`VECTOR_JOIN`（带/不带 filter 两个变体）；
 - connector 可通过 `HmsTableFactory.getRules()` 注入自定义规则（`addTableFactoryRules`）。
 
-### 7.2 物理算子（node 包）
+### 物理算子（node 包）
 
 | 算子 | 说明 |
 | --- | --- |
@@ -319,7 +319,7 @@ BindableInterface
 | `SqlrecEnumerableUnion` | union 合并（配合 `IGNORE_UNION_EXCEPTION` 分支降级） |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE 写路径：分发到 connector 的写接口（批量 upsert/delete） |
 
-### 7.3 KV Join 数据流（KvJoinUtils）
+### KV Join 数据流（KvJoinUtils）
 
 `KvJoinUtils.kvJoin()`（`sqlrec-core/src/main/java/com/sqlrec/utils/KvJoinUtils.java`）：
 
@@ -328,9 +328,9 @@ BindableInterface
 3. 右表结果按 `key.toString()` 建 HashMap（规避 Integer/Long equals 语义差异，但引入跨类型字符串碰撞）；
 4. 按 join 类型拼装（LEFT 无匹配补 null），`snakeMerge` 合并输出。
 
-## 8. 元数据子系统（db + schema）
+## 元数据子系统（db + schema）
 
-### 8.1 双模式架构
+### 双模式架构
 
 `MetadataAccessFactory.java`（`sqlrec-core/src/main/java/com/sqlrec/db/MetadataAccessFactory.java`）按 `SQL_SCHEMA_DIR` 是否为空选择：
 
@@ -342,17 +342,17 @@ BindableInterface
 
 `MetadataAccess = SchemaAccess + StoreAccess + HdfsAccess` 聚合门面，全静态单例（DCL）。
 
-### 8.2 HmsClient
+### HmsClient
 
 `HmsClient.java`（`sqlrec-core/src/main/java/com/sqlrec/db/remote/HmsClient.java`）：`HiveMetaStoreClient` 静态缓存（DCL + volatile + JVM shutdown hook）；`withRetry()` 对 `TTransportException` 失效重建客户端后重试一次（读幂等）；**所有公开方法 `synchronized static`** —— HMS 访问进程内全局串行。
 
-### 8.3 Schema 组装与缓存
+### Schema 组装与缓存
 
 - `CalciteSchemaFactory.java`（`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`）：`createCalciteSchema()` 构建根 schema：远程模式下按 `databaseListCache`（`ObjCache`，TTL 60s，异步刷新）为每个库挂 `HmsSchema`；`globalSchema`（由 server 启动时设置）存在时直接复用其 subSchema 映射（快速路径）。
 - `HmsSchema.java`（`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`）：per-db 两级 `ObjCache`——`tableMapCache`（增量：仅 `getTableUpdateTime` 变化的表重建 `Table` 对象，未变沿用旧实例）与 `functionMapCache`（HMS 函数 + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` 内置 UDF → `UdfManager.createScalarFunction` 反射）。
 - **`ObjCache`**（`sqlrec-core/src/main/java/com/sqlrec/utils/ObjCache.java`）：TTL + 可选异步刷新的极简缓存。`getObj()` 失效即 `updateObj()`（synchronized）：首载同步；之后提交到**全局单线程** executor 异步刷新并立即返回旧值；`invalidate()` 清空。
 
-### 8.4 表抽象体系（common/schema）
+### 表抽象体系（common/schema）
 
 ```
 AbstractTable
@@ -365,7 +365,7 @@ AbstractTable
 
 `HmsTableFactory`（SPI，`META-INF/services` 注册）：HMS 表的 storage handler / serde / 参数 → 对应 connector 的 Calcite Table + 可选自定义优化规则 + Flink DynamicTableFactory。connector 通过 SPI 被发现（`TableFactoryUtils`）。
 
-## 9. 存储连接层（sqlrec-connectors）
+## 存储连接层（sqlrec-connectors）
 
 六个 connector 结构一致：`config/`（Options 解析表属性）+ `calcite/`（CalciteTable + Factory）+ `handler/`（存储访问）+（redis/milvus）`flink/`（Flink DynamicTable Source/Sink）。
 
@@ -380,14 +380,14 @@ AbstractTable
 
 **Guava 版本对齐**：根 pom 统一 32.1.3（hive-metastore 带 19.0 与 milvus/grpc 冲突）。
 
-## 10. UDF 子系统（sqlrec-udf + core/udf）
+## UDF 子系统（sqlrec-udf + core/udf）
 
-### 10.1 注册与加载
+### 注册与加载
 
 - **内置 UDF**：`FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` 静态注册 scalar 函数名 → 类名；table 函数经 `JavaFunctionUtils.getTableFunction()` 查找（HMS 注册的 Java 函数或内置）。
 - **动态 Java UDF**：`UdfManager`/`JavaFunctionUtils` 从 HMS function 注册表按 className 反射加载，`isJavaFunctionModifiedSince` 支撑热更新（类名级）。
 
-### 10.2 HTTP 类 UDF（在线推理核心）
+### HTTP 类 UDF（在线推理核心）
 
 - `CallServiceFunction.java`（`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`）（`call_service`）：`ServiceManager.getServiceConfig()` 取服务 URL（ObjCache 缓存）→ 输入表序列化为 JSON 数组 → POST → 解析预测 map → `mergePredictions` 按列名拼回输入行。静态 `OkHttpClient`（30s 三段超时，volatile 可测试替换）。
 - `CallServiceWithQVFunction`、`BatchCallServiceUDTF`（Flink UDTF，JDK HttpURLConnection，按 batchSize 攒批）、`CallSqlRecApiFunction`（跨 sqlrec 实例调用，走 `SqlRecApiClient`）。
@@ -395,9 +395,9 @@ AbstractTable
 - **特征族**：`TagToVecFunction`、`RandomVecFunction`、`FeatureCoverageMetricsFunction`、`GetGrowthbookFeaturesFunction`（GrowthBook SDK）、`Get/SetVariablesFunction`（变量传播）。
 - 其他：`JsonToTableFunction`、`AddColFunction`、`TruncateTableFunction`、`SleepFunction`（测试用）。
 
-## 11. 模型子系统（sqlrec-model + core/model + k8s）
+## 模型子系统（sqlrec-model + core/model + k8s）
 
-### 11.1 生命周期状态机
+### 生命周期状态机
 
 ```
 CREATE MODEL ──► 校验(ModelController.checkModel: 字段/参数/输入输出重名)
@@ -423,7 +423,7 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 - **Checkpoint 保护**：被 Service 引用的 checkpoint/模型禁止删除（`deleteCheckpoint`/`deleteModel` 前置校验）。
 - **路径安全**：`PathUtils.validateModelPath` 防越界删除。
 
-### 11.2 ModelController SPI 与后端
+### ModelController SPI 与后端
 
 `ModelController`（common，SPI：`META-INF/services`）由 `ModelControllerFactory` 按 `engine` 分发：
 
@@ -435,11 +435,11 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 
 `K8sYamlBuilder`（model/common）统一生成 ConfigMap/Service/Deployment（容器端口、资源 request/limit、副本数、`REPLICAS`/`LABEL_COLUMNS` 等 env）；`GbdtK8sYamlUtils`/`TzrecK8sYamlUtils` 生成训练/导出 Job YAML（含 HDFS 挂载、Python 镜像）。
 
-### 11.3 K8sManager
+### K8sManager
 
 `K8sManager.java`（`sqlrec-core/src/main/java/com/sqlrec/k8s/K8sManager.java`）：fabric8 client 静态缓存（DCL + shutdown hook）；`applyYaml`（serverSideApply）、`deleteYaml`（先查存在再删，支持 Deployment/Service/ConfigMap/Secret/Pod/Job）、`checkJobsStatusFromYaml`、`isDeploymentReadyFromYaml`；传输级/5xx 失败自动 `resetClient()` 重建（4xx 业务错误不重建）。
 
-## 12. Demo 与编程模型（sqlrec-demo）
+## Demo 与编程模型（sqlrec-demo）
 
 `src/main/sql/quick_start/` 提供基于 filesystem connector 内存表的无外部依赖体验链路，其全局对象统一使用 `demo_` 前缀（`demo_user_interest_category`、`demo_category_hot_item`、`demo_exposure_item`、`demo_rec`）；MovieLens 完整推荐链路位于 `src/main/sql/movielens/`：
 
@@ -451,13 +451,13 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 
 编程模型要点：`IF` 表达条件执行，`IF TIMEIN` 在超时值大于 0 时为 THEN 设置毫秒级超时并在失败时回退 ELSE，`IF + RETURN` 支持函数提前返回；`CALL ... ASYNC` 表达旁路落盘；`ASSERT` 做数据门禁；变量（`get_or_default`/`SET`）做请求级参数传递。
 
-## 13. 可观测性
+## 可观测性
 
 - **Metrics**：Micrometer 复合 registry + Prometheus `/metrics`（HTTP 请求 timer/counter、会话/操作 gauge、操作开关 counter、cache-table 忽略异常 counter、函数更新 timer 等）；deploy/prometheus 提供 ServiceMonitor + Grafana JSON。
 - **Trace**：OpenTelemetry（OTLP gRPC → Jaeger），`DEBUG_TRACE` 开关 + `TRACE_ENDPOINT/HEADERS/SERVICE_NAME`；`TraceUtils` 在节点执行处埋点。
 - **日志**：log4j2；编译流程 INFO 级打印完整 logical/physical plan 与生成的 Java 源码。
 
-## 14. 线程模型与并发设计汇总
+## 线程模型与并发设计汇总
 
 | 线程资源 | 类型 | 用途 |
 | --- | --- | --- |
@@ -471,14 +471,14 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 
 静态可变状态：`CompileManager.functionBindableMap/sqlApiCache`、`CalciteSchemaFactory.schemaMap/globalSchema`、`ServiceManager.serviceConfigCacheMap`、各 connector 静态连接池、`HmsClient.client`、`K8sManager.kubernetesClient`。
 
-## 15. 部署架构（deploy/ + bin/ + docker/）
+## 部署架构（deploy/ + bin/ + docker/）
 
 - `deploy_minikube.sh` + `deploy_components.sh`：minikube 一键全家桶（HMS、PostgreSQL、Redis(单机/集群)、Milvus、MongoDB、Kafka、HDFS、Flink SQL Gateway、Kyuubi、GrowthBook、Jaeger、Prometheus/Grafana、DolphinScheduler、ClickHouse、OpenSearch、Jupyter…），每组件独立 `deploy.sh/uninstall.sh` + PVC。
 - `deploy/sqlrec/sqlrec.yaml`：sqlrec 引擎 Deployment（镜像由 `build_sqlrec_docker.sh` 构建，Dockerfile 基于发行包）。
 - `bin/`：`beeline.sh`（Thrift 客户端）、`kyuubi.sh`、`server.sh`、`cli.sh`、`sqlrec.cmd`。
 - `benchmark/`：movielens（端到端召回链路 + wrk 压测 request.lua）与 criteo1m 两套基准。
 
-## 附录 A：关键配置项（SqlRecConfigs）
+## 关键配置项（SqlRecConfigs）
 
 | 配置 | 默认 | 说明 |
 | --- | --- | --- |

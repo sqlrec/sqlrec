@@ -83,254 +83,192 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
 
 ### 完整服务部署（可选）
 
-下面的步骤会部署持久化元数据，以及完整示例使用的外部数据和模型服务；它与上面的无外部依赖 Docker Demo 是两条独立的体验路径。
+下面的步骤会部署持久化元数据及完整示例所需的外部数据、计算和模型基础设施。部署完成后，可以在集群中复现与上述 Docker Demo 完全相同的 quick-start 表、SQL 函数和 API。
 
 SQLRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
 
 按下述命令部署SQLRec系统：
 
 ```bash
-# clone sqlrec repository
+# 克隆 SQLRec 仓库
 git clone https://github.com/sqlrec/sqlrec.git
 cd ./sqlrec/deploy
 
-# deploy minikube
+# 部署 minikube
 ./deploy_minikube.sh
 
-# verify pod status, wait all pod ready
+# 查看 Pod 状态，等待所有 Pod 就绪
 alias kubectl="minikube kubectl --"
-kubectl get pod --ALL
+kubectl get pods --all-namespaces
 
-# download resource
+# 下载部署资源
 ./download_resource.sh
 
-# deploy sqlrec and dependencies services
+# 部署 SQLRec 及依赖服务
 ./deploy_components.sh
 
-# verify pod status, wait all pod ready
-kubectl get pod --ALL
+# 查看 Pod 状态，等待所有 Pod 就绪
+kubectl get pods --all-namespaces
 
-# verify sqlrec service
+# 连接 SQLRec，验证服务
 cd ..
 bash ./bin/beeline.sh
 ```
 
 注意：
 
-- 上述基于minikube的部署方案仅用于测试，生产环境需要先部署可靠的大数据基础设施，然后参考deploy下的脚本初始化数据库、部署SQLRec deployment
-- 如果需要重新部署，可以先通过minikube delete删除集群
-- 有一些组件没有默认部署，比如kyuubi、jupyter等，如果需要，可以在deploy目录执行对应的部署脚本，比如`bash ./kyuubi/deploy.sh`
-- 可以在env.sh自定义密码、网络端口等参数
+- 上述基于 minikube 的部署方案仅用于测试。生产环境需要先部署可靠的大数据基础设施，再参考 `deploy/` 下的脚本初始化数据库并部署 SQLRec。
+- 如需重新部署，可以先执行 `minikube delete` 删除测试集群。
+- Kyuubi、Jupyter 等组件默认不部署。如有需要，可在 `deploy/` 目录执行对应脚本，例如 `bash ./kyuubi/deploy.sh`。
+- 可以在 `deploy/env.sh` 中自定义密码、网络端口等参数。
 
-### 连接SQLRec服务
+### 连接 SQLRec 服务
 
-SQLRec实现了hive thrift接口，你可以使用beeline连接SQLRec服务，然后像使用hive一样使用它。
+SQLRec 实现了 Hive Thrift 接口，可以使用 Beeline 连接：
 
 ```bash
 bash ./bin/beeline.sh
 ```
 
-### SQL开发
+### SQL 开发
 
-执行`bash ./bin/beeline.sh`命令连接SQLRec服务，参考下述流程开发推荐需要的数据表、SQL函数、API接口等：
+执行 `bash ./bin/beeline.sh` 连接 SQLRec 服务。下面的表名、字段名、SQL 函数名和 API 名均与 `sqlrec/sqlrec-demo` 镜像中的 quick-start 示例一致；对应定义位于 [`sqlrec-demo/src/main/sql/quick_start/`](sqlrec-demo/src/main/sql/quick_start/)。
 
-1.初始化数据表，注意可以通过`kubectl get node -o wide`命令获取minikube节点的ip地址，你可能需要替换下述代码的ip地址
+1. 创建三张 quick-start 表：
 
 ```sql
 SET table.sql-dialect = default;
 
-CREATE TABLE IF NOT EXISTS `user_interest_category1` (
+CREATE TABLE IF NOT EXISTS `demo_user_interest_category` (
   `user_id` BIGINT,
-  `category1` STRING,
+  `category` STRING,
   `score` FLOAT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
+  PRIMARY KEY (user_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
+  'connector' = 'filesystem'
 );
 
-CREATE TABLE IF NOT EXISTS `category1_hot_item` (
-  `category1` STRING,
+CREATE TABLE IF NOT EXISTS `demo_category_hot_item` (
+  `category` STRING,
   `item_id` BIGINT,
   `score` FLOAT,
-  PRIMARY KEY (category1)  NOT ENFORCED
+  PRIMARY KEY (item_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0'
+  'connector' = 'filesystem'
 );
 
-CREATE TABLE IF NOT EXISTS `exposure_item` (
+CREATE TABLE IF NOT EXISTS `demo_exposure_item` (
   `user_id` BIGINT,
   `item_id` BIGINT,
   `bhv_time` BIGINT,
-  PRIMARY KEY (user_id)  NOT ENFORCED
+  PRIMARY KEY (item_id) NOT ENFORCED
 ) WITH (
-  'connector' = 'redis',
-  'data-structure' = 'list',
-  'url' = 'redis://192.168.49.2:30017/0',
-  'cache-ttl' = '0'
+  'connector' = 'filesystem'
 );
-
 ```
 
-1. 写入测试数据
+这里特意沿用 demo 镜像的 `filesystem` connector，以确保示例语义一致；表数据保存在 SQLRec 服务进程内，集群部署所提供的持久化能力用于元数据。生产数据请按实际需求改用 Redis 等持久化 connector。
+
+2. 写入测试数据：
 
 ```sql
-INSERT INTO `user_interest_category1` VALUES
-(1000001, 'pc', 100),
-(1000001, 'phone', 100);
+INSERT INTO `demo_user_interest_category` VALUES
+(1000001, 'pc', 100);
 
-INSERT INTO `category1_hot_item` VALUES
+INSERT INTO `demo_category_hot_item` VALUES
 ('pc', 1000001, 100),
-('pc', 1000002, 100),
-('pc', 1000003, 100),
-('pc', 1000004, 100),
-('pc', 1000005, 100),
-('phone', 1000011, 100),
-('phone', 1000012, 100),
-('phone', 1000013, 100),
-('phone', 1000014, 100),
-('phone', 1000015, 100);
-
-select * from `user_interest_category1` where `user_id` = 1000001;
-
-select * from `category1_hot_item` where `category1` = 'pc';
+('pc', 1000002, 90);
 ```
 
-3.开发sql函数
+3. 创建与 demo 镜像一致的 `demo_rec` SQL 函数：
 
 ```sql
--- define function test rec
-create or replace sql function test_rec;
+create or replace sql function demo_rec;
 
--- define input param
-define input table user_info(id bigint);
+define input table user_info(user_id bigint);
 
--- query exposed item for deduplication
-cache table exposured_item as
+cache table exposed_item as
 select item_id
-from
-user_info join exposure_item on user_id = user_info.id;
+from user_info join demo_exposure_item
+on demo_exposure_item.user_id = user_info.user_id;
 
--- query user interest category1
-cache table cur_user_interest_category1 as
-select category1
-from
-user_info join user_interest_category1 on user_id = user_info.id
+cache table cur_user_interest_category as
+select category
+from user_info join demo_user_interest_category
+on demo_user_interest_category.user_id = user_info.user_id
 limit 10;
 
--- query category1 hot item
-cache table category1_recall as
-select item_id as item_id, 'user_category1_interest_recall:' || cur_user_interest_category1.category1 as rec_reason
-from
-cur_user_interest_category1 join category1_hot_item
-on category1_hot_item.category1 = cur_user_interest_category1.category1
+cache table category_recall as
+select
+  item_id,
+  'user_category_interest_recall:' || cur_user_interest_category.category as rec_reason
+from cur_user_interest_category join demo_category_hot_item
+on demo_category_hot_item.category = cur_user_interest_category.category
 limit 300;
 
--- dedup category1 recall
-cache table dedup_category1_recall as call dedup(category1_recall, exposured_item, 'item_id', 'item_id');
+cache table dedup_category_recall as
+call dedup(category_recall, exposed_item, 'item_id', 'item_id');
 
 -- truncate to rec item num
 cache table final_recall_item as
 select item_id, rec_reason
-from dedup_category1_recall
+from dedup_category_recall
 limit 2;
 
 -- gen rec meta data
-cache table request_meta as select
-user_info.id as user_id,
-cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
-uuid() as req_id
+cache table request_meta as
+select
+  user_info.user_id,
+  cast(CURRENT_TIMESTAMP as BIGINT) as req_time,
+  uuid() as req_id
 from user_info;
 
 -- gen final rec data
 cache table final_rec_data as
 select
-request_meta.user_id as user_id,
-item_id,
-cast('XXX' as VARCHAR) as item_name,
-rec_reason,
-request_meta.req_time as req_time,
-request_meta.req_id as req_id
-from
-request_meta join final_recall_item on 1=1;
+  request_meta.user_id as user_id,
+  item_id,
+  cast('XXX' as VARCHAR) as item_name,
+  rec_reason,
+  request_meta.req_time as req_time,
+  request_meta.req_id as req_id
+from request_meta join final_recall_item on 1=1;
 
 -- write exposed item to exposure table for deduplication
-insert into exposure_item
+insert into demo_exposure_item
 select user_id, item_id, req_time
 from final_rec_data;
 
 return final_rec_data;
 ```
 
-上面SQL定义了推荐函数test\_rec，可以发现SQL函数定义语法是：
-
-- `create or replace sql function`加函数名开头
-- `define input table`定义输入参数，可以为空或者定义多个
-- `cache table`缓存中间计算结果，可以缓存SELECT语句、SQL函数调用的执行结果
-- `call`调用其他函数, 可以通过async关键字异步调用
-- `return`返回计算结果，可以为空
-
-可以直接在beeline命令行测试函数，如下所示
+上面的函数会按用户兴趣召回热门物品、过滤已曝光物品，并记录本次曝光。可以用以下 SQL 验证：
 
 ```sql
-0: jdbc:hive2://192.168.49.2:30000/default> cache table t1 as select cast(1000001 as bigint) as id;
-+-------------+--------+
-| table_name  | count  |
-+-------------+--------+
-| t1          | 1      |
-+-------------+--------+
-1 row selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> desc t1;
-+-------+---------+
-| name  |  type   |
-+-------+---------+
-| id    | BIGINT  |
-+-------+---------+
-1 row selected (0.002 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000015  | XXX        | user_category1_interest_recall:phone  | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-| 1000001  | 1000005  | XXX        | user_category1_interest_recall:pc     | 1775366030516  | ee073e63-b74a-4c7e-8fea-60459729099c  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.006 seconds)
-0: jdbc:hive2://192.168.49.2:30000/default> call test_rec(t1);
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| user_id  | item_id  | item_name  |              rec_reason               |    req_time    |                req_id                 |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-| 1000001  | 1000014  | XXX        | user_category1_interest_recall:phone  | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-| 1000001  | 1000004  | XXX        | user_category1_interest_recall:pc     | 1775366045908  | 37116c4c-9e7e-4dcc-9913-14f9628a8467  |
-+----------+----------+------------+---------------------------------------+----------------+---------------------------------------+
-2 rows selected (0.003 seconds)
+cache table quick_start_user as select cast(1000001 as bigint) as user_id;
+call demo_rec(quick_start_user);
 ```
 
-可以发现，召回、推荐理由、去重都已经生效。
-
-1. 创建API接口
-   参考下述SQL将SQL函数暴露为API接口：
+4. 将 SQL 函数暴露为同名 API：
 
 ```sql
-create or replace api test_rec with test_rec;
+create or replace api demo_rec with demo_rec;
 ```
 
 ### 推荐测试
 
-使用下述命令进行推荐测试：
+获取 minikube 节点 IP，并调用 `demo_rec`：
 
 ```bash
-yi@debian12:~$ curl -X POST http://192.168.49.2:30001/api/v1/test_rec \
--H "Content-Type: application/json" \
--d '{"data":{"user_info":[{"id": 1000001}]}}'
-{"data":[{"user_id":1000001,"item_id":1000013,"item_name":"XXX","rec_reason":"user_category1_interest_recall:phone","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"},{"user_id":1000001,"item_id":1000003,"item_name":"XXX","rec_reason":"user_category1_interest_recall:pc","req_time":1775367428357,"req_id":"f014bd2d-41f8-4de5-93e0-3507cdae2542"}]}
+MINIKUBE_NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+curl -X POST "http://${MINIKUBE_NODE_IP}:30001/api/v1/demo_rec" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-### 前端UI
+### 前端 UI
 
-SQLRec提供了基于Web的前端UI，用于监控和管理。你可以通过 `http://192.168.49.2:30001/ui/static/index.html` 访问（请将IP地址替换为你的minikube节点IP）。
+SQLRec 提供了用于监控和管理的 Web UI。可以访问 `http://<MINIKUBE_NODE_IP>:30001/ui/static/index.html`（将占位符替换为上一步获取的 minikube 节点 IP）。
 
 前端UI可以让你：
 - 查看SQL函数及其执行DAG（有向无环图）

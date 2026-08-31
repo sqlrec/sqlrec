@@ -6,108 +6,7 @@
 
 SQLRec 提供了灵活的连接器扩展机制，允许开发者实现自定义的数据源连接器。通过实现特定的接口和继承基础类，可以快速接入新的数据存储系统。
 
-## 表类型体系
-
-### SqlRecTable
-
-`SqlRecTable` 是所有 SQLRec 表的抽象基类，继承自 Calcite 的 `AbstractTable`。
-
-```java
-package com.sqlrec.common.schema;
-
-import org.apache.calcite.schema.impl.AbstractTable;
-
-public abstract class SqlRecTable extends AbstractTable {
-}
-```
-
-**使用场景**：
-- 不需要主键查询的场景
-- 只需要基础表功能的场景
-- 例如：Kafka 连接器（只写）
-
-### SqlRecKvTable
-
-`SqlRecKvTable` 继承自 `SqlRecTable`，实现了 `ModifiableTable` 和 `FilterableTable` 接口，提供键值表功能。
-
-```java
-package com.sqlrec.common.schema;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import org.apache.calcite.schema.FilterableTable;
-import org.apache.calcite.schema.ModifiableTable;
-
-import java.util.*;
-
-public abstract class SqlRecKvTable extends SqlRecTable
-    implements ModifiableTable, FilterableTable {
-
-    private Cache<Object, List<Object[]>> cache;
-
-    // 获取主键索引（抽象方法，子类必须实现）
-    public abstract int getPrimaryKeyIndex();
-
-    // 按主键批量查询的具体实现（抽象方法，子类实现数据源访问逻辑）
-    public abstract Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet);
-
-    // 按主键批量查询（内置缓存，缓存未命中时调用 getByPrimaryKeyImpl）
-    public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        // ... 缓存命中则直接返回，未命中则调用 getByPrimaryKeyImpl 并写入缓存
-    }
-
-    // 初始化缓存
-    public void initCache(int maxSize, long expireAfterWrite) {
-        if (maxSize <= 0 || expireAfterWrite <= 0) {
-            return;
-        }
-        cache = Caffeine.newBuilder()
-                .maximumSize(maxSize)
-                .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
-                .build();
-    }
-
-    // 是否只支持主键过滤
-    public boolean onlyFilterByPrimaryKey() {
-        return true;
-    }
-}
-```
-
-**使用场景**：
-- 需要主键查询的场景
-- 需要本地缓存加速的场景
-- 例如：Redis 连接器
-
-**需要实现的方法**：
-- `getPrimaryKeyIndex()`：返回主键列的索引
-- `getByPrimaryKeyImpl(Set<Object> keySet)`：根据主键批量查询数据（由基类 `getByPrimaryKey` 内置缓存调用）
-- `getRowType(RelDataTypeFactory typeFactory)`：定义表结构
-- `scanImpl(List<RexNode> filters)`：实现过滤查询（由基类 `scan` 调用）
-- `getModifiableCollection()`：返回可修改的集合对象
-
-### VectorSearchable 接口
-
-`VectorSearchable` 是向量检索接口（不是类），由 `SqlRecKvTable` 子类实现，提供向量检索功能。
-
-```java
-package com.sqlrec.common.schema;
-
-import java.util.List;
-
-public interface VectorSearchable {
-    List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request);
-
-    // searchByEmbedding wraps the implementation with type conversion and metrics.
-}
-```
-
-**使用场景**：
-- 需要向量相似度搜索的场景
-- 例如：Milvus 连接器
-
-**需要实现的方法**：
-- 实现 `VectorSearchable.searchByEmbeddingImpl()`：执行向量搜索。
+开始开发前，请先阅读 [Connector 基础概念](./basic_concepts.md)，根据访问模式选择 `SqlRecTable`、`SqlRecKvTable` 以及可选的 `VectorSearchable` 能力。
 
 ## 开发自定义连接器
 
@@ -311,25 +210,32 @@ public class ExampleVectorTable extends SqlRecKvTable implements VectorSearchabl
 package com.sqlrec.connectors.example.calcite;
 
 import com.sqlrec.common.schema.HmsTableFactory;
-import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.example.config.ExampleConfig;
 import com.sqlrec.connectors.example.config.ExampleOptions;
+import org.apache.calcite.plan.RelOptRule;
 import org.apache.hadoop.hive.metastore.api.Table;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class ExampleCalciteTableFactory implements HmsTableFactory {
     @Override
-    public String getIdentifier() {
-        return ExampleOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public SqlRecTable createTable(Table table) {
+    public org.apache.calcite.schema.Table getTableFromHmsTable(Table table) {
         Map<String, String> parameters = table.getParameters();
         ExampleConfig config = ExampleOptions.getExampleConfig(parameters);
         config.fieldSchemas = table.getSd().getCols();
         config.primaryKeyIndex = getPrimaryKeyIndex(table);
         return new ExampleCalciteTable(config);
+    }
+
+    @Override
+    public String getConnectorName() {
+        return ExampleOptions.CONNECTOR_IDENTIFIER;
+    }
+
+    @Override
+    public List<RelOptRule> getRules() {
+        return new ArrayList<>();
     }
 
     private int getPrimaryKeyIndex(Table table) {

@@ -88,7 +88,7 @@
   <rect x="1242" y="302" width="246" height="78" rx="16" fill="#FFFFFF" stroke="#D9DFEC"/><text x="1264" y="334" class="title">Model Manager</text><text x="1264" y="357" class="copy">GBDT · TZRec · External</text>
   <rect x="1242" y="398" width="246" height="78" rx="16" fill="#FFFFFF" stroke="#D9DFEC"/><text x="1264" y="430" class="title">Training &amp; Export</text><text x="1264" y="453" class="copy">Kubernetes Jobs</text>
   <rect x="1242" y="494" width="246" height="78" rx="16" fill="#FFFFFF" stroke="#D9DFEC"/><text x="1264" y="526" class="title">Model Serving</text><text x="1264" y="549" class="copy">Kubernetes Deployments</text>
-  <path d="M1270 380v16" class="control"/><path d="M1270 476v16" class="control"/>
+  <path d="M1365 380v16" class="control"/><path d="M1365 476v16" class="control"/>
   <path d="M495 330v-52q0-12 12-12h705q12 0 12-12v7h12" class="control"/>
   <path d="M1152 521h34q12 0 12 12h38" class="flow"/>
   </g>

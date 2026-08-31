@@ -6,27 +6,7 @@ This document introduces the built-in data connectors in SQLRec and their usage.
 
 SQLRec provides multiple built-in connectors for connecting to different data storage systems. Connectors are implemented based on Calcite table abstractions, supporting SQL queries and data write operations.
 
-### Table Type Hierarchy
-
-SQLRec connectors are based on the following table type hierarchy:
-
-```
-SqlRecTable (Abstract Base Class)
-    │
-    ├── SqlRecKvTable (Key-Value Table, supports primary key queries and caching)
-    │       │
-    │       └── implements VectorSearchable (vector search interface)
-    │
-    └── Other table types...
-```
-
-**Table Type Descriptions**:
-
-| Table Type | Description | Features |
-|------------|-------------|----------|
-| `SqlRecTable` | Abstract base class, inherits from Calcite's `AbstractTable` | Provides basic table functionality |
-| `SqlRecKvTable` | Key-value table, supports primary key queries | Supports primary key indexing, caching mechanism, filter queries, data modification |
-| `VectorSearchable` | Vector search interface | Interface, implemented by `SqlRecKvTable` subclasses, supports vector similarity search |
+For the connector loading flow, table type system, and extension mechanism, start with [Connector Basic Concepts](./basic_concepts.md).
 
 ## Built-in Connectors
 
