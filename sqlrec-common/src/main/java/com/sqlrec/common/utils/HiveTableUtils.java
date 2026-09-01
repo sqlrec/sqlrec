@@ -81,9 +81,6 @@ public class HiveTableUtils {
     //todo cover more type case
     public static String convertHiveType(String hiveType) {
         hiveType = hiveType.toUpperCase();
-        if (hiveType.startsWith("VARCHAR")) {
-            return "VARCHAR";
-        }
         if (hiveType.contains("NOT NULL")) {
             return hiveType.replace("NOT NULL", "").trim();
         }

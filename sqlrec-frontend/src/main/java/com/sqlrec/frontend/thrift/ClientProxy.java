@@ -20,6 +20,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * A proxy owns one generated Thrift client and transport for a session.  Generated
+ * clients and their protocols are not safe for concurrent request/response exchanges,
+ * so every TCLIService entry point is synchronized for the whole reconnect/translate/
+ * invoke/restore sequence.
+ */
 public class ClientProxy implements TCLIService.Iface {
     private static final Logger logger = LoggerFactory.getLogger(ClientProxy.class);
 
@@ -38,7 +44,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
+    public synchronized TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
         this.localSessionId = ThriftUtils.getHandleIdentifier();
         this.pendingOpenSessionReq = req;
 
@@ -190,7 +196,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TCloseSessionResp CloseSession(TCloseSessionReq req) throws TException {
+    public synchronized TCloseSessionResp CloseSession(TCloseSessionReq req) throws TException {
         try {
             if (connected) {
                 THandleIdentifier originalSessionId = translateSessionHandle(req.getSessionHandle());
@@ -221,7 +227,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
+    public synchronized TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
         updateAccessTime();
 
         TGetInfoResp resp = new TGetInfoResp();
@@ -257,7 +263,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
+    public synchronized TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tExecuteStatementReq.getSessionHandle());
@@ -269,7 +275,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
+    public synchronized TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTypeInfoReq.getSessionHandle());
@@ -281,7 +287,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
+    public synchronized TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetCatalogsReq.getSessionHandle());
@@ -293,7 +299,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
+    public synchronized TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetSchemasReq.getSessionHandle());
@@ -305,7 +311,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
+    public synchronized TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTablesReq.getSessionHandle());
@@ -317,7 +323,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
+    public synchronized TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetTableTypesReq.getSessionHandle());
@@ -329,7 +335,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
+    public synchronized TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetColumnsReq.getSessionHandle());
@@ -341,7 +347,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
+    public synchronized TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetFunctionsReq.getSessionHandle());
@@ -353,7 +359,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
+    public synchronized TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetPrimaryKeysReq.getSessionHandle());
@@ -365,7 +371,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
+    public synchronized TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetCrossReferenceReq.getSessionHandle());
@@ -377,42 +383,42 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
+    public synchronized TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.GetOperationStatus(tGetOperationStatusReq));
     }
 
     @Override
-    public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
+    public synchronized TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.CancelOperation(tCancelOperationReq));
     }
 
     @Override
-    public TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
+    public synchronized TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.CloseOperation(tCloseOperationReq));
     }
 
     @Override
-    public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
+    public synchronized TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
     }
 
     @Override
-    public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
+    public synchronized TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.FetchResults(tFetchResultsReq));
     }
 
     @Override
-    public TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
+    public synchronized TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tGetDelegationTokenReq.getSessionHandle());
@@ -424,7 +430,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
+    public synchronized TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tCancelDelegationTokenReq.getSessionHandle());
@@ -436,7 +442,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
+    public synchronized TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tRenewDelegationTokenReq.getSessionHandle());
@@ -448,14 +454,14 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
+    public synchronized TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
         updateAccessTime();
         ensureConnected();
         return invokeRemote(() -> client.GetQueryId(tGetQueryIdReq));
     }
 
     @Override
-    public TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
+    public synchronized TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
         updateAccessTime();
         ensureConnected();
         THandleIdentifier originalSessionId = translateSessionHandle(tSetClientInfoReq.getSessionHandle());

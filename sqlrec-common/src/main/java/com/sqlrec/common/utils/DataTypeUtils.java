@@ -12,8 +12,17 @@ import org.apache.calcite.sql.validate.SqlValidator;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DataTypeUtils {
+    private static final Pattern DECIMAL_TYPE_PATTERN = Pattern.compile(
+            "^DECIMAL\\s*\\(\\s*(\\d+)\\s*(?:,\\s*(\\d+)\\s*)?\\)$"
+    );
+    private static final Pattern CHARACTER_TYPE_PATTERN = Pattern.compile(
+            "^(CHAR|VARCHAR)\\s*\\(\\s*(\\d+)\\s*\\)$"
+    );
+
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
         RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (FieldSchema fieldSchema : fieldSchemas) {
@@ -29,11 +38,11 @@ public class DataTypeUtils {
 
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, String type) {
         type = type.trim().toUpperCase();
+        if (type.endsWith(" NOT NULL")) {
+            type = type.substring(0, type.length() - " NOT NULL".length()).trim();
+        }
         if (type.equals("INT")) {
             type = "INTEGER";
-        }
-        if (type.startsWith("VARCHAR")) {
-            type = "VARCHAR";
         }
         if (type.equals("STRING")) {
             type = "VARCHAR";
@@ -43,6 +52,22 @@ public class DataTypeUtils {
             String elementType = type.substring("ARRAY<".length(), type.length() - 1);
             RelDataType elementTypeName = getRelDataType(typeFactory, elementType);
             return typeFactory.createArrayType(elementTypeName, -1);
+        }
+
+        Matcher decimalMatcher = DECIMAL_TYPE_PATTERN.matcher(type);
+        if (decimalMatcher.matches()) {
+            int precision = Integer.parseInt(decimalMatcher.group(1));
+            int scale = decimalMatcher.group(2) == null
+                    ? 0
+                    : Integer.parseInt(decimalMatcher.group(2));
+            return typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
+        }
+
+        Matcher characterMatcher = CHARACTER_TYPE_PATTERN.matcher(type);
+        if (characterMatcher.matches()) {
+            SqlTypeName typeName = SqlTypeName.get(characterMatcher.group(1));
+            int precision = Integer.parseInt(characterMatcher.group(2));
+            return typeFactory.createSqlType(Objects.requireNonNull(typeName), precision);
         }
 
         SqlTypeName sqlTypeName = SqlTypeName.get(type);

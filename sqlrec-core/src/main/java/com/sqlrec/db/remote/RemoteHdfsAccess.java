@@ -5,8 +5,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -18,33 +16,26 @@ public class RemoteHdfsAccess implements HdfsAccess {
     public boolean pathExists(String hdfsPath) {
         validatePath(hdfsPath);
 
-        StringBuilder output = new StringBuilder();
         try {
             ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-test", "-e", hdfsPath);
             pb.redirectErrorStream(true);
+            // Avoid a PIPE reader blocking before the timed wait can run.
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
             clearJavaToolOptions(pb.environment());
             Process process = pb.start();
-            // Collect output to prevent pipe buffer deadlock and for diagnostics
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                try { process.waitFor(); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-                log.error("Check hdfs path exists timeout: path={}, output={}", hdfsPath, output);
+                log.error("Check hdfs path exists timeout: path={}", hdfsPath);
                 throw new RuntimeException("Check hdfs path exists timeout: path=" + hdfsPath);
             }
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                log.warn("Check hdfs path exists failed: path={}, exitCode={}, output={}", hdfsPath, exitCode, output);
+                log.warn("Check hdfs path exists failed: path={}, exitCode={}", hdfsPath, exitCode);
             }
             return exitCode == 0;
         } catch (Exception e) {
-            log.error("Check hdfs path exists exception: path={}, output={}", hdfsPath, output, e);
+            log.error("Check hdfs path exists exception: path={}", hdfsPath, e);
             throw new RuntimeException("Check hdfs path exists failed: path=" + hdfsPath, e);
         }
     }
@@ -56,27 +47,19 @@ public class RemoteHdfsAccess implements HdfsAccess {
         try {
             ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-rm", "-r", "-f", hdfsPath);
             pb.redirectErrorStream(true);
+            // Avoid a PIPE reader blocking before the timed wait can run.
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
             clearJavaToolOptions(pb.environment());
             Process process = pb.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                try { process.waitFor(); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 throw new RuntimeException("Delete hdfs path timeout: path=" + hdfsPath);
             }
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                log.warn("Delete hdfs path failed: path={}, exitCode={}, output={}", hdfsPath, exitCode, output);
-                throw new RuntimeException("Delete hdfs path failed: path=" + hdfsPath + " output=" + output);
+                log.warn("Delete hdfs path failed: path={}, exitCode={}", hdfsPath, exitCode);
+                throw new RuntimeException("Delete hdfs path failed: path=" + hdfsPath);
             }
             log.info("Delete hdfs path success: path={}", hdfsPath);
         } catch (Exception e) {

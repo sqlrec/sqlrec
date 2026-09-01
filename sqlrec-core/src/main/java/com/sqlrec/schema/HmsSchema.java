@@ -16,6 +16,8 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,18 +29,33 @@ public class HmsSchema extends AbstractSchema {
     private final MetadataAccess metadataAccess;
     private final ObjCache<Map<String, Table>> tableMapCache;
     private final ObjCache<Multimap<String, Function>> functionMapCache;
+    private volatile Map<String, Long> tableModificationTimes = Collections.emptyMap();
 
     public HmsSchema(String databaseName, MetadataAccess metadataAccess) {
+        this(
+                databaseName,
+                metadataAccess,
+                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
+                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue()
+        );
+    }
+
+    HmsSchema(
+            String databaseName,
+            MetadataAccess metadataAccess,
+            long cacheExpireTimeInMillis,
+            boolean asyncUpdate
+    ) {
         this.databaseName = databaseName;
         this.metadataAccess = metadataAccess;
         this.tableMapCache = new ObjCache<>(
-                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
-                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
+                cacheExpireTimeInMillis,
+                asyncUpdate,
                 this::computeTableMap
         );
         this.functionMapCache = new ObjCache<>(
-                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
-                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
+                cacheExpireTimeInMillis,
+                asyncUpdate,
                 this::computeFunctionMap
         );
     }
@@ -62,20 +79,27 @@ public class HmsSchema extends AbstractSchema {
         try {
             List<org.apache.hadoop.hive.metastore.api.Table> tableMetas = metadataAccess.getTables(databaseName);
             Map<String, Table> tableMap = new ConcurrentHashMap<>();
+            Map<String, Long> oldModificationTimes = tableModificationTimes;
+            Map<String, Long> newModificationTimes = new HashMap<>();
             for (org.apache.hadoop.hive.metastore.api.Table tableMeta : tableMetas) {
                 String tableName = tableMeta.getTableName();
-                if (oldTableMap != null && oldTableMap.containsKey(tableName)) {
-                    long oldUpdateTime = metadataAccess.getTableUpdateTime(databaseName, tableName);
-                    if (oldUpdateTime >= HiveTableUtils.getTableModificationTime(tableMeta)) {
-                        tableMap.put(tableName, oldTableMap.get(tableName));
-                        continue;
-                    }
+                long newModificationTime = HiveTableUtils.getTableModificationTime(tableMeta);
+                newModificationTimes.put(tableName, newModificationTime);
+
+                Long oldModificationTime = oldModificationTimes.get(tableName);
+                if (oldTableMap != null
+                        && oldTableMap.containsKey(tableName)
+                        && oldModificationTime != null
+                        && oldModificationTime >= newModificationTime) {
+                    tableMap.put(tableName, oldTableMap.get(tableName));
+                    continue;
                 }
                 Table table = TableFactoryUtils.getTableFromHmsTable(tableMeta);
                 if (table != null) {
                     tableMap.put(tableName, table);
                 }
             }
+            tableModificationTimes = Collections.unmodifiableMap(newModificationTimes);
             return tableMap;
         } catch (Exception e) {
             log.error("Error while computing table map for schema {}", databaseName, e);

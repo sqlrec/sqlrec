@@ -18,27 +18,45 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FileSystemHandler {
     private static final Logger logger = LoggerFactory.getLogger(FileSystemHandler.class);
 
     private final FileSystemConfig fileSystemConfig;
-    private volatile List<Object[]> data;
-    private final Object lock = new Object();
+    private volatile ConcurrentHashMap<Object, Object[]> data;
+    private final Object initializationLock = new Object();
 
     public FileSystemHandler(FileSystemConfig fileSystemConfig) {
         this.fileSystemConfig = fileSystemConfig;
     }
 
-    private List<Object[]> ensureData() {
-        if (data == null) {
-            synchronized (lock) {
-                if (data == null) {
-                    data = loadData();
+    private ConcurrentHashMap<Object, Object[]> ensureData() {
+        ConcurrentHashMap<Object, Object[]> current = data;
+        if (current == null) {
+            synchronized (initializationLock) {
+                current = data;
+                if (current == null) {
+                    current = indexByPrimaryKey(loadData());
+                    data = current;
                 }
             }
         }
-        return data;
+        return current;
+    }
+
+    private ConcurrentHashMap<Object, Object[]> indexByPrimaryKey(List<Object[]> rows) {
+        ConcurrentHashMap<Object, Object[]> indexedRows = new ConcurrentHashMap<>();
+        for (Object[] row : rows) {
+            Object primaryKeyValue = getKey(row);
+            if (primaryKeyValue == null) {
+                logger.warn("Skipping row with null primary key at index {}", fileSystemConfig.primaryKeyIndex);
+                continue;
+            }
+            // A later row intentionally replaces an earlier row with the same primary key.
+            indexedRows.put(primaryKeyValue, row);
+        }
+        return indexedRows;
     }
 
     private List<Object[]> loadData() {
@@ -225,7 +243,7 @@ public class FileSystemHandler {
     }
 
     public List<Object[]> scan() {
-        return new ArrayList<>(ensureData());
+        return snapshotRows(ensureData().values());
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
@@ -233,44 +251,44 @@ public class FileSystemHandler {
             return Collections.emptyMap();
         }
 
-        List<Object[]> allData = ensureData();
+        ConcurrentHashMap<Object, Object[]> allData = ensureData();
         Map<Object, List<Object[]>> result = new HashMap<>();
-        for (Object[] row : allData) {
-            Object key = getKey(row);
-            if (keySet.contains(key)) {
-                result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+        for (Object key : keySet) {
+            Object[] row = allData.get(key);
+            if (row != null) {
+                result.put(key, Collections.singletonList(copyRow(row)));
             }
         }
         return result;
     }
 
     public boolean upsert(Object[] data) {
-        synchronized (lock) {
-            normalizeRowTypes(data);
-            List<Object[]> allData = ensureData();
-            Object primaryKeyValue = getKey(data);
-            validatePrimaryKey(primaryKeyValue);
-
-            for (int i = 0; i < allData.size(); i++) {
-                if (Objects.equals(primaryKeyValue, getKey(allData.get(i)))) {
-                    allData.set(i, data);
-                    return true;
-                }
-            }
-
-            allData.add(data);
-            return true;
-        }
+        Object[] row = copyRow(data);
+        normalizeRowTypes(row);
+        Object primaryKeyValue = getKey(row);
+        validatePrimaryKey(primaryKeyValue);
+        ensureData().put(primaryKeyValue, row);
+        return true;
     }
 
     public boolean delete(Object[] data) {
-        synchronized (lock) {
-            normalizeRowTypes(data);
-            List<Object[]> allData = ensureData();
-            Object primaryKeyValue = getKey(data);
-            validatePrimaryKey(primaryKeyValue);
-            return allData.removeIf(row -> Objects.equals(primaryKeyValue, getKey(row)));
+        Object[] row = copyRow(data);
+        normalizeRowTypes(row);
+        Object primaryKeyValue = getKey(row);
+        validatePrimaryKey(primaryKeyValue);
+        return ensureData().remove(primaryKeyValue) != null;
+    }
+
+    private static List<Object[]> snapshotRows(Collection<Object[]> rows) {
+        List<Object[]> snapshot = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            snapshot.add(copyRow(row));
         }
+        return snapshot;
+    }
+
+    private static Object[] copyRow(Object[] row) {
+        return Arrays.copyOf(Objects.requireNonNull(row, "row"), row.length);
     }
 
     private void validatePrimaryKey(Object primaryKeyValue) {

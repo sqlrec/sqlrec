@@ -41,6 +41,10 @@ public class ObjCache<T> {
         if (currentTimeInMillis - lastUpdateTimeInMillis < cacheExpireTimeInMillis) {
             return;
         }
+        // Advance the timestamp before refreshing on purpose. If the refresh fails,
+        // the cache remains "fresh" until the next expiration window; this acts as
+        // exception backoff and prevents a failing data source from being retried on
+        // every cache access.
         lastUpdateTimeInMillis = currentTimeInMillis;
 
         if (obj == null || !asyncUpdate) {
