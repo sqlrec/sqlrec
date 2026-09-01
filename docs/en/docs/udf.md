@@ -232,7 +232,26 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName,
 `context` is injected by SQLRec. SQL supports these two call forms:
 
 - `CALL call_service(serviceName, input)`: calls the service with row-wise JSON. The result contains the input columns followed by model output columns.
-- `CALL call_service(serviceName, user, item)`: calls the service in Query-Value mode. `user` must contain exactly one row and `item` may contain multiple rows. The result keeps the Item columns and appends model output columns. Model input fields are automatically split between User and Item based on the model definition.
+- `CALL call_service(serviceName, user, item)`: calls the service in User-Item mode with a column-oriented JSON request body. The result keeps the Item columns and appends model output columns.
+
+User-Item request rules:
+
+1. The User table must contain exactly one row; the Item table may contain multiple rows.
+2. Only model input fields are considered. A field belongs to User when its name matches a User table column (case-insensitive); otherwise it belongs to Item. If both tables contain the same field, the User field takes precedence. A model field missing from its selected table is omitted from the request, as are extra table columns not declared as model inputs.
+3. Every field is serialized as a JSON array. User fields are single-element arrays, so one set of user data is sent only once per request. Item fields become arrays in Item row order; user data is not repeated for every item.
+
+For example, one User row and three Item rows produce:
+
+```json
+{
+  "user_id": [1001],
+  "user_age": [25],
+  "item_id": [1, 2, 3],
+  "category": ["phone", "tablet", "laptop"]
+}
+```
+
+When the Item table is empty, no HTTP request is sent. The function returns an empty table whose schema consists of the Item columns followed by the model output columns.
 
 HTTP connect/read/write timeouts default to 30 seconds. See the [model documentation](./model/basic_concepts.md#call_service) for the protocol and examples.
 

@@ -191,7 +191,7 @@ http://{service_id}.{namespace}.svc.cluster.local:80/predict
 
 ## 内置模型调用 UDF
 
-SQLRec 提供内置的 `call_service` UDF（用户定义函数）用于调用模型服务进行推理，并通过重载支持普通输入和 Query-Value 输入。
+SQLRec 提供内置的 `call_service` UDF（用户定义函数）用于调用模型服务进行推理，并通过重载支持普通行式输入和 User-Item 输入。
 
 ### call_service
 
@@ -254,9 +254,9 @@ SELECT
 CALL call_service('test_service', t1);
 ```
 
-### Query-Value 调用方式
+### User-Item 调用方式
 
-`call_service` 的三参数重载支持 Query-Value 模式，适用于推荐系统场景。它将输入分为 Query（查询特征，单行）和 Value（候选特征，多行），用于批量预测多个候选项。
+`call_service` 的三参数重载支持 User-Item 模式，适用于用一份用户特征批量预测多个候选物品的推荐场景。User 表必须恰好包含一行，Item 表可以包含多行。
 
 **函数签名**：
 
@@ -273,24 +273,24 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTab
 | `user` | CacheTable | 用户特征表，必须只有一行 |
 | `item` | CacheTable | 物品特征表，可以有多行 |
 
-**返回值**：返回一个新的 `CacheTable`，包含 Value 表的列和模型输出列。
+**返回值**：返回一个新的 `CacheTable`，包含 Item 表的列和模型输出列。
 
 **使用场景**：
-- 推荐系统中，Query 表包含用户特征，Value 表包含多个候选物品特征
+- User 表包含一份用户特征，Item 表包含多个候选物品特征
 - 一次请求预测用户对所有候选物品的偏好分数
 
 **使用示例**：
 
 ```sql
--- 用户特征（Query，单行）
-CACHE TABLE user_query AS
+-- 用户特征（单行）
+CACHE TABLE user_features AS
 SELECT
     1001 AS user_id,
     'Alice' AS user_name,
     'USA' AS user_country,
     25 AS user_age;
 
--- 候选物品特征（Value，多行）
+-- 候选物品特征（多行）
 CACHE TABLE item_candidates AS
 SELECT item_id, item_name, item_category
 FROM items
@@ -298,7 +298,7 @@ WHERE category = 'Electronics'
 LIMIT 100;
 
 -- 批量预测用户对所有候选物品的偏好
-CALL call_service('rec_service', user_query, item_candidates);
+CALL call_service('rec_service', user_features, item_candidates);
 ```
 
 ## 服务调用数据协议
@@ -347,9 +347,9 @@ Accept: application/json
 ]
 ```
 
-#### 列式 JSON 格式（call_service Query-Value 重载）
+#### 列式 JSON 格式（call_service User-Item 重载）
 
-`call_service` 的 Query-Value 重载使用列式 JSON 格式，将 Query 和 Value 数据组合发送：
+`call_service` 的 User-Item 重载使用列式 JSON 格式。模型输入字段按以下规则划分：如果字段名存在于 User 表中（匹配时忽略大小写），该字段属于 User；其余模型输入字段属于 Item。随后每个字段被序列化为一个 JSON 数组：
 
 ```json
 {
@@ -364,9 +364,12 @@ Accept: application/json
 ```
 
 **格式说明**：
-- Query 表的每个字段对应一个单元素数组
-- Value 表的字段保持原值
-- 所有字段以列式存储，每个字段对应一个数组
+- User 表必须只有一行，因此每个 User 字段对应一个单元素数组，用户数据在整个请求中只传递一遍
+- Item 字段按 Item 表的行顺序组成数组，数组长度等于 Item 行数
+- User 字段不会扩展到 Item 行数，也不会为每个 Item 重复传递
+- 只序列化模型定义的输入字段；User 表同名字段优先于 Item 表字段，模型未声明的额外列会被忽略
+- 模型输入字段在选定的 User 或 Item 表中不存在时，该字段不会写入请求
+- Item 表为空时不发送 HTTP 请求，直接返回带完整输出字段的空表
 
 ### 输出数据格式
 
@@ -381,7 +384,7 @@ Accept: application/json
 **格式说明**：
 - 返回一个 JSON 对象
 - 每个输出字段对应一个键
-- 值为预测结果数组，数组长度与输入行数相同
+- 值为预测结果数组，数组长度应与 Item 表行数相同
 - 字段名由 `ModelController.getOutputFields()` 定义
 
 ### 数据合并逻辑
@@ -389,7 +392,7 @@ Accept: application/json
 UDF 会将输入数据与预测结果合并：
 
 1. **call_service**：将预测结果追加到输入行的末尾
-2. **call_service Query-Value 重载**：将预测结果追加到 Value 表行的末尾
+2. **call_service User-Item 重载**：将预测结果追加到 Item 表行的末尾
 
 **合并示例**：
 

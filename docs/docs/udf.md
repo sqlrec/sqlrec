@@ -232,7 +232,26 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName,
 `context` 由 SQLRec 自动注入。SQL 调用支持以下两种形式：
 
 - `CALL call_service(serviceName, input)`：使用行式 JSON 调用服务，返回表包含输入列以及模型输出列。
-- `CALL call_service(serviceName, user, item)`：使用 Query-Value 模式调用服务。`user` 必须恰好一行，`item` 可包含多行；返回表保留 Item 表列并追加模型输出列。服务输入字段会按模型定义自动拆分为 User 和 Item 两部分。
+- `CALL call_service(serviceName, user, item)`：使用 User-Item 模式调用服务，请求体为列式 JSON，返回表保留 Item 表列并追加模型输出列。
+
+User-Item 模式的请求规则：
+
+1. User 表必须恰好一行；Item 表可以包含多行。
+2. 仅处理模型定义的输入字段。字段名如果存在于 User 表中（匹配时忽略大小写），该字段归入 User；否则归入 Item。若两张表存在同名字段，优先使用 User 表中的字段；在对应表中找不到的模型字段不会写入请求。两张表中不属于模型输入的额外列也不会写入请求。
+3. 每个字段都序列化为一个 JSON 数组。User 字段是单元素数组，因此一份用户数据在一次请求中只发送一遍；Item 字段按 Item 表的行顺序组成数组，不会为每个 Item 重复发送 User 数据。
+
+例如，一行 User 数据和三行 Item 数据会生成：
+
+```json
+{
+  "user_id": [1001],
+  "user_age": [25],
+  "item_id": [1, 2, 3],
+  "category": ["phone", "tablet", "laptop"]
+}
+```
+
+当 Item 表为空时不会发送 HTTP 请求，函数直接返回空表，其字段为 Item 表字段加模型输出字段。
 
 HTTP 请求超时默认为连接、读写各 30 秒。详细协议和示例参见[模型文档](./model/basic_concepts.md#call_service)。
 

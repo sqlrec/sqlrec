@@ -192,7 +192,7 @@ The `ModelConfigs` class defines general configuration parameters for the model 
 
 ## Built-in Model Call UDF
 
-SQLRec provides the built-in `call_service` UDF (User Defined Function) for model-service inference, overloaded for regular and Query-Value inputs.
+SQLRec provides the built-in `call_service` UDF (User Defined Function) for model-service inference, overloaded for regular row-oriented input and User-Item input.
 
 ### call_service
 
@@ -255,9 +255,9 @@ SELECT
 CALL call_service('test_service', t1);
 ```
 
-### Query-Value Call Form
+### User-Item Call Form
 
-The three-argument overload of `call_service` supports Query-Value mode for recommendation scenarios. It divides input into Query (query features, single row) and Value (candidate features, multiple rows) to predict multiple candidates in one request.
+The three-argument overload of `call_service` supports User-Item mode for recommendation scenarios where one set of user features is used to score multiple candidate items. The User table must contain exactly one row; the Item table may contain multiple rows.
 
 **Function Signature**:
 
@@ -274,24 +274,24 @@ public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTab
 | `user` | CacheTable | User feature table, must have only one row |
 | `item` | CacheTable | Item feature table, can have multiple rows |
 
-**Return Value**: Returns a new `CacheTable` containing Value table columns and model output columns.
+**Return Value**: Returns a new `CacheTable` containing Item table columns and model output columns.
 
 **Use Cases**:
-- In recommendation systems, Query table contains user features, Value table contains multiple candidate item features
+- The User table contains one set of user features and the Item table contains multiple candidate items
 - One request predicts user preference scores for all candidate items
 
 **Usage Example**:
 
 ```sql
--- User features (Query, single row)
-CACHE TABLE user_query AS
+-- User features (single row)
+CACHE TABLE user_features AS
 SELECT
     1001 AS user_id,
     'Alice' AS user_name,
     'USA' AS user_country,
     25 AS user_age;
 
--- Candidate item features (Value, multiple rows)
+-- Candidate item features (multiple rows)
 CACHE TABLE item_candidates AS
 SELECT item_id, item_name, item_category
 FROM items
@@ -299,7 +299,7 @@ WHERE category = 'Electronics'
 LIMIT 100;
 
 -- Batch predict user preference for all candidate items
-CALL call_service('rec_service', user_query, item_candidates);
+CALL call_service('rec_service', user_features, item_candidates);
 ```
 
 ## Service Call Data Protocol
@@ -348,9 +348,9 @@ Accept: application/json
 ]
 ```
 
-#### Column-wise JSON Format (call_service Query-Value Overload)
+#### Column-wise JSON Format (call_service User-Item Overload)
 
-The Query-Value overload of `call_service` uses column-wise JSON format, combining Query and Value data:
+The User-Item overload of `call_service` uses column-oriented JSON. Model input fields are partitioned as follows: a field belongs to User when its name matches a User table column (case-insensitive); all remaining model input fields belong to Item. Each field is then serialized as a JSON array:
 
 ```json
 {
@@ -365,9 +365,12 @@ The Query-Value overload of `call_service` uses column-wise JSON format, combini
 ```
 
 **Format Description**:
-- Each Query table field is represented by a single-element array
-- Value table fields keep original values
-- All fields stored column-wise, each field corresponds to an array
+- The User table has exactly one row, so every User field is a single-element array and user data is sent only once in the request
+- Item fields are arrays in Item row order, with lengths equal to the number of Item rows
+- User fields are not expanded to the Item row count and are not repeated for each item
+- Only declared model input fields are serialized; a matching User field takes precedence over an Item field with the same name, and extra table columns are ignored
+- A model input field missing from its selected User or Item table is omitted from the request
+- When the Item table is empty, no HTTP request is sent; an empty table with the full output schema is returned
 
 ### Output Data Format
 
@@ -382,7 +385,7 @@ Prediction results returned by service are in JSON object format:
 **Format Description**:
 - Returns a JSON object
 - Each output field corresponds to a key
-- Value is prediction result array, array length matches input row count
+- Each value is a prediction array whose length should match the Item row count
 - Field names defined by `ModelController.getOutputFields()`
 
 ### Data Merge Logic
@@ -390,7 +393,7 @@ Prediction results returned by service are in JSON object format:
 UDF merges input data with prediction results:
 
 1. **call_service**: Appends prediction results to the end of input rows
-2. **call_service Query-Value overload**: Appends prediction results to the end of Value table rows
+2. **call_service User-Item overload**: Appends prediction results to the end of Item table rows
 
 **Merge Example**:
 
