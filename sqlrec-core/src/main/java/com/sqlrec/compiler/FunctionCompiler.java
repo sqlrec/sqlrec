@@ -9,6 +9,7 @@ import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
+import com.sqlrec.sql.parser.SqlIfCache;
 import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -44,6 +45,7 @@ public class FunctionCompiler {
     private CompileManager compileManager;
     private List<RelDataTypeField> returnDataFields;
     private boolean returnDataFieldsInitialized;
+    private boolean awaitingEmptyReturnAfterExhaustiveIf;
 
     public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
         this.isOrReplace = false;
@@ -67,6 +69,7 @@ public class FunctionCompiler {
         cacheTableNames = new HashSet<>();
         returnDataFields = null;
         returnDataFieldsInitialized = false;
+        awaitingEmptyReturnAfterExhaustiveIf = false;
     }
 
     public SqlFunctionBindable getFunctionBindable() {
@@ -157,6 +160,11 @@ public class FunctionCompiler {
     }
 
     private void compileFunctionBody(SqlNode flinkSqlNode, String sql) throws Exception {
+        if (awaitingEmptyReturnAfterExhaustiveIf) {
+            compileEmptyTerminatingReturn(flinkSqlNode, sql);
+            return;
+        }
+
         if (flinkSqlNode instanceof SqlReturn) {
             compileTopLevelReturn((SqlReturn) flinkSqlNode, sql);
         } else {
@@ -165,14 +173,54 @@ public class FunctionCompiler {
             );
             collectReturnDataFields(bindable);
             addBodyBindable(bindable, sql, false);
+            if (isExhaustiveReturnIf(flinkSqlNode)) {
+                awaitingEmptyReturnAfterExhaustiveIf = true;
+            }
         }
     }
 
+    private void compileEmptyTerminatingReturn(SqlNode flinkSqlNode, String sql) throws Exception {
+        if (!(flinkSqlNode instanceof SqlReturn) || !isEmptyReturn((SqlReturn) flinkSqlNode)) {
+            throw new Exception(
+                    "IF whose THEN and ELSE branches both RETURN must be followed by exactly one empty RETURN"
+            );
+        }
+
+        // The empty RETURN is only the syntactic function terminator. Both IF branches
+        // already determine the function's result schema and return at runtime.
+        compileTopLevelReturn((SqlReturn) flinkSqlNode, sql, false);
+    }
+
+    private boolean isExhaustiveReturnIf(SqlNode sqlNode) {
+        if (!(sqlNode instanceof SqlIfCache)) {
+            return false;
+        }
+        SqlIfCache sqlIf = (SqlIfCache) sqlNode;
+        return sqlIf.getThenClause() instanceof SqlReturn
+                && sqlIf.getElseClause() instanceof SqlReturn;
+    }
+
+    private boolean isEmptyReturn(SqlReturn sqlReturn) {
+        return sqlReturn.getTableName() == null
+                && sqlReturn.getSelect() == null
+                && sqlReturn.getCallSqlFunction() == null;
+    }
+
     private void compileTopLevelReturn(SqlReturn sqlReturn, String sql) throws Exception {
+        compileTopLevelReturn(sqlReturn, sql, true);
+    }
+
+    private void compileTopLevelReturn(
+            SqlReturn sqlReturn,
+            String sql,
+            boolean collectDataFields
+    ) throws Exception {
         BindableInterface returnBindable = compileManager.compileSql(
                 sqlReturn, schema, Consts.DEFAULT_SCHEMA_NAME, sql
         );
-        collectReturnDataFields(returnBindable);
+        if (collectDataFields) {
+            collectReturnDataFields(returnBindable);
+        }
         addBodyBindable(returnBindable, sql, true);
         sqlFunctionBindable.setReturnDataFields(returnDataFields);
         sqlFunctionBindable.init();

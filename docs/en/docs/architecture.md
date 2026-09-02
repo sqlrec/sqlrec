@@ -218,13 +218,14 @@ All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREA
 FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
    → FUNCTION_PARAM (0..n DEFINE INPUT TABLE)
    → FUNCTION_BODY (any SQL / CACHE / CALL / IF, including early RETURN inside IF)
-   → FUNCTION_RETURN (top-level RETURN / RETURN t / RETURN SELECT / RETURN CALL)
+   → FUNCTION_RETURN (top-level RETURN / RETURN t / RETURN SELECT / RETURN CALL;
+                      only bare RETURN is valid after an exhaustive IF)
    → isFunctionCompileFinish
 ```
 
 - Input tables without `LIKE` are registered into a temporary schema as placeholder `CacheTable(enumerable=null)` so that function body SQL passes validation;
 - Tables of `CACHE` statements inside the function body are likewise registered as placeholder CacheTables (named with sequence numbers when duplicated);
-- RETURN inside IF participates in result-schema validation but does not advance the state machine. Only a top-level RETURN terminates the definition, and all return points must be either empty or use the same schema;
+- RETURN inside IF participates in result-schema validation but does not advance the state machine. Only a top-level RETURN terminates the definition. When both THEN and ELSE are RETURN statements, the compiler enters an “awaiting empty terminator” state, accepts only the immediately following bare `RETURN;`, and preserves the result schema inferred from the IF branches;
 - Upon completion, `SqlExecutor.saveSqlFunction()` persists it (JSON statement list) to the metadata database and `CacheManager.invalidateAll()` immediately evicts old compilation artifacts.
 
 ### NormalSqlCompiler (Full Calcite Compilation Pipeline)

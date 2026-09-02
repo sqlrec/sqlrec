@@ -164,19 +164,24 @@ class SqlFunctionReturnTest {
 
     @Test
     void ifWithTwoReturnBranchesExecutesSelectedBranch() throws Exception {
-        SqlFunctionBindable trueFunction = compile(
-                "return_if_true",
-                "IF (SELECT TRUE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
-                "RETURN SELECT 3 AS id"
-        );
-        SqlFunctionBindable falseFunction = compile(
-                "return_if_false",
-                "IF (SELECT FALSE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
-                "RETURN SELECT 3 AS id"
-        );
+        for (boolean parallel : List.of(false, true)) {
+            SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(parallel);
+            String suffix = parallel ? "parallel" : "serial";
+            SqlFunctionBindable trueFunction = compile(
+                    "return_if_true_" + suffix,
+                    "IF (SELECT TRUE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
+                    "RETURN"
+            );
+            SqlFunctionBindable falseFunction = compile(
+                    "return_if_false_" + suffix,
+                    "IF (SELECT FALSE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
+                    "RETURN"
+            );
 
-        assertEquals(1, trueFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
-        assertEquals(2, falseFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(1, trueFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(2, falseFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals("id", trueFunction.getReturnDataFields().get(0).getName().toLowerCase());
+        }
     }
 
     @Test
@@ -185,7 +190,7 @@ class SqlFunctionReturnTest {
                 "return_timein",
                 "IF TIMEIN (SELECT 1000) THEN (RETURN SELECT 1 AS id) "
                         + "ELSE (RETURN SELECT 2 AS id)",
-                "RETURN SELECT 3 AS id"
+                "RETURN"
         );
 
         assertEquals(1, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
@@ -210,7 +215,7 @@ class SqlFunctionReturnTest {
                 "dependency_if_root",
                 "IF (SELECT TRUE) THEN (RETURN CALL dependency_left()) "
                         + "ELSE (RETURN CALL dependency_right())",
-                "RETURN SELECT 3 AS id"
+                "RETURN"
         );
 
         assertEquals(
@@ -229,6 +234,29 @@ class SqlFunctionReturnTest {
         );
 
         assertTrue(error.getMessage().contains("function define end without return"));
+    }
+
+    @Test
+    void exhaustiveIfRejectsDataReturningTerminator() {
+        Exception error = assertCompileError(
+                "exhaustive_if_data_terminator",
+                "IF (SELECT TRUE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
+                "RETURN SELECT 3 AS id"
+        );
+
+        assertTrue(error.getMessage().contains("exactly one empty RETURN"));
+    }
+
+    @Test
+    void exhaustiveIfRejectsStatementsBeforeTerminator() {
+        Exception error = assertCompileError(
+                "exhaustive_if_extra_statement",
+                "IF (SELECT TRUE) THEN (RETURN SELECT 1 AS id) ELSE (RETURN SELECT 2 AS id)",
+                "SELECT 3 AS id",
+                "RETURN"
+        );
+
+        assertTrue(error.getMessage().contains("exactly one empty RETURN"));
     }
 
     @Test

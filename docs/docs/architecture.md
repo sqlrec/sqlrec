@@ -214,13 +214,13 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
    → FUNCTION_PARAM (0..n 条 DEFINE INPUT TABLE)
    → FUNCTION_BODY (任意 SQL / CACHE / CALL / IF，包括 IF 内提前 RETURN)
-   → FUNCTION_RETURN (顶层 RETURN / RETURN t / RETURN SELECT / RETURN CALL)
+   → FUNCTION_RETURN (顶层 RETURN / RETURN t / RETURN SELECT / RETURN CALL；全路径 IF 后仅允许空 RETURN)
    → isFunctionCompileFinish
 ```
 
 - 输入表若无 `LIKE`，用占位 `CacheTable(enumerable=null)` 注册进临时 schema，使函数体 SQL 能通过校验；
 - 函数体内 `CACHE` 语句的表同样以占位 CacheTable 注册（同名重复时以序号命名 proxyBindable）；
-- IF 内 RETURN 参与返回模式校验但不推进状态机；只有顶层 RETURN 才结束函数定义，且所有返回点必须同为空返回或具有相同 schema；
+- IF 内 RETURN 参与返回模式校验但不推进状态机；只有顶层 RETURN 才结束函数定义。若 IF 的 THEN/ELSE 都是 RETURN，编译器进入“等待空终止 RETURN”状态，只接受紧随其后的一条空 `RETURN;`，并保留由 IF 分支推导出的返回 schema；
 - 完成后由 `SqlExecutor.saveSqlFunction()` 持久化（JSON 语句列表）到元数据库，并 `CacheManager.invalidateAll()` 立即驱逐旧编译产物。
 
 ### NormalSqlCompiler（Calcite 编译全流程）

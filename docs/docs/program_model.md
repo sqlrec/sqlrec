@@ -621,7 +621,7 @@ RETURN result;
 1. 一条 `CREATE [OR REPLACE] SQL FUNCTION`。
 2. 零到多条连续的 `DEFINE INPUT TABLE`；也可以写 `DEFINE INPUT TABLE input_data LIKE existing_table`。
 3. 函数体语句。一旦开始函数体，就不能再追加 DEFINE。
-4. 一条顶层 `RETURN` 结束定义；即使 IF 的所有分支都会返回，也仍需要顶层 RETURN 作为编译结束标志。
+4. 一条顶层 `RETURN` 结束定义。若紧邻它的 IF 在 THEN 和 ELSE 中都返回，这条顶层语句必须是空 `RETURN;`，且 IF 与它之间不能有其他语句。
 
 ### 函数传参
 
@@ -732,9 +732,19 @@ RETURN SELECT id, score FROM candidates ORDER BY score DESC;
 IF 使用 RETURN 时，必须满足以下分支结构之一：
 
 - THEN 返回且没有 ELSE；条件为 false 时继续执行 IF 后面的语句。
-- THEN 和 ELSE 都返回；两个分支的返回模式必须兼容。
+- THEN 和 ELSE 都返回；两个分支的返回模式必须兼容。此时 IF 已覆盖全部路径，后面必须立即且只能使用空 `RETURN;` 结束函数定义。
 
-不能只在 ELSE 返回，也不能让 THEN 返回而 ELSE 执行普通语句。函数内所有可能的返回点必须全部为空返回，或者具有相同的列数、列名和列类型；CHAR/VARCHAR 等字符串类型彼此兼容。
+不能只在 ELSE 返回，也不能让 THEN 返回而 ELSE 执行普通语句。函数内所有运行时返回点必须全部为空返回，或者具有相同的列数、列名和列类型；CHAR/VARCHAR 等字符串类型彼此兼容。双分支均返回时，末尾空 `RETURN;` 仅是编译结束标志，不参与返回模式推导。
+
+```sql
+-- 两个分支都返回时的完整函数结尾
+IF (SELECT use_primary FROM config_table) THEN (
+    RETURN SELECT id, score FROM primary_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+RETURN;
+```
 
 `IF TIMEIN` 也可以在两个分支中使用 RETURN。当超时时间大于 0 时，THEN 超时或抛出异常会丢弃其临时返回状态，然后由 ELSE 设置最终返回值；超时时间小于等于 0 时直接执行 THEN。
 

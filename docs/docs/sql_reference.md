@@ -556,9 +556,11 @@ RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'funct
 **规则：**
 
 - `RETURN;` 表示函数正常结束但不返回数据。
-- 顶层 `RETURN` 是 SQL 函数定义的结束标志；即使函数体中的 `IF` 已包含提前返回，函数定义末尾仍需提供顶层 `RETURN`。顶层 `RETURN` 之后不能再定义其他函数体语句。
+- 顶层 `RETURN` 是 SQL 函数定义的结束标志；即使函数体中的 `IF` 已包含提前返回，函数定义仍需以顶层 `RETURN` 结束。顶层 `RETURN` 之后不能再定义其他函数体语句。
 - `IF` 分支内的 `RETURN` 只在运行时提前结束函数，不会在编译时结束函数定义。
-- 函数内所有可能执行的 `RETURN` 必须具有一致的返回模式：要么全部为空返回，要么全部返回列数、列名和列类型一致的数据。
+- 如果 IF 只有 THEN 分支返回，条件为 false 时仍会继续执行；末尾顶层 `RETURN` 是该路径的实际返回点，必须与 THEN 的返回模式兼容。
+- 如果 IF 的 THEN 和 ELSE 都是 `RETURN`，IF 已覆盖所有运行路径。该 IF 后必须立即且只能写一条不携带数据的 `RETURN;` 作为函数定义结束标志；不能插入其他语句，也不能改写为 `RETURN table_name`、`RETURN SELECT ...` 或 `RETURN CALL ...`。这条空 RETURN 不参与返回模式推导。
+- 函数内所有可能执行的返回点必须具有一致的返回模式：要么全部为空返回，要么全部返回列数、列名和列类型一致的数据。上述双分支场景中的末尾空 RETURN 只是编译结束标志，不属于运行时返回点。
 - `RETURN CALL ... ASYNC` 不受支持，因为异步调用无法作为当前函数的同步返回值。
 
 **示例：**
@@ -744,7 +746,7 @@ IF 语句支持两种执行模式：
 - 两分支均为 CACHE 语句时：必须写入相同的表名，且表结构必须兼容
 - 两分支均为非 CACHE 语句时：两个分支的返回字段结构必须兼容
 - IF 包含 `RETURN` 时，仅支持两种结构：THEN 返回且没有 ELSE；或者 THEN 和 ELSE 都返回。不能只在 ELSE 返回，也不能将返回分支与非返回 ELSE 混用
-- 两个分支都返回时，返回模式必须兼容；函数中其他返回点也必须采用相同模式
+- 两个分支都返回时，返回模式必须兼容；该 IF 后必须立即以一条空 `RETURN;` 结束函数定义，不能再写其他语句。函数结果模式由两个分支推导，不受末尾空 RETURN 影响
 - THEN 返回且没有 ELSE 时，如果条件为 false，函数继续执行 IF 后面的语句
 - TIMEIN 模式必须提供 ELSE；两个分支必须同为 CACHE，或同为 RETURN
 - 当前不支持在 THEN 或 ELSE 中直接嵌套另一个 IF
@@ -788,8 +790,8 @@ IF (SELECT use_primary FROM config_table) THEN (
 ) ELSE (
     RETURN SELECT id, score FROM fallback_result
 );
--- 即使两个分支都会返回，仍需使用顶层 RETURN 结束函数定义
-RETURN SELECT id, score FROM fallback_result;
+-- 两个分支已覆盖全部路径；紧随其后的空 RETURN 只结束函数定义
+RETURN;
 
 -- TIMEIN 同样支持 RETURN；超时或异常时执行 ELSE
 IF TIMEIN (SELECT 1000) THEN (
@@ -797,7 +799,7 @@ IF TIMEIN (SELECT 1000) THEN (
 ) ELSE (
     RETURN SELECT id, score FROM fallback_result
 );
-RETURN SELECT id, score FROM fallback_result;
+RETURN;
 ```
 
 

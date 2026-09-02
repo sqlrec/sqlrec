@@ -558,7 +558,9 @@ RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'funct
 - `RETURN;` completes the function normally without returning data.
 - A top-level `RETURN` terminates the SQL function definition. Even when an `IF` in the body can return early, the definition must still end with a top-level `RETURN`. No function-body statement may follow it.
 - A `RETURN` inside an `IF` only exits the invocation at runtime; it does not terminate the function definition at compile time.
-- Every possible `RETURN` in a function must use one consistent result schema: either all returns are empty, or all return the same column count, names, and types.
+- If only the THEN branch returns, a false condition continues execution. The final top-level `RETURN` is an actual return point for that path and must be compatible with the THEN result schema.
+- If both THEN and ELSE are `RETURN` statements, the IF covers every runtime path. It must be followed immediately by exactly one bare `RETURN;` that terminates the function definition. No statement may appear between them, and the terminator cannot be `RETURN table_name`, `RETURN SELECT ...`, or `RETURN CALL ...`. This empty terminator does not participate in result-schema inference.
+- Every return point that can execute must use one consistent result schema: either all are empty, or all return the same column count, names, and types. The final empty terminator in the exhaustive-IF case above is compile-time syntax, not a runtime return point.
 - `RETURN CALL ... ASYNC` is not supported because an asynchronous invocation cannot provide the synchronous result of the current function.
 
 **Examples:**
@@ -744,7 +746,7 @@ The IF statement supports two execution modes:
 - When both branches are CACHE statements: they must write to the same table name with compatible table schemas
 - When both branches are non-CACHE statements: the return field structures of the two branches must be compatible
 - An IF containing `RETURN` has only two valid shapes: a returning THEN with no ELSE, or both THEN and ELSE returning. An ELSE-only return and a returning THEN paired with a non-returning ELSE are rejected
-- When both branches return, their result schemas must be compatible; every other return point in the function must use the same schema
+- When both branches return, their result schemas must be compatible. The IF must be followed immediately by one empty `RETURN;` that ends the definition, with no intervening statement. The function result schema comes from the two branches and is unaffected by this empty terminator
 - When THEN returns and ELSE is omitted, a false condition continues with the statements following the IF
 - TIMEIN requires ELSE; both branches must be CACHE statements or both must be RETURN statements
 - Directly nesting another IF in THEN or ELSE is currently unsupported
@@ -788,8 +790,8 @@ IF (SELECT use_primary FROM config_table) THEN (
 ) ELSE (
     RETURN SELECT id, score FROM fallback_result
 );
--- A top-level RETURN is still required to terminate the function definition
-RETURN SELECT id, score FROM fallback_result;
+-- Both branches cover every path; the following empty RETURN only ends the definition
+RETURN;
 
 -- TIMEIN also supports RETURN; timeout or failure selects ELSE
 IF TIMEIN (SELECT 1000) THEN (
@@ -797,7 +799,7 @@ IF TIMEIN (SELECT 1000) THEN (
 ) ELSE (
     RETURN SELECT id, score FROM fallback_result
 );
-RETURN SELECT id, score FROM fallback_result;
+RETURN;
 ```
 
 

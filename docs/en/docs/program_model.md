@@ -621,7 +621,7 @@ A function definition is submitted as multiple independent SQL statements in thi
 1. One `CREATE [OR REPLACE] SQL FUNCTION` statement.
 2. Zero or more consecutive `DEFINE INPUT TABLE` statements; `DEFINE INPUT TABLE input_data LIKE existing_table` is also supported.
 3. Function-body statements. DEFINE cannot be added after the body has started.
-4. One top-level `RETURN` terminates the definition. It is still required when every IF branch returns.
+4. One top-level `RETURN` terminates the definition. If the immediately preceding IF returns from both THEN and ELSE, this statement must be a bare `RETURN;`, with no intervening statement.
 
 ### Function Parameter Passing
 
@@ -732,9 +732,19 @@ A function definition must end with a top-level `RETURN`, and no function-body s
 An IF that uses RETURN must have one of these branch shapes:
 
 - THEN returns and ELSE is omitted; a false condition continues after the IF.
-- Both THEN and ELSE return, with compatible result schemas.
+- Both THEN and ELSE return, with compatible result schemas. The IF then covers every path and must be followed immediately by exactly one empty `RETURN;` that ends the definition.
 
-An ELSE-only return and a returning THEN paired with an ordinary ELSE statement are rejected. Across the whole function, all possible return points must either be empty, or have identical column counts, names, and types; CHAR/VARCHAR and other string types are mutually compatible.
+An ELSE-only return and a returning THEN paired with an ordinary ELSE statement are rejected. Across the whole function, all runtime return points must either be empty, or have identical column counts, names, and types; CHAR/VARCHAR and other string types are mutually compatible. When both branches return, the final empty `RETURN;` is only a compile-time terminator and does not participate in result-schema inference.
+
+```sql
+-- Complete function ending when both branches return
+IF (SELECT use_primary FROM config_table) THEN (
+    RETURN SELECT id, score FROM primary_result
+) ELSE (
+    RETURN SELECT id, score FROM fallback_result
+);
+RETURN;
+```
 
 `IF TIMEIN` can also use RETURN in both branches. When the timeout is positive, a timeout or exception in THEN discards its temporary return state and ELSE supplies the final result; a non-positive timeout executes THEN directly.
 
