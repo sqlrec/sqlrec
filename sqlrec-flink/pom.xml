@@ -249,7 +249,7 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
-            <version>3.1.0</version>
+            <version>3.4.3</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -269,6 +269,14 @@
                     <artifactId>jackson-core-asl</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <!-- Keep hadoop-auth aligned with hadoop-common. Hive 3.1.3 otherwise
+             pulls hadoop-auth 3.1.0, which lacks the JDK 25 Subject adapter. -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
+            <version>3.4.3</version>
+            <scope>test</scope>
         </dependency>
         <!-- Datanucleus/JDO: needed by embedded Hive Metastore (Derby backend) -->
         <dependency>
