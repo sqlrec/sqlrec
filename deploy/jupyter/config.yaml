@@ -11,7 +11,7 @@ singleuser:
           claimName: ${CLIENT_PVC_NAME}
   extraEnv:
     SPARK_HOME: "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}"
-    JAVA_HOME: "${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}"
+    JAVA_HOME: "${CONTAINER_JAVA_HOME}"
 
 
 hub:

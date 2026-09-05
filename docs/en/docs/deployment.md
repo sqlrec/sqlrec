@@ -4,7 +4,15 @@ This document introduces how to deploy the SQLRec system.
 
 ## System Requirements
 
-The deployment scripts target AMD64 Linux and require Bash, Docker, kubectl, and Helm. The Minikube flow can install missing Docker, Minikube, and Helm components; production environments should manage them centrally.
+The deployment scripts support AMD64 Linux and Apple Silicon macOS 14 or later. Linux uses the Minikube Docker driver. macOS uses Minikube 1.37+, vfkit, vmnet-shared networking, and VirtioFS mounts. Production environments should manage Kubernetes and related dependencies centrally.
+
+Docker Desktop is not required on macOS. The deployment script installs missing command-line dependencies with Homebrew; the equivalent command is:
+
+```bash
+brew install minikube vfkit docker docker-buildx helm gettext libpq
+```
+
+The deployment script also configures the Homebrew Buildx plugin and installs `vmnet-helper` using the version-specific procedure in the [official Minikube vfkit documentation](https://minikube.sigs.k8s.io/docs/drivers/vfkit/).
 
 The Minikube example allocates a 256GB disk and starts several dependencies. Actual memory and disk needs depend on enabled components and data volume; 32GB/256GB should not be treated as a fixed production size. The first deployment needs access to image/Helm repositories and download URLs.
 
@@ -41,6 +49,9 @@ bash ./bin/beeline.sh
 **Notes**:
 - The Minikube-based deployment solution above is for testing only
 - If you need to redeploy, you can first delete the cluster via `minikube delete`
+- Workload images are saved to `deploy/data/image-cache/<arch>` after a successful deployment and loaded when a new cluster is created
+- macOS defaults to 8 CPUs, 24GB of memory, and a 256GB disk; override these with `MINIKUBE_CPUS`, `MINIKUBE_MEMORY`, and `MINIKUBE_DISK_SIZE`
+- The host, pods, and shared configuration use the `NODE_IP` returned by `minikube ip` for NodePort access; access through the host's physical IP from other LAN machines is not guaranteed
 - Some components are not deployed by default, such as Kyuubi, Jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory
 - Deployment scripts read `deploy/env.sh`; override values before execution, for example `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`
 - `deploy_components.sh` deploys PostgreSQL, MinIO/JuiceFS, Hadoop, HMS, Flink, Spark, SQLRec, and by default Kafka, Redis, and Milvus. HDFS, MongoDB, Kyuubi, Jupyter, and observability components require their own scripts
@@ -203,7 +214,7 @@ SQLRec provides two image build scripts:
 | `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
 | `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) training/inference image (CPU version) |
 
-The image version `SQLREC_VERSION` comes from `deploy/env.sh` (default `0.1.10`) and can be overridden via environment variables before execution.
+The image version `SQLREC_VERSION` comes from `deploy/env.sh` (default `0.1.11`) and can be overridden via environment variables before execution.
 
 **Build Steps**:
 
@@ -228,6 +239,8 @@ if command -v minikube >/dev/null 2>&1; then
   eval $(minikube -p minikube docker-env)
 fi
 ```
+
+macOS installs only the Docker CLI and does not run Docker Desktop, so Minikube must be running before building images. The GBDT Dockerfile still contains x86_64 native dependencies, and ARM64 support in the tzrec base image is not confirmed; these two model images are currently outside the guaranteed core macOS ARM64 deployment scope.
 
 **Manual Build**:
 

@@ -7,30 +7,39 @@ spec:
     spec:
       containers:
         - name: hms-init
-          image: apache/hive:${HIVE_VERSION}
+          image: debian:${DEBIAN_IMAGE_VERSION}
           env:
-            - name: SERVICE_NAME
-              value: metastore
-            - name: DB_DRIVER
-              value: postgres
-          command: ["/opt/hive/bin/schematool",  "-dbType", "postgres", "-initSchema"]
+            - name: JAVA_HOME
+              value: ${CONTAINER_JAVA_HOME}
+            - name: HADOOP_HOME
+              value: ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
+            - name: HIVE_HOME
+              value: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
+            - name: HIVE_CONF_DIR
+              value: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf
+          command: ["${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/bin/schematool", "-dbType", "postgres", "-initSchema"]
           volumeMounts:
-            - mountPath: /opt/hive/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
+            - mountPath: ${CLIENT_DIR}
+              name: client-pv
+            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/lib/${POSTGRESQL_CONNECTOR_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${POSTGRESQL_CONNECTOR_JAR_NAME}
-            - mountPath: /opt/hive/lib/${JUICEFS_HADOOP_JAR_NAME}
+            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/lib/${JUICEFS_HADOOP_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
-            - mountPath: /opt/hive/conf/hive-site.xml
+            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/hive-site.xml
               name: hive-site-hms
               subPath: hive-site-hms.xml
-            - mountPath: /opt/hive/conf/core-site.xml
+            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/core-site.xml
               name: core-site
               subPath: core-site.xml
-            - mountPath: /opt/hive/conf/hdfs-site.xml
+            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/hdfs-site.xml
               name: hdfs-site
               subPath: hdfs-site.xml
       volumes:
+        - name: client-pv
+          persistentVolumeClaim:
+            claimName: ${CLIENT_PVC_NAME}
         - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
             claimName: ${LIB_PVC_NAME}

@@ -33,11 +33,11 @@ spec:
         - containerPort: 3100
         env:
         - name: MONGODB_URI
-          value: mongodb://${GROWTHBOOK_MONGODB_USER}:${GROWTHBOOK_MONGODB_PASSWORD}@${HOST_IP}:${GROWTHBOOK_MONGODB_PORT}/growthbook?authSource=admin
+          value: mongodb://${GROWTHBOOK_MONGODB_USER}:${GROWTHBOOK_MONGODB_PASSWORD}@${NODE_IP}:${GROWTHBOOK_MONGODB_PORT}/growthbook?authSource=admin
         - name: APP_ORIGIN
-          value: http://${HOST_IP}:${GROWTHBOOK_WEB_PORT}
+          value: http://${NODE_IP}:${GROWTHBOOK_WEB_PORT}
         - name: API_HOST
-          value: http://${HOST_IP}:${GROWTHBOOK_API_PORT}
+          value: http://${NODE_IP}:${GROWTHBOOK_API_PORT}
         - name: NODE_ENV
           value: ${GROWTHBOOK_NODE_ENV}
         - name: JWT_SECRET

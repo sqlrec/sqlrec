@@ -1,8 +1,7 @@
 #!/bin/bash
 shopt -s expand_aliases
-source ~/.bash_profile
 set -ex
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source ${dir}/env.sh
 
 # check if NODE_IP is set

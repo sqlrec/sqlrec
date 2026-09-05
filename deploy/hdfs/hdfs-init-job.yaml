@@ -15,8 +15,10 @@ spec:
         - |
           mkdir -p ${HDFS_NAMENODE_DATA_DIR}
           mkdir -p ${HDFS_DATANODE_DATA_DIR}
-          echo "export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}" >> ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/hadoop-env.sh
           ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs namenode -format
+        env:
+        - name: JAVA_HOME
+          value: ${CONTAINER_JAVA_HOME}
         volumeMounts:
         - name: client-pv
           mountPath: ${CLIENT_DIR}

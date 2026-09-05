@@ -1,28 +1,79 @@
+import hashlib
 import os
-import requests
-import zipfile
-import pandas as pd
 import tempfile
-import shutil
+import warnings
+import zipfile
+
+import pandas as pd
+
+# macOS Command Line Tools Python 3.9 links against LibreSSL. This script
+# authenticates the immutable dataset with a pinned SHA-256 checksum below.
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL.*")
+import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 MOVIELENS_1M_URL = "https://files.grouplens.org/datasets/movielens/ml-1m.zip"
 MOVIELENS_1M_FILENAME = "ml-1m.zip"
+MOVIELENS_1M_SHA256 = "a6898adb50b9ca05aa231689da44c217cb524e7ebd39d264c56e2832f2c54e20"
+
+
+def sha256sum(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def checksum_is_valid(path):
+    return sha256sum(path) == MOVIELENS_1M_SHA256
+
+
+def open_download():
+    try:
+        return requests.get(MOVIELENS_1M_URL, stream=True, timeout=(15, 120))
+    except requests.exceptions.SSLError:
+        # GroupLens has occasionally served an expired TLS certificate. The
+        # immutable archive is still authenticated below with a pinned hash.
+        print("WARNING: GroupLens TLS verification failed; retrying with pinned SHA-256 verification.")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", InsecureRequestWarning)
+            return requests.get(
+                MOVIELENS_1M_URL,
+                stream=True,
+                timeout=(15, 120),
+                verify=False,
+            )
+
 
 def download_movielens(output_dir):
     zip_path = os.path.join(output_dir, MOVIELENS_1M_FILENAME)
-    
-    if os.path.exists(zip_path):
+
+    if os.path.exists(zip_path) and checksum_is_valid(zip_path):
         print(f"MovieLens-1M zip file already exists: {zip_path}")
     else:
+        if os.path.exists(zip_path):
+            print(f"Existing archive failed checksum verification; downloading it again: {zip_path}")
         print(f"Downloading MovieLens-1M dataset from {MOVIELENS_1M_URL}...")
-        response = requests.get(MOVIELENS_1M_URL, stream=True)
-        response.raise_for_status()
-        
-        with open(zip_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"Download completed: {zip_path}")
-    
+        temp_path = None
+        try:
+            with open_download() as response:
+                response.raise_for_status()
+                with tempfile.NamedTemporaryFile(dir=output_dir, delete=False) as file:
+                    temp_path = file.name
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            file.write(chunk)
+
+            if not checksum_is_valid(temp_path):
+                raise RuntimeError("MovieLens-1M archive SHA-256 verification failed")
+            os.replace(temp_path, zip_path)
+            temp_path = None
+            print(f"Download and SHA-256 verification completed: {zip_path}")
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
     return zip_path
 
 def extract_movielens(zip_path, output_dir):

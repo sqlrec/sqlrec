@@ -4,7 +4,15 @@
 
 ## 系统要求
 
-部署脚本面向 AMD64 Linux；脚本依赖 Bash、Docker、kubectl 和 Helm。Minikube 方案会自动安装缺少的 Docker、Minikube 和 Helm，但生产环境应由运维统一管理这些组件。
+部署脚本支持 AMD64 Linux 和 Apple Silicon macOS 14 及以上版本。Linux 使用 Minikube Docker driver；macOS 使用 Minikube 1.37+、vfkit、vmnet-shared 网络和 VirtioFS 挂载。生产环境应由运维统一管理 Kubernetes 及相关依赖。
+
+macOS 不需要安装 Docker Desktop。部署脚本会通过 Homebrew 安装缺少的命令行依赖，等效命令如下：
+
+```bash
+brew install minikube vfkit docker docker-buildx helm gettext libpq
+```
+
+部署脚本还会配置 Homebrew Buildx 插件，并按照 [Minikube vfkit 官方文档](https://minikube.sigs.k8s.io/docs/drivers/vfkit/)中对应 macOS 版本的方式安装 `vmnet-helper`。
 
 Minikube 示例把磁盘配额设为 256GB，并且会同时启动多个依赖服务；实际内存和磁盘需求取决于启用的组件及数据量，不能把 32GB/256GB 视为生产环境的固定规格。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
 
@@ -41,6 +49,9 @@ bash ./bin/beeline.sh
 **注意事项**：
 - 上述基于 Minikube 的部署方案仅用于测试
 - 如果需要重新部署，可以先通过 `minikube delete` 删除集群
+- 部署成功后，工作负载镜像会保存到 `deploy/data/image-cache/<arch>`；重新创建集群时会自动加载
+- macOS 默认给 Minikube 分配 8 CPU、24GB 内存和 256GB 磁盘，可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖
+- 主机、Pod 和共享配置统一通过 `minikube ip` 返回的 `NODE_IP` 访问 NodePort；不保证局域网其他机器通过宿主机物理 IP 访问
 - 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
 - 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`
 - `deploy_components.sh` 默认部署 PostgreSQL、MinIO/JuiceFS、Hadoop、HMS、Flink、Spark、SQLRec，以及 Kafka、Redis、Milvus；HDFS、MongoDB、Kyuubi、Jupyter、监控等组件需单独启用对应脚本
@@ -203,7 +214,7 @@ SQLRec 提供了两个镜像构建脚本：
 | `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
 | `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) 训练/推理镜像（CPU 版本） |
 
-镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`（默认 `0.1.10`），可在执行前通过环境变量覆盖。
+镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`（默认 `0.1.11`），可在执行前通过环境变量覆盖。
 
 **构建步骤**：
 
@@ -228,6 +239,8 @@ if command -v minikube >/dev/null 2>&1; then
   eval $(minikube -p minikube docker-env)
 fi
 ```
+
+macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。当前 GBDT Dockerfile 仍包含 x86_64 原生依赖，tzrec 基础镜像的 ARM64 支持也未确认；这两个模型镜像暂不属于 macOS ARM64核心部署的保证范围。
 
 **手动构建**：
 

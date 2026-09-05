@@ -1,8 +1,7 @@
 #!/bin/bash
 set -ex
 shopt -s expand_aliases
-source ~/.bash_profile
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source ${dir}/../env.sh
 
 export POSTGRESQL_DB=$1
@@ -15,3 +14,4 @@ export POSTGRESQL_PASSWORD_BASE64=$(echo -n $4 | base64)
 envsubst < ${dir}/pg.yaml > ${dir}/pg.yaml.${POSTGRESQL_DB}
 kubectl apply -f ${dir}/pg.yaml.${POSTGRESQL_DB} -n ${NAMESPACE}
 kubectl wait --for=condition=Ready cluster/${POSTGRESQL_DB}-postgresql --timeout=${DEPLOY_TIMEOUT}s -n ${NAMESPACE}
+rm ${dir}/pg.yaml.${POSTGRESQL_DB}

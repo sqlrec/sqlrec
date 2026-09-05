@@ -1,13 +1,12 @@
 #!/bin/bash
 set -ex
 shopt -s expand_aliases
-source ~/.bash_profile
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source ${dir}/../env.sh
 
 # Only substitute the env.sh variables; shell variables inside container
 # commands (e.g. ${POD_NAME}, ${PORT}) must be preserved for runtime.
-ENVSUBST_VARS='${NAMESPACE} ${VALKEY_VERSION} ${NODE_IP} ${HOST_IP} ${REDIS_CLUSTER_BASE_PORT} ${REDIS_CLUSTER_NODES}'
+ENVSUBST_VARS='${NAMESPACE} ${VALKEY_VERSION} ${NODE_IP} ${REDIS_CLUSTER_BASE_PORT} ${REDIS_CLUSTER_NODES}'
 envsubst "${ENVSUBST_VARS}" \
   < ${dir}/redis-cluster.yaml > ${dir}/redis-cluster.yaml.tmp
 

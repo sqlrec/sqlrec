@@ -1,8 +1,7 @@
 #!/bin/bash
 set -ex
 shopt -s expand_aliases
-source ~/.bash_profile
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source ${dir}/../env.sh
 
 # refer to https://docs.opensearch.org.cn/docs/latest/install-and-configure/install-opensearch/helm/

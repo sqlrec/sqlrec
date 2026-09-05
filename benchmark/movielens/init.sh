@@ -9,12 +9,36 @@ source ${BASE_DIR}/env.sh
 bash ${BASE_DIR}/kyuubi/deploy.sh
 
 
-if ! which wrk > /dev/null 2>&1; then
-    echo "wrk not found, installing..."
-    sudo apt-get update
-    sudo apt-get install -y wrk
-else
+if command -v wrk >/dev/null 2>&1; then
     echo "wrk is already installed"
+else
+    echo "wrk not found, installing..."
+    case "${DEPLOY_OS}" in
+        darwin)
+            if ! command -v brew >/dev/null 2>&1; then
+                echo "ERROR: Homebrew is required to install wrk on macOS." >&2
+                exit 1
+            fi
+            brew install wrk
+            ;;
+        linux)
+            if ! command -v apt-get >/dev/null 2>&1; then
+                echo "ERROR: automatic wrk installation currently requires apt-get on Linux." >&2
+                exit 1
+            fi
+            sudo apt-get update
+            sudo apt-get install -y wrk
+            ;;
+        *)
+            echo "ERROR: unsupported operating system: ${DEPLOY_OS}" >&2
+            exit 1
+            ;;
+    esac
+
+    if ! command -v wrk >/dev/null 2>&1; then
+        echo "ERROR: wrk is still unavailable after installation." >&2
+        exit 1
+    fi
 fi
 
 
@@ -79,7 +103,8 @@ curl --request POST \
 
 python3 -m venv ${dir}/.venv
 source ${dir}/.venv/bin/activate
-pip install -r ${dir}/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r ${dir}/requirements.txt
 python ${dir}/download_data.py
 
 HDFS_WAREHOUSE_DIR="/user/hive/warehouse"

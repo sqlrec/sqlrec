@@ -47,3 +47,8 @@ __pycache__/
 /docs/.vitepress/dist/
 .flattened-pom.xml
 /sqlrec-flink/derby.log
+
+.venv
+*.parquet
+*.zip
+ml-1m

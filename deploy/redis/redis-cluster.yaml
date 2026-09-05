@@ -66,7 +66,7 @@ spec:
         - name: BASE_PORT
           value: "${REDIS_CLUSTER_BASE_PORT}"
         - name: ANNOUNCE_IP
-          value: "${HOST_IP}"
+          value: "${NODE_IP}"
         volumeMounts:
         - name: data
           mountPath: /data

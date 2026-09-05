@@ -30,7 +30,7 @@ spec:
             - name: MODEL_BASE_PATH
               value: /user/sqlrec/models
             - name: JAVA_HOME
-              value: ${JAVA_HOME}
+              value: ${CONTAINER_JAVA_HOME}
             - name: HADOOP_HOME
               value: ${HADOOP_HOME}
             - name: CLASSPATH

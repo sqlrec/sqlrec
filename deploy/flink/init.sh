@@ -1,15 +1,15 @@
 set -ex
 
 if [ ! -f "${LIB_DIR}/${FLINK_HADOOP_JAR_NAME}" ];then
-  wget -P "${LIB_DIR}" "${FLINK_HADOOP_JAR_URL}"
+  download_file "${FLINK_HADOOP_JAR_URL}" "${LIB_DIR}/${FLINK_HADOOP_JAR_NAME}"
 fi
 
 if [ ! -f "${LIB_DIR}/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}" ];then
-  wget -P "${LIB_DIR}" "${FLINK_SQL_CONNECTOR_HIVE_JAR_URL}"
+  download_file "${FLINK_SQL_CONNECTOR_HIVE_JAR_URL}" "${LIB_DIR}/${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}"
 fi
 
 if [ ! -f "${LIB_DIR}/${SQLREC_FLINK_JAR_NAME}" ];then
-  wget -P "${LIB_DIR}" "${SQLREC_FLINK_JAR_URL}"
+  download_file "${SQLREC_FLINK_JAR_URL}" "${LIB_DIR}/${SQLREC_FLINK_JAR_NAME}"
 fi
 
 helm repo add flink-operator-repo https://dlcdn.apache.org/flink/flink-kubernetes-operator-1.12.1/

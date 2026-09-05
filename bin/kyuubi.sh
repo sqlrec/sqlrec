@@ -1,7 +1,6 @@
 #!/bin/bash
 shopt -s expand_aliases
-source ~/.bash_profile
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 
 export BASE_DIR=$(dirname ${dir})/deploy
 source ${dir}/../deploy/env.sh

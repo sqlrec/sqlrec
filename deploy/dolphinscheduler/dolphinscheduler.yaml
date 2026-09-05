@@ -52,7 +52,7 @@ spec:
         - name: SPARK_HOME
           value: "${SPARK_HOME}"
         - name: JAVA_HOME
-          value: "${JAVA_HOME}"
+          value: "${CONTAINER_JAVA_HOME}"
         volumeMounts:
         - mountPath: ${CLIENT_DIR}
           name: client-dir

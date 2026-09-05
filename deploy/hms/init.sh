@@ -1,11 +1,11 @@
 set -ex
 
 if [ ! -f ${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME} ]; then
-  wget -P ${LIB_DIR} ${POSTGRESQL_CONNECTOR_JAR_URL}
+  download_file "${POSTGRESQL_CONNECTOR_JAR_URL}" "${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME}"
 fi
 
 if [ ! -f ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} ]; then
-  wget -P ${CLIENT_DIR} ${HIVE_CLIENT_URL}
+  download_file "${HIVE_CLIENT_URL}" "${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME}"
 fi
 
 if [ ! -e ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME} ]; then

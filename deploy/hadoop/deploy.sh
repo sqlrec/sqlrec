@@ -1,8 +1,7 @@
 #!/bin/bash
 set -ex
 shopt -s expand_aliases
-source ~/.bash_profile
-dir=$(dirname $(realpath $0))
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source ${dir}/../env.sh
 
 envsubst < ${dir}/core-site.xml > ${CONF_DIR}/core-site.xml
@@ -15,7 +14,8 @@ hadoop fs -mkdir -p /etc
 echo "supergroup:0:hdfs,root,${USER}" > groups
 hadoop fs -put -f groups /etc
 rm groups
-sed -i 's/<!--//; s/-->//' ${CONF_DIR}/core-site.xml
+sed 's/<!--//; s/-->//' "${CONF_DIR}/core-site.xml" > "${CONF_DIR}/core-site.xml.tmp"
+mv "${CONF_DIR}/core-site.xml.tmp" "${CONF_DIR}/core-site.xml"
 
 cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
 
