@@ -85,7 +85,7 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
 
 下面的步骤会部署持久化元数据及完整示例所需的外部数据、计算和模型基础设施。部署完成后，可以在集群中复现与上述 Docker Demo 完全相同的 quick-start 表、SQL 函数和 API。
 
-SQLRec目前支持AMD64的Linux系统，后续会支持MacOS。注意，部署需要至少32GB的内存、256GB磁盘空间、可靠的互联网连接（如果使用加速器，注意使用tun模式）。
+SQLRec 目前支持 AMD64 和 ARM64 Linux，以及 Apple Silicon 芯片且版本不低于 14 的 macOS。Linux 使用 Minikube Docker driver；macOS 使用 Minikube 1.37+、vfkit、vmnet-shared 网络和 VirtioFS 挂载。部署需要至少 32GB 内存、256GB 磁盘空间和可靠的互联网连接（如果使用加速器，注意使用 tun 模式）。
 
 按下述命令部署SQLRec系统：
 
@@ -328,4 +328,3 @@ Transfer/sec:      2.93MB
 - GPU训练、推理支持
 - 支持认证、鉴权
 - 最佳实践教程，包括搜索、推荐等
-

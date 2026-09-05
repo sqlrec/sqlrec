@@ -32,8 +32,32 @@ find_vmnet_helper() {
 }
 
 install_linux_dependencies() {
-  if [ "${DEPLOY_ARCH}" != amd64 ]; then
-    echo "ERROR: the Linux deployment currently supports AMD64 only." >&2
+  local command_name
+  local missing_cli=false
+  for command_name in curl tar envsubst psql; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      missing_cli=true
+      break
+    fi
+  done
+
+  if [ "${missing_cli}" = true ]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y ca-certificates curl tar gzip gettext-base postgresql-client
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y ca-certificates curl tar gzip gettext postgresql
+    elif command -v yum >/dev/null 2>&1; then
+      sudo yum install -y ca-certificates curl tar gzip gettext postgresql
+    else
+      echo "ERROR: cannot install required Linux commands automatically." >&2
+      echo "Install curl, tar, envsubst, and psql, then rerun this script." >&2
+      exit 1
+    fi
+  fi
+
+  if ! require_commands curl tar envsubst psql; then
+    echo "ERROR: required Linux commands are still missing after installation." >&2
     exit 1
   fi
 
@@ -220,6 +244,22 @@ fi
 
 bash "${dir}/cache_images.sh" load
 minikube addons enable storage-provisioner-rancher
+
+# Rancher's default /opt/local-path-provisioner directory is not on Minikube's
+# list of paths persisted by VM drivers. Store dynamically provisioned volumes
+# below /data instead, which Minikube explicitly preserves across VM restarts.
+kubectl wait --for=create configmap/local-path-config \
+  --namespace=local-path-storage \
+  --timeout="${DEPLOY_TIMEOUT}s"
+kubectl patch configmap local-path-config \
+  --namespace=local-path-storage \
+  --type=merge \
+  --patch '{"data":{"config.json":"{\"nodePathMap\":[{\"node\":\"DEFAULT_PATH_FOR_NON_LISTED_NODES\",\"paths\":[\"/data/local-path-provisioner\"]}]}"}}'
+kubectl rollout restart deployment/local-path-provisioner \
+  --namespace=local-path-storage
+kubectl rollout status deployment/local-path-provisioner \
+  --namespace=local-path-storage \
+  --timeout="${DEPLOY_TIMEOUT}s"
 
 echo "Minikube is ready at ${NODE_IP}"
 echo 'deploy minikube done'

@@ -2,7 +2,7 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 export MONGODB_NAME=$1
 
@@ -11,5 +11,5 @@ if [ -z "${MONGODB_NAME}" ]; then
   exit 1
 fi
 
-envsubst < ${dir}/mongo.yaml > ${dir}/mongo.yaml.${MONGODB_NAME}
-kubectl delete -f ${dir}/mongo.yaml.${MONGODB_NAME} -n ${NAMESPACE} --ignore-not-found
+render_config "${dir}/mongo.yaml"
+kubectl delete -f "${dir}/mongo.yaml.tmp" -n ${NAMESPACE} --ignore-not-found

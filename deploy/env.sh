@@ -50,8 +50,29 @@ export MINIKUBE_URL="https://storage.googleapis.com/minikube/releases/latest/min
 export MINIKUBE_ARCH_NAME="minikube-linux-${DEPLOY_ARCH}"
 
 if [ "${DEPLOY_OS}" = darwin ]; then
-    export MINIKUBE_CPUS="${MINIKUBE_CPUS:-8}"
-    export MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-24576mb}"
+    export MINIKUBE_CPUS="${MINIKUBE_CPUS:-$(sysctl -n hw.physicalcpu)}"
+    export MINIKUBE_MEMORY_PERCENT="${MINIKUBE_MEMORY_PERCENT:-80}"
+    if [ -z "${MINIKUBE_MEMORY:-}" ]; then
+        case "${MINIKUBE_MEMORY_PERCENT}" in
+            ''|*[!0-9]*)
+                echo "ERROR: MINIKUBE_MEMORY_PERCENT must be an integer from 1 to 100." >&2
+                return 1 2>/dev/null || exit 1
+                ;;
+        esac
+        if [ "${MINIKUBE_MEMORY_PERCENT}" -lt 1 ] || [ "${MINIKUBE_MEMORY_PERCENT}" -gt 100 ]; then
+            echo "ERROR: MINIKUBE_MEMORY_PERCENT must be an integer from 1 to 100." >&2
+            return 1 2>/dev/null || exit 1
+        fi
+
+        if ! host_memory_bytes="$(sysctl -n hw.memsize)" || [ -z "${host_memory_bytes}" ]; then
+            echo "ERROR: unable to determine host memory with sysctl." >&2
+            return 1 2>/dev/null || exit 1
+        fi
+        host_memory_mb=$((host_memory_bytes / 1024 / 1024))
+        export MINIKUBE_MEMORY="$((host_memory_mb * MINIKUBE_MEMORY_PERCENT / 100))mb"
+    else
+        export MINIKUBE_MEMORY
+    fi
 else
     export MINIKUBE_CPUS="${MINIKUBE_CPUS:-no-limit}"
     export MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-no-limit}"
@@ -81,7 +102,7 @@ export HMS_POSTGRESQL_USER="${HMS_POSTGRESQL_USER:-metastore}"
 export HMS_POSTGRESQL_PASSWORD="${HMS_POSTGRESQL_PASSWORD:-abc123456}"
 export HMS_PORT="${HMS_PORT:-30008}"
 
-export KYUUBI_VERSION="${KYUUBI_VERSION:-1.9.0-spark}"
+export KYUUBI_VERSION="${KYUUBI_VERSION:-1.9.0}"
 export KYUUBI_PORT="${KYUUBI_PORT:-30009}"
 
 export FLINK_VERSION="${FLINK_VERSION:-1.19}"
@@ -207,6 +228,11 @@ export POSTGRESQL_CONNECTOR_JAR_NAME=postgresql-42.7.8.jar
 export SPARK_CLIENT_URL=https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz
 export SPARK_CLIENT_ARCH_NAME=spark-3.5.1-bin-hadoop3.tgz
 export SPARK_CLIENT_DIR_NAME=spark-3.5.1-bin-hadoop3
+export SPARK_IMAGE="${SPARK_IMAGE:-apache/spark:3.5.1-scala2.12-java17-python3-r-ubuntu}"
+
+export KYUUBI_CLIENT_URL="https://archive.apache.org/dist/kyuubi/kyuubi-${KYUUBI_VERSION}/apache-kyuubi-${KYUUBI_VERSION}-bin.tgz"
+export KYUUBI_CLIENT_ARCH_NAME="apache-kyuubi-${KYUUBI_VERSION}-bin.tgz"
+export KYUUBI_CLIENT_DIR_NAME="apache-kyuubi-${KYUUBI_VERSION}-bin"
 
 export JAVA_VERSION="8.472.08.1"
 if [ "${DEPLOY_OS}" = darwin ]; then
@@ -217,17 +243,23 @@ if [ "${DEPLOY_OS}" = darwin ]; then
     export CONTAINER_JAVA_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-linux-aarch64.tar.gz"
     export CONTAINER_JAVA_DIR_NAME="amazon-corretto-${JAVA_VERSION}-linux-aarch64"
 else
-    export JAVA_CLIENT_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-linux-x64.tar.gz"
-    export JAVA_CLIENT_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-linux-x64.tar.gz"
-    export JAVA_CLIENT_DIR_NAME="amazon-corretto-${JAVA_VERSION}-linux-x64"
+    case "${DEPLOY_ARCH}" in
+        amd64) JAVA_PLATFORM=linux-x64 ;;
+        arm64) JAVA_PLATFORM=linux-aarch64 ;;
+    esac
+    export JAVA_CLIENT_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}.tar.gz"
+    export JAVA_CLIENT_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}.tar.gz"
+    export JAVA_CLIENT_DIR_NAME="amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}"
     export CONTAINER_JAVA_URL="${JAVA_CLIENT_URL}"
     export CONTAINER_JAVA_ARCH_NAME="${JAVA_CLIENT_ARCH_NAME}"
     export CONTAINER_JAVA_DIR_NAME="${JAVA_CLIENT_DIR_NAME}"
+    unset JAVA_PLATFORM
 fi
 
 export HADOOP_HOME=${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
 export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
 export SPARK_HOME=${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}
+export KYUUBI_HOME=${CLIENT_DIR}/${KYUUBI_CLIENT_DIR_NAME}
 export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}
 export CONTAINER_JAVA_HOME=${CLIENT_DIR}/${CONTAINER_JAVA_DIR_NAME}
 export PATH=${PATH}:${CLIENT_DIR}:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${HIVE_HOME}/bin:${JAVA_HOME}/bin

@@ -4,7 +4,7 @@
 
 ## 系统要求
 
-部署脚本支持 AMD64 Linux 和 Apple Silicon macOS 14 及以上版本。Linux 使用 Minikube Docker driver；macOS 使用 Minikube 1.37+、vfkit、vmnet-shared 网络和 VirtioFS 挂载。生产环境应由运维统一管理 Kubernetes 及相关依赖。
+部署脚本支持 AMD64 和 ARM64 Linux，以及 Apple Silicon macOS 14 及以上版本。Linux 使用 Minikube Docker driver；macOS 使用 Minikube 1.37+、vfkit、vmnet-shared 网络和 VirtioFS 挂载。生产环境应由运维统一管理 Kubernetes 及相关依赖。
 
 macOS 不需要安装 Docker Desktop。部署脚本会通过 Homebrew 安装缺少的命令行依赖，等效命令如下：
 
@@ -50,7 +50,7 @@ bash ./bin/beeline.sh
 - 上述基于 Minikube 的部署方案仅用于测试
 - 如果需要重新部署，可以先通过 `minikube delete` 删除集群
 - 部署成功后，工作负载镜像会保存到 `deploy/data/image-cache/<arch>`；重新创建集群时会自动加载
-- macOS 默认给 Minikube 分配 8 CPU、24GB 内存和 256GB 磁盘，可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖
+- macOS 默认按宿主机物理核心数给 Minikube 分配 CPU、按宿主机总内存的 80% 分配内存，并分配 256GB 磁盘；可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY_PERCENT`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖，其中显式设置 `MINIKUBE_MEMORY` 时不再按比例计算
 - 主机、Pod 和共享配置统一通过 `minikube ip` 返回的 `NODE_IP` 访问 NodePort；不保证局域网其他机器通过宿主机物理 IP 访问
 - 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
 - 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`
@@ -240,7 +240,7 @@ if command -v minikube >/dev/null 2>&1; then
 fi
 ```
 
-macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。当前 GBDT Dockerfile 仍包含 x86_64 原生依赖，tzrec 基础镜像的 ARM64 支持也未确认；这两个模型镜像暂不属于 macOS ARM64核心部署的保证范围。
+macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。当前 GBDT Dockerfile 仍包含 x86_64 原生依赖，tzrec 基础镜像的 ARM64 支持也未确认；这两个模型镜像暂不属于 ARM64 核心部署的保证范围。
 
 **手动构建**：
 

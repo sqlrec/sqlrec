@@ -83,7 +83,7 @@ See the [Quick Start guide](https://sqlrec.github.io/sqlrec/en/docs/quick_start)
 ### Full Service Deployment (Optional)
 The steps below deploy persistent metadata and the external data, compute, and model infrastructure used by the complete examples. After deployment, you can reproduce the exact same quick-start tables, SQL function, and API as the Docker demo above.
 
-SQLRec supports AMD64 Linux and Apple Silicon macOS 14 or later. Linux uses the Minikube Docker driver. macOS uses Minikube 1.37+ with the vfkit driver, vmnet-shared networking, and VirtioFS mounts. The deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
+SQLRec supports AMD64 and ARM64 Linux, and Apple Silicon macOS 14 or later. Linux uses the Minikube Docker driver. macOS uses Minikube 1.37+ with the vfkit driver, vmnet-shared networking, and VirtioFS mounts. The deployment requires at least 32GB of memory, 256GB of disk space, and a reliable internet connection (if using an accelerator, make sure to use tun mode).
 
 On macOS, the deployment script installs missing command-line dependencies with Homebrew (Docker Desktop is not required). The equivalent command is:
 

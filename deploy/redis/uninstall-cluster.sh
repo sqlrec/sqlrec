@@ -2,13 +2,11 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 ENVSUBST_VARS='${NAMESPACE} ${VALKEY_VERSION} ${NODE_IP} ${REDIS_CLUSTER_BASE_PORT} ${REDIS_CLUSTER_NODES}'
-envsubst "${ENVSUBST_VARS}" \
-  < ${dir}/redis-cluster.yaml > ${dir}/redis-cluster.yaml.tmp
+render_config "${dir}/redis-cluster.yaml" "${ENVSUBST_VARS}"
 kubectl delete -f "${dir}/redis-cluster.yaml.tmp" -n "${NAMESPACE}" --ignore-not-found
-rm -f ${dir}/redis-cluster.yaml.tmp
 
 # Clean up PVCs created by the StatefulSet
 for i in $(seq 0 $((${REDIS_CLUSTER_NODES} - 1))); do

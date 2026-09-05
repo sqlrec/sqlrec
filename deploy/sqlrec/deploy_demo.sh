@@ -2,7 +2,7 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 DEFAULT_JAVA_TOOL_OPTIONS="-XX:+UseCompactObjectHeaders -XX:+UseStringDeduplication"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-${DEFAULT_JAVA_TOOL_OPTIONS}}"
@@ -14,5 +14,5 @@ export DEBUG_TRACE="${DEBUG_TRACE:-false}"
 export TRACE_ENDPOINT="${TRACE_ENDPOINT:-http://${NODE_IP}:${JAEGER_OTLP_GRPC_PORT}}"
 export TRACE_SERVICE_NAME="${TRACE_SERVICE_NAME:-sqlrec}"
 
-envsubst < ${dir}/demo.yaml > ${dir}/demo.yaml.tmp
-kubectl apply -f ${dir}/demo.yaml.tmp -n "${NAMESPACE}"
+render_config "${dir}/demo.yaml"
+kubectl apply -f "${dir}/demo.yaml.tmp" -n "${NAMESPACE}"

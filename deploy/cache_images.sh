@@ -38,8 +38,12 @@ save_images() {
 
   # Cache workload images that are actually present after a successful deploy.
   # Minikube already manages the Kubernetes system/preload images separately.
-  kubectl get pods --all-namespaces \
-    -o go-template='{{range .items}}{{if ne .metadata.namespace "kube-system"}}{{range .spec.initContainers}}{{printf "%s\n" .image}}{{end}}{{range .spec.containers}}{{printf "%s\n" .image}}{{end}}{{end}}{{end}}' |
+  {
+    kubectl get pods --all-namespaces \
+      -o go-template='{{range .items}}{{if ne .metadata.namespace "kube-system"}}{{range .spec.initContainers}}{{printf "%s\n" .image}}{{end}}{{range .spec.containers}}{{printf "%s\n" .image}}{{end}}{{end}}{{end}}'
+    # Spark driver/executor Pods are created only when the first query starts.
+    printf '%s\n' "${SPARK_IMAGE}"
+  } |
     sed '/^[[:space:]]*$/d' |
     sort -u > "${images_file}"
 

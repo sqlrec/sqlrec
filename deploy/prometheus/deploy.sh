@@ -2,7 +2,7 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n ${NAMESPACE} \
   --set grafana.service.type=NodePort \
@@ -10,18 +10,18 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n 
   --set prometheus.service.type=NodePort \
   --set prometheus.service.nodePort=${PROMETHEUS_PORT}
 
-envsubst < ${dir}/sqlrec-servicemonitor.yaml > ${dir}/sqlrec-servicemonitor.yaml.tmp
-kubectl apply -f ${dir}/sqlrec-servicemonitor.yaml.tmp -n "${NAMESPACE}"
+render_config "${dir}/sqlrec-servicemonitor.yaml"
+kubectl apply -f "${dir}/sqlrec-servicemonitor.yaml.tmp" -n "${NAMESPACE}"
 
 kubectl create configmap sqlrec-jvm-dashboard \
-  --from-file=jvm-grafana.json=${dir}/jvm_grafana.json \
+  --from-file="jvm-grafana.json=${dir}/jvm_grafana.json" \
   -n ${NAMESPACE} \
   --dry-run=client -o yaml | \
   kubectl label --local -f - grafana_dashboard=1 -o yaml | \
   kubectl apply -n ${NAMESPACE} -f -
 
 kubectl create configmap sqlrec-dashboard \
-  --from-file=sqlrec-grafana.json=${dir}/sqlrec_grafana.json \
+  --from-file="sqlrec-grafana.json=${dir}/sqlrec_grafana.json" \
   -n ${NAMESPACE} \
   --dry-run=client -o yaml | \
   kubectl label --local -f - grafana_dashboard=1 -o yaml | \

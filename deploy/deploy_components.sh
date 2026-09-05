@@ -2,7 +2,7 @@
 shopt -s expand_aliases
 set -ex
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/env.sh
+source "${dir}/env.sh"
 
 # check if NODE_IP is set
 if [ -z "${NODE_IP}" ]; then
@@ -18,37 +18,37 @@ if ! kubectl get namespace "${NAMESPACE}-milvus" >/dev/null 2>&1; then
   kubectl create namespace "${NAMESPACE}-milvus"
 fi
 
-envsubst < ${dir}/pv.yaml > ${dir}/pv.yaml.tmp
-kubectl apply -f ${dir}/pv.yaml.tmp -n ${NAMESPACE}
+render_config "${dir}/pv.yaml"
+kubectl apply -f "${dir}/pv.yaml.tmp" -n ${NAMESPACE}
 
 # juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
-cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/
-cp ${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME} ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/
+cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/"
+cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/"
 
-bash ${dir}/minio/deploy.sh
-bash ${dir}/juicefs/deploy.sh
-bash ${dir}/hadoop/deploy.sh
-bash ${dir}/hms/deploy.sh
-bash ${dir}/flink/deploy.sh
-bash ${dir}/spark/deploy.sh
+bash "${dir}/minio/deploy.sh"
+bash "${dir}/juicefs/deploy.sh"
+bash "${dir}/hadoop/deploy.sh"
+bash "${dir}/hms/deploy.sh"
+bash "${dir}/flink/deploy.sh"
+bash "${dir}/spark/deploy.sh"
 
-bash ${dir}/sqlrec/deploy.sh
+bash "${dir}/sqlrec/deploy.sh"
 
 # extra components, deploy them if needed
-bash ${dir}/kafka/deploy.sh
-bash ${dir}/redis/deploy.sh
-bash ${dir}/milvus/deploy.sh
-#bash ${dir}/hdfs/deploy.sh
-#bash ${dir}/mongodb/deploy_default.sh
-#bash ${dir}/kyuubi/deploy.sh
-#bash ${dir}/jupyter/deploy.sh
-#bash ${dir}/clickhouse/deploy.sh
-#bash ${dir}/growthbook/deploy.sh
-#bash ${dir}/prometheus/deploy.sh
-#bash ${dir}/jaeger/deploy.sh
+bash "${dir}/kafka/deploy.sh"
+bash "${dir}/redis/deploy.sh"
+bash "${dir}/milvus/deploy.sh"
+#bash "${dir}/hdfs/deploy.sh"
+#bash "${dir}/mongodb/deploy_default.sh"
+#bash "${dir}/kyuubi/deploy.sh"
+#bash "${dir}/jupyter/deploy.sh"
+#bash "${dir}/clickhouse/deploy.sh"
+#bash "${dir}/growthbook/deploy.sh"
+#bash "${dir}/prometheus/deploy.sh"
+#bash "${dir}/jaeger/deploy.sh"
 
-cp ${CONF_DIR}/* ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/
-cp ${CONF_DIR}/* ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/
-cp ${CONF_DIR}/* ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/"
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/"
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/"
 
 echo "deploy components done"

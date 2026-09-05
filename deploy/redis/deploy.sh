@@ -2,7 +2,7 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 helm upgrade --install valkey valkey/valkey \
   --namespace "${NAMESPACE}" \

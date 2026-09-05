@@ -31,6 +31,22 @@ require_commands() {
     fi
 }
 
+# Render a configuration template while keeping the generated file available
+# for troubleshooting. Templates use their real file extension and rendered
+# files consistently append .tmp (for example, config.yaml -> config.yaml.tmp).
+# An optional envsubst variable list can be supplied as the second argument.
+render_config() {
+    local template=$1
+    local variables=${2:-}
+    local rendered="${template}.tmp"
+
+    if [ -n "${variables}" ]; then
+        envsubst "${variables}" < "${template}" > "${rendered}"
+    else
+        envsubst < "${template}" > "${rendered}"
+    fi
+}
+
 version_at_least() {
     local actual=${1#v}
     local required=${2#v}
@@ -79,5 +95,5 @@ wait_for_job() {
 # the function definitions and does not provide the Bash-compatible export that
 # the deployment scripts need.
 if [ -n "${BASH_VERSION:-}" ]; then
-    export -f prepend_path download_file require_commands version_at_least wait_for_job
+    export -f prepend_path download_file require_commands render_config version_at_least wait_for_job
 fi

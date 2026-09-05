@@ -2,7 +2,7 @@
 set -ex
 shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
-source ${dir}/../env.sh
+source "${dir}/../env.sh"
 
 export POSTGRESQL_DB=$1
 
@@ -17,5 +17,5 @@ export POSTGRESQL_PASSWORD=$4
 export POSTGRESQL_OWNER_BASE64=$(echo -n $3 | base64)
 export POSTGRESQL_PASSWORD_BASE64=$(echo -n $4 | base64)
 
-envsubst < ${dir}/pg.yaml > ${dir}/pg.yaml.${POSTGRESQL_DB}
-kubectl delete -f ${dir}/pg.yaml.${POSTGRESQL_DB} -n ${NAMESPACE} --ignore-not-found
+envsubst < "${dir}/pg.yaml" > "${dir}/pg.${POSTGRESQL_DB}.yaml.tmp"
+kubectl delete -f "${dir}/pg.${POSTGRESQL_DB}.yaml.tmp" -n ${NAMESPACE} --ignore-not-found

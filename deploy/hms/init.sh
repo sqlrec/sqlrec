@@ -1,13 +1,13 @@
 set -ex
 
-if [ ! -f ${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME} ]; then
+if [ ! -f "${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME}" ]; then
   download_file "${POSTGRESQL_CONNECTOR_JAR_URL}" "${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME}"
 fi
 
-if [ ! -f ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} ]; then
+if [ ! -f "${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME}" ]; then
   download_file "${HIVE_CLIENT_URL}" "${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME}"
 fi
 
-if [ ! -e ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME} ]; then
-  tar -xzf ${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME} -C ${CLIENT_DIR}
+if [ ! -e "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}" ]; then
+  tar -xzf "${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME}" -C "${CLIENT_DIR}"
 fi
