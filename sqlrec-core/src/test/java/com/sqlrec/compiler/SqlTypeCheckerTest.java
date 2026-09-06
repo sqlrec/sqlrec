@@ -30,7 +30,7 @@ public class SqlTypeCheckerTest {
                 new SqlTestCase("use `default`", Arrays.asList(), Arrays.asList()),
                 new SqlTestCase("select * from db1.t1", Arrays.asList("db1.t1"), Arrays.asList()),
                 new SqlTestCase("select * from ( select * from db1.t1) t", Arrays.asList("db1.t1"), Arrays.asList()),
-                new SqlTestCase("SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME", Arrays.asList("myTable"), Arrays.asList()),
+                new SqlTestCase("SELECT NAME, count(*) as cnt FROM myTable where ID > 1 group by NAME", Arrays.asList("mytable"), Arrays.asList()),
                 new SqlTestCase("select * from t1 union select * from t2 union select * from t3", Arrays.asList("t1", "t2", "t3"), Arrays.asList()),
                 new SqlTestCase("select * from t1 join t2 on t1.id = t2.id", Arrays.asList("t1", "t2"), Arrays.asList()),
                 new SqlTestCase("update t1 SET column1 = value1 where id = 1", Arrays.asList("t1"), Arrays.asList("t1")),

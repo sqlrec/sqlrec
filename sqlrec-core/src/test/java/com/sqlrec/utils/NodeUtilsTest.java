@@ -37,6 +37,39 @@ public class NodeUtilsTest {
     }
 
     @Test
+    public void testGetTableFromSqlNodeWithAliases() throws Exception {
+        SqlNode sqlNode = CompileManager.parseFlinkSql(
+                "select * from My_Table as mt join Other_Table as ot on mt.id = ot.id"
+        );
+
+        List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);
+
+        assertEquals(2, result.size());
+        assertTrue(result.contains("my_table"));
+        assertTrue(result.contains("other_table"));
+        assertFalse(result.contains("mt"));
+        assertFalse(result.contains("ot"));
+    }
+
+    @Test
+    public void testGetTableFromSqlNodeWithAliasedSubquery() throws Exception {
+        SqlNode sqlNode = CompileManager.parseFlinkSql(
+                "select * from (select * from Nested_Table) as nested_alias"
+        );
+
+        List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);
+
+        assertEquals(List.of("nested_table"), result);
+    }
+
+    @Test
+    public void testGetTableFromSqlNodeNormalizesQualifiedName() throws Exception {
+        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from My_Db.My_Table as mt");
+
+        assertEquals(List.of("my_db.my_table"), NodeUtils.getTableFromSqlNode(sqlNode));
+    }
+
+    @Test
     public void testGetTableFromSqlNodeWithInsert() throws Exception {
         SqlNode sqlNode = CompileManager.parseFlinkSql("insert into target_table select * from source_table");
         List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);

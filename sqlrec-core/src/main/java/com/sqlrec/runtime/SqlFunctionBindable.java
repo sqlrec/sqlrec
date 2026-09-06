@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.utils.ExecutorServiceUtils;
+import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.TopologicalSortUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -168,9 +169,12 @@ public class SqlFunctionBindable extends BindableInterface {
         Set<String> cacheTableNames = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
-                cacheTableNames.add(bindable.getCacheTableName());
+                cacheTableNames.add(NodeUtils.normalizeTableName(bindable.getCacheTableName()));
             }
-            Set<String> bindableTables = new HashSet<>(tableFunction.apply(bindable));
+            Set<String> bindableTables = new HashSet<>();
+            for (String tableName : tableFunction.apply(bindable)) {
+                bindableTables.add(NodeUtils.normalizeTableName(tableName));
+            }
             bindableTables.removeAll(cacheTableNames);
             resultTables.addAll(bindableTables);
         }

@@ -42,10 +42,10 @@ public class CalciteBindable extends BindableInterface {
         this.physicalPlan = physicalPlan;
         this.javaExpression = javaExpression;
 
-        List<String> readTables = NodeUtils.getTableFromSqlNode(sqlNode);
+        List<String> readTables = NodeUtils.getTableFromRelNode(bestExp);
         this.readTables = new HashSet<>(readTables);
 
-        List<String> writeTables = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
+        List<String> writeTables = NodeUtils.getModifyTablesFromRelNode(bestExp);
         this.writeTables = new HashSet<>(writeTables);
     }
 

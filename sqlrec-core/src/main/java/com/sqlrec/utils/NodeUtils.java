@@ -5,6 +5,8 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelVisitor;
+import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
@@ -18,6 +20,7 @@ import org.apache.calcite.sql.util.SqlBasicVisitor;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class NodeUtils {
@@ -132,9 +135,6 @@ public class NodeUtils {
     }
 
     public static List<String> getTableFromSqlNode(SqlNode flinkSqlNode) {
-        // This intentionally follows the existing lightweight AST traversal.
-        // It may miss tables hidden behind subqueries, CTEs, aliases, table
-        // functions, nested set operations, or other FROM-clause wrappers.
         List<String> tableNames = new ArrayList<>();
         if (flinkSqlNode == null) {
             return tableNames;
@@ -143,7 +143,15 @@ public class NodeUtils {
         class TableNameVisitor extends SqlBasicVisitor<Void> {
             @Override
             public Void visit(SqlCall call) {
-                tryGetTable(call, tableNames);
+                // SELECT owns traversal of its FROM tree. JOIN/AS nodes are then
+                // visited by Calcite as well, so processing them again here would
+                // report every table more than once.
+                if (call instanceof SqlSelect
+                        || call instanceof SqlInsert
+                        || call instanceof SqlUpdate
+                        || call instanceof SqlDelete) {
+                    tryGetTable(call, tableNames);
+                }
                 return super.visit(call);
             }
         }
@@ -181,9 +189,45 @@ public class NodeUtils {
     private static void tryGetTableNameFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
         if (sqlNode instanceof SqlIdentifier) {
             SqlIdentifier sqlIdentifier = (SqlIdentifier) sqlNode;
-            String tableName = sqlIdentifier.toString();
-            tableNames.add(tableName);
+            tableNames.add(normalizeTableName(sqlIdentifier.names));
+        } else if (sqlNode instanceof SqlJoin) {
+            SqlJoin join = (SqlJoin) sqlNode;
+            tryGetTableNameFromSqlNode(join.getLeft(), tableNames);
+            tryGetTableNameFromSqlNode(join.getRight(), tableNames);
+        } else if (sqlNode instanceof SqlSelect) {
+            // A nested SELECT is visited independently by TableNameVisitor.
+            return;
+        } else if (sqlNode instanceof SqlCall) {
+            SqlCall call = (SqlCall) sqlNode;
+            if (call.getKind() == SqlKind.AS && !call.getOperandList().isEmpty()) {
+                // A table alias wraps the actual table/query in operand 0. Do not visit
+                // the alias identifier itself, since it is not a table dependency.
+                tryGetTableNameFromSqlNode(call.getOperandList().get(0), tableNames);
+            }
         }
+    }
+
+    /**
+     * Extracts read dependencies from a validated relational plan. Unlike the SQL
+     * AST, table scans in the relational plan are unaffected by aliases and query
+     * wrappers.
+     */
+    public static List<String> getTableFromRelNode(RelNode relNode) {
+        List<String> tableNames = new ArrayList<>();
+        if (relNode == null) {
+            return tableNames;
+        }
+
+        new RelVisitor() {
+            @Override
+            public void visit(RelNode node, int ordinal, RelNode parent) {
+                if (node instanceof TableScan) {
+                    tableNames.add(normalizeTableName(((TableScan) node).getTable().getQualifiedName()));
+                }
+                super.visit(node, ordinal, parent);
+            }
+        }.go(relNode);
+        return tableNames;
     }
 
     public static List<String> getModifyTablesFromSqlNode(SqlNode flinkSqlNode) {
@@ -221,5 +265,32 @@ public class NodeUtils {
             SqlDelete sqlDelete = (SqlDelete) sqlNode;
             tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
         }
+    }
+
+    /** Extracts write targets from a validated relational plan. */
+    public static List<String> getModifyTablesFromRelNode(RelNode relNode) {
+        List<String> tableNames = new ArrayList<>();
+        if (relNode == null) {
+            return tableNames;
+        }
+
+        new RelVisitor() {
+            @Override
+            public void visit(RelNode node, int ordinal, RelNode parent) {
+                if (node instanceof TableModify) {
+                    tableNames.add(normalizeTableName(((TableModify) node).getTable().getQualifiedName()));
+                }
+                super.visit(node, ordinal, parent);
+            }
+        }.go(relNode);
+        return tableNames;
+    }
+
+    public static String normalizeTableName(String tableName) {
+        return tableName == null ? null : tableName.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeTableName(List<String> qualifiedName) {
+        return normalizeTableName(String.join(".", qualifiedName));
     }
 }

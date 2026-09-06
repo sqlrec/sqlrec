@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -89,7 +90,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
     @Override
     public Set<String> getReadTables() {
         Set<String> readTables = new HashSet<>(sqlFunctionBindable.getReadTables());
-        readTables.addAll(inputTables);
+        inputTables.stream().map(NodeUtils::normalizeTableName).forEach(readTables::add);
         readTables.removeAll(getPlaceholdersTableNames());
         return readTables;
     }
@@ -102,7 +103,10 @@ public class CallSqlFunctionBindable extends BindableInterface {
     }
 
     private List<String> getPlaceholdersTableNames() {
-        return tablePlaceholders.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+        return tablePlaceholders.stream()
+                .map(Map.Entry::getKey)
+                .map(NodeUtils::normalizeTableName)
+                .collect(Collectors.toList());
     }
 
     @Override

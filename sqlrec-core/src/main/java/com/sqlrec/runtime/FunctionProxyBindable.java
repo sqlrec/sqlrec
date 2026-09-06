@@ -9,6 +9,7 @@ import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.ExecutorServiceUtils;
+import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -82,7 +83,9 @@ public class FunctionProxyBindable extends BindableInterface {
             boolean found = false;
             if (inputList != null) {
                 for (SqlNode input : inputList) {
-                    if (input instanceof SqlIdentifier && ((SqlIdentifier) input).getSimple().equals(this.partitionBy)) {
+                    if (input instanceof SqlIdentifier
+                            && NodeUtils.normalizeTableName(((SqlIdentifier) input).getSimple())
+                            .equals(NodeUtils.normalizeTableName(this.partitionBy))) {
                         found = true;
                         break;
                     }
@@ -215,7 +218,8 @@ public class FunctionProxyBindable extends BindableInterface {
                 for (String tableName : schema.getTableNames()) {
                     CalciteSchema.TableEntry entry = schema.getTable(tableName, false);
                     if (entry.getTable() instanceof CacheTable) {
-                        if (tableName.equals(partitionBy)) {
+                        if (NodeUtils.normalizeTableName(tableName)
+                                .equals(NodeUtils.normalizeTableName(partitionBy))) {
                             partitionSchema.add(tableName, new CacheTable(tableName, Linq4j.asEnumerable(partitionRows), fields));
                         } else {
                             partitionSchema.add(tableName, entry.getTable());
@@ -327,7 +331,15 @@ public class FunctionProxyBindable extends BindableInterface {
         if (delegate != null) {
             return delegate.getReadTables();
         }
-        return Set.of();
+        Set<String> readTables = new HashSet<>();
+        if (inputList != null) {
+            for (SqlNode input : inputList) {
+                if (input instanceof SqlIdentifier) {
+                    readTables.add(NodeUtils.normalizeTableName(((SqlIdentifier) input).getSimple()));
+                }
+            }
+        }
+        return readTables;
     }
 
     @Override

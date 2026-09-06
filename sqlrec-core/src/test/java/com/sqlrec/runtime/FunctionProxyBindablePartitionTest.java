@@ -106,6 +106,24 @@ public class FunctionProxyBindablePartitionTest {
                         )
                 ),
 
+                // table identity is case-insensitive during validation and partition replacement
+                new SqlTestCase(
+                        "cache table MixedCaseTable as select * from myTable",
+                        Arrays.<Object[]>asList(new Object[]{"MixedCaseTable", 3L})
+                ),
+                new SqlTestCase(
+                        "cache table r6 as call partition_echo_fun(mixedcasetable) " +
+                                "partition by MIXEDCASETABLE size 2",
+                        Arrays.<Object[]>asList(new Object[]{"r6", 2L})
+                ),
+                new SqlTestCase(
+                        "select * from r6",
+                        Arrays.asList(
+                                new Object[]{2},
+                                new Object[]{1}
+                        )
+                ),
+
                 // partition by table not in input -> should fail
                 new SqlTestCase(
                         "call partition_echo_fun(t1) partition by t2 size 1",

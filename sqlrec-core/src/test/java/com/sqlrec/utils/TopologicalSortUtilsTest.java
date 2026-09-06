@@ -1,9 +1,10 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.runtime.BindableInterface;
-import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import com.sqlrec.runtime.SqlFunctionBindable;
+import com.sqlrec.schema.ConcurrentCalciteSchema;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -71,6 +72,18 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
+    public void testTopologicalSortDoesNotMutateDependency() {
+        Map<Integer, Set<Integer>> dependency = new HashMap<>();
+        dependency.put(0, new HashSet<>());
+        dependency.put(1, new HashSet<>(Set.of(0)));
+
+        TopologicalSortUtils.topologicalSort(dependency);
+
+        assertEquals(Set.of(), dependency.get(0));
+        assertEquals(Set.of(0), dependency.get(1));
+    }
+
+    @Test
     public void testGetReverseBindableDependency() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
@@ -91,109 +104,266 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testBuildBindableDependencyWithNoDependencies() {
-        List<BindableInterface> bindableList = new ArrayList<>();
-        bindableList.add(createTestBindable(true, Set.of("t1"), Set.of("t2")));
-        bindableList.add(createTestBindable(true, Set.of("t3"), Set.of("t4")));
+    public void testGetReverseBindableDependencyWithNoEdges() {
+        Map<Integer, Set<Integer>> dependency = new HashMap<>();
+        dependency.put(0, Set.of());
+        dependency.put(1, Set.of());
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
+        assertTrue(TopologicalSortUtils.getReverseBindableDependency(dependency).isEmpty());
+    }
 
-        assertNotNull(dependency);
-        assertEquals(2, dependency.size());
+    @Test
+    public void testTopologicalSortWithMinimalSqlFunction() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION minimal_function",
+                "RETURN"
+        ));
+
+        assertEquals(List.of(0), TopologicalSortUtils.topologicalSort(function.getBindableList()).getKey());
+        assertEquals(Set.of(), function.getBindableDependency().get(0));
+    }
+
+    @Test
+    public void testBuildBindableDependencyWithNoDependencies() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION independent_writes",
+                "CACHE TABLE t1 AS SELECT 1 AS id",
+                "CACHE TABLE t2 AS SELECT 2 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
         assertTrue(dependency.get(0).isEmpty());
         assertTrue(dependency.get(1).isEmpty());
     }
 
     @Test
-    public void testBuildBindableDependencyWithReadAfterWrite() {
-        List<BindableInterface> bindableList = new ArrayList<>();
-        bindableList.add(createTestBindable(true, Set.of(), Set.of("t1")));
-        bindableList.add(createTestBindable(true, Set.of("t1"), Set.of()));
+    public void testBuildBindableDependencyWithReadAfterWrite() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION read_after_write",
+                "CACHE TABLE t1 AS SELECT 1 AS id",
+                "SELECT * FROM t1",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
-
-        assertNotNull(dependency);
-        assertEquals(2, dependency.size());
         assertTrue(dependency.get(0).isEmpty());
-        assertEquals(1, dependency.get(1).size());
-        assertTrue(dependency.get(1).contains(0));
+        assertEquals(Set.of(0), dependency.get(1));
     }
 
     @Test
-    public void testBuildBindableDependencyWithWriteAfterWrite() {
-        List<BindableInterface> bindableList = new ArrayList<>();
-        bindableList.add(createTestBindable(true, Set.of(), Set.of("t1")));
-        bindableList.add(createTestBindable(true, Set.of(), Set.of("t1")));
+    public void testBuildBindableDependencyAllowsConcurrentReads() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION concurrent_reads",
+                "CACHE TABLE shared_table AS SELECT 1 AS id",
+                "SELECT * FROM shared_table",
+                "SELECT * FROM shared_table",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
-
-        assertNotNull(dependency);
-        assertEquals(2, dependency.size());
-        assertTrue(dependency.get(0).isEmpty());
-        assertEquals(1, dependency.get(1).size());
-        assertTrue(dependency.get(1).contains(0));
+        assertEquals(Set.of(), dependency.get(0));
+        assertEquals(Set.of(0), dependency.get(1));
+        assertEquals(Set.of(0), dependency.get(2));
+        assertFalse(dependency.get(2).contains(1));
     }
 
     @Test
-    public void testBuildBindableDependencyWithNonParallelizable() {
-        List<BindableInterface> bindableList = new ArrayList<>();
-        bindableList.add(createTestBindable(true, Set.of("t1"), Set.of("t2")));
-        bindableList.add(createTestBindable(false, Set.of("t3"), Set.of("t4")));
-        bindableList.add(createTestBindable(true, Set.of("t5"), Set.of("t6")));
+    public void testBuildBindableDependencyWithWriteAfterRead() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION write_after_read",
+                "DEFINE INPUT TABLE shared_table(id INT)",
+                "SELECT * FROM shared_table",
+                "CACHE TABLE shared_table AS SELECT 1 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
-
-        assertNotNull(dependency);
-        assertEquals(3, dependency.size());
-        assertTrue(dependency.get(0).isEmpty());
-        assertEquals(1, dependency.get(1).size());
-        assertTrue(dependency.get(1).contains(0));
-        assertEquals(1, dependency.get(2).size());
-        assertTrue(dependency.get(2).contains(1));
+        assertEquals(Set.of(0), dependency.get(1));
     }
 
     @Test
-    public void testReturnNodeIsAnExecutionBarrier() {
-        List<BindableInterface> bindableList = List.of(
-                createTestBindable(true, Set.of(), Set.of("left")),
-                createTestBindable(true, Set.of(), Set.of("right")),
-                createReturnBindable(Set.of()),
-                createTestBindable(true, Set.of(), Set.of("after"))
+    public void testBuildBindableDependencyDoesNotCreateSelfDependency() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION read_and_write_same_table",
+                "DEFINE INPUT TABLE shared_table(id INT)",
+                "CACHE TABLE shared_table AS SELECT * FROM shared_table",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertEquals(Set.of(), dependency.get(0));
+    }
+
+    @Test
+    public void testBuildBindableDependencyCollectsAllPriorReadersAndWriters() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION all_prior_accesses",
+                "DEFINE INPUT TABLE Shared_Table(id INT)",
+                "SELECT * FROM Shared_Table",
+                "CACHE TABLE shared_table AS SELECT 1 AS id",
+                "SELECT * FROM SHARED_TABLE",
+                "CACHE TABLE Shared_Table AS SELECT 2 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertEquals(Set.of(), dependency.get(0));
+        assertEquals(Set.of(0), dependency.get(1));
+        assertEquals(Set.of(1), dependency.get(2));
+        assertEquals(Set.of(0, 1, 2), dependency.get(3));
+    }
+
+    @Test
+    public void testBuildBindableDependencyIsCaseInsensitive() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION case_insensitive_dependency",
+                "CACHE TABLE Source_Table AS SELECT 1 AS id",
+                "SELECT * FROM source_table",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertEquals(Set.of(0), dependency.get(1));
+    }
+
+    @Test
+    public void testCompiledFunctionTracksAliasedCacheTableDependency() throws Exception {
+        SqlFunctionBindable function = compileFunction(
+                List.of(
+                        "CREATE SQL FUNCTION alias_dependency",
+                        "CACHE TABLE Source_Table AS SELECT 1 AS id",
+                        "CACHE TABLE result_cache AS SELECT * FROM source_table AS source_alias",
+                        "RETURN result_cache"
+                )
         );
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
-
-        assertEquals(Set.of(0, 1), dependency.get(2));
-        assertTrue(dependency.get(3).contains(2));
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(
-                TopologicalSortUtils.optimizeDependency(dependency)
-        );
-        assertTrue(sorted.indexOf(0) < sorted.indexOf(2));
-        assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
-        assertTrue(sorted.indexOf(2) < sorted.indexOf(3));
+        assertEquals(Set.of(0), function.getBindableDependency().get(1));
+        assertTrue(function.getBindableDependency().get(2).contains(1));
+        assertFalse(function.getAccessTables().contains("source_table"));
     }
 
     @Test
-    public void testProxyWrappedReturnStillActsAsExecutionBarrier() {
-        List<BindableInterface> bindableList = List.of(
-                createTestBindable(true, Set.of(), Set.of("before")),
-                new com.sqlrec.runtime.ProxyAllBindable(createReturnBindable(Set.of("before"))),
-                createTestBindable(true, Set.of(), Set.of("after"))
+    public void testCompiledFunctionTracksCacheTableThroughAliasedSubquery() throws Exception {
+        SqlFunctionBindable function = compileFunction(
+                List.of(
+                        "CREATE SQL FUNCTION subquery_dependency",
+                        "CACHE TABLE source_table AS SELECT 1 AS id",
+                        "CACHE TABLE result_cache AS SELECT * FROM (SELECT * FROM source_table) AS nested_source",
+                        "RETURN result_cache"
+                )
         );
 
-        Map<Integer, Set<Integer>> dependency = TopologicalSortUtils.buildBindableDependency(bindableList);
+        assertEquals(Set.of(0), function.getBindableDependency().get(1));
+    }
 
+    @Test
+    public void testDynamicAsyncFunctionTracksInputTableDependency() throws Exception {
+        SqlFunctionBindable function = compileFunction(
+                List.of(
+                        "CREATE SQL FUNCTION dynamic_async_dependency",
+                        "CACHE TABLE Source_Table AS SELECT 1 AS id",
+                        "CALL GET('function_name')(source_table) LIKE source_table ASYNC",
+                        "RETURN source_table"
+                )
+        );
+
+        assertEquals(Set.of("source_table"), function.getBindableList().get(1).getReadTables());
+        assertEquals(Set.of(0), function.getBindableDependency().get(1));
+    }
+
+    private SqlFunctionBindable compileFunction(List<String> sql) throws Exception {
+        FunctionCompiler compiler = new FunctionCompiler(
+                ConcurrentCalciteSchema.createRootSchema(),
+                new CompileManager()
+        );
+        compiler.compileAllSql(sql);
+        return compiler.getFunctionBindable();
+    }
+
+    @Test
+    public void testBuildBindableDependencyWithWriteAfterWrite() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION write_after_write",
+                "CACHE TABLE t1 AS SELECT 1 AS id",
+                "CACHE TABLE t1 AS SELECT 2 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertTrue(dependency.get(0).isEmpty());
+        assertEquals(Set.of(0), dependency.get(1));
+    }
+
+    @Test
+    public void testBuildBindableDependencyWithNonParallelizable() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION set_barrier",
+                "CACHE TABLE t1 AS SELECT 1 AS id",
+                "SET barrier_key=barrier_value",
+                "CACHE TABLE t2 AS SELECT 2 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertTrue(dependency.get(0).isEmpty());
         assertEquals(Set.of(0), dependency.get(1));
         assertEquals(Set.of(1), dependency.get(2));
     }
 
     @Test
-    public void testExceptionAnalysisIgnoresReturnControlEdges() {
-        List<BindableInterface> bindableList = List.of(
-                createTestBindable(true, Set.of(), Set.of("unused")),
-                createTestBindable(true, Set.of(), Set.of("result")),
-                createReturnBindable(Set.of("result"))
+    public void testReturnNodeIsAnExecutionBarrier() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION return_barrier",
+                "CACHE TABLE left_table AS SELECT 1 AS id",
+                "CACHE TABLE right_table AS SELECT 2 AS id",
+                "RETURN"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertEquals(Set.of(0, 1), dependency.get(2));
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(
+                TopologicalSortUtils.optimizeDependency(dependency)
         );
+        assertTrue(sorted.indexOf(0) < sorted.indexOf(2));
+        assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
+    }
+
+    @Test
+    public void testProxyWrappedNestedReturnStillActsAsExecutionBarrier() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION nested_return_barrier",
+                "CACHE TABLE before_table AS SELECT 1 AS id",
+                "IF (SELECT TRUE) THEN (RETURN SELECT 1 AS id)",
+                "CACHE TABLE after_table AS SELECT 2 AS id",
+                "RETURN after_table"
+        ));
+        Map<Integer, Set<Integer>> dependency =
+                TopologicalSortUtils.buildBindableDependency(function.getBindableList());
+
+        assertEquals(Set.of(0), dependency.get(1));
+        assertTrue(dependency.get(2).contains(1));
+    }
+
+    @Test
+    public void testExceptionAnalysisIgnoresReturnControlEdges() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION ignored_return_edges",
+                "CACHE TABLE unused_table AS SELECT 1 AS id",
+                "CACHE TABLE result_table AS SELECT 2 AS id",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
         List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
@@ -204,13 +374,16 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testExceptionAnalysisAllowsSourcesFeedingReturnedUnion() {
-        List<BindableInterface> bindableList = List.of(
-                createTestBindable(true, Set.of(), Set.of("left")),
-                createTestBindable(true, Set.of(), Set.of("right")),
-                createTestBindable(true, Set.of("left", "right"), Set.of("result"), true),
-                createReturnBindable(Set.of("result"))
-        );
+    public void testExceptionAnalysisAllowsSourcesFeedingReturnedUnion() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION returned_union",
+                "CACHE TABLE left_table AS SELECT 1 AS id",
+                "CACHE TABLE right_table AS SELECT 2 AS id",
+                "CACHE TABLE result_table AS " +
+                        "SELECT * FROM left_table UNION ALL SELECT * FROM right_table",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
         List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
@@ -222,11 +395,13 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testExceptionAnalysisTreatsEmptyReturnAsHavingNoDataProducer() {
-        List<BindableInterface> bindableList = List.of(
-                createTestBindable(true, Set.of(), Set.of("unused")),
-                createReturnBindable(Set.of())
-        );
+    public void testExceptionAnalysisTreatsEmptyReturnAsHavingNoDataProducer() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION empty_return",
+                "CACHE TABLE unused_table AS SELECT 1 AS id",
+                "RETURN"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
         List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
@@ -236,21 +411,67 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testTopologicalSortWithBindableList() {
-        List<BindableInterface> bindableList = new ArrayList<>();
-        bindableList.add(createTestBindable(true, Set.of(), Set.of("t1")));
-        bindableList.add(createTestBindable(true, Set.of("t1"), Set.of("t2")));
-        bindableList.add(createTestBindable(true, Set.of("t2"), Set.of()));
+    public void testExceptionAnalysisAllowsUnusedNonUnionChain() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION unused_chain",
+                "CACHE TABLE unused_source AS SELECT 1 AS id",
+                "CACHE TABLE unused_result AS SELECT * FROM unused_source",
+                "RETURN"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0));
+        assertTrue(unionSources.get(1));
+        assertFalse(unionSources.get(2));
+    }
+
+    @Test
+    public void testExceptionAnalysisDoesNotIgnoreSourceWithReturnedConsumer() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION shared_source_consumers",
+                "CACHE TABLE source_table AS SELECT 1 AS id",
+                "CACHE TABLE unused_table AS " +
+                        "SELECT * FROM source_table UNION ALL SELECT * FROM source_table",
+                "CACHE TABLE result_table AS SELECT * FROM source_table",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertFalse(unionSources.get(0), "one returned consumer makes the shared source non-ignorable");
+        assertTrue(unionSources.get(1), "the unused UNION branch remains ignorable");
+        assertFalse(unionSources.get(2));
+        assertFalse(unionSources.get(3));
+    }
+
+    @Test
+    public void testTopologicalSortWithSqlFunctionBindables() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION sorted_sql_bindables",
+                "CACHE TABLE t1 AS SELECT 1 AS id",
+                "CACHE TABLE t2 AS SELECT * FROM t1",
+                "SELECT * FROM t2",
+                "RETURN"
+        ));
 
         Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> result =
-                TopologicalSortUtils.topologicalSort(bindableList);
+                TopologicalSortUtils.topologicalSort(function.getBindableList());
 
         assertNotNull(result);
         assertNotNull(result.getKey());
         assertNotNull(result.getValue());
-        assertEquals(3, result.getKey().size());
+        assertEquals(4, result.getKey().size());
         assertTrue(result.getKey().indexOf(0) < result.getKey().indexOf(1));
         assertTrue(result.getKey().indexOf(1) < result.getKey().indexOf(2));
+        assertEquals(Set.of(), result.getValue().get(0));
+        assertEquals(Set.of(0), result.getValue().get(1));
+        assertEquals(Set.of(1), result.getValue().get(2));
+        assertEquals(Set.of(2), result.getValue().get(3));
     }
 
     @Test
@@ -430,9 +651,7 @@ public class TopologicalSortUtilsTest {
 
         TopologicalSortUtils.optimizeDependency(original);
 
-        assertEquals(2, original.get(2).size());
-        assertTrue(original.get(2).contains(0));
-        assertTrue(original.get(2).contains(1));
+        assertEquals(copy, original);
     }
 
     @Test
@@ -661,80 +880,4 @@ public class TopologicalSortUtilsTest {
         assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
     }
 
-    private BindableInterface createTestBindable(boolean parallelizable, Set<String> readTables, Set<String> writeTables) {
-        return createTestBindable(parallelizable, readTables, writeTables, false);
-    }
-
-    private BindableInterface createTestBindable(
-            boolean parallelizable,
-            Set<String> readTables,
-            Set<String> writeTables,
-            boolean union
-    ) {
-        return new BindableInterface() {
-            @Override
-            public Enumerable<Object[]> bind(CalciteSchema schema, com.sqlrec.common.runtime.ExecuteContext context) {
-                return null;
-            }
-
-            @Override
-            public List<RelDataTypeField> getReturnDataFields() {
-                return null;
-            }
-
-            @Override
-            public boolean isParallelizable() {
-                return parallelizable;
-            }
-
-            @Override
-            public Set<String> getReadTables() {
-                return readTables;
-            }
-
-            @Override
-            public Set<String> getWriteTables() {
-                return writeTables;
-            }
-
-            @Override
-            public boolean isUnionSql() {
-                return union;
-            }
-        };
-    }
-
-    private BindableInterface createReturnBindable(Set<String> readTables) {
-        return new BindableInterface() {
-            @Override
-            public Enumerable<Object[]> bind(CalciteSchema schema, com.sqlrec.common.runtime.ExecuteContext context) {
-                return null;
-            }
-
-            @Override
-            public List<RelDataTypeField> getReturnDataFields() {
-                return null;
-            }
-
-            @Override
-            public boolean isParallelizable() {
-                return true;
-            }
-
-            @Override
-            public boolean containsReturn() {
-                return true;
-            }
-
-            @Override
-            public Set<String> getReadTables() {
-                return readTables;
-            }
-
-            @Override
-            public Set<String> getWriteTables() {
-                return Set.of();
-            }
-        };
-    }
 }
