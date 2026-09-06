@@ -1,4 +1,4 @@
-export SQLREC_VERSION="${SQLREC_VERSION:-0.1.11}"
+export SQLREC_VERSION="${SQLREC_VERSION:-0.1.12}"
 
 # Resolve the sourced file without changing directories in zsh. An interactive
 # zsh may have a chpwd hook that writes to stdout; doing this via `cd` inside a
