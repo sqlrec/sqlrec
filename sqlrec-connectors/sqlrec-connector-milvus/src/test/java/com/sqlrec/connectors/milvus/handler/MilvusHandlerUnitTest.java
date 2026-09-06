@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.milvus.handler;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
@@ -17,10 +18,8 @@ import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.QueryReq;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
-import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
-import com.google.gson.JsonObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -203,6 +202,7 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
+    @SilenceLoggers(MilvusHandler.class)
     public void testScanRetriesOnConnectionFailure() {
         QueryResp.QueryResult result = mock(QueryResp.QueryResult.class);
         Map<String, Object> entity = new HashMap<>();
@@ -381,6 +381,7 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
+    @SilenceLoggers(MilvusHandler.class)
     public void testVectorSearchRetriesOnConnectionFailure() {
         SearchResp response = mock(SearchResp.class);
         when(response.getSearchResults()).thenReturn(Collections.emptyList());

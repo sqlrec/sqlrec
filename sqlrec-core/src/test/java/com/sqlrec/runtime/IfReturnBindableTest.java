@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -183,6 +184,7 @@ class IfReturnBindableTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinTimeoutDiscardsLateThenReturnAndKeepsElseReturn() throws Exception {
         CountDownLatch thenFinished = new CountDownLatch(1);
         BindableInterface slowValue = new ValueBindable(INT_FIELDS, 1) {
@@ -216,6 +218,7 @@ class IfReturnBindableTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinExceptionDiscardsThenStateAndFallsBackToElseReturn() {
         BindableInterface failure = new ValueBindable(INT_FIELDS, 1) {
             @Override
@@ -237,6 +240,7 @@ class IfReturnBindableTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinExceptionAfterTemporaryReturnStillKeepsElseReturn() {
         BindableInterface partialReturnThenFailure = new ValueBindable(INT_FIELDS, 1) {
             @Override

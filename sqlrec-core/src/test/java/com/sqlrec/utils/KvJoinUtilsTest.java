@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -48,6 +49,7 @@ public class KvJoinUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(KvJoinUtils.class)
     public void testKvJoinIgnoreQueryExceptionWhenEnabled() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
 
@@ -96,6 +98,7 @@ public class KvJoinUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(KvJoinUtils.class)
     public void testKvJoinPartialFailureWhenIgnoreEnabled() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
 

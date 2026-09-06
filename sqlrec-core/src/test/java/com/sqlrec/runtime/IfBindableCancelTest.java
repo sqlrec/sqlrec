@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -108,6 +109,7 @@ public class IfBindableCancelTest {
     // ==================== timein mode: timeout/failure cancels the then subtree ====================
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     public void testTimeinTimeoutFallsBackToElseAndCancelsThenSubtree() throws Exception {
         PollingBindable thenInner = new PollingBindable();
         AtomicBoolean elseExecuted = new AtomicBoolean(false);
@@ -150,6 +152,7 @@ public class IfBindableCancelTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     public void testTimeinThenExceptionFallsBackToElse() {
         AtomicBoolean thenExecuted = new AtomicBoolean(false);
         AtomicBoolean elseExecuted = new AtomicBoolean(false);

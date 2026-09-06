@@ -3,6 +3,7 @@ package com.sqlrec.connectors.milvus.flink;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
+import com.sqlrec.common.utils.SilenceLoggers;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.catalog.Column;
@@ -144,6 +145,7 @@ class MilvusSinkFunctionTest {
     }
 
     @Test
+    @SilenceLoggers(MilvusSinkFunction.class)
     void testAsyncFlushFailurePropagatesToCheckpoint() throws Exception {
         doThrow(new RuntimeException("milvus down")).when(mockHandler).addBatch(anyList());
 

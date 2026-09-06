@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.JavaFunctionUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -370,6 +371,7 @@ public class IfBindableTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     public void testIfTimeinWithJavaUDFTimeout() throws Exception {
         JavaFunctionUtils.registerTableFunction("default", "slow_func_udf", SlowFunction.class);
 

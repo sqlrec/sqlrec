@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -145,6 +146,7 @@ public class CacheTableBindableCancelTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     public void testRegularExceptionRecoveryIsOwnedByProxy() {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");

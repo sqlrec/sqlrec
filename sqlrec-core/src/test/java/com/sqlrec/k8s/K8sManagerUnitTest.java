@@ -1,5 +1,6 @@
 package com.sqlrec.k8s;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +80,7 @@ public class K8sManagerUnitTest {
     }
 
     @Test
+    @SilenceLoggers(K8sManager.class)
     public void testApplyYamlUsesInjectedClient() {
         // Non-empty YAML will call client.load(...).serverSideApply().
         // The fluent chain is not stubbed, so mock's load() returns null,

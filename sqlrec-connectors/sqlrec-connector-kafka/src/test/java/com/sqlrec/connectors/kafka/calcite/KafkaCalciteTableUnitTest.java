@@ -1,7 +1,9 @@
 package com.sqlrec.connectors.kafka.calcite;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
+import com.sqlrec.common.utils.SilenceLoggers;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
@@ -13,7 +15,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -115,6 +116,7 @@ public class KafkaCalciteTableUnitTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     public void testRemoveImplThrows() {
         KafkaCalciteTable.KafkaCollection collection =
                 new KafkaCalciteTable.KafkaCollection(table, config);
@@ -124,6 +126,7 @@ public class KafkaCalciteTableUnitTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     public void testAddImplWithProducerFailure() {
         KafkaCalciteTable.KafkaCollection collection =
                 new KafkaCalciteTable.KafkaCollection(table, config);
@@ -136,6 +139,7 @@ public class KafkaCalciteTableUnitTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     public void testAddImplWithNullRow() {
         KafkaCalciteTable.KafkaCollection collection =
                 new KafkaCalciteTable.KafkaCollection(table, config);

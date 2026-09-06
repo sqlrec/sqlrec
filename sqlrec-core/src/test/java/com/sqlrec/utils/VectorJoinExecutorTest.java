@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
@@ -167,6 +168,7 @@ public class VectorJoinExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(VectorJoinExecutor.class)
     public void ignoresLookupFailureWhenConfigured() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
         VectorSearchable rightTable = mock(VectorSearchable.class);

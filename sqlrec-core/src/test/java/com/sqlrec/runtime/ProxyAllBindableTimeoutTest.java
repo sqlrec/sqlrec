@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -194,6 +195,7 @@ public class ProxyAllBindableTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     public void testRegularExceptionOnTimedCacheNodeIsRecovered() {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
@@ -416,6 +418,7 @@ public class ProxyAllBindableTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     public void testCancellationDuringTimeoutRecoveryPreventsCacheWrite() throws Exception {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");

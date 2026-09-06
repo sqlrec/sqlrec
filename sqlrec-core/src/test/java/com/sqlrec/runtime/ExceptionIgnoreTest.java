@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -13,6 +14,7 @@ import java.util.List;
 
 public class ExceptionIgnoreTest {
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     public void testExceptionIgnore() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         CalciteSchemaFactory.setGlobalSchema(schema);

@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -204,6 +205,7 @@ public class CacheTableBindableTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     public void testIgnoreExceptionWithTimeout() throws Exception {
         ExecuteContext context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");

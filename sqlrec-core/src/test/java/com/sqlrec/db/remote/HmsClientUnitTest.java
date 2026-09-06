@@ -1,5 +1,6 @@
 package com.sqlrec.db.remote;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -143,6 +144,7 @@ public class HmsClientUnitTest {
     }
 
     @Test
+    @SilenceLoggers(HmsClient.class)
     public void testInvalidateClientCatchesCloseException() {
         // close() throws; invalidateClient should catch it and still set client to null
         doThrow(new RuntimeException("close failed")).when(mockClient).close();
