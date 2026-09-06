@@ -165,6 +165,18 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <environmentVariables>
+                        <!-- Keep all test runs independent of host-level
+                             /var/log permissions. -->
+                        <LOG_DIR>${project.build.directory}/logs</LOG_DIR>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -179,7 +191,6 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.5.4</version>
                         <configuration>
                             <excludedGroups>integration</excludedGroups>
                         </configuration>

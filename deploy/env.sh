@@ -1,7 +1,18 @@
 export SQLREC_VERSION="${SQLREC_VERSION:-0.1.11}"
 
-# BASH_SOURCE identifies a sourced file in Bash; zsh's %x is the fallback.
-export SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd -P)"
+# Resolve the sourced file without changing directories in zsh. An interactive
+# zsh may have a chpwd hook that writes to stdout; doing this via `cd` inside a
+# command substitution would capture that output and corrupt SCRIPT_DIR.
+if [ -n "${ZSH_VERSION:-}" ]; then
+    script_path="${(%):-%x}"
+    export SCRIPT_DIR="${script_path:A:h}"
+    unset script_path
+elif [ -n "${BASH_VERSION:-}" ]; then
+    export SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+else
+    echo "ERROR: deploy/env.sh must be sourced from Bash or zsh." >&2
+    return 1 2>/dev/null || exit 1
+fi
 export BASE_DIR="${BASE_DIR:-${SCRIPT_DIR}}"
 export DATA_DIR="${BASE_DIR}/data"
 export CONF_DIR="${DATA_DIR}/conf"

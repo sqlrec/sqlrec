@@ -1,6 +1,7 @@
 package com.sqlrec.udf.table;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -23,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("integration")
 public class GetGrowthbookFeaturesFunctionTest {
-    private static final String API_HOST = "http://192.168.1.5:30032";
+    private static final String API_HOST =
+            "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30032";
     private static final String CLIENT_KEY = "sdk-TXRZAkqm6avFjR";
     private static final String FEATURE_KEY = "test";
 

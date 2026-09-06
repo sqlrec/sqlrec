@@ -1,8 +1,5 @@
 SET table.sql-dialect = default;
 
-CREATE TEMPORARY FUNCTION random_vec AS 'com.sqlrec.udf.scalar.RandomVecFunction';
-CREATE TEMPORARY FUNCTION batch_call_service AS 'com.sqlrec.udf.udtf.BatchCallServiceUDTF';
-
 INSERT INTO user_table
 SELECT user_id, gender, age, occupation, zip_code
 FROM ml_users WHERE dt = '2024-01-01';
@@ -35,17 +32,78 @@ SELECT movie_id1, movie_id2, score
 FROM offline_itemcf_i2i WHERE dt = '2024-01-01'
 ORDER BY movie_id1, score;
 
+-- Use mock embeddings to exercise the Milvus write and vector search paths
+-- without training a model or calling a model service.
 INSERT INTO item_embedding
-SELECT 
-    r.long_map['movie_id'] AS id,
-    r.string_map['title'] AS title,
-    r.string_array_map['genres'] AS genres,
-    r.double_array_map['item_tower_emb'] AS embedding
-FROM ml_movies, LATERAL TABLE(batch_call_service(
-    'http://recall-service-item.sqlrec.svc.cluster.local:80/predict',
-    128, 
-    'movie_id', movie_id, 
-    'title', title, 
-    'genres', genres
-)) AS r
+SELECT
+    movie_id AS id,
+    title,
+    genres,
+    ARRAY[
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND(),
+        RAND()
+    ] AS embedding
+FROM ml_movies
 WHERE dt = '2024-01-01';

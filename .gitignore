@@ -40,6 +40,7 @@ deploy/data
 *.sh.tmp
 *.xml.tmp
 *.yaml.tmp
+*.sql.tmp
 dependency-reduced-pom.xml
 
 node_modules/

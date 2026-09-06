@@ -8,5 +8,5 @@ CREATE TABLE IF NOT EXISTS `user_table` (
   PRIMARY KEY (user_id)  NOT ENFORCED
 ) WITH (
   'connector' = 'redis',
-  'url' = 'redis://192.168.1.5:30017/0'
+  'url' = 'redis://${DEFAULT_TEST_IP}:30017/0'
 );

@@ -8,6 +8,13 @@ public class SqlRecConfigs {
             null,
             String.class
     );
+    public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
+            "DEFAULT_TEST_IP",
+            "192.168.64.2",
+            "default test ip",
+            null,
+            String.class
+    );
 
     // service network config
     public static final ConfigOption<Boolean> ENABLE_REST_SERVER = new ConfigOption<>(
@@ -113,7 +120,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> TRACE_ENDPOINT = new ConfigOption<>(
             "TRACE_ENDPOINT",
-            "http://localhost:4317",
+            "http://" + DEFAULT_TEST_IP.getValue() + ":4317",
             "OTLP gRPC endpoint for trace export",
             null,
             String.class
@@ -183,13 +190,6 @@ public class SqlRecConfigs {
     );
 
     // dependency service config
-    public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
-            "DEFAULT_TEST_IP",
-            "192.168.1.5",
-            "default test ip",
-            null,
-            String.class
-    );
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
             "jdbc:postgresql://" + DEFAULT_TEST_IP.getValue() + ":30005/sqlrec?sslmode=disable",

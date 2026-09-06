@@ -40,6 +40,8 @@ spec:
               value: "${JAVA_TOOL_OPTIONS}"
             - name: SQLREC_VERSION
               value: "${SQLREC_VERSION}"
+            - name: DEFAULT_TEST_IP
+              value: ${NODE_IP}
             - name: SQL_SCHEMA_DIR
               value: /app/sql
           ports:
