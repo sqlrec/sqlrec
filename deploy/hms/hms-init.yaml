@@ -16,7 +16,7 @@ spec:
             - name: HIVE_HOME
               value: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
             - name: HIVE_CONF_DIR
-              value: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf
+              value: /etc/sqlrec/hms-conf
           command: ["${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/bin/schematool", "-dbType", "postgres", "-initSchema"]
           volumeMounts:
             - mountPath: ${CLIENT_DIR}
@@ -27,15 +27,9 @@ spec:
             - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/lib/${JUICEFS_HADOOP_JAR_NAME}
               name: ${LIB_PV_NAME}
               subPath: ${JUICEFS_HADOOP_JAR_NAME}
-            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/hive-site.xml
-              name: hive-site-hms
-              subPath: hive-site-hms.xml
-            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/core-site.xml
-              name: core-site
-              subPath: core-site.xml
-            - mountPath: ${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/hdfs-site.xml
-              name: hdfs-site
-              subPath: hdfs-site.xml
+            - mountPath: /etc/sqlrec/hms-conf
+              name: hms-conf
+              readOnly: true
       volumes:
         - name: client-pv
           persistentVolumeClaim:
@@ -43,13 +37,22 @@ spec:
         - name: ${LIB_PV_NAME}
           persistentVolumeClaim:
             claimName: ${LIB_PVC_NAME}
-        - name: core-site
-          configMap:
-            name: core-site
-        - name: hive-site-hms
-          configMap:
-            name: hive-site-hms
-        - name: hdfs-site
-          configMap:
-            name: hdfs-site
+        - name: hms-conf
+          projected:
+            sources:
+              - configMap:
+                  name: hive-site-hms
+                  items:
+                    - key: hive-site-hms.xml
+                      path: hive-site.xml
+              - configMap:
+                  name: core-site
+                  items:
+                    - key: core-site.xml
+                      path: core-site.xml
+              - configMap:
+                  name: hdfs-site
+                  items:
+                    - key: hdfs-site.xml
+                      path: hdfs-site.xml
       restartPolicy: Never

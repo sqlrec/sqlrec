@@ -52,21 +52,6 @@ spec:
           volumeMounts:
             - mountPath: ${CLIENT_DIR}
               name: client-pv
-            - mountPath: ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/juicefs-hadoop.jar
-              name: ${LIB_PV_NAME}
-              subPath: ${JUICEFS_HADOOP_JAR_NAME}
-            - mountPath: ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/hive-site.xml
-              name: hive-site
-              subPath: hive-site.xml
-            - mountPath: ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/core-site.xml
-              name: core-site
-              subPath: core-site.xml
-            - mountPath: ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/hdfs-site.xml
-              name: hdfs-site
-              subPath: hdfs-site.xml
-            - mountPath: ${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/spark-defaults.conf
-              name: spark-defaults
-              subPath: spark-defaults.conf
             - mountPath: ${CLIENT_DIR}/${KYUUBI_CLIENT_DIR_NAME}/logs
               name: kyuubi-logs
             - mountPath: ${CLIENT_DIR}/${KYUUBI_CLIENT_DIR_NAME}/pid
@@ -77,21 +62,6 @@ spec:
         - name: client-pv
           persistentVolumeClaim:
             claimName: ${CLIENT_PVC_NAME}
-        - name: ${LIB_PV_NAME}
-          persistentVolumeClaim:
-            claimName: ${LIB_PVC_NAME}
-        - name: core-site
-          configMap:
-            name: core-site
-        - name: hive-site
-          configMap:
-            name: hive-site
-        - name: hdfs-site
-          configMap:
-            name: hdfs-site
-        - name: spark-defaults
-          configMap:
-            name: spark-defaults
         - name: kyuubi-logs
           emptyDir: {}
         - name: kyuubi-pid

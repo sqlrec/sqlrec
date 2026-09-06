@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
@@ -251,10 +251,13 @@ minikube addons enable storage-provisioner-rancher
 kubectl wait --for=create configmap/local-path-config \
   --namespace=local-path-storage \
   --timeout="${DEPLOY_TIMEOUT}s"
+local_path_config_patch="$(printf \
+  '{"data":{"config.json":"{\\"nodePathMap\\":[{\\"node\\":\\"DEFAULT_PATH_FOR_NON_LISTED_NODES\\",\\"paths\\":[\\"%s\\"]}]}"}}' \
+  "${LOCAL_PATH_PROVISIONER_DATA_DIR}")"
 kubectl patch configmap local-path-config \
   --namespace=local-path-storage \
   --type=merge \
-  --patch '{"data":{"config.json":"{\"nodePathMap\":[{\"node\":\"DEFAULT_PATH_FOR_NON_LISTED_NODES\",\"paths\":[\"/data/local-path-provisioner\"]}]}"}}'
+  --patch "${local_path_config_patch}"
 kubectl rollout restart deployment/local-path-provisioner \
   --namespace=local-path-storage
 kubectl rollout status deployment/local-path-provisioner \

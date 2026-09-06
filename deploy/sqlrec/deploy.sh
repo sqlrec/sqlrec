@@ -12,7 +12,19 @@ fi
 bash "${dir}/../postgresql/deploy.sh" sqlrec ${SQLREC_POSTGRESQL_PORT} ${SQLREC_POSTGRESQL_USER} ${SQLREC_POSTGRESQL_PASSWORD}
 
 export PGPASSWORD=${SQLREC_POSTGRESQL_PASSWORD}
-psql -h ${NODE_IP} -p ${SQLREC_POSTGRESQL_PORT} -U ${SQLREC_POSTGRESQL_USER} -d sqlrec -f "${dir}/../sql/master.sql"
+PSQL_MAX_ATTEMPTS="${PSQL_MAX_ATTEMPTS:-30}"
+PSQL_RETRY_INTERVAL="${PSQL_RETRY_INTERVAL:-5}"
+for ((attempt = 1; attempt <= PSQL_MAX_ATTEMPTS; attempt++)); do
+  if psql -h "${NODE_IP}" -p "${SQLREC_POSTGRESQL_PORT}" -U "${SQLREC_POSTGRESQL_USER}" -d sqlrec -f "${dir}/../sql/master.sql"; then
+    break
+  fi
+  if [ "${attempt}" -eq "${PSQL_MAX_ATTEMPTS}" ]; then
+    echo "ERROR: failed to initialize PostgreSQL after ${PSQL_MAX_ATTEMPTS} attempts." >&2
+    exit 1
+  fi
+  echo "PostgreSQL is not ready; retrying in ${PSQL_RETRY_INTERVAL}s (${attempt}/${PSQL_MAX_ATTEMPTS})..." >&2
+  sleep "${PSQL_RETRY_INTERVAL}"
+done
 
 DEFAULT_JAVA_TOOL_OPTIONS="-XX:+UseCompactObjectHeaders -XX:+UseStringDeduplication"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-${DEFAULT_JAVA_TOOL_OPTIONS}}"

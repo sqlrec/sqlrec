@@ -32,6 +32,10 @@ bash "${dir}/hms/deploy.sh"
 bash "${dir}/flink/deploy.sh"
 bash "${dir}/spark/deploy.sh"
 
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/"
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/"
+cp "${CONF_DIR}"/* "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/"
+
 bash "${dir}/sqlrec/deploy.sh"
 
 # extra components, deploy them if needed
@@ -46,9 +50,5 @@ bash "${dir}/milvus/deploy.sh"
 #bash "${dir}/growthbook/deploy.sh"
 #bash "${dir}/prometheus/deploy.sh"
 #bash "${dir}/jaeger/deploy.sh"
-
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/"
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/"
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/"
 
 echo "deploy components done"
