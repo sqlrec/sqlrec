@@ -14,6 +14,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.net.URISyntaxException;
@@ -23,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("integration")
 public class TestShowCreate {
 
     private static String sqlDir;
