@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class WideAndDeepModelTest {
@@ -273,7 +274,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -288,7 +289,7 @@ spec:
       - configMap:
           name: "train-job-123-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -433,7 +434,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -448,7 +449,7 @@ spec:
       - configMap:
           name: "default-train-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -609,7 +610,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -624,7 +625,7 @@ spec:
       - configMap:
           name: "export-job-456-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -680,7 +681,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -704,7 +705,7 @@ spec:
     targetPort: 80
   selector:
     app: "test-service-id"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -749,7 +750,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -770,7 +771,7 @@ spec:
     targetPort: 80
   selector:
     app: "default-service-id"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -938,7 +939,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -953,7 +954,7 @@ spec:
       - configMap:
           name: "int-train-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -1100,7 +1101,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -1115,7 +1116,7 @@ spec:
       - configMap:
           name: "custom-train-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 }

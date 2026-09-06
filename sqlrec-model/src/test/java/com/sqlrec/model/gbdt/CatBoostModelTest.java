@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class CatBoostModelTest {
@@ -205,7 +206,7 @@ spec:
       - command:
         - "bash"
         - "/data/start.sh"
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-job"
         resources:
           requests:
@@ -219,7 +220,7 @@ spec:
       - configMap:
           name: "cb-train-job-123-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -311,7 +312,7 @@ spec:
       - command:
         - "bash"
         - "/data/start.sh"
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-job"
         resources:
           requests:
@@ -325,7 +326,7 @@ spec:
       - configMap:
           name: "cb-export-job-456-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 

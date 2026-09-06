@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class DSSMModelTest {
@@ -338,7 +339,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -353,7 +354,7 @@ spec:
       - configMap:
           name: "dssm-train-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -536,7 +537,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -551,7 +552,7 @@ spec:
       - configMap:
           name: "dssm-user-only-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -734,7 +735,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -749,7 +750,7 @@ spec:
       - configMap:
           name: "dssm-item-only-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -908,7 +909,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -923,7 +924,7 @@ spec:
       - configMap:
           name: "dssm-export-job-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -976,7 +977,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -1000,7 +1001,7 @@ spec:
     targetPort: 80
   selector:
     app: "dssm-service-id"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -1045,7 +1046,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -1066,7 +1067,7 @@ spec:
     targetPort: 80
   selector:
     app: "dssm-default-service"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 }

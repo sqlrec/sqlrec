@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class LightGBMModelTest {
@@ -238,7 +239,7 @@ spec:
       - command:
         - "bash"
         - "/data/start.sh"
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-job"
         resources:
           requests:
@@ -252,7 +253,7 @@ spec:
       - configMap:
           name: "train-job-123-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -345,7 +346,7 @@ spec:
       - command:
         - "bash"
         - "/data/start.sh"
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-job"
         resources:
           requests:
@@ -359,7 +360,7 @@ spec:
       - configMap:
           name: "export-job-456-cm"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -415,7 +416,7 @@ spec:
           ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/v1' "$LOCAL_CACHE_DIR"
 
           exec /app/onnx_server "$LOCAL_CACHE_DIR" 80
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-service"
         ports:
         - containerPort: 80
@@ -439,7 +440,7 @@ spec:
     targetPort: 80
   selector:
     app: "test-service-id"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 
@@ -484,7 +485,7 @@ spec:
           ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/default' "$LOCAL_CACHE_DIR"
 
           exec /app/onnx_server "$LOCAL_CACHE_DIR" 80
-        image: "sqlrec/gbdt:0.1.0-cpu"
+        image: "sqlrec/gbdt:%s-cpu"
         name: "gbdt-service"
         ports:
         - containerPort: 80
@@ -505,7 +506,7 @@ spec:
     targetPort: 80
   selector:
     app: "default-service-id"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, k8sYaml);
     }
 }

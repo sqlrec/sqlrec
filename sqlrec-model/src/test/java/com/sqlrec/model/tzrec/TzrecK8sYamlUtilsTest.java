@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class TzrecK8sYamlUtilsTest {
@@ -92,7 +93,7 @@ spec:
         int masterPort = 29500;
         Map<String, String> params = new HashMap<>();
         params.put("image", "sqlrec/tzrec");
-        params.put("version", "0.1.0-cpu");
+        params.put("version", SQLREC_VERSION.getValue() + "-cpu");
         params.put("pod_cpu_cores", "2");
         params.put("pod_memory", "8Gi");
         params.put("pod_cpu_limit", "4");
@@ -136,7 +137,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           limits:
@@ -154,7 +155,7 @@ spec:
       - configMap:
           name: "test-configmap"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, yaml);
     }
 
@@ -168,7 +169,7 @@ spec:
         int masterPort = 29500;
         Map<String, String> params = new HashMap<>();
         params.put("image", "sqlrec/tzrec");
-        params.put("version", "0.1.0-cpu");
+        params.put("version", SQLREC_VERSION.getValue() + "-cpu");
         params.put("pod_cpu_cores", "2");
         params.put("pod_memory", "8Gi");
 
@@ -210,7 +211,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-job"
         resources:
           requests:
@@ -225,7 +226,7 @@ spec:
       - configMap:
           name: "nolimit-configmap"
         name: "config-volume"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, yaml);
     }
 
@@ -354,7 +355,7 @@ metadata:
         String modelCheckpointDir = "/model/checkpoint/v1";
         Map<String, String> params = new HashMap<>();
         params.put("image", "sqlrec/tzrec");
-        params.put("version", "0.1.0-cpu");
+        params.put("version", SQLREC_VERSION.getValue() + "-cpu");
         params.put("pod_cpu_cores", "4");
         params.put("pod_memory", "16Gi");
         params.put("pod_cpu_limit", "8");
@@ -394,7 +395,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -406,7 +407,7 @@ spec:
           requests:
             cpu: "4"
             memory: "16Gi"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, yaml);
     }
 
@@ -448,7 +449,7 @@ spec:
           value: "1"
         - name: "USE_FARM_HASH_TO_BUCKETIZE"
           value: "true"
-        image: "sqlrec/tzrec:0.1.0-cpu"
+        image: "sqlrec/tzrec:%s-cpu"
         name: "tzrec-service"
         ports:
         - containerPort: 80
@@ -457,7 +458,7 @@ spec:
           requests:
             cpu: "1"
             memory: "2Gi"
-""";
+""".formatted(SQLREC_VERSION.getValue());
         assertEquals(expectedYaml, yaml);
     }
 }
