@@ -47,9 +47,9 @@ public class SqlFunctionBindable extends BindableInterface {
 
         initAllDependSqlFunctionMap();
 
-        if (SqlRecConfigs.IGNORE_UNION_EXCEPTION.getValue()) {
-            initExceptionIgnore();
-        }
+        // Mark structural UNION sources at compile time. Whether recovery is enabled is
+        // evaluated from the execution context, so request-level SET values take effect.
+        initExceptionIgnore();
     }
 
     @Override
@@ -276,9 +276,7 @@ public class SqlFunctionBindable extends BindableInterface {
         );
         for (int i = 0; i < bindableList.size(); i++) {
             BindableInterface bindable = bindableList.get(i);
-            if (isUnionSource.containsKey(i) && isUnionSource.get(i)) {
-                bindable.setIgnoreException(true);
-            }
+            bindable.setIgnoreException(isUnionSource.getOrDefault(i, false));
         }
     }
 }

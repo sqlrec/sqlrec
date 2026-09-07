@@ -289,8 +289,9 @@ BindableInterface
  ├─ ReturnBindable         RETURN statement: returns a cache table or delegates SELECT/CALL,
  │                          then writes the result to the current function frame's ReturnState
  ├─ ProxyAllBindable       Node execution wrapper for timeout, cancellation, tracing, metrics,
- │                          and logging; uniformly recovers ignorable failures using
- │                          isIgnoreException() and cache-table metadata
+ │                          and logging; at execution time checks IGNORE_UNION_EXCEPTION,
+ │                          isIgnoreException(), and cache-table metadata, then recovers an
+ │                          eligible UNION-only branch as an empty CacheTable and records it
  ├─ CallSqlFunctionBindable Function call binding (validates input table existence)
  ├─ JavaFunctionBindable   Java table UDF binding
  ├─ IfBindable             Conditional branch: condition is a one-row, one-column SELECT;
@@ -328,7 +329,7 @@ BindableInterface
 | `FilterableTableScan` | Table scan carrying pushed-down predicates (filter entry for KV/vector tables) |
 | `SqlrecEnumerableKvJoin` | KV join: left table fully collected join keys → right table `SqlRecKvTable.getByPrimaryKey()` batch point lookup (or per-key filter scan for non-primary keys) → string key map merge (`MergeUtils.snakeMerge`); supports LEFT join null padding |
 | `SqlrecEnumerableVectorLookupJoin` | Two-input vector lookup join: enumerates the left input and performs filtered ANN lookups against the right `VectorSearchable` table (`DEFAULT_VECTOR_SEARCH_LIMIT` default 100) |
-| `SqlrecEnumerableUnion` | Union merge (with `IGNORE_UNION_EXCEPTION` branch degradation) |
+| `SqlrecEnumerableUnion` | Snake merge for `UNION ALL`; merge-time deduplication with Calcite's row comparer for `UNION DISTINCT`; strict merge-branch degradation with `IGNORE_UNION_EXCEPTION` |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE write path: dispatched to connector write interfaces (batch upsert/delete) |
 
 ### KV Join Data Flow (KvJoinUtils)
@@ -404,7 +405,7 @@ The six connectors share the same structure: `config/` (Options parsing of table
 
 - `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): overloaded for regular and User-Item inputs; `ServiceManager.getServiceConfig()` gets the service URL (ObjCache cached) → input serialized as a row-oriented JSON array or User-Item column-oriented JSON → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. User fields are sent once as single-element arrays, while Item fields become arrays in row order. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
 - `BatchCallServiceUDTF` (Flink UDTF, JDK HttpURLConnection, batched by batchSize), `CallSqlRecApiFunction` (cross-instance sqlrec invocation via `SqlRecApiClient`).
-- **Diversification family**: `WindowDiversify` (tag quota within sliding window), `DppDiversity` (determinantal point process), `RuleDiversity`, `WeightedMerge`, `DedupFunction`, `ShuffleFunction`.
+- **Diversification family**: `WindowDiversify` (tag quota within sliding window), `DppDiversity` (determinantal point process), `RuleDiversity`, `WeightedMerge` (reuses the `MergeUtils` weighted round-robin core and is marked as UNION-like), `DedupFunction`, `ShuffleFunction`.
 - **Feature family**: `TagToVecFunction`, `RandomVecFunction`, `FeatureCoverageMetricsFunction`, `GetGrowthbookFeaturesFunction` (GrowthBook SDK), `Get/SetVariablesFunction` (variable propagation).
 - Others: `JsonToTableFunction`, `AddColFunction`, `TruncateTableFunction`, `SleepFunction` (for testing).
 
@@ -510,5 +511,6 @@ Static mutable state: `CompileManager.functionBindableMap/sqlApiCache`, `Calcite
 | `FLINK_SQL_GATEWAY_ADDRESS/PORT` | .../30018 | Remote Flink Gateway |
 | `SESSION_CHECK_INTERVAL` / `SESSION_IDLE_TIMEOUT` | 5min / 30min | Session management |
 | `SQL_SYNC_EXECUTE_TIMEOUT` | 180s | Synchronous execution timeout |
-| `IGNORE_UNION_EXCEPTION` / `IGNORE_JOIN_QUERY_EXCEPTION` | true | Degradation switches |
+| `IGNORE_UNION_EXCEPTION` | true | SQL-function execution switch: replaces a failed cache branch with an empty table only when every consumer path eventually enters `UNION` or a statically bound `UnionLikeTableFunction` (built-in: `weighted_merge`); cancellation, interruption, `Error`, and branches flowing to non-merge paths are not degraded |
+| `IGNORE_JOIN_QUERY_EXCEPTION` | true | Ignores an individual external-storage query failure during a KV join and continues with the remaining keys |
 | `DEFAULT_VECTOR_SEARCH_LIMIT` | 100 | Default topK for vector retrieval |

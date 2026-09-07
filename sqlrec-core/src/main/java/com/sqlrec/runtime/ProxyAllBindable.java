@@ -177,7 +177,9 @@ public class ProxyAllBindable extends BindableInterface {
             ExecuteContext context,
             Throwable failure
     ) {
-        if (!delegate.isIgnoreException() || context.isCancelled()) {
+        if (!SqlRecConfigs.IGNORE_UNION_EXCEPTION.getValue(context.getVariables())
+                || !delegate.isIgnoreException()
+                || context.isCancelled()) {
             return null;
         }
 

@@ -3,6 +3,7 @@ package com.sqlrec.node;
 import com.sqlrec.common.utils.MergeUtils;
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.linq4j.Ord;
+import org.apache.calcite.linq4j.function.EqualityComparer;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
@@ -32,6 +33,7 @@ public class SqlrecEnumerableUnion extends EnumerableUnion {
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
         final BlockBuilder builder = new BlockBuilder();
         List<Expression> inputExps = new ArrayList<>();
+        Expression comparer = null;
         for (Ord<RelNode> ord : Ord.zip(inputs)) {
             EnumerableRel input = (EnumerableRel) ord.e;
             final Result result = implementor.visitChild(this, ord.i, input, pref);
@@ -40,13 +42,30 @@ public class SqlrecEnumerableUnion extends EnumerableUnion {
                             "child" + ord.i,
                             result.block);
             inputExps.add(childExp);
+            if (comparer == null) {
+                comparer = result.physType.comparer();
+            }
         }
 
         Expression unionExp;
         try {
-            unionExp = Expressions.call(
-                    MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class),
-                    inputExps);
+            if (all) {
+                unionExp = Expressions.call(
+                        MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class),
+                        inputExps);
+            } else {
+                List<Expression> arguments = new ArrayList<>();
+                arguments.add(comparer == null
+                        ? Expressions.constant(null, EqualityComparer.class)
+                        : comparer);
+                arguments.addAll(inputExps);
+                unionExp = Expressions.call(
+                        MergeUtils.class.getMethod(
+                                "snakeMergeDistinctEnumerable",
+                                EqualityComparer.class,
+                                Iterable[].class),
+                        arguments);
+            }
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }

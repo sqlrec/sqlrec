@@ -609,8 +609,8 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 ```
 
 **Working Principle**:
-1. In each round, take the weight number of records from each table in order
-2. Deduplicate by primary key, already seen records are not added again
+1. Use the shared weighted round-robin core in `MergeUtils`; in each round, take the configured number of accepted records from each table in order
+2. Deduplicate by primary key; an already seen record is skipped and does not consume that table's quota for the round
 3. Repeat rounds until `limit` is reached or all tables are exhausted
 4. Tables with higher weights contribute more records per round
 
@@ -620,6 +620,8 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 - Number of weights must match the number of tables
 - Weights and limit must be positive integers
 - Primary key column must exist in all tables
+- `weighted_merge` implements `UnionLikeTableFunction` and is therefore treated as a UNION-like merge node. In a SQL function, when `IGNORE_UNION_EXCEPTION=true` and every consumer path of an input cache table eventually enters UNION/`weighted_merge`, a failed input can degrade to an empty table while the remaining inputs continue; no degradation occurs if that input also flows to a path that does not enter a merge
+- Detection relies on a function instance bound statically at compile time; a function name resolved dynamically through `GET()` has no statically bound instance and is not identified as UNION-like during compilation
 
 ---
 

@@ -279,7 +279,8 @@ BindableInterface
  ├─ SqlFunctionBindable    SQL 函数本体：按依赖串行/并行执行节点；RETURN 后跳过尚未执行的节点
  ├─ ReturnBindable         RETURN 语句：返回缓存表或委托 SELECT/CALL，并写入当前函数帧的 ReturnState
  ├─ ProxyAllBindable       节点执行包装：超时、取消、Trace、Metrics 和日志；
- │                          根据 isIgnoreException() 和缓存表元数据统一恢复可忽略异常并计数
+ │                          执行时检查 IGNORE_UNION_EXCEPTION、isIgnoreException() 和缓存表元数据，
+ │                          将符合条件的 UNION-only 分支恢复为空 CacheTable 并计数
  ├─ CallSqlFunctionBindable 函数调用绑定（校验输入表存在性）
  ├─ JavaFunctionBindable   Java table UDF 绑定
  ├─ IfBindable             条件分支：条件是单行单列 SELECT；支持 CACHE、CRUD、CALL、SET、ASSERT、RETURN；
@@ -316,7 +317,7 @@ BindableInterface
 | `FilterableTableScan` | 携带下推谓词的表扫描（KV/向量表的过滤入口） |
 | `SqlrecEnumerableKvJoin` | KV join：左表全量收集 join key → 右表 `SqlRecKvTable.getByPrimaryKey()` 批量点查（或非主键时逐 key 带 filter scan）→ 字符串 key map 合并（`MergeUtils.snakeMerge`）；支持 LEFT join 补 null |
 | `SqlrecEnumerableVectorLookupJoin` | 双输入向量 lookup join：遍历左表，使用右侧 `VectorSearchable` 表执行带过滤条件的 ANN 检索（`DEFAULT_VECTOR_SEARCH_LIMIT` 默认 100） |
-| `SqlrecEnumerableUnion` | union 合并（配合 `IGNORE_UNION_EXCEPTION` 分支降级） |
+| `SqlrecEnumerableUnion` | `UNION ALL` 蛇形合并；`UNION DISTINCT` 使用 Calcite 行比较器边合并边去重；配合 `IGNORE_UNION_EXCEPTION` 做严格的合并分支降级 |
 | `SqlrecEnumerableTableModify` | INSERT/UPDATE/DELETE 写路径：分发到 connector 的写接口（批量 upsert/delete） |
 
 ### KV Join 数据流（KvJoinUtils）
@@ -391,7 +392,7 @@ AbstractTable
 
 - `CallServiceFunction.java`（`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`）（`call_service`）：通过重载同时支持普通输入和 User-Item 输入；`ServiceManager.getServiceConfig()` 取服务 URL（ObjCache 缓存）→ 输入表序列化为行式 JSON 数组或 User-Item 列式 JSON → POST → 解析 prediction map → `mergePredictions` 按列名拼回输入行。User 字段以单元素数组传递一次，Item 字段按行组成数组。静态 `OkHttpClient`（30s 三段超时，volatile 可测试替换）。
 - `BatchCallServiceUDTF`（Flink UDTF，JDK HttpURLConnection，按 batchSize 攒批）、`CallSqlRecApiFunction`（跨 sqlrec 实例调用，走 `SqlRecApiClient`）。
-- **多样化族**：`WindowDiversify`（滑动窗口内按 tag 配额）、`DppDiversity`（行列式点过程）、`RuleDiversity`、`WeightedMerge`、`DedupFunction`、`ShuffleFunction`。
+- **多样化族**：`WindowDiversify`（滑动窗口内按 tag 配额）、`DppDiversity`（行列式点过程）、`RuleDiversity`、`WeightedMerge`（复用 `MergeUtils` 加权轮询内核，并标记为类 UNION 合并节点）、`DedupFunction`、`ShuffleFunction`。
 - **特征族**：`TagToVecFunction`、`RandomVecFunction`、`FeatureCoverageMetricsFunction`、`GetGrowthbookFeaturesFunction`（GrowthBook SDK）、`Get/SetVariablesFunction`（变量传播）。
 - 其他：`JsonToTableFunction`、`AddColFunction`、`TruncateTableFunction`、`SleepFunction`（测试用）。
 
@@ -496,5 +497,6 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 | `FLINK_SQL_GATEWAY_ADDRESS/PORT` | .../30018 | 远端 Flink Gateway |
 | `SESSION_CHECK_INTERVAL` / `SESSION_IDLE_TIMEOUT` | 5min / 30min | 会话管理 |
 | `SQL_SYNC_EXECUTE_TIMEOUT` | 180s | 同步执行超时 |
-| `IGNORE_UNION_EXCEPTION` / `IGNORE_JOIN_QUERY_EXCEPTION` | true | 降级开关 |
+| `IGNORE_UNION_EXCEPTION` | true | SQL 函数执行时开关：仅将所有消费路径最终都进入 `UNION` 或静态 `UnionLikeTableFunction`（内置为 `weighted_merge`）的失败缓存分支替换为空表；取消、中断、`Error` 以及流向非合并路径的分支不降级 |
+| `IGNORE_JOIN_QUERY_EXCEPTION` | true | KV join 查询外部存储时忽略单次查询异常并继续处理其余 key |
 | `DEFAULT_VECTOR_SEARCH_LIMIT` | 100 | 向量检索默认 topK |

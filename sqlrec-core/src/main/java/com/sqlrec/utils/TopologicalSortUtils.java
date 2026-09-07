@@ -116,7 +116,7 @@ public class TopologicalSortUtils {
 
     private static Map<Integer, Set<Integer>> buildBindableDependency(
             List<BindableInterface> bindableList,
-            boolean returnAsDataSink
+            boolean dataDependenciesOnly
     ) {
         Map<String, Set<Integer>> readTableToBindableIndex = new HashMap<>();
         Map<String, Set<Integer>> writeTableToBindableIndex = new HashMap<>();
@@ -130,7 +130,7 @@ public class TopologicalSortUtils {
             BindableInterface bindable = bindableList.get(i);
 
             boolean executionBarrier = !bindable.isParallelizable() || bindable.containsReturn();
-            if (executionBarrier && !(returnAsDataSink && bindable.containsReturn())) {
+            if (executionBarrier && !dataDependenciesOnly) {
                 for (int j = 0; j < i; j++) {
                     bindableDependency.get(i).add(j);
                 }
@@ -193,9 +193,9 @@ public class TopologicalSortUtils {
         Map<Integer, Boolean> isUnionSource = new HashMap<>();
         Map<Integer, Boolean> isUnionNode = new HashMap<>();
 
-        // RETURN is an execution barrier, so the execution graph makes it depend on every
-        // preceding node. Exception-ignore analysis needs only its real table dependencies;
-        // otherwise unused failed nodes are incorrectly considered part of the return path.
+        // Execution barriers add control edges to the execution graph. Exception-ignore
+        // analysis must use only real table dependencies, otherwise a SET or RETURN between
+        // a source and its UNION consumer incorrectly disables branch degradation.
         Map<Integer, Set<Integer>> exceptionDependency = optimizeDependency(
                 buildBindableDependency(bindableList, true)
         );
@@ -213,21 +213,23 @@ public class TopologicalSortUtils {
                 continue;
             }
 
-            if (reverseBindableDependency.containsKey(bindableIndex)) {
-                Set<Integer> dependBindableSet = reverseBindableDependency.get(bindableIndex);
-                for (Integer dependBindableIndex : dependBindableSet) {
-                    if (!isUnionNode.getOrDefault(dependBindableIndex, false) &&
-                            !isUnionSource.getOrDefault(dependBindableIndex, false)) {
-                        isUnionSource.put(bindableIndex, false);
-                        break;
-                    }
+            Set<Integer> consumers = reverseBindableDependency.getOrDefault(
+                    bindableIndex, Collections.emptySet());
+            boolean reachesUnion = false;
+            boolean hasNonUnionConsumer = false;
+            for (Integer consumerIndex : consumers) {
+                if (isUnionNode.getOrDefault(consumerIndex, false)
+                        || isUnionSource.getOrDefault(consumerIndex, false)) {
+                    reachesUnion = true;
+                } else {
+                    hasNonUnionConsumer = true;
+                    break;
                 }
             }
-            if (isUnionSource.containsKey(bindableIndex)) {
-                continue;
-            }
 
-            isUnionSource.put(bindableIndex, true);
+            // A node is recoverable only when it actually feeds a UNION and every one of
+            // its consumers stays on a UNION-only path. Unused non-UNION work must fail.
+            isUnionSource.put(bindableIndex, reachesUnion && !hasNonUnionConsumer);
         }
 
         return isUnionSource;

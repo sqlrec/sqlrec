@@ -1,6 +1,7 @@
 package com.sqlrec.common.utils;
 
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.function.Functions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -75,5 +76,40 @@ public class MergeUtilsTest {
         List<Object> merged = MergeUtils.snakeMerge();
 
         assertTrue(merged.isEmpty());
+    }
+
+    @Test
+    public void testSnakeMergeDistinctUsesRowComparer() {
+        List<Object[]> a = Arrays.asList(
+                new Object[]{1, "a"},
+                new Object[]{2, "b"}
+        );
+        List<Object[]> b = Arrays.asList(
+                new Object[]{1, "a"},
+                new Object[]{3, "c"}
+        );
+
+        List<Object[]> merged = MergeUtils.snakeMergeDistinct(Functions.arrayComparer(), a, b);
+
+        assertEquals(3, merged.size());
+        assertArrayEquals(new Object[]{1, "a"}, merged.get(0));
+        assertArrayEquals(new Object[]{3, "c"}, merged.get(1));
+        assertArrayEquals(new Object[]{2, "b"}, merged.get(2));
+    }
+
+    @Test
+    public void testWeightedMergeDoesNotChargeDuplicateToQuota() {
+        List<Integer> a = Arrays.asList(1, 2);
+        List<Integer> b = Arrays.asList(1, 3, 4);
+
+        List<Integer> merged = MergeUtils.weightedMerge(
+                new int[]{1, 2},
+                10,
+                value -> value,
+                a,
+                b
+        );
+
+        assertEquals(Arrays.asList(1, 3, 4, 2), merged);
     }
 }

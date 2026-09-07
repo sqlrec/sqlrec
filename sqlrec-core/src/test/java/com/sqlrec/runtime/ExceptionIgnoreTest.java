@@ -80,6 +80,26 @@ public class ExceptionIgnoreTest {
         );
         new CompileManager().compileSqlFunction("sql_fun6", sqlFun6);
 
+        List<String> sqlFun7 = Arrays.asList(
+                "create sql function sql_fun7",
+                "define input table input1(id int)",
+                "set IGNORE_UNION_EXCEPTION=false",
+                "cache table t1 as call test_fun(input1)",
+                "cache table t2 as select * from input1 union all select * from t1",
+                "return t2"
+        );
+        new CompileManager().compileSqlFunction("sql_fun7", sqlFun7);
+
+        List<String> sqlFun8 = Arrays.asList(
+                "create sql function sql_fun8",
+                "define input table input1(id int)",
+                "cache table healthy as select * from input1",
+                "cache table failed as call test_fun(input1)",
+                "cache table merged as call weighted_merge('', '1,1', '10', healthy, failed)",
+                "return merged"
+        );
+        new CompileManager().compileSqlFunction("sql_fun8", sqlFun8);
+
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(
                         "cache table t1 as select 1 as id",
@@ -100,13 +120,13 @@ public class ExceptionIgnoreTest {
                 ),
                 new SqlTestCase(
                         "cache table t5 as call sql_fun3(t1)",
-                        Arrays.<Object[]>asList(
-                                new Object[]{"t5", 1L}
-                        )
+                        null,
+                        new RuntimeException()
                 ),
                 new SqlTestCase(
                         "cache table t6 as call sql_fun4(t1)",
-                        Arrays.<Object[]>asList(new Object[]{"t6", 1L})
+                        null,
+                        new RuntimeException()
                 ),
                 new SqlTestCase(
                         "cache table t7 as call sql_fun5(t1)",
@@ -115,7 +135,19 @@ public class ExceptionIgnoreTest {
                 ),
                 new SqlTestCase(
                         "cache table t8 as call sql_fun6(t1)",
-                        Arrays.<Object[]>asList(new Object[]{"t8", 1L})
+                        null,
+                        new RuntimeException()
+                ),
+                new SqlTestCase(
+                        "cache table t9 as call sql_fun7(t1)",
+                        null,
+                        new RuntimeException()
+                ),
+                new SqlTestCase(
+                        "cache table t10 as call sql_fun8(t1)",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"t10", 1L}
+                        )
                 )
         );
 

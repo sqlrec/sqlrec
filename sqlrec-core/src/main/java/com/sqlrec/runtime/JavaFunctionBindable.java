@@ -2,6 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.runtime.UnionLikeTableFunction;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.sql.parser.SqlGetVariable;
@@ -254,6 +255,11 @@ public class JavaFunctionBindable extends BindableInterface {
     @Override
     public Set<String> getWriteTables() {
         return Set.of();
+    }
+
+    @Override
+    public boolean isUnionSql() {
+        return tableFunction instanceof UnionLikeTableFunction;
     }
 
     public Set<String> getDependencyJavaFuncName() {

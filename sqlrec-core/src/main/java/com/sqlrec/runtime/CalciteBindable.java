@@ -1,12 +1,12 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.runtime.Bindable;
 import org.apache.calcite.sql.SqlNode;
@@ -93,7 +93,18 @@ public class CalciteBindable extends BindableInterface {
     }
 
     public boolean isUnionSql() {
-        return SqlTypeChecker.isUnionSql(sqlNode);
+        RelNode current = bestExp;
+        while (current != null) {
+            if (current instanceof Union) {
+                return true;
+            }
+            List<RelNode> inputs = current.getInputs();
+            if (inputs.size() != 1) {
+                return false;
+            }
+            current = inputs.get(0);
+        }
+        return false;
     }
 
     public String getLogicalPlan() {

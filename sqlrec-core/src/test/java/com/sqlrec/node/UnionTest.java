@@ -32,7 +32,34 @@ public class UnionTest {
                         )
                 ),
                 new SqlTestCase(
+                        "cache table distinct_union as select 1 as a union select 1 as a",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"distinct_union", 1L}
+                        )
+                ),
+                new SqlTestCase(
+                        "cache table distinct_row_union as "
+                                + "select 1 as a, 'same' as b union select 1 as a, 'same' as b",
+                        Arrays.<Object[]>asList(
+                                new Object[]{"distinct_row_union", 1L}
+                        )
+                ),
+                new SqlTestCase(
                         "select * from t0 union all select * from t1 union all select * from t2",
+                        Arrays.asList(
+                                new Object[]{1},
+                                new Object[]{4},
+                                new Object[]{7},
+                                new Object[]{2},
+                                new Object[]{5},
+                                new Object[]{8},
+                                new Object[]{3},
+                                new Object[]{6},
+                                new Object[]{9}
+                        )
+                ),
+                new SqlTestCase(
+                        "select * from t0 union select * from t1 union select * from t2",
                         Arrays.asList(
                                 new Object[]{1},
                                 new Object[]{4},

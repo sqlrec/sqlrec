@@ -244,6 +244,39 @@ public class ProxyAllBindableTimeoutTest {
     }
 
     @Test
+    public void testUnionRecoveryCanBeDisabledByExecutionVariable() {
+        ExecuteContextImpl context = new ExecuteContextImpl();
+        context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
+        context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), "false");
+
+        TestBindable delegate = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                throw new IllegalStateException("must not be ignored");
+            }
+
+            @Override
+            public String getCacheTableName() {
+                return "required_cache";
+            }
+
+            @Override
+            public List<RelDataTypeField> getCacheTableDataFields() {
+                return getReturnDataFields();
+            }
+        };
+        delegate.setIgnoreException(true);
+        ProxyAllBindable proxy = new ProxyAllBindable(delegate);
+        proxy.setName("required_cache_node");
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+
+        assertEquals("Node required_cache_node execution failed", exception.getMessage());
+        assertEquals("must not be ignored", exception.getCause().getMessage());
+    }
+
+    @Test
     public void testErrorFromTimedExecutionPropagatesUnwrapped() {
         ExecuteContextImpl context = new ExecuteContextImpl();
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");

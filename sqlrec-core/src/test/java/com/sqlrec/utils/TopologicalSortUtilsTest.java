@@ -356,7 +356,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testExceptionAnalysisIgnoresReturnControlEdges() throws Exception {
+    public void testExceptionAnalysisUsesReturnDataDependenciesOnly() throws Exception {
         SqlFunctionBindable function = compileFunction(List.of(
                 "CREATE SQL FUNCTION ignored_return_edges",
                 "CACHE TABLE unused_table AS SELECT 1 AS id",
@@ -368,7 +368,7 @@ public class TopologicalSortUtilsTest {
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
-        assertTrue(unionSources.get(0), "unused node may recover to an empty cache");
+        assertFalse(unionSources.get(0), "unused non-UNION nodes must not hide failures");
         assertFalse(unionSources.get(1), "the actual result producer must not hide failures");
         assertFalse(unionSources.get(2), "RETURN is the result sink");
     }
@@ -406,12 +406,12 @@ public class TopologicalSortUtilsTest {
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
-        assertTrue(unionSources.get(0));
+        assertFalse(unionSources.get(0));
         assertFalse(unionSources.get(1));
     }
 
     @Test
-    public void testExceptionAnalysisAllowsUnusedNonUnionChain() throws Exception {
+    public void testExceptionAnalysisDoesNotIgnoreUnusedNonUnionChain() throws Exception {
         SqlFunctionBindable function = compileFunction(List.of(
                 "CREATE SQL FUNCTION unused_chain",
                 "CACHE TABLE unused_source AS SELECT 1 AS id",
@@ -423,9 +423,72 @@ public class TopologicalSortUtilsTest {
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
+        assertFalse(unionSources.get(0));
+        assertFalse(unionSources.get(1));
+        assertFalse(unionSources.get(2));
+    }
+
+    @Test
+    public void testExceptionAnalysisRecognizesOrderedUnion() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION ordered_union",
+                "CACHE TABLE left_table AS SELECT 1 AS id",
+                "CACHE TABLE right_table AS SELECT 2 AS id",
+                "CACHE TABLE result_table AS " +
+                        "SELECT * FROM left_table UNION ALL SELECT * FROM right_table ORDER BY id",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
         assertTrue(unionSources.get(0));
         assertTrue(unionSources.get(1));
         assertFalse(unionSources.get(2));
+        assertFalse(unionSources.get(3));
+    }
+
+    @Test
+    public void testExceptionAnalysisRecognizesUnionSubquery() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION nested_union",
+                "CACHE TABLE left_table AS SELECT 1 AS id",
+                "CACHE TABLE right_table AS SELECT 2 AS id",
+                "CACHE TABLE result_table AS SELECT * FROM (" +
+                        "SELECT * FROM left_table UNION ALL SELECT * FROM right_table) AS union_result",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0));
+        assertTrue(unionSources.get(1));
+        assertFalse(unionSources.get(2));
+        assertFalse(unionSources.get(3));
+    }
+
+    @Test
+    public void testExceptionAnalysisIgnoresSetControlEdges() throws Exception {
+        SqlFunctionBindable function = compileFunction(List.of(
+                "CREATE SQL FUNCTION union_after_set",
+                "CACHE TABLE left_table AS SELECT 1 AS id",
+                "SET marker=value",
+                "CACHE TABLE right_table AS SELECT 2 AS id",
+                "CACHE TABLE result_table AS " +
+                        "SELECT * FROM left_table UNION ALL SELECT * FROM right_table",
+                "RETURN result_table"
+        ));
+        List<BindableInterface> bindableList = function.getBindableList();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
+
+        assertTrue(unionSources.get(0));
+        assertFalse(unionSources.get(1));
+        assertTrue(unionSources.get(2));
     }
 
     @Test
@@ -444,7 +507,7 @@ public class TopologicalSortUtilsTest {
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
         assertFalse(unionSources.get(0), "one returned consumer makes the shared source non-ignorable");
-        assertTrue(unionSources.get(1), "the unused UNION branch remains ignorable");
+        assertFalse(unionSources.get(1), "an unused UNION result is not a UNION branch source");
         assertFalse(unionSources.get(2));
         assertFalse(unionSources.get(3));
     }

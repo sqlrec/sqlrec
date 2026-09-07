@@ -496,21 +496,24 @@ public static Enumerable<Object[]> execute(
 
 ### UNION 操作
 
-本地 UNION 操作通过 `SqlrecEnumerableUnion` 实现，使用蛇形合并算法。
+本地 `UNION ALL` 和 `UNION DISTINCT` 操作都通过 `SqlrecEnumerableUnion` 实现，并使用蛇形合并算法。
 
 #### 实现方式
 
 ```java
 // SqlrecEnumerableUnion.implement
-Expression unionExp = Expressions.call(
-    MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class), 
-    inputExps
-);
+// comparerAndInputExps = comparer 后依次追加全部 inputExps
+Expression unionExp = all
+    ? Expressions.call(MergeUtils.class.getMethod(
+          "snakeMergeEnumerable", Iterable[].class), inputExps)
+    : Expressions.call(MergeUtils.class.getMethod(
+          "snakeMergeDistinctEnumerable", EqualityComparer.class, Iterable[].class),
+          comparerAndInputExps);
 ```
 
 #### 蛇形合并算法
 
-蛇形合并会轮询各输入源、交替取出一行，最后物化为一个 `List`。它不是惰性的流式输出：
+蛇形合并会轮询各输入源、交替取出一行，最后物化为一个 `List`。它不是惰性的流式输出。`UNION DISTINCT` 使用 Calcite 为当前物理行类型生成的 `EqualityComparer` 去重；重复行不会占用该输入源本轮的有效输出配额。
 
 ```java
 // MergeUtils.snakeMergeEnumerable
@@ -522,7 +525,17 @@ public static <T> Enumerable<T> snakeMergeEnumerable(Iterable<T>... sources) {
 
 本地集合运算目前只对 UNION 做了专门识别；不要假定 INTERSECT、EXCEPT 等操作可以和进程内 `CacheTable` 一起本地执行。
 
-当前实现没有根据 `UNION` 的 `ALL` 标志执行去重，因此编写 SQLRec 本地查询时应明确使用 `UNION ALL`。如果业务需要去重，应在合并后显式使用 `SELECT DISTINCT` 或 `GROUP BY`。无论使用哪种形式，都不应依赖合并产生的行顺序；需要稳定顺序时必须在最外层写 `ORDER BY`。
+`UNION ALL` 保留重复行，`UNION`（即 `UNION DISTINCT`）按整行去重。蛇形合并决定当前实现通常观察到的轮询输出顺序，但 SQL 不保证未排序结果的顺序；需要稳定顺序时必须在最外层写 `ORDER BY`。
+
+#### UNION 分支异常恢复
+
+SQL 函数编译时会基于真实的表读写依赖识别可降级分支，执行时再读取 `IGNORE_UNION_EXCEPTION`（默认 `true`）。只有满足以下条件的缓存表生产节点才允许恢复：
+
+- 该节点最终流向 `UNION`/`UNION ALL`，或者静态绑定且实现 `UnionLikeTableFunction` 的表函数（内置实现为 `weighted_merge`）；
+- 从该节点出发的每条数据消费链最终都进入上述合并操作，不存在未先进入合并的直接返回、独立执行或其他非合并消费路径；
+- 失败节点具有缓存表名和字段结构，能够用同结构的空 `CacheTable` 替代。
+
+符合条件的普通异常和节点超时会把该分支替换为空表，其余分支继续参与合并。取消、线程中断和 `Error` 不会被吞掉；未使用的普通节点、未经过合并便直接返回的节点以及同时流向非合并路径的共享输入也不会降级。`SET IGNORE_UNION_EXCEPTION=false` 会在当前执行上下文关闭恢复，而不是改变编译期依赖关系。通过 `GET()` 动态解析函数名的调用没有静态绑定实例，因而无法在编译期识别 `UnionLikeTableFunction`，不会被当作合并节点。
 
 ## 变量系统
 
@@ -1093,6 +1106,6 @@ Class<?> clazz = Class.forName(className);
 | 过滤查询 | 条件筛选 | `FilterableTableScan` + 规则优化 |
 | KV Join | 主键关联查询 | `SqlRecKvJoinRule` + 主键批量查询 |
 | 向量搜索 | 相似度匹配 | `SqlRecVectorJoinRule` + `ip()` 函数 |
-| UNION ALL | 数据合并 | `SqlrecEnumerableUnion` + 蛇形合并算法 |
+| UNION ALL / UNION DISTINCT | 数据合并 / 整行去重合并 | `SqlrecEnumerableUnion` + `MergeUtils` 蛇形合并算法 |
 
 SQLRec 在声明式 SQL 之上提供了表变量、多语句函数、控制流、运行时变量和并行执行等编程能力。编写 SQL 时仍需遵守本文列出的表类型、函数参数、控制流和执行路由限制。
