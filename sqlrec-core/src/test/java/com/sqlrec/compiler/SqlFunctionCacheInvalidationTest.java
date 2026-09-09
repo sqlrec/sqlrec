@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verify that compiled sql function cache is refreshed immediately after the
- * function is updated / dropped, without waiting for the periodic FunctionUpdater.
+ * function is updated / dropped, without waiting for asynchronous cache refresh.
  */
 class SqlFunctionCacheInvalidationTest {
     private static final String[] TEST_FUNCTIONS = {
@@ -54,7 +54,7 @@ class SqlFunctionCacheInvalidationTest {
         });
         CalciteSchemaFactory.setGlobalSchema(globalSchema);
         JavaFunctionUtils.setSkipHmsQuery(true);
-        CompileManager.invalidateCache();
+        SqlFunctionCache.invalidateAll();
 
         savedMetadataAccess = (MetadataAccess) getStaticField("instance");
         setStaticField("instance", new MetadataAccess(
@@ -70,7 +70,7 @@ class SqlFunctionCacheInvalidationTest {
         for (String functionName : TEST_FUNCTIONS) {
             db.deleteSqlFunction(functionName);
         }
-        CompileManager.invalidateCache();
+        SqlFunctionCache.invalidateAll();
         CalciteSchemaFactory.setGlobalSchema(null);
         JavaFunctionUtils.setSkipHmsQuery(false);
         setStaticField("instance", savedMetadataAccess);

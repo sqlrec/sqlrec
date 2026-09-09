@@ -8,6 +8,8 @@ import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.SqlApiCache;
+import com.sqlrec.entity.SqlApi;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
@@ -31,7 +33,9 @@ public class RestFunctionExecutor {
         }
         apiName = ResourceNames.normalize(apiName);
 
-        SqlFunctionBindable sqlFunctionBindable = CompileManager.getApiBindSqlFunction(apiName);
+        SqlApi sqlApi = SqlApiCache.get(apiName);
+        SqlFunctionBindable sqlFunctionBindable =
+                new CompileManager().getSqlFunction(sqlApi.getFunctionName());
         if (sqlFunctionBindable == null) {
             throw new IllegalArgumentException("function not found for api: " + apiName);
         }

@@ -1,7 +1,6 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.rest.HttpServerHandler;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -34,7 +33,6 @@ public class RestServer {
         int businessMaxPendingTasks = SqlRecConfigs.REST_BUSINESS_MAX_PENDING_TASKS.getValue();
         validateBusinessExecutorConfig(businessExecutorThreads, businessMaxPendingTasks);
 
-        FunctionUpdater.initFunctionUpdateService();
         PrometheusMetricsUtils.initMetrics();
         CalciteSchemaFactory.createCalciteSchema();
 

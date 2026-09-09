@@ -136,7 +136,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 1. 校验 `ENABLE_REST_SERVER` / `ENABLE_THRIFT_SERVER` 至少一个为 true；
 2. 每个启用的 server 在独立线程中启动（`startServer`），任一 server 退出即 `countDown` 主 latch，进程 `System.exit(1)`（fail-fast）。
 
-两个 server 启动时都执行相同的三步初始化：`FunctionUpdater.initFunctionUpdateService()`（周期函数热更新，仅远程元数据模式）、`PrometheusMetricsUtils.initMetrics()`、`CalciteSchemaFactory.createCalciteSchema()`（预热 schema）。
+两个 server 启动时都初始化 `PrometheusMetricsUtils`，并通过 `CalciteSchemaFactory.createCalciteSchema()` 预热 schema。SQL 函数缓存按需初始化，不再启动独立的定时更新服务。
 
 ### Thrift 服务（兼容 Hive 协议）
 
@@ -154,7 +154,7 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 - `RestServer.java`：Netty `NioEventLoopGroup(1)` + 默认 worker 组，`HttpServerCodec` + `HttpObjectAggregator(65536)` + `HttpServerHandler`（端口 30001）。
 - 路由（`HttpServerHandler.java`）：
   - `POST /sql/v1` → `RestSqlExecutor`（受 `ENABLE_REST_SQL_API` 开关控制）：解析 `RequestData{sqls, params, metricTags}`，**每请求新建一个 `SqlExecutor`**，顺序执行 SQL，返回 `ExecuteDataList`；
-  - `POST /api/v1/<name>` → `RestFunctionExecutor`：按 API 名查 `SqlApi` → `CompileManager.getApiBindSqlFunction()` 编译/取缓存函数 → bind 执行；
+  - `POST /api/v1/<name>` → `RestFunctionExecutor`：通过 `SqlApiCache` 按 API 名查 `SqlApi` → `CompileManager.getSqlFunction()` 编译/取缓存函数 → bind 执行；
   - `GET /metrics` → Prometheus scrape；
   - `/ui/*` → UI 静态资源与 UI API。
 - 每个请求记录 micrometer timer/counter（按 path/method/status 打标）。
@@ -202,9 +202,10 @@ SQLRec 是一个**用 SQL 描述推荐系统全部业务逻辑**的推荐引擎�
 
 - `parseFlinkSql()`：预处理 + Flink conformance 解析（Lex.JAVA）。
 - `compileSql()`：先 `SqlTypeChecker.isFlinkSqlCompilable()` 校验，再按 AST 类型分发到 6 类 Bindable 构造器（见 §6）。
-- **SQL 函数缓存**：`static ConcurrentHashMap<String, SqlFunctionBindable> functionBindableMap`（进程级共享）；`Caffeine sqlApiCache` 缓存 API 名 → 函数名映射（TTL = `SCHEMA_CACHE_EXPIRE`，默认 60s）。
+- **SQL 函数缓存**：每个实例持有一个 Caffeine `Cache<String, SqlFunctionBindable>`。默认构造器使用 `SqlFunctionCache` 管理的进程级缓存；后台刷新使用一个新的空缓存，使根函数及其依赖在同一次编译会话中保持一致。
 - **循环依赖检测**：实例字段 `compilingSqlFunctions`（ArrayList 链）记录编译栈，`compileSqlFunction()` 递归编译时检测环。
-- `getApiBindSqlFunction()`：API 名 → SqlApi → 函数名 → `getSqlFunction()`（缓存命中或编译）。
+
+`SqlApiCache` 独立负责 API 元数据缓存，TTL 为 `SCHEMA_CACHE_EXPIRE`（默认 60s）；REST 执行器先解析 API，再通过 `CompileManager` 获取对应 SQL 函数。
 
 ### FunctionCompiler（多语句函数编译状态机）
 
@@ -221,7 +222,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - 输入表若无 `LIKE`，用占位 `CacheTable(enumerable=null)` 注册进临时 schema，使函数体 SQL 能通过校验；
 - 函数体内 `CACHE` 语句的表同样以占位 CacheTable 注册（同名重复时以序号命名 proxyBindable）；
 - IF 内 RETURN 参与返回模式校验但不推进状态机；只有顶层 RETURN 才结束函数定义。若 IF 的 THEN/ELSE 都是 RETURN，编译器进入“等待空终止 RETURN”状态，只接受紧随其后的一条空 `RETURN;`，并保留由 IF 分支推导出的返回 schema；
-- 完成后由 `SqlExecutor.saveSqlFunction()` 持久化（JSON 语句列表）到元数据库，并 `CacheManager.invalidateAll()` 立即驱逐旧编译产物。
+- 完成后由 `SqlExecutor.saveSqlFunction()` 持久化（JSON 语句列表）到元数据库，并只失效 SQL 函数缓存，立即驱逐旧编译产物。
 
 ### NormalSqlCompiler（Calcite 编译全流程）
 
@@ -239,14 +240,18 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 
 `SqlTypeChecker.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlTypeChecker.java`）：递归判定语句是否可在本地 Calcite 执行——顶层必须是 SELECT/INSERT/UPDATE/DELETE/ORDER BY/UNION（或控制流节点递归判定），且引用的所有表解析为 `SqlRecTable`（connector 提供的 Calcite 表）。该判定同时决定"本地执行 vs 转发 Flink Gateway"。
 
-### FunctionUpdater（函数热更新）
+### SqlFunctionCache（函数缓存与后台刷新）
 
-`FunctionUpdater.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionUpdater.java`）：单线程 scheduled executor（默认 300s 周期），对 `functionBindableMap` 中每个函数做依赖图遍历（`inProgress` 集合防环）：
+`SqlFunctionCache.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlFunctionCache.java`）持有进程级 Caffeine 缓存：
 
-- 函数在 DB 中 `updatedAt > bindable.createTime` → 重编译；
-- 依赖函数被更新/删除 → 级联重编译；函数在 DB 中已删除 → 从缓存移除；
-- 依赖表（减去函数入参占位表）的 HMS 更新时间晚于 `createTime` → 重编译；
-- 依赖 Java UDF 类名变更/缺失 → 重编译（todo：无法感知同类名字节码变更）。
+- 首次访问未命中时，由当前请求的 `CompileManager` 同步编译并写入缓存；
+- 写入时间超过 `FUNCTION_UPDATE_INTERVAL`（默认 300s）后，下一次访问返回当前值，同时由两个 daemon 线程之一异步重新编译；
+- 后台编译创建新的空缓存和 `CompileManager`，根函数及递归依赖全部重新加载，编译成功后由 Caffeine 原子替换旧值；
+- 刷新失败时保留旧值并记录 warning；写入时间达到两倍刷新间隔后缓存硬过期，下一次访问同步加载；
+- FileSystemMeta 模式使用不自动过期的普通 Caffeine Cache；
+- 刷新通过 `sqlrec.function.update.duration{status=success|error}` 记录耗时，通过 `sqlrec.function.update.count{result=success|failed}` 记录次数。
+
+`refreshAfterWrite` 是访问触发的刷新，并非定时扫描：没有访问的函数不会主动重编译。
 
 ## 执行子系统（executor + runtime）
 
@@ -259,7 +264,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - `defaultSchema`：`USE DATABASE` 可变；
 - `functionCompiler`：函数多语句编译的会话内状态。
 
-`executeSqlAsync()` 分发顺序：函数编译状态机 → `USE` → `FLUSH`（全缓存失效）→ 资源查询（SHOW/DESC 族）→ 可编译 CRUD（编译 + bind + 组装 `SqlProcessResult`）→ 资源编辑（CREATE/DROP/TRAIN/EXPORT MODEL、SERVICE、API、SQL FUNCTION，编辑后 `CacheManager.invalidateAll()`）→ 兜底返回 null（由 frontend 转发 Flink Gateway）。
+`executeSqlAsync()` 分发顺序：函数编译状态机 → `USE` → `FLUSH`（全缓存失效）→ 资源查询（SHOW/DESC 族）→ 可编译 CRUD（编译 + bind + 组装 `SqlProcessResult`）→ 资源编辑（CREATE/DROP/TRAIN/EXPORT MODEL、SERVICE、API、SQL FUNCTION；SQL 函数编辑只失效函数缓存，其余资源编辑失效全部缓存）→ 兜底返回 null（由 frontend 转发 Flink Gateway）。
 
 `executeSql()`：同步包装，轮询 `result.isCompleted()` + `SQL_SYNC_EXECUTE_TIMEOUT`（默认 180s）超时。
 
@@ -464,13 +469,13 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 | --- | --- | --- |
 | `ExecutorServiceUtils` 虚拟线程池 | 全局、无界 | CACHE 超时执行、ASYNC CALL、PARTITION 并行 |
 | `ObjCache.executorService` | 全局、单线程 | 所有 ObjCache 的异步刷新（共享） |
-| `FunctionUpdater.executor` | 单线程 scheduled | 函数热更新检查（300s） |
+| `SqlFunctionCache.RefreshExecutorHolder.EXECUTOR` | 固定 2 个 daemon 线程 | SQL 函数缓存异步刷新 |
 | `SessionTimeoutChecker.timeoutChecker` | 单线程 scheduled | 会话超时（5min 检查） |
 | Thrift `TThreadPoolServer` | 每连接一平台线程 | RPC 处理（含同步 SQL 执行） |
 | Netty event loop | boss(1)+worker(默认) | REST 处理（**业务在 event loop 上同步执行**） |
 | 各静态客户端 | — | HmsClient（全局 synchronized）、K8sManager、RedisWrapper/JdbcHandler 连接池 |
 
-静态可变状态：`CompileManager.functionBindableMap/sqlApiCache`、`CalciteSchemaFactory.schemaMap/globalSchema`、`ServiceManager.serviceConfigCacheMap`、各 connector 静态连接池、`HmsClient.client`、`K8sManager.kubernetesClient`。
+静态可变状态：`SqlFunctionCache`、`SqlApiCache`、`CalciteSchemaFactory.schemaMap/globalSchema`、`ServiceManager.serviceConfigCacheMap`、各 connector 静态连接池、`HmsClient.client`、`K8sManager.kubernetesClient`。
 
 ## 部署架构（deploy/ + bin/ + docker/）
 

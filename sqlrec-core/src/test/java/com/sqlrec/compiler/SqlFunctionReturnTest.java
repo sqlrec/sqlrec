@@ -34,7 +34,7 @@ class SqlFunctionReturnTest {
 
     @BeforeEach
     void setUp() {
-        CompileManager.invalidateCache();
+        SqlFunctionCache.invalidateAll();
         schema = CalciteSchema.createRootSchema(false);
         CalciteSchemaFactory.setGlobalSchema(schema);
         JavaFunctionUtils.setSkipHmsQuery(true);
@@ -44,7 +44,7 @@ class SqlFunctionReturnTest {
     @AfterEach
     void tearDown() {
         SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(originalParallelism);
-        CompileManager.invalidateCache();
+        SqlFunctionCache.invalidateAll();
         CalciteSchemaFactory.setGlobalSchema(null);
         JavaFunctionUtils.setSkipHmsQuery(false);
     }

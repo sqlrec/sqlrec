@@ -1,6 +1,7 @@
 package com.sqlrec.schema;
 
-import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.SqlApiCache;
+import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.model.ServiceManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +25,15 @@ public class CacheManager {
         }
 
         try {
-            CompileManager.invalidateCache();
+            SqlFunctionCache.invalidateAll();
         } catch (Exception e) {
-            log.error("Failed to invalidate CompileManager cache", e);
+            log.error("Failed to invalidate SQL function cache", e);
+        }
+
+        try {
+            SqlApiCache.invalidateAll();
+        } catch (Exception e) {
+            log.error("Failed to invalidate SqlApi cache", e);
         }
 
         try {

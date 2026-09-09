@@ -24,7 +24,6 @@ class CompileManagerTest {
 
         SqlFunctionBindable sqlFunctionBindable1 = new CompileManager().getSqlFunction("test");
         Thread.sleep(1);
-        FunctionUpdater.updateFunctionBindable();
         SqlFunctionBindable sqlFunctionBindable2 = new CompileManager().getSqlFunction("test");
         assertEquals(sqlFunctionBindable1, sqlFunctionBindable2);
 
@@ -33,13 +32,13 @@ class CompileManagerTest {
         SqlFunction sqlFunction2 = db.getSqlFunction("test");
         assertEquals(sqlFunction2.getUpdatedAt(), sqlFunction.getUpdatedAt());
 
-        FunctionUpdater.updateFunctionBindable();
+        SqlFunctionCache.invalidateAll();
         SqlFunctionBindable sqlFunctionBindable3 = new CompileManager().getSqlFunction("test");
         assertNotEquals(sqlFunctionBindable1, sqlFunctionBindable3);
         assertTrue(sqlFunctionBindable3.getCreateTime() > sqlFunctionBindable1.getCreateTime());
 
         db.deleteSqlFunction("test");
-        FunctionUpdater.updateFunctionBindable();
+        SqlFunctionCache.invalidateAll();
         assertThrows(Exception.class, () -> new CompileManager().getSqlFunction("test"));
     }
 }

@@ -1,15 +1,13 @@
 package com.sqlrec.compiler;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.sqlrec.common.config.SqlRecConfigs;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
-import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.*;
 import com.sqlrec.sql.parser.SqlAssert;
@@ -30,32 +28,20 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class CompileManager {
-    private static final Logger log = LoggerFactory.getLogger(CompileManager.class);
-
-    private static Map<String, SqlFunctionBindable> functionBindableMap = new ConcurrentHashMap<>();
-    private static Cache<String, SqlApi> sqlApiCache = Caffeine.newBuilder()
-            .expireAfterWrite(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS)
-            .build();
-
-    public static void invalidateCache() {
-        sqlApiCache.invalidateAll();
-        functionBindableMap.clear();
-    }
-
-    private List<String> compilingSqlFunctions = new ArrayList<>();
+    private final List<String> compilingSqlFunctions = new ArrayList<>();
+    private final Cache<String, SqlFunctionBindable> functionCache;
 
     public CompileManager() {
+        this(SqlFunctionCache.getCache());
+    }
 
+    CompileManager(Cache<String, SqlFunctionBindable> functionCache) {
+        this.functionCache = functionCache;
     }
 
     public static SqlNode parseFlinkSql(String sql) throws Exception {
@@ -247,11 +233,20 @@ public class CompileManager {
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
         functionName = ResourceNames.normalize(functionName);
-        SqlFunctionBindable bindable = functionBindableMap.get(functionName);
-        if (bindable != null) {
-            return bindable;
+        SqlFunctionBindable cached = functionCache.getIfPresent(functionName);
+        if (cached == null) {
+            SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName);
+            functionCache.put(functionName, compiled);
+            return compiled;
         }
-        return compileSqlFunction(functionName);
+
+        if (functionCache instanceof LoadingCache) {
+            @SuppressWarnings("unchecked")
+            LoadingCache<String, SqlFunctionBindable> loadingCache =
+                    (LoadingCache<String, SqlFunctionBindable>) functionCache;
+            return loadingCache.get(functionName);
+        }
+        return cached;
     }
 
     public BindableInterface getExecutableSqlFunction(String functionName) throws Exception {
@@ -265,18 +260,33 @@ public class CompileManager {
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
         functionName = ResourceNames.normalize(functionName);
+        SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName);
+        functionCache.put(functionName, compiled);
+        return compiled;
+    }
+
+    private SqlFunctionBindable compileSqlFunctionDefinition(String functionName) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlFunction sqlFunction = db.getSqlFunction(functionName);
         if (sqlFunction == null) {
             throw new Exception("function not fund : " + functionName);
         }
         List<String> sqlList = JsonUtils.parseStringList(sqlFunction.getSqlList());
-        return compileSqlFunction(functionName, sqlList);
+        return compileSqlFunctionDefinition(functionName, sqlList);
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
         functionName = ResourceNames.normalize(functionName);
+        SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName, sqlList);
+        functionCache.put(functionName, compiled);
+        return compiled;
+    }
+
+    private SqlFunctionBindable compileSqlFunctionDefinition(
+            String functionName,
+            List<String> sqlList
+    ) throws Exception {
         if (compilingSqlFunctions.contains(functionName)) {
             throw new Exception("circular dependency: " + functionName + " trace: "
                     + String.join("->", compilingSqlFunctions));
@@ -295,35 +305,14 @@ public class CompileManager {
             if (!functionName.equals(functionCompiler.getFunctionBindable().getFunName())) {
                 throw new RuntimeException("function name not match");
             }
-            functionBindableMap.put(functionName, functionCompiler.getFunctionBindable());
             return functionCompiler.getFunctionBindable();
         }
         throw new RuntimeException("function define end without return");
-    }
-
-    public static SqlFunctionBindable getApiBindSqlFunction(String apiName) throws Exception {
-        SqlApi sqlApi = sqlApiCache.getIfPresent(apiName);
-        if (sqlApi == null) {
-            MetadataAccess db = MetadataAccessFactory.getInstance();
-            sqlApi = db.getSqlApi(apiName);
-            if (sqlApi != null) {
-                sqlApiCache.put(apiName, sqlApi);
-            }
-        }
-
-        if (sqlApi == null) {
-            throw new Exception("api not fund : " + apiName);
-        }
-        return new CompileManager().getSqlFunction(sqlApi.getFunctionName());
     }
 
     public static SetBindable getSetBindable(SqlSet set) {
         SqlCharStringLiteral key = (SqlCharStringLiteral) set.getKey();
         SqlCharStringLiteral value = (SqlCharStringLiteral) set.getValue();
         return new SetBindable(SchemaUtils.getValueOfStringLiteral(key), SchemaUtils.getValueOfStringLiteral(value));
-    }
-
-    public static Map<String, SqlFunctionBindable> getFunctionBindableMap() {
-        return functionBindableMap;
     }
 }

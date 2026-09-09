@@ -12,6 +12,7 @@ import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
+import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -110,7 +111,11 @@ public class SqlExecutor {
         }
 
         result = processResourceEdit(sqlNode);
-        CacheManager.invalidateAll();
+        if (sqlNode instanceof SqlDropSqlFunction) {
+            SqlFunctionCache.invalidateAll();
+        } else {
+            CacheManager.invalidateAll();
+        }
 
         return result;
     }
@@ -409,9 +414,7 @@ public class SqlExecutor {
         } else {
             db.insertSqlFunction(sqlFunction);
         }
-        // evict stale compiled bindable immediately, so next call uses the new version
-        // instead of waiting for the periodic FunctionUpdater check
-        CacheManager.invalidateAll();
+        SqlFunctionCache.invalidateAll();
     }
 
     public static void saveSqlApi(SqlCreateApi api) {

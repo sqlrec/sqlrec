@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Guard against forgotten forwarding overrides in wrapper bindables.
- * Dependency metadata lost in a wrapper layer used to break FunctionUpdater
+ * Dependency metadata must survive every bindable wrapper layer.
  * refresh and circular dependency detection silently.
  */
 public class BindableForwardingTest {

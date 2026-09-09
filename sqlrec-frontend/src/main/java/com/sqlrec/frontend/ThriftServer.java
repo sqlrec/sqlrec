@@ -1,7 +1,6 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.compiler.FunctionUpdater;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.frontend.thrift.TCLIServiceImpl;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -18,7 +17,6 @@ public class ThriftServer {
     private static final Logger logger = LoggerFactory.getLogger(ThriftServer.class);
 
     public static void main(String[] args) throws TTransportException {
-        FunctionUpdater.initFunctionUpdateService();
         PrometheusMetricsUtils.initMetrics();
         CalciteSchemaFactory.createCalciteSchema();
 

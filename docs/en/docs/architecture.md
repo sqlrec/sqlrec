@@ -140,7 +140,7 @@ Module responsibilities:
 1. Validates that at least one of `ENABLE_REST_SERVER` / `ENABLE_THRIFT_SERVER` is true;
 2. Each enabled server starts in its own thread (`startServer`); if any server exits, the main latch counts down and the process calls `System.exit(1)` (fail-fast).
 
-Both servers perform the same three-step initialization at startup: `FunctionUpdater.initFunctionUpdateService()` (periodic function hot-update, remote metadata mode only), `PrometheusMetricsUtils.initMetrics()`, and `CalciteSchemaFactory.createCalciteSchema()` (schema warm-up).
+Both servers initialize `PrometheusMetricsUtils` and warm up the schema through `CalciteSchemaFactory.createCalciteSchema()`. The SQL function cache is initialized on demand; there is no separate scheduled updater service.
 
 ### Thrift Service (Hive Protocol Compatible)
 
@@ -158,7 +158,7 @@ Both servers perform the same three-step initialization at startup: `FunctionUpd
 - `RestServer.java`: Netty `NioEventLoopGroup(1)` + default worker group, `HttpServerCodec` + `HttpObjectAggregator(65536)` + `HttpServerHandler` (port 30001).
 - Routing (`HttpServerHandler.java`):
   - `POST /sql/v1` → `RestSqlExecutor` (controlled by the `ENABLE_REST_SQL_API` switch): parses `RequestData{sqls, params, metricTags}`, **creates a new `SqlExecutor` per request**, executes SQL sequentially, returns `ExecuteDataList`;
-  - `POST /api/v1/<name>` → `RestFunctionExecutor`: looks up `SqlApi` by API name → `CompileManager.getApiBindSqlFunction()` compiles/gets cached function → bind and execute;
+  - `POST /api/v1/<name>` → `RestFunctionExecutor`: resolves `SqlApi` through `SqlApiCache` → `CompileManager.getSqlFunction()` compiles/gets the cached function → bind and execute;
   - `GET /metrics` → Prometheus scrape;
   - `/ui/*` → UI static resources and UI API.
 - Each request records micrometer timer/counter (tagged by path/method/status).
@@ -206,9 +206,10 @@ All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREA
 
 - `parseFlinkSql()`: preprocessing + Flink conformance parsing (Lex.JAVA).
 - `compileSql()`: first validates via `SqlTypeChecker.isFlinkSqlCompilable()`, then dispatches by AST type to 6 Bindable constructors (see §6).
-- **SQL function cache**: `static ConcurrentHashMap<String, SqlFunctionBindable> functionBindableMap` (process-level shared); `Caffeine sqlApiCache` caches API name → function name mapping (TTL = `SCHEMA_CACHE_EXPIRE`, default 60s).
+- **SQL function cache**: each instance holds a Caffeine `Cache<String, SqlFunctionBindable>`. The default constructor uses the process-wide cache owned by `SqlFunctionCache`; background refreshes use a new empty cache so that a root function and all of its dependencies are compiled consistently in one session.
 - **Circular dependency detection**: instance field `compilingSqlFunctions` (ArrayList chain) records the compilation stack; `compileSqlFunction()` detects cycles during recursive compilation.
-- `getApiBindSqlFunction()`: API name → SqlApi → function name → `getSqlFunction()` (cache hit or compile).
+
+`SqlApiCache` independently owns the API metadata cache with a TTL of `SCHEMA_CACHE_EXPIRE` (60 seconds by default). The REST executor resolves the API first, then asks `CompileManager` for its SQL function.
 
 ### FunctionCompiler (Multi-Statement Function Compilation State Machine)
 
@@ -226,7 +227,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - Input tables without `LIKE` are registered into a temporary schema as placeholder `CacheTable(enumerable=null)` so that function body SQL passes validation;
 - Tables of `CACHE` statements inside the function body are likewise registered as placeholder CacheTables (named with sequence numbers when duplicated);
 - RETURN inside IF participates in result-schema validation but does not advance the state machine. Only a top-level RETURN terminates the definition. When both THEN and ELSE are RETURN statements, the compiler enters an “awaiting empty terminator” state, accepts only the immediately following bare `RETURN;`, and preserves the result schema inferred from the IF branches;
-- Upon completion, `SqlExecutor.saveSqlFunction()` persists it (JSON statement list) to the metadata database and `CacheManager.invalidateAll()` immediately evicts old compilation artifacts.
+- Upon completion, `SqlExecutor.saveSqlFunction()` persists it (JSON statement list) to the metadata database and invalidates only the SQL function cache, immediately evicting old compilation artifacts.
 
 ### NormalSqlCompiler (Full Calcite Compilation Pipeline)
 
@@ -244,14 +245,18 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 
 `SqlTypeChecker.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlTypeChecker.java`): recursively determines whether a statement can execute on local Calcite — the top level must be SELECT/INSERT/UPDATE/DELETE/ORDER BY/UNION (or control-flow nodes recursively determined), and all referenced tables must resolve to `SqlRecTable` (Calcite tables provided by connectors). This determination also decides "local execution vs forwarding to Flink Gateway".
 
-### FunctionUpdater (Function Hot-Update)
+### SqlFunctionCache (Function Cache and Background Refresh)
 
-`FunctionUpdater.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/FunctionUpdater.java`): single-threaded scheduled executor (default 300s period), traverses the dependency graph for each function in `functionBindableMap` (`inProgress` set prevents cycles):
+`SqlFunctionCache.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlFunctionCache.java`) owns the process-wide Caffeine cache:
 
-- Function in DB has `updatedAt > bindable.createTime` → recompile;
-- Dependent function updated/deleted → cascading recompile; function deleted from DB → removed from cache;
-- Dependent tables' (minus function input placeholder tables) HMS update time later than `createTime` → recompile;
-- Dependent Java UDF class name changed/missing → recompile (todo: cannot detect bytecode changes with the same class name).
+- On the first miss, the request's `CompileManager` compiles the function synchronously and stores it;
+- after `FUNCTION_UPDATE_INTERVAL` (300 seconds by default), the next access returns the current value and asks one of two daemon threads to compile a replacement asynchronously;
+- a background compilation creates a new empty cache and `CompileManager`, forcing the root function and all recursive dependencies to be loaded again; Caffeine atomically replaces the old value after success;
+- a failed refresh keeps the old value and emits a warning; the entry expires after twice the refresh interval, after which the next access loads synchronously;
+- FileSystemMeta mode uses a regular Caffeine Cache with no automatic expiration;
+- refresh duration is recorded by `sqlrec.function.update.duration{status=success|error}`, and refresh count by `sqlrec.function.update.count{result=success|failed}`.
+
+`refreshAfterWrite` is access-driven rather than a periodic scan: functions that are not accessed are not proactively recompiled.
 
 ## Execution Subsystem (executor + runtime)
 
@@ -264,7 +269,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 - `defaultSchema`: mutable via `USE DATABASE`;
 - `functionCompiler`: in-session state for multi-statement function compilation.
 
-`executeSqlAsync()` dispatch order: function compilation state machine → `USE` → `FLUSH` (invalidate all caches) → resource queries (SHOW/DESC family) → compilable CRUD (compile + bind + assemble `SqlProcessResult`) → resource editing (CREATE/DROP/TRAIN/EXPORT MODEL, SERVICE, API, SQL FUNCTION, followed by `CacheManager.invalidateAll()`) → fallback returns null (forwarded to Flink Gateway by the frontend).
+`executeSqlAsync()` dispatch order: function compilation state machine → `USE` → `FLUSH` (invalidate all caches) → resource queries (SHOW/DESC family) → compilable CRUD (compile + bind + assemble `SqlProcessResult`) → resource editing (CREATE/DROP/TRAIN/EXPORT MODEL, SERVICE, API, SQL FUNCTION; SQL function edits invalidate only the function cache, while other resource edits invalidate all caches) → fallback returns null (forwarded to Flink Gateway by the frontend).
 
 `executeSql()`: synchronous wrapper, polls `result.isCompleted()` + `SQL_SYNC_EXECUTE_TIMEOUT` (default 180s) timeout.
 
@@ -478,13 +483,13 @@ Programming model essentials: `IF` expresses conditional execution; for a positi
 | --- | --- | --- |
 | `ExecutorServiceUtils` virtual thread pool | global, unbounded | CACHE timeout execution, ASYNC CALL, PARTITION parallelism |
 | `ObjCache.executorService` | global, single-threaded | Async refresh for all ObjCaches (shared) |
-| `FunctionUpdater.executor` | single-threaded scheduled | Function hot-update checks (300s) |
+| `SqlFunctionCache.RefreshExecutorHolder.EXECUTOR` | fixed pool of 2 daemon threads | Asynchronous SQL function cache refresh |
 | `SessionTimeoutChecker.timeoutChecker` | single-threaded scheduled | Session timeout (5min check) |
 | Thrift `TThreadPoolServer` | one platform thread per connection | RPC handling (including synchronous SQL execution) |
 | Netty event loop | boss(1)+worker(default) | REST handling (**business executes synchronously on the event loop**) |
 | Static clients | — | HmsClient (globally synchronized), K8sManager, RedisWrapper/JdbcHandler connection pools |
 
-Static mutable state: `CompileManager.functionBindableMap/sqlApiCache`, `CalciteSchemaFactory.schemaMap/globalSchema`, `ServiceManager.serviceConfigCacheMap`, connector static connection pools, `HmsClient.client`, `K8sManager.kubernetesClient`.
+Static mutable state: `SqlFunctionCache`, `SqlApiCache`, `CalciteSchemaFactory.schemaMap/globalSchema`, `ServiceManager.serviceConfigCacheMap`, connector static connection pools, `HmsClient.client`, and `K8sManager.kubernetesClient`.
 
 ## Deployment Architecture (deploy/ + bin/ + docker/)
 
