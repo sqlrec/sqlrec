@@ -1,33 +1,35 @@
 package com.sqlrec.schema;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.udf.config.FunctionConfigs;
+import com.sqlrec.utils.CacheUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class JavaFunctionUtils {
     private static final Logger log = LoggerFactory.getLogger(JavaFunctionUtils.class);
     private static volatile boolean skipHmsQuery = false;
-    private static Map<String, Class<?>> javaFunctionClassMap = new ConcurrentHashMap<>();
-    private static Map<String, Long> functionUpdateTime = new ConcurrentHashMap<>();
-    private static Cache<String, String> notExistCache = Caffeine.newBuilder()
-            .expireAfterWrite(SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(), TimeUnit.SECONDS)
-            .build();
+    private static final LoadingCache<String, Optional<Class<?>>> javaFunctionClassCache =
+            CacheUtils.createRefreshCache(
+                    Duration.ofSeconds(SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue()),
+                    JavaFunctionUtils::loadJavaFunctionClass
+            );
+
+    private static final Map<String, Class<?>> registeredJavaFunctionClassMap = new ConcurrentHashMap<>();
 
     public static void invalidateCache() {
-        notExistCache.invalidateAll();
-        javaFunctionClassMap.clear();
-        functionUpdateTime.clear();
+        javaFunctionClassCache.invalidateAll();
     }
 
     public static void setSkipHmsQuery(boolean skip) {
@@ -39,11 +41,7 @@ public class JavaFunctionUtils {
     }
 
     public static Object getTableFunction(String db, String funName) throws Exception {
-        String mapKey = getMapKey(db, funName);
-        Class<?> clazz = javaFunctionClassMap.get(mapKey);
-        if (clazz == null) {
-            clazz = getTableFunctionClass(db, funName);
-        }
+        Class<?> clazz = getTableFunctionClass(db, funName);
         if (clazz == null) {
             return null;
         }
@@ -51,38 +49,47 @@ public class JavaFunctionUtils {
     }
 
     public static Class<?> getTableFunctionClass(String db, String funName) {
-        String mapKey = getMapKey(db, funName);
-        if (notExistCache.asMap().containsKey(mapKey)) {
-            return null;
+        String normalizedDb = ResourceNames.normalize(db);
+        String normalizedFunName = ResourceNames.normalize(funName);
+        String mapKey = getMapKey(normalizedDb, normalizedFunName);
+        Class<?> registeredClazz = registeredJavaFunctionClassMap.get(mapKey);
+        if (registeredClazz != null) {
+            return registeredClazz;
         }
 
-        Class<?> clazz = null;
+        try {
+            return javaFunctionClassCache.get(mapKey).orElse(null);
+        } catch (JavaFunctionLoadException e) {
+            log.warn("Exception when get table function: db={}, funName={}",
+                    normalizedDb, normalizedFunName, e.getCause());
+            return null;
+        }
+    }
+
+    private static Optional<Class<?>> loadJavaFunctionClass(String mapKey) {
+        int separatorIndex = mapKey.indexOf('.');
+        String db = mapKey.substring(0, separatorIndex);
+        String funName = mapKey.substring(separatorIndex + 1);
         try {
             String className = getJavaFunctionClassName(db, funName);
             if (StringUtils.isEmpty(className)) {
-                return null;
+                return Optional.empty();
             }
-            Class<?> existingClazz = javaFunctionClassMap.get(mapKey);
-            if (existingClazz == null || !existingClazz.getName().equals(className)) {
-                clazz = Class.forName(className);
-                javaFunctionClassMap.put(mapKey, clazz);
-                functionUpdateTime.put(mapKey, System.currentTimeMillis());
-                log.info("Register table function: db={}, funName={}, className={}", db, funName, className);
-            } else {
-                clazz = existingClazz;
-            }
+
+            Class<?> clazz = Class.forName(className);
+            log.info("Register table function: db={}, funName={}, className={}", db, funName, className);
+            return Optional.of(clazz);
         } catch (NoSuchObjectException e) {
             log.info("function: db={}, funName={} not found", db, funName);
-            notExistCache.put(mapKey, "");
-            return null;
+            return Optional.empty();
         } catch (Exception e) {
-            log.warn("Exception when get table function: db={}, funName={}", db, funName, e);
-            return null;
+            throw new JavaFunctionLoadException(e);
         }
-        return clazz;
     }
 
     public static String getJavaFunctionClassName(String db, String funName) throws Exception {
+        db = ResourceNames.normalize(db);
+        funName = ResourceNames.normalize(funName);
         if (FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.containsKey(funName)) {
             return FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.get(funName);
         }
@@ -99,36 +106,19 @@ public class JavaFunctionUtils {
     }
 
     public static void registerTableFunction(String db, String funName, Class<?> clazz) {
-        javaFunctionClassMap.put(getMapKey(db, funName), clazz);
-    }
-
-    public static long getFunctionUpdateTime(String db, String funName) {
-        String mapKey = getMapKey(db, funName);
-        return functionUpdateTime.getOrDefault(mapKey, 0L);
-    }
-
-    /**
-     * Returns true if the java function's class has been (re)loaded after {@code baselineTime}
-     * (e.g. because its className changed in the metastore), or if the function can no longer be
-     * resolved (deleted / not found).
-     * <p>
-     * Note: this only detects className changes (which trigger a class reload inside
-     * {@link #getTableFunctionClass(String, String)}) and missing functions. It cannot detect
-     * bytecode-only changes (same className, different JAR) — see todo in caller.
-     */
-    public static boolean isJavaFunctionModifiedSince(String db, String funName, long baselineTime) {
-        // getTableFunctionClass may reload the class (and refresh functionUpdateTime) when the
-        // className in the metastore differs from the cached one.
-        Class<?> clazz = getTableFunctionClass(db, funName);
-        if (clazz == null) {
-            // function no longer resolvable (deleted or not found) — treat as modified so that
-            // dependents are refreshed and surface the failure rather than serving stale state.
-            return true;
-        }
-        return getFunctionUpdateTime(db, funName) > baselineTime;
+        registeredJavaFunctionClassMap.put(
+                getMapKey(ResourceNames.normalize(db), ResourceNames.normalize(funName)),
+                clazz
+        );
     }
 
     private static String getMapKey(String db, String funName) {
         return db + "." + funName;
+    }
+
+    private static final class JavaFunctionLoadException extends RuntimeException {
+        private JavaFunctionLoadException(Exception cause) {
+            super(cause);
+        }
     }
 }

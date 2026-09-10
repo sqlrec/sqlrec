@@ -245,9 +245,9 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 `SqlFunctionCache.java`（`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlFunctionCache.java`）持有进程级 Caffeine 缓存：
 
 - 首次访问未命中时，由当前请求的 `CompileManager` 同步编译并写入缓存；
-- 写入时间超过 `FUNCTION_UPDATE_INTERVAL`（默认 300s）后，下一次访问返回当前值，同时由两个 daemon 线程之一异步重新编译；
+- 写入时间超过 `FUNCTION_UPDATE_INTERVAL`（默认 300s）后，下一次访问返回当前值，同时由共享的单个 cache-refresh 线程异步重新编译；
 - 后台编译创建新的空缓存和 `CompileManager`，根函数及递归依赖全部重新加载，编译成功后由 Caffeine 原子替换旧值；
-- 刷新失败时保留旧值并记录 warning；写入时间达到两倍刷新间隔后缓存硬过期，下一次访问同步加载；
+- 刷新失败时保留旧值并记录 warning，等待一个完整刷新周期后才会重试；缓存不会按时间硬过期；
 - FileSystemMeta 模式使用不自动过期的普通 Caffeine Cache；
 - 刷新通过 `sqlrec.function.update.duration{status=success|error}` 记录耗时，通过 `sqlrec.function.update.count{result=success|failed}` 记录次数。
 
@@ -357,6 +357,7 @@ BindableInterface
 - `CalciteSchemaFactory.java`（`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`）：`createCalciteSchema()` 构建根 schema：远程模式下按 `databaseListCache`（`ObjCache`，TTL 60s，异步刷新）为每个库挂 `HmsSchema`；`globalSchema`（由 server 启动时设置）存在时直接复用其 subSchema 映射（快速路径）。
 - `HmsSchema.java`（`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`）：per-db 两级 `ObjCache`——`tableMapCache`（增量：仅 `getTableUpdateTime` 变化的表重建 `Table` 对象，未变沿用旧实例）与 `functionMapCache`（HMS 函数 + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` 内置 UDF → `UdfManager.createScalarFunction` 反射）。
 - **`ObjCache`**（`sqlrec-core/src/main/java/com/sqlrec/utils/ObjCache.java`）：TTL + 可选异步刷新的极简缓存。`getObj()` 失效即 `updateObj()`（synchronized）：首载同步；之后提交到**全局单线程** executor 异步刷新并立即返回旧值；`invalidate()` 清空。
+- **`CacheUtils`**：统一创建使用共享单线程 executor 的 Caffeine `LoadingCache`；调用方只需提供刷新周期和加载函数，刷新失败时自动保留旧值并等待下一个周期。支持注入 executor 和 ticker 进行确定性测试。
 
 ### 表抽象体系（common/schema）
 
@@ -391,7 +392,7 @@ AbstractTable
 ### 注册与加载
 
 - **内置 UDF**：`FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` 静态注册 scalar 函数名 → 类名；table 函数经 `JavaFunctionUtils.getTableFunction()` 查找（HMS 注册的 Java 函数或内置）。
-- **动态 Java UDF**：`UdfManager`/`JavaFunctionUtils` 从 HMS function 注册表按 className 反射加载，`isJavaFunctionModifiedSince` 支撑热更新（类名级）。
+- **动态 Java UDF**：`UdfManager`/`JavaFunctionUtils` 从 HMS function 注册表按 className 反射加载；`JavaFunctionUtils` 使用 Caffeine 缓存定义，首次加载同步执行，之后按 `FUNCTION_UPDATE_INTERVAL` 异步刷新并立即返回旧值；刷新失败时保留旧值并等待一个完整周期再重试，避免 HMS 故障阻塞在线请求。SQL function 缓存刷新时会据此重新绑定 Java UDF 类。
 
 ### HTTP 类 UDF（在线推理核心）
 
@@ -469,7 +470,7 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 | --- | --- | --- |
 | `ExecutorServiceUtils` 虚拟线程池 | 全局、无界 | CACHE 超时执行、ASYNC CALL、PARTITION 并行 |
 | `ObjCache.executorService` | 全局、单线程 | 所有 ObjCache 的异步刷新（共享） |
-| `SqlFunctionCache.RefreshExecutorHolder.EXECUTOR` | 固定 2 个 daemon 线程 | SQL 函数缓存异步刷新 |
+| `ExecutorServiceUtils` cache-refresh 线程 | 全局、单个 daemon 线程 | SQL 函数及 Java UDF 定义缓存异步刷新 |
 | `SessionTimeoutChecker.timeoutChecker` | 单线程 scheduled | 会话超时（5min 检查） |
 | Thrift `TThreadPoolServer` | 每连接一平台线程 | RPC 处理（含同步 SQL 执行） |
 | Netty event loop | boss(1)+worker(默认) | REST 处理（**业务在 event loop 上同步执行**） |

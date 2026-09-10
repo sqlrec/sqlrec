@@ -250,9 +250,9 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 `SqlFunctionCache.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlFunctionCache.java`) owns the process-wide Caffeine cache:
 
 - On the first miss, the request's `CompileManager` compiles the function synchronously and stores it;
-- after `FUNCTION_UPDATE_INTERVAL` (300 seconds by default), the next access returns the current value and asks one of two daemon threads to compile a replacement asynchronously;
+- after `FUNCTION_UPDATE_INTERVAL` (300 seconds by default), the next access returns the current value and asks the shared single cache-refresh thread to compile a replacement asynchronously;
 - a background compilation creates a new empty cache and `CompileManager`, forcing the root function and all recursive dependencies to be loaded again; Caffeine atomically replaces the old value after success;
-- a failed refresh keeps the old value and emits a warning; the entry expires after twice the refresh interval, after which the next access loads synchronously;
+- a failed refresh keeps the old value, emits a warning, and waits one full refresh interval before retrying; entries do not expire based on time;
 - FileSystemMeta mode uses a regular Caffeine Cache with no automatic expiration;
 - refresh duration is recorded by `sqlrec.function.update.duration{status=success|error}`, and refresh count by `sqlrec.function.update.count{result=success|failed}`.
 
@@ -369,6 +369,7 @@ BindableInterface
 - `CalciteSchemaFactory.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`): `createCalciteSchema()` builds the root schema: in remote mode, attaches an `HmsSchema` per database based on `databaseListCache` (`ObjCache`, TTL 60s, async refresh); when `globalSchema` (set at server startup) exists, directly reuses its subSchema mapping (fast path).
 - `HmsSchema.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`): per-db two-level `ObjCache` — `tableMapCache` (incremental: only rebuilds `Table` objects whose `getTableUpdateTime` changed, reuses old instances otherwise) and `functionMapCache` (HMS functions + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` built-in UDFs → `UdfManager.createScalarFunction` reflection).
 - **`ObjCache`** (`sqlrec-core/src/main/java/com/sqlrec/utils/ObjCache.java`): minimal cache with TTL + optional async refresh. `getObj()` triggers `updateObj()` on expiry (synchronized): first load synchronous; afterwards submitted to a **global single-thread** executor for async refresh and immediately returns the old value; `invalidate()` clears.
+- **`CacheUtils`**: creates Caffeine `LoadingCache` instances using the shared single-thread executor. Callers provide only a refresh interval and load function; a failed refresh automatically keeps the old value until the next interval. Executors and tickers can be injected for deterministic tests.
 
 ### Table Abstraction System (common/schema)
 
@@ -404,7 +405,7 @@ The six connectors share the same structure: `config/` (Options parsing of table
 ### Registration and Loading
 
 - **Built-in UDFs**: `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` statically registers scalar function names → class names; table functions are looked up via `JavaFunctionUtils.getTableFunction()` (Java functions registered in HMS or built-in).
-- **Dynamic Java UDFs**: `UdfManager`/`JavaFunctionUtils` load from the HMS function registry by className via reflection; `isJavaFunctionModifiedSince` supports hot-update (class name level).
+- **Dynamic Java UDFs**: `UdfManager`/`JavaFunctionUtils` load from the HMS function registry by className via reflection. `JavaFunctionUtils` caches definitions with Caffeine: the initial load is synchronous, while later accesses trigger an asynchronous refresh after `FUNCTION_UPDATE_INTERVAL` and immediately return the old value. A failed refresh keeps the old value and waits one full interval before retrying, so an HMS outage does not block online requests. SQL-function cache refreshes then rebind Java UDF classes from this cache.
 
 ### HTTP UDFs (Online Inference Core)
 
@@ -483,7 +484,7 @@ Programming model essentials: `IF` expresses conditional execution; for a positi
 | --- | --- | --- |
 | `ExecutorServiceUtils` virtual thread pool | global, unbounded | CACHE timeout execution, ASYNC CALL, PARTITION parallelism |
 | `ObjCache.executorService` | global, single-threaded | Async refresh for all ObjCaches (shared) |
-| `SqlFunctionCache.RefreshExecutorHolder.EXECUTOR` | fixed pool of 2 daemon threads | Asynchronous SQL function cache refresh |
+| `ExecutorServiceUtils` cache-refresh thread | global, single daemon thread | Asynchronous SQL-function and Java-UDF definition cache refresh |
 | `SessionTimeoutChecker.timeoutChecker` | single-threaded scheduled | Session timeout (5min check) |
 | Thrift `TThreadPoolServer` | one platform thread per connection | RPC handling (including synchronous SQL execution) |
 | Netty event loop | boss(1)+worker(default) | REST handling (**business executes synchronously on the event loop**) |

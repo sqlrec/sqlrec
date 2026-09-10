@@ -32,4 +32,12 @@ public class ExecutorServiceUtilsTest {
 
         assertEquals(1, counter[0]);
     }
+
+    @Test
+    public void testCacheRefreshExecutorServiceSingleton() {
+        ExecutorService e1 = ExecutorServiceUtils.getCacheRefreshExecutorService();
+        ExecutorService e2 = ExecutorServiceUtils.getCacheRefreshExecutorService();
+
+        assertSame(e1, e2);
+    }
 }

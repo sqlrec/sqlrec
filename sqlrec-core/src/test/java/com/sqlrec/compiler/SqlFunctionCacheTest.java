@@ -43,9 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlFunctionCacheTest {
@@ -162,6 +160,14 @@ class SqlFunctionCacheTest {
             executor.runAll();
             assertSame(original, cache.getIfPresent("deleted"));
 
+            ticker.advance(Duration.ofMillis(500));
+            assertSame(original, manager.getSqlFunction("deleted"));
+            assertEquals(0, executor.size());
+
+            ticker.advance(Duration.ofMillis(600));
+            assertSame(original, manager.getSqlFunction("deleted"));
+            assertEquals(1, executor.size());
+
             Counter failed = metrics.find(Consts.METRICS_FUNCTION_UPDATE_COUNT)
                     .tag("result", "failed")
                     .counter();
@@ -173,23 +179,6 @@ class SqlFunctionCacheTest {
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(metrics);
         }
-    }
-
-    @Test
-    void hardExpirationRemovesInactiveEntry() throws Exception {
-        putFunction("expired", 1);
-        ManualTicker ticker = new ManualTicker();
-        Cache<String, SqlFunctionBindable> cache = SqlFunctionCache.createCache(
-                false, 1, TimeUnit.SECONDS, Runnable::run, ticker);
-        CompileManager manager = new CompileManager(cache);
-
-        manager.getSqlFunction("expired");
-        metadataAccess.deleteSqlFunction("expired");
-        ticker.advance(Duration.ofSeconds(3));
-        cache.cleanUp();
-
-        assertNull(cache.getIfPresent("expired"));
-        assertThrows(Exception.class, () -> manager.getSqlFunction("expired"));
     }
 
     @Test

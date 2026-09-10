@@ -1,7 +1,6 @@
 package com.sqlrec.compiler;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import com.sqlrec.common.config.Consts;
@@ -9,17 +8,19 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.runtime.SqlFunctionBindable;
+import com.sqlrec.utils.CacheUtils;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import io.micrometer.core.instrument.Tags;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-/** Creates and owns the process-wide SQL-function cache. */
+/**
+ * Creates and owns the process-wide SQL-function cache.
+ */
 public final class SqlFunctionCache {
     private static final Logger log = LoggerFactory.getLogger(SqlFunctionCache.class);
     private static final Cache<String, SqlFunctionBindable> CACHE = createCache();
@@ -40,7 +41,7 @@ public final class SqlFunctionCache {
                 ExecEnv.isFileSystemMeta(),
                 SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(),
                 TimeUnit.SECONDS,
-                RefreshExecutorHolder.EXECUTOR,
+                ExecutorServiceUtils.getCacheRefreshExecutorService(),
                 Ticker.systemTicker()
         );
     }
@@ -56,12 +57,12 @@ public final class SqlFunctionCache {
             return Caffeine.newBuilder().build();
         }
 
-        return Caffeine.newBuilder()
-                .refreshAfterWrite(refreshInterval, timeUnit)
-                .expireAfterWrite(refreshInterval * 2L, timeUnit)
-                .executor(executor)
-                .ticker(ticker)
-                .build((CacheLoader<String, SqlFunctionBindable>) SqlFunctionCache::refreshFunction);
+        return CacheUtils.createRefreshCache(
+                Duration.of(refreshInterval, timeUnit.toChronoUnit()),
+                executor,
+                ticker,
+                SqlFunctionCache::refreshFunction
+        );
     }
 
     private static SqlFunctionBindable refreshFunction(String functionName) throws Exception {
@@ -77,7 +78,6 @@ public final class SqlFunctionCache {
         } catch (Exception e) {
             status = "error";
             result = "failed";
-            log.warn("Failed to refresh SQL function cache: {}", functionName, e);
             throw e;
         } finally {
             long duration = System.currentTimeMillis() - startTime;
@@ -90,18 +90,4 @@ public final class SqlFunctionCache {
         }
     }
 
-    private static final class RefreshExecutorHolder {
-        private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(
-                2,
-                daemonThreadFactory()
-        );
-
-        private static ThreadFactory daemonThreadFactory() {
-            return runnable -> {
-                Thread thread = new Thread(runnable, "sql-function-cache-refresh");
-                thread.setDaemon(true);
-                return thread;
-            };
-        }
-    }
 }
