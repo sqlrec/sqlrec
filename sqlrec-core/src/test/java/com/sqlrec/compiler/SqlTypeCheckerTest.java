@@ -1,14 +1,22 @@
 package com.sqlrec.compiler;
 
-import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.utils.NodeUtils;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.schema.Table;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SqlTypeCheckerTest {
 
@@ -56,5 +64,78 @@ public class SqlTypeCheckerTest {
             System.out.println("Actual modify tables: " + actualModifyTables);
             assertEquals(testCase.expectedModifyTables, actualModifyTables, "Modify tables mismatch for SQL: " + testCase.sql);
         }
+    }
+
+    @Test
+    public void topLevelCteIsNotLocallyCompilable() throws Exception {
+        SqlNode sqlNode = CompileManager.parseFlinkSql(
+                "with cte as (select 1 as id) select * from cte"
+        );
+
+        assertFalse(SqlTypeChecker.isFlinkSqlCompilable(
+                sqlNode,
+                createSchema(),
+                Consts.DEFAULT_SCHEMA_NAME
+        ));
+    }
+
+    @Test
+    public void cacheCteCannotBypassLocalCheckByUsingARealTableName() throws Exception {
+        CalciteSchema schema = createSchema("physical_table");
+        SqlNode sqlNode = CompileManager.parseFlinkSql(
+                "cache table result_table as "
+                        + "with physical_table as (select 1 as id) "
+                        + "select * from physical_table"
+        );
+
+        assertFalse(SqlTypeChecker.isFlinkSqlCompilable(
+                sqlNode,
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME
+        ));
+    }
+
+    @Test
+    public void insertCteIsNotLocallyCompilable() throws Exception {
+        CalciteSchema schema = createSchema("sink_table", "physical_table");
+        SqlNode sqlNode = CompileManager.parseFlinkSql(
+                "insert into sink_table "
+                        + "with physical_table as (select 1 as id) "
+                        + "select * from physical_table"
+        );
+
+        assertFalse(SqlTypeChecker.isFlinkSqlCompilable(
+                sqlNode,
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME
+        ));
+    }
+
+    @Test
+    public void ordinarySelectRemainsLocallyCompilable() throws Exception {
+        CalciteSchema schema = createSchema("physical_table");
+        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from physical_table");
+
+        assertTrue(SqlTypeChecker.isFlinkSqlCompilable(
+                sqlNode,
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME
+        ));
+    }
+
+    private static CalciteSchema createSchema(String... tableNames) {
+        Map<String, Table> tables = new LinkedHashMap<>();
+        for (String tableName : tableNames) {
+            tables.put(tableName, new CacheTable(tableName, null, List.of()));
+        }
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return tables;
+            }
+        });
+        return schema;
     }
 }

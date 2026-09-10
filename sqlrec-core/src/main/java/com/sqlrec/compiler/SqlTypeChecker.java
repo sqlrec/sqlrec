@@ -22,6 +22,14 @@ public class SqlTypeChecker {
     private static final Logger log = LoggerFactory.getLogger(SqlTypeChecker.class);
 
     public static boolean isFlinkSqlCompilable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {
+        // CTEs may be delegated to a remote engine, but must never enter SQLRec's
+        // local Calcite execution path. Check the complete query tree because a
+        // WITH can be nested below an otherwise locally supported statement such
+        // as INSERT or CACHE.
+        if (containsCte(flinkSqlNode)) {
+            return false;
+        }
+
         if (flinkSqlNode instanceof SqlReturn) {
             return true;
         }
@@ -59,6 +67,38 @@ public class SqlTypeChecker {
             return false;
         }
         return isSqlTableRunnable(flinkSqlNode, schema, defaultSchema);
+    }
+
+    private static boolean containsCte(SqlNode sqlNode) {
+        if (sqlNode == null) {
+            return false;
+        }
+        if (sqlNode instanceof SqlWith || sqlNode.getKind() == SqlKind.WITH) {
+            return true;
+        }
+
+        if (sqlNode instanceof SqlCache) {
+            // SqlCache intentionally exposes no operands, so visit its query explicitly.
+            return containsCte(((SqlCache) sqlNode).getSelect());
+        }
+
+        if (sqlNode instanceof SqlNodeList) {
+            for (SqlNode child : (SqlNodeList) sqlNode) {
+                if (containsCte(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (sqlNode instanceof SqlCall) {
+            for (SqlNode operand : ((SqlCall) sqlNode).getOperandList()) {
+                if (containsCte(operand)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean isCrudSql(SqlNode flinkSqlNode) {
