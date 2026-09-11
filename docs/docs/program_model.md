@@ -701,7 +701,9 @@ LIKE FUNCTION 'my_function'
 PARTITION BY input_table SIZE 100;
 ```
 
-分区表必须同时出现在 CALL 的实参列表中，SIZE 必须是整数字面量，建议使用正数。`LIKE` 必须写在 `PARTITION BY` 之前，`ASYNC` 必须写在最后。分区合并不保证业务排序，如需稳定顺序应在缓存结果后另行 `ORDER BY`。
+分区表必须同时出现在 CALL 的实参列表中。SIZE 可以是整数字面量，也可以通过 `get()` 或 `get_or_default()` 在运行时获取，例如 `SIZE get_or_default('partition_size', '100')`。建议使用正数；为兼容旧语法，非正数仍表示不拆分、整表作为一个分区。`LIKE` 必须写在 `PARTITION BY` 之前，`ASYNC` 必须写在最后。分区合并不保证业务排序，如需稳定顺序应在缓存结果后另行 `ORDER BY`。
+
+默认情况下任一分区失败都会导致整个调用失败。将执行变量 `IGNORE_PARTITION_EXCEPTION` 设置为 `true` 后，允许忽略失败分区并合并其余成功分区的结果；如果全部分区均失败，调用仍会报错。该参数默认值为 `false`。
 
 ### 函数返回结果
 

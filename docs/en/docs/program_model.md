@@ -701,7 +701,9 @@ LIKE FUNCTION 'my_function'
 PARTITION BY input_table SIZE 100;
 ```
 
-The partition table must also be an argument of CALL. SIZE must be an integer literal and should be positive. `LIKE` must precede `PARTITION BY`, and `ASYNC` must be last. Partition merging does not guarantee business ordering; cache the result and apply a separate `ORDER BY` when stable ordering is needed.
+The partition table must also be an argument of CALL. SIZE can be an integer literal or resolved at runtime with `get()` or `get_or_default()`, for example `SIZE get_or_default('partition_size', '100')`. A positive value is recommended; for backward compatibility, a non-positive value keeps the whole table in one partition. `LIKE` must precede `PARTITION BY`, and `ASYNC` must be last. Partition merging does not guarantee business ordering; cache the result and apply a separate `ORDER BY` when stable ordering is needed.
+
+By default, any failed partition fails the whole call. Set the execution variable `IGNORE_PARTITION_EXCEPTION` to `true` to discard failed partitions and merge the remaining successful results. The call still fails if every partition fails. The default value is `false`.
 
 ### Function Return Results
 

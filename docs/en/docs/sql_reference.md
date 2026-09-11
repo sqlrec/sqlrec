@@ -680,7 +680,7 @@ CACHE TABLE table_name AS
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
-| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously (only supported in standalone CALL statements, not in CACHE TABLE) |
 | `select_statement` | SELECT query statement |
 
@@ -891,7 +891,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
-| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables, `partition_size` is the maximum number of rows per partition |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously |
 
 `ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.

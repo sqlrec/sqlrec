@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 public class FunctionProxyBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(FunctionProxyBindable.class);
@@ -35,7 +37,7 @@ public class FunctionProxyBindable extends BindableInterface {
     private List<RelDataTypeField> returnDataFields;
     private boolean isAsync;
     private String partitionBy;
-    private int partitionSize;
+    private SqlNode partitionSizeNode;
 
     public FunctionProxyBindable(
             SqlCallSqlFunction callSqlFunction,
@@ -96,11 +98,11 @@ public class FunctionProxyBindable extends BindableInterface {
             }
         }
         if (partitionSizeNode != null) {
-            if (partitionSizeNode instanceof SqlLiteral) {
-                this.partitionSize = ((SqlLiteral) partitionSizeNode).intValue(false);
-            } else {
-                throw new RuntimeException("SIZE must be an integer literal");
+            if (!(partitionSizeNode instanceof SqlLiteral)
+                    && !(partitionSizeNode instanceof SqlGetVariable)) {
+                throw new RuntimeException("SIZE must be an integer literal, get(), or get_or_default()");
             }
+            this.partitionSizeNode = partitionSizeNode;
         }
     }
 
@@ -202,6 +204,9 @@ public class FunctionProxyBindable extends BindableInterface {
         CacheTable partitionTable = SchemaUtils.getCacheTable(partitionBy, schema);
         List<RelDataTypeField> fields = partitionTable.getDataFields();
 
+        // Resolve the size at execution time so request variables can control partitioning.
+        int partitionSize = resolvePartitionSize(context);
+
         // read all rows and split by partitionSize
         List<Object[]> allRows = new ArrayList<>();
         partitionTable.scan(null).forEach(allRows::add);
@@ -231,24 +236,93 @@ public class FunctionProxyBindable extends BindableInterface {
             futures.add(future);
         }
 
+        boolean ignorePartitionException = SqlRecConfigs.IGNORE_PARTITION_EXCEPTION
+                .getValue(context.getVariables());
+
         // wait for all partitions and merge results
         List<Object[]> mergedResults = new ArrayList<>();
-        try {
-            for (int i = 0; i < futures.size(); i++) {
+        List<Throwable> failures = new ArrayList<>();
+        int successCount = 0;
+        for (int i = 0; i < futures.size(); i++) {
+            try {
                 Enumerable<Object[]> result = futures.get(i).join();
+                // Materialize each result separately so a failure during enumeration does not
+                // leave a partially merged result from that partition.
+                List<Object[]> partitionResults = new ArrayList<>();
                 if (result != null) {
-                    result.forEach(mergedResults::add);
+                    result.forEach(partitionResults::add);
                 }
+                mergedResults.addAll(partitionResults);
+                successCount++;
+            } catch (Exception e) {
+                Throwable failure = unwrapPartitionFailure(e);
+                if (!ignorePartitionException
+                        || context.isCancelled()
+                        || partitionContext.isCancelled()
+                        || failure instanceof InterruptedException
+                        || failure instanceof Error) {
+                    cancelPartitionTasks(partitionContext, futures);
+                    throw new RuntimeException("Partition execution failed", failure);
+                }
+
+                failures.add(failure);
+                log.warn("[{}] partition {}/{} execution failed and its result is discarded: {}",
+                        context.getLogId(), i + 1, futures.size(), failure.getMessage(), failure);
             }
-        } catch (Exception e) {
-            partitionContext.cancel();
-            for (CompletableFuture<Enumerable<Object[]>> f : futures) {
-                f.cancel(true);
+        }
+
+        if (successCount == 0 && !failures.isEmpty()) {
+            cancelPartitionTasks(partitionContext, futures);
+            RuntimeException allFailed = new RuntimeException(
+                    "All " + failures.size() + " partition executions failed", failures.get(0));
+            for (int i = 1; i < failures.size(); i++) {
+                allFailed.addSuppressed(failures.get(i));
             }
-            throw new RuntimeException("Partition execution failed", e);
+            throw allFailed;
         }
 
         return Linq4j.asEnumerable(mergedResults);
+    }
+
+    private int resolvePartitionSize(ExecuteContext context) {
+        if (partitionSizeNode instanceof SqlLiteral) {
+            return ((SqlLiteral) partitionSizeNode).intValue(false);
+        }
+
+        SqlGetVariable getVariable = (SqlGetVariable) partitionSizeNode;
+        String variableName = SchemaUtils.getValueOfStringLiteral(getVariable.getVariableName());
+        String value = context.getVariable(variableName);
+        if (value == null && getVariable.hasDefaultValue()) {
+            value = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) getVariable.getDefaultValue());
+        }
+        if (value == null) {
+            throw new RuntimeException("cant get partition size from variable: " + variableName);
+        }
+
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new RuntimeException(
+                    "Invalid partition size from variable '" + variableName + "': '" + value + "'", e);
+        }
+    }
+
+    private Throwable unwrapPartitionFailure(Throwable failure) {
+        Throwable result = failure;
+        while (result instanceof CompletionException && result.getCause() != null) {
+            result = result.getCause();
+        }
+        return result;
+    }
+
+    private void cancelPartitionTasks(
+            ExecuteContextImpl partitionContext,
+            List<CompletableFuture<Enumerable<Object[]>>> futures
+    ) {
+        partitionContext.cancel();
+        for (CompletableFuture<Enumerable<Object[]>> future : futures) {
+            future.cancel(true);
+        }
     }
 
     private List<List<Object[]>> splitBySize(List<Object[]> rows, int size) {

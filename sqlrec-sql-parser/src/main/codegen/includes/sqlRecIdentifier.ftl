@@ -80,7 +80,11 @@ SqlCallSqlFunction GetCallSqlFunction() :
         <PARTITION> <BY>
         partitionBy = SimpleIdentifier()
         <SIZE>
-        partitionSize = Literal()
+        (
+            partitionSize = Literal()
+        |
+            partitionSize = SqlGetVariable()
+        )
     ]
     [
         <ASYNC> { isAsync = true; }

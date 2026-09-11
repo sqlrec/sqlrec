@@ -153,6 +153,13 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
+    public static final ConfigOption<Boolean> IGNORE_PARTITION_EXCEPTION = new ConfigOption<>(
+            "IGNORE_PARTITION_EXCEPTION",
+            false,
+            "ignore failed partition results when at least one partition succeeds",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Integer> SCHEMA_CACHE_EXPIRE = new ConfigOption<>(
             "SCHEMA_CACHE_EXPIRE",
             300,

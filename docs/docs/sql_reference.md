@@ -680,7 +680,7 @@ CACHE TABLE table_name AS
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
-| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行（仅在独立的 CALL 语句中支持，CACHE TABLE 中暂不支持） |
 | `select_statement` | SELECT 查询语句 |
 
@@ -891,7 +891,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
-| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 为每个分区的最大行数 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行 |
 
 `ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
