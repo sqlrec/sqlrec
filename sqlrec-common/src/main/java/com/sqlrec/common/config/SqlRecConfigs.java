@@ -153,26 +153,12 @@ public class SqlRecConfigs {
             null,
             Boolean.class
     );
-    public static final ConfigOption<Integer> FUNCTION_UPDATE_INTERVAL = new ConfigOption<>(
-            "FUNCTION_UPDATE_INTERVAL",
-            300,
-            "function update interval in seconds",
-            null,
-            Integer.class
-    );
     public static final ConfigOption<Integer> SCHEMA_CACHE_EXPIRE = new ConfigOption<>(
             "SCHEMA_CACHE_EXPIRE",
-            60,
-            "schema cache expire in seconds",
+            300,
+            "metadata and function cache refresh interval in seconds",
             null,
             Integer.class
-    );
-    public static final ConfigOption<Boolean> ASYNC_SCHEMA_UPDATE = new ConfigOption<>(
-            "ASYNC_SCHEMA_UPDATE",
-            true,
-            "async schema update or not",
-            null,
-            Boolean.class
     );
     public static final ConfigOption<String> SQL_SCHEMA_DIR = new ConfigOption<>(
             "SQL_SCHEMA_DIR",

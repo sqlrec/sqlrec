@@ -7,7 +7,7 @@ import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.udf.UdfManager;
 import com.sqlrec.udf.config.FunctionConfigs;
-import com.sqlrec.utils.ObjCache;
+import com.sqlrec.utils.CacheUtils;
 import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.ScalarFunction;
@@ -16,6 +16,7 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -27,35 +28,31 @@ public class HmsSchema extends AbstractSchema {
 
     private final String databaseName;
     private final MetadataAccess metadataAccess;
-    private final ObjCache<Map<String, Table>> tableMapCache;
-    private final ObjCache<Multimap<String, Function>> functionMapCache;
+    private final CacheUtils.SingleValueCache<Map<String, Table>> tableMapCache;
+    private final CacheUtils.SingleValueCache<Multimap<String, Function>> functionMapCache;
     private volatile Map<String, Long> tableModificationTimes = Collections.emptyMap();
 
     public HmsSchema(String databaseName, MetadataAccess metadataAccess) {
         this(
                 databaseName,
                 metadataAccess,
-                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
-                SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue()
+                Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue())
         );
     }
 
     HmsSchema(
             String databaseName,
             MetadataAccess metadataAccess,
-            long cacheExpireTimeInMillis,
-            boolean asyncUpdate
+            Duration refreshInterval
     ) {
         this.databaseName = databaseName;
         this.metadataAccess = metadataAccess;
-        this.tableMapCache = new ObjCache<>(
-                cacheExpireTimeInMillis,
-                asyncUpdate,
+        this.tableMapCache = CacheUtils.createSingleValueRefreshCache(
+                refreshInterval,
                 this::computeTableMap
         );
-        this.functionMapCache = new ObjCache<>(
-                cacheExpireTimeInMillis,
-                asyncUpdate,
+        this.functionMapCache = CacheUtils.createSingleValueRefreshCache(
+                refreshInterval,
                 this::computeFunctionMap
         );
     }
@@ -67,12 +64,12 @@ public class HmsSchema extends AbstractSchema {
 
     @Override
     protected Map<String, Table> getTableMap() {
-        return tableMapCache.getObj();
+        return tableMapCache.get();
     }
 
     @Override
     protected Multimap<String, Function> getFunctionMultimap() {
-        return functionMapCache.getObj();
+        return functionMapCache.get();
     }
 
     private Map<String, Table> computeTableMap(Map<String, Table> oldTableMap) {

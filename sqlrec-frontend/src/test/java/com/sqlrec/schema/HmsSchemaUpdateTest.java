@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -68,7 +69,7 @@ public class HmsSchemaUpdateTest {
         hmsClient.createTable(hmsTable);
 
         MetadataAccess metadataAccess = new MetadataAccess(new HmsSchemaAccess(), null, null);
-        HmsSchema schema = new HmsSchema(DATABASE, metadataAccess, 1L, false);
+        HmsSchema schema = new HmsSchema(DATABASE, metadataAccess, Duration.ofMillis(1));
         SqlTypeFactoryImpl typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
         Table first = schema.getTable(tableName);
@@ -77,6 +78,8 @@ public class HmsSchemaUpdateTest {
 
         // A refresh without an HMS change must continue to reuse the cached Calcite table.
         Thread.sleep(5L);
+        schema.getTable(tableName);
+        Thread.sleep(50L);
         Table unchanged = schema.getTable(tableName);
         assertSame(first, unchanged);
 
@@ -91,10 +94,23 @@ public class HmsSchemaUpdateTest {
         hmsClient.alter_table(DATABASE, tableName, altered);
 
         Thread.sleep(5L);
-        Table refreshed = schema.getTable(tableName);
+        Table refreshed = waitForTableRefresh(schema, first);
         assertNotNull(refreshed);
         assertNotSame(first, refreshed);
         assertEquals(List.of("id", "name"), refreshed.getRowType(typeFactory).getFieldNames());
+    }
+
+    private Table waitForTableRefresh(HmsSchema schema, Table previousTable) throws InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        Table currentTable;
+        do {
+            currentTable = schema.getTable(tableName);
+            if (currentTable != previousTable) {
+                return currentTable;
+            }
+            Thread.sleep(10L);
+        } while (System.nanoTime() < deadline);
+        return currentTable;
     }
 
     private org.apache.hadoop.hive.metastore.api.Table createHmsTable() {

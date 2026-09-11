@@ -1,5 +1,6 @@
 package com.sqlrec.model;
 
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelController;
@@ -13,42 +14,43 @@ import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateService;
-import com.sqlrec.utils.ObjCache;
+import com.sqlrec.utils.CacheUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.util.Optional;
 
 public class ServiceManager {
     private static final Logger log = LoggerFactory.getLogger(ServiceManager.class);
 
-    private static final ConcurrentHashMap<String, ObjCache<ServiceConf>> serviceConfigCacheMap = new ConcurrentHashMap<>();
+    private static final LoadingCache<String, Optional<ServiceConf>> serviceConfigCache =
+            CacheUtils.createRefreshCache(
+                    Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
+                    serviceName -> {
+                        try {
+                            MetadataAccess db = MetadataAccessFactory.getInstance();
+                            Service service = db.getService(serviceName);
+                            if (service == null) {
+                                return Optional.empty();
+                            }
+                            return Optional.of(ModelEntityConverter.convertToServiceConfig(service));
+                        } catch (Exception e) {
+                            throw new RuntimeException(
+                                    "Failed to get service config for service: " + serviceName,
+                                    e
+                            );
+                        }
+                    }
+            );
 
     public static void invalidateCache() {
-        serviceConfigCacheMap.values().forEach(ObjCache::invalidate);
+        serviceConfigCache.invalidateAll();
     }
 
     public static ServiceConf getServiceConfig(String serviceName) {
-        ObjCache<ServiceConf> cache = serviceConfigCacheMap.computeIfAbsent(serviceName,
-                name -> new ObjCache<>(
-                        SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue() * 1000L,
-                        SqlRecConfigs.ASYNC_SCHEMA_UPDATE.getValue(),
-                        oldConfig -> {
-                            try {
-                                MetadataAccess db = MetadataAccessFactory.getInstance();
-                                Service service = db.getService(name);
-                                if (service == null) {
-                                    return null;
-                                }
-                                return ModelEntityConverter.convertToServiceConfig(service);
-                            } catch (Exception e) {
-                                throw new RuntimeException("Failed to get service config for service: " + name, e);
-                            }
-                        }
-                )
-        );
-        return cache.getObj();
+        return serviceConfigCache.get(serviceName).orElse(null);
     }
 
     public static boolean isServiceOperationCompleted(String serviceName) {
@@ -149,6 +151,6 @@ public class ServiceManager {
             K8sManager.deleteYaml(service.getYaml());
         }
         db.deleteService(serviceName);
-        serviceConfigCacheMap.remove(serviceName);
+        serviceConfigCache.invalidate(serviceName);
     }
 }

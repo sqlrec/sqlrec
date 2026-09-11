@@ -33,7 +33,7 @@ SQLRec is a recommendation engine that **describes the entire business logic of 
 | K8s | fabric8 kubernetes-client |
 | Network entry | Thrift (Hive TCLIService protocol, compatible with beeline/Kyuubi), Netty (REST), JLine (CLI) |
 | Observability | Micrometer + Prometheus, OpenTelemetry 1.29 (OTLP trace), Jaeger |
-| Cache | Caffeine 2.9, in-house `ObjCache` |
+| Cache | Caffeine 2.9 |
 | Model serving | C++ (catboost_server / onnx_server / tzrec server, embedding cpp-httplib), Python (training scripts) |
 
 ## Overall Architecture
@@ -209,7 +209,7 @@ All AST nodes implement `unparse` (via `SqlUnparseUtils`), supporting `SHOW CREA
 - **SQL function cache**: each instance holds a Caffeine `Cache<String, SqlFunctionBindable>`. The default constructor uses the process-wide cache owned by `SqlFunctionCache`; background refreshes use a new empty cache so that a root function and all of its dependencies are compiled consistently in one session.
 - **Circular dependency detection**: instance field `compilingSqlFunctions` (ArrayList chain) records the compilation stack; `compileSqlFunction()` detects cycles during recursive compilation.
 
-`SqlApiCache` independently owns the API metadata cache with a TTL of `SCHEMA_CACHE_EXPIRE` (60 seconds by default). The REST executor resolves the API first, then asks `CompileManager` for its SQL function.
+`SqlApiCache` independently owns the API metadata cache with a TTL of `SCHEMA_CACHE_EXPIRE` (300 seconds by default). The REST executor resolves the API first, then asks `CompileManager` for its SQL function.
 
 ### FunctionCompiler (Multi-Statement Function Compilation State Machine)
 
@@ -250,7 +250,7 @@ FUNCTION_DEFINITION (CREATE SQL FUNCTION f)
 `SqlFunctionCache.java` (`sqlrec-core/src/main/java/com/sqlrec/compiler/SqlFunctionCache.java`) owns the process-wide Caffeine cache:
 
 - On the first miss, the request's `CompileManager` compiles the function synchronously and stores it;
-- after `FUNCTION_UPDATE_INTERVAL` (300 seconds by default), the next access returns the current value and asks the shared single cache-refresh thread to compile a replacement asynchronously;
+- after `SCHEMA_CACHE_EXPIRE` (300 seconds by default), the next access returns the current value and asks the shared single cache-refresh thread to compile a replacement asynchronously;
 - a background compilation creates a new empty cache and `CompileManager`, forcing the root function and all recursive dependencies to be loaded again; Caffeine atomically replaces the old value after success;
 - a failed refresh keeps the old value, emits a warning, and waits one full refresh interval before retrying; entries do not expire based on time;
 - FileSystemMeta mode uses a regular Caffeine Cache with no automatic expiration;
@@ -366,10 +366,9 @@ BindableInterface
 
 ### Schema Assembly and Caching
 
-- `CalciteSchemaFactory.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`): `createCalciteSchema()` builds the root schema: in remote mode, attaches an `HmsSchema` per database based on `databaseListCache` (`ObjCache`, TTL 60s, async refresh); when `globalSchema` (set at server startup) exists, directly reuses its subSchema mapping (fast path).
-- `HmsSchema.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`): per-db two-level `ObjCache` — `tableMapCache` (incremental: only rebuilds `Table` objects whose `getTableUpdateTime` changed, reuses old instances otherwise) and `functionMapCache` (HMS functions + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` built-in UDFs → `UdfManager.createScalarFunction` reflection).
-- **`ObjCache`** (`sqlrec-core/src/main/java/com/sqlrec/utils/ObjCache.java`): minimal cache with TTL + optional async refresh. `getObj()` triggers `updateObj()` on expiry (synchronized): first load synchronous; afterwards submitted to a **global single-thread** executor for async refresh and immediately returns the old value; `invalidate()` clears.
-- **`CacheUtils`**: creates Caffeine `LoadingCache` instances using the shared single-thread executor. Callers provide only a refresh interval and load function; a failed refresh automatically keeps the old value until the next interval. Executors and tickers can be injected for deterministic tests.
+- `CalciteSchemaFactory.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/CalciteSchemaFactory.java`): `createCalciteSchema()` builds the root schema: in remote mode, attaches an `HmsSchema` per database based on `databaseListCache` (Caffeine, asynchronous refresh every 300 seconds by default); when `globalSchema` (set at server startup) exists, directly reuses its subSchema mapping (fast path).
+- `HmsSchema.java` (`sqlrec-core/src/main/java/com/sqlrec/schema/HmsSchema.java`): per-db two-level Caffeine caches — `tableMapCache` (incremental: only rebuilds `Table` objects whose `getTableUpdateTime` changed, reuses old instances otherwise) and `functionMapCache` (HMS functions + `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` built-in UDFs → `UdfManager.createScalarFunction` reflection).
+- **`CacheUtils`**: creates Caffeine `LoadingCache` instances using the shared single-thread executor. It supports both ordinary load functions and refresh functions that consume the previous value; a failed refresh automatically keeps the old value until the next interval. Executors and tickers can be injected for deterministic tests.
 
 ### Table Abstraction System (common/schema)
 
@@ -405,11 +404,11 @@ The six connectors share the same structure: `config/` (Options parsing of table
 ### Registration and Loading
 
 - **Built-in UDFs**: `FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS` statically registers scalar function names → class names; table functions are looked up via `JavaFunctionUtils.getTableFunction()` (Java functions registered in HMS or built-in).
-- **Dynamic Java UDFs**: `UdfManager`/`JavaFunctionUtils` load from the HMS function registry by className via reflection. `JavaFunctionUtils` caches definitions with Caffeine: the initial load is synchronous, while later accesses trigger an asynchronous refresh after `FUNCTION_UPDATE_INTERVAL` and immediately return the old value. A failed refresh keeps the old value and waits one full interval before retrying, so an HMS outage does not block online requests. SQL-function cache refreshes then rebind Java UDF classes from this cache.
+- **Dynamic Java UDFs**: `UdfManager`/`JavaFunctionUtils` load from the HMS function registry by className via reflection. `JavaFunctionUtils` caches definitions with Caffeine: the initial load is synchronous, while later accesses trigger an asynchronous refresh after `SCHEMA_CACHE_EXPIRE` and immediately return the old value. A failed refresh keeps the old value and waits one full interval before retrying, so an HMS outage does not block online requests. SQL-function cache refreshes then rebind Java UDF classes from this cache.
 
 ### HTTP UDFs (Online Inference Core)
 
-- `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): overloaded for regular and User-Item inputs; `ServiceManager.getServiceConfig()` gets the service URL (ObjCache cached) → input serialized as a row-oriented JSON array or User-Item column-oriented JSON → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. User fields are sent once as single-element arrays, while Item fields become arrays in row order. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
+- `CallServiceFunction.java` (`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`) (`call_service`): overloaded for regular and User-Item inputs; `ServiceManager.getServiceConfig()` gets the service URL (Caffeine cached) → input serialized as a row-oriented JSON array or User-Item column-oriented JSON → POST → parse prediction map → `mergePredictions` merges predictions back into input rows by column name. User fields are sent once as single-element arrays, while Item fields become arrays in row order. Static `OkHttpClient` (30s three-stage timeout, volatile for testability).
 - `BatchCallServiceUDTF` (Flink UDTF, JDK HttpURLConnection, batched by batchSize), `CallSqlRecApiFunction` (cross-instance sqlrec invocation via `SqlRecApiClient`).
 - **Diversification family**: `WindowDiversify` (tag quota within sliding window), `DppDiversity` (determinantal point process), `RuleDiversity`, `WeightedMerge` (reuses the `MergeUtils` weighted round-robin core and is marked as UNION-like), `DedupFunction`, `ShuffleFunction`.
 - **Feature family**: `TagToVecFunction`, `RandomVecFunction`, `FeatureCoverageMetricsFunction`, `GetGrowthbookFeaturesFunction` (GrowthBook SDK), `Get/SetVariablesFunction` (variable propagation).
@@ -483,14 +482,13 @@ Programming model essentials: `IF` expresses conditional execution; for a positi
 | Thread Resource | Type | Purpose |
 | --- | --- | --- |
 | `ExecutorServiceUtils` virtual thread pool | global, unbounded | CACHE timeout execution, ASYNC CALL, PARTITION parallelism |
-| `ObjCache.executorService` | global, single-threaded | Async refresh for all ObjCaches (shared) |
-| `ExecutorServiceUtils` cache-refresh thread | global, single daemon thread | Asynchronous SQL-function and Java-UDF definition cache refresh |
+| `ExecutorServiceUtils` cache-refresh thread | global, single daemon thread | Asynchronous SQL-function, Java-UDF, schema, and service-configuration cache refresh |
 | `SessionTimeoutChecker.timeoutChecker` | single-threaded scheduled | Session timeout (5min check) |
 | Thrift `TThreadPoolServer` | one platform thread per connection | RPC handling (including synchronous SQL execution) |
 | Netty event loop | boss(1)+worker(default) | REST handling (**business executes synchronously on the event loop**) |
 | Static clients | — | HmsClient (globally synchronized), K8sManager, RedisWrapper/JdbcHandler connection pools |
 
-Static mutable state: `SqlFunctionCache`, `SqlApiCache`, `CalciteSchemaFactory.schemaMap/globalSchema`, `ServiceManager.serviceConfigCacheMap`, connector static connection pools, `HmsClient.client`, and `K8sManager.kubernetesClient`.
+Static mutable state: `SqlFunctionCache`, `SqlApiCache`, `CalciteSchemaFactory.schemaMap/globalSchema`, `ServiceManager.serviceConfigCache`, connector static connection pools, `HmsClient.client`, and `K8sManager.kubernetesClient`.
 
 ## Deployment Architecture (deploy/ + bin/ + docker/)
 
@@ -509,8 +507,7 @@ Static mutable state: `SqlFunctionCache`, `SqlApiCache`, `CalciteSchemaFactory.s
 | `ENABLE_REST_SERVER/SQL_API/UI_API/THRIFT_SERVER` | true | Entry switches |
 | `PARALLELISM_EXEC` | true | Parallel execution |
 | `NODE_EXEC_TIMEOUT` | 0 (unlimited) | Execution timeout for timeout-capable nodes (ms) |
-| `FUNCTION_UPDATE_INTERVAL` | 300s | Function hot-update period |
-| `SCHEMA_CACHE_EXPIRE` / `ASYNC_SCHEMA_UPDATE` | 60s / true | Schema cache |
+| `SCHEMA_CACHE_EXPIRE` | 300s | Schema, function, API, and service-configuration cache refresh interval |
 | `SQL_SCHEMA_DIR` | empty (use HMS) | Local file metadata mode |
 | `META_DB_URL/USER/PASSWORD/DRIVER` | PG | Metadata database |
 | `HIVE_METASTORE_URI` | thrift://...:30008 | HMS |

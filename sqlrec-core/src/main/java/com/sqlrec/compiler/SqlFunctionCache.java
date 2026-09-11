@@ -39,7 +39,7 @@ public final class SqlFunctionCache {
     private static Cache<String, SqlFunctionBindable> createCache() {
         return createCache(
                 ExecEnv.isFileSystemMeta(),
-                SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue(),
+                SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(),
                 TimeUnit.SECONDS,
                 ExecutorServiceUtils.getCacheRefreshExecutorService(),
                 Ticker.systemTicker()

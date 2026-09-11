@@ -22,7 +22,7 @@ public class JavaFunctionUtils {
     private static volatile boolean skipHmsQuery = false;
     private static final LoadingCache<String, Optional<Class<?>>> javaFunctionClassCache =
             CacheUtils.createRefreshCache(
-                    Duration.ofSeconds(SqlRecConfigs.FUNCTION_UPDATE_INTERVAL.getValue()),
+                    Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
                     JavaFunctionUtils::loadJavaFunctionClass
             );
 
