@@ -820,7 +820,7 @@ if (funNameStack.contains(funName)) {
 
 SQLRec supports implementing user-defined functions (UDF) through Java, which can be called directly in SQL.
 
-This section explains the UDF invocation and development model. When writing business SQL with built-in UDFs, also consult [Built-in UDFs](udf.md) for exact signatures, parameter meanings, and output schemas; a function name alone is not enough to infer a valid call.
+This section explains the UDF invocation and development model. When writing business SQL, start with [UDF Basics](udf/basic_concepts.md), then see [Scalar Functions](udf/scalar_functions.md) or [Table Functions](udf/table_functions.md) for arguments, return values, and examples.
 
 ### UDF Definition
 

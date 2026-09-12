@@ -820,7 +820,7 @@ if (funNameStack.contains(funName)) {
 
 SQLRec 支持通过 Java 实现用户定义函数（UDF），可以在 SQL 中直接调用。
 
-本节解释 UDF 的调用和开发模型。编写使用内置 UDF 的业务 SQL 时，还应查阅 [内置 UDF](udf.md) 中的函数签名、参数含义和输出 schema；不能仅凭函数名推断调用方式。
+本节解释 UDF 的调用和开发模型。编写业务 SQL 时，可从 [UDF 基础概念](udf/basic_concepts.md) 开始，再查阅[标量函数](udf/scalar_functions.md)或[表函数](udf/table_functions.md)的参数、返回值和调用示例。
 
 ### UDF 定义
 

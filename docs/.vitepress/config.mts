@@ -25,7 +25,16 @@ export default defineConfig({
           { text: '架构设计', link: '/docs/architecture' },
           { text: 'SQL语法', link: '/docs/sql_reference' },
           { text: '异常恢复', link: '/docs/exception_recovery' },
-          { text: '内置UDF', link: '/docs/udf' },
+          {
+            text: 'UDF',
+            collapsed: true,
+            items: [
+              { text: '基础概念', link: '/docs/udf/basic_concepts' },
+              { text: '标量函数', link: '/docs/udf/scalar_functions' },
+              { text: '表函数', link: '/docs/udf/table_functions' },
+              { text: '自定义 UDF', link: '/docs/udf/custom_udf' }
+            ]
+          },
           {
             text: 'Connectors',
             collapsed: true,
@@ -76,7 +85,16 @@ export default defineConfig({
           { text: 'Architecture', link: '/en/docs/architecture' },
           { text: 'SQL Reference', link: '/en/docs/sql_reference' },
           { text: 'Exception Recovery', link: '/en/docs/exception_recovery' },
-          { text: 'Built-in UDF', link: '/en/docs/udf' },
+          {
+            text: 'UDF',
+            collapsed: true,
+            items: [
+              { text: 'Basic Concepts', link: '/en/docs/udf/basic_concepts' },
+              { text: 'Scalar Functions', link: '/en/docs/udf/scalar_functions' },
+              { text: 'Table Functions', link: '/en/docs/udf/table_functions' },
+              { text: 'Custom UDFs', link: '/en/docs/udf/custom_udf' }
+            ]
+          },
           {
             text: 'Connectors',
             collapsed: true,
