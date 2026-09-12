@@ -3,6 +3,8 @@ package com.sqlrec.utils;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.MergeUtils;
+import com.sqlrec.common.runtime.SqlRecDataContext;
+import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -25,6 +27,16 @@ public class KvJoinUtils {
             SqlRecKvTable rightTable,
             RexNode condition,
             JoinRelType joinType
+    ) {
+        return kvJoin(left, rightTable, condition, joinType, null);
+    }
+
+    public static Enumerable kvJoin(
+            Enumerable left,
+            SqlRecKvTable rightTable,
+            RexNode condition,
+            JoinRelType joinType,
+            DataContext dataContext
     ) {
         if (left == null) {
             throw new IllegalArgumentException("left table is null");
@@ -61,7 +73,8 @@ public class KvJoinUtils {
         if (rightJoinKeyColIndex == rightTable.getPrimaryKeyIndex()) {
             rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
         } else {
-            rightValuesMap = scanRightTableByJoinKey(rightTable, rightJoinKeyColIndex, joinKeys);
+            rightValuesMap = scanRightTableByJoinKey(
+                    rightTable, rightJoinKeyColIndex, joinKeys, dataContext);
         }
 
         // Keep the historical stringified-key matching behavior for compatibility
@@ -104,7 +117,8 @@ public class KvJoinUtils {
     private static Map<Object, List<Object[]>> scanRightTableByJoinKey(
             SqlRecKvTable rightTable,
             int rightJoinKeyColIndex,
-            Set<Object> joinKeys
+            Set<Object> joinKeys,
+            DataContext dataContext
     ) {
         if (joinKeys.isEmpty()) {
             return Collections.emptyMap();
@@ -130,7 +144,7 @@ public class KvJoinUtils {
                     rightValuesMap.put(key, rows);
                 }
             } catch (Exception e) {
-                if (SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue()) {
+                if (ignoreJoinQueryException(dataContext)) {
                     log.warn("Failed to scan right table for join key: {}", key, e);
                     continue;
                 }
@@ -138,6 +152,14 @@ public class KvJoinUtils {
             }
         }
         return rightValuesMap;
+    }
+
+    private static boolean ignoreJoinQueryException(DataContext dataContext) {
+        if (dataContext instanceof SqlRecDataContext) {
+            return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION
+                    .getValue(((SqlRecDataContext) dataContext).getVariables());
+        }
+        return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue();
     }
 
     public static Object[] copyValues(Object[] leftValue, Object[] rightValue, int leftSize, int rightSize) {

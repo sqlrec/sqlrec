@@ -122,7 +122,8 @@ public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
                                 leftExpression,
                                 rightExpression,
                                 stashedCondition,
-                                Expressions.constant(joinType)
+                                Expressions.constant(joinType),
+                                implementor.getRootExpression()
                         )
                 ).toBlock()
         );

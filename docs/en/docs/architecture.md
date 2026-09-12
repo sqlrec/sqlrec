@@ -515,5 +515,5 @@ Static mutable state: `SqlFunctionCache`, `SqlApiCache`, `CalciteSchemaFactory.s
 | `SESSION_CHECK_INTERVAL` / `SESSION_IDLE_TIMEOUT` | 5min / 30min | Session management |
 | `SQL_SYNC_EXECUTE_TIMEOUT` | 180s | Synchronous execution timeout |
 | `IGNORE_UNION_EXCEPTION` | true | SQL-function execution switch: replaces a failed cache branch with an empty table only when every consumer path eventually enters `UNION` or a statically bound `UnionLikeTableFunction` (built-in: `weighted_merge`); cancellation, interruption, `Error`, and branches flowing to non-merge paths are not degraded |
-| `IGNORE_JOIN_QUERY_EXCEPTION` | true | Ignores an individual external-storage query failure during a KV join and continues with the remaining keys |
+| `IGNORE_JOIN_QUERY_EXCEPTION` | true | Ignores an individual external-storage query failure during a KV/Vector join and continues with the remaining keys; execution parameters take precedence over the environment and default value |
 | `DEFAULT_VECTOR_SEARCH_LIMIT` | 100 | Default topK for vector retrieval |

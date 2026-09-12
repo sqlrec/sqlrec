@@ -294,7 +294,7 @@ IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
 - 无 ELSE 且条件为 false 时，如果 THEN 是 CACHE 语句，系统会注册一个具有相同 schema 的空缓存表。
 - 分支可以使用 CRUD、`CACHE TABLE`、`CALL`、`SET`、`ASSERT` 或 `RETURN`；`RETURN` 只能在 SQL 函数中使用，详细规则见“函数返回结果”。
 
-`IF TIMEIN` 的条件返回毫秒数。超时值大于 0 时，THEN 超时或抛出异常会执行 ELSE；小于等于 0 时直接执行 THEN，此时 THEN 的异常不会回退。TIMEIN 必须提供 ELSE，且两个分支必须同为 CACHE 或同为 RETURN：
+`IF TIMEIN` 的条件返回毫秒数。超时值大于 0 时，THEN 超时或抛出异常会执行 ELSE；小于等于 0 时不设置超时，但 THEN 抛出普通异常时仍会执行 ELSE。TIMEIN 必须提供 ELSE，且两个分支必须同为 CACHE 或同为 RETURN：
 
 ```sql
 IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
@@ -761,7 +761,7 @@ IF (SELECT use_primary FROM config_table) THEN (
 RETURN;
 ```
 
-`IF TIMEIN` 也可以在两个分支中使用 RETURN。当超时时间大于 0 时，THEN 超时或抛出异常会丢弃其临时返回状态，然后由 ELSE 设置最终返回值；超时时间小于等于 0 时直接执行 THEN。
+`IF TIMEIN` 也可以在两个分支中使用 RETURN。当超时时间大于 0 时，THEN 超时或抛出异常会丢弃其临时返回状态，然后由 ELSE 设置最终返回值；超时时间小于等于 0 时不设置超时，THEN 成功后提交返回值，普通异常仍由 ELSE 恢复。
 
 #### 返回值的使用
 

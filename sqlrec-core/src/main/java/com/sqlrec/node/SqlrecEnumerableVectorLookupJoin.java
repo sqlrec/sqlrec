@@ -152,7 +152,8 @@ public final class SqlrecEnumerableVectorLookupJoin extends BiRel implements Enu
                 filterExpression,
                 Expressions.constant(leftEmbeddingIndex),
                 Expressions.constant(rightEmbeddingField),
-                Expressions.constant(topKPerLeftRow));
+                Expressions.constant(topKPerLeftRow),
+                implementor.getRootExpression());
         builder.add(Expressions.return_(null, lookup));
         return implementor.result(physType, builder.toBlock());
     }

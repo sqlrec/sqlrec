@@ -294,7 +294,7 @@ The following constraints apply:
 - If ELSE is omitted and the condition is false, a CACHE branch causes an empty cache table with the same schema to be registered.
 - A branch may contain CRUD, `CACHE TABLE`, `CALL`, `SET`, `ASSERT`, or `RETURN`; `RETURN` is valid only inside an SQL function and follows the rules in “Function Return Results.”
 
-The condition of `IF TIMEIN` returns milliseconds. For a positive timeout, a timeout or exception in THEN falls back to ELSE. A non-positive timeout executes THEN directly, and exceptions do not fall back in that case. TIMEIN requires ELSE, and both branches must either be CACHE statements or RETURN statements:
+The condition of `IF TIMEIN` returns milliseconds. For a positive timeout, a timeout or exception in THEN falls back to ELSE. A non-positive timeout configures no timeout, but ordinary exceptions in THEN still fall back to ELSE. TIMEIN requires ELSE, and both branches must either be CACHE statements or RETURN statements:
 
 ```sql
 IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
@@ -761,7 +761,7 @@ IF (SELECT use_primary FROM config_table) THEN (
 RETURN;
 ```
 
-`IF TIMEIN` can also use RETURN in both branches. When the timeout is positive, a timeout or exception in THEN discards its temporary return state and ELSE supplies the final result; a non-positive timeout executes THEN directly.
+`IF TIMEIN` can also use RETURN in both branches. When the timeout is positive, a timeout or exception in THEN discards its temporary return state and ELSE supplies the final result; a non-positive timeout configures no timeout, commits THEN's return only after success, and still uses ELSE for ordinary exceptions.
 
 #### Using Return Values
 

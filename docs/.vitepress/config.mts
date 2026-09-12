@@ -24,6 +24,7 @@ export default defineConfig({
           { text: '编程模型', link: '/docs/program_model' },
           { text: '架构设计', link: '/docs/architecture' },
           { text: 'SQL语法', link: '/docs/sql_reference' },
+          { text: '异常恢复', link: '/docs/exception_recovery' },
           { text: '内置UDF', link: '/docs/udf' },
           {
             text: 'Connectors',
@@ -74,6 +75,7 @@ export default defineConfig({
           { text: 'Programming Model', link: '/en/docs/program_model' },
           { text: 'Architecture', link: '/en/docs/architecture' },
           { text: 'SQL Reference', link: '/en/docs/sql_reference' },
+          { text: 'Exception Recovery', link: '/en/docs/exception_recovery' },
           { text: 'Built-in UDF', link: '/en/docs/udf' },
           {
             text: 'Connectors',

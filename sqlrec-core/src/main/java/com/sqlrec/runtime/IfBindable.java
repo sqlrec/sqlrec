@@ -178,10 +178,37 @@ public class IfBindable extends BindableInterface {
 
         long timeout = ((Number) value).longValue();
         if (timeout <= 0) {
-            return thenClause.bind(schema, context);
+            // A non-positive timeout means "wait indefinitely", not "disable
+            // recovery". Execute synchronously in the same isolated/cloned
+            // context used by the timed path so ordinary THEN failures can
+            // still fall back to ELSE and RETURN state is not leaked.
+            return executeWithoutTimeout(schema, context);
         }
 
         return executeWithTimeout(schema, context, timeout);
+    }
+
+    private Enumerable<Object[]> executeWithoutTimeout(CalciteSchema schema, ExecuteContext context) {
+        ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
+        boolean containsReturn = containsReturn();
+        ExecuteContextImpl thenContext = containsReturn
+                ? functionContext.createIsolatedReturnContext()
+                : functionContext.clone();
+        try {
+            Enumerable<Object[]> result = thenClause.bind(schema, thenContext);
+            if (containsReturn) {
+                functionContext.commitFunctionReturnFrom(thenContext);
+            }
+            return result;
+        } catch (Exception e) {
+            thenContext.cancel();
+            if (context.isCancelled()) {
+                throw new RuntimeException("if node " + getName() + " cancelled", e);
+            }
+            log.error("Error executing thenClause, falling back to elseClause", e);
+            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
+            return elseClause.bind(schema, context);
+        }
     }
 
     private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {

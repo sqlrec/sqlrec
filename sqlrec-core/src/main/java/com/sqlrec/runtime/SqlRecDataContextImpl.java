@@ -52,4 +52,9 @@ public class SqlRecDataContextImpl implements SqlRecDataContext {
     public String getVariable(String key) {
         return executeContext.getVariable(key);
     }
+
+    @Override
+    public Map<String, String> getVariables() {
+        return executeContext.getVariables();
+    }
 }

@@ -41,6 +41,19 @@ public class ConfigOptionTest {
     }
 
     @Test
+    public void testGetValueFromOptionsFallsBackToEnvironmentBeforeDefault() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "PATH",
+                "default_value",
+                "Test description",
+                null,
+                String.class
+        );
+
+        assertEquals(System.getenv("PATH"), option.getValue(Collections.emptyMap()));
+    }
+
+    @Test
     public void testGetValueFromOptions_NullOptions() {
         ConfigOption<String> option = new ConfigOption<>(
                 "test.key",

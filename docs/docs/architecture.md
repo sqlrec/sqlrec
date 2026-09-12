@@ -501,5 +501,5 @@ CREATE SERVICE ► 校验 checkpoint=SUCCEEDED + 类型合法
 | `SESSION_CHECK_INTERVAL` / `SESSION_IDLE_TIMEOUT` | 5min / 30min | 会话管理 |
 | `SQL_SYNC_EXECUTE_TIMEOUT` | 180s | 同步执行超时 |
 | `IGNORE_UNION_EXCEPTION` | true | SQL 函数执行时开关：仅将所有消费路径最终都进入 `UNION` 或静态 `UnionLikeTableFunction`（内置为 `weighted_merge`）的失败缓存分支替换为空表；取消、中断、`Error` 以及流向非合并路径的分支不降级 |
-| `IGNORE_JOIN_QUERY_EXCEPTION` | true | KV join 查询外部存储时忽略单次查询异常并继续处理其余 key |
+| `IGNORE_JOIN_QUERY_EXCEPTION` | true | KV/Vector join 查询外部存储时忽略单次查询异常并继续处理其余 key；优先使用执行上下文参数，其次环境变量，最后使用默认值 |
 | `DEFAULT_VECTOR_SEARCH_LIMIT` | 100 | 向量检索默认 topK |

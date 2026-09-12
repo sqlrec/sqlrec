@@ -2,7 +2,11 @@ package com.sqlrec.utils;
 
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.runtime.SqlRecDataContext;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.runtime.SqlRecDataContextImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -128,6 +132,29 @@ public class KvJoinUtilsTest {
         // Right table columns are always the returned row regardless of which key succeeded
         assertEquals(200, row[2]);
         assertEquals("match", row[3]);
+    }
+
+    @Test
+    public void testExecutionContextOverridesDefault() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        executeContext.setVariable("IGNORE_JOIN_QUERY_EXCEPTION", "false");
+        SqlRecDataContext dataContext = new SqlRecDataContextImpl(
+                Collections.emptyMap(), CalciteSchema.createRootSchema(false), executeContext);
+
+        Enumerable left = Linq4j.asEnumerable(Collections.singletonList(new Object[]{1, "Alice"}));
+        SqlRecKvTable rightTable = mock(SqlRecKvTable.class);
+        when(rightTable.getRowType(any())).thenReturn(rightRowType);
+        when(rightTable.getPrimaryKeyIndex()).thenReturn(0);
+        when(rightTable.scan(any(), any())).thenThrow(new RuntimeException("scan failed"));
+
+        RexInputRef leftRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
+        RexInputRef rightRef = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 3);
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                KvJoinUtils.kvJoin(left, rightTable, condition, JoinRelType.INNER, dataContext));
+        assertEquals("scan failed", exception.getMessage());
     }
 
     @Test

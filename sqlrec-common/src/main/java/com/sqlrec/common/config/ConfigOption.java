@@ -39,10 +39,12 @@ public class ConfigOption<T> {
     }
 
     public T getValue(Map<String, String> options) {
-        if (options == null || !options.containsKey(key)) {
-            return processValue(null);
+        String value = options == null ? null : options.get(key);
+        // Request/execution options take precedence. When absent, fall back to the
+        // process environment and finally to the option's declared default value.
+        if (value == null) {
+            value = System.getenv(key);
         }
-        String value = options.get(key);
         return processValue(value);
     }
 

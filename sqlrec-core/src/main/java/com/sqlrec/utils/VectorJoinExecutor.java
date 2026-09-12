@@ -1,6 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.runtime.SqlRecDataContext;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
@@ -8,6 +9,7 @@ import com.sqlrec.common.utils.DataTransformUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.DataContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +29,18 @@ public final class VectorJoinExecutor {
             int leftEmbeddingIndex,
             String rightEmbeddingField,
             int topKPerLeftRow) {
+        return execute(left, rightTable, pushedFilterObject, leftEmbeddingIndex,
+                rightEmbeddingField, topKPerLeftRow, null);
+    }
+
+    public static <T> Enumerable<Object[]> execute(
+            Enumerable<T> left,
+            VectorSearchable rightTable,
+            Object pushedFilterObject,
+            int leftEmbeddingIndex,
+            String rightEmbeddingField,
+            int topKPerLeftRow,
+            DataContext dataContext) {
         if (left == null) {
             throw new IllegalArgumentException("left input is null");
         }
@@ -44,7 +58,8 @@ public final class VectorJoinExecutor {
                 pushedFilter,
                 leftEmbeddingIndex,
                 rightEmbeddingField,
-                effectiveTopK));
+                effectiveTopK,
+                dataContext));
     }
 
     private static Enumerable<Object[]> lookupOne(
@@ -53,7 +68,8 @@ public final class VectorJoinExecutor {
             RexNode pushedFilter,
             int leftEmbeddingIndex,
             String rightEmbeddingField,
-            int topK) {
+            int topK,
+            DataContext dataContext) {
         Object[] leftRow = value instanceof Object[] ? (Object[]) value : new Object[]{value};
         if (leftEmbeddingIndex < 0 || leftEmbeddingIndex >= leftRow.length) {
             throw new IllegalArgumentException(
@@ -77,12 +93,20 @@ public final class VectorJoinExecutor {
             }
             return Linq4j.asEnumerable(matches).select(match -> join(leftRow, match));
         } catch (RuntimeException e) {
-            if (!SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue()) {
+            if (!ignoreJoinQueryException(dataContext)) {
                 throw e;
             }
             log.warn("Failed to execute vector lookup for one left row", e);
             return Linq4j.emptyEnumerable();
         }
+    }
+
+    private static boolean ignoreJoinQueryException(DataContext dataContext) {
+        if (dataContext instanceof SqlRecDataContext) {
+            return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION
+                    .getValue(((SqlRecDataContext) dataContext).getVariables());
+        }
+        return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue();
     }
 
     private static Object[] join(Object[] leftRow, VectorSearchResult match) {

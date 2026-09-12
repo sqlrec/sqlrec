@@ -194,6 +194,46 @@ public class IfBindableCancelTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
+    public void testTimeinNonPositiveThenExceptionFallsBackToElse() {
+        AtomicBoolean thenExecuted = new AtomicBoolean(false);
+        AtomicBoolean elseExecuted = new AtomicBoolean(false);
+
+        TestBindable thenInner = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                thenExecuted.set(true);
+                throw new RuntimeException("then boom");
+            }
+        };
+        TestBindable elseInner = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                elseExecuted.set(true);
+                return Linq4j.asEnumerable(Collections.singletonList(new Object[]{"fallback"}));
+            }
+        };
+
+        IfBindable ifBindable = new IfBindable(
+                condition(0L),
+                cacheClause("t", thenInner),
+                cacheClause("t", elseInner),
+                true
+        );
+
+        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        Enumerable<Object[]> result = ifBindable.bind(schema, context);
+
+        assertTrue(thenExecuted.get());
+        assertTrue(elseExecuted.get(), "else clause should execute after then failure without timeout");
+        List<Object[]> rows = new ArrayList<>();
+        result.forEach(rows::add);
+        assertEquals("t", rows.get(0)[0]);
+        assertEquals(1L, rows.get(0)[1]);
+    }
+
+    @Test
     public void testTimeinCancelledWhileWaitingRethrowsWithoutFallback() throws Exception {
         // the then branch observes cancellation (polling thenContext): after the ancestor cancels, then fails;
         // the If must not fall back to else, but abort by throwing

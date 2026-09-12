@@ -2,6 +2,9 @@ package com.sqlrec.utils;
 
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.runtime.SqlRecDataContextImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
@@ -204,6 +207,30 @@ public class VectorJoinExecutorTest {
                         "embedding",
                         10).count());
 
+        assertEquals("search failed", exception.getMessage());
+    }
+
+    @Test
+    public void executionContextOverridesDefault() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        executeContext.setVariable("IGNORE_JOIN_QUERY_EXCEPTION", "false");
+        SqlRecDataContextImpl dataContext = new SqlRecDataContextImpl(
+                Collections.emptyMap(), CalciteSchema.createRootSchema(false), executeContext);
+        VectorSearchable rightTable = mock(VectorSearchable.class);
+        doThrow(new RuntimeException("search failed"))
+                .when(rightTable).searchByEmbedding(any());
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                VectorJoinExecutor.execute(
+                        Linq4j.asEnumerable(Collections.singletonList(
+                                new Object[]{1, Arrays.asList(0.1f, 0.2f)})),
+                        rightTable,
+                        null,
+                        1,
+                        "embedding",
+                        10,
+                        dataContext).count());
         assertEquals("search failed", exception.getMessage());
     }
 
