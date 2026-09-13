@@ -1,0 +1,265 @@
+# Service Deployment
+
+This document introduces how to deploy the SQLRec system.
+
+## System Requirements
+
+The deployment scripts support AMD64 and ARM64 Linux, and Apple Silicon macOS. Linux uses the Minikube Docker driver; macOS uses vfkit, vmnet-shared networking, and VirtioFS mounts. Exact system and tool requirements evolve with the scripts, so treat the checks and configuration under `deploy/` as authoritative. Production environments should manage Kubernetes and related dependencies centrally.
+
+Docker Desktop is not required on macOS. The deployment script installs missing command-line dependencies with Homebrew; the equivalent command is:
+
+```bash
+brew install minikube vfkit docker docker-buildx helm gettext libpq
+```
+
+The deployment script also configures the Homebrew Buildx plugin and installs `vmnet-helper` using the version-specific procedure in the [official Minikube vfkit documentation](https://minikube.sigs.k8s.io/docs/drivers/vfkit/).
+
+The Minikube example allocates a 256GB disk and starts several dependencies. Actual memory and disk needs depend on enabled components and data volume; 32GB/256GB should not be treated as a fixed production size. The first deployment needs access to image/Helm repositories and download URLs.
+
+## Quick Deployment (Minikube)
+
+You can quickly deploy a test environment using Minikube:
+
+```bash
+# clone sqlrec repository
+git clone https://github.com/sqlrec/sqlrec.git
+cd ./sqlrec/deploy
+
+# deploy minikube
+./deploy_minikube.sh
+
+# verify pod status, wait all pod ready
+alias kubectl="minikube kubectl --"
+kubectl get pods --all-namespaces
+
+# download resource
+./download_resource.sh
+
+# deploy sqlrec and dependencies services
+./deploy_components.sh
+
+# verify pod status, wait all pod ready
+kubectl get pods --all-namespaces
+
+# verify sqlrec service
+cd ..
+bash ./bin/beeline.sh
+```
+
+If Beeline connects and `SHOW TABLES;` succeeds, the core SQLRec service is ready. If pods are still starting or pulling images, wait for required components in `kubectl get pods --all-namespaces` before retrying.
+
+**Notes**:
+- The Minikube-based deployment solution above is for testing only
+- If you need to redeploy, you can first delete the cluster via `minikube delete`
+- Workload images are saved to `deploy/data/image-cache/<arch>` after a successful deployment and loaded when a new cluster is created
+- On macOS, Minikube defaults to the host's physical core count, 80% of the host's total memory, and a 256GB disk. Override these with `MINIKUBE_CPUS`, `MINIKUBE_MEMORY_PERCENT`, `MINIKUBE_MEMORY`, and `MINIKUBE_DISK_SIZE`; an explicit `MINIKUBE_MEMORY` value takes precedence over the percentage
+- Dynamically provisioned Local PV data is stored at `/data/local-path-provisioner` in the Minikube node by default. The deployment uses Rancher's official Helm chart to install a project-managed local-path provisioner, so `minikube start` cannot restore `/opt/local-path-provisioner` by reapplying the built-in manifest of an enabled addon. Set `LOCAL_PATH_PROVISIONER_DATA_DIR` before running `deploy_minikube.sh` to use another absolute path
+- The host, pods, and shared configuration use the `NODE_IP` returned by `minikube ip` for NodePort access; access through the host's physical IP from other LAN machines is not guaranteed
+- Some components are not deployed by default, such as Kyuubi, Jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory
+- Deployment scripts read `deploy/env.sh`; use matching environment variables to override versions, namespaces, passwords, or ports, for example `NAMESPACE=dev SQLREC_VERSION=your-version bash ./deploy_components.sh`
+- `deploy_components.sh` deploys PostgreSQL, MinIO/JuiceFS, Hadoop, HMS, Flink, Spark, SQLRec, and by default Kafka, Redis, and Milvus. HDFS, MongoDB, Kyuubi, Jupyter, and observability components require their own scripts
+
+## Production Environment Deployment
+
+Do not copy the Minikube flow directly into production. Prepare Kubernetes, storage, PostgreSQL, Hive Metastore, and Flink SQL Gateway first, then adapt the YAML for your network, storage classes, and security policy. The repository manifests use `hostPath` and NodePort and are primarily intended for single-node/test environments.
+
+### Core Dependency Services
+
+SQLRec requires the following core dependency services to run:
+
+| Service | Purpose | Required |
+|---------|---------|----------|
+| **Kubernetes** | Container orchestration platform for deploying and managing model training, export, and serving | Yes |
+| **PostgreSQL** | Metadata storage, storing model, service, function definitions, etc. | Yes |
+| **Hive Metastore** | Table metadata management, managing Hive table structure information | Yes |
+| **Flink SQL Gateway** | SQL execution engine, executing Flink SQL statements | Yes |
+| **Distributed Storage** | Storing model files, training data, etc. (MinIO/JuiceFS/HDFS) | Yes |
+
+### Optional Dependency Services
+
+| Service | Purpose |
+|---------|---------|
+| Kafka | Message queue for streaming data processing |
+| Redis | Cache service |
+| Milvus | Vector database for vector search |
+| Spark | Distributed computing engine |
+| Kyuubi | SQL gateway, providing multi-tenant SQL services |
+| Jupyter | Notebook environment for interactive development |
+
+### PersistentVolume Configuration
+
+SQLRec relies on Kubernetes PersistentVolume (PV) to store client components and configuration files. Production environments need to prepare the following PVs in advance:
+
+**Required PVs**:
+
+| PV Name | Purpose | Size Recommendation |
+|---------|---------|---------------------|
+| `sqlrec-lib-pv` / `sqlrec-lib-pvc` | Dependency JARs such as the JuiceFS Hadoop JAR | 128Gi (example default) |
+| `sqlrec-client-pv` / `sqlrec-client-pvc` | Hadoop, Hive, Spark, Java clients and configuration | 128Gi (example default) |
+
+`deploy/pv.yaml` defines `hostPath`, `ReadWriteOnce` PVs with a `Retain` reclaim policy. Replace them with a cluster-backed StorageClass/PV in production and verify how SQLRec, Flink, Spark, and HMS access the client files.
+
+**Client files and Hadoop configuration**:
+
+The SQLRec container uses `HADOOP_HOME`, `HADOOP_CONF_DIR`, and `CLASSPATH` to access the clients. Deployment scripts copy files from `deploy/data/conf` into the Hadoop, Hive, and Spark client directories; manual deployments must make these clients and configurations readable from the mounted volume.
+
+**Key Configuration Files**:
+
+| File | Description | Required Configuration Items |
+|------|-------------|------------------------------|
+| `core-site.xml` | Hadoop core configuration | `fs.defaultFS`, JuiceFS related configurations |
+| `hdfs-site.xml` | HDFS configuration | Replication factor, block size, etc. |
+| `hive-site.xml` | Hive configuration | `hive.metastore.uris` (when Hive tables are used) |
+
+### SQLRec Service Configuration
+
+SQLRec service is deployed through Kubernetes Deployment with the following main configuration items:
+
+**Required Environment Variables**:
+
+| Environment Variable | Description |
+|---------------------|-------------|
+| `NAMESPACE` | Kubernetes namespace |
+| `MODEL_BASE_PATH` | Model storage base path; the example YAML currently fixes it to `/user/sqlrec/models`, so change the YAML for production |
+| `META_DB_URL` | PostgreSQL connection URL |
+| `META_DB_USER` | PostgreSQL username |
+| `META_DB_PASSWORD` | PostgreSQL password |
+| `HIVE_METASTORE_URI` | Hive Metastore Thrift URI |
+| `FLINK_SQL_GATEWAY_ADDRESS` | Flink SQL Gateway address |
+| `FLINK_SQL_GATEWAY_PORT` | Flink SQL Gateway port |
+
+**Service Ports**:
+
+| Port | Service | Description |
+|------|---------|-------------|
+| 30000 | Thrift Server | JDBC/Beeline connection port |
+| 30001 | REST Server | REST API port |
+| 30002 | Debug | Remote debugging port |
+
+**Kubernetes Permissions**:
+
+SQLRec requires the following Kubernetes permissions to manage model training and service deployment:
+
+```bash
+# Create ServiceAccount
+kubectl create serviceaccount sqlrec -n ${NAMESPACE}
+
+# Grant edit permissions
+kubectl create clusterrolebinding sqlrec-role \
+  --clusterrole=edit \
+  --serviceaccount=${NAMESPACE}:sqlrec \
+  --namespace=${NAMESPACE}
+```
+
+### Deployment Steps
+
+1. **Prepare Kubernetes Cluster**
+
+   Ensure the Kubernetes cluster is properly configured and can access the container image registry.
+
+2. **Prepare Client PV**
+
+   Create PV and PVC, and prepare Hadoop, Hive, Spark clients and configuration files in the client directory.
+
+3. **Deploy PostgreSQL**
+
+   ```bash
+   # Initialize table structure
+   psql -d sqlrec -f deploy/sql/master.sql
+   ```
+
+4. **Deploy Hive Metastore**
+
+   Ensure Hive Metastore service is started and accessible.
+
+5. **Deploy Flink SQL Gateway**
+
+   Ensure Flink SQL Gateway service is started and accessible.
+
+6. **Deploy Distributed Storage**
+
+   Choose MinIO, JuiceFS, or HDFS as the storage backend according to actual needs.
+
+7. **Deploy SQLRec**
+
+   ```bash
+   # Initialize metadata, permissions, and the SQLRec Deployment
+   bash deploy/sqlrec/deploy.sh
+   ```
+
+   Do not run only `envsubst`: `deploy/sqlrec/deploy.sh` also initializes PostgreSQL, imports `deploy/sql/master.sql`, creates the ServiceAccount, and renders the temporary YAML. Production users may reuse the steps after reviewing database addresses, permissions, NodePorts, and storage.
+
+8. **Verify Deployment**
+
+   ```bash
+   # Check Pod status
+   kubectl get pod -n ${NAMESPACE}
+   
+   # Connection test
+   bash ./bin/beeline.sh
+   ```
+
+## Image Building
+
+SQLRec provides two image build scripts:
+
+| Script | Built Images |
+|--------|--------------|
+| `bin/build_sqlrec_docker.sh` | SQLRec service related images |
+| `bin/build_model_docker.sh` | Model training/inference images |
+
+**Built Images**:
+
+| Image | Dockerfile | Description |
+|-------|------------|-------------|
+| `sqlrec/sqlrec:${SQLREC_VERSION}` | `docker/Dockerfile` | SQLRec service image |
+| `sqlrec/sqlrec-demo:${SQLREC_VERSION}` | `docker/demo.Dockerfile` | SQLRec Demo image |
+| `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec model training/inference image (CPU version) |
+| `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) training/inference image (CPU version) |
+| `sqlrec/transformers:${SQLREC_VERSION}` | `docker/sqlrec-model-transformers.Dockerfile` | Hugging Face Transformers model image |
+
+The image version `SQLREC_VERSION` comes from `deploy/env.sh` and can be overridden before execution. This documentation intentionally does not pin its default; use the current deployment script as authoritative.
+
+**Build Steps**:
+
+```bash
+# Build SQLRec service images
+bash ./bin/build_sqlrec_docker.sh
+
+# Build model images
+bash ./bin/build_model_docker.sh
+```
+
+::: tip Tip
+The scripts automatically switch to the project root directory to execute the build, no manual cd is needed; the scripts internally `source deploy/env.sh` to read the version number and other configurations.
+:::
+
+**Minikube Environment**:
+
+If a Minikube environment is detected, the build scripts will automatically configure Minikube's Docker environment so that built images can be directly used by Minikube:
+
+```bash
+if command -v minikube >/dev/null 2>&1; then
+  eval $(minikube -p minikube docker-env)
+fi
+```
+
+macOS installs only the Docker CLI and does not run Docker Desktop, so Minikube must be running before building images. The GBDT image supports both AMD64 and ARM64. ARM64 support in the tzrec base image is not confirmed, so the tzrec model image remains outside the guaranteed core ARM64 deployment scope.
+
+**Manual Build**:
+
+If you need to build images manually:
+
+```bash
+# Enter project root directory
+cd /path/to/sqlrec
+
+# Select the version to build
+export SQLREC_VERSION=your-version
+
+# Build SQLRec service image
+docker build -t sqlrec/sqlrec:${SQLREC_VERSION} -f ./docker/Dockerfile .
+
+# Build model image
+docker build -t sqlrec/tzrec:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+```

@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: 快速开始
-      link: /docs/quick_start
+      link: /docs/getting-started/docker
 
 features:
   - title: 开发简单
@@ -20,4 +20,3 @@ features:
   - title: 扩展性强
     details: 可自定义UDF、Table类型、Model类型等
 ---
-

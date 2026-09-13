@@ -7,7 +7,7 @@ hero:
   actions:
     - theme: brand
       text: Quick Start
-      link: /en/docs/quick_start
+      link: /en/docs/getting-started/docker
 
 features:
   - title: Simple Development
