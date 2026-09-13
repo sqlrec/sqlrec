@@ -51,7 +51,7 @@ bash ./bin/beeline.sh
 - 如果需要重新部署，可以先通过 `minikube delete` 删除集群
 - 部署成功后，工作负载镜像会保存到 `deploy/data/image-cache/<arch>`；重新创建集群时会自动加载
 - macOS 默认按宿主机物理核心数给 Minikube 分配 CPU、按宿主机总内存的 80% 分配内存，并分配 256GB 磁盘；可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY_PERCENT`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖，其中显式设置 `MINIKUBE_MEMORY` 时不再按比例计算
-- 动态 Local PV 默认保存在 Minikube 节点的 `/data/local-path-provisioner`；可在运行 `deploy_minikube.sh` 前通过 `LOCAL_PATH_PROVISIONER_DATA_DIR` 指定其他绝对路径
+- 动态 Local PV 默认保存在 Minikube 节点的 `/data/local-path-provisioner`。部署脚本通过 Rancher 官方 Helm chart 安装项目自管的 local-path provisioner，避免 `minikube start` 重新应用已启用 addon 的内置清单时把路径恢复为 `/opt/local-path-provisioner`。可在运行 `deploy_minikube.sh` 前通过 `LOCAL_PATH_PROVISIONER_DATA_DIR` 指定其他绝对路径
 - 主机、Pod 和共享配置统一通过 `minikube ip` 返回的 `NODE_IP` 访问 NodePort；不保证局域网其他机器通过宿主机物理 IP 访问
 - 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
 - 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`

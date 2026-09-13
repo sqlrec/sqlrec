@@ -90,6 +90,8 @@ else
 fi
 export MINIKUBE_DISK_SIZE="${MINIKUBE_DISK_SIZE:-256gb}"
 export LOCAL_PATH_PROVISIONER_DATA_DIR="${LOCAL_PATH_PROVISIONER_DATA_DIR:-/data/local-path-provisioner}"
+export LOCAL_PATH_PROVISIONER_CHART="${LOCAL_PATH_PROVISIONER_CHART:-oci://ghcr.io/rancher/local-path-provisioner/charts/local-path-provisioner}"
+export LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-0.0.37}"
 
 export DEBIAN_IMAGE_VERSION="${DEBIAN_IMAGE_VERSION:-12-slim}"
 

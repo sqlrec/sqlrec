@@ -1,0 +1,15 @@
+fullnameOverride: local-path-provisioner
+
+helperImage:
+  repository: docker.io/library/busybox
+  tag: stable
+
+storageClass:
+  name: local-path
+  provisionerName: rancher.io/local-path
+  defaultClass: true
+
+nodePathMap:
+  - node: DEFAULT_PATH_FOR_NON_LISTED_NODES
+    paths:
+      - ${LOCAL_PATH_PROVISIONER_DATA_DIR}

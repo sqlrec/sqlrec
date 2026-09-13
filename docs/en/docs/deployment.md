@@ -51,7 +51,7 @@ bash ./bin/beeline.sh
 - If you need to redeploy, you can first delete the cluster via `minikube delete`
 - Workload images are saved to `deploy/data/image-cache/<arch>` after a successful deployment and loaded when a new cluster is created
 - On macOS, Minikube defaults to the host's physical core count, 80% of the host's total memory, and a 256GB disk. Override these with `MINIKUBE_CPUS`, `MINIKUBE_MEMORY_PERCENT`, `MINIKUBE_MEMORY`, and `MINIKUBE_DISK_SIZE`; an explicit `MINIKUBE_MEMORY` value takes precedence over the percentage
-- Dynamically provisioned Local PV data is stored at `/data/local-path-provisioner` in the Minikube node by default. Set `LOCAL_PATH_PROVISIONER_DATA_DIR` before running `deploy_minikube.sh` to use another absolute path
+- Dynamically provisioned Local PV data is stored at `/data/local-path-provisioner` in the Minikube node by default. The deployment uses Rancher's official Helm chart to install a project-managed local-path provisioner, so `minikube start` cannot restore `/opt/local-path-provisioner` by reapplying the built-in manifest of an enabled addon. Set `LOCAL_PATH_PROVISIONER_DATA_DIR` before running `deploy_minikube.sh` to use another absolute path
 - The host, pods, and shared configuration use the `NODE_IP` returned by `minikube ip` for NodePort access; access through the host's physical IP from other LAN machines is not guaranteed
 - Some components are not deployed by default, such as Kyuubi, Jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory
 - Deployment scripts read `deploy/env.sh`; override values before execution, for example `NAMESPACE=dev SQLREC_VERSION=0.1.10 bash ./deploy_components.sh`

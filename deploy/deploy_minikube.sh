@@ -243,26 +243,45 @@ if ! (eval "$(minikube -p minikube docker-env)" && docker info >/dev/null); then
 fi
 
 bash "${dir}/cache_images.sh" load
-minikube addons enable storage-provisioner-rancher
 
-# Rancher's default /opt/local-path-provisioner directory is not on Minikube's
-# list of paths persisted by VM drivers. Store dynamically provisioned volumes
-# below /data instead, which Minikube explicitly preserves across VM restarts.
-kubectl wait --for=create configmap/local-path-config \
-  --namespace=local-path-storage \
-  --timeout="${DEPLOY_TIMEOUT}s"
-local_path_config_patch="$(printf \
-  '{"data":{"config.json":"{\\"nodePathMap\\":[{\\"node\\":\\"DEFAULT_PATH_FOR_NON_LISTED_NODES\\",\\"paths\\":[\\"%s\\"]}]}"}}' \
-  "${LOCAL_PATH_PROVISIONER_DATA_DIR}")"
-kubectl patch configmap local-path-config \
-  --namespace=local-path-storage \
-  --type=merge \
-  --patch "${local_path_config_patch}"
-kubectl rollout restart deployment/local-path-provisioner \
-  --namespace=local-path-storage
-kubectl rollout status deployment/local-path-provisioner \
-  --namespace=local-path-storage \
-  --timeout="${DEPLOY_TIMEOUT}s"
+case "${LOCAL_PATH_PROVISIONER_DATA_DIR}" in
+  /*) ;;
+  *)
+    echo "ERROR: LOCAL_PATH_PROVISIONER_DATA_DIR must be an absolute path." >&2
+    exit 1
+    ;;
+esac
+
+# Do not patch Minikube's storage-provisioner-rancher addon: enabling that addon
+# again restores its /opt/local-path-provisioner ConfigMap. Disable the addon
+# once and install an equivalent project-managed provisioner whose configuration
+# survives Minikube restarts.
+if minikube addons list -p minikube -o json |
+  grep -q '"storage-provisioner-rancher":{[^}]*"Status":"enabled"'; then
+  minikube addons disable storage-provisioner-rancher
+  kubectl wait --for=delete namespace/local-path-storage \
+    --timeout="${DEPLOY_TIMEOUT}s"
+fi
+
+render_config "${dir}/local-path-provisioner.values.yaml" \
+  '${LOCAL_PATH_PROVISIONER_DATA_DIR}'
+helm upgrade --install local-path-provisioner \
+  "${LOCAL_PATH_PROVISIONER_CHART}" \
+  --version "${LOCAL_PATH_PROVISIONER_VERSION}" \
+  --namespace local-path-storage \
+  --create-namespace \
+  --values "${dir}/local-path-provisioner.values.yaml.tmp" \
+  --wait \
+  --timeout "${DEPLOY_TIMEOUT}s"
+
+# Keep local-path as the only default class when Minikube's standard provisioner
+# is also enabled. Static PV/PVC definitions with storageClassName: "" are not
+# affected by this annotation.
+if kubectl get storageclass standard >/dev/null 2>&1; then
+  kubectl annotate storageclass standard \
+    storageclass.kubernetes.io/is-default-class=false \
+    --overwrite
+fi
 
 echo "Minikube is ready at ${NODE_IP}"
 echo 'deploy minikube done'
