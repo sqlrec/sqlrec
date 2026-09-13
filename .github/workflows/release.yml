@@ -210,7 +210,17 @@ jobs:
   docker-gbdt:
     needs: build-test-release
     if: ${{ always() && (needs.build-test-release.result == 'success' || needs.build-test-release.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            juicefs_builder: builder
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            juicefs_builder: arm-builder
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -229,16 +239,15 @@ jobs:
           path: juicefs-src
           fetch-depth: 1
 
-      # Build the juicefs Python wheel from the fork using its own Makefile
-      # (sdk/python/Makefile): `make builder` creates the centos7 sdkbuilder
-      # image, `make juicefs` builds libjfs.so + the wheel inside it. The
-      # resulting wheel has a timestamped version (e.g. 1.3.0.<YYYYMMDDHHMM>),
-      # so the Dockerfile consumes it via a `juicefs-*.whl` wildcard.
+      # The wheel embeds libjfs.so, so each image must consume a wheel built on
+      # the same native architecture. QEMU is intentionally not used here.
       - name: Build juicefs Python wheel
         working-directory: juicefs-src/sdk/python
         run: |
-          make builder
-          make juicefs
+          make ${{ matrix.juicefs_builder }}
+          build_date="$(TZ=UTC git show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd)"
+          build_date_short="$(TZ=UTC git show -s --date=format-local:'%Y%m%d%H%M' --format=%cd)"
+          make juicefs BUILD_DATE="$build_date" BUILD_DATE_SHORT="$build_date_short"
           find juicefs/dist -name 'juicefs-*.whl' -exec cp {} "$GITHUB_WORKSPACE/" \;
           ls -la "$GITHUB_WORKSPACE/"juicefs-*.whl
 
@@ -256,6 +265,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=-${{ matrix.arch }}
           # semver tags fire on `v*` tag pushes; `type=sha` covers manual
           # workflow_dispatch runs (which have no semver tag).
           tags: |
@@ -263,17 +274,94 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}-cpu
             type=sha,format=short
 
-      - name: Build and push GBDT image
+      # Load the native single-platform image first so architecture and dynamic
+      # library checks finish before any per-architecture tags are published.
+      - name: Build GBDT image (${{ matrix.arch }})
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/sqlrec-model-gbdt.Dockerfile
-          platforms: linux/amd64
-          push: true
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=gbdt-${{ matrix.arch }}
+          cache-to: type=gha,scope=gbdt-${{ matrix.arch }},mode=max
+
+      - name: Verify GBDT image (${{ matrix.arch }})
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          actual_arch="$(docker run --rm --entrypoint uname "$image" -m)"
+          case "$EXPECTED_ARCH:$actual_arch" in
+            amd64:x86_64|arm64:aarch64) ;;
+            *) echo "unexpected image architecture: $actual_arch" >&2; exit 1 ;;
+          esac
+          docker run --rm --entrypoint python "$image" -c \
+            'import catboost, fsspec, lightgbm, onnxruntime, pandas, pyarrow, xgboost'
+          docker run --rm --entrypoint python "$image" -c \
+            'import ctypes, pathlib, juicefs; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name("libjfs.so")))'
+          docker run --rm --entrypoint sh "$image" -c \
+            'set -eu; links="$(ldd /app/onnx_server /app/catboost_server 2>&1)"; printf "%s\n" "$links"; ! printf "%s\n" "$links" | grep -q "not found"'
+
+      - name: Push GBDT image (${{ matrix.arch }})
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              docker push "$tag"
+            fi
+          done <<EOF
+          $IMAGE_TAGS
+          EOF
+
+  docker-gbdt-manifest:
+    needs: docker-gbdt
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/gbdt
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}-cpu
+            type=semver,pattern={{major}}.{{minor}}-cpu
+            type=sha,format=short
+
+      - name: Create multi-architecture manifests
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "$tag-amd64" \
+                "$tag-arm64"
+            fi
+          done <<EOF
+          $IMAGE_TAGS
+          EOF
 
   # The amd64 variant includes CUDA, while arm64 uses the PyTorch CPU wheel.
   # Buildx publishes both variants as one multi-architecture image manifest.

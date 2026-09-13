@@ -241,7 +241,7 @@ if command -v minikube >/dev/null 2>&1; then
 fi
 ```
 
-macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。当前 GBDT Dockerfile 仍包含 x86_64 原生依赖，tzrec 基础镜像的 ARM64 支持也未确认；这两个模型镜像暂不属于 ARM64 核心部署的保证范围。
+macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。GBDT 镜像同时支持 AMD64 和 ARM64。tzrec 基础镜像的 ARM64 支持尚未确认，因此 tzrec 模型镜像仍不属于 ARM64 核心部署的保证范围。
 
 **手动构建**：
 

@@ -241,7 +241,7 @@ if command -v minikube >/dev/null 2>&1; then
 fi
 ```
 
-macOS installs only the Docker CLI and does not run Docker Desktop, so Minikube must be running before building images. The GBDT Dockerfile still contains x86_64 native dependencies, and ARM64 support in the tzrec base image is not confirmed; these two model images are currently outside the guaranteed core ARM64 deployment scope.
+macOS installs only the Docker CLI and does not run Docker Desktop, so Minikube must be running before building images. The GBDT image supports both AMD64 and ARM64. ARM64 support in the tzrec base image is not confirmed, so the tzrec model image remains outside the guaranteed core ARM64 deployment scope.
 
 **Manual Build**:
 

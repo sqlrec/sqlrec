@@ -4,7 +4,10 @@
 #   virtualenv with all packages. Build-only tools (cmake/make/g++/wget) live
 #   here and are discarded — they never reach the runtime image.
 # ===========================================================================
-FROM python:3.10-slim AS builder
+FROM python:3.10-slim-bookworm AS builder
+
+ARG TARGETARCH
+ARG CATBOOST_VERSION=1.2.10
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -25,16 +28,17 @@ ENV PATH=/opt/venv/bin:$PATH
 ENV VIRTUAL_ENV=/opt/venv
 
 # Python dependencies for GBDT training, export, and HDFS download.
-#   - lightgbm, xgboost, catboost: GBDT training frameworks
+#   - lightgbm, xgboost-cpu, catboost: GBDT training frameworks
+#     (xgboost-cpu exposes the same xgboost module without bundling NCCL)
 #   - onnxruntime: ONNX inference (used during export validation)
 #   - onnxmltools: LightGBM/XGBoost -> ONNX converter
 #   - scikit-learn: required by onnxmltools initial_types
 #   - pyarrow: HDFS access via HadoopFileSystem + parquet IO
 #   - fsspec, pandas: dataset loading helpers
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --timeout 120 --retries 5 \
         lightgbm \
-        xgboost \
-        catboost \
+        xgboost-cpu \
+        catboost==${CATBOOST_VERSION} \
         onnxruntime \
         onnxmltools \
         scikit-learn \
@@ -48,10 +52,16 @@ COPY juicefs-*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/juicefs-*.whl \
     && rm -f /tmp/juicefs-*.whl
 
-# Install ONNX Runtime C++ SDK
+# Install the architecture-specific ONNX Runtime C++ SDK.
 ENV ONNXRUNTIME_VERSION=1.17.1
-RUN wget -q -O /tmp/onnxruntime.tgz \
-        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz" \
+RUN ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" \
+    && case "${ARCH}" in \
+         amd64) ONNX_ARCH=x64 ;; \
+         arm64) ONNX_ARCH=aarch64 ;; \
+         *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
+       esac \
+    && wget -q -O /tmp/onnxruntime.tgz \
+        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
     && mkdir -p /opt/onnxruntime \
     && tar -xzf /tmp/onnxruntime.tgz -C /opt/onnxruntime --strip-components=1 \
     && rm -f /tmp/onnxruntime.tgz
@@ -61,14 +71,18 @@ ENV ONNXRUNTIME_LIB_DIR=/opt/onnxruntime/lib
 
 # Install CatBoost C++ library (libcatboostmodel) for native model serving.
 # The CatBoost pip wheel does NOT include libcatboostmodel.so; download the
-# prebuilt shared library and header from the CatBoost GitHub release that
-# matches the pip-installed version.
-RUN CB_VERSION=$(python -c "import catboost; print(catboost.__version__)") \
+# prebuilt shared library and header from the matching CatBoost GitHub release.
+RUN ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" \
+    && case "${ARCH}" in \
+         amd64) CATBOOST_ARCH=x86_64 ;; \
+         arm64) CATBOOST_ARCH=aarch64 ;; \
+         *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
+       esac \
     && mkdir -p /opt/catboost/lib /opt/catboost/include/catboost/libs/model_interface \
     && wget -q -O /opt/catboost/lib/libcatboostmodel.so \
-        "https://github.com/catboost/catboost/releases/download/v${CB_VERSION}/libcatboostmodel-linux-x86_64-${CB_VERSION}.so" \
+        "https://github.com/catboost/catboost/releases/download/v${CATBOOST_VERSION}/libcatboostmodel-linux-${CATBOOST_ARCH}-${CATBOOST_VERSION}.so" \
     && wget -q -O /opt/catboost/include/catboost/libs/model_interface/c_api.h \
-        "https://raw.githubusercontent.com/catboost/catboost/v${CB_VERSION}/catboost/libs/model_interface/c_api.h"
+        "https://raw.githubusercontent.com/catboost/catboost/v${CATBOOST_VERSION}/catboost/libs/model_interface/c_api.h"
 
 ENV CATBOOST_INCLUDE_DIR=/opt/catboost/include
 ENV CATBOOST_LIB_DIR=/opt/catboost/lib
@@ -89,7 +103,7 @@ RUN mkdir -p /build/gbdt/build /app \
 #   Java and Hadoop are NOT installed here — they are injected into pods at
 #   runtime via volume mounts and env vars (see ModelManager.injectPodConfig).
 # ===========================================================================
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH=/opt/venv/bin:$PATH
