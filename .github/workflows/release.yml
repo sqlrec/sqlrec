@@ -245,6 +245,14 @@ jobs:
         working-directory: juicefs-src/sdk/python
         run: |
           make ${{ matrix.juicefs_builder }}
+          # Derive the CI builder without changing the checked-out JuiceFS
+          # Makefile or Dockerfiles. docker run inherits GOFLAGS from the
+          # image, disabling Go VCS stamping for the bind-mounted checkout.
+          docker tag sdkbuilder sdkbuilder-base
+          docker build --tag sdkbuilder - <<'EOF'
+          FROM sdkbuilder-base
+          ENV GOFLAGS=-buildvcs=false
+          EOF
           build_date="$(TZ=UTC git show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd)"
           build_date_short="$(TZ=UTC git show -s --date=format-local:'%Y%m%d%H%M' --format=%cd)"
           make juicefs BUILD_DATE="$build_date" BUILD_DATE_SHORT="$build_date_short"
@@ -454,6 +462,13 @@ jobs:
         working-directory: juicefs-src/sdk/python
         run: |
           make builder
+          # Keep the third-party checkout unchanged; make juicefs will use
+          # this derived image and inherit GOFLAGS inside its container.
+          docker tag sdkbuilder sdkbuilder-base
+          docker build --tag sdkbuilder - <<'EOF'
+          FROM sdkbuilder-base
+          ENV GOFLAGS=-buildvcs=false
+          EOF
           make juicefs
           find juicefs/dist -name 'juicefs-*.whl' -exec cp {} "$GITHUB_WORKSPACE/" \;
           ls -la "$GITHUB_WORKSPACE/"juicefs-*.whl
