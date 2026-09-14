@@ -157,7 +157,7 @@ public class KvJoinUtils {
     private static boolean ignoreJoinQueryException(DataContext dataContext) {
         if (dataContext instanceof SqlRecDataContext) {
             return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION
-                    .getValue(((SqlRecDataContext) dataContext).getVariables());
+                    .getValueWithEnvFallback(((SqlRecDataContext) dataContext).getVariables());
         }
         return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue();
     }

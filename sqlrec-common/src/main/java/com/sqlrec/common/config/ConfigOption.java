@@ -38,10 +38,17 @@ public class ConfigOption<T> {
         return type;
     }
 
+    /** Resolves this option from the supplied map and then the declared default value. */
     public T getValue(Map<String, String> options) {
-        String value = options == null ? null : options.get(key);
-        // Request/execution options take precedence. When absent, fall back to the
-        // process environment and finally to the option's declared default value.
+        return processValue(getOptionValue(options));
+    }
+
+    /**
+     * Resolves this option from the supplied map, then the process environment, and finally the
+     * declared default value.
+     */
+    public T getValueWithEnvFallback(Map<String, String> options) {
+        String value = getOptionValue(options);
         if (value == null) {
             value = System.getenv(key);
         }
@@ -49,23 +56,16 @@ public class ConfigOption<T> {
     }
 
     public T getValueOrNull(Map<String, String> options) {
-        String value = (options != null && options.containsKey(key))
-                ? options.get(key) : null;
-        T processedValue = getFromStr(value);
-        if (processedValue != null && validValues != null
-                && !validValues.contains(processedValue)) {
-            throw new IllegalArgumentException("Invalid value: " + value);
-        }
-        return processedValue;
+        String value = getOptionValue(options);
+        return validateValue(getFromStr(value), value);
     }
 
     public boolean isSet(Map<String, String> options) {
-        return options != null && options.containsKey(key) && options.get(key) != null;
+        return getOptionValue(options) != null;
     }
 
     public T getValue() {
-        String value = System.getenv(key);
-        return processValue(value);
+        return processValue(System.getenv(key));
     }
 
     private T processValue(String value) {
@@ -73,40 +73,48 @@ public class ConfigOption<T> {
         if (processedValue == null) {
             throw new IllegalArgumentException(key + " is not set");
         }
+        return validateValue(processedValue, value);
+    }
+
+    private T validateValue(T processedValue, String value) {
         if (validValues != null && !validValues.contains(processedValue)) {
             throw new IllegalArgumentException("Invalid value: " + value);
         }
         return processedValue;
     }
 
+    private String getOptionValue(Map<String, String> options) {
+        return options == null ? null : options.get(key);
+    }
+
     private T getFromStr(String value) {
         if (value == null) {
             return defaultValue;
         }
-        if (getType() == String.class) {
-            return (T) value;
+        if (type == String.class) {
+            return type.cast(value);
         }
-        if (getType() == Integer.class) {
-            return (T) Integer.valueOf(value);
+        if (type == Integer.class) {
+            return type.cast(Integer.valueOf(value));
         }
-        if (getType() == Long.class) {
-            return (T) Long.valueOf(value);
+        if (type == Long.class) {
+            return type.cast(Long.valueOf(value));
         }
-        if (getType() == Double.class) {
-            return (T) Double.valueOf(value);
+        if (type == Double.class) {
+            return type.cast(Double.valueOf(value));
         }
-        if (getType() == Float.class) {
-            return (T) Float.valueOf(value);
+        if (type == Float.class) {
+            return type.cast(Float.valueOf(value));
         }
-        if (getType() == Short.class) {
-            return (T) Short.valueOf(value);
+        if (type == Short.class) {
+            return type.cast(Short.valueOf(value));
         }
-        if (getType() == Byte.class) {
-            return (T) Byte.valueOf(value);
+        if (type == Byte.class) {
+            return type.cast(Byte.valueOf(value));
         }
-        if (getType() == Boolean.class) {
-            return (T) Boolean.valueOf(value);
+        if (type == Boolean.class) {
+            return type.cast(Boolean.valueOf(value));
         }
-        throw new UnsupportedOperationException("Not supported type: " + getType());
+        throw new UnsupportedOperationException("Not supported type: " + type);
     }
 }

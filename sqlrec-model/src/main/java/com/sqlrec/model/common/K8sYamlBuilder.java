@@ -154,7 +154,8 @@ public class K8sYamlBuilder {
     }
 
     public static String getServiceUrl(ServiceConf serviceConf) {
-        String namespace = ModelConfigs.NAMESPACE.getValue(serviceConf.getParams());
+        String namespace = ModelConfigs.NAMESPACE
+                .getValueWithEnvFallback(serviceConf.getParams());
         return "http://" + serviceConf.getId() + "." + namespace + ".svc.cluster.local:80/predict";
     }
 }

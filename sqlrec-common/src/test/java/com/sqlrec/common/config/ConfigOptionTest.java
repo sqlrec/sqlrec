@@ -41,7 +41,7 @@ public class ConfigOptionTest {
     }
 
     @Test
-    public void testGetValueFromOptionsFallsBackToEnvironmentBeforeDefault() {
+    public void testGetValueFromOptionsDoesNotReadEnvironment() {
         ConfigOption<String> option = new ConfigOption<>(
                 "PATH",
                 "default_value",
@@ -50,7 +50,65 @@ public class ConfigOptionTest {
                 String.class
         );
 
-        assertEquals(System.getenv("PATH"), option.getValue(Collections.emptyMap()));
+        assertEquals("default_value", option.getValue(Collections.emptyMap()));
+    }
+
+    @Test
+    public void testRequiredValueFromOptionsDoesNotReadEnvironment() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "PATH",
+                null,
+                "Test description",
+                null,
+                String.class
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> option.getValue(Collections.emptyMap()));
+        assertEquals("PATH is not set", exception.getMessage());
+    }
+
+    @Test
+    public void testGetValueWithEnvFallbackReadsEnvironmentBeforeDefault() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "PATH",
+                "default_value",
+                "Test description",
+                null,
+                String.class
+        );
+
+        assertEquals(System.getenv("PATH"),
+                option.getValueWithEnvFallback(Collections.emptyMap()));
+    }
+
+    @Test
+    public void testGetValueWithEnvFallbackPrefersOptions() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "PATH",
+                "default_value",
+                "Test description",
+                null,
+                String.class
+        );
+
+        assertEquals("option_value",
+                option.getValueWithEnvFallback(Map.of("PATH", "option_value")));
+    }
+
+    @Test
+    public void testGetValueWithEnvFallbackUsesDefault() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "NON_EXISTENT_ENV_VAR_WITH_FALLBACK_12345",
+                "default_value",
+                "Test description",
+                null,
+                String.class
+        );
+
+        assertEquals("default_value",
+                option.getValueWithEnvFallback(Collections.emptyMap()));
     }
 
     @Test
@@ -245,6 +303,93 @@ public class ConfigOptionTest {
                 () -> option.getValue(Collections.emptyMap())
         );
         assertTrue(exception.getMessage().contains("is not set"));
+    }
+
+    @Test
+    public void testGetValueOrNullFromOptions() {
+        ConfigOption<Integer> option = new ConfigOption<>(
+                "test.optional", null, "Test optional value", null, Integer.class);
+
+        assertEquals(10, option.getValueOrNull(Map.of("test.optional", "10")));
+    }
+
+    @Test
+    public void testGetValueOrNullUsesDefaultValue() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "test.optional", "default_value", "Test optional value", null, String.class);
+
+        assertEquals("default_value", option.getValueOrNull(Collections.emptyMap()));
+    }
+
+    @Test
+    public void testGetValueOrNullWithoutDefaultReturnsNull() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "test.optional", null, "Test optional value", null, String.class);
+
+        assertNull(option.getValueOrNull(null));
+    }
+
+    @Test
+    public void testGetValueOrNullRejectsInvalidValue() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "test.optional", null, "Test optional value",
+                Arrays.asList("one", "two"), String.class);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> option.getValueOrNull(Map.of("test.optional", "three")));
+    }
+
+    @Test
+    public void testIsSet() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "test.key", null, "Test value presence", null, String.class);
+        Map<String, String> nullValue = new HashMap<>();
+        nullValue.put("test.key", null);
+
+        assertAll(
+                () -> assertFalse(option.isSet(null)),
+                () -> assertFalse(option.isSet(Collections.emptyMap())),
+                () -> assertFalse(option.isSet(nullValue)),
+                () -> assertTrue(option.isSet(Map.of("test.key", ""))),
+                () -> assertTrue(option.isSet(Map.of("test.key", "value")))
+        );
+    }
+
+    @Test
+    public void testSetDefaultValue() {
+        ConfigOption<String> option = new ConfigOption<>(
+                "test.key", "old", "Test mutable default", null, String.class);
+
+        option.setDefaultValue("new");
+
+        assertEquals("new", option.getDefaultValue());
+        assertEquals("new", option.getValue(Collections.emptyMap()));
+    }
+
+    @Test
+    public void testInvalidIntegerValue() {
+        ConfigOption<Integer> option = new ConfigOption<>(
+                "test.int", 0, "Test integer", null, Integer.class);
+
+        assertThrows(NumberFormatException.class,
+                () -> option.getValue(Map.of("test.int", "not-a-number")));
+    }
+
+    @Test
+    public void testInvalidBooleanValueIsFalse() {
+        ConfigOption<Boolean> option = new ConfigOption<>(
+                "test.boolean", true, "Test boolean", null, Boolean.class);
+
+        assertFalse(option.getValue(Map.of("test.boolean", "not-a-boolean")));
+    }
+
+    @Test
+    public void testUnsupportedType() {
+        ConfigOption<Object> option = new ConfigOption<>(
+                "test.object", null, "Test unsupported type", null, Object.class);
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> option.getValue(Map.of("test.object", "value")));
     }
 
     @Test

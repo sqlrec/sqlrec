@@ -237,7 +237,7 @@ public class FunctionProxyBindable extends BindableInterface {
         }
 
         boolean ignorePartitionException = SqlRecConfigs.IGNORE_PARTITION_EXCEPTION
-                .getValue(context.getVariables());
+                .getValueWithEnvFallback(context.getVariables());
 
         // wait for all partitions and merge results
         List<Object[]> mergedResults = new ArrayList<>();

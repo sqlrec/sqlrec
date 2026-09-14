@@ -340,12 +340,7 @@ public class K8sYamlUtils {
     }
 
     public static String injectPodConfig(String k8sYaml, ModelConf model, Map<String, String> params) {
-        String namespace;
-        if (params.containsKey(ModelConfigs.NAMESPACE.getKey())) {
-            namespace = params.get(ModelConfigs.NAMESPACE.getKey());
-        } else {
-            namespace = ModelConfigs.NAMESPACE.getValue();
-        }
+        String namespace = ModelConfigs.NAMESPACE.getValueWithEnvFallback(params);
 
         k8sYaml = injectNamespaceIntoYaml(k8sYaml, namespace);
 

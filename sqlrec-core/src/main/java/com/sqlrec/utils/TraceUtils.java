@@ -87,11 +87,8 @@ public class TraceUtils {
         if (StringUtils.isEmpty(SqlRecConfigs.TRACE_ENDPOINT.getValue()) || initFailed) {
             return false;
         }
-        Map<String, String> vars = context.getVariables();
-        if (vars != null && vars.containsKey(SqlRecConfigs.DEBUG_TRACE.getKey())) {
-            return SqlRecConfigs.DEBUG_TRACE.getValue(vars);
-        }
-        return SqlRecConfigs.DEBUG_TRACE.getValue();
+        return SqlRecConfigs.DEBUG_TRACE
+                .getValueWithEnvFallback(context.getVariables());
     }
 
     public static Span startSpan(ExecuteContext context, String spanName) {

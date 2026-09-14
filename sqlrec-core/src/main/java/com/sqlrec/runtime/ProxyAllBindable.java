@@ -130,7 +130,8 @@ public class ProxyAllBindable extends BindableInterface {
 
     private Enumerable<Object[]> executeDelegate(CalciteSchema schema, ExecuteContextImpl nodeContext)
             throws Throwable {
-        long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT.getValue(nodeContext.getVariables());
+        long timeout = SqlRecConfigs.NODE_EXEC_TIMEOUT
+                .getValueWithEnvFallback(nodeContext.getVariables());
         if (timeout <= 0 || !delegate.isTimeoutAble(schema, nodeContext)) {
             return delegate.bind(schema, nodeContext);
         }
@@ -177,7 +178,8 @@ public class ProxyAllBindable extends BindableInterface {
             ExecuteContext context,
             Throwable failure
     ) {
-        if (!SqlRecConfigs.IGNORE_UNION_EXCEPTION.getValue(context.getVariables())
+        if (!SqlRecConfigs.IGNORE_UNION_EXCEPTION
+                .getValueWithEnvFallback(context.getVariables())
                 || !delegate.isIgnoreException()
                 || context.isCancelled()) {
             return null;
@@ -216,11 +218,8 @@ public class ProxyAllBindable extends BindableInterface {
     }
 
     private boolean isDebugPrintEnabled(ExecuteContext context) {
-        Map<String, String> vars = context.getVariables();
-        if (vars != null && vars.containsKey(SqlRecConfigs.DEBUG_PRINT.getKey())) {
-            return SqlRecConfigs.DEBUG_PRINT.getValue(vars);
-        }
-        return SqlRecConfigs.DEBUG_PRINT.getValue();
+        return SqlRecConfigs.DEBUG_PRINT
+                .getValueWithEnvFallback(context.getVariables());
     }
 
     private void printNodeResult(ExecuteContext context, String nodeName,
