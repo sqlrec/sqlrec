@@ -162,6 +162,24 @@ public class ClientProxy implements TCLIService.Iface {
         }
     }
 
+    private <T> T invokeWithSessionHandle(TSessionHandle sessionHandle, RemoteCall<T> call)
+            throws TException {
+        updateAccessTime();
+        ensureConnected();
+        THandleIdentifier originalSessionId = translateSessionHandle(sessionHandle);
+        try {
+            return invokeRemote(call);
+        } finally {
+            restoreSessionHandle(sessionHandle, originalSessionId);
+        }
+    }
+
+    private <T> T invokeConnected(RemoteCall<T> call) throws TException {
+        updateAccessTime();
+        ensureConnected();
+        return invokeRemote(call);
+    }
+
     private THandleIdentifier translateSessionHandle(TSessionHandle sessionHandle) {
         if (sessionHandle != null && remoteSessionId != null) {
             THandleIdentifier originalSessionId = copyHandleId(sessionHandle.getSessionId());
@@ -177,7 +195,7 @@ public class ClientProxy implements TCLIService.Iface {
         }
     }
 
-    private THandleIdentifier copyHandleId(THandleIdentifier source) {
+    private static THandleIdentifier copyHandleId(THandleIdentifier source) {
         byte[] guidBytes = Arrays.copyOf(source.getGuid(), source.getGuid().length);
         byte[] secretBytes = Arrays.copyOf(source.getSecret(), source.getSecret().length);
         return new THandleIdentifier(ByteBuffer.wrap(guidBytes), ByteBuffer.wrap(secretBytes));
@@ -234,29 +252,14 @@ public class ClientProxy implements TCLIService.Iface {
         resp.setStatus(new TStatus(TStatusCode.SUCCESS_STATUS));
 
         TGetInfoType infoType = tGetInfoReq.getInfoType();
-        String infoValue;
-        switch (infoType) {
-            case CLI_DBMS_NAME:
-                infoValue = "Apache Hive";
-                break;
-            case CLI_DBMS_VER:
-                infoValue = "3.1.3";
-                break;
-            case CLI_SERVER_NAME:
-                infoValue = "SQLRec";
-                break;
-            case CLI_CATALOG_NAME:
-                infoValue = "hive";
-                break;
-            case CLI_DATA_SOURCE_NAME:
-                infoValue = "SQLRec";
-                break;
-            case CLI_DATA_SOURCE_READ_ONLY:
-                infoValue = "N";
-                break;
-            default:
-                infoValue = "";
-        }
+        String infoValue = switch (infoType) {
+            case CLI_DBMS_NAME -> "Apache Hive";
+            case CLI_DBMS_VER -> "3.1.3";
+            case CLI_SERVER_NAME, CLI_DATA_SOURCE_NAME -> "SQLRec";
+            case CLI_CATALOG_NAME -> "hive";
+            case CLI_DATA_SOURCE_READ_ONLY -> "N";
+            default -> "";
+        };
         resp.setInfoValue(TGetInfoValue.stringValue(infoValue));
 
         return resp;
@@ -264,211 +267,143 @@ public class ClientProxy implements TCLIService.Iface {
 
     @Override
     public synchronized TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tExecuteStatementReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.ExecuteStatement(tExecuteStatementReq));
-        } finally {
-            restoreSessionHandle(tExecuteStatementReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tExecuteStatementReq.getSessionHandle(),
+                () -> client.ExecuteStatement(tExecuteStatementReq)
+        );
     }
 
     @Override
     public synchronized TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetTypeInfoReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetTypeInfo(tGetTypeInfoReq));
-        } finally {
-            restoreSessionHandle(tGetTypeInfoReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetTypeInfoReq.getSessionHandle(),
+                () -> client.GetTypeInfo(tGetTypeInfoReq)
+        );
     }
 
     @Override
     public synchronized TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetCatalogsReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetCatalogs(tGetCatalogsReq));
-        } finally {
-            restoreSessionHandle(tGetCatalogsReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetCatalogsReq.getSessionHandle(),
+                () -> client.GetCatalogs(tGetCatalogsReq)
+        );
     }
 
     @Override
     public synchronized TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetSchemasReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetSchemas(tGetSchemasReq));
-        } finally {
-            restoreSessionHandle(tGetSchemasReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetSchemasReq.getSessionHandle(),
+                () -> client.GetSchemas(tGetSchemasReq)
+        );
     }
 
     @Override
     public synchronized TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetTablesReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetTables(tGetTablesReq));
-        } finally {
-            restoreSessionHandle(tGetTablesReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetTablesReq.getSessionHandle(),
+                () -> client.GetTables(tGetTablesReq)
+        );
     }
 
     @Override
     public synchronized TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetTableTypesReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetTableTypes(tGetTableTypesReq));
-        } finally {
-            restoreSessionHandle(tGetTableTypesReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetTableTypesReq.getSessionHandle(),
+                () -> client.GetTableTypes(tGetTableTypesReq)
+        );
     }
 
     @Override
     public synchronized TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetColumnsReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetColumns(tGetColumnsReq));
-        } finally {
-            restoreSessionHandle(tGetColumnsReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetColumnsReq.getSessionHandle(),
+                () -> client.GetColumns(tGetColumnsReq)
+        );
     }
 
     @Override
     public synchronized TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetFunctionsReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetFunctions(tGetFunctionsReq));
-        } finally {
-            restoreSessionHandle(tGetFunctionsReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetFunctionsReq.getSessionHandle(),
+                () -> client.GetFunctions(tGetFunctionsReq)
+        );
     }
 
     @Override
     public synchronized TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetPrimaryKeysReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetPrimaryKeys(tGetPrimaryKeysReq));
-        } finally {
-            restoreSessionHandle(tGetPrimaryKeysReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetPrimaryKeysReq.getSessionHandle(),
+                () -> client.GetPrimaryKeys(tGetPrimaryKeysReq)
+        );
     }
 
     @Override
     public synchronized TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetCrossReferenceReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetCrossReference(tGetCrossReferenceReq));
-        } finally {
-            restoreSessionHandle(tGetCrossReferenceReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetCrossReferenceReq.getSessionHandle(),
+                () -> client.GetCrossReference(tGetCrossReferenceReq)
+        );
     }
 
     @Override
     public synchronized TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.GetOperationStatus(tGetOperationStatusReq));
+        return invokeConnected(() -> client.GetOperationStatus(tGetOperationStatusReq));
     }
 
     @Override
     public synchronized TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.CancelOperation(tCancelOperationReq));
+        return invokeConnected(() -> client.CancelOperation(tCancelOperationReq));
     }
 
     @Override
     public synchronized TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.CloseOperation(tCloseOperationReq));
+        return invokeConnected(() -> client.CloseOperation(tCloseOperationReq));
     }
 
     @Override
     public synchronized TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
+        return invokeConnected(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
     }
 
     @Override
     public synchronized TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.FetchResults(tFetchResultsReq));
+        return invokeConnected(() -> client.FetchResults(tFetchResultsReq));
     }
 
     @Override
     public synchronized TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tGetDelegationTokenReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.GetDelegationToken(tGetDelegationTokenReq));
-        } finally {
-            restoreSessionHandle(tGetDelegationTokenReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tGetDelegationTokenReq.getSessionHandle(),
+                () -> client.GetDelegationToken(tGetDelegationTokenReq)
+        );
     }
 
     @Override
     public synchronized TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tCancelDelegationTokenReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.CancelDelegationToken(tCancelDelegationTokenReq));
-        } finally {
-            restoreSessionHandle(tCancelDelegationTokenReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tCancelDelegationTokenReq.getSessionHandle(),
+                () -> client.CancelDelegationToken(tCancelDelegationTokenReq)
+        );
     }
 
     @Override
     public synchronized TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tRenewDelegationTokenReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.RenewDelegationToken(tRenewDelegationTokenReq));
-        } finally {
-            restoreSessionHandle(tRenewDelegationTokenReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tRenewDelegationTokenReq.getSessionHandle(),
+                () -> client.RenewDelegationToken(tRenewDelegationTokenReq)
+        );
     }
 
     @Override
     public synchronized TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        return invokeRemote(() -> client.GetQueryId(tGetQueryIdReq));
+        return invokeConnected(() -> client.GetQueryId(tGetQueryIdReq));
     }
 
     @Override
     public synchronized TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(tSetClientInfoReq.getSessionHandle());
-        try {
-            return invokeRemote(() -> client.SetClientInfo(tSetClientInfoReq));
-        } finally {
-            restoreSessionHandle(tSetClientInfoReq.getSessionHandle(), originalSessionId);
-        }
+        return invokeWithSessionHandle(
+                tSetClientInfoReq.getSessionHandle(),
+                () -> client.SetClientInfo(tSetClientInfoReq)
+        );
     }
 }

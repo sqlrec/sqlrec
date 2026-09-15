@@ -90,18 +90,18 @@ public class CompileManager {
         }
 
         BindableInterface bindable;
-        if (flinkSqlNode instanceof SqlReturn) {
-            bindable = getReturnBindable((SqlReturn) flinkSqlNode, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlCallSqlFunction) {
-            bindable = getCallSqlFunctionBindable((SqlCallSqlFunction) flinkSqlNode, schema);
-        } else if (flinkSqlNode instanceof SqlIfCache) {
-            bindable = getIfBindable((SqlIfCache) flinkSqlNode, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlCache) {
-            bindable = getCacheBindable((SqlCache) flinkSqlNode, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlAssert) {
-            bindable = getAssertBindable((SqlAssert) flinkSqlNode, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlSet) {
-            bindable = getSetBindable((SqlSet) flinkSqlNode);
+        if (flinkSqlNode instanceof SqlReturn sqlReturn) {
+            bindable = getReturnBindable(sqlReturn, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlCallSqlFunction callSqlFunction) {
+            bindable = getCallSqlFunctionBindable(callSqlFunction, schema);
+        } else if (flinkSqlNode instanceof SqlIfCache ifCache) {
+            bindable = getIfBindable(ifCache, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlCache cache) {
+            bindable = getCacheBindable(cache, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlAssert assertStatement) {
+            bindable = getAssertBindable(assertStatement, schema, defaultSchema);
+        } else if (flinkSqlNode instanceof SqlSet set) {
+            bindable = getSetBindable(set);
         } else {
             bindable = getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
         }
@@ -122,10 +122,9 @@ public class CompileManager {
             if (tableEntry == null) {
                 throw new Exception("return table not found: " + tableName);
             }
-            if (!(tableEntry.getTable() instanceof CacheTable)) {
+            if (!(tableEntry.getTable() instanceof CacheTable cacheTable)) {
                 throw new Exception("return table is not cache table");
             }
-            CacheTable cacheTable = (CacheTable) tableEntry.getTable();
             returnBindable = new ReturnBindable(tableName, cacheTable.getDataFields());
         } else if (sqlReturn.getCallSqlFunction() != null) {
             SqlCallSqlFunction call = sqlReturn.getCallSqlFunction();
@@ -161,21 +160,33 @@ public class CompileManager {
             if (callSqlFunction.isAsync()) {
                 throw new Exception("async function not support in cache");
             }
-            BindableInterface bindableInterface = getCallSqlFunctionBindable(callSqlFunction, schema);
-            BindableInterface bindable = new CacheTableBindable(tableName, bindableInterface);
-            bindable.setSql(createSql);
-            return bindable;
+            return createCacheBindable(
+                    tableName,
+                    createSql,
+                    getCallSqlFunctionBindable(callSqlFunction, schema)
+            );
         }
 
         SqlNode select = cache.getSelect();
         if (select != null) {
-            BindableInterface bindableInterface = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
-            BindableInterface bindable = new CacheTableBindable(tableName, bindableInterface);
-            bindable.setSql(createSql);
-            return bindable;
+            return createCacheBindable(
+                    tableName,
+                    createSql,
+                    getNormalSqlBindable(getSqlStr(select), schema, defaultSchema)
+            );
         }
 
         throw new Exception("cache sql obj is invalid");
+    }
+
+    private static BindableInterface createCacheBindable(
+            String tableName,
+            String createSql,
+            BindableInterface source
+    ) {
+        BindableInterface cacheBindable = new CacheTableBindable(tableName, source);
+        cacheBindable.setSql(createSql);
+        return cacheBindable;
     }
 
     private BindableInterface getIfBindable(
@@ -197,8 +208,7 @@ public class CompileManager {
         BindableInterface elseBindable = null;
         if (elseClause != null) {
             elseBindable = compileIfBranch(elseClause, schema, defaultSchema);
-        } else if (thenBindable instanceof CacheTableBindable) {
-            CacheTableBindable thenCache = (CacheTableBindable) thenBindable;
+        } else if (thenBindable instanceof CacheTableBindable thenCache) {
             CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
             if (table != null) {
                 DataTypeUtils.checkTableSchemaSame(

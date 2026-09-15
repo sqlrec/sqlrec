@@ -1,5 +1,7 @@
 package com.sqlrec.model.huggingface;
 
+import com.sqlrec.model.common.ShellScriptUtils;
+
 /** Generates scripts for snapshot acquisition and serving. */
 public final class ShellUtils {
     private ShellUtils() {
@@ -42,6 +44,6 @@ public final class ShellUtils {
         if (value == null) {
             throw new IllegalArgumentException("shell value must not be null");
         }
-        return "'" + value.replace("'", "'\\''") + "'";
+        return ShellScriptUtils.quote(value);
     }
 }

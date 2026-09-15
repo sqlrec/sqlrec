@@ -56,7 +56,7 @@ public class UiHandler {
             }
             return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
         } catch (IllegalArgumentException e) {
-            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, errorMessage(e, "invalid request"));
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, RestUtils.errorMessage(e, "invalid request"));
         }
     }
 
@@ -155,9 +155,7 @@ public class UiHandler {
         if (segments.size() == 2) {
             String name = segments.get(1);
             List<Map<String, String>> detail = apiService.getFunction(name);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name)
-                    : ok(detail);
+            return okOrNotFound(detail, "Function not found: " + name);
         }
         return invalidApiPath(segments);
     }
@@ -169,9 +167,7 @@ public class UiHandler {
 
         String name = segments.get(1);
         Map<String, Object> dag = apiService.getFunctionDag(name);
-        return dag == null
-                ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Function not found: " + name)
-                : ok(dag);
+        return okOrNotFound(dag, "Function not found: " + name);
     }
 
     private FullHttpResponse handleTables(List<String> segments) throws Exception {
@@ -185,10 +181,10 @@ public class UiHandler {
             String database = segments.get(1);
             String tableName = segments.get(2);
             Map<String, Object> detail = apiService.getTable(database, tableName);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND,
-                    "Table not found: " + database + "." + tableName)
-                    : ok(detail);
+            return okOrNotFound(
+                    detail,
+                    "Table not found: " + database + "." + tableName
+            );
         }
         return invalidApiPath(segments);
     }
@@ -200,9 +196,7 @@ public class UiHandler {
         if (segments.size() == 2) {
             String name = segments.get(1);
             Map<String, Object> detail = apiService.getApi(name);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "API not found: " + name)
-                    : ok(detail);
+            return okOrNotFound(detail, "API not found: " + name);
         }
         return invalidApiPath(segments);
     }
@@ -216,9 +210,7 @@ public class UiHandler {
         String modelName = segments.get(1);
         if (segments.size() == 2) {
             Map<String, Object> detail = apiService.getModel(modelName);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Model not found: " + modelName)
-                    : ok(detail);
+            return okOrNotFound(detail, "Model not found: " + modelName);
         }
         if (segments.size() == 3 && "checkpoints".equals(segments.get(2))) {
             int page = queryInteger(queryParameters, "page", DEFAULT_PAGE, Integer.MAX_VALUE);
@@ -229,10 +221,10 @@ public class UiHandler {
         if (segments.size() == 4 && "checkpoints".equals(segments.get(2))) {
             String checkpointName = segments.get(3);
             Map<String, Object> detail = apiService.getCheckpoint(modelName, checkpointName);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND,
-                    "Checkpoint not found: " + modelName + "/" + checkpointName)
-                    : ok(detail);
+            return okOrNotFound(
+                    detail,
+                    "Checkpoint not found: " + modelName + "/" + checkpointName
+            );
         }
         return invalidApiPath(segments);
     }
@@ -244,9 +236,7 @@ public class UiHandler {
         if (segments.size() == 2) {
             String name = segments.get(1);
             Map<String, Object> detail = apiService.getService(name);
-            return detail == null
-                    ? RestUtils.error(HttpResponseStatus.NOT_FOUND, "Service not found: " + name)
-                    : ok(detail);
+            return okOrNotFound(detail, "Service not found: " + name);
         }
         return invalidApiPath(segments);
     }
@@ -292,9 +282,10 @@ public class UiHandler {
         return RestUtils.ok(JsonUtils.toJson(result));
     }
 
-    private String errorMessage(Exception exception, String fallback) {
-        String message = exception.getMessage();
-        return message == null || message.isBlank() ? fallback : message;
+    private FullHttpResponse okOrNotFound(Object result, String notFoundMessage) {
+        return result == null
+                ? RestUtils.error(HttpResponseStatus.NOT_FOUND, notFoundMessage)
+                : ok(result);
     }
 
     // Static resource metadata

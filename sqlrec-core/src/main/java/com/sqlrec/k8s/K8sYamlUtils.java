@@ -51,12 +51,12 @@ public class K8sYamlUtils {
             Object resource = Serialization.unmarshal(inputStream);
             if (resource instanceof Iterable) {
                 for (Object item : (Iterable<?>) resource) {
-                    if (item instanceof HasMetadata) {
-                        resources.add((HasMetadata) item);
+                    if (item instanceof HasMetadata metadata) {
+                        resources.add(metadata);
                     }
                 }
-            } else if (resource instanceof HasMetadata) {
-                resources.add((HasMetadata) resource);
+            } else if (resource instanceof HasMetadata metadata) {
+                resources.add(metadata);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse YAML: " + e.getMessage(), e);
@@ -95,18 +95,9 @@ public class K8sYamlUtils {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if (resource instanceof Job) {
-                    Job job = (Job) resource;
-                    if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
-                            job.getSpec().getTemplate().getSpec() != null) {
-                        injectEnvVarsIntoContainers(job.getSpec().getTemplate().getSpec().getContainers(), envVars);
-                    }
-                } else if (resource instanceof Deployment) {
-                    Deployment deployment = (Deployment) resource;
-                    if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
-                            deployment.getSpec().getTemplate().getSpec() != null) {
-                        injectEnvVarsIntoContainers(deployment.getSpec().getTemplate().getSpec().getContainers(), envVars);
-                    }
+                PodSpec podSpec = getPodSpec(resource);
+                if (podSpec != null) {
+                    injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
                 }
             }
 
@@ -124,17 +115,27 @@ public class K8sYamlUtils {
 
         StringBuilder yamlBuilder = new StringBuilder();
         for (int i = 0; i < resources.size(); i++) {
-            if (i > 0) {
-                String nextYaml = Serialization.asYaml(resources.get(i));
-                if (!nextYaml.trim().startsWith("---")) {
-                    yamlBuilder.append("---\n");
-                }
-                yamlBuilder.append(nextYaml);
-            } else {
-                yamlBuilder.append(Serialization.asYaml(resources.get(i)));
+            String resourceYaml = Serialization.asYaml(resources.get(i));
+            if (i > 0 && !resourceYaml.trim().startsWith("---")) {
+                yamlBuilder.append("---\n");
             }
+            yamlBuilder.append(resourceYaml);
         }
         return yamlBuilder.toString();
+    }
+
+    private static PodSpec getPodSpec(HasMetadata resource) {
+        if (resource instanceof Job job
+                && job.getSpec() != null
+                && job.getSpec().getTemplate() != null) {
+            return job.getSpec().getTemplate().getSpec();
+        }
+        if (resource instanceof Deployment deployment
+                && deployment.getSpec() != null
+                && deployment.getSpec().getTemplate() != null) {
+            return deployment.getSpec().getTemplate().getSpec();
+        }
+        return null;
     }
 
     private static void injectEnvVarsIntoContainers(List<Container> containers, Map<String, String> envVars) {
@@ -180,18 +181,9 @@ public class K8sYamlUtils {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if (resource instanceof Job) {
-                    Job job = (Job) resource;
-                    if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
-                            job.getSpec().getTemplate().getSpec() != null) {
-                        injectVolumeMount(job.getSpec().getTemplate().getSpec(), pvcName, volumeName, mountPath, subPath);
-                    }
-                } else if (resource instanceof Deployment) {
-                    Deployment deployment = (Deployment) resource;
-                    if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
-                            deployment.getSpec().getTemplate().getSpec() != null) {
-                        injectVolumeMount(deployment.getSpec().getTemplate().getSpec(), pvcName, volumeName, mountPath, subPath);
-                    }
+                PodSpec podSpec = getPodSpec(resource);
+                if (podSpec != null) {
+                    injectVolumeMount(podSpec, pvcName, volumeName, mountPath, subPath);
                 }
             }
 
@@ -235,18 +227,9 @@ public class K8sYamlUtils {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
-                if (resource instanceof Job) {
-                    Job job = (Job) resource;
-                    if (job.getSpec() != null && job.getSpec().getTemplate() != null &&
-                            job.getSpec().getTemplate().getSpec() != null) {
-                        injectNodeSelector(job.getSpec().getTemplate().getSpec(), nodeSelectors);
-                    }
-                } else if (resource instanceof Deployment) {
-                    Deployment deployment = (Deployment) resource;
-                    if (deployment.getSpec() != null && deployment.getSpec().getTemplate() != null &&
-                            deployment.getSpec().getTemplate().getSpec() != null) {
-                        injectNodeSelector(deployment.getSpec().getTemplate().getSpec(), nodeSelectors);
-                    }
+                PodSpec podSpec = getPodSpec(resource);
+                if (podSpec != null) {
+                    injectNodeSelector(podSpec, nodeSelectors);
                 }
             }
 
@@ -385,26 +368,24 @@ public class K8sYamlUtils {
     }
 
     private static Map<String, String> parseNodeSelectors(Map<String, String> params) {
-        Map<String, String> nodeSelectors = new HashMap<>();
-        String prefix = "kubernetes.node.selector.";
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getKey().startsWith(prefix)) {
-                String labelKey = entry.getKey().substring(prefix.length());
-                nodeSelectors.put(labelKey, entry.getValue());
-            }
-        }
-        return nodeSelectors;
+        return parsePrefixedEntries(params, "kubernetes.node.selector.");
     }
 
     private static Map<String, String> parseEnvVars(Map<String, String> params) {
-        Map<String, String> envVars = new HashMap<>();
-        String prefix = "kubernetes.env.";
+        return parsePrefixedEntries(params, "kubernetes.env.");
+    }
+
+    private static Map<String, String> parsePrefixedEntries(
+            Map<String, String> params,
+            String prefix
+    ) {
+        Map<String, String> entries = new HashMap<>();
         for (Map.Entry<String, String> entry : params.entrySet()) {
             if (entry.getKey().startsWith(prefix)) {
-                String envKey = entry.getKey().substring(prefix.length());
-                envVars.put(envKey, entry.getValue());
+                String key = entry.getKey().substring(prefix.length());
+                entries.put(key, entry.getValue());
             }
         }
-        return envVars;
+        return entries;
     }
 }

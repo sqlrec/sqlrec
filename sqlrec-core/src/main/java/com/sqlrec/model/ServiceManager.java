@@ -95,10 +95,9 @@ public class ServiceManager {
         }
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
 
-        ModelController modelController = ModelControllerFactory.getModelController(serviceConfig.getModelConfig());
-        if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + serviceConfig.getModelConfig().getModelName());
-        }
+        ModelController modelController = ModelControllerFactory.getRequiredModelController(
+                serviceConfig.getModelConfig()
+        );
 
         String modelDdl = modelEntity.getDdl();
         if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && !skipCheckpoint) {

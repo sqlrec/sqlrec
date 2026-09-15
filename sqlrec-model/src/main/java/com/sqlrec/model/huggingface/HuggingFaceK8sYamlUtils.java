@@ -18,15 +18,12 @@ import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import io.fabric8.kubernetes.api.model.SecretKeySelectorBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
-import io.fabric8.kubernetes.api.model.batch.v1.Job;
-import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /** Kubernetes resources for snapshot download jobs and Transformers services. */
 public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
@@ -38,10 +35,7 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
     public static String genTrainJobYaml(String pipelineConfig, String shell, String id, Map<String, String> params) {
         String configMapName = id + "-cm";
         String jobName = id + "-job";
-        String configMapYaml = createConfigMapYaml(configMapName, new TreeMap<>() {{
-            put(ModelConfigBase.PIPELINE_CONFIG_NAME, pipelineConfig);
-            put(ModelConfigBase.START_SHELL_NAME, shell);
-        }});
+        String configMapYaml = createPipelineConfigMapYaml(configMapName, pipelineConfig, shell);
         return mergeK8sYamls(configMapYaml, createTrainJobYaml(jobName, configMapName, params));
     }
 
@@ -61,29 +55,14 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
                     .build());
         }
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
-        Job job = new JobBuilder()
-                .withNewMetadata().withName(jobName).endMetadata()
-                .withNewSpec()
-                    .withBackoffLimit(1)
-                    .withNewTemplate()
-                        .withNewSpec()
-                            .addNewContainer()
-                                .withName("transformers-download")
-                                .withImage(image)
-                                .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
-                                .withEnv(env)
-                                .withResources(buildResourceRequirements(params))
-                                .addNewVolumeMount().withName(CONFIG_VOLUME).withMountPath(Config.SHELL_DIR).endVolumeMount()
-                            .endContainer()
-                            .addNewVolume().withName(CONFIG_VOLUME)
-                                .withNewConfigMap().withName(configMapName).endConfigMap()
-                            .endVolume()
-                            .withRestartPolicy("Never")
-                        .endSpec()
-                    .endTemplate()
-                .endSpec()
-                .build();
-        return Serialization.asYaml(job);
+        return createSingleNodeJobYaml(
+                jobName,
+                configMapName,
+                "transformers-download",
+                image,
+                env,
+                params
+        );
     }
 
     public static String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
@@ -102,8 +81,7 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
                 .build();
         String configMapYaml = Serialization.asYaml(configMap);
         String deploymentYaml = createServiceDeploymentYaml(name, name + "-cm", params);
-        String serviceYaml = createServiceYaml(name, 80, "app", name);
-        return mergeK8sYamls(configMapYaml, deploymentYaml, serviceYaml);
+        return mergeK8sYamls(configMapYaml, createServingResourcesYaml(name, deploymentYaml));
     }
 
     static String createServiceDeploymentYaml(String name, String configMapName, Map<String, String> params) {

@@ -14,16 +14,16 @@ import org.apache.calcite.sql.SqlNode;
 import java.util.*;
 
 public class CalciteBindable extends BindableInterface {
-    private Map<String, Object> parameters;
-    private Bindable<Object[]> bindable;
-    private RelNode bestExp;
-    private SqlNode sqlNode;
-    private Set<String> readTables;
-    private Set<String> writeTables;
+    private final Map<String, Object> parameters;
+    private final Bindable<Object[]> bindable;
+    private final RelNode bestExp;
+    private final SqlNode sqlNode;
+    private final Set<String> readTables;
+    private final Set<String> writeTables;
 
-    private String logicalPlan;
-    private String physicalPlan;
-    private String javaExpression;
+    private final String logicalPlan;
+    private final String physicalPlan;
+    private final String javaExpression;
 
     public CalciteBindable(
             Map<String, Object> parameters,

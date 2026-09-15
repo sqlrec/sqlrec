@@ -25,64 +25,85 @@ public class JsonToTableFunction {
         }
 
         JsonElement root = JsonParser.parseString(jsonString);
-
-        // Collect all json objects to process
-        List<JsonObject> objects = new ArrayList<>();
-        if (root.isJsonArray()) {
-            JsonArray array = root.getAsJsonArray();
-            for (JsonElement element : array) {
-                if (element.isJsonObject()) {
-                    objects.add(element.getAsJsonObject());
-                }
-            }
-        } else if (root.isJsonObject()) {
-            objects.add(root.getAsJsonObject());
-        } else {
-            throw new IllegalArgumentException("json string must be a json object or json array");
-        }
+        List<JsonObject> objects = collectObjects(root);
 
         if (objects.isEmpty()) {
             throw new IllegalArgumentException("no json objects found in input");
         }
 
-        // Collect all keys preserving insertion order
-        Set<String> allKeys = new LinkedHashSet<>();
-        for (JsonObject obj : objects) {
-            for (String key : obj.keySet()) {
-                allKeys.add(key);
-            }
-        }
-
-        List<String> keyList = new ArrayList<>(allKeys);
-
-        // Infer column types from the first non-null value for each key
-        Map<String, String> columnTypes = new LinkedHashMap<>();
-        for (String key : keyList) {
-            columnTypes.put(key, inferColumnType(objects, key));
-        }
-
-        // Build schema fields
-        List<RelDataTypeField> dataFields = new ArrayList<>();
-        for (int i = 0; i < keyList.size(); i++) {
-            String key = keyList.get(i);
-            dataFields.add(DataTypeUtils.getRelDataTypeField(key, i, columnTypes.get(key)));
-        }
-
-        // Build row data
-        List<Object[]> rows = new ArrayList<>();
-        for (JsonObject obj : objects) {
-            Object[] row = new Object[keyList.size()];
-            for (int i = 0; i < keyList.size(); i++) {
-                String key = keyList.get(i);
-                row[i] = convertValue(obj.get(key), columnTypes.get(key));
-            }
-            rows.add(row);
-        }
-
+        List<String> keys = collectKeys(objects);
+        Map<String, String> columnTypes = inferColumnTypes(objects, keys);
+        List<RelDataTypeField> dataFields = createDataFields(keys, columnTypes);
+        List<Object[]> rows = createRows(objects, keys, columnTypes);
         return new CacheTable("output", Linq4j.asEnumerable(rows), dataFields);
     }
 
-    private String inferColumnType(List<JsonObject> objects, String key) {
+    private static List<JsonObject> collectObjects(JsonElement root) {
+        List<JsonObject> objects = new ArrayList<>();
+        if (root.isJsonArray()) {
+            for (JsonElement element : root.getAsJsonArray()) {
+                if (element.isJsonObject()) {
+                    objects.add(element.getAsJsonObject());
+                }
+            }
+            return objects;
+        }
+        if (root.isJsonObject()) {
+            objects.add(root.getAsJsonObject());
+            return objects;
+        }
+        throw new IllegalArgumentException("json string must be a json object or json array");
+    }
+
+    private static List<String> collectKeys(List<JsonObject> objects) {
+        Set<String> allKeys = new LinkedHashSet<>();
+        for (JsonObject object : objects) {
+            allKeys.addAll(object.keySet());
+        }
+        return new ArrayList<>(allKeys);
+    }
+
+    private static Map<String, String> inferColumnTypes(
+            List<JsonObject> objects,
+            List<String> keys
+    ) {
+        Map<String, String> columnTypes = new LinkedHashMap<>();
+        for (String key : keys) {
+            columnTypes.put(key, inferColumnType(objects, key));
+        }
+        return columnTypes;
+    }
+
+    private static List<RelDataTypeField> createDataFields(
+            List<String> keys,
+            Map<String, String> columnTypes
+    ) {
+        List<RelDataTypeField> dataFields = new ArrayList<>();
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            dataFields.add(DataTypeUtils.getRelDataTypeField(key, i, columnTypes.get(key)));
+        }
+        return dataFields;
+    }
+
+    private static List<Object[]> createRows(
+            List<JsonObject> objects,
+            List<String> keys,
+            Map<String, String> columnTypes
+    ) {
+        List<Object[]> rows = new ArrayList<>();
+        for (JsonObject object : objects) {
+            Object[] row = new Object[keys.size()];
+            for (int i = 0; i < keys.size(); i++) {
+                String key = keys.get(i);
+                row[i] = convertValue(object.get(key), columnTypes.get(key));
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private static String inferColumnType(List<JsonObject> objects, String key) {
         for (JsonObject obj : objects) {
             JsonElement element = obj.get(key);
             if (element != null && !element.isJsonNull()) {
@@ -108,7 +129,7 @@ public class JsonToTableFunction {
         return "VARCHAR";
     }
 
-    private String inferArrayElementType(JsonArray array) {
+    private static String inferArrayElementType(JsonArray array) {
         for (JsonElement item : array) {
             if (item != null && !item.isJsonNull() && item.isJsonPrimitive()) {
                 JsonPrimitive prim = item.getAsJsonPrimitive();
@@ -124,7 +145,7 @@ public class JsonToTableFunction {
         return "VARCHAR";
     }
 
-    private Object convertValue(JsonElement element, String type) {
+    private static Object convertValue(JsonElement element, String type) {
         if (element == null || element.isJsonNull()) {
             return null;
         }

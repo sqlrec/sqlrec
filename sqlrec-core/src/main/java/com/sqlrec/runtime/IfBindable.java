@@ -28,10 +28,10 @@ import java.util.concurrent.TimeoutException;
 public class IfBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(IfBindable.class);
 
-    private CalciteBindable condition;
-    private BindableInterface thenClause;
-    private BindableInterface elseClause;
-    private boolean timein;
+    private final CalciteBindable condition;
+    private final BindableInterface thenClause;
+    private final BindableInterface elseClause;
+    private final boolean timein;
 
     public IfBindable(
             CalciteBindable condition,

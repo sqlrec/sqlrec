@@ -108,10 +108,18 @@ public class SessionManager {
     }
 
     public TCLIService.Iface getClientByOperationId(THandleIdentifier operationId) {
-        if (operationToSessionMap.containsKey(operationId)) {
-            return getClient(operationToSessionMap.get(operationId));
+        THandleIdentifier sessionId = operationToSessionMap.get(operationId);
+        return sessionId == null ? null : getClient(sessionId);
+    }
+
+    private TCLIService.Iface getRequiredClientByOperationId(THandleIdentifier operationId)
+            throws TException {
+        TCLIService.Iface client = getClientByOperationId(operationId);
+        if (client == null) {
+            throw new TException("No client found for operation, operationGuid: "
+                    + ThriftUtils.safeHandleId(operationId));
         }
-        return null;
+        return client;
     }
 
     private SqlExecutor getSqlExecutor(THandleIdentifier sessionId) throws TException {
@@ -132,52 +140,29 @@ public class SessionManager {
 
         THandleIdentifier operationId = ThriftUtils.getHandleIdentifier();
         String queryId = ThriftUtils.getQueryId();
-        SqlOperation operation = null;
-        TExecuteStatementResp resp = null;
-
         SqlExecutor sqlExecutor = getSqlExecutor(sessionId);
-        try {
-            SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(tExecuteStatementReq.getStatement());
-            if (coreResult != null &&
-                    (ExecEnv.isFileSystemMeta() ||
-                            !ThriftUtils.isSqlNeedExecInRemote(tExecuteStatementReq.getStatement())
-                    )
-            ) {
-                operation = new SqlOperation(coreResult, operationId, queryId);
-                logger.info("Statement executed by local SqlExecutor, operationGuid: {}", ThriftUtils.safeHandleId(operationId));
-            }
-        } catch (Exception e) {
-            logger.error("Failed to execute statement via SqlExecutor: {}", e.getMessage(), e);
-            operation = new SqlOperation(new SqlProcessResult(), operationId, queryId);
-            operation.setException(e);
-            operation.setMsg("exec error: " + ExceptionUtils.getStackTrace(e));
-        }
+        SqlOperation operation = executeLocally(
+                sqlExecutor,
+                tExecuteStatementReq.getStatement(),
+                operationId,
+                queryId
+        );
 
+        TExecuteStatementResp resp;
         if (operation != null) {
             operationMap.put(operationId, operation);
-            TOperationHandle operationHandle = new TOperationHandle(
-                    operationId, TOperationType.EXECUTE_STATEMENT, true
-            );
-            resp = new TExecuteStatementResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-            resp.setOperationHandle(operationHandle);
+            resp = createLocalExecuteResponse(operationId);
+        } else {
+            resp = executeRemotely(tExecuteStatementReq, sessionId);
         }
 
-        if (resp == null) {
-            TCLIService.Iface client = getClient(sessionId);
-            if (client == null) {
-                throw new TException("No client found for session, sessionGuid: " + ThriftUtils.safeHandleId(sessionId));
-            }
-            resp = client.ExecuteStatement(tExecuteStatementReq);
-            logger.info("Statement executed by remote client, operationGuid: {}", ThriftUtils.safeHandleId(resp.getOperationHandle().getOperationId()));
-        }
-
-        TOperationHandle opHandle = resp.getOperationHandle();
-        if (opHandle == null) {
+        TOperationHandle operationHandle = resp.getOperationHandle();
+        if (operationHandle == null) {
             // Defensive guard: should not happen for the local-execution path, but avoid NPE if it does.
             throw new TException("ExecuteStatement returned no operation handle, sessionGuid: "
                     + ThriftUtils.safeHandleId(sessionId));
         }
-        operationId = opHandle.getOperationId();
+        operationId = operationHandle.getOperationId();
         operationToSessionMap.put(operationId, sessionId);
 
         MetricsUtils.getCompositeMeterRegistry()
@@ -189,27 +174,64 @@ public class SessionManager {
         return resp;
     }
 
+    private SqlOperation executeLocally(
+            SqlExecutor sqlExecutor,
+            String sql,
+            THandleIdentifier operationId,
+            String queryId
+    ) {
+        try {
+            SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(sql);
+            if (coreResult != null &&
+                    (ExecEnv.isFileSystemMeta() ||
+                            !ThriftUtils.isSqlNeedExecInRemote(sql)
+                    )
+            ) {
+                logger.info("Statement executed by local SqlExecutor, operationGuid: {}",
+                        ThriftUtils.safeHandleId(operationId));
+                return new SqlOperation(coreResult, operationId, queryId);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to execute statement via SqlExecutor: {}", e.getMessage(), e);
+            SqlOperation operation = new SqlOperation(new SqlProcessResult(), operationId, queryId);
+            operation.setException(e);
+            operation.setMsg("exec error: " + ExceptionUtils.getStackTrace(e));
+            return operation;
+        }
+        return null;
+    }
+
+    private TExecuteStatementResp createLocalExecuteResponse(THandleIdentifier operationId) {
+        TOperationHandle operationHandle = new TOperationHandle(
+                operationId, TOperationType.EXECUTE_STATEMENT, true
+        );
+        TExecuteStatementResp response = new TExecuteStatementResp(
+                new TStatus(TStatusCode.SUCCESS_STATUS)
+        );
+        response.setOperationHandle(operationHandle);
+        return response;
+    }
+
+    private TExecuteStatementResp executeRemotely(
+            TExecuteStatementReq request,
+            THandleIdentifier sessionId
+    ) throws TException {
+        TCLIService.Iface client = getClient(sessionId);
+        if (client == null) {
+            throw new TException("No client found for session, sessionGuid: "
+                    + ThriftUtils.safeHandleId(sessionId));
+        }
+        TExecuteStatementResp response = client.ExecuteStatement(request);
+        logger.info("Statement executed by remote client, operationGuid: {}",
+                ThriftUtils.safeHandleId(response.getOperationHandle().getOperationId()));
+        return response;
+    }
+
     public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
         THandleIdentifier handleIdentifier = tGetOperationStatusReq.getOperationHandle().getOperationId();
         SqlOperation operation = operationMap.get(handleIdentifier);
         if (operation != null) {
-            TOperationState operationState;
-            if (operation.getException() != null) {
-                operationState = TOperationState.ERROR_STATE;
-            } else {
-                try {
-                    if (operation.isCompleted()) {
-                        operationState = TOperationState.FINISHED_STATE;
-                    } else {
-                        operationState = TOperationState.RUNNING_STATE;
-                    }
-                } catch (Exception e) {
-                    logger.error("Failed to get operation status: {}", e.getMessage(), e);
-                    operation.setException(e);
-                    operation.setMsg(e.getMessage() + " stack trace: " + ExceptionUtils.getStackTrace(e));
-                    operationState = TOperationState.ERROR_STATE;
-                }
-            }
+            TOperationState operationState = getOperationState(operation);
             TGetOperationStatusResp resp = new TGetOperationStatusResp(new TStatus(TStatusCode.SUCCESS_STATUS));
             resp.setOperationState(operationState);
             resp.setHasResultSet(true);
@@ -220,11 +242,24 @@ public class SessionManager {
             return resp;
         }
 
-        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
-        if (client == null) {
-            throw new TException("No client found for operation, operationGuid: " + ThriftUtils.safeHandleId(handleIdentifier));
+        return getRequiredClientByOperationId(handleIdentifier)
+                .GetOperationStatus(tGetOperationStatusReq);
+    }
+
+    private TOperationState getOperationState(SqlOperation operation) {
+        if (operation.getException() != null) {
+            return TOperationState.ERROR_STATE;
         }
-        return client.GetOperationStatus(tGetOperationStatusReq);
+        try {
+            return operation.isCompleted()
+                    ? TOperationState.FINISHED_STATE
+                    : TOperationState.RUNNING_STATE;
+        } catch (Exception e) {
+            logger.error("Failed to get operation status: {}", e.getMessage(), e);
+            operation.setException(e);
+            operation.setMsg(e.getMessage() + " stack trace: " + ExceptionUtils.getStackTrace(e));
+            return TOperationState.ERROR_STATE;
+        }
     }
 
     public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
@@ -240,11 +275,8 @@ public class SessionManager {
             return resp;
         }
 
-        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
-        if (client == null) {
-            throw new TException("No client found for operation, operationGuid: " + ThriftUtils.safeHandleId(handleIdentifier));
-        }
-        return client.GetResultSetMetadata(tGetResultSetMetadataReq);
+        return getRequiredClientByOperationId(handleIdentifier)
+                .GetResultSetMetadata(tGetResultSetMetadataReq);
     }
 
     public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
@@ -269,11 +301,7 @@ public class SessionManager {
             return resp;
         }
 
-        TCLIService.Iface client = getClientByOperationId(handleIdentifier);
-        if (client == null) {
-            throw new TException("No client found for operation, operationGuid: " + ThriftUtils.safeHandleId(handleIdentifier));
-        }
-        return client.FetchResults(tFetchResultsReq);
+        return getRequiredClientByOperationId(handleIdentifier).FetchResults(tFetchResultsReq);
     }
 
     public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {

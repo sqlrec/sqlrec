@@ -1,5 +1,6 @@
 package com.sqlrec.model.gbdt;
 
+import com.sqlrec.model.common.ShellScriptUtils;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
 
 /**
@@ -48,13 +49,13 @@ public class ShellUtils {
         String serverBinary = modelType == ModelType.CATBOOST
                 ? "catboost_server"
                 : "onnx_server";
-        String escapedPath = modelCheckpointDir.replace("'", "'\\''");
         return "#!/bin/bash\n" +
                 "set -ex\n" +
                 "\n" +
                 "LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}\n" +
                 "rm -rf \"$LOCAL_CACHE_DIR\"\n" +
-                "${HADOOP_HOME}/bin/hadoop fs -get '" + escapedPath + "' \"$LOCAL_CACHE_DIR\"\n" +
+                "${HADOOP_HOME}/bin/hadoop fs -get " + ShellScriptUtils.quote(modelCheckpointDir)
+                + " \"$LOCAL_CACHE_DIR\"\n" +
                 "\n" +
                 "exec /app/" + serverBinary + " \"$LOCAL_CACHE_DIR\" 80\n";
     }

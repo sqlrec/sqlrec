@@ -1,7 +1,5 @@
 package com.sqlrec.model.gbdt;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.config.ConfigOption;
@@ -10,10 +8,10 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
+import com.sqlrec.model.common.ModelConfigUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,11 +21,6 @@ import java.util.Set;
  * Generates pipeline.config (JSON) for the GBDT Python train/export entry points.
  */
 public class PipelineConfigUtils {
-
-    private static final Gson GSON = new GsonBuilder()
-            .setPrettyPrinting()
-            .disableHtmlEscaping()
-            .create();
 
     public enum ModelType {
         LIGHTGBM("lightgbm"),
@@ -61,7 +54,7 @@ public class PipelineConfigUtils {
         config.add("params", buildParams(params, modelType));
 
         // Trailing newline keeps the ConfigMap YAML block scalar a plain "|" (clip) block.
-        return GSON.toJson(config) + "\n";
+        return ModelConfigUtils.toPrettyJson(config);
     }
 
     public static String generateExportConfig(ModelExportConf exportConf) {
@@ -73,7 +66,7 @@ public class PipelineConfigUtils {
         JsonObject config = new JsonObject();
         config.addProperty("base_model_dir", baseModelDir);
         config.addProperty("export_dir", exportDir);
-        return GSON.toJson(config) + "\n";
+        return ModelConfigUtils.toPrettyJson(config);
     }
 
     private static JsonObject buildParams(Map<String, String> params, ModelType modelType) {
@@ -117,14 +110,7 @@ public class PipelineConfigUtils {
 
     /** Merge base params with overrides; overrides take precedence. Returns unmodifiable. */
     public static Map<String, String> mergeParams(Map<String, String> base, Map<String, String> overrides) {
-        Map<String, String> merged = new LinkedHashMap<>();
-        if (base != null) {
-            merged.putAll(base);
-        }
-        if (overrides != null) {
-            merged.putAll(overrides);
-        }
-        return Collections.unmodifiableMap(merged);
+        return Collections.unmodifiableMap(ModelConfigUtils.mergeParams(base, overrides));
     }
 
     /** Three-tier precedence: primary if set -> fallback if set -> primary default. */

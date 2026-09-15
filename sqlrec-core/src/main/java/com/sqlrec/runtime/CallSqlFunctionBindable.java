@@ -15,10 +15,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class CallSqlFunctionBindable extends BindableInterface {
-    private String funName;
-    private List<String> inputTables;
-    private List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders;
-    private BindableInterface sqlFunctionBindable;
+    private final String funName;
+    private final List<String> inputTables;
+    private final List<Map.Entry<String, List<RelDataTypeField>>> tablePlaceholders;
+    private final BindableInterface sqlFunctionBindable;
 
     public CallSqlFunctionBindable(String funName, List<String> inputTables, SqlFunctionBindable sqlFunctionBindable) {
         if (sqlFunctionBindable.getInputTables().size() != inputTables.size()) {

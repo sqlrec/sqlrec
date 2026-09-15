@@ -15,35 +15,44 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class FunctionConfigs {
-    public static final Map<String, String> DEFAULT_SCALAR_FUNCTION_CONFIGS = new HashMap<String, String>() {{
-        put("ip", IpFunction.class.getName());
-        put("l2_norm", L2NormFunction.class.getName());
-        put("random_vec", RandomVecFunction.class.getName());
-        put("uuid", UuidFunction.class.getName());
-        put("get", GetFunction.class.getName());
-        put("get_or_default", GetOrDefaultFunction.class.getName());
-        put("array_contains", ArrayContainsFunction.class.getName());
-        put("array_contains_all", ArrayContainsAllFunction.class.getName());
-        put("array_contains_any", ArrayContainsAnyFunction.class.getName());
-    }};
+    public static final Map<String, String> DEFAULT_SCALAR_FUNCTION_CONFIGS =
+            createScalarFunctionConfigs();
+    public static final Map<String, String> DEFAULT_JAVA_FUNCTION_CONFIGS =
+            createJavaFunctionConfigs();
 
-    public static final Map<String, String> DEFAULT_JAVA_FUNCTION_CONFIGS = new HashMap<String, String>() {{
-        put("add_col", AddColFunction.class.getName());
-        put("shuffle", ShuffleFunction.class.getName());
-        put("window_diversify", WindowDiversify.class.getName());
-        put("dedup", DedupFunction.class.getName());
-        put("call_service", CallServiceFunction.class.getName());
-        put("call_sqlrec_api", CallSqlRecApiFunction.class.getName());
-        put("truncate_table", TruncateTableFunction.class.getName());
-        put("get_variables", GetVariablesFunction.class.getName());
-        put("set_variables", SetVariablesFunction.class.getName());
-        put("feature_coverage_metrics", FeatureCoverageMetricsFunction.class.getName());
-        put("weighted_merge", WeightedMergeFunction.class.getName());
-        put("dpp_diversity", DppDiversity.class.getName());
-        put("rule_diversity", RuleDiversity.class.getName());
-        put("tag_to_vec", TagToVecFunction.class.getName());
-        put("json_to_table", JsonToTableFunction.class.getName());
-        put("get_growthbook_features", GetGrowthbookFeaturesFunction.class.getName());
-        put("sleep", SleepFunction.class.getName());
-    }};
+    private static Map<String, String> createScalarFunctionConfigs() {
+        Map<String, String> configs = new HashMap<>();
+        configs.put("ip", IpFunction.class.getName());
+        configs.put("l2_norm", L2NormFunction.class.getName());
+        configs.put("random_vec", RandomVecFunction.class.getName());
+        configs.put("uuid", UuidFunction.class.getName());
+        configs.put("get", GetFunction.class.getName());
+        configs.put("get_or_default", GetOrDefaultFunction.class.getName());
+        configs.put("array_contains", ArrayContainsFunction.class.getName());
+        configs.put("array_contains_all", ArrayContainsAllFunction.class.getName());
+        configs.put("array_contains_any", ArrayContainsAnyFunction.class.getName());
+        return configs;
+    }
+
+    private static Map<String, String> createJavaFunctionConfigs() {
+        Map<String, String> configs = new HashMap<>();
+        configs.put("add_col", AddColFunction.class.getName());
+        configs.put("shuffle", ShuffleFunction.class.getName());
+        configs.put("window_diversify", WindowDiversify.class.getName());
+        configs.put("dedup", DedupFunction.class.getName());
+        configs.put("call_service", CallServiceFunction.class.getName());
+        configs.put("call_sqlrec_api", CallSqlRecApiFunction.class.getName());
+        configs.put("truncate_table", TruncateTableFunction.class.getName());
+        configs.put("get_variables", GetVariablesFunction.class.getName());
+        configs.put("set_variables", SetVariablesFunction.class.getName());
+        configs.put("feature_coverage_metrics", FeatureCoverageMetricsFunction.class.getName());
+        configs.put("weighted_merge", WeightedMergeFunction.class.getName());
+        configs.put("dpp_diversity", DppDiversity.class.getName());
+        configs.put("rule_diversity", RuleDiversity.class.getName());
+        configs.put("tag_to_vec", TagToVecFunction.class.getName());
+        configs.put("json_to_table", JsonToTableFunction.class.getName());
+        configs.put("get_growthbook_features", GetGrowthbookFeaturesFunction.class.getName());
+        configs.put("sleep", SleepFunction.class.getName());
+        return configs;
+    }
 }

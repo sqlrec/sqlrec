@@ -5,10 +5,10 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import okhttp3.*;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.commons.lang3.StringUtils;
@@ -34,28 +34,14 @@ public class CallServiceFunction {
     }
 
     public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input) {
-        ServiceConf serviceConfig = context.getServiceConfig(serviceName);
-        if (serviceConfig == null) {
-            throw new RuntimeException("Service " + serviceName + " not exist or formate error");
-        }
-        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
-            throw new RuntimeException("Service " + serviceName + " url is empty");
-        }
-        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
-        if (controller == null) {
-            throw new RuntimeException("model controller not exist for " + serviceName);
-        }
-        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
+        ResolvedService service = resolveService(context, serviceName);
+        ServiceConf serviceConfig = service.config;
+        List<FieldSchema> modelOutputFields = service.outputFields;
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(input.getDataFields(), modelOutputFields);
 
-        Enumerable<Object[]> enumerable = input.scan(null);
-        if (enumerable == null || enumerable.count() == 0) {
-            return new CacheTable("output", Linq4j.asEnumerable(new ArrayList<>()), newDataFields);
-        }
-
-        List<Object[]> inputData = new ArrayList<>();
-        for (Object[] row : enumerable) {
-            inputData.add(row);
+        List<Object[]> inputData = DataTransformUtils.materializeRows(input);
+        if (inputData.isEmpty()) {
+            return resultTable(inputData, newDataFields);
         }
 
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
@@ -66,44 +52,26 @@ public class CallServiceFunction {
 
         List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
 
-        return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
+        return resultTable(newData, newDataFields);
     }
 
     public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item) {
-        ServiceConf serviceConfig = context.getServiceConfig(serviceName);
-        if (serviceConfig == null) {
-            throw new RuntimeException("Service " + serviceName + " not exist or formate error");
-        }
-        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
-            throw new RuntimeException("Service " + serviceName + " url is empty");
-        }
-        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
-        if (controller == null) {
-            throw new RuntimeException("model controller not exist for " + serviceName);
-        }
+        ResolvedService service = resolveService(context, serviceName);
+        ServiceConf serviceConfig = service.config;
+        List<FieldSchema> modelOutputFields = service.outputFields;
 
-        List<FieldSchema> modelOutputFields = controller.getOutputFields(serviceConfig.getModelConfig());
-
-        Enumerable<Object[]> userEnumerable = user.scan(null);
-        List<Object[]> userData = new ArrayList<>();
-        if (userEnumerable != null) {
-            for (Object[] row : userEnumerable) {
-                userData.add(row);
-            }
-        }
+        List<Object[]> userData = DataTransformUtils.materializeRows(user);
         if (userData.size() != 1) {
             throw new RuntimeException("User table must have exactly one row");
         }
 
-        Enumerable<Object[]> itemEnumerable = item.scan(null);
-        if (itemEnumerable == null || itemEnumerable.count() == 0) {
-            List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(item.getDataFields(), modelOutputFields);
-            return new CacheTable("output", Linq4j.asEnumerable(new ArrayList<>()), newDataFields);
-        }
-
-        List<Object[]> itemData = new ArrayList<>();
-        for (Object[] row : itemEnumerable) {
-            itemData.add(row);
+        List<Object[]> itemData = DataTransformUtils.materializeRows(item);
+        if (itemData.isEmpty()) {
+            List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
+                    item.getDataFields(),
+                    modelOutputFields
+            );
+            return resultTable(itemData, newDataFields);
         }
 
         List<FieldSchema> allInputFields = serviceConfig.getModelConfig().getInputFields();
@@ -130,9 +98,37 @@ public class CallServiceFunction {
         Map<String, Object> predictions = callPredictionService(
                 serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
         List<Object[]> newData = mergePredictions(itemData, predictions, modelOutputFields);
-        List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(item.getDataFields(), modelOutputFields);
+        List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
+                item.getDataFields(),
+                modelOutputFields
+        );
 
-        return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);
+        return resultTable(newData, newDataFields);
+    }
+
+    private static ResolvedService resolveService(ReadonlyContext context, String serviceName) {
+        ServiceConf serviceConfig = context.getServiceConfig(serviceName);
+        if (serviceConfig == null) {
+            throw new RuntimeException("Service " + serviceName + " not exist or formate error");
+        }
+        if (StringUtils.isEmpty(serviceConfig.getUrl())) {
+            throw new RuntimeException("Service " + serviceName + " url is empty");
+        }
+        ModelController controller = context.getModelController(serviceConfig.getModelConfig());
+        if (controller == null) {
+            throw new RuntimeException("model controller not exist for " + serviceName);
+        }
+        return new ResolvedService(
+                serviceConfig,
+                controller.getOutputFields(serviceConfig.getModelConfig())
+        );
+    }
+
+    private static CacheTable resultTable(
+            List<Object[]> rows,
+            List<RelDataTypeField> fields
+    ) {
+        return new CacheTable("output", Linq4j.asEnumerable(rows), fields);
     }
 
     public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
@@ -228,5 +224,15 @@ public class CallServiceFunction {
         }
 
         return newData;
+    }
+
+    private static final class ResolvedService {
+        private final ServiceConf config;
+        private final List<FieldSchema> outputFields;
+
+        private ResolvedService(ServiceConf config, List<FieldSchema> outputFields) {
+            this.config = config;
+            this.outputFields = outputFields;
+        }
     }
 }

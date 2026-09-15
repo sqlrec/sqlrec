@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class RestUtilsTest {
 
     @Test
+    void errorMessageUsesExceptionMessageOrFallback() {
+        assertEquals("specific message", RestUtils.errorMessage(
+                new IllegalArgumentException("specific message"),
+                "fallback"
+        ));
+        assertEquals("fallback", RestUtils.errorMessage(new IllegalArgumentException("  "), "fallback"));
+        assertEquals("fallback", RestUtils.errorMessage(new IllegalArgumentException(), "fallback"));
+    }
+
+    @Test
     void errorEscapesMessageAsValidJson() {
         String message = "invalid \"value\" at C:\\data\nnext line";
         FullHttpResponse response = RestUtils.error(HttpResponseStatus.BAD_REQUEST, message);

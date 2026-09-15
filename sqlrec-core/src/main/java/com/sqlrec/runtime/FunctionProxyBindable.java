@@ -31,13 +31,13 @@ import java.util.concurrent.CompletionException;
 public class FunctionProxyBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(FunctionProxyBindable.class);
 
-    private List<SqlNode> inputList;
-    private SqlGetVariable funcNameVariable;
-    private BindableInterface delegate;
-    private List<RelDataTypeField> returnDataFields;
-    private boolean isAsync;
-    private String partitionBy;
-    private SqlNode partitionSizeNode;
+    private final List<SqlNode> inputList;
+    private final SqlGetVariable funcNameVariable;
+    private final BindableInterface delegate;
+    private final List<RelDataTypeField> returnDataFields;
+    private final boolean async;
+    private final String partitionBy;
+    private final SqlNode partitionSizeNode;
 
     public FunctionProxyBindable(
             SqlCallSqlFunction callSqlFunction,
@@ -54,8 +54,10 @@ public class FunctionProxyBindable extends BindableInterface {
         this.delegate = null;
         this.funcNameVariable = funcNameVariable;
         this.returnDataFields = returnDataFields;
-        this.isAsync = isAsync;
-        extractPartitionInfo(callSqlFunction, inputList);
+        this.async = isAsync;
+        PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
+        this.partitionBy = partitionSpec.tableName();
+        this.partitionSizeNode = partitionSpec.sizeNode();
     }
 
     public FunctionProxyBindable(
@@ -68,16 +70,21 @@ public class FunctionProxyBindable extends BindableInterface {
         this.delegate = delegate;
         this.funcNameVariable = null;
         this.returnDataFields = delegate.getReturnDataFields();
-        this.isAsync = isAsync;
-        extractPartitionInfo(callSqlFunction, inputList);
+        this.async = isAsync;
+        PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
+        this.partitionBy = partitionSpec.tableName();
+        this.partitionSizeNode = partitionSpec.sizeNode();
     }
 
-    private void extractPartitionInfo(SqlCallSqlFunction callSqlFunction, List<SqlNode> inputList) {
+    private static PartitionSpec extractPartitionInfo(
+            SqlCallSqlFunction callSqlFunction,
+            List<SqlNode> inputList
+    ) {
         SqlNode partitionByNode = callSqlFunction.getPartitionBy();
-        SqlNode partitionSizeNode = callSqlFunction.getPartitionSize();
+        String partitionTable = null;
         if (partitionByNode != null) {
             if (partitionByNode instanceof SqlIdentifier) {
-                this.partitionBy = ((SqlIdentifier) partitionByNode).getSimple();
+                partitionTable = ((SqlIdentifier) partitionByNode).getSimple();
             } else {
                 throw new RuntimeException("PARTITION BY must be a simple identifier");
             }
@@ -87,23 +94,26 @@ public class FunctionProxyBindable extends BindableInterface {
                 for (SqlNode input : inputList) {
                     if (input instanceof SqlIdentifier
                             && NodeUtils.normalizeTableName(((SqlIdentifier) input).getSimple())
-                            .equals(NodeUtils.normalizeTableName(this.partitionBy))) {
+                            .equals(NodeUtils.normalizeTableName(partitionTable))) {
                         found = true;
                         break;
                     }
                 }
             }
             if (!found) {
-                throw new RuntimeException("PARTITION BY table '" + this.partitionBy + "' must be one of the function input tables");
+                throw new RuntimeException("PARTITION BY table '" + partitionTable
+                        + "' must be one of the function input tables");
             }
         }
-        if (partitionSizeNode != null) {
-            if (!(partitionSizeNode instanceof SqlLiteral)
-                    && !(partitionSizeNode instanceof SqlGetVariable)) {
+
+        SqlNode sizeNode = callSqlFunction.getPartitionSize();
+        if (sizeNode != null) {
+            if (!(sizeNode instanceof SqlLiteral)
+                    && !(sizeNode instanceof SqlGetVariable)) {
                 throw new RuntimeException("SIZE must be an integer literal, get(), or get_or_default()");
             }
-            this.partitionSizeNode = partitionSizeNode;
         }
+        return new PartitionSpec(partitionTable, sizeNode);
     }
 
     public static BindableInterface getFunctionBindable(
@@ -180,23 +190,22 @@ public class FunctionProxyBindable extends BindableInterface {
         BindableInterface targetBindable = resolveBindable(schema, context);
 
         if (partitionBy != null) {
-            if (isAsync) {
-                // Async calls are intentionally fire-and-forget; failures are reported by the
-                // existing logging and metrics instrumentation instead of being propagated synchronously.
-                ExecutorServiceUtils.getExecutorService().submit(() -> bindWithPartition(schema, context, targetBindable));
+            if (async) {
+                submitAsync(() -> bindWithPartition(schema, context, targetBindable));
                 return null;
             }
             return bindWithPartition(schema, context, targetBindable);
         }
 
-        if (isAsync) {
-            // Async calls are intentionally fire-and-forget; failures are reported by the
-            // existing logging and metrics instrumentation instead of being propagated synchronously.
-            ExecutorServiceUtils.getExecutorService().submit(() -> targetBindable.bind(schema, context));
+        if (async) {
+            submitAsync(() -> targetBindable.bind(schema, context));
             return null;
-        } else {
-            return targetBindable.bind(schema, context);
         }
+        return targetBindable.bind(schema, context);
+    }
+
+    private void submitAsync(Runnable task) {
+        ExecutorServiceUtils.getExecutorService().submit(task);
     }
 
     private Enumerable<Object[]> bindWithPartition(CalciteSchema schema, ExecuteContext context, BindableInterface targetBindable) {
@@ -218,19 +227,7 @@ public class FunctionProxyBindable extends BindableInterface {
         List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();
         for (List<Object[]> partitionRows : partitions) {
             CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(() -> {
-                // create a temporary schema, replacing the partitioned table with a sub-table
-                CalciteSchema partitionSchema = CalciteSchemaFactory.createCalciteSchema();
-                for (String tableName : schema.getTableNames()) {
-                    CalciteSchema.TableEntry entry = schema.getTable(tableName, false);
-                    if (entry.getTable() instanceof CacheTable) {
-                        if (NodeUtils.normalizeTableName(tableName)
-                                .equals(NodeUtils.normalizeTableName(partitionBy))) {
-                            partitionSchema.add(tableName, new CacheTable(tableName, Linq4j.asEnumerable(partitionRows), fields));
-                        } else {
-                            partitionSchema.add(tableName, entry.getTable());
-                        }
-                    }
-                }
+                CalciteSchema partitionSchema = createPartitionSchema(schema, partitionRows, fields);
                 return targetBindable.bind(partitionSchema, partitionContext);
             }, ExecutorServiceUtils.getExecutorService());
             futures.add(future);
@@ -282,6 +279,31 @@ public class FunctionProxyBindable extends BindableInterface {
         }
 
         return Linq4j.asEnumerable(mergedResults);
+    }
+
+    private CalciteSchema createPartitionSchema(
+            CalciteSchema sourceSchema,
+            List<Object[]> partitionRows,
+            List<RelDataTypeField> fields
+    ) {
+        CalciteSchema partitionSchema = CalciteSchemaFactory.createCalciteSchema();
+        for (String tableName : sourceSchema.getTableNames()) {
+            CalciteSchema.TableEntry entry = sourceSchema.getTable(tableName, false);
+            if (!(entry.getTable() instanceof CacheTable)) {
+                continue;
+            }
+
+            if (NodeUtils.normalizeTableName(tableName)
+                    .equals(NodeUtils.normalizeTableName(partitionBy))) {
+                partitionSchema.add(
+                        tableName,
+                        new CacheTable(tableName, Linq4j.asEnumerable(partitionRows), fields)
+                );
+            } else {
+                partitionSchema.add(tableName, entry.getTable());
+            }
+        }
+        return partitionSchema;
     }
 
     private int resolvePartitionSize(ExecuteContext context) {
@@ -369,7 +391,7 @@ public class FunctionProxyBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        if (isAsync) {
+        if (async) {
             return true;
         }
         if (delegate != null) {
@@ -494,5 +516,8 @@ public class FunctionProxyBindable extends BindableInterface {
             return delegate.getJavaExpression();
         }
         return null;
+    }
+
+    private record PartitionSpec(String tableName, SqlNode sizeNode) {
     }
 }

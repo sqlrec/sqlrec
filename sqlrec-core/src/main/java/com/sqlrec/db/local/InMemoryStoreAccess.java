@@ -42,30 +42,28 @@ public class InMemoryStoreAccess implements StoreAccess {
                 throw new RuntimeException("SQL function node group is empty");
             }
             SqlNode firstNode = nodeGroup.get(0);
-            if (!(firstNode instanceof SqlCreateSqlFunction)) {
+            if (!(firstNode instanceof SqlCreateSqlFunction createFunction)) {
                 throw new RuntimeException("Expected SqlCreateSqlFunction but got " + firstNode.getClass().getSimpleName());
             }
-            SqlCreateSqlFunction createFunc = (SqlCreateSqlFunction) firstNode;
-            String funcName = ResourceNames.of(createFunc.getFuncName());
+            String functionName = ResourceNames.of(createFunction.getFuncName());
             List<String> sqlList = new ArrayList<>();
             for (SqlNode node : nodeGroup) {
                 sqlList.add(CompileManager.getSqlStr(node));
             }
             SqlFunction sqlFunction = new SqlFunction();
-            sqlFunction.setName(funcName);
+            sqlFunction.setName(functionName);
             sqlFunction.setSqlList(JsonUtils.toJson(sqlList));
             sqlFunction.setCreatedAt(System.currentTimeMillis());
             sqlFunction.setUpdatedAt(System.currentTimeMillis());
-            sqlFunctionMap.put(funcName, sqlFunction);
+            sqlFunctionMap.put(functionName, sqlFunction);
         }
     }
 
     private void initApis(List<SqlNode> apiNodes) {
         for (SqlNode node : apiNodes) {
-            if (!(node instanceof SqlCreateApi)) {
+            if (!(node instanceof SqlCreateApi createApi)) {
                 throw new RuntimeException("Expected SqlCreateApi but got " + node.getClass().getSimpleName());
             }
-            SqlCreateApi createApi = (SqlCreateApi) node;
             SqlApi sqlApi = new SqlApi();
             sqlApi.setName(ResourceNames.normalize(createApi.getApiName()));
             sqlApi.setFunctionName(ResourceNames.normalize(createApi.getFuncName()));
@@ -77,10 +75,9 @@ public class InMemoryStoreAccess implements StoreAccess {
 
     private void initModels(List<SqlNode> modelNodes) {
         for (SqlNode node : modelNodes) {
-            if (!(node instanceof SqlCreateModel)) {
+            if (!(node instanceof SqlCreateModel createModel)) {
                 throw new RuntimeException("Expected SqlCreateModel but got " + node.getClass().getSimpleName());
             }
-            SqlCreateModel createModel = (SqlCreateModel) node;
             Model model = new Model();
             model.setName(ResourceNames.of(createModel.getModelName()));
             model.setDdl(CompileManager.getSqlStr(node));

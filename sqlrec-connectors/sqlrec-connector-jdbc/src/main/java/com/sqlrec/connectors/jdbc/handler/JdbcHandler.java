@@ -15,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 public class JdbcHandler {
     private static final Logger logger = LoggerFactory.getLogger(JdbcHandler.class);
@@ -80,33 +81,41 @@ public class JdbcHandler {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        SqlStatement template = upsertTemplate();
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(template.getSql())) {
-            for (Object[] data : dataList) {
-                template.withParameters(Arrays.asList(data)).addToBatch(stmt);
-            }
-            stmt.executeBatch();
-            return true;
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to batch upsert into table " + jdbcConfig.tableName, e);
-        }
+        return executeBatch(
+                dataList,
+                upsertTemplate(),
+                Arrays::asList,
+                "Failed to batch upsert into table " + jdbcConfig.tableName
+        );
     }
 
     public boolean deleteBatch(Collection<? extends Object[]> dataList) {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        SqlStatement template = deleteTemplate();
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(template.getSql())) {
-            for (Object[] data : dataList) {
-                template.withParameters(Collections.singletonList(data[jdbcConfig.primaryKeyIndex])).addToBatch(stmt);
+        return executeBatch(
+                dataList,
+                deleteTemplate(),
+                data -> Collections.singletonList(data[jdbcConfig.primaryKeyIndex]),
+                "Failed to batch delete from table " + jdbcConfig.tableName
+        );
+    }
+
+    private boolean executeBatch(
+            Collection<? extends Object[]> rows,
+            SqlStatement template,
+            Function<Object[], List<?>> parameterMapper,
+            String errorMessage
+    ) {
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement(template.getSql())) {
+            for (Object[] row : rows) {
+                template.withParameters(parameterMapper.apply(row)).addToBatch(statement);
             }
-            stmt.executeBatch();
+            statement.executeBatch();
             return true;
         } catch (SQLException e) {
-            throw new RuntimeException("Failed to batch delete from table " + jdbcConfig.tableName, e);
+            throw new RuntimeException(errorMessage, e);
         }
     }
 

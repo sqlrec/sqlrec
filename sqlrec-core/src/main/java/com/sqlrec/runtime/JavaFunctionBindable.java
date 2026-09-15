@@ -23,11 +23,11 @@ import java.util.List;
 import java.util.Set;
 
 public class JavaFunctionBindable extends BindableInterface {
-    private String functionName;
-    private Object tableFunction;
-    private List<SqlNode> inputTableList;
-    private List<RelDataTypeField> returnDataFields;
-    private Method evalMethod;
+    private final String functionName;
+    private final Object tableFunction;
+    private final List<SqlNode> inputTableList;
+    private final List<RelDataTypeField> returnDataFields;
+    private final Method evalMethod;
 
     public JavaFunctionBindable(
             String functionName,
@@ -41,17 +41,17 @@ public class JavaFunctionBindable extends BindableInterface {
         this.inputTableList = inputTableList;
         this.evalMethod = selectEvalMethod(tableFunction, inputTableList);
 
-        if (returnDataFields != null) {
-            this.returnDataFields = returnDataFields;
-        } else {
+        List<RelDataTypeField> resolvedReturnDataFields = returnDataFields;
+        if (resolvedReturnDataFields == null) {
             if (CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
                 Object outputTable = callEvalMethod(schema, new ExecuteContextImpl());
                 if (outputTable == null) {
                     throw new RuntimeException("table function return null");
                 }
-                this.returnDataFields = ((CacheTable) outputTable).getDataFields();
+                resolvedReturnDataFields = ((CacheTable) outputTable).getDataFields();
             }
         }
+        this.returnDataFields = resolvedReturnDataFields;
     }
 
     public static List<Method> getEvalMethods(Object tableFunction) {

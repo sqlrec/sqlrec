@@ -4,12 +4,10 @@ import com.sqlrec.common.config.ConfigOption;
 import com.sqlrec.common.config.SqlRecConfigs;
 
 /**
- * Configuration options shared by every model backend (gbdt / tzrec / external).
+ * Configuration options shared by the managed Kubernetes model backends.
  *
- * <p>Holds the options that are byte-for-byte identical across {@code com.sqlrec.model.gbdt.Config}
- * and {@code com.sqlrec.model.tzrec.Config}: Docker image version, label columns, pod resource
- * requests/limits, replica count and the shell/pipeline-config file names. Backends only need to
- * declare their own {@code IMAGE} (image name differs) and backend-specific training params.
+ * <p>Holds the common image version, label columns, pod resources, replica count, and mounted file
+ * names. Backends only declare options whose defaults or meaning differ.
  *
  * <p>Backends inherit these constants via {@code extends ModelConfigBase}, so existing call sites
  * such as {@code Config.POD_CPU_CORES} keep resolving unchanged.

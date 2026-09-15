@@ -1,6 +1,5 @@
 package com.sqlrec.executor;
 
-import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.ServiceManager;
@@ -9,10 +8,8 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
 
-public class ServiceSqlProcessResult extends SqlProcessResult {
+public class ServiceSqlProcessResult extends CachedCompletionSqlProcessResult {
     private String serviceName;
-    private volatile long lastCheckTime = 0;
-    private volatile boolean cachedCompleted = false;
 
     public ServiceSqlProcessResult() {
         super();
@@ -45,14 +42,6 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
 
     @Override
     public boolean isCompleted() {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCheckTime < SqlRecConfigs.COMPLETION_CHECK_CACHE_INTERVAL.getValue()) {
-            return cachedCompleted;
-        }
-        lastCheckTime = currentTime;
-
-        boolean completed = ServiceManager.isServiceOperationCompleted(serviceName);
-        cachedCompleted = completed;
-        return completed;
+        return checkCompletion(() -> ServiceManager.isServiceOperationCompleted(serviceName));
     }
 }

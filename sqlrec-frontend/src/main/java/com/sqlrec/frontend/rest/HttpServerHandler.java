@@ -56,7 +56,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             response = dispatch(requestContext);
         } catch (IllegalArgumentException e) {
             logger.debug("Invalid HTTP request: uri={}, message={}", request.uri(), e.getMessage());
-            response = RestUtils.error(HttpResponseStatus.BAD_REQUEST, errorMessage(e, "invalid request"));
+            response = RestUtils.error(HttpResponseStatus.BAD_REQUEST, RestUtils.errorMessage(e, "invalid request"));
         } catch (Exception e) {
             logger.error("Error processing HTTP request: uri={}", request.uri(), e);
             response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "internal server error");
@@ -189,10 +189,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             return UI_API_PREFIX + "{resource}";
         }
         return "unmatched";
-    }
-
-    private String errorMessage(Exception e, String fallback) {
-        return e.getMessage() == null || e.getMessage().isBlank() ? fallback : e.getMessage();
     }
 
     // Connection lifecycle

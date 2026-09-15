@@ -157,16 +157,13 @@ public class DataTypeUtils {
                         "desired field name not equal to given field name: "
                                 + desiredField.getName() + " != " + givenField.getName());
             }
-            if (SqlTypeName.STRING_TYPES.contains(desiredField.getType().getSqlTypeName()) &&
-                    SqlTypeName.STRING_TYPES.contains(givenField.getType().getSqlTypeName())) {
+            if (haveCompatibleSchemaTypes(desiredField, givenField)) {
                 continue;
             }
-            if (!desiredField.getType().getSqlTypeName().equals(givenField.getType().getSqlTypeName())) {
-                throw new RuntimeException(
-                        "desired field type not equal to given field type: "
-                                + desiredField.getType().getSqlTypeName() + " != "
-                                + givenField.getType().getSqlTypeName());
-            }
+            throw new RuntimeException(
+                    "desired field type not equal to given field type: "
+                            + desiredField.getType().getSqlTypeName() + " != "
+                            + givenField.getType().getSqlTypeName());
         }
     }
 
@@ -191,17 +188,25 @@ public class DataTypeUtils {
                 throw new RuntimeException(
                         "field name not equal: " + field1.getName() + " != " + field2.getName());
             }
-            if (SqlTypeName.STRING_TYPES.contains(field1.getType().getSqlTypeName()) &&
-                    SqlTypeName.STRING_TYPES.contains(field2.getType().getSqlTypeName())) {
+            if (haveCompatibleSchemaTypes(field1, field2)) {
                 continue;
             }
-            if (!field1.getType().getSqlTypeName().equals(field2.getType().getSqlTypeName())) {
-                throw new RuntimeException(
-                        "field type not equal: "
-                                + field1.getType().getSqlTypeName() + " != "
-                                + field2.getType().getSqlTypeName());
-            }
+            throw new RuntimeException(
+                    "field type not equal: "
+                            + field1.getType().getSqlTypeName() + " != "
+                            + field2.getType().getSqlTypeName());
         }
+    }
+
+    private static boolean haveCompatibleSchemaTypes(
+            RelDataTypeField first,
+            RelDataTypeField second
+    ) {
+        SqlTypeName firstType = first.getType().getSqlTypeName();
+        SqlTypeName secondType = second.getType().getSqlTypeName();
+        return firstType.equals(secondType)
+                || SqlTypeName.STRING_TYPES.contains(firstType)
+                && SqlTypeName.STRING_TYPES.contains(secondType);
     }
 
     public static void checkTableSchemaIdentical(List<RelDataTypeField> referenceFields, List<RelDataTypeField> fields, int tableIndex) {
@@ -423,6 +428,23 @@ public class DataTypeUtils {
             throw new RuntimeException("adaptRowsToSchema failed, rows/desiredFields/givenFields must not be null");
         }
 
+        int[] indexMapping = buildFieldIndexMapping(desiredFields, givenFields);
+
+        List<Object[]> result = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            if (row == null) {
+                result.add(null);
+                continue;
+            }
+            result.add(adaptRow(row, desiredFields, indexMapping));
+        }
+        return result;
+    }
+
+    private static int[] buildFieldIndexMapping(
+            List<RelDataTypeField> desiredFields,
+            List<RelDataTypeField> givenFields
+    ) {
         Map<String, Integer> givenNameToIndex = new HashMap<>();
         for (int i = 0; i < givenFields.size(); i++) {
             givenNameToIndex.put(givenFields.get(i).getName().toLowerCase(Locale.ROOT), i);
@@ -431,33 +453,34 @@ public class DataTypeUtils {
         int[] indexMapping = new int[desiredFields.size()];
         for (int i = 0; i < desiredFields.size(); i++) {
             RelDataTypeField desiredField = desiredFields.get(i);
-            Integer givenIdx = givenNameToIndex.get(desiredField.getName().toLowerCase(Locale.ROOT));
-            if (givenIdx == null) {
+            Integer givenIndex = givenNameToIndex.get(
+                    desiredField.getName().toLowerCase(Locale.ROOT)
+            );
+            if (givenIndex == null) {
                 throw new RuntimeException(
                         "adaptRowsToSchema failed, desired field not found in given fields: "
                                 + desiredField.getName());
             }
-            checkFieldTypeCompatible(desiredField, givenFields.get(givenIdx));
-            indexMapping[i] = givenIdx;
+            checkFieldTypeCompatible(desiredField, givenFields.get(givenIndex));
+            indexMapping[i] = givenIndex;
         }
+        return indexMapping;
+    }
 
-        List<Object[]> result = new ArrayList<>(rows.size());
-        for (Object[] row : rows) {
-            if (row == null) {
-                result.add(null);
-                continue;
+    private static Object[] adaptRow(
+            Object[] row,
+            List<RelDataTypeField> desiredFields,
+            int[] indexMapping
+    ) {
+        Object[] adaptedRow = new Object[desiredFields.size()];
+        for (int i = 0; i < desiredFields.size(); i++) {
+            int givenIndex = indexMapping[i];
+            if (givenIndex < row.length && row[givenIndex] != null) {
+                SqlTypeName targetType = desiredFields.get(i).getType().getSqlTypeName();
+                adaptedRow[i] = convertType(row[givenIndex], targetType);
             }
-            Object[] newRow = new Object[desiredFields.size()];
-            for (int i = 0; i < desiredFields.size(); i++) {
-                int givenIdx = indexMapping[i];
-                if (givenIdx < row.length && row[givenIdx] != null) {
-                    SqlTypeName targetType = desiredFields.get(i).getType().getSqlTypeName();
-                    newRow[i] = convertType(row[givenIdx], targetType);
-                }
-            }
-            result.add(newRow);
         }
-        return result;
+        return adaptedRow;
     }
 
     private static void checkFieldTypeCompatible(RelDataTypeField desiredField, RelDataTypeField givenField) {

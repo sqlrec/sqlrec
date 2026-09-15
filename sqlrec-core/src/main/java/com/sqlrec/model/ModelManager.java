@@ -29,30 +29,37 @@ public class ModelManager {
     public static ModelConf getAndCheckModel(SqlCreateModel sqlCreateModel) {
         try {
             ModelConf model = ModelEntityConverter.convertToModel(sqlCreateModel);
-            ModelController modelController = ModelControllerFactory.getModelController(model);
-            if (modelController == null) {
-                throw new IllegalArgumentException("Model controller not found for model name: " + model.getModelName());
-            }
+            ModelController modelController = ModelControllerFactory.getRequiredModelController(model);
             String errorMessage = modelController.checkModel(model);
             if (errorMessage != null) {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            List<FieldSchema> inputFields = model.getInputFields();
-            List<FieldSchema> outputFields = modelController.getOutputFields(model);
-            if (inputFields != null && outputFields != null) {
-                for (FieldSchema inputField : inputFields) {
-                    for (FieldSchema outputField : outputFields) {
-                        if (inputField.getName().equalsIgnoreCase(outputField.getName())) {
-                            throw new IllegalArgumentException("Field '" + inputField.getName() + "' exists in both input fields and output fields");
-                        }
-                    }
-                }
-            }
+            checkInputAndOutputFieldNames(
+                    model.getInputFields(),
+                    modelController.getOutputFields(model)
+            );
 
             return model;
         } catch (Exception e) {
             throw new RuntimeException("Error while checking model: " + e.getMessage(), e);
+        }
+    }
+
+    private static void checkInputAndOutputFieldNames(
+            List<FieldSchema> inputFields,
+            List<FieldSchema> outputFields
+    ) {
+        if (inputFields == null || outputFields == null) {
+            return;
+        }
+        for (FieldSchema inputField : inputFields) {
+            for (FieldSchema outputField : outputFields) {
+                if (inputField.getName().equalsIgnoreCase(outputField.getName())) {
+                    throw new IllegalArgumentException("Field '" + inputField.getName()
+                            + "' exists in both input fields and output fields");
+                }
+            }
         }
     }
 
@@ -92,10 +99,7 @@ public class ModelManager {
 
         Model modelEntity = db.getModel(modelTrainConf.getModelName());
         ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
-        if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
-        }
+        ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
@@ -122,16 +126,14 @@ public class ModelManager {
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
-        Checkpoint checkpoint = new Checkpoint();
-        checkpoint.setModelName(modelTrainConf.getModelName());
-        checkpoint.setCheckpointName(modelTrainConf.getCheckpointName());
-        checkpoint.setModelDdl(modelEntity.getDdl());
-        checkpoint.setYaml(k8sYaml);
-        checkpoint.setDdl(CompileManager.getSqlStr(sqlTrainModel));
-        checkpoint.setCheckpointType(Consts.CHECKPOINT_TYPE_ORIGIN);
-        checkpoint.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
-        checkpoint.setCreatedAt(System.currentTimeMillis());
-        checkpoint.setUpdatedAt(System.currentTimeMillis());
+        Checkpoint checkpoint = createCheckpoint(
+                modelTrainConf.getModelName(),
+                modelTrainConf.getCheckpointName(),
+                modelEntity.getDdl(),
+                k8sYaml,
+                CompileManager.getSqlStr(sqlTrainModel),
+                Consts.CHECKPOINT_TYPE_ORIGIN
+        );
 
         db.insertCheckpoint(checkpoint);
         K8sManager.applyYaml(k8sYaml);
@@ -156,10 +158,7 @@ public class ModelManager {
         }
 
         ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
-        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
-        if (modelController == null) {
-            throw new IllegalArgumentException("Model controller not found for model name: " + modelConfig.getModelName());
-        }
+        ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
 
@@ -200,16 +199,14 @@ public class ModelManager {
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
-            Checkpoint checkpoint = new Checkpoint();
-            checkpoint.setModelName(modelExportConf.getModelName());
-            checkpoint.setCheckpointName(exportCheckpointName);
-            checkpoint.setModelDdl(modelEntity.getDdl());
-            checkpoint.setYaml(k8sYaml);
-            checkpoint.setDdl(CompileManager.getSqlStr(sqlExportModel));
-            checkpoint.setCheckpointType(Consts.CHECKPOINT_TYPE_EXPORT);
-            checkpoint.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
-            checkpoint.setCreatedAt(System.currentTimeMillis());
-            checkpoint.setUpdatedAt(System.currentTimeMillis());
+            Checkpoint checkpoint = createCheckpoint(
+                    modelExportConf.getModelName(),
+                    exportCheckpointName,
+                    modelEntity.getDdl(),
+                    k8sYaml,
+                    CompileManager.getSqlStr(sqlExportModel),
+                    Consts.CHECKPOINT_TYPE_EXPORT
+            );
 
             db.insertCheckpoint(checkpoint);
             checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
@@ -218,6 +215,27 @@ public class ModelManager {
         K8sManager.applyYaml(k8sYaml);
 
         return checkpointInfos;
+    }
+
+    private static Checkpoint createCheckpoint(
+            String modelName,
+            String checkpointName,
+            String modelDdl,
+            String k8sYaml,
+            String checkpointDdl,
+            String checkpointType
+    ) {
+        Checkpoint checkpoint = new Checkpoint();
+        checkpoint.setModelName(modelName);
+        checkpoint.setCheckpointName(checkpointName);
+        checkpoint.setModelDdl(modelDdl);
+        checkpoint.setYaml(k8sYaml);
+        checkpoint.setDdl(checkpointDdl);
+        checkpoint.setCheckpointType(checkpointType);
+        checkpoint.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
+        checkpoint.setCreatedAt(System.currentTimeMillis());
+        checkpoint.setUpdatedAt(System.currentTimeMillis());
+        return checkpoint;
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
@@ -303,23 +321,17 @@ public class ModelManager {
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
                 String k8sYaml = checkpoint.getYaml();
                 if (StringUtils.isEmpty(k8sYaml)) {
-                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
-                    checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    db.upsertCheckpoint(checkpoint);
+                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
                     failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName() + " (k8sYaml is empty)");
                     continue;
                 }
 
                 String jobStatus = K8sManager.checkJobsStatusFromYaml(k8sYaml);
                 if ("succeeded".equals(jobStatus)) {
-                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
-                    checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    db.upsertCheckpoint(checkpoint);
+                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     yamlsToDelete.add(k8sYaml);
                 } else if ("failed".equals(jobStatus)) {
-                    checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
-                    checkpoint.setUpdatedAt(System.currentTimeMillis());
-                    db.upsertCheckpoint(checkpoint);
+                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
                     failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
                 } else {
                     allCompleted = false;
@@ -338,5 +350,15 @@ public class ModelManager {
         }
 
         return allCompleted;
+    }
+
+    private static void updateCheckpointStatus(
+            MetadataAccess db,
+            Checkpoint checkpoint,
+            String status
+    ) {
+        checkpoint.setStatus(status);
+        checkpoint.setUpdatedAt(System.currentTimeMillis());
+        db.upsertCheckpoint(checkpoint);
     }
 }

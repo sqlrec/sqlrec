@@ -49,9 +49,10 @@ import java.util.stream.Collectors;
 
 public class SqlExecutor {
     private static final Logger logger = LoggerFactory.getLogger(SqlExecutor.class);
+    private static final String MESSAGE_FIELD = "msg";
 
-    private CalciteSchema schema;
-    private ExecuteContext context;
+    private final CalciteSchema schema;
+    private final ExecuteContext context;
     private String defaultSchema;
     private FunctionCompiler functionCompiler;
 
@@ -81,12 +82,12 @@ public class SqlExecutor {
 
         if (sqlNode instanceof SqlUseDatabase) {
             defaultSchema = ((SqlUseDatabase) sqlNode).getDatabaseName().getSimple();
-            return SqlProcessResult.msg("database changed to " + defaultSchema, "msg");
+            return message("database changed to " + defaultSchema);
         }
 
         if (sqlNode instanceof SqlFlush) {
             CacheManager.invalidateAll();
-            return SqlProcessResult.msg("all caches flushed", "msg");
+            return message("all caches flushed");
         }
 
         result = processResourceQuery(sqlNode);
@@ -95,15 +96,7 @@ public class SqlExecutor {
         }
 
         if (SqlTypeChecker.isFlinkSqlCompilable(sqlNode, schema, defaultSchema)) {
-            BindableInterface bindableInterface = new CompileManager().compileSql(
-                    sqlNode, schema, defaultSchema, sql
-            );
-            Enumerable<Object[]> enumerable = bindableInterface.bind(schema, context);
-            if (enumerable == null) {
-                return SqlProcessResult.msg("sql run success without output", "msg");
-            }
-            List<RelDataTypeField> fields = bindableInterface.getReturnDataFields();
-            return SqlProcessResult.of(enumerable, fields);
+            return compileAndExecute(sqlNode, sql);
         }
 
         if (ExecEnv.isFileSystemMeta()) {
@@ -126,9 +119,25 @@ public class SqlExecutor {
             throw new RuntimeException("cannot exec sql: " + sql);
         }
         if (result.isCompleted()) {
-            return new CacheTable("result", result.getEnumerable(), result.getFields());
+            return toCacheTable(result);
         }
 
+        waitForCompletion(result, sql);
+        return toCacheTable(result);
+    }
+
+    private SqlProcessResult compileAndExecute(SqlNode sqlNode, String sql) throws Exception {
+        BindableInterface bindable = new CompileManager().compileSql(
+                sqlNode, schema, defaultSchema, sql
+        );
+        Enumerable<Object[]> enumerable = bindable.bind(schema, context);
+        if (enumerable == null) {
+            return message("sql run success without output");
+        }
+        return SqlProcessResult.of(enumerable, bindable.getReturnDataFields());
+    }
+
+    private void waitForCompletion(SqlProcessResult result, String sql) throws InterruptedException {
         long timeout = SqlRecConfigs.SQL_SYNC_EXECUTE_TIMEOUT.getValue();
         long start = System.currentTimeMillis();
         logger.info("executeSql start, timeout: {}ms, sql: {}", timeout, sql);
@@ -141,7 +150,14 @@ public class SqlExecutor {
             Thread.sleep(1000);
         }
         logger.info("executeSql completed in {}ms, sql: {}", System.currentTimeMillis() - start, sql);
+    }
+
+    private CacheTable toCacheTable(SqlProcessResult result) {
         return new CacheTable("result", result.getEnumerable(), result.getFields());
+    }
+
+    private static SqlProcessResult message(String text) {
+        return SqlProcessResult.msg(text, MESSAGE_FIELD);
     }
 
     private SqlProcessResult tryCompileFunction(SqlNode sqlNode, String sql) throws Exception {
@@ -151,14 +167,14 @@ public class SqlExecutor {
                 if (functionCompiler.isFunctionCompileFinish()) {
                     SqlExecutor.saveSqlFunction(functionCompiler);
                     functionCompiler = null;
-                    return SqlProcessResult.msg("function compile success", "msg");
+                    return message("function compile success");
                 } else {
-                    return SqlProcessResult.msg("add a sql to function", "msg");
+                    return message("add a sql to function");
                 }
             } else if (sqlNode instanceof SqlCreateSqlFunction) {
                 functionCompiler = new FunctionCompiler(null, null);
                 functionCompiler.compile(sqlNode, sql);
-                return SqlProcessResult.msg("start compile function", "msg");
+                return message("start compile function");
             }
         } catch (Exception e) {
             functionCompiler = null;
@@ -171,70 +187,62 @@ public class SqlExecutor {
 
     private SqlProcessResult processResourceEdit(SqlNode sqlNode) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        if (sqlNode instanceof SqlCreateApi) {
-            SqlExecutor.saveSqlApi((SqlCreateApi) sqlNode);
-            return SqlProcessResult.msg("create api success", "msg");
+        if (sqlNode instanceof SqlCreateApi createApi) {
+            SqlExecutor.saveSqlApi(createApi);
+            return message("create api success");
         }
 
-        if (sqlNode instanceof SqlCreateModel) {
-            SqlCreateModel createModel = (SqlCreateModel) sqlNode;
+        if (sqlNode instanceof SqlCreateModel createModel) {
             ModelManager.createModel(createModel);
-            return SqlProcessResult.msg("create model success", "msg");
+            return message("create model success");
         }
 
-        if (sqlNode instanceof SqlTrainModel) {
-            SqlTrainModel trainModel = (SqlTrainModel) sqlNode;
+        if (sqlNode instanceof SqlTrainModel trainModel) {
             List<CheckpointInfo> checkpointInfos = ModelManager.trainModel(trainModel, defaultSchema);
             return ModelSqlProcessResult.msg("train model success", "msg", checkpointInfos);
         }
 
-        if (sqlNode instanceof SqlExportModel) {
-            SqlExportModel exportModel = (SqlExportModel) sqlNode;
+        if (sqlNode instanceof SqlExportModel exportModel) {
             List<CheckpointInfo> checkpointInfos = ModelManager.exportModel(exportModel, defaultSchema);
             return ModelSqlProcessResult.msg("export model success", "msg", checkpointInfos);
         }
 
-        if (sqlNode instanceof SqlDropModel) {
-            SqlDropModel dropModel = (SqlDropModel) sqlNode;
+        if (sqlNode instanceof SqlDropModel dropModel) {
             String modelName = dropModel.getModelName().getSimple();
             ModelManager.deleteModel(modelName);
-            return SqlProcessResult.msg("drop model success", "msg");
+            return message("drop model success");
         }
 
-        if (sqlNode instanceof SqlAlterModelDropCheckpoint) {
-            SqlAlterModelDropCheckpoint alterModelDropCheckpoint = (SqlAlterModelDropCheckpoint) sqlNode;
+        if (sqlNode instanceof SqlAlterModelDropCheckpoint alterModelDropCheckpoint) {
             String modelName = alterModelDropCheckpoint.getModelName().getSimple();
             String checkpointName = SchemaUtils.removeQuotes(alterModelDropCheckpoint.getCheckpointName().toString());
             Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
             if (checkpoint == null) {
                 if (alterModelDropCheckpoint.isIfExists()) {
-                    return SqlProcessResult.msg("drop checkpoint success", "msg");
+                    return message("drop checkpoint success");
                 }
                 throw new RuntimeException("checkpoint not exists: " + checkpointName + " for model " + modelName);
             }
             ModelManager.deleteCheckpoint(modelName, checkpointName);
-            return SqlProcessResult.msg("drop checkpoint success", "msg");
+            return message("drop checkpoint success");
         }
 
-        if (sqlNode instanceof SqlCreateService) {
-            SqlCreateService createService = (SqlCreateService) sqlNode;
+        if (sqlNode instanceof SqlCreateService createService) {
             String serviceName = ServiceManager.createService(createService);
             return ServiceSqlProcessResult.msg("create service success", "msg", serviceName);
         }
 
-        if (sqlNode instanceof SqlDropService) {
-            SqlDropService dropService = (SqlDropService) sqlNode;
+        if (sqlNode instanceof SqlDropService dropService) {
             ServiceManager.deleteService(dropService.getServiceName().getSimple());
-            return SqlProcessResult.msg("drop service success", "msg");
+            return message("drop service success");
         }
 
-        if (sqlNode instanceof SqlDropSqlFunction) {
-            SqlDropSqlFunction dropSqlFunction = (SqlDropSqlFunction) sqlNode;
+        if (sqlNode instanceof SqlDropSqlFunction dropSqlFunction) {
             String funcName = dropSqlFunction.getFuncName().getSimple();
             SqlFunction sqlFunction = db.getSqlFunction(funcName);
             if (sqlFunction == null) {
                 if (dropSqlFunction.isIfExists()) {
-                    return SqlProcessResult.msg("drop sql function success", "msg");
+                    return message("drop sql function success");
                 }
                 throw new RuntimeException("sql function not exists: " + funcName);
             }
@@ -246,21 +254,20 @@ public class SqlExecutor {
                 throw new RuntimeException("sql function " + funcName + " is used by api: " + String.join(", ", usingApis));
             }
             db.deleteSqlFunction(funcName);
-            return SqlProcessResult.msg("drop sql function success", "msg");
+            return message("drop sql function success");
         }
 
-        if (sqlNode instanceof SqlDropApi) {
-            SqlDropApi dropApi = (SqlDropApi) sqlNode;
+        if (sqlNode instanceof SqlDropApi dropApi) {
             String apiName = dropApi.getApiName().getSimple();
             SqlApi sqlApi = db.getSqlApi(apiName);
             if (sqlApi == null) {
                 if (dropApi.isIfExists()) {
-                    return SqlProcessResult.msg("drop api success", "msg");
+                    return message("drop api success");
                 }
                 throw new RuntimeException("api not exists: " + apiName);
             }
             db.deleteSqlApi(apiName);
-            return SqlProcessResult.msg("drop api success", "msg");
+            return message("drop api success");
         }
 
         return null;

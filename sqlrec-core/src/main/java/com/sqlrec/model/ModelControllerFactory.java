@@ -40,4 +40,14 @@ public class ModelControllerFactory {
         String modelAlgorithmName = ModelConfigs.MODEL.getValue(modelConfig.getParams());
         return ModelControllerFactory.getModelController(modelAlgorithmName);
     }
+
+    static ModelController getRequiredModelController(ModelConf modelConfig) {
+        ModelController modelController = getModelController(modelConfig);
+        if (modelController == null) {
+            throw new IllegalArgumentException(
+                    "Model controller not found for model name: " + modelConfig.getModelName()
+            );
+        }
+        return modelController;
+    }
 }

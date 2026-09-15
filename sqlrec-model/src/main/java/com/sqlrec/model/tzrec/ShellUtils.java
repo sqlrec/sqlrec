@@ -3,6 +3,7 @@ package com.sqlrec.model.tzrec;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
+import com.sqlrec.model.common.ShellScriptUtils;
 
 public class ShellUtils {
 
@@ -28,7 +29,9 @@ public class ShellUtils {
     public static String genExportModelShell(ModelConf model, ModelExportConf exportConf, String exportDir) {
         // Single-quote and escape the directory so shell metacharacters in exportDir (which derives
         // from user-configured base_model_dir) cannot break out of the argument and inject commands.
-        String escapedDir = exportDir.replace("'", "'\\''");
-        return torchrunShell("tzrec.export", " \\\n    --export_dir '" + escapedDir + "'");
+        return torchrunShell(
+                "tzrec.export",
+                " \\\n    --export_dir " + ShellScriptUtils.quote(exportDir)
+        );
     }
 }

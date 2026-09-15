@@ -12,8 +12,8 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import java.util.*;
 
 public class CacheTableBindable extends BindableInterface {
-    private String tableName;
-    private BindableInterface bindable;
+    private final String tableName;
+    private final BindableInterface bindable;
 
     public CacheTableBindable(String tableName, BindableInterface bindable) {
         this.tableName = tableName;

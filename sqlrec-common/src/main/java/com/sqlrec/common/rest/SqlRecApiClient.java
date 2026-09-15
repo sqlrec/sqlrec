@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Lightweight client for calling remote sqlrec REST APIs.
@@ -64,19 +65,9 @@ public final class SqlRecApiClient {
                                               Map<String, List<Map<String, Object>>> data,
                                               Map<String, String> params,
                                               Map<String, String> metricTags) {
-        if (url == null || url.isEmpty()) {
-            throw new IllegalArgumentException("url is null or empty");
-        }
-
-        RequestData requestData = new RequestData();
+        RequestData requestData = createRequestData(params, metricTags);
         requestData.setData(data);
-        requestData.setParams(params);
-        requestData.setMetricTags(metricTags);
-        String bodyJson = JsonUtils.toJson(requestData);
-
-        String responseJson = doPost(url, bodyJson);
-        ExecuteData response = JsonUtils.fromJson(responseJson, ExecuteData.class);
-        return response != null ? response : new ExecuteData();
+        return postRequest(url, requestData, ExecuteData.class, ExecuteData::new);
     }
 
     /**
@@ -112,19 +103,9 @@ public final class SqlRecApiClient {
                                              List<String> sqls,
                                              Map<String, String> params,
                                              Map<String, String> metricTags) {
-        if (url == null || url.isEmpty()) {
-            throw new IllegalArgumentException("url is null or empty");
-        }
-
-        RequestData requestData = new RequestData();
+        RequestData requestData = createRequestData(params, metricTags);
         requestData.setSqls(sqls);
-        requestData.setParams(params);
-        requestData.setMetricTags(metricTags);
-        String bodyJson = JsonUtils.toJson(requestData);
-
-        String responseJson = doPost(url, bodyJson);
-        ExecuteDataList response = JsonUtils.fromJson(responseJson, ExecuteDataList.class);
-        return response != null ? response : new ExecuteDataList();
+        return postRequest(url, requestData, ExecuteDataList.class, ExecuteDataList::new);
     }
 
     /**
@@ -140,6 +121,32 @@ public final class SqlRecApiClient {
      */
     public static ExecuteDataList callSqlApi(String url, List<String> sqls) {
         return callSqlApi(url, sqls, null, null);
+    }
+
+    private static RequestData createRequestData(
+            Map<String, String> params,
+            Map<String, String> metricTags
+    ) {
+        RequestData requestData = new RequestData();
+        requestData.setParams(params);
+        requestData.setMetricTags(metricTags);
+        return requestData;
+    }
+
+    private static <T> T postRequest(
+            String url,
+            RequestData requestData,
+            Class<T> responseType,
+            Supplier<T> emptyResponse
+    ) {
+        if (url == null || url.isEmpty()) {
+            throw new IllegalArgumentException("url is null or empty");
+        }
+        T response = JsonUtils.fromJson(
+                doPost(url, JsonUtils.toJson(requestData)),
+                responseType
+        );
+        return response != null ? response : emptyResponse.get();
     }
 
     private static String doPost(String url, String bodyJson) {

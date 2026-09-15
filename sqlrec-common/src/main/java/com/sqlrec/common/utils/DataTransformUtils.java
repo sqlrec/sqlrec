@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.schema.CacheTable;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -8,13 +9,19 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class DataTransformUtils {
+    /** Materialize a cache table exactly once, treating a null enumerable as no rows. */
+    public static List<Object[]> materializeRows(CacheTable table) {
+        Enumerable<Object[]> enumerable = table.scan(null);
+        return enumerable == null ? new ArrayList<>() : enumerable.toList();
+    }
+
     public static List<Float> convertToFloatVec(Object obj) {
         if (obj instanceof List) {
             List<?> list = (List<?>) obj;
             List<Float> floatList = new ArrayList<>(list.size());
-            for (Object o : list) {
-                if (o instanceof Number) {
-                    floatList.add(((Number) o).floatValue());
+            for (Object element : list) {
+                if (element instanceof Number) {
+                    floatList.add(((Number) element).floatValue());
                 } else {
                     throw new IllegalArgumentException("list contains non-number element");
                 }
@@ -36,18 +43,19 @@ public class DataTransformUtils {
                 arr[i] = ((Number) list.get(i)).doubleValue();
             }
             return arr;
-        } else if (vecObj instanceof double[]) {
+        }
+        if (vecObj instanceof double[]) {
             return (double[]) vecObj;
-        } else if (vecObj instanceof float[]) {
-            float[] farr = (float[]) vecObj;
-            double[] arr = new double[farr.length];
-            for (int i = 0; i < farr.length; i++) {
-                arr[i] = farr[i];
+        }
+        if (vecObj instanceof float[]) {
+            float[] floats = (float[]) vecObj;
+            double[] arr = new double[floats.length];
+            for (int i = 0; i < floats.length; i++) {
+                arr[i] = floats[i];
             }
             return arr;
-        } else {
-            throw new IllegalArgumentException("Unsupported vector type: " + vecObj.getClass().getName());
         }
+        throw new IllegalArgumentException("Unsupported vector type: " + vecObj.getClass().getName());
     }
 
     /**
@@ -157,15 +165,9 @@ public class DataTransformUtils {
         }
 
         List<Object[]> list = new ArrayList<>();
-        for (Object[] objects : enumerable) {
-            Object object = objects[index];
-            Object[] newObjects = new Object[1];
-            if (object == null) {
-                newObjects[0] = null;
-            } else {
-                newObjects[0] = JsonUtils.toJson(object);
-            }
-            list.add(newObjects);
+        for (Object[] row : enumerable) {
+            Object value = row[index];
+            list.add(new Object[]{value == null ? null : JsonUtils.toJson(value)});
         }
         return Linq4j.asEnumerable(list);
     }
@@ -218,30 +220,30 @@ public class DataTransformUtils {
             displayRows.add(strRow);
         }
 
-        String separator = buildTableSeparator(colWidths, colCount);
+        String separator = buildTableSeparator(colWidths);
         lines.add(separator);
-        lines.add(buildTableRow(headers, colWidths, colCount));
+        lines.add(buildTableRow(headers, colWidths));
         lines.add(separator);
         for (String[] row : displayRows) {
-            lines.add(buildTableRow(row, colWidths, colCount));
+            lines.add(buildTableRow(row, colWidths));
         }
         lines.add(separator);
 
         return lines;
     }
 
-    private static String buildTableSeparator(int[] colWidths, int colCount) {
+    private static String buildTableSeparator(int[] colWidths) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < colCount; i++) {
-            sb.append("+").append("-".repeat(colWidths[i] + 2));
+        for (int colWidth : colWidths) {
+            sb.append("+").append("-".repeat(colWidth + 2));
         }
         sb.append("+");
         return sb.toString();
     }
 
-    private static String buildTableRow(String[] values, int[] colWidths, int colCount) {
+    private static String buildTableRow(String[] values, int[] colWidths) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < colCount; i++) {
+        for (int i = 0; i < colWidths.length; i++) {
             sb.append("| ").append(padRight(values[i], colWidths[i])).append(" ");
         }
         sb.append("|");

@@ -1,32 +1,21 @@
 package com.sqlrec.model.huggingface;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.model.common.ModelConfigUtils;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Builds the JSON consumed by the snapshot download job. */
 public final class PipelineConfigUtils {
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-
     private PipelineConfigUtils() {
     }
 
     public static Map<String, String> mergeParams(Map<String, String> base, Map<String, String> overrides) {
-        Map<String, String> merged = new LinkedHashMap<>();
-        if (base != null) {
-            merged.putAll(base);
-        }
-        if (overrides != null) {
-            merged.putAll(overrides);
-        }
-        return merged;
+        return ModelConfigUtils.mergeParams(base, overrides);
     }
 
     public static String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
@@ -59,14 +48,14 @@ public final class PipelineConfigUtils {
             model.getParams().forEach(modelParams::addProperty);
         }
         config.add("model_params", modelParams);
-        return GSON.toJson(config) + "\n";
+        return ModelConfigUtils.toPrettyJson(config);
     }
 
     public static String generateServiceConfig(ModelConf model, Map<String, String> serviceParams) {
         Map<String, String> params = mergeParams(model.getParams(), serviceParams);
         JsonObject config = new JsonObject();
         params.forEach(config::addProperty);
-        return GSON.toJson(config) + "\n";
+        return ModelConfigUtils.toPrettyJson(config);
     }
 
     private static void addCsv(JsonObject target, String key, String value) {

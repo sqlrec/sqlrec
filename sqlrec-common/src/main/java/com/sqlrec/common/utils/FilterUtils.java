@@ -142,31 +142,33 @@ public class FilterUtils {
         RexNode left = call.getOperands().get(0);
         RexNode right = call.getOperands().get(1);
 
-        if (left instanceof RexInputRef && right instanceof RexLiteral) {
-            RexInputRef inputRef = (RexInputRef) left;
-            if (inputRef.getIndex() == primaryKeyIndex) {
-                return ((RexLiteral) right).getValue2();
-            }
-        } else if (right instanceof RexInputRef && left instanceof RexLiteral) {
-            RexInputRef inputRef = (RexInputRef) right;
-            if (inputRef.getIndex() == primaryKeyIndex) {
-                return ((RexLiteral) left).getValue2();
-            }
+        Object value = extractPrimaryKeyValue(left, right, primaryKeyIndex);
+        if (value != null) {
+            return value;
         }
-        return null;
+        return extractPrimaryKeyValue(right, left, primaryKeyIndex);
+    }
+
+    private static Object extractPrimaryKeyValue(
+            RexNode fieldOperand,
+            RexNode valueOperand,
+            int primaryKeyIndex
+    ) {
+        if (!(fieldOperand instanceof RexInputRef) || !(valueOperand instanceof RexLiteral)) {
+            return null;
+        }
+        RexInputRef inputRef = (RexInputRef) fieldOperand;
+        return inputRef.getIndex() == primaryKeyIndex
+                ? ((RexLiteral) valueOperand).getValue2()
+                : null;
     }
 
     public static List<RexNode> getPrimaryKeyFilters(List<RexNode> filters, int primaryKeyIndex) {
         for (RexNode filter : filters) {
             if (filter.isA(SqlKind.EQUALS)) {
                 RexCall call = (RexCall) filter;
-                for (RexNode operand : call.getOperands()) {
-                    if (operand instanceof RexInputRef) {
-                        RexInputRef inputRef = (RexInputRef) operand;
-                        if (inputRef.getIndex() == primaryKeyIndex) {
-                            return Collections.singletonList(call);
-                        }
-                    }
+                if (referencesField(call, primaryKeyIndex)) {
+                    return Collections.singletonList(call);
                 }
             } else if (filter.isA(SqlKind.AND)) {
                 RexCall call = (RexCall) filter;
@@ -177,6 +179,16 @@ public class FilterUtils {
             }
         }
         return Collections.emptyList();
+    }
+
+    private static boolean referencesField(RexCall call, int fieldIndex) {
+        for (RexNode operand : call.getOperands()) {
+            if (operand instanceof RexInputRef
+                    && ((RexInputRef) operand).getIndex() == fieldIndex) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // --- Unified filter string generation ---
@@ -224,18 +236,24 @@ public class FilterUtils {
 
     private static String getFilterString(RexNode filter, List<FieldSchema> fieldSchemas, FilterContext ctx) {
         if (filter.isA(SqlKind.OR)) {
-            RexCall call = (RexCall) filter;
-            return call.getOperands().stream()
-                    .map(operand -> "(" + getFilterString(operand, fieldSchemas, ctx) + ")")
-                    .collect(Collectors.joining(" OR "));
-        } else if (filter.isA(SqlKind.AND)) {
-            RexCall call = (RexCall) filter;
-            return call.getOperands().stream()
-                    .map(operand -> "(" + getFilterString(operand, fieldSchemas, ctx) + ")")
-                    .collect(Collectors.joining(" AND "));
+            return joinOperands((RexCall) filter, fieldSchemas, ctx, " OR ");
+        }
+        if (filter.isA(SqlKind.AND)) {
+            return joinOperands((RexCall) filter, fieldSchemas, ctx, " AND ");
         }
         RexCall call = (RexCall) filter;
         return convertNormalFilter(call, fieldSchemas, ctx);
+    }
+
+    private static String joinOperands(
+            RexCall call,
+            List<FieldSchema> fieldSchemas,
+            FilterContext ctx,
+            String delimiter
+    ) {
+        return call.getOperands().stream()
+                .map(operand -> "(" + getFilterString(operand, fieldSchemas, ctx) + ")")
+                .collect(Collectors.joining(delimiter));
     }
 
     private static String convertNormalFilter(RexCall filter, List<FieldSchema> fieldSchemas, FilterContext ctx) {

@@ -38,11 +38,11 @@ public class FunctionCompiler {
 
     private FunctionCompileStage stage;
     private Boolean isOrReplace;
-    private CalciteSchema schema;
-    private SqlFunctionBindable sqlFunctionBindable;
-    private List<String> sqlList;
-    private Set<String> cacheTableNames;
-    private CompileManager compileManager;
+    private final CalciteSchema schema;
+    private final SqlFunctionBindable sqlFunctionBindable;
+    private final List<String> sqlList;
+    private final Set<String> cacheTableNames;
+    private final CompileManager compileManager;
     private List<RelDataTypeField> returnDataFields;
     private boolean returnDataFieldsInitialized;
     private boolean awaitingEmptyReturnAfterExhaustiveIf;
@@ -50,26 +50,15 @@ public class FunctionCompiler {
     public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
         this.isOrReplace = false;
         this.stage = FunctionCompileStage.FUNCTION_DEFINITION;
-        if (schema != null) {
-            this.schema = schema;
-        } else {
-            this.schema = CalciteSchemaFactory.createCalciteSchema();
-        }
+        this.schema = schema != null ? schema : CalciteSchemaFactory.createCalciteSchema();
         this.sqlFunctionBindable = new SqlFunctionBindable(
                 new ArrayList<>(),
                 new ArrayList<>(),
                 null
         );
-        sqlList = new ArrayList<>();
-        if (compileManager != null) {
-            this.compileManager = compileManager;
-        } else {
-            this.compileManager = new CompileManager();
-        }
-        cacheTableNames = new HashSet<>();
-        returnDataFields = null;
-        returnDataFieldsInitialized = false;
-        awaitingEmptyReturnAfterExhaustiveIf = false;
+        this.sqlList = new ArrayList<>();
+        this.compileManager = compileManager != null ? compileManager : new CompileManager();
+        this.cacheTableNames = new HashSet<>();
     }
 
     public SqlFunctionBindable getFunctionBindable() {
@@ -118,8 +107,7 @@ public class FunctionCompiler {
     }
 
     private void compileFunctionDefinition(SqlNode flinkSqlNode) {
-        if (flinkSqlNode instanceof SqlCreateSqlFunction) {
-            SqlCreateSqlFunction sqlCreateFunction = (SqlCreateSqlFunction) flinkSqlNode;
+        if (flinkSqlNode instanceof SqlCreateSqlFunction sqlCreateFunction) {
             sqlFunctionBindable.setFunName(ResourceNames.of(sqlCreateFunction.getFuncName()));
             isOrReplace = sqlCreateFunction.isOrReplace();
             stage = FunctionCompileStage.FUNCTION_PARAM;
@@ -129,34 +117,34 @@ public class FunctionCompiler {
     }
 
     private void compileFunctionParam(SqlNode flinkSqlNode, String sql) throws Exception {
-        if (flinkSqlNode instanceof SqlDefineInputTable) {
-            SqlDefineInputTable sqlDefineInputTable = (SqlDefineInputTable) flinkSqlNode;
-            List<RelDataTypeField> relDataTypeFields;
-            if (sqlDefineInputTable.getLikeTable() != null) {
-                String likeTableName = sqlDefineInputTable.getLikeTable().toString();
-                Table table = SchemaUtils.getTableObj(schema, Consts.DEFAULT_SCHEMA_NAME, likeTableName);
-                if (table == null) {
-                    throw new Exception("like table not found: " + likeTableName);
-                }
-                RelDataType rowType = table.getRowType(new JavaTypeFactoryImpl());
-                relDataTypeFields = rowType.getFieldList();
-            } else {
-                relDataTypeFields = getTableFieldsTypes(
-                        sqlDefineInputTable.getColumnList(),
-                        sqlDefineInputTable.getColumnTypeList()
-                );
-            }
-            sqlFunctionBindable.addInputTable(sqlDefineInputTable.getTableName().getSimple(), relDataTypeFields);
+        if (flinkSqlNode instanceof SqlDefineInputTable inputTable) {
+            List<RelDataTypeField> relDataTypeFields = resolveInputTableFields(inputTable);
+            sqlFunctionBindable.addInputTable(inputTable.getTableName().getSimple(), relDataTypeFields);
             CacheTable tmpTable = new CacheTable(
-                    sqlDefineInputTable.getTableName().getSimple(),
+                    inputTable.getTableName().getSimple(),
                     null,
                     relDataTypeFields
             );
-            schema.add(sqlDefineInputTable.getTableName().getSimple(), tmpTable);
+            schema.add(inputTable.getTableName().getSimple(), tmpTable);
         } else {
             stage = FunctionCompileStage.FUNCTION_BODY;
             compileFunctionBody(flinkSqlNode, sql);
         }
+    }
+
+    private List<RelDataTypeField> resolveInputTableFields(SqlDefineInputTable inputTable)
+            throws Exception {
+        if (inputTable.getLikeTable() == null) {
+            return getTableFieldsTypes(inputTable.getColumnList(), inputTable.getColumnTypeList());
+        }
+
+        String likeTableName = inputTable.getLikeTable().toString();
+        Table table = SchemaUtils.getTableObj(schema, Consts.DEFAULT_SCHEMA_NAME, likeTableName);
+        if (table == null) {
+            throw new Exception("like table not found: " + likeTableName);
+        }
+        RelDataType rowType = table.getRowType(new JavaTypeFactoryImpl());
+        return rowType.getFieldList();
     }
 
     private void compileFunctionBody(SqlNode flinkSqlNode, String sql) throws Exception {
@@ -165,8 +153,8 @@ public class FunctionCompiler {
             return;
         }
 
-        if (flinkSqlNode instanceof SqlReturn) {
-            compileTopLevelReturn((SqlReturn) flinkSqlNode, sql);
+        if (flinkSqlNode instanceof SqlReturn sqlReturn) {
+            compileTopLevelReturn(sqlReturn, sql);
         } else {
             BindableInterface bindable = compileManager.compileSql(
                     flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
@@ -180,7 +168,7 @@ public class FunctionCompiler {
     }
 
     private void compileEmptyTerminatingReturn(SqlNode flinkSqlNode, String sql) throws Exception {
-        if (!(flinkSqlNode instanceof SqlReturn) || !isEmptyReturn((SqlReturn) flinkSqlNode)) {
+        if (!(flinkSqlNode instanceof SqlReturn sqlReturn) || !isEmptyReturn(sqlReturn)) {
             throw new Exception(
                     "IF whose THEN and ELSE branches both RETURN must be followed by exactly one empty RETURN"
             );
@@ -188,14 +176,13 @@ public class FunctionCompiler {
 
         // The empty RETURN is only the syntactic function terminator. Both IF branches
         // already determine the function's result schema and return at runtime.
-        compileTopLevelReturn((SqlReturn) flinkSqlNode, sql, false);
+        compileTopLevelReturn(sqlReturn, sql, false);
     }
 
     private boolean isExhaustiveReturnIf(SqlNode sqlNode) {
-        if (!(sqlNode instanceof SqlIfCache)) {
+        if (!(sqlNode instanceof SqlIfCache sqlIf)) {
             return false;
         }
-        SqlIfCache sqlIf = (SqlIfCache) sqlNode;
         return sqlIf.getThenClause() instanceof SqlReturn
                 && sqlIf.getElseClause() instanceof SqlReturn;
     }

@@ -7,7 +7,6 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -33,8 +32,7 @@ public class CallSqlRecApiFunction {
             if (tableName == null || tableName.isEmpty()) {
                 throw new IllegalArgumentException("input table has no name");
             }
-            Enumerable<Object[]> enumerable = table.scan(null);
-            List<Object[]> rows = enumerable != null ? enumerable.toList() : new ArrayList<>();
+            List<Object[]> rows = DataTransformUtils.materializeRows(table);
             inputs.put(tableName, DataTransformUtils.convertToMapList(rows, table.getDataFields()));
         }
 

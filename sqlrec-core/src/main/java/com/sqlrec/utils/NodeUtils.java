@@ -52,19 +52,16 @@ public class NodeUtils {
     }
 
     public static RelOptTable getScanTable(RelNode aNode) {
-        if (aNode instanceof RelSubset) {
-            RelSubset relNode = ((RelSubset) aNode);
+        if (aNode instanceof RelSubset relNode) {
             List<RelNode> inputs = relNode.getRelList();
             for (RelNode input : inputs) {
-                if (input instanceof TableScan) {
-                    TableScan tableScan = (TableScan) input;
+                if (input instanceof TableScan tableScan) {
                     return tableScan.getTable();
                 }
             }
         }
 
-        if (aNode instanceof TableScan) {
-            TableScan tableScan = (TableScan) aNode;
+        if (aNode instanceof TableScan tableScan) {
             return tableScan.getTable();
         }
 
@@ -73,12 +70,11 @@ public class NodeUtils {
 
     public static Map.Entry<Integer, Integer> getJoinKeyColIndex(RexNode condition) {
         List<Integer> indexList = new ArrayList<>();
-        if (condition instanceof RexCall) {
-            RexCall call = (RexCall) condition;
+        if (condition instanceof RexCall call) {
             if (call.getOperator().getKind() == SqlKind.EQUALS) {
                 for (RexNode operand : call.getOperands()) {
-                    if (operand instanceof RexInputRef) {
-                        indexList.add(((RexInputRef) operand).getIndex());
+                    if (operand instanceof RexInputRef inputRef) {
+                        indexList.add(inputRef.getIndex());
                     } else {
                         throw new UnsupportedOperationException("Join condition operand must be RexInputRef");
                     }
@@ -100,8 +96,7 @@ public class NodeUtils {
 
     public static boolean hasIpFunction(LogicalProject project) {
         for (RexNode node : project.getProjects()) {
-            if (node instanceof RexCall) {
-                RexCall call = (RexCall) node;
+            if (node instanceof RexCall call) {
                 if (call.getOperator().getName().equalsIgnoreCase("ip")) {
                     return true;
                 }
@@ -112,17 +107,15 @@ public class NodeUtils {
 
     public static boolean isTrueCondition(LogicalJoin join) {
         RexNode condition = join.getCondition();
-        if (condition instanceof RexLiteral) {
-            RexLiteral literal = (RexLiteral) condition;
-            if (literal.getValue() instanceof Boolean) {
-                return (Boolean) literal.getValue();
+        if (condition instanceof RexLiteral literal) {
+            if (literal.getValue() instanceof Boolean value) {
+                return value;
             }
-            if (literal.getValue() instanceof BigDecimal) {
-                return ((BigDecimal) literal.getValue()).compareTo(BigDecimal.ONE) == 0;
+            if (literal.getValue() instanceof BigDecimal value) {
+                return value.compareTo(BigDecimal.ONE) == 0;
             }
         }
-        if (condition instanceof RexCall) {
-            RexCall call = (RexCall) condition;
+        if (condition instanceof RexCall call) {
             if (call.getOperator().getKind() == SqlKind.EQUALS) {
                 RexNode left = call.getOperands().get(0);
                 RexNode right = call.getOperands().get(1);
@@ -167,38 +160,30 @@ public class NodeUtils {
             return;
         }
 
-        if (sqlNode instanceof SqlInsert) {
-            SqlInsert insertSql = (SqlInsert) sqlNode;
+        if (sqlNode instanceof SqlInsert insertSql) {
             tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlSelect) {
-            SqlSelect sqlSelect = (SqlSelect) sqlNode;
+        } else if (sqlNode instanceof SqlSelect sqlSelect) {
             tryGetTableNameFromSqlNode(sqlSelect.getFrom(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate) {
-            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
+        } else if (sqlNode instanceof SqlUpdate sqlUpdate) {
             tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete) {
-            SqlDelete sqlDelete = (SqlDelete) sqlNode;
+        } else if (sqlNode instanceof SqlDelete sqlDelete) {
             tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlJoin) {
-            SqlJoin sqlKind = (SqlJoin) sqlNode;
-            tryGetTableNameFromSqlNode(sqlKind.getLeft(), tableNames);
-            tryGetTableNameFromSqlNode(sqlKind.getRight(), tableNames);
+        } else if (sqlNode instanceof SqlJoin join) {
+            tryGetTableNameFromSqlNode(join.getLeft(), tableNames);
+            tryGetTableNameFromSqlNode(join.getRight(), tableNames);
         }
     }
 
     private static void tryGetTableNameFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode instanceof SqlIdentifier) {
-            SqlIdentifier sqlIdentifier = (SqlIdentifier) sqlNode;
-            tableNames.add(normalizeTableName(sqlIdentifier.names));
-        } else if (sqlNode instanceof SqlJoin) {
-            SqlJoin join = (SqlJoin) sqlNode;
+        if (sqlNode instanceof SqlIdentifier identifier) {
+            tableNames.add(normalizeTableName(identifier.names));
+        } else if (sqlNode instanceof SqlJoin join) {
             tryGetTableNameFromSqlNode(join.getLeft(), tableNames);
             tryGetTableNameFromSqlNode(join.getRight(), tableNames);
         } else if (sqlNode instanceof SqlSelect) {
             // A nested SELECT is visited independently by TableNameVisitor.
             return;
-        } else if (sqlNode instanceof SqlCall) {
-            SqlCall call = (SqlCall) sqlNode;
+        } else if (sqlNode instanceof SqlCall call) {
             if (call.getKind() == SqlKind.AS && !call.getOperandList().isEmpty()) {
                 // A table alias wraps the actual table/query in operand 0. Do not visit
                 // the alias identifier itself, since it is not a table dependency.
@@ -221,8 +206,8 @@ public class NodeUtils {
         new RelVisitor() {
             @Override
             public void visit(RelNode node, int ordinal, RelNode parent) {
-                if (node instanceof TableScan) {
-                    tableNames.add(normalizeTableName(((TableScan) node).getTable().getQualifiedName()));
+                if (node instanceof TableScan tableScan) {
+                    tableNames.add(normalizeTableName(tableScan.getTable().getQualifiedName()));
                 }
                 super.visit(node, ordinal, parent);
             }
@@ -255,14 +240,11 @@ public class NodeUtils {
             return;
         }
 
-        if (sqlNode instanceof SqlInsert) {
-            SqlInsert insertSql = (SqlInsert) sqlNode;
+        if (sqlNode instanceof SqlInsert insertSql) {
             tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate) {
-            SqlUpdate sqlUpdate = (SqlUpdate) sqlNode;
+        } else if (sqlNode instanceof SqlUpdate sqlUpdate) {
             tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete) {
-            SqlDelete sqlDelete = (SqlDelete) sqlNode;
+        } else if (sqlNode instanceof SqlDelete sqlDelete) {
             tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
         }
     }
@@ -277,8 +259,8 @@ public class NodeUtils {
         new RelVisitor() {
             @Override
             public void visit(RelNode node, int ordinal, RelNode parent) {
-                if (node instanceof TableModify) {
-                    tableNames.add(normalizeTableName(((TableModify) node).getTable().getQualifiedName()));
+                if (node instanceof TableModify tableModify) {
+                    tableNames.add(normalizeTableName(tableModify.getTable().getQualifiedName()));
                 }
                 super.visit(node, ordinal, parent);
             }

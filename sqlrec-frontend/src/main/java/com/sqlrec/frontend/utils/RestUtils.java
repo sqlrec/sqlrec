@@ -34,6 +34,11 @@ public class RestUtils {
         return build(status, content, contentType, null);
     }
 
+    public static String errorMessage(Exception exception, String fallback) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? fallback : message;
+    }
+
     private static FullHttpResponse build(HttpResponseStatus status, byte[] content, String contentType, Map<String, String> extraHeaders) {
         DefaultFullHttpResponse response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1,

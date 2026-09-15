@@ -166,40 +166,7 @@ public class ThriftUtils {
         TTableSchema schema = new TTableSchema();
 
         for (RelDataTypeField field : fields) {
-            TTypeId tTypeId = null;
-            switch (field.getType().getSqlTypeName()) {
-                case VARCHAR:
-                    tTypeId = TTypeId.STRING_TYPE;
-                    break;
-                case CHAR:
-                    tTypeId = TTypeId.CHAR_TYPE;
-                    break;
-                case SMALLINT:
-                    tTypeId = TTypeId.SMALLINT_TYPE;
-                    break;
-                case TINYINT:
-                    tTypeId = TTypeId.TINYINT_TYPE;
-                    break;
-                case INTEGER:
-                    tTypeId = TTypeId.INT_TYPE;
-                    break;
-                case BIGINT:
-                    tTypeId = TTypeId.BIGINT_TYPE;
-                    break;
-                case FLOAT:
-                    tTypeId = TTypeId.FLOAT_TYPE;
-                    break;
-                case DOUBLE:
-                    tTypeId = TTypeId.DOUBLE_TYPE;
-                    break;
-                case BOOLEAN:
-                    tTypeId = TTypeId.BOOLEAN_TYPE;
-                    break;
-                default:
-                    tTypeId = TTypeId.STRING_TYPE;
-            }
-
-            TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(tTypeId);
+            TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(toTTypeId(field));
             typeEntry.setTypeQualifiers(new TTypeQualifiers(new HashMap<>()));
             TTypeDesc tTypeDesc = new TTypeDesc(
                     Collections.singletonList(TTypeEntry.primitiveEntry(typeEntry))
@@ -210,23 +177,33 @@ public class ThriftUtils {
         return schema;
     }
 
+    private static TTypeId toTTypeId(RelDataTypeField field) {
+        return switch (field.getType().getSqlTypeName()) {
+            case VARCHAR -> TTypeId.STRING_TYPE;
+            case CHAR -> TTypeId.CHAR_TYPE;
+            case SMALLINT -> TTypeId.SMALLINT_TYPE;
+            case TINYINT -> TTypeId.TINYINT_TYPE;
+            case INTEGER -> TTypeId.INT_TYPE;
+            case BIGINT -> TTypeId.BIGINT_TYPE;
+            case FLOAT -> TTypeId.FLOAT_TYPE;
+            case DOUBLE -> TTypeId.DOUBLE_TYPE;
+            case BOOLEAN -> TTypeId.BOOLEAN_TYPE;
+            default -> TTypeId.STRING_TYPE;
+        };
+    }
+
     public static THandleIdentifier getHandleIdentifier() {
-        UUID publicId = UUID.randomUUID();
-        UUID secretId = UUID.randomUUID();
-
-        byte[] guid = new byte[16];
-        ByteBuffer pbb = ByteBuffer.wrap(guid);
-
-        byte[] secret = new byte[16];
-        ByteBuffer sbb = ByteBuffer.wrap(secret);
-
-        pbb.putLong(publicId.getMostSignificantBits());
-        pbb.putLong(publicId.getLeastSignificantBits());
-
-        sbb.putLong(secretId.getMostSignificantBits());
-        sbb.putLong(secretId.getLeastSignificantBits());
-
+        byte[] guid = uuidToBytes(UUID.randomUUID());
+        byte[] secret = uuidToBytes(UUID.randomUUID());
         return new THandleIdentifier(ByteBuffer.wrap(guid), ByteBuffer.wrap(secret));
+    }
+
+    private static byte[] uuidToBytes(UUID uuid) {
+        byte[] bytes = new byte[16];
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        buffer.putLong(uuid.getMostSignificantBits());
+        buffer.putLong(uuid.getLeastSignificantBits());
+        return bytes;
     }
 
     public static String safeHandleId(THandleIdentifier handleId) {

@@ -2,16 +2,11 @@ package com.sqlrec.model.gbdt;
 
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
-import com.sqlrec.model.common.ModelConfigBase;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
-import io.fabric8.kubernetes.api.model.batch.v1.Job;
-import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
-import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Kubernetes YAML generation for GBDT (CatBoost / LightGBM) train, export and service.
@@ -29,38 +24,14 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
             Map<String, String> params
     ) {
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
-
-        Job job = new JobBuilder()
-                .withNewMetadata()
-                    .withName(jobName)
-                .endMetadata()
-                .withNewSpec()
-                    .withBackoffLimit(1)
-                    .withNewTemplate()
-                        .withNewSpec()
-                            .addNewContainer()
-                                .withName("gbdt-job")
-                                .withImage(image)
-                                .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
-                                .withResources(buildResourceRequirements(params))
-                                .addNewVolumeMount()
-                                    .withName("config-volume")
-                                    .withMountPath(Config.SHELL_DIR)
-                                .endVolumeMount()
-                            .endContainer()
-                            .addNewVolume()
-                                .withName("config-volume")
-                                .withNewConfigMap()
-                                    .withName(configMapName)
-                                .endConfigMap()
-                            .endVolume()
-                            .withRestartPolicy("Never")
-                        .endSpec()
-                    .endTemplate()
-                .endSpec()
-                .build();
-
-        return Serialization.asYaml(job);
+        return createSingleNodeJobYaml(
+                jobName,
+                configMapName,
+                "gbdt-job",
+                image,
+                null,
+                params
+        );
     }
 
     public static String createDeploymentYaml(
@@ -93,13 +64,7 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
         String configMapName = id + "-cm";
         String jobName = id + "-job";
 
-        String configMapYaml = createConfigMapYaml(
-                configMapName,
-                new TreeMap<>() {{
-                    put(ModelConfigBase.PIPELINE_CONFIG_NAME, pipelineConfig);
-                    put(ModelConfigBase.START_SHELL_NAME, shell);
-                }}
-        );
+        String configMapYaml = createPipelineConfigMapYaml(configMapName, pipelineConfig, shell);
 
         String jobYaml = createJobYaml(jobName, configMapName, params);
 
@@ -107,14 +72,9 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
     }
 
     public static String getServiceK8sYaml(ModelType modelType, ServiceConf serviceConf) {
-        String deploymentName = serviceConf.getId();
-        String serviceName = serviceConf.getId();
-
-        String serviceYaml = createServiceYaml(serviceName, 80, "app", deploymentName);
         String deploymentYaml = createDeploymentYaml(
-                deploymentName, serviceConf.getModelCheckpointDir(), modelType, serviceConf.getParams()
+                serviceConf.getId(), serviceConf.getModelCheckpointDir(), modelType, serviceConf.getParams()
         );
-
-        return mergeK8sYamls(deploymentYaml, serviceYaml);
+        return createServingResourcesYaml(serviceConf.getId(), deploymentYaml);
     }
 }

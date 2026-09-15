@@ -32,8 +32,8 @@ public class SchemaUtils {
         if (value == null) {
             return null;
         }
-        if (value instanceof SqlCharStringLiteral) {
-            return getValueOfStringLiteral((SqlCharStringLiteral) value);
+        if (value instanceof SqlCharStringLiteral stringLiteral) {
+            return getValueOfStringLiteral(stringLiteral);
         }
         throw new RuntimeException("value is not a string literal: " + value);
     }
@@ -67,23 +67,20 @@ public class SchemaUtils {
             return null;
         }
 
-        if (field instanceof SqlTableColumn.SqlRegularColumn) {
-            SqlTableColumn.SqlRegularColumn regularColumn = (SqlTableColumn.SqlRegularColumn) field;
+        if (field instanceof SqlTableColumn.SqlRegularColumn regularColumn) {
             String name = regularColumn.getName().toString();
             String type = regularColumn.getType().toString();
             return new FieldSchema(name, type);
-        } else {
-            log.warn("Unsupported field type: {}", field);
-            throw new IllegalArgumentException("Unsupported field type: " + field);
         }
+        log.warn("Unsupported field type: {}", field);
+        throw new IllegalArgumentException("Unsupported field type: " + field);
     }
 
     public static Map<String, String> convertPropertyList(SqlNodeList propertyList) {
         Map<String, String> params = new HashMap<>();
         if (propertyList != null && propertyList.size() > 0) {
             for (SqlNode property : propertyList) {
-                if (property instanceof SqlTableOption) {
-                    SqlTableOption option = (SqlTableOption) property;
+                if (property instanceof SqlTableOption option) {
                     String key = removeQuotes(option.getKey().toString());
                     String value = removeQuotes(option.getValue().toString());
                     params.put(key, value);
@@ -120,10 +117,10 @@ public class SchemaUtils {
             throw new RuntimeException("like table not found: " + likeTableName);
         }
         Table table = tableEntry.getTable();
-        if (!(table instanceof CacheTable)) {
+        if (!(table instanceof CacheTable cacheTable)) {
             throw new RuntimeException("like table must be cache table for table function");
         }
-        return ((CacheTable) table).getDataFields();
+        return cacheTable.getDataFields();
     }
 
     public static CacheTable getCacheTable(String inputTableName, CalciteSchema schema) {
@@ -131,10 +128,10 @@ public class SchemaUtils {
                 schema.getTable(inputTableName, false),
                 "input table not found: " + inputTableName
         ).getTable();
-        if (!(table instanceof CacheTable)) {
+        if (!(table instanceof CacheTable cacheTable)) {
             throw new RuntimeException("input table must be cache table for table function");
         }
-        return (CacheTable) table;
+        return cacheTable;
     }
 
     public static CacheTable tryGetCacheTable(String inputTableName, CalciteSchema schema) {
@@ -142,10 +139,7 @@ public class SchemaUtils {
         if (table == null) {
             return null;
         }
-        if (!(table instanceof CacheTable)) {
-            return null;
-        }
-        return (CacheTable) table;
+        return table instanceof CacheTable ? (CacheTable) table : null;
     }
 
     public static Table getTableObj(CalciteSchema schema, String shortTableName) {
@@ -171,14 +165,14 @@ public class SchemaUtils {
             String shortTableName = tableNameParts[1];
             CalciteSchema subSchema = schema.getSubSchema(schemaName, false);
             return getTableObj(subSchema, shortTableName);
-        } else {
-            Table table = getTableObj(schema, tableName);
-            if (table == null) {
-                CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
-                table = getTableObj(subSchema, tableName);
-            }
-            return table;
         }
+
+        Table table = getTableObj(schema, tableName);
+        if (table == null) {
+            CalciteSchema subSchema = schema.getSubSchema(defaultSchema, false);
+            table = getTableObj(subSchema, tableName);
+        }
+        return table;
     }
 
     public static String getSqlFirstWord(String sql) {
@@ -206,13 +200,7 @@ public class SchemaUtils {
         sb.append("CREATE TABLE ").append(tableName).append(" (");
 
         List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns = hmsTable.getSd().getCols();
-        for (int i = 0; i < columns.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            org.apache.hadoop.hive.metastore.api.FieldSchema col = columns.get(i);
-            sb.append(col.getName()).append(" ").append(col.getType());
-        }
+        appendColumns(sb, columns);
 
         Map<String, String> parameters = hmsTable.getParameters();
         String primaryKey = parameters != null ? parameters.get("flink.schema.primary-key.columns") : null;
@@ -222,29 +210,53 @@ public class SchemaUtils {
 
         sb.append(")");
 
-        if (parameters != null && !parameters.isEmpty()) {
-            Map<String, String> flinkOptions = new LinkedHashMap<>();
-            for (Map.Entry<String, String> entry : parameters.entrySet()) {
-                if (entry.getKey().startsWith("flink.") && !entry.getKey().equals("flink.schema.primary-key.columns")) {
-                    flinkOptions.put(entry.getKey().substring(6), entry.getValue());
-                }
-            }
-            if (!flinkOptions.isEmpty()) {
-                sb.append(" WITH (");
-                int i = 0;
-                for (Map.Entry<String, String> entry : flinkOptions.entrySet()) {
-                    if (i > 0) {
-                        sb.append(", ");
-                    }
-                    sb.append("'").append(entry.getKey().replace("'", "''"))
-                            .append("' = '").append(entry.getValue().replace("'", "''")).append("'");
-                    i++;
-                }
-                sb.append(")");
-            }
+        Map<String, String> flinkOptions = getFlinkOptions(parameters);
+        if (!flinkOptions.isEmpty()) {
+            appendTableOptions(sb, flinkOptions);
         }
 
         return sb.toString();
+    }
+
+    private static void appendColumns(
+            StringBuilder sql,
+            List<org.apache.hadoop.hive.metastore.api.FieldSchema> columns
+    ) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) {
+                sql.append(", ");
+            }
+            org.apache.hadoop.hive.metastore.api.FieldSchema column = columns.get(i);
+            sql.append(column.getName()).append(" ").append(column.getType());
+        }
+    }
+
+    private static Map<String, String> getFlinkOptions(Map<String, String> parameters) {
+        Map<String, String> flinkOptions = new LinkedHashMap<>();
+        if (parameters == null) {
+            return flinkOptions;
+        }
+        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+            if (entry.getKey().startsWith("flink.")
+                    && !entry.getKey().equals("flink.schema.primary-key.columns")) {
+                flinkOptions.put(entry.getKey().substring(6), entry.getValue());
+            }
+        }
+        return flinkOptions;
+    }
+
+    private static void appendTableOptions(StringBuilder sql, Map<String, String> options) {
+        sql.append(" WITH (");
+        int index = 0;
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            if (index > 0) {
+                sql.append(", ");
+            }
+            sql.append("'").append(entry.getKey().replace("'", "''"))
+                    .append("' = '").append(entry.getValue().replace("'", "''")).append("'");
+            index++;
+        }
+        sql.append(")");
     }
 
     /**
@@ -270,11 +282,10 @@ public class SchemaUtils {
         SqlNodeList columnList = createTable.getColumnList();
         if (columnList != null) {
             for (SqlNode field : columnList) {
-                if (field instanceof SqlTableColumn.SqlRegularColumn) {
-                    SqlTableColumn.SqlRegularColumn col = (SqlTableColumn.SqlRegularColumn) field;
-                    String colName = col.getName().getSimple();
-                    String typeStr = col.getType().toString();
-                    columns.add(new org.apache.hadoop.hive.metastore.api.FieldSchema(colName, typeStr, null));
+                if (field instanceof SqlTableColumn.SqlRegularColumn column) {
+                    String columnName = column.getName().getSimple();
+                    String type = column.getType().toString();
+                    columns.add(new org.apache.hadoop.hive.metastore.api.FieldSchema(columnName, type, null));
                 }
             }
         }

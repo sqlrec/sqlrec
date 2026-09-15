@@ -75,32 +75,14 @@ final class UiApiService {
         List<Map<String, Object>> edges = new ArrayList<>();
 
         for (int i = 0; i < bindables.size(); i++) {
-            BindableInterface bindable = bindables.get(i);
-            String originalName = getBindableLabel(bindable, i);
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", String.valueOf(i));
-            node.put("type", getBindableType(bindable));
-            node.put("label", stripFunctionNamePrefix(originalName, functionNamePrefix));
-            node.put("sql", bindable.getSql());
-            node.put("dependencyFunction", String.join(",", bindable.getDependencySqlFuncName()));
-            node.put("avgExecTimeMs", getNodeAvgExecTime(originalName));
-            node.put("avgDataCount", getNodeAvgDataCount(originalName));
-            node.put("logicalPlan", bindable.getLogicalPlan());
-            node.put("physicalPlan", bindable.getPhysicalPlan());
-            node.put("javaExpression", bindable.getJavaExpression());
-            addCacheTableFields(node, bindable);
-            nodes.add(node);
+            nodes.add(createDagNode(bindables.get(i), i, functionNamePrefix));
         }
 
         if (dependencies != null) {
             for (Map.Entry<Integer, Set<Integer>> entry : dependencies.entrySet()) {
                 int targetId = entry.getKey();
                 for (int sourceId : entry.getValue()) {
-                    Map<String, Object> edge = new HashMap<>();
-                    edge.put("id", sourceId + "-" + targetId);
-                    edge.put("source", String.valueOf(sourceId));
-                    edge.put("target", String.valueOf(targetId));
-                    edges.add(edge);
+                    edges.add(createDagEdge(sourceId, targetId));
                 }
             }
         }
@@ -111,6 +93,35 @@ final class UiApiService {
         return result;
     }
 
+    private static Map<String, Object> createDagNode(
+            BindableInterface bindable,
+            int index,
+            String functionNamePrefix
+    ) {
+        String originalName = getBindableLabel(bindable, index);
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", String.valueOf(index));
+        node.put("type", getBindableType(bindable));
+        node.put("label", stripFunctionNamePrefix(originalName, functionNamePrefix));
+        node.put("sql", bindable.getSql());
+        node.put("dependencyFunction", String.join(",", bindable.getDependencySqlFuncName()));
+        node.put("avgExecTimeMs", getNodeAvgExecTime(originalName));
+        node.put("avgDataCount", getNodeAvgDataCount(originalName));
+        node.put("logicalPlan", bindable.getLogicalPlan());
+        node.put("physicalPlan", bindable.getPhysicalPlan());
+        node.put("javaExpression", bindable.getJavaExpression());
+        addCacheTableFields(node, bindable);
+        return node;
+    }
+
+    private static Map<String, Object> createDagEdge(int sourceId, int targetId) {
+        Map<String, Object> edge = new HashMap<>();
+        edge.put("id", sourceId + "-" + targetId);
+        edge.put("source", String.valueOf(sourceId));
+        edge.put("target", String.valueOf(targetId));
+        return edge;
+    }
+
     List<Map<String, Object>> listDatabases() throws Exception {
         return toItems(metadataAccess.getDatabases(), Function.identity());
     }
@@ -118,9 +129,7 @@ final class UiApiService {
     List<Map<String, Object>> listTables(String database) throws Exception {
         return metadataAccess.getTables(database).stream()
                 .map(table -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", table.getTableName());
-                    item.put("name", table.getTableName());
+                    Map<String, Object> item = createNamedItem(table.getTableName());
                     item.put("database", table.getDbName());
                     item.put("owner", table.getOwner());
                     item.put("tableType", table.getTableType());
@@ -154,9 +163,7 @@ final class UiApiService {
             rows.add(createRow("", ""));
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", rows);
-        return result;
+        return tableData(rows);
     }
 
     List<Map<String, Object>> listApis() {
@@ -176,9 +183,7 @@ final class UiApiService {
         rows.add(createRow("Created At:", formatTimestamp(api.getCreatedAt())));
         rows.add(createRow("Updated At:", formatTimestamp(api.getUpdatedAt())));
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", rows);
-        return result;
+        return tableData(rows);
     }
 
     List<Map<String, Object>> listModels() {
@@ -193,8 +198,7 @@ final class UiApiService {
 
         List<List<String>> rows = new ArrayList<>();
         ModelUtils.addModelInfo(rows, model);
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", convertRowsToMap(rows));
+        Map<String, Object> result = tableData(convertRowsToMap(rows));
         if (model.getDdl() != null) {
             result.put("ddl", model.getDdl());
         }
@@ -257,8 +261,7 @@ final class UiApiService {
 
         List<List<String>> rows = new ArrayList<>();
         ModelUtils.addServiceInfo(rows, service);
-        Map<String, Object> result = new HashMap<>();
-        result.put("tableData", convertRowsToMap(rows));
+        Map<String, Object> result = tableData(convertRowsToMap(rows));
         if (service.getYaml() != null) {
             result.put("yaml", service.getYaml());
         }
@@ -272,12 +275,22 @@ final class UiApiService {
         return values.stream()
                 .map(value -> {
                     String name = nameFunction.apply(value);
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", name);
-                    item.put("name", name);
-                    return item;
+                    return createNamedItem(name);
                 })
                 .collect(Collectors.toList());
+    }
+
+    private static Map<String, Object> createNamedItem(String name) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", name);
+        item.put("name", name);
+        return item;
+    }
+
+    private static Map<String, Object> tableData(List<?> rows) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("tableData", rows);
+        return result;
     }
 
     private static List<Map<String, String>> convertFunctionToTable(SqlFunction function) {

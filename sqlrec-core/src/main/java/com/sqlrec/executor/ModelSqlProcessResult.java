@@ -1,6 +1,5 @@
 package com.sqlrec.executor;
 
-import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -11,10 +10,8 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ModelSqlProcessResult extends SqlProcessResult {
+public class ModelSqlProcessResult extends CachedCompletionSqlProcessResult {
     private List<CheckpointInfo> checkpointInfos;
-    private volatile long lastCheckTime = 0;
-    private volatile boolean cachedCompleted = false;
 
     public ModelSqlProcessResult() {
         super();
@@ -52,14 +49,8 @@ public class ModelSqlProcessResult extends SqlProcessResult {
             return true;
         }
 
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCheckTime < SqlRecConfigs.COMPLETION_CHECK_CACHE_INTERVAL.getValue()) {
-            return cachedCompleted;
-        }
-        lastCheckTime = currentTime;
-
-        boolean allCompleted = ModelManager.isCheckpointOperationCompleted(checkpointInfos);
-        cachedCompleted = allCompleted;
-        return allCompleted;
+        return checkCompletion(
+                () -> ModelManager.isCheckpointOperationCompleted(checkpointInfos)
+        );
     }
 }

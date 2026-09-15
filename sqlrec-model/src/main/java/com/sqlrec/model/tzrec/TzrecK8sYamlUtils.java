@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Kubernetes YAML generation for TZRec (DSSM / WideAndDeep) train, export and service.
@@ -149,13 +148,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
         int nprocPerNode = Config.NPROC_PER_NODE.getValue(params);
         int masterPort = Config.MASTER_PORT.getValue(params);
 
-        String configMapYaml = createConfigMapYaml(
-                configMapName,
-                new TreeMap<>() {{
-                    put(Config.PIPELINE_CONFIG_NAME, pipelineConfig);
-                    put(Config.START_SHELL_NAME, shell);
-                }}
-        );
+        String configMapYaml = createPipelineConfigMapYaml(configMapName, pipelineConfig, shell);
 
         String serviceYaml = createHeadlessServiceYaml(jobName, serviceName, masterPort);
 
@@ -167,14 +160,9 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
     }
 
     public static String getServiceK8sYaml(ServiceConf serviceConf) {
-        String deploymentName = serviceConf.getId();
-        String serviceName = serviceConf.getId();
-
-        String serviceYaml = createServiceYaml(serviceName, 80, "app", deploymentName);
         String deploymentYaml = createDeploymentYaml(
-                deploymentName, serviceConf.getModelCheckpointDir(), serviceConf.getParams()
+                serviceConf.getId(), serviceConf.getModelCheckpointDir(), serviceConf.getParams()
         );
-
-        return mergeK8sYamls(deploymentYaml, serviceYaml);
+        return createServingResourcesYaml(serviceConf.getId(), deploymentYaml);
     }
 }

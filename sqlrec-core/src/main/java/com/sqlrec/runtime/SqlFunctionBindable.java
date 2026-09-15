@@ -80,33 +80,20 @@ public class SqlFunctionBindable extends BindableInterface {
 
     private void execInParallel(CalciteSchema schema, ExecuteContext context) {
         Map<Integer, CompletableFuture<Object>> bindFutures = new HashMap<>();
-        for (int i : sortedBindableList) {
-            BindableInterface bindable = bindableList.get(i);
-            Set<Integer> dependentBindableIndices = bindableDependency.get(i);
-            CompletableFuture<Object> bindFuture;
-            if (dependentBindableIndices == null || dependentBindableIndices.isEmpty()) {
-                bindFuture = CompletableFuture.supplyAsync(
-                        () -> bindUnlessReturned(bindable, schema, context), ExecutorServiceUtils.getExecutorService()
-                );
-            } else {
-                List<CompletableFuture<Object>> dependentBindFutures = new ArrayList<>();
-                for (int dependentBindableIndex : dependentBindableIndices) {
-                    dependentBindFutures.add(bindFutures.get(dependentBindableIndex));
-                }
-                CompletableFuture<Void> dependentBindFuturesAll = CompletableFuture.allOf(
-                        dependentBindFutures.toArray(new CompletableFuture[0])
-                );
-                bindFuture = dependentBindFuturesAll.thenApplyAsync(
-                        (v) -> bindUnlessReturned(bindable, schema, context), ExecutorServiceUtils.getExecutorService()
-                );
-            }
+        for (int bindableIndex : sortedBindableList) {
+            BindableInterface bindable = bindableList.get(bindableIndex);
+            Set<Integer> dependencyIndices = bindableDependency.get(bindableIndex);
+            CompletableFuture<Object> bindFuture = schedule(
+                    bindable, dependencyIndices, bindFutures, schema, context
+            );
             bindFuture.whenComplete((result, ex) -> {
                 if (ex != null) {
                     context.cancel();
                 }
             });
-            bindFutures.put(i, bindFuture);
+            bindFutures.put(bindableIndex, bindFuture);
         }
+
         CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(
                 bindFutures.values().toArray(new CompletableFuture[0])
         );
@@ -117,6 +104,29 @@ public class SqlFunctionBindable extends BindableInterface {
             bindFutures.values().forEach(f -> f.cancel(true));
             throw e;
         }
+    }
+
+    private CompletableFuture<Object> schedule(
+            BindableInterface bindable,
+            Set<Integer> dependencyIndices,
+            Map<Integer, CompletableFuture<Object>> bindFutures,
+            CalciteSchema schema,
+            ExecuteContext context
+    ) {
+        if (dependencyIndices == null || dependencyIndices.isEmpty()) {
+            return CompletableFuture.supplyAsync(
+                    () -> bindUnlessReturned(bindable, schema, context),
+                    ExecutorServiceUtils.getExecutorService()
+            );
+        }
+
+        CompletableFuture<?>[] dependencies = dependencyIndices.stream()
+                .map(bindFutures::get)
+                .toArray(CompletableFuture[]::new);
+        return CompletableFuture.allOf(dependencies).thenApplyAsync(
+                ignored -> bindUnlessReturned(bindable, schema, context),
+                ExecutorServiceUtils.getExecutorService()
+        );
     }
 
     private Enumerable<Object[]> bindUnlessReturned(

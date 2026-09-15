@@ -34,10 +34,10 @@ public class ModelEntityConverter {
 
     public static ModelConf convertToModel(String modelDdl) throws Exception {
         SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelDdl);
-        if (!(modelSqlNode instanceof SqlCreateModel)) {
+        if (!(modelSqlNode instanceof SqlCreateModel createModel)) {
             throw new IllegalArgumentException("Invalid model DDL: " + modelDdl);
         }
-        return convertToModel((SqlCreateModel) modelSqlNode);
+        return convertToModel(createModel);
     }
 
     public static ModelConf convertToModel(SqlCreateModel sqlCreateModel) {
@@ -62,7 +62,10 @@ public class ModelEntityConverter {
         return modelConfig;
     }
 
-    public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
+    public static ModelTrainConf convertToModelTrainConf(
+            SqlTrainModel sqlTrainModel,
+            String defaultSchema
+    ) throws Exception {
         ModelTrainConf modelTrainConf = new ModelTrainConf();
         modelTrainConf.setModelName(ResourceNames.of(sqlTrainModel.getModelName()));
         modelTrainConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlTrainModel.getCheckpoint().toString())));
@@ -85,7 +88,10 @@ public class ModelEntityConverter {
         return modelTrainConf;
     }
 
-    public static ModelExportConf convertToModelExportConf(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
+    public static ModelExportConf convertToModelExportConf(
+            SqlExportModel sqlExportModel,
+            String defaultSchema
+    ) throws Exception {
         ModelExportConf modelExportConf = new ModelExportConf();
         modelExportConf.setModelName(ResourceNames.of(sqlExportModel.getModelName()));
         modelExportConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString())));
@@ -116,23 +122,24 @@ public class ModelEntityConverter {
     }
 
     public static ServiceConf convertToServiceConfig(Service service) throws Exception {
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(service.getDdl());
-        if (!(modelSqlNode instanceof SqlCreateService)) {
+        SqlNode serviceSqlNode = CompileManager.parseFlinkSql(service.getDdl());
+        if (!(serviceSqlNode instanceof SqlCreateService createService)) {
             throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
         }
-        ServiceConf serviceConfig = convertToServiceConf((SqlCreateService) modelSqlNode);
+        ServiceConf serviceConfig = convertToServiceConf(createService);
         serviceConfig.setUrl(service.getUrl());
         serviceConfig.setModelConfig(convertToModel(service.getModelDdl()));
         return serviceConfig;
     }
 
-    public static List<String> getHivePartitionPaths(SqlIdentifier dataSource, SqlNode whereCondition, String defaultSchema) throws Exception {
+    public static List<String> getHivePartitionPaths(
+            SqlIdentifier dataSource,
+            SqlNode whereCondition,
+            String defaultSchema
+    ) throws Exception {
         String db = defaultSchema;
-        String table = null;
-        String partitionFilter = "";
-        if (whereCondition != null) {
-            partitionFilter = whereCondition.toString();
-        }
+        String table;
+        String partitionFilter = whereCondition == null ? "" : whereCondition.toString();
         if (dataSource.isSimple()) {
             table = dataSource.toString();
         } else {
@@ -165,7 +172,7 @@ public class ModelEntityConverter {
 
     public static String getModelCheckpointPath(String modelName, String checkpoint) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        String modelDdl = null;
+        String modelDdl;
         Checkpoint checkpointEntity = db.getCheckpoint(modelName, checkpoint);
         if (checkpointEntity != null) {
             modelDdl = checkpointEntity.getModelDdl();
@@ -188,7 +195,7 @@ public class ModelEntityConverter {
 
     public static List<String> fixPathProtocol(List<String> partitionPaths) {
         String defaultFS = null;
-        List<String> r = new ArrayList<>();
+        List<String> fixedPaths = new ArrayList<>();
         for (String path : partitionPaths) {
             if (!path.contains(":")) {
                 if (defaultFS == null) {
@@ -196,11 +203,11 @@ public class ModelEntityConverter {
                     defaultFS = hadoopConf.get("fs.defaultFS", "hdfs:///");
                     log.info("Default filesystem: {}", defaultFS);
                 }
-                r.add(defaultFS + path);
+                fixedPaths.add(defaultFS + path);
             } else {
-                r.add(path);
+                fixedPaths.add(path);
             }
         }
-        return r;
+        return fixedPaths;
     }
 }

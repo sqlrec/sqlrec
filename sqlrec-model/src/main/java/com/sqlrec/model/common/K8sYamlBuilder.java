@@ -13,25 +13,27 @@ import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Shared Kubernetes YAML generation primitives used by every model backend.
  *
- * <p>GBDT ({@code com.sqlrec.model.gbdt.GbdtK8sYamlUtils}) and TZRec
- * ({@code com.sqlrec.model.tzrec.TzrecK8sYamlUtils}) both extend this class so that the identical
- * ConfigMap / Service / Deployment / resource-requirements / YAML-merge / service-URL helpers
- * exist in a single place. Only the backend-specific {@code createJobYaml} / {@code genJobYaml}
- * / {@code getServiceK8sYaml} stay in the subclasses.
+ * <p>Model backends extend this class so identical ConfigMap, Job, Service, Deployment, resource,
+ * YAML merge, and service URL rules exist in one place. Subclasses retain only backend-specific
+ * orchestration and resource details.
  *
  * <p>Note: this is the YAML <em>generator</em>. The unrelated YAML parser/injector in
  * {@code com.sqlrec.k8s.K8sYamlUtils} (sqlrec-core) only reads/mutates existing YAML.
  */
 public class K8sYamlBuilder {
+    private static final String CONFIG_VOLUME = "config-volume";
 
     protected K8sYamlBuilder() {
     }
@@ -45,6 +47,62 @@ public class K8sYamlBuilder {
                 .build();
 
         return Serialization.asYaml(configMap);
+    }
+
+    protected static String createPipelineConfigMapYaml(
+            String name,
+            String pipelineConfig,
+            String startShell
+    ) {
+        Map<String, String> files = new TreeMap<>();
+        files.put(ModelConfigBase.PIPELINE_CONFIG_NAME, pipelineConfig);
+        files.put(ModelConfigBase.START_SHELL_NAME, startShell);
+        return createConfigMapYaml(name, files);
+    }
+
+    protected static String createSingleNodeJobYaml(
+            String jobName,
+            String configMapName,
+            String containerName,
+            String image,
+            List<EnvVar> envVars,
+            Map<String, String> params
+    ) {
+        Job job = new JobBuilder()
+                .withNewMetadata()
+                    .withName(jobName)
+                .endMetadata()
+                .withNewSpec()
+                    .withBackoffLimit(1)
+                    .withNewTemplate()
+                        .withNewSpec()
+                            .addNewContainer()
+                                .withName(containerName)
+                                .withImage(image)
+                                .withCommand(
+                                        "bash",
+                                        ModelConfigBase.SHELL_DIR + "/" + ModelConfigBase.START_SHELL_NAME
+                                )
+                                .withEnv(envVars)
+                                .withResources(buildResourceRequirements(params))
+                                .addNewVolumeMount()
+                                    .withName(CONFIG_VOLUME)
+                                    .withMountPath(ModelConfigBase.SHELL_DIR)
+                                .endVolumeMount()
+                            .endContainer()
+                            .addNewVolume()
+                                .withName(CONFIG_VOLUME)
+                                .withNewConfigMap()
+                                    .withName(configMapName)
+                                .endConfigMap()
+                            .endVolume()
+                            .withRestartPolicy("Never")
+                        .endSpec()
+                    .endTemplate()
+                .endSpec()
+                .build();
+
+        return Serialization.asYaml(job);
     }
 
     public static String createServiceYaml(String serviceName, int port, String selectKey, String selectValue) {
@@ -157,5 +215,9 @@ public class K8sYamlBuilder {
         String namespace = ModelConfigs.NAMESPACE
                 .getValueWithEnvFallback(serviceConf.getParams());
         return "http://" + serviceConf.getId() + "." + namespace + ".svc.cluster.local:80/predict";
+    }
+
+    protected static String createServingResourcesYaml(String name, String deploymentYaml) {
+        return mergeK8sYamls(deploymentYaml, createServiceYaml(name, 80, "app", name));
     }
 }
