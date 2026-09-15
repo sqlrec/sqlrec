@@ -1,0 +1,42 @@
+name: Build Images (No Publish)
+
+run-name: Build ${{ inputs.build_target }} without publishing
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: 'images or wheels to build'
+        required: true
+        default: 'models'
+        type: choice
+        options:
+          - models
+          - juicefs
+          - gbdt
+          - tzrec
+          - transformers
+      juicefs_ref:
+        description: 'juicefs fork ref (branch/tag/SHA)'
+        required: false
+        default: 'feat/sqlrec'
+        type: string
+      tzrec_ref:
+        description: 'TorchEasyRec fork ref (branch/tag/SHA)'
+        required: false
+        default: 'feat/sqlrec'
+        type: string
+
+# This caller deliberately has no write permission and passes no publishing
+# secrets to the reusable workflow.
+permissions:
+  contents: read
+
+jobs:
+  build-images:
+    uses: ./.github/workflows/_build-images.yml
+    with:
+      build_target: ${{ inputs.build_target }}
+      publish_images: false
+      juicefs_ref: ${{ inputs.juicefs_ref }}
+      tzrec_ref: ${{ inputs.tzrec_ref }}
