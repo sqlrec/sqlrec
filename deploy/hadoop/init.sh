@@ -1,4 +1,8 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
+
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
 
 if [ ! -f "${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME}" ]; then
   download_file "${HADOOP_CLIENT_URL}" "${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME}"

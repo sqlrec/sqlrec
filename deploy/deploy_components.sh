@@ -1,25 +1,18 @@
 #!/bin/bash
-shopt -s expand_aliases
-set -ex
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
 
-# check if NODE_IP is set
 if [ -z "${NODE_IP}" ]; then
-  echo "NODE_IP is not set"
+  echo "ERROR: NODE_IP is not set; start Minikube first or provide NODE_IP." >&2
   exit 1
 fi
 
-if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-  kubectl create namespace "${NAMESPACE}"
-fi
-
-if ! kubectl get namespace "${NAMESPACE}-milvus" >/dev/null 2>&1; then
-  kubectl create namespace "${NAMESPACE}-milvus"
-fi
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "${NAMESPACE}-milvus" --dry-run=client -o yaml | kubectl apply -f -
 
 render_config "${dir}/pv.yaml"
-kubectl apply -f "${dir}/pv.yaml.tmp" -n ${NAMESPACE}
+kubectl apply -f "${dir}/pv.yaml.tmp" -n "${NAMESPACE}"
 
 # juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
 cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/"

@@ -1,4 +1,8 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
+
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
 
 if [ ! -f "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}" ]; then
   download_file "${JUICEFS_URL}" "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}"
@@ -9,11 +13,10 @@ if [ ! -f "${CLIENT_DIR}/juicefs" ]; then
 fi
 
 if command -v juicefs >/dev/null 2>&1; then
-  echo 'juicefs has installed'
-elif [ "${DEPLOY_OS}" = darwin ]; then
-  echo "using downloaded JuiceFS CLI from ${CLIENT_DIR}/juicefs"
+  echo "using JuiceFS CLI from $(command -v juicefs)"
 else
-  sudo install "${CLIENT_DIR}/juicefs" /usr/local/bin
+  echo "ERROR: downloaded JuiceFS CLI is not executable: ${CLIENT_DIR}/juicefs" >&2
+  exit 1
 fi
 
 if [ ! -f "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" ]; then

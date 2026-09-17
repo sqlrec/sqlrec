@@ -1,12 +1,11 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 DEFAULT_JAVA_TOOL_OPTIONS="-XX:+UseCompactObjectHeaders -XX:+UseStringDeduplication"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-${DEFAULT_JAVA_TOOL_OPTIONS}}"
-if [ "${DEBUG_MODE}" = "true" ]; then
+if [ "${DEBUG_MODE:-false}" = "true" ]; then
     export JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${SQLREC_DEBUG_PORT}"
 fi
 

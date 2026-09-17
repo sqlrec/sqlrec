@@ -1,6 +1,5 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 

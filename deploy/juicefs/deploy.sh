@@ -1,25 +1,24 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 helm upgrade --install juicefs-valkey valkey/valkey \
   --namespace "${NAMESPACE}" \
-  --set image.tag=${VALKEY_VERSION} \
+  --set image.tag="${VALKEY_VERSION}" \
   --set service.type=NodePort \
-  --set service.nodePort=${JUICEFS_REDIS_PORT} \
+  --set service.nodePort="${JUICEFS_REDIS_PORT}" \
   --set dataStorage.enabled=true \
   --set dataStorage.requestedSize=128Gi \
   --set valkeyConfig="appendonly yes" \
   --wait \
-  --timeout ${DEPLOY_TIMEOUT}s
+  --timeout "${DEPLOY_TIMEOUT}s"
 
 juicefs format \
     --no-update \
     --storage minio \
-    --bucket http://${NODE_IP}:${MINIO_PORT}/bucket1 \
-    --access-key ${MINIO_USER} \
-    --secret-key ${MINIO_PASSWORD} \
+    --bucket "http://${NODE_IP}:${MINIO_PORT}/bucket1" \
+    --access-key "${MINIO_USER}" \
+    --secret-key "${MINIO_PASSWORD}" \
     "redis://${NODE_IP}:${JUICEFS_REDIS_PORT}/0" \
     myjfs

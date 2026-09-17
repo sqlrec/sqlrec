@@ -1,4 +1,8 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
+
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
 
 if [ ! -f "${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME}" ]; then
   download_file "${POSTGRESQL_CONNECTOR_JAR_URL}" "${LIB_DIR}/${POSTGRESQL_CONNECTOR_JAR_NAME}"

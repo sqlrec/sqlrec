@@ -1,4 +1,7 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
 
-helm repo add jupyterhub https://hub.jupyter.org/helm-chart/
-helm repo update
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
+
+helm repo add jupyterhub https://hub.jupyter.org/helm-chart/ --force-update

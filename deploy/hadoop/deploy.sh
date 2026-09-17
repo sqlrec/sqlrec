@@ -1,6 +1,5 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
@@ -14,9 +13,12 @@ cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/"
 
 hadoop fs -mkdir -p /spark/upload
 hadoop fs -mkdir -p /etc
-echo "supergroup:0:hdfs,root,${USER}" > groups
-hadoop fs -put -f groups /etc
-rm groups
+groups_file="$(mktemp "${TMPDIR:-/tmp}/sqlrec-groups.XXXXXX")"
+trap 'rm -f "${groups_file}"' EXIT INT TERM
+printf 'supergroup:0:hdfs,root,%s\n' "${USER}" > "${groups_file}"
+hadoop fs -put -f "${groups_file}" /etc/groups
+rm -f "${groups_file}"
+trap - EXIT INT TERM
 sed 's/<!--//; s/-->//' "${dir}/core-site.xml.tmp" > "${dir}/core-site.rendering.xml.tmp"
 mv "${dir}/core-site.rendering.xml.tmp" "${dir}/core-site.xml.tmp"
 cp "${dir}/core-site.xml.tmp" "${CONF_DIR}/core-site.xml"

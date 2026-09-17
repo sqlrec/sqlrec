@@ -32,9 +32,9 @@ find_vmnet_helper() {
 }
 
 install_linux_dependencies() {
-  local command_name
+  local command_name docker_user
   local missing_cli=false
-  for command_name in curl tar envsubst psql; do
+  for command_name in curl tar gzip envsubst psql; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
       missing_cli=true
       break
@@ -43,20 +43,20 @@ install_linux_dependencies() {
 
   if [ "${missing_cli}" = true ]; then
     if command -v apt-get >/dev/null 2>&1; then
-      sudo apt-get update
-      sudo apt-get install -y ca-certificates curl tar gzip gettext-base postgresql-client
+      run_privileged apt-get update
+      run_privileged apt-get install -y ca-certificates curl tar gzip gettext-base postgresql-client
     elif command -v dnf >/dev/null 2>&1; then
-      sudo dnf install -y ca-certificates curl tar gzip gettext postgresql
+      run_privileged dnf install -y ca-certificates curl tar gzip gettext postgresql
     elif command -v yum >/dev/null 2>&1; then
-      sudo yum install -y ca-certificates curl tar gzip gettext postgresql
+      run_privileged yum install -y ca-certificates curl tar gzip gettext postgresql
     else
       echo "ERROR: cannot install required Linux commands automatically." >&2
-      echo "Install curl, tar, envsubst, and psql, then rerun this script." >&2
+      echo "Install curl, tar, gzip, envsubst, and psql, then rerun this script." >&2
       exit 1
     fi
   fi
 
-  if ! require_commands curl tar envsubst psql; then
+  if ! require_commands curl tar gzip envsubst psql; then
     echo "ERROR: required Linux commands are still missing after installation." >&2
     exit 1
   fi
@@ -66,9 +66,17 @@ install_linux_dependencies() {
     echo 'skip install docker'
   else
     download_file https://get.docker.com "${CLIENT_DIR}/get-docker.sh"
-    sudo sh "${CLIENT_DIR}/get-docker.sh"
-    sudo usermod -aG docker "${USER}"
+    run_privileged sh "${CLIENT_DIR}/get-docker.sh"
+    docker_user="${SUDO_USER:-${USER:-}}"
+    if [ -n "${docker_user}" ] && [ "${docker_user}" != root ]; then
+      run_privileged usermod -aG docker "${docker_user}"
+    fi
     echo "Docker was installed. Log out and back in, then rerun this script." >&2
+    exit 1
+  fi
+
+  if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Docker is installed but the daemon is unavailable or the current user cannot access it." >&2
     exit 1
   fi
 
@@ -78,7 +86,7 @@ install_linux_dependencies() {
     if [ ! -f "${CLIENT_DIR}/${MINIKUBE_ARCH_NAME}" ]; then
       download_file "${MINIKUBE_URL}" "${CLIENT_DIR}/${MINIKUBE_ARCH_NAME}"
     fi
-    sudo install "${CLIENT_DIR}/${MINIKUBE_ARCH_NAME}" /usr/local/bin/minikube
+    run_privileged install "${CLIENT_DIR}/${MINIKUBE_ARCH_NAME}" /usr/local/bin/minikube
   fi
 
   if command -v helm >/dev/null 2>&1; then
@@ -87,6 +95,11 @@ install_linux_dependencies() {
     download_file https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 "${CLIENT_DIR}/get-helm-3.sh"
     bash "${CLIENT_DIR}/get-helm-3.sh"
   fi
+
+  # env.sh ran before a first-time Minikube installation. Configure the
+  # bundled kubectl fallback now that the minikube command is available.
+  configure_host_tools
+  require_commands docker minikube kubectl helm
 }
 
 check_macos_dependencies() {
@@ -119,8 +132,7 @@ check_macos_dependencies() {
     brew install "${missing_formulae[@]}"
   fi
 
-  prepend_path "$(brew --prefix gettext)/bin"
-  prepend_path "$(brew --prefix libpq)/bin"
+  configure_host_tools
 
   if ! require_commands minikube vfkit docker docker-buildx kubectl helm envsubst psql; then
     echo "ERROR: required commands are still missing after Homebrew installation." >&2
@@ -180,6 +192,7 @@ start_linux_minikube() {
     --cpus="${MINIKUBE_CPUS}" \
     --memory="${MINIKUBE_MEMORY}" \
     --disk-size="${MINIKUBE_DISK_SIZE}" \
+    --mount \
     --mount-string="${DATA_DIR}:${DATA_DIR}" \
     --ports="${PORT_RANGE_START}-${PORT_RANGE_END}:${PORT_RANGE_START}-${PORT_RANGE_END}" \
     --ports="${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}:${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}"
@@ -193,6 +206,7 @@ start_macos_minikube() {
     --cpus="${MINIKUBE_CPUS}" \
     --memory="${MINIKUBE_MEMORY}" \
     --disk-size="${MINIKUBE_DISK_SIZE}" \
+    --mount \
     --mount-string="${DATA_DIR}:${DATA_DIR}"
 }
 

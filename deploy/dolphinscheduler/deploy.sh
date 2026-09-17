@@ -1,12 +1,14 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 export DOLPHINSCHEDULER_DB="dolphinscheduler"
 
-bash "${dir}/../postgresql/deploy.sh" ${DOLPHINSCHEDULER_DB} ${DOLPHINSCHEDULER_POSTGRESQL_PORT} ${DOLPHINSCHEDULER_POSTGRESQL_USER} ${DOLPHINSCHEDULER_POSTGRESQL_PASSWORD}
+bash "${dir}/../postgresql/deploy.sh" "${DOLPHINSCHEDULER_DB}" \
+  "${DOLPHINSCHEDULER_POSTGRESQL_PORT}" \
+  "${DOLPHINSCHEDULER_POSTGRESQL_USER}" \
+  "${DOLPHINSCHEDULER_POSTGRESQL_PASSWORD}"
 
 render_config "${dir}/dolphinscheduler-init.yaml"
 

@@ -9,12 +9,29 @@ prepend_path() {
     export PATH
 }
 
+append_path() {
+    case ":${PATH}:" in
+        *":$1:"*) ;;
+        *) PATH="${PATH}:$1" ;;
+    esac
+    export PATH
+}
+
 # Download a file without depending on wget, which is not installed by default
 # on macOS. Existing files are left untouched by the callers.
 download_file() {
     local url=$1
     local destination=$2
-    curl --fail --location --retry 3 --output "${destination}" "${url}"
+    local temporary="${destination}.tmp.$$"
+
+    # Write downloads atomically. A failed curl must not leave a partial file
+    # that a later run mistakes for a completed download.
+    if curl --fail --location --retry 3 --output "${temporary}" "${url}"; then
+        mv "${temporary}" "${destination}"
+    else
+        rm -f "${temporary}"
+        return 1
+    fi
 }
 
 require_commands() {
@@ -39,12 +56,20 @@ render_config() {
     local template=$1
     local variables=${2:-}
     local rendered="${template}.tmp"
+    local temporary="${rendered}.$$"
 
     if [ -n "${variables}" ]; then
-        envsubst "${variables}" < "${template}" > "${rendered}"
+        envsubst "${variables}" < "${template}" > "${temporary}" || {
+            rm -f "${temporary}"
+            return 1
+        }
     else
-        envsubst < "${template}" > "${rendered}"
+        envsubst < "${template}" > "${temporary}" || {
+            rm -f "${temporary}"
+            return 1
+        }
     fi
+    mv "${temporary}" "${rendered}"
 }
 
 version_at_least() {
@@ -62,11 +87,15 @@ EOF
     required_patch=${required_patch%%[^0-9]*}
     actual_patch=${actual_patch:-0}
     required_patch=${required_patch:-0}
-    [ "${actual_major:-0}" -gt "${required_major:-0}" ] ||
-        { [ "${actual_major:-0}" -eq "${required_major:-0}" ] &&
-          { [ "${actual_minor:-0}" -gt "${required_minor:-0}" ] ||
-            { [ "${actual_minor:-0}" -eq "${required_minor:-0}" ] &&
-              [ "${actual_patch}" -ge "${required_patch}" ]; }; }; }
+    if [ "${actual_major:-0}" -ne "${required_major:-0}" ]; then
+        [ "${actual_major:-0}" -gt "${required_major:-0}" ] && return 0
+        return 1
+    fi
+    if [ "${actual_minor:-0}" -ne "${required_minor:-0}" ]; then
+        [ "${actual_minor:-0}" -gt "${required_minor:-0}" ] && return 0
+        return 1
+    fi
+    [ "${actual_patch}" -ge "${required_patch}" ]
 }
 
 # wait for a k8s job to complete; fail fast (with logs) if the job fails
@@ -95,5 +124,5 @@ wait_for_job() {
 # the function definitions and does not provide the Bash-compatible export that
 # the deployment scripts need.
 if [ -n "${BASH_VERSION:-}" ]; then
-    export -f prepend_path download_file require_commands render_config version_at_least wait_for_job
+    export -f prepend_path append_path download_file require_commands render_config version_at_least wait_for_job
 fi

@@ -1,4 +1,7 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
 
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update

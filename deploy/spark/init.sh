@@ -1,4 +1,8 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
+
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
 
 if [ ! -f "${CLIENT_DIR}/${SPARK_CLIENT_ARCH_NAME}" ]; then
   download_file "${SPARK_CLIENT_URL}" "${CLIENT_DIR}/${SPARK_CLIENT_ARCH_NAME}"

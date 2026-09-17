@@ -1,10 +1,10 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
-bash "${dir}/../postgresql/deploy.sh" metastore ${HMS_POSTGRESQL_PORT} ${HMS_POSTGRESQL_USER} ${HMS_POSTGRESQL_PASSWORD}
+bash "${dir}/../postgresql/deploy.sh" metastore \
+  "${HMS_POSTGRESQL_PORT}" "${HMS_POSTGRESQL_USER}" "${HMS_POSTGRESQL_PASSWORD}"
 
 render_config "${dir}/hms.yaml"
 render_config "${dir}/hms-init.yaml"

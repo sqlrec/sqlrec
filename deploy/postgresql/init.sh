@@ -1,14 +1,11 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
 
 if ! command -v psql >/dev/null 2>&1; then
-  if [ "${DEPLOY_OS}" = darwin ]; then
-    echo "ERROR: psql is required. Run 'brew install libpq' and ensure its bin directory is on PATH." >&2
-    exit 1
-  fi
-  sudo apt-get install -y postgresql-client
+  echo "ERROR: psql is required; install the PostgreSQL client or run deploy_minikube.sh first." >&2
+  exit 1
 fi
 
 # refer to https://cloudnative-pg.io/documentation/current/installation_upgrade/

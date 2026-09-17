@@ -1,5 +1,6 @@
 export SQLREC_VERSION="${SQLREC_VERSION:-0.1.13}"
 
+# Base paths
 # Resolve the sourced file without changing directories in zsh. An interactive
 # zsh may have a chpwd hook that writes to stdout; doing this via `cd` inside a
 # command substitution would capture that output and corrupt SCRIPT_DIR.
@@ -21,24 +22,11 @@ export CLIENT_DIR="${DATA_DIR}/client"
 export PV_DIR="${DATA_DIR}/pv"
 export IMAGE_CACHE_DIR="${DATA_DIR}/image-cache"
 
-case "$(uname -s)" in
-    Linux) export DEPLOY_OS=linux ;;
-    Darwin) export DEPLOY_OS=darwin ;;
-    *)
-        echo "ERROR: unsupported operating system: $(uname -s)" >&2
-        return 1 2>/dev/null || exit 1
-        ;;
-esac
+source "${SCRIPT_DIR}/functions.sh"
+source "${SCRIPT_DIR}/platform.sh"
+detect_deploy_platform || { return 1 2>/dev/null || exit 1; }
 
-case "$(uname -m)" in
-    x86_64|amd64) export DEPLOY_ARCH=amd64 ;;
-    arm64|aarch64) export DEPLOY_ARCH=arm64 ;;
-    *)
-        echo "ERROR: unsupported architecture: $(uname -m)" >&2
-        return 1 2>/dev/null || exit 1
-        ;;
-esac
-
+# Kubernetes and Minikube defaults
 export LIB_PV_NAME=sqlrec-lib-pv
 export LIB_PVC_NAME=sqlrec-lib-pvc
 export CLIENT_PV_NAME=sqlrec-client-pv
@@ -49,45 +37,12 @@ export NAMESPACE="${NAMESPACE:-sqlrec}"
 # unified timeout (seconds) for all deployment waits; overridable from the environment, default 1 hour
 export DEPLOY_TIMEOUT="${DEPLOY_TIMEOUT:-3600}"
 
-export NODE_IP=""
-if command -v minikube >/dev/null 2>&1; then
-    export NODE_IP="$(minikube -p minikube ip 2>/dev/null || true)"
-fi
-if [ -n "${NODE_IP}" ]; then
-    export K8S_APISERVER_ADDR="k8s://https://${NODE_IP}:8443"
-fi
+configure_cluster_address
 
 export MINIKUBE_URL="https://storage.googleapis.com/minikube/releases/latest/minikube-linux-${DEPLOY_ARCH}"
 export MINIKUBE_ARCH_NAME="minikube-linux-${DEPLOY_ARCH}"
 
-if [ "${DEPLOY_OS}" = darwin ]; then
-    export MINIKUBE_CPUS="${MINIKUBE_CPUS:-$(sysctl -n hw.physicalcpu)}"
-    export MINIKUBE_MEMORY_PERCENT="${MINIKUBE_MEMORY_PERCENT:-80}"
-    if [ -z "${MINIKUBE_MEMORY:-}" ]; then
-        case "${MINIKUBE_MEMORY_PERCENT}" in
-            ''|*[!0-9]*)
-                echo "ERROR: MINIKUBE_MEMORY_PERCENT must be an integer from 1 to 100." >&2
-                return 1 2>/dev/null || exit 1
-                ;;
-        esac
-        if [ "${MINIKUBE_MEMORY_PERCENT}" -lt 1 ] || [ "${MINIKUBE_MEMORY_PERCENT}" -gt 100 ]; then
-            echo "ERROR: MINIKUBE_MEMORY_PERCENT must be an integer from 1 to 100." >&2
-            return 1 2>/dev/null || exit 1
-        fi
-
-        if ! host_memory_bytes="$(sysctl -n hw.memsize)" || [ -z "${host_memory_bytes}" ]; then
-            echo "ERROR: unable to determine host memory with sysctl." >&2
-            return 1 2>/dev/null || exit 1
-        fi
-        host_memory_mb=$((host_memory_bytes / 1024 / 1024))
-        export MINIKUBE_MEMORY="$((host_memory_mb * MINIKUBE_MEMORY_PERCENT / 100))mb"
-    else
-        export MINIKUBE_MEMORY
-    fi
-else
-    export MINIKUBE_CPUS="${MINIKUBE_CPUS:-no-limit}"
-    export MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-no-limit}"
-fi
+configure_minikube_resources || { return 1 2>/dev/null || exit 1; }
 export MINIKUBE_DISK_SIZE="${MINIKUBE_DISK_SIZE:-256gb}"
 export LOCAL_PATH_PROVISIONER_DATA_DIR="${LOCAL_PATH_PROVISIONER_DATA_DIR:-/data/local-path-provisioner}"
 export LOCAL_PATH_PROVISIONER_CHART="${LOCAL_PATH_PROVISIONER_CHART:-oci://ghcr.io/rancher/local-path-provisioner/charts/local-path-provisioner}"
@@ -95,6 +50,7 @@ export LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-0.0.37}
 
 export DEBIAN_IMAGE_VERSION="${DEBIAN_IMAGE_VERSION:-12-slim}"
 
+# Component versions, ports, and credentials
 # all service ports are allocated sequentially from 30000; minikube maps the entire range at once
 export PORT_RANGE_START=30000
 export PORT_RANGE_END=30099
@@ -213,6 +169,7 @@ export OPENSEARCH_HTTP_PORT="${OPENSEARCH_HTTP_PORT:-30026}"
 export OPENSEARCH_PASSWORD="${OPENSEARCH_PASSWORD:-Sqlrec_123456}"
 export OPENSEARCH_DASHBOARDS_PORT="${OPENSEARCH_DASHBOARDS_PORT:-30027}"
 
+# Downloadable clients and libraries
 export JFS_LATEST_TAG="${JFS_LATEST_TAG:-1.3.1}"
 export JUICEFS_PLATFORM="${DEPLOY_OS}"
 export JUICEFS_URL="https://github.com/juicedata/juicefs/releases/download/v${JFS_LATEST_TAG}/juicefs-${JFS_LATEST_TAG}-${JUICEFS_PLATFORM}-${DEPLOY_ARCH}.tar.gz"
@@ -249,52 +206,18 @@ export KYUUBI_CLIENT_ARCH_NAME="apache-kyuubi-${KYUUBI_VERSION}-bin.tgz"
 export KYUUBI_CLIENT_DIR_NAME="apache-kyuubi-${KYUUBI_VERSION}-bin"
 
 export JAVA_VERSION="8.472.08.1"
-if [ "${DEPLOY_OS}" = darwin ]; then
-    export JAVA_CLIENT_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-macosx-aarch64.tar.gz"
-    export JAVA_CLIENT_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-macosx-aarch64.tar.gz"
-    export JAVA_CLIENT_DIR_NAME="amazon-corretto-8.jdk/Contents/Home"
-    export CONTAINER_JAVA_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-linux-aarch64.tar.gz"
-    export CONTAINER_JAVA_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-linux-aarch64.tar.gz"
-    export CONTAINER_JAVA_DIR_NAME="amazon-corretto-${JAVA_VERSION}-linux-aarch64"
-else
-    case "${DEPLOY_ARCH}" in
-        amd64) JAVA_PLATFORM=linux-x64 ;;
-        arm64) JAVA_PLATFORM=linux-aarch64 ;;
-    esac
-    export JAVA_CLIENT_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}.tar.gz"
-    export JAVA_CLIENT_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}.tar.gz"
-    export JAVA_CLIENT_DIR_NAME="amazon-corretto-${JAVA_VERSION}-${JAVA_PLATFORM}"
-    export CONTAINER_JAVA_URL="${JAVA_CLIENT_URL}"
-    export CONTAINER_JAVA_ARCH_NAME="${JAVA_CLIENT_ARCH_NAME}"
-    export CONTAINER_JAVA_DIR_NAME="${JAVA_CLIENT_DIR_NAME}"
-    unset JAVA_PLATFORM
-fi
+configure_java_distribution
 
+# Runtime locations
 export HADOOP_HOME=${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}
 export HIVE_HOME=${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}
 export SPARK_HOME=${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}
 export KYUUBI_HOME=${CLIENT_DIR}/${KYUUBI_CLIENT_DIR_NAME}
 export JAVA_HOME=${CLIENT_DIR}/${JAVA_CLIENT_DIR_NAME}
 export CONTAINER_JAVA_HOME=${CLIENT_DIR}/${CONTAINER_JAVA_DIR_NAME}
-export PATH=${PATH}:${CLIENT_DIR}:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${HIVE_HOME}/bin:${JAVA_HOME}/bin
-
-source "${SCRIPT_DIR}/functions.sh"
-
-if [ "${DEPLOY_OS}" = darwin ] && command -v brew >/dev/null 2>&1; then
-    GETTEXT_PREFIX="$(brew --prefix gettext 2>/dev/null || true)"
-    LIBPQ_PREFIX="$(brew --prefix libpq 2>/dev/null || true)"
-    [ -n "${GETTEXT_PREFIX}" ] && prepend_path "${GETTEXT_PREFIX}/bin"
-    [ -n "${LIBPQ_PREFIX}" ] && prepend_path "${LIBPQ_PREFIX}/bin"
-    unset GETTEXT_PREFIX LIBPQ_PREFIX
-fi
-
-# Use the kubectl bundled with minikube when a standalone kubectl executable is
-# not installed. Exporting the function makes it available to child scripts.
-if ! command -v kubectl >/dev/null 2>&1 && command -v minikube >/dev/null 2>&1; then
-    kubectl() {
-        minikube kubectl -- "$@"
-    }
-    if [ -n "${BASH_VERSION:-}" ]; then
-        export -f kubectl
-    fi
-fi
+append_path "${CLIENT_DIR}"
+append_path "${HADOOP_HOME}/bin"
+append_path "${SPARK_HOME}/bin"
+append_path "${HIVE_HOME}/bin"
+append_path "${JAVA_HOME}/bin"
+configure_host_tools

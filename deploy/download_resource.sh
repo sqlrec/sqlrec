@@ -1,12 +1,9 @@
 #!/bin/bash
-shopt -s expand_aliases
-set -ex
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
 
-if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-  kubectl create namespace "${NAMESPACE}"
-fi
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 bash "${dir}/postgresql/init.sh"
 bash "${dir}/minio/init.sh"

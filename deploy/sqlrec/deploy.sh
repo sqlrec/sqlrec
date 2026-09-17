@@ -1,17 +1,18 @@
 #!/bin/bash
-set -ex
-shopt -s expand_aliases
+set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
-if ! kubectl get serviceaccount sqlrec -n "${NAMESPACE}" >/dev/null 2>&1; then
-  kubectl create serviceaccount sqlrec -n "${NAMESPACE}"
-  kubectl create clusterrolebinding sqlrec-role --clusterrole=edit --serviceaccount="${NAMESPACE}":sqlrec --namespace="${NAMESPACE}"
-fi
+kubectl create serviceaccount sqlrec -n "${NAMESPACE}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create clusterrolebinding sqlrec-role \
+  --clusterrole=edit \
+  --serviceaccount="${NAMESPACE}:sqlrec" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-bash "${dir}/../postgresql/deploy.sh" sqlrec ${SQLREC_POSTGRESQL_PORT} ${SQLREC_POSTGRESQL_USER} ${SQLREC_POSTGRESQL_PASSWORD}
+bash "${dir}/../postgresql/deploy.sh" sqlrec "${SQLREC_POSTGRESQL_PORT}" "${SQLREC_POSTGRESQL_USER}" "${SQLREC_POSTGRESQL_PASSWORD}"
 
-export PGPASSWORD=${SQLREC_POSTGRESQL_PASSWORD}
+export PGPASSWORD="${SQLREC_POSTGRESQL_PASSWORD}"
 PSQL_MAX_ATTEMPTS="${PSQL_MAX_ATTEMPTS:-30}"
 PSQL_RETRY_INTERVAL="${PSQL_RETRY_INTERVAL:-5}"
 for ((attempt = 1; attempt <= PSQL_MAX_ATTEMPTS; attempt++)); do
@@ -28,7 +29,7 @@ done
 
 DEFAULT_JAVA_TOOL_OPTIONS="-XX:+UseCompactObjectHeaders -XX:+UseStringDeduplication"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-${DEFAULT_JAVA_TOOL_OPTIONS}}"
-if [ "${DEBUG_MODE}" = "true" ]; then
+if [ "${DEBUG_MODE:-false}" = "true" ]; then
     export JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${SQLREC_DEBUG_PORT}"
 fi
 

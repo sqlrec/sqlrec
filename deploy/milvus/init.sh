@@ -1,4 +1,7 @@
-set -ex
+#!/bin/bash
+set -exo pipefail
 
-helm repo add zilliztech https://zilliztech.github.io/milvus-helm/
-helm repo update
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+source "${dir}/../env.sh"
+
+helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ --force-update
