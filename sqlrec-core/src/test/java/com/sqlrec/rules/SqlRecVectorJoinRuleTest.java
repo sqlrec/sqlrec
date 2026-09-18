@@ -6,7 +6,6 @@ import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
-import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -87,19 +86,10 @@ public class SqlRecVectorJoinRuleTest {
         assertArrayEquals(new Object[]{1, 101, "book", 0.9d}, rows.get(0));
         assertArrayEquals(new Object[]{2, 202, "movie", 0.8d}, rows.get(3));
 
-        List<String> rightFields = Arrays.asList("id", "category", "tags", "embedding");
-        assertEquals(
-                "category == \"book\"",
-                FilterUtils.buildMilvusFilterExpression(
-                        vectorTable.requests.get(0).getFilterCondition(),
-                        vectorTable.requests.get(0).getLeftRow(),
-                        rightFields));
-        assertEquals(
-                "category == \"movie\"",
-                FilterUtils.buildMilvusFilterExpression(
-                        vectorTable.requests.get(1).getFilterCondition(),
-                        vectorTable.requests.get(1).getLeftRow(),
-                        rightFields));
+        assertEquals("book", vectorTable.requests.get(0).getLeftRow()[1]);
+        assertEquals("movie", vectorTable.requests.get(1).getLeftRow()[1]);
+        assertTrue(vectorTable.requests.stream()
+                .allMatch(request -> request.getFilterCondition() != null));
     }
 
     private BindableInterface compile(String sql) throws Exception {
@@ -168,6 +158,12 @@ public class SqlRecVectorJoinRuleTest {
                                     Arrays.asList("second"),
                                     Arrays.asList(0.7f, 0.8f)},
                             0.8d));
+        }
+
+        @Override
+        public boolean supportsJoinFilter(
+                RexNode condition, int leftFieldCount, int rightFieldCount) {
+            return true;
         }
 
         @Override

@@ -1,8 +1,8 @@
 package com.sqlrec.connectors.jdbc.handler;
 
-import com.sqlrec.common.utils.SqlStatement;
-import com.sqlrec.common.utils.SqlUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
+import com.sqlrec.connectors.jdbc.sql.JdbcSqlBuilder;
+import com.sqlrec.connectors.jdbc.sql.JdbcStatement;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.calcite.rex.RexNode;
@@ -34,7 +34,7 @@ public class JdbcHandler {
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
-        SqlStatement statement = SqlUtils.select(
+        JdbcStatement statement = JdbcSqlBuilder.select(
                 jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, filters);
         return query(statement, "Failed to scan table " + jdbcConfig.tableName);
     }
@@ -44,7 +44,7 @@ public class JdbcHandler {
             return Collections.emptyMap();
         }
 
-        SqlStatement statement = SqlUtils.selectByPrimaryKey(
+        JdbcStatement statement = JdbcSqlBuilder.selectByPrimaryKey(
                         jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas,
                         jdbcConfig.primaryKey, keySet.size())
                 .withParameters(new ArrayList<>(keySet));
@@ -59,13 +59,13 @@ public class JdbcHandler {
     }
 
     public boolean upsert(Object[] data) {
-        SqlStatement statement = upsertTemplate().withParameters(Arrays.asList(data));
+        JdbcStatement statement = upsertTemplate().withParameters(Arrays.asList(data));
         update(statement, "Failed to upsert into table " + jdbcConfig.tableName);
         return true;
     }
 
     public boolean delete(Object[] data) {
-        SqlStatement statement = deleteTemplate()
+        JdbcStatement statement = deleteTemplate()
                 .withParameters(Collections.singletonList(data[jdbcConfig.primaryKeyIndex]));
         update(statement, "Failed to delete from table " + jdbcConfig.tableName);
         return true;
@@ -103,7 +103,7 @@ public class JdbcHandler {
 
     private boolean executeBatch(
             Collection<? extends Object[]> rows,
-            SqlStatement template,
+            JdbcStatement template,
             Function<Object[], List<?>> parameterMapper,
             String errorMessage
     ) {
@@ -119,18 +119,18 @@ public class JdbcHandler {
         }
     }
 
-    private SqlStatement upsertTemplate() {
-        return SqlUtils.upsert(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
+    private JdbcStatement upsertTemplate() {
+        return JdbcSqlBuilder.upsert(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
     }
 
-    private SqlStatement deleteTemplate() {
-        return SqlUtils.deleteByPrimaryKey(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
+    private JdbcStatement deleteTemplate() {
+        return JdbcSqlBuilder.deleteByPrimaryKey(jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.primaryKey);
     }
 
     /**
      * Execute a query statement and materialize all rows.
      */
-    private List<Object[]> query(SqlStatement statement, String errorMessage) {
+    private List<Object[]> query(JdbcStatement statement, String errorMessage) {
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(statement.getSql())) {
             statement.bindTo(stmt);
@@ -145,7 +145,7 @@ public class JdbcHandler {
     /**
      * Execute an update statement (upsert/delete).
      */
-    private void update(SqlStatement statement, String errorMessage) {
+    private void update(JdbcStatement statement, String errorMessage) {
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(statement.getSql())) {
             statement.bindTo(stmt);

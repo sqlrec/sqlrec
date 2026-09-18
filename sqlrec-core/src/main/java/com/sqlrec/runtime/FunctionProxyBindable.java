@@ -1,11 +1,8 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
@@ -14,30 +11,21 @@ import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 public class FunctionProxyBindable extends BindableInterface {
-    private static final Logger log = LoggerFactory.getLogger(FunctionProxyBindable.class);
-
     private final List<SqlNode> inputList;
     private final SqlGetVariable funcNameVariable;
     private final BindableInterface delegate;
     private final List<RelDataTypeField> returnDataFields;
     private final boolean async;
-    private final String partitionBy;
-    private final SqlNode partitionSizeNode;
+    private final PartitionExecutor partitionExecutor;
 
     public FunctionProxyBindable(
             SqlCallSqlFunction callSqlFunction,
@@ -56,8 +44,8 @@ public class FunctionProxyBindable extends BindableInterface {
         this.returnDataFields = returnDataFields;
         this.async = isAsync;
         PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
-        this.partitionBy = partitionSpec.tableName();
-        this.partitionSizeNode = partitionSpec.sizeNode();
+        this.partitionExecutor = partitionSpec.tableName() == null ? null
+                : new PartitionExecutor(partitionSpec.tableName(), partitionSpec.sizeNode());
     }
 
     public FunctionProxyBindable(
@@ -72,8 +60,8 @@ public class FunctionProxyBindable extends BindableInterface {
         this.returnDataFields = delegate.getReturnDataFields();
         this.async = isAsync;
         PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
-        this.partitionBy = partitionSpec.tableName();
-        this.partitionSizeNode = partitionSpec.sizeNode();
+        this.partitionExecutor = partitionSpec.tableName() == null ? null
+                : new PartitionExecutor(partitionSpec.tableName(), partitionSpec.sizeNode());
     }
 
     private static PartitionSpec extractPartitionInfo(
@@ -121,35 +109,7 @@ public class FunctionProxyBindable extends BindableInterface {
             CalciteSchema schema,
             CompileManager compileManager
     ) throws Exception {
-        List<SqlNode> inputList = callSqlFunction.getInputTableList();
-        SqlGetVariable funcNameVariable = callSqlFunction.getFuncNameVariable();
-        SqlIdentifier likeTableNameIdentifier = callSqlFunction.getLikeTableName();
-        SqlNode likeFunctionNameNode = callSqlFunction.getLikeFunctionName();
-
-        List<RelDataTypeField> returnDataFields = null;
-        if (likeTableNameIdentifier != null) {
-            String likeTableName = likeTableNameIdentifier.getSimple();
-            returnDataFields = SchemaUtils.getDataTypeByLikeTableName(likeTableName, schema);
-        } else if (likeFunctionNameNode != null) {
-            String likeFunctionName = SchemaUtils.getValueOfStringLiteral(likeFunctionNameNode);
-            SqlFunctionBindable likeFunctionBindable = compileManager.getSqlFunction(likeFunctionName);
-            if (likeFunctionBindable == null) {
-                throw new RuntimeException("like function not found: " + likeFunctionName);
-            }
-            returnDataFields = likeFunctionBindable.getReturnDataFields();
-        }
-
-        if (funcNameVariable != null) {
-            return new FunctionProxyBindable(
-                    callSqlFunction, inputList, funcNameVariable, returnDataFields, callSqlFunction.isAsync()
-            );
-        }
-
-        String functionName = callSqlFunction.getFuncName().getSimple();
-        BindableInterface delegate = getFunctionBindableByName(
-                functionName, schema, inputList, returnDataFields, compileManager
-        );
-        return new FunctionProxyBindable(callSqlFunction, inputList, delegate, callSqlFunction.isAsync());
+        return FunctionBindableFactory.create(callSqlFunction, schema, compileManager);
     }
 
     public static BindableInterface getFunctionBindableByName(
@@ -159,42 +119,20 @@ public class FunctionProxyBindable extends BindableInterface {
             List<RelDataTypeField> returnDataFields,
             CompileManager compileManager
     ) throws Exception {
-        Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
-        if (javaFunctionObj != null) {
-            return new JavaFunctionBindable(
-                    functionName, javaFunctionObj, inputList, returnDataFields, schema
-            );
-        }
-
-        SqlFunctionBindable sqlFunctionBindable = compileManager.getSqlFunction(functionName);
-        if (sqlFunctionBindable != null) {
-            List<String> inputTableList = new ArrayList<>();
-            for (SqlNode input : inputList) {
-                if (input instanceof SqlIdentifier) {
-                    inputTableList.add(((SqlIdentifier) input).getSimple());
-                } else {
-                    throw new Exception("function input table must be table name");
-                }
-            }
-            CallSqlFunctionBindable callSqlFunctionBindable = new CallSqlFunctionBindable(
-                    functionName, inputTableList, sqlFunctionBindable);
-            callSqlFunctionBindable.checkInputTable(schema);
-            return callSqlFunctionBindable;
-        }
-
-        throw new Exception("function not find: " + functionName);
+        return FunctionBindableFactory.createByName(
+                functionName, schema, inputList, returnDataFields, compileManager);
     }
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         BindableInterface targetBindable = resolveBindable(schema, context);
 
-        if (partitionBy != null) {
+        if (partitionExecutor != null) {
             if (async) {
-                submitAsync(() -> bindWithPartition(schema, context, targetBindable));
+                submitAsync(() -> partitionExecutor.execute(schema, context, targetBindable));
                 return null;
             }
-            return bindWithPartition(schema, context, targetBindable);
+            return partitionExecutor.execute(schema, context, targetBindable);
         }
 
         if (async) {
@@ -206,156 +144,6 @@ public class FunctionProxyBindable extends BindableInterface {
 
     private void submitAsync(Runnable task) {
         ExecutorServiceUtils.getExecutorService().submit(task);
-    }
-
-    private Enumerable<Object[]> bindWithPartition(CalciteSchema schema, ExecuteContext context, BindableInterface targetBindable) {
-        // get the CacheTable to partition by partitionBy (which is a table name)
-        CacheTable partitionTable = SchemaUtils.getCacheTable(partitionBy, schema);
-        List<RelDataTypeField> fields = partitionTable.getDataFields();
-
-        // Resolve the size at execution time so request variables can control partitioning.
-        int partitionSize = resolvePartitionSize(context);
-
-        // read all rows and split by partitionSize
-        List<Object[]> allRows = new ArrayList<>();
-        partitionTable.scan(null).forEach(allRows::add);
-        List<List<Object[]>> partitions = splitBySize(allRows, partitionSize);
-
-        ExecuteContextImpl partitionContext = ((ExecuteContextImpl) context).clone();
-
-        // execute each partition concurrently and merge results
-        List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();
-        for (List<Object[]> partitionRows : partitions) {
-            CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(() -> {
-                CalciteSchema partitionSchema = createPartitionSchema(schema, partitionRows, fields);
-                return targetBindable.bind(partitionSchema, partitionContext);
-            }, ExecutorServiceUtils.getExecutorService());
-            futures.add(future);
-        }
-
-        boolean ignorePartitionException = SqlRecConfigs.IGNORE_PARTITION_EXCEPTION
-                .getValueWithEnvFallback(context.getVariables());
-
-        // wait for all partitions and merge results
-        List<Object[]> mergedResults = new ArrayList<>();
-        List<Throwable> failures = new ArrayList<>();
-        int successCount = 0;
-        for (int i = 0; i < futures.size(); i++) {
-            try {
-                Enumerable<Object[]> result = futures.get(i).join();
-                // Materialize each result separately so a failure during enumeration does not
-                // leave a partially merged result from that partition.
-                List<Object[]> partitionResults = new ArrayList<>();
-                if (result != null) {
-                    result.forEach(partitionResults::add);
-                }
-                mergedResults.addAll(partitionResults);
-                successCount++;
-            } catch (Exception e) {
-                Throwable failure = unwrapPartitionFailure(e);
-                if (!ignorePartitionException
-                        || context.isCancelled()
-                        || partitionContext.isCancelled()
-                        || failure instanceof InterruptedException
-                        || failure instanceof Error) {
-                    cancelPartitionTasks(partitionContext, futures);
-                    throw new RuntimeException("Partition execution failed", failure);
-                }
-
-                failures.add(failure);
-                log.warn("[{}] partition {}/{} execution failed and its result is discarded: {}",
-                        context.getLogId(), i + 1, futures.size(), failure.getMessage(), failure);
-            }
-        }
-
-        if (successCount == 0 && !failures.isEmpty()) {
-            cancelPartitionTasks(partitionContext, futures);
-            RuntimeException allFailed = new RuntimeException(
-                    "All " + failures.size() + " partition executions failed", failures.get(0));
-            for (int i = 1; i < failures.size(); i++) {
-                allFailed.addSuppressed(failures.get(i));
-            }
-            throw allFailed;
-        }
-
-        return Linq4j.asEnumerable(mergedResults);
-    }
-
-    private CalciteSchema createPartitionSchema(
-            CalciteSchema sourceSchema,
-            List<Object[]> partitionRows,
-            List<RelDataTypeField> fields
-    ) {
-        CalciteSchema partitionSchema = CalciteSchemaFactory.createCalciteSchema();
-        for (String tableName : sourceSchema.getTableNames()) {
-            CalciteSchema.TableEntry entry = sourceSchema.getTable(tableName, false);
-            if (!(entry.getTable() instanceof CacheTable)) {
-                continue;
-            }
-
-            if (NodeUtils.normalizeTableName(tableName)
-                    .equals(NodeUtils.normalizeTableName(partitionBy))) {
-                partitionSchema.add(
-                        tableName,
-                        new CacheTable(tableName, Linq4j.asEnumerable(partitionRows), fields)
-                );
-            } else {
-                partitionSchema.add(tableName, entry.getTable());
-            }
-        }
-        return partitionSchema;
-    }
-
-    private int resolvePartitionSize(ExecuteContext context) {
-        if (partitionSizeNode instanceof SqlLiteral) {
-            return ((SqlLiteral) partitionSizeNode).intValue(false);
-        }
-
-        SqlGetVariable getVariable = (SqlGetVariable) partitionSizeNode;
-        String variableName = SchemaUtils.getValueOfStringLiteral(getVariable.getVariableName());
-        String value = context.getVariable(variableName);
-        if (value == null && getVariable.hasDefaultValue()) {
-            value = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) getVariable.getDefaultValue());
-        }
-        if (value == null) {
-            throw new RuntimeException("cant get partition size from variable: " + variableName);
-        }
-
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            throw new RuntimeException(
-                    "Invalid partition size from variable '" + variableName + "': '" + value + "'", e);
-        }
-    }
-
-    private Throwable unwrapPartitionFailure(Throwable failure) {
-        Throwable result = failure;
-        while (result instanceof CompletionException && result.getCause() != null) {
-            result = result.getCause();
-        }
-        return result;
-    }
-
-    private void cancelPartitionTasks(
-            ExecuteContextImpl partitionContext,
-            List<CompletableFuture<Enumerable<Object[]>>> futures
-    ) {
-        partitionContext.cancel();
-        for (CompletableFuture<Enumerable<Object[]>> future : futures) {
-            future.cancel(true);
-        }
-    }
-
-    private List<List<Object[]>> splitBySize(List<Object[]> rows, int size) {
-        if (size <= 0) {
-            return Collections.singletonList(rows);
-        }
-        List<List<Object[]>> partitions = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i += size) {
-            partitions.add(rows.subList(i, Math.min(i + size, rows.size())));
-        }
-        return partitions;
     }
 
     private BindableInterface resolveBindable(CalciteSchema schema, ExecuteContext context) {

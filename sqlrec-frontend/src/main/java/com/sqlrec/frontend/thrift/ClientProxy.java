@@ -2,7 +2,6 @@ package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
@@ -80,7 +79,7 @@ public class ClientProxy implements TCLIService.Iface {
         }
         this.connected = false;
 
-        if (ExecEnv.isFileSystemMeta()) {
+        if (SqlRecConfigs.isFileSystemMetadata()) {
             throw new TException("Remote connection is not allowed in file system meta mode");
         }
         if (pendingOpenSessionReq == null) {

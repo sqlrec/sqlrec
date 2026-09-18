@@ -19,7 +19,6 @@ import org.bson.conversions.Bson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
@@ -52,11 +51,8 @@ class MongoHandlerBuildQueryTest {
         );
     }
 
-    private Bson invokeBuildQuery(List<RexNode> filters) throws Exception {
-        MongoHandler handler = new MongoHandler(mongoConfig);
-        Method method = MongoHandler.class.getDeclaredMethod("buildQuery", List.class);
-        method.setAccessible(true);
-        return (Bson) method.invoke(handler, filters);
+    private Bson invokeBuildQuery(List<RexNode> filters) {
+        return new MongoFilterTranslator(mongoConfig).buildQuery(filters);
     }
 
     private BsonDocument toBsonDocument(Bson bson) {

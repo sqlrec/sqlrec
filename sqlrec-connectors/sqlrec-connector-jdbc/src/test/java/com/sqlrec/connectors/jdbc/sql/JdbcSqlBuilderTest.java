@@ -1,4 +1,4 @@
-package com.sqlrec.common.utils;
+package com.sqlrec.connectors.jdbc.sql;
 
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -17,7 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class SqlUtilsTest {
+class JdbcSqlBuilderTest {
 
     private final List<FieldSchema> fieldSchemas = Arrays.asList(
             new FieldSchema("id", "INTEGER"),
@@ -40,14 +40,14 @@ class SqlUtilsTest {
 
     @Test
     void testSelectWithoutFilters() {
-        SqlStatement statement = SqlUtils.select(PG_URL, "users", fieldSchemas, null);
+        JdbcStatement statement = JdbcSqlBuilder.select(PG_URL, "users", fieldSchemas, null);
         assertEquals("SELECT id, name, age FROM users", statement.getSql());
         assertTrue(statement.getParameters().isEmpty());
     }
 
     @Test
     void testSelectWithEmptyFilters() {
-        SqlStatement statement = SqlUtils.select(PG_URL, "users", fieldSchemas, Collections.emptyList());
+        JdbcStatement statement = JdbcSqlBuilder.select(PG_URL, "users", fieldSchemas, Collections.emptyList());
         assertEquals("SELECT id, name, age FROM users", statement.getSql());
         assertTrue(statement.getParameters().isEmpty());
     }
@@ -58,7 +58,7 @@ class SqlUtilsTest {
         RexNode literal = rexBuilder.makeLiteral("Bob", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
         RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, nameRef, literal);
 
-        SqlStatement statement = SqlUtils.select(PG_URL, "users", fieldSchemas, Collections.singletonList(filter));
+        JdbcStatement statement = JdbcSqlBuilder.select(PG_URL, "users", fieldSchemas, Collections.singletonList(filter));
         // values travel as parameters, never inlined into the SQL text
         assertEquals("SELECT id, name, age FROM users WHERE name = ?", statement.getSql());
         assertEquals(Collections.singletonList("Bob"), statement.getParameters());
@@ -66,12 +66,12 @@ class SqlUtilsTest {
 
     @Test
     void testSelectByPrimaryKey() {
-        SqlStatement template = SqlUtils.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", 3);
+        JdbcStatement template = JdbcSqlBuilder.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", 3);
         assertEquals("SELECT id, name, age FROM users WHERE id IN (?, ?, ?)", template.getSql());
         assertEquals(0, template.getParameterCount());
 
         List<Object> keys = Arrays.asList(1, 2, 3);
-        SqlStatement bound = template.withParameters(keys);
+        JdbcStatement bound = template.withParameters(keys);
         assertEquals(template.getSql(), bound.getSql());
         assertEquals(keys, bound.getParameters());
     }
@@ -79,14 +79,14 @@ class SqlUtilsTest {
     @Test
     void testSelectByPrimaryKeyRejectsNonPositiveKeyCount() {
         assertThrows(IllegalArgumentException.class,
-                () -> SqlUtils.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", 0));
+                () -> JdbcSqlBuilder.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", 0));
         assertThrows(IllegalArgumentException.class,
-                () -> SqlUtils.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", -1));
+                () -> JdbcSqlBuilder.selectByPrimaryKey(PG_URL, "users", fieldSchemas, "id", -1));
     }
 
     @Test
     void testUpsertPostgreSql() {
-        SqlStatement statement = SqlUtils.upsert(PG_URL, "users", fieldSchemas, "id");
+        JdbcStatement statement = JdbcSqlBuilder.upsert(PG_URL, "users", fieldSchemas, "id");
         assertEquals(
                 "INSERT INTO users (id, name, age) VALUES (?, ?, ?) " +
                         "ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id, name = EXCLUDED.name, age = EXCLUDED.age",
@@ -97,7 +97,7 @@ class SqlUtilsTest {
 
     @Test
     void testUpsertMySql() {
-        SqlStatement statement = SqlUtils.upsert(MYSQL_URL, "users", fieldSchemas, "id");
+        JdbcStatement statement = JdbcSqlBuilder.upsert(MYSQL_URL, "users", fieldSchemas, "id");
         assertEquals(
                 "INSERT INTO users (id, name, age) VALUES (?, ?, ?) " +
                         "ON DUPLICATE KEY UPDATE id = VALUES(id), name = VALUES(name), age = VALUES(age)",
@@ -106,16 +106,16 @@ class SqlUtilsTest {
 
     @Test
     void testUpsertH2() {
-        SqlStatement statement = SqlUtils.upsert(H2_URL, "users", fieldSchemas, "id");
+        JdbcStatement statement = JdbcSqlBuilder.upsert(H2_URL, "users", fieldSchemas, "id");
         assertEquals("MERGE INTO users KEY (id) VALUES (?, ?, ?)", statement.getSql());
     }
 
     @Test
     void testDeleteByPrimaryKey() {
-        SqlStatement template = SqlUtils.deleteByPrimaryKey(PG_URL, "users", "id");
+        JdbcStatement template = JdbcSqlBuilder.deleteByPrimaryKey(PG_URL, "users", "id");
         assertEquals("DELETE FROM users WHERE id = ?", template.getSql());
 
-        SqlStatement bound = template.withParameters(Collections.singletonList(1));
+        JdbcStatement bound = template.withParameters(Collections.singletonList(1));
         assertEquals(Collections.singletonList(1), bound.getParameters());
     }
 
@@ -127,7 +127,7 @@ class SqlUtilsTest {
                 new FieldSchema("name\"; DROP TABLE users; --", "VARCHAR")
         );
 
-        SqlStatement pg = SqlUtils.upsert(PG_URL, "users; DROP TABLE users; --", evilSchemas, "id");
+        JdbcStatement pg = JdbcSqlBuilder.upsert(PG_URL, "users; DROP TABLE users; --", evilSchemas, "id");
         assertEquals(
                 "INSERT INTO \"users; DROP TABLE users; --\" (id, \"name\"\"; DROP TABLE users; --\") VALUES (?, ?) "
                         + "ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id, "
@@ -135,14 +135,14 @@ class SqlUtilsTest {
                 pg.getSql());
         assertEquals(0, pg.getParameterCount());
 
-        SqlStatement mysql = SqlUtils.upsert(MYSQL_URL, "users`x", evilSchemas, "id");
+        JdbcStatement mysql = JdbcSqlBuilder.upsert(MYSQL_URL, "users`x", evilSchemas, "id");
         assertTrue(mysql.getSql().startsWith("INSERT INTO `users``x` (id, `name\"; DROP TABLE users; --`)"));
         assertTrue(mysql.getSql().contains("ON DUPLICATE KEY UPDATE"));
     }
 
     @Test
     void testDeleteByPrimaryKeyQuotesUnsafeIdentifiers() {
-        SqlStatement statement = SqlUtils.deleteByPrimaryKey(PG_URL, "users; DROP TABLE users; --", "id` OR 1=1; --");
+        JdbcStatement statement = JdbcSqlBuilder.deleteByPrimaryKey(PG_URL, "users; DROP TABLE users; --", "id` OR 1=1; --");
         assertEquals("DELETE FROM \"users; DROP TABLE users; --\" WHERE \"id` OR 1=1; --\" = ?",
                 statement.getSql());
         assertEquals(0, statement.getParameterCount());
@@ -150,7 +150,7 @@ class SqlUtilsTest {
 
     @Test
     void testSelectByPrimaryKeyQuotesUnsafePrimaryKey() {
-        SqlStatement statement = SqlUtils.selectByPrimaryKey(
+        JdbcStatement statement = JdbcSqlBuilder.selectByPrimaryKey(
                 MYSQL_URL, "users", fieldSchemas, "id`; DELETE FROM users; --", 2);
         // backtick inside the payload is escaped by doubling
         assertEquals("SELECT id, name, age FROM users WHERE `id``; DELETE FROM users; --` IN (?, ?)",
@@ -159,12 +159,12 @@ class SqlUtilsTest {
 
     @Test
     void testWithParametersDoesNotMutateOriginal() {
-        SqlStatement template = SqlUtils.deleteByPrimaryKey(PG_URL, "users", "id");
+        JdbcStatement template = JdbcSqlBuilder.deleteByPrimaryKey(PG_URL, "users", "id");
         List<Object> first = Collections.singletonList(1);
         List<Object> second = Collections.singletonList(2);
 
-        SqlStatement firstBound = template.withParameters(first);
-        SqlStatement secondBound = template.withParameters(second);
+        JdbcStatement firstBound = template.withParameters(first);
+        JdbcStatement secondBound = template.withParameters(second);
 
         assertEquals(first, firstBound.getParameters());
         assertEquals(second, secondBound.getParameters());
@@ -174,7 +174,7 @@ class SqlUtilsTest {
 
     @Test
     void testParametersAreUnmodifiable() {
-        SqlStatement statement = SqlUtils.deleteByPrimaryKey(PG_URL, "users", "id")
+        JdbcStatement statement = JdbcSqlBuilder.deleteByPrimaryKey(PG_URL, "users", "id")
                 .withParameters(Collections.singletonList(1));
         assertThrows(UnsupportedOperationException.class,
                 () -> statement.getParameters().add(2));
@@ -182,42 +182,42 @@ class SqlUtilsTest {
 
     @Test
     void testSelectQuotingWithInjectionAttemptInTableName() {
-        SqlStatement statement = SqlUtils.select(PG_URL, "users; DROP TABLE x; --", fieldSchemas, null);
+        JdbcStatement statement = JdbcSqlBuilder.select(PG_URL, "users; DROP TABLE x; --", fieldSchemas, null);
         assertEquals("SELECT id, name, age FROM \"users; DROP TABLE x; --\"", statement.getSql());
     }
 
     @Test
     void testSelectQuotesQualifiedTableNameByPart() {
-        SqlStatement statement = SqlUtils.select(PG_URL, "public.users", fieldSchemas, null);
+        JdbcStatement statement = JdbcSqlBuilder.select(PG_URL, "public.users", fieldSchemas, null);
         assertEquals("SELECT id, name, age FROM public.users", statement.getSql());
 
-        SqlStatement unsafeParts = SqlUtils.select(PG_URL, "public schema.user table", fieldSchemas, null);
+        JdbcStatement unsafeParts = JdbcSqlBuilder.select(PG_URL, "public schema.user table", fieldSchemas, null);
         assertEquals("SELECT id, name, age FROM \"public schema\".\"user table\"", unsafeParts.getSql());
     }
 
     @Test
     void testRejectsEmptyFieldSchemas() {
         assertThrows(IllegalArgumentException.class,
-                () -> SqlUtils.select(PG_URL, "users", Collections.emptyList(), null));
+                () -> JdbcSqlBuilder.select(PG_URL, "users", Collections.emptyList(), null));
     }
 
     @Test
     void testRejectsMalformedQualifiedTableName() {
         assertThrows(IllegalArgumentException.class,
-                () -> SqlUtils.select(PG_URL, "public.", fieldSchemas, null));
+                () -> JdbcSqlBuilder.select(PG_URL, "public.", fieldSchemas, null));
     }
 
     @Test
     void testQuoteIdentifierEscapesInjectionAttempt() {
         // A malicious identifier containing a double quote must be escaped so it cannot break out
         // of the quoted identifier and inject SQL.
-        String quoted = SqlUtils.quoteIdentifier("col\"; DROP TABLE users; --", PG_URL);
+        String quoted = JdbcSqlBuilder.quoteIdentifier("col\"; DROP TABLE users; --", PG_URL);
         assertEquals("\"col\"\"; DROP TABLE users; --\"", quoted);
     }
 
     @Test
     void testQuoteIdentifierMysqlUsesBackticks() {
-        String quoted = SqlUtils.quoteIdentifier("col`x", MYSQL_URL);
+        String quoted = JdbcSqlBuilder.quoteIdentifier("col`x", MYSQL_URL);
         assertEquals("`col``x`", quoted);
     }
 
@@ -225,23 +225,24 @@ class SqlUtilsTest {
     void testQuoteIdentifierSafeIdentifierNotQuoted() {
         // Safe identifiers (alphanumeric + underscore) are returned as-is to preserve the
         // database's default case-folding behavior.
-        assertEquals("users", SqlUtils.quoteIdentifier("users", PG_URL));
-        assertEquals("id", SqlUtils.quoteIdentifier("id", PG_URL));
-        assertEquals("_user_1", SqlUtils.quoteIdentifier("_user_1", PG_URL));
+        assertEquals("users", JdbcSqlBuilder.quoteIdentifier("users", PG_URL));
+        assertEquals("id", JdbcSqlBuilder.quoteIdentifier("id", PG_URL));
+        assertEquals("_user_1", JdbcSqlBuilder.quoteIdentifier("_user_1", PG_URL));
     }
 
     @Test
     void testQuoteIdentifierUnsafeIdentifierQuoted() {
         // Identifiers with special characters are quoted to prevent injection.
-        assertEquals("\"user table\"", SqlUtils.quoteIdentifier("user table", PG_URL));
-        assertEquals("\"user-name\"", SqlUtils.quoteIdentifier("user-name", PG_URL));
-        assertEquals("\"1col\"", SqlUtils.quoteIdentifier("1col", PG_URL));
+        assertEquals("\"user table\"", JdbcSqlBuilder.quoteIdentifier("user table", PG_URL));
+        assertEquals("\"user-name\"", JdbcSqlBuilder.quoteIdentifier("user-name", PG_URL));
+        assertEquals("\"1col\"", JdbcSqlBuilder.quoteIdentifier("1col", PG_URL));
     }
 
     @Test
     void testQuoteIdentifierEmptyReturnsEmpty() {
         // empty identifiers pass through unchanged (a misconfiguration that will surface
         // as a SQL syntax error on the database side)
-        assertEquals("", SqlUtils.quoteIdentifier("", PG_URL));
+        assertEquals("", JdbcSqlBuilder.quoteIdentifier("", PG_URL));
     }
 }
+

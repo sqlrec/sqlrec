@@ -5,6 +5,7 @@ import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,12 @@ public interface VectorSearchable {
     Logger log = LoggerFactory.getLogger(VectorSearchable.class);
 
     List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request);
+
+    /** Whether this backend can completely evaluate the join predicate during vector search. */
+    default boolean supportsJoinFilter(
+            RexNode condition, int leftFieldCount, int rightFieldCount) {
+        return false;
+    }
 
     default List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {
         SqlRecTable table = (SqlRecTable) this;

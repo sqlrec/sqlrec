@@ -1,9 +1,9 @@
 package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
@@ -183,7 +183,7 @@ public class SessionManager {
         try {
             SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(sql);
             if (coreResult != null &&
-                    (ExecEnv.isFileSystemMeta() ||
+                    (SqlRecConfigs.isFileSystemMetadata() ||
                             !ThriftUtils.isSqlNeedExecInRemote(sql)
                     )
             ) {

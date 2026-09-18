@@ -1,5 +1,7 @@
 package com.sqlrec.common.config;
 
+import org.apache.commons.lang3.StringUtils;
+
 public class SqlRecConfigs {
     public static final ConfigOption<String> SQLREC_VERSION = new ConfigOption<>(
             "SQLREC_VERSION",
@@ -174,6 +176,7 @@ public class SqlRecConfigs {
             null,
             String.class
     );
+
     public static final ConfigOption<Integer> DEFAULT_VECTOR_SEARCH_LIMIT = new ConfigOption<>(
             "DEFAULT_VECTOR_SEARCH_LIMIT",
             100,
@@ -278,4 +281,9 @@ public class SqlRecConfigs {
             null,
             Long.class
     );
+
+    /** Returns whether metadata is loaded from SQL files instead of remote stores. */
+    public static boolean isFileSystemMetadata() {
+        return StringUtils.isNotBlank(SQL_SCHEMA_DIR.getValue());
+    }
 }

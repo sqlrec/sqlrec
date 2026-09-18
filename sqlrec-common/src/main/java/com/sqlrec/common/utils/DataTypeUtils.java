@@ -12,17 +12,8 @@ import org.apache.calcite.sql.validate.SqlValidator;
 
 import java.math.BigDecimal;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class DataTypeUtils {
-    private static final Pattern DECIMAL_TYPE_PATTERN = Pattern.compile(
-            "^DECIMAL\\s*\\(\\s*(\\d+)\\s*(?:,\\s*(\\d+)\\s*)?\\)$"
-    );
-    private static final Pattern CHARACTER_TYPE_PATTERN = Pattern.compile(
-            "^(CHAR|VARCHAR)\\s*\\(\\s*(\\d+)\\s*\\)$"
-    );
-
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, List<FieldSchema> fieldSchemas) {
         RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (FieldSchema fieldSchema : fieldSchemas) {
@@ -37,44 +28,7 @@ public class DataTypeUtils {
     }
 
     public static RelDataType getRelDataType(RelDataTypeFactory typeFactory, String type) {
-        type = type.trim().toUpperCase();
-        if (type.endsWith(" NOT NULL")) {
-            type = type.substring(0, type.length() - " NOT NULL".length()).trim();
-        }
-        if (type.equals("INT")) {
-            type = "INTEGER";
-        }
-        if (type.equals("STRING")) {
-            type = "VARCHAR";
-        }
-
-        if (type.startsWith("ARRAY<") && type.endsWith(">")) {
-            String elementType = type.substring("ARRAY<".length(), type.length() - 1);
-            RelDataType elementTypeName = getRelDataType(typeFactory, elementType);
-            return typeFactory.createArrayType(elementTypeName, -1);
-        }
-
-        Matcher decimalMatcher = DECIMAL_TYPE_PATTERN.matcher(type);
-        if (decimalMatcher.matches()) {
-            int precision = Integer.parseInt(decimalMatcher.group(1));
-            int scale = decimalMatcher.group(2) == null
-                    ? 0
-                    : Integer.parseInt(decimalMatcher.group(2));
-            return typeFactory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
-        }
-
-        Matcher characterMatcher = CHARACTER_TYPE_PATTERN.matcher(type);
-        if (characterMatcher.matches()) {
-            SqlTypeName typeName = SqlTypeName.get(characterMatcher.group(1));
-            int precision = Integer.parseInt(characterMatcher.group(2));
-            return typeFactory.createSqlType(Objects.requireNonNull(typeName), precision);
-        }
-
-        SqlTypeName sqlTypeName = SqlTypeName.get(type);
-        if (sqlTypeName == null) {
-            throw new RuntimeException("sql type name not found: " + type);
-        }
-        return typeFactory.createSqlType(sqlTypeName);
+        return DataTypeSupport.Parser.parse(typeFactory, type);
     }
 
     public static RelDataTypeField getRelDataTypeField(String name, int index, SqlTypeName typeName) {
@@ -145,26 +99,7 @@ public class DataTypeUtils {
             List<RelDataTypeField> desiredFields,
             List<RelDataTypeField> givenFields
     ) {
-        if (desiredFields.size() > givenFields.size()) {
-            throw new RuntimeException("desired fields size greater than given fields size");
-        }
-
-        for (int i = 0; i < desiredFields.size(); i++) {
-            RelDataTypeField desiredField = desiredFields.get(i);
-            RelDataTypeField givenField = givenFields.get(i);
-            if (!desiredField.getName().equalsIgnoreCase(givenField.getName())) {
-                throw new RuntimeException(
-                        "desired field name not equal to given field name: "
-                                + desiredField.getName() + " != " + givenField.getName());
-            }
-            if (haveCompatibleSchemaTypes(desiredField, givenField)) {
-                continue;
-            }
-            throw new RuntimeException(
-                    "desired field type not equal to given field type: "
-                            + desiredField.getType().getSqlTypeName() + " != "
-                            + givenField.getType().getSqlTypeName());
-        }
+        DataTypeSupport.Schemas.checkCompatible(desiredFields, givenFields);
     }
 
     /**
@@ -176,49 +111,11 @@ public class DataTypeUtils {
             List<RelDataTypeField> fields1,
             List<RelDataTypeField> fields2
     ) {
-        if (fields1.size() != fields2.size()) {
-            throw new RuntimeException(
-                    "field count not equal: " + fields1.size() + " != " + fields2.size());
-        }
-
-        for (int i = 0; i < fields1.size(); i++) {
-            RelDataTypeField field1 = fields1.get(i);
-            RelDataTypeField field2 = fields2.get(i);
-            if (!field1.getName().equalsIgnoreCase(field2.getName())) {
-                throw new RuntimeException(
-                        "field name not equal: " + field1.getName() + " != " + field2.getName());
-            }
-            if (haveCompatibleSchemaTypes(field1, field2)) {
-                continue;
-            }
-            throw new RuntimeException(
-                    "field type not equal: "
-                            + field1.getType().getSqlTypeName() + " != "
-                            + field2.getType().getSqlTypeName());
-        }
-    }
-
-    private static boolean haveCompatibleSchemaTypes(
-            RelDataTypeField first,
-            RelDataTypeField second
-    ) {
-        SqlTypeName firstType = first.getType().getSqlTypeName();
-        SqlTypeName secondType = second.getType().getSqlTypeName();
-        return firstType.equals(secondType)
-                || SqlTypeName.STRING_TYPES.contains(firstType)
-                && SqlTypeName.STRING_TYPES.contains(secondType);
+        DataTypeSupport.Schemas.checkSame(fields1, fields2);
     }
 
     public static void checkTableSchemaIdentical(List<RelDataTypeField> referenceFields, List<RelDataTypeField> fields, int tableIndex) {
-        if (referenceFields.size() != fields.size()) {
-            throw new IllegalArgumentException("Table " + tableIndex + " has different column count than table 0");
-        }
-        for (int j = 0; j < referenceFields.size(); j++) {
-            if (!referenceFields.get(j).getType().equals(fields.get(j).getType())) {
-                throw new IllegalArgumentException("Column type mismatch at index " + j
-                        + ": " + referenceFields.get(j).getType() + " vs " + fields.get(j).getType());
-            }
-        }
+        DataTypeSupport.Schemas.checkIdentical(referenceFields, fields, tableIndex);
     }
 
     public static int findFieldIndex(List<RelDataTypeField> fields, String fieldName) {
@@ -273,139 +170,19 @@ public class DataTypeUtils {
     }
 
     public static Object convertType(Object value, SqlTypeName sqlTypeName) {
-        if (value == null) {
-            return null;
-        }
-        if (sqlTypeName == null) {
-            return value;
-        }
-        switch (sqlTypeName) {
-            case TINYINT:
-                if (value instanceof Byte) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).byteValue();
-            case SMALLINT:
-                if (value instanceof Short) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).shortValue();
-            case INTEGER:
-                if (value instanceof Integer) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).intValue();
-            case BIGINT:
-                if (value instanceof Long) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).longValue();
-            case FLOAT:
-            case REAL:
-                if (value instanceof Float) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).floatValue();
-            case DOUBLE:
-                if (value instanceof Double) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName).doubleValue();
-            case DECIMAL:
-                if (value instanceof BigDecimal) {
-                    return value;
-                }
-                return toNumber(value, sqlTypeName);
-            case BOOLEAN:
-                if (value instanceof Boolean) {
-                    return value;
-                }
-                return Boolean.valueOf(value.toString());
-            case VARCHAR:
-            case CHAR:
-                if (value instanceof String) {
-                    return value;
-                }
-                return value.toString();
-            case DATE:
-            case TIME:
-            case TIMESTAMP:
-                return value;
-            default:
-                return value;
-        }
-    }
-
-    private static Number toNumber(Object value, SqlTypeName target) {
-        if (value instanceof Number) {
-            return (Number) value;
-        }
-        if (value instanceof String) {
-            String s = (String) value;
-            try {
-                switch (target) {
-                    case TINYINT:
-                        return Byte.valueOf(s);
-                    case SMALLINT:
-                        return Short.valueOf(s);
-                    case INTEGER:
-                        return Integer.valueOf(s);
-                    case BIGINT:
-                        return Long.valueOf(s);
-                    case FLOAT:
-                    case REAL:
-                        return Float.valueOf(s);
-                    case DOUBLE:
-                        return Double.valueOf(s);
-                    case DECIMAL:
-                        return new BigDecimal(s);
-                    default:
-                        return Double.valueOf(s);
-                }
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(
-                        "Cannot parse '" + s + "' as " + target + " value", e);
-            }
-        }
-        throw new IllegalArgumentException(
-                "Cannot convert " + value.getClass().getName() + " to numeric type " + target);
+        return DataTypeSupport.Rows.convert(value, sqlTypeName);
     }
 
     public static Set<Object> convertKeySet(Set<Object> keySet, SqlTypeName sqlTypeName) {
-        Set<Object> result = new HashSet<>(keySet.size());
-        for (Object key : keySet) {
-            result.add(convertType(key, sqlTypeName));
-        }
-        return result;
+        return DataTypeSupport.Rows.convertKeys(keySet, sqlTypeName);
     }
 
     public static <V> Map<Object, V> convertMapKeys(Map<Object, V> map, SqlTypeName sqlTypeName) {
-        Map<Object, V> result = new HashMap<>(map.size());
-        for (Map.Entry<Object, V> entry : map.entrySet()) {
-            result.put(convertType(entry.getKey(), sqlTypeName), entry.getValue());
-        }
-        return result;
+        return DataTypeSupport.Rows.convertKeys(map, sqlTypeName);
     }
 
     public static void convertRowTypes(List<Object[]> rows, List<RelDataTypeField> fields) {
-        if (rows == null || fields == null) {
-            return;
-        }
-        for (Object[] row : rows) {
-            if (row == null) {
-                continue;
-            }
-            if (fields.size() > row.length) {
-                throw new RuntimeException("convertRowTypes failed, row length is " + row.length + ", fields size is " + fields.size());
-            }
-            for (int i = 0; i < fields.size(); i++) {
-                RelDataTypeField field = fields.get(i);
-                SqlTypeName targetType = field.getType().getSqlTypeName();
-                if (row[i] != null) {
-                    row[i] = convertType(row[i], targetType);
-                }
-            }
-        }
+        DataTypeSupport.Rows.convertRows(rows, fields);
     }
 
     /**
@@ -424,85 +201,7 @@ public class DataTypeUtils {
             List<RelDataTypeField> desiredFields,
             List<RelDataTypeField> givenFields
     ) {
-        if (rows == null || desiredFields == null || givenFields == null) {
-            throw new RuntimeException("adaptRowsToSchema failed, rows/desiredFields/givenFields must not be null");
-        }
-
-        int[] indexMapping = buildFieldIndexMapping(desiredFields, givenFields);
-
-        List<Object[]> result = new ArrayList<>(rows.size());
-        for (Object[] row : rows) {
-            if (row == null) {
-                result.add(null);
-                continue;
-            }
-            result.add(adaptRow(row, desiredFields, indexMapping));
-        }
-        return result;
-    }
-
-    private static int[] buildFieldIndexMapping(
-            List<RelDataTypeField> desiredFields,
-            List<RelDataTypeField> givenFields
-    ) {
-        Map<String, Integer> givenNameToIndex = new HashMap<>();
-        for (int i = 0; i < givenFields.size(); i++) {
-            givenNameToIndex.put(givenFields.get(i).getName().toLowerCase(Locale.ROOT), i);
-        }
-
-        int[] indexMapping = new int[desiredFields.size()];
-        for (int i = 0; i < desiredFields.size(); i++) {
-            RelDataTypeField desiredField = desiredFields.get(i);
-            Integer givenIndex = givenNameToIndex.get(
-                    desiredField.getName().toLowerCase(Locale.ROOT)
-            );
-            if (givenIndex == null) {
-                throw new RuntimeException(
-                        "adaptRowsToSchema failed, desired field not found in given fields: "
-                                + desiredField.getName());
-            }
-            checkFieldTypeCompatible(desiredField, givenFields.get(givenIndex));
-            indexMapping[i] = givenIndex;
-        }
-        return indexMapping;
-    }
-
-    private static Object[] adaptRow(
-            Object[] row,
-            List<RelDataTypeField> desiredFields,
-            int[] indexMapping
-    ) {
-        Object[] adaptedRow = new Object[desiredFields.size()];
-        for (int i = 0; i < desiredFields.size(); i++) {
-            int givenIndex = indexMapping[i];
-            if (givenIndex < row.length && row[givenIndex] != null) {
-                SqlTypeName targetType = desiredFields.get(i).getType().getSqlTypeName();
-                adaptedRow[i] = convertType(row[givenIndex], targetType);
-            }
-        }
-        return adaptedRow;
-    }
-
-    private static void checkFieldTypeCompatible(RelDataTypeField desiredField, RelDataTypeField givenField) {
-        SqlTypeName desiredType = desiredField.getType().getSqlTypeName();
-        SqlTypeName givenType = givenField.getType().getSqlTypeName();
-        // Rule 2: any type can be converted to a string type
-        if (SqlTypeName.STRING_TYPES.contains(desiredType)) {
-            return;
-        }
-        // Rule 3: numeric types can be converted between each other
-        if (SqlTypeName.NUMERIC_TYPES.contains(desiredType)
-                && SqlTypeName.NUMERIC_TYPES.contains(givenType)) {
-            return;
-        }
-        // Otherwise an exact type match is required
-        if (desiredType.equals(givenType)) {
-            return;
-        }
-        throw new RuntimeException(
-                "adaptRowsToSchema failed, incompatible field type for '"
-                        + desiredField.getName() + "': desired " + desiredType
-                        + ", given " + givenType);
+        return DataTypeSupport.Rows.adapt(rows, desiredFields, givenFields);
     }
 
     public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
@@ -520,49 +219,14 @@ public class DataTypeUtils {
     }
 
     public static String inferColumnTypeName(List<Map<String, Object>> rows, String columnName) {
-        for (Map<String, Object> row : rows) {
-            Object value = row.get(columnName);
-            if (value != null) {
-                return inferTypeName(value);
-            }
-        }
-        return "VARCHAR";
+        return DataTypeSupport.Inference.inferColumnTypeName(rows, columnName);
     }
 
     public static String inferTypeName(Object value) {
-        if (value == null) {
-            return "VARCHAR";
-        }
-        if (value instanceof Long || value instanceof Integer) {
-            return "BIGINT";
-        }
-        if (value instanceof Number) {
-            return "DOUBLE";
-        }
-        if (value instanceof Boolean) {
-            return "BOOLEAN";
-        }
-        if (value instanceof List) {
-            String elementType = inferListElementType((List<?>) value);
-            if (elementType != null) {
-                return "ARRAY<" + elementType + ">";
-            }
-            return "VARCHAR";
-        }
-        // String, Map -> VARCHAR
-        return "VARCHAR";
+        return DataTypeSupport.Inference.inferTypeName(value);
     }
 
     public static String inferListElementType(List<?> list) {
-        for (Object elem : list) {
-            if (elem != null) {
-                // nested complex type -> fall back to VARCHAR
-                if (elem instanceof Map || elem instanceof List) {
-                    return null;
-                }
-                return inferTypeName(elem);
-            }
-        }
-        return null;
+        return DataTypeSupport.Inference.inferListElementType(list);
     }
 }

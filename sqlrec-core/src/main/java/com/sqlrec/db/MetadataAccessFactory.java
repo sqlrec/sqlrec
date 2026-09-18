@@ -1,7 +1,6 @@
 package com.sqlrec.db;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.db.local.InMemoryStoreAccess;
 import com.sqlrec.db.local.LocalHdfsAccess;
 import com.sqlrec.db.local.SqlFileParser;
@@ -33,7 +32,7 @@ public class MetadataAccessFactory {
     }
 
     private static void init() throws Exception {
-        if (ExecEnv.isFileSystemMeta()) {
+        if (SqlRecConfigs.isFileSystemMetadata()) {
             String sqlSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getValue();
             SqlFileParser parser = new SqlFileParser(sqlSchemaDir);
             parser.load();

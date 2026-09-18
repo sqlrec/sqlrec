@@ -1,4 +1,4 @@
-package com.sqlrec.common.utils;
+package com.sqlrec.connectors.jdbc.sql;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,16 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
-class SqlStatementTest {
+class JdbcStatementTest {
 
-    private static SqlStatement statement(String sql, Object... parameters) {
-        return new SqlStatement(sql, Arrays.asList(parameters));
+    private static JdbcStatement statement(String sql, Object... parameters) {
+        return new JdbcStatement(sql, Arrays.asList(parameters));
     }
 
     @Test
     void testBindToBindsValuesInOrder() throws SQLException {
         PreparedStatement stmt = mock(PreparedStatement.class);
-        SqlStatement statement = statement("a = ? AND b = ? AND c = ?", "v1", BigDecimal.TEN, true);
+        JdbcStatement statement = statement("a = ? AND b = ? AND c = ?", "v1", BigDecimal.TEN, true);
 
         statement.bindTo(stmt);
 
@@ -39,7 +39,7 @@ class SqlStatementTest {
     @Test
     void testBindToBindsNullAsSetNull() throws SQLException {
         PreparedStatement stmt = mock(PreparedStatement.class);
-        SqlStatement statement = statement("a = ?", new Object[]{null});
+        JdbcStatement statement = statement("a = ?", new Object[]{null});
 
         statement.bindTo(stmt);
 
@@ -50,7 +50,7 @@ class SqlStatementTest {
     @Test
     void testBindToWithNoParametersIsNoOp() throws SQLException {
         PreparedStatement stmt = mock(PreparedStatement.class);
-        SqlStatement statement = statement("SELECT 1");
+        JdbcStatement statement = statement("SELECT 1");
 
         statement.bindTo(stmt);
 
@@ -60,7 +60,7 @@ class SqlStatementTest {
     @Test
     void testAddToBatchBindsThenBatches() throws SQLException {
         PreparedStatement stmt = mock(PreparedStatement.class);
-        SqlStatement statement = statement("a = ?", "v1");
+        JdbcStatement statement = statement("a = ?", "v1");
 
         statement.addToBatch(stmt);
 
@@ -72,7 +72,7 @@ class SqlStatementTest {
     @Test
     void testWithParametersCopiesAndIsolatesParameterList() {
         List<Object> params = new java.util.ArrayList<>(Collections.singletonList("v1"));
-        SqlStatement statement = statement("a = ?").withParameters(params);
+        JdbcStatement statement = statement("a = ?").withParameters(params);
 
         // mutating the source list afterwards must not affect the statement
         params.add("v2");
@@ -81,17 +81,17 @@ class SqlStatementTest {
 
     @Test
     void testConstructorRejectsNullSql() {
-        assertThrows(NullPointerException.class, () -> new SqlStatement(null, Collections.emptyList()));
+        assertThrows(NullPointerException.class, () -> new JdbcStatement(null, Collections.emptyList()));
     }
 
     @Test
     void testConstructorRejectsNullParameters() {
-        assertThrows(NullPointerException.class, () -> new SqlStatement("SELECT 1", null));
+        assertThrows(NullPointerException.class, () -> new JdbcStatement("SELECT 1", null));
     }
 
     @Test
     void testToStringDoesNotLeakParameterValues() {
-        SqlStatement statement = statement("name = ?", "secret-value'; DROP TABLE users; --");
+        JdbcStatement statement = statement("name = ?", "secret-value'; DROP TABLE users; --");
         String text = statement.toString();
 
         assertTrue(text.contains("name = ?"));
@@ -100,3 +100,4 @@ class SqlStatementTest {
         assertFalse(text.contains("DROP TABLE"));
     }
 }
+

@@ -5,7 +5,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.ExecEnv;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.utils.CacheUtils;
@@ -38,7 +37,7 @@ public final class SqlFunctionCache {
 
     private static Cache<String, SqlFunctionBindable> createCache() {
         return createCache(
-                ExecEnv.isFileSystemMeta(),
+                SqlRecConfigs.isFileSystemMetadata(),
                 SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(),
                 TimeUnit.SECONDS,
                 ExecutorServiceUtils.getCacheRefreshExecutorService(),

@@ -1,7 +1,6 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.schema.VectorSearchable;
-import com.sqlrec.common.utils.FilterUtils;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.volcano.RelSubset;
@@ -52,7 +51,8 @@ public final class VectorJoinPlanExtractor {
         }
 
         RelOptTable rightTable = rightScan.getTable();
-        if (rightTable.unwrap(VectorSearchable.class) == null || sort.offset != null) {
+        VectorSearchable vectorTable = rightTable.unwrap(VectorSearchable.class);
+        if (vectorTable == null || sort.offset != null) {
             return Optional.empty();
         }
 
@@ -90,7 +90,8 @@ public final class VectorJoinPlanExtractor {
                 filter == null ? null : filter.getCondition(),
                 leftFieldCount,
                 rightFieldCount,
-                join.getCluster().getRexBuilder());
+                join.getCluster().getRexBuilder(),
+                vectorTable);
         if (!filterSplit.isSupported()) {
             return Optional.empty();
         }
@@ -126,7 +127,8 @@ public final class VectorJoinPlanExtractor {
             RexNode condition,
             int leftFieldCount,
             int rightFieldCount,
-            RexBuilder rexBuilder) {
+            RexBuilder rexBuilder,
+            VectorSearchable vectorTable) {
         if (condition == null) {
             return FilterSplit.supported(null, null);
         }
@@ -146,7 +148,7 @@ public final class VectorJoinPlanExtractor {
                 continue;
             }
 
-            if (!FilterUtils.canBuildMilvusJoinFilter(
+            if (!vectorTable.supportsJoinFilter(
                     conjunct, leftFieldCount, rightFieldCount)) {
                 return FilterSplit.unsupported();
             }

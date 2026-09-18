@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -208,6 +209,13 @@ public class DataTypeUtilsTest {
 
         List<Object[]> result3 = DataTypeUtils.adaptRowsToSchema(rows3, desiredBig, givenDouble);
         assertEquals(Long.valueOf(30L), result3.get(0)[0]);
+    }
+
+    @Test
+    public void testNumericToDecimalConversionProducesBigDecimal() {
+        assertEquals(new BigDecimal("30"), DataTypeUtils.convertType(30, SqlTypeName.DECIMAL));
+        assertEquals(new BigDecimal("30.5"), DataTypeUtils.convertType(30.5d, SqlTypeName.DECIMAL));
+        assertEquals(new BigDecimal("42.75"), DataTypeUtils.convertType("42.75", SqlTypeName.DECIMAL));
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.filter.MilvusFilterBuilder;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -43,6 +44,13 @@ public class MilvusCalciteTable extends SqlRecKvTable implements VectorSearchabl
     @Override
     public List<VectorSearchResult> searchByEmbeddingImpl(VectorSearchRequest request) {
         return milvusHandler.searchByEmbedding(request);
+    }
+
+    @Override
+    public boolean supportsJoinFilter(
+            RexNode condition, int leftFieldCount, int rightFieldCount) {
+        return MilvusFilterBuilder.supportsJoinFilter(
+                condition, leftFieldCount, rightFieldCount);
     }
 
     @Override

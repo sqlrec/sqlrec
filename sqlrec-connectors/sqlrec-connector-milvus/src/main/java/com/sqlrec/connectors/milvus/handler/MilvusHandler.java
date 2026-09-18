@@ -5,9 +5,9 @@ import com.google.gson.JsonObject;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
-import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.filter.MilvusFilterBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.milvus.pool.MilvusClientV2Pool;
@@ -147,7 +147,7 @@ public class MilvusHandler {
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
-        String filterSql = FilterUtils.getMilvusFilterSqlString(filters, milvusConfig.fieldSchemas);
+        String filterSql = MilvusFilterBuilder.buildScanFilter(filters, milvusConfig.fieldSchemas);
         QueryReq queryReq = QueryReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
@@ -175,7 +175,7 @@ public class MilvusHandler {
     }
 
     public List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {
-        String filterExpression = FilterUtils.buildMilvusFilterExpression(
+        String filterExpression = MilvusFilterBuilder.buildJoinFilter(
                 request.getFilterCondition(),
                 request.getLeftRow(),
                 milvusConfig.fieldSchemas.stream().map(FieldSchema::getName).collect(Collectors.toList())

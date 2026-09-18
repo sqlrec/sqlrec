@@ -253,7 +253,30 @@ public class VectorJoinPlanExtractorTest {
     }
 
     private VectorJoinPlanExtractor.FilterSplit split(RexNode condition) {
-        return VectorJoinPlanExtractor.splitFilter(condition, 2, 2, rexBuilder);
+        VectorSearchable vectorTable = mock(VectorSearchable.class);
+        when(vectorTable.supportsJoinFilter(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(2),
+                org.mockito.ArgumentMatchers.eq(2))).thenAnswer(invocation ->
+                supportsTestFilter(invocation.getArgument(0)));
+        return VectorJoinPlanExtractor.splitFilter(condition, 2, 2, rexBuilder, vectorTable);
+    }
+
+    private boolean supportsTestFilter(RexNode condition) {
+        if (!(condition instanceof RexCall)) {
+            return false;
+        }
+        RexCall call = (RexCall) condition;
+        if (call.isA(SqlKind.AND) || call.isA(SqlKind.OR)) {
+            return call.getOperands().stream().allMatch(this::supportsTestFilter);
+        }
+        return call.getOperands().size() == 2
+                && call.getOperands().stream().allMatch(operand ->
+                        operand instanceof org.apache.calcite.rex.RexInputRef
+                                || operand instanceof org.apache.calcite.rex.RexLiteral)
+                && call.getOperands().stream().anyMatch(operand ->
+                        operand instanceof org.apache.calcite.rex.RexInputRef
+                                && ((org.apache.calcite.rex.RexInputRef) operand).getIndex() >= 2);
     }
 
     private RexNode input(int index) {
@@ -305,8 +328,13 @@ public class VectorJoinPlanExtractorTest {
             when(left.getRowType()).thenReturn(leftType);
             when(rightScan.getRowType()).thenReturn(rightType);
             when(rightScan.getTable()).thenReturn(rightTable);
+            VectorSearchable vectorTable = mock(VectorSearchable.class);
+            when(vectorTable.supportsJoinFilter(
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyInt(),
+                    org.mockito.ArgumentMatchers.anyInt())).thenReturn(true);
             when(rightTable.unwrap(VectorSearchable.class)).thenReturn(
-                    vectorRight ? mock(VectorSearchable.class) : null);
+                    vectorRight ? vectorTable : null);
 
             when(project.getCluster()).thenReturn(cluster);
             when(project.getTraitSet()).thenReturn(cluster.traitSet());

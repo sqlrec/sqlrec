@@ -1,4 +1,4 @@
-package com.sqlrec.common.utils;
+package com.sqlrec.connectors.jdbc.sql;
 
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rex.RexNode;
@@ -8,35 +8,37 @@ import java.util.List;
 
 /**
  * The single place where SQL text is assembled. Every public method returns a
- * {@link SqlStatement}, whose SQL text contains only dialect-quoted identifiers
+ * {@link JdbcStatement}, whose SQL text contains only dialect-quoted identifiers
  * (see {@link #quoteIdentifier(String, String)}) and {@code '?'} placeholders; literal
- * values always travel as bind parameters. {@link SqlStatement} can only be constructed
+ * values always travel as bind parameters. {@link JdbcStatement} can only be constructed
  * inside this package, so code outside it cannot produce SQL with inlined values.
  */
-public class SqlUtils {
+public final class JdbcSqlBuilder {
+    private JdbcSqlBuilder() {
+    }
 
     /**
      * Build a SELECT for the whole table, optionally with a WHERE clause translated from
-     * Calcite filter conditions (see {@link FilterUtils#buildSqlFilter}).
+     * Calcite filter conditions (see {@link JdbcFilterBuilder#build}).
      */
-    public static SqlStatement select(String url, String tableName, List<FieldSchema> fieldSchemas, List<RexNode> filters) {
+    public static JdbcStatement select(String url, String tableName, List<FieldSchema> fieldSchemas, List<RexNode> filters) {
         validateFieldSchemas(fieldSchemas);
-        SqlStatement where = FilterUtils.buildSqlFilter(filters, fieldSchemas, url);
+        JdbcStatement where = JdbcFilterBuilder.build(filters, fieldSchemas, url);
         StringBuilder sql = new StringBuilder("SELECT ");
         appendColumnNames(sql, fieldSchemas, url);
         sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
         if (!where.getSql().isEmpty()) {
             sql.append(" WHERE ").append(where.getSql());
         }
-        return new SqlStatement(sql.toString(), where.getParameters());
+        return new JdbcStatement(sql.toString(), where.getParameters());
     }
 
     /**
      * Build a SELECT of rows whose primary key is in the given key set.
      * The returned statement carries {@code keyCount} unbound placeholders; the caller
-     * must supply the key values via {@link SqlStatement#withParameters(List)}.
+     * must supply the key values via {@link JdbcStatement#withParameters(List)}.
      */
-    public static SqlStatement selectByPrimaryKey(String url, String tableName, List<FieldSchema> fieldSchemas,
+    public static JdbcStatement selectByPrimaryKey(String url, String tableName, List<FieldSchema> fieldSchemas,
                                                   String primaryKey, int keyCount) {
         validateFieldSchemas(fieldSchemas);
         if (keyCount <= 0) {
@@ -48,16 +50,16 @@ public class SqlUtils {
         sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" IN (");
         appendPlaceholders(sql, keyCount);
         sql.append(")");
-        return new SqlStatement(sql.toString(), Collections.emptyList());
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /**
      * Build an upsert statement (INSERT ... ON CONFLICT/ON DUPLICATE KEY or MERGE INTO,
      * depending on the dialect inferred from the JDBC url). The returned statement is a
      * row template: the caller supplies one value per column via
-     * {@link SqlStatement#withParameters(List)}.
+     * {@link JdbcStatement#withParameters(List)}.
      */
-    public static SqlStatement upsert(String url, String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+    public static JdbcStatement upsert(String url, String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         validateFieldSchemas(fieldSchemas);
         String lowerUrl = url.toLowerCase();
         if (lowerUrl.startsWith("jdbc:mysql:")) {
@@ -71,7 +73,7 @@ public class SqlUtils {
     }
 
     /** PostgreSQL uses ANSI double-quoted identifiers. */
-    private static SqlStatement postgresUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+    private static JdbcStatement postgresUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = null;
         StringBuilder sql = new StringBuilder("INSERT INTO ");
         sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
@@ -80,11 +82,11 @@ public class SqlUtils {
         appendPlaceholders(sql, fieldSchemas.size());
         sql.append(") ON CONFLICT (").append(quoteIdentifier(primaryKey, url)).append(") DO UPDATE SET ");
         appendExcludedSet(sql, fieldSchemas, url);
-        return new SqlStatement(sql.toString(), Collections.emptyList());
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /** MySQL uses backtick-quoted identifiers. */
-    private static SqlStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+    private static JdbcStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = "jdbc:mysql:";
         StringBuilder sql = new StringBuilder("INSERT INTO ");
         sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
@@ -93,28 +95,28 @@ public class SqlUtils {
         appendPlaceholders(sql, fieldSchemas.size());
         sql.append(") ON DUPLICATE KEY UPDATE ");
         appendValuesSet(sql, fieldSchemas, url);
-        return new SqlStatement(sql.toString(), Collections.emptyList());
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /** H2 uses ANSI double-quoted identifiers. */
-    private static SqlStatement h2Upsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+    private static JdbcStatement h2Upsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = "jdbc:h2:";
         StringBuilder sql = new StringBuilder("MERGE INTO ");
         sql.append(quoteQualifiedIdentifier(tableName, url)).append(" KEY (");
         sql.append(quoteIdentifier(primaryKey, url)).append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
         sql.append(")");
-        return new SqlStatement(sql.toString(), Collections.emptyList());
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /**
      * Build a delete-by-primary-key statement. The returned statement is a row template:
-     * the caller supplies the key value via {@link SqlStatement#withParameters(List)}.
+     * the caller supplies the key value via {@link JdbcStatement#withParameters(List)}.
      */
-    public static SqlStatement deleteByPrimaryKey(String url, String tableName, String primaryKey) {
+    public static JdbcStatement deleteByPrimaryKey(String url, String tableName, String primaryKey) {
         String sql = "DELETE FROM " + quoteQualifiedIdentifier(tableName, url)
                 + " WHERE " + quoteIdentifier(primaryKey, url) + " = ?";
-        return new SqlStatement(sql, Collections.emptyList());
+        return new JdbcStatement(sql, Collections.emptyList());
     }
 
     private static void appendColumnNames(StringBuilder sql, List<FieldSchema> fieldSchemas, String url) {
