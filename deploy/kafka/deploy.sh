@@ -6,3 +6,6 @@ source "${dir}/../env.sh"
 # refer to https://strimzi.io/quickstarts
 render_config "${dir}/kafka.yaml"
 kubectl apply -f "${dir}/kafka.yaml.tmp" -n "${NAMESPACE}"
+kubectl wait --for=condition=Ready kafka/kafka \
+  -n "${NAMESPACE}" \
+  --timeout="${DEPLOY_TIMEOUT}s"

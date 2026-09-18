@@ -57,7 +57,8 @@ If Beeline connects and `SHOW TABLES;` succeeds, the core SQLRec service is read
 - The host, pods, and shared configuration use the `NODE_IP` returned by `minikube ip` for NodePort access; access through the host's physical IP from other LAN machines is not guaranteed
 - Some components are not deployed by default, such as Kyuubi, Jupyter, etc. If needed, you can execute the corresponding deployment scripts in the deploy directory
 - Deployment scripts read `deploy/env.sh`; use matching environment variables to override versions, namespaces, passwords, or ports, for example `NAMESPACE=dev SQLREC_VERSION=your-version bash ./deploy_components.sh`
-- `deploy_components.sh` deploys PostgreSQL, MinIO/JuiceFS, Hadoop, HMS, Flink, Spark, SQLRec, and by default Kafka, Redis, and Milvus. HDFS, MongoDB, Kyuubi, Jupyter, and observability components require their own scripts
+- RustFS provides shared S3 storage in standalone mode, and the deployment creates the buckets required by JuiceFS and Milvus. Override defaults with variables such as `RUSTFS_VERSION`, `RUSTFS_PORT`, `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, and `RUSTFS_DATA_STORAGE_SIZE`
+- `deploy_components.sh` deploys PostgreSQL, RustFS/JuiceFS, Hadoop, HMS, Flink, Spark, SQLRec, and by default Kafka, Redis, and Milvus. HDFS, MongoDB, Kyuubi, Jupyter, and observability components require their own scripts
 
 ## Production Environment Deployment
 
@@ -73,7 +74,7 @@ SQLRec requires the following core dependency services to run:
 | **PostgreSQL** | Metadata storage, storing model, service, function definitions, etc. | Yes |
 | **Hive Metastore** | Table metadata management, managing Hive table structure information | Yes |
 | **Flink SQL Gateway** | SQL execution engine, executing Flink SQL statements | Yes |
-| **Distributed Storage** | Storing model files, training data, etc. (MinIO/JuiceFS/HDFS) | Yes |
+| **Distributed Storage** | Storing model files, training data, etc. (RustFS/JuiceFS/HDFS) | Yes |
 
 ### Optional Dependency Services
 
@@ -178,7 +179,7 @@ kubectl create clusterrolebinding sqlrec-role \
 
 6. **Deploy Distributed Storage**
 
-   Choose MinIO, JuiceFS, or HDFS as the storage backend according to actual needs.
+   Choose RustFS, JuiceFS, or HDFS as the storage backend according to actual needs.
 
 7. **Deploy SQLRec**
 

@@ -6,7 +6,7 @@ source "${dir}/env.sh"
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 bash "${dir}/postgresql/init.sh"
-bash "${dir}/minio/init.sh"
+bash "${dir}/rustfs/init.sh"
 bash "${dir}/juicefs/init.sh"
 bash "${dir}/hadoop/init.sh"
 bash "${dir}/spark/init.sh"

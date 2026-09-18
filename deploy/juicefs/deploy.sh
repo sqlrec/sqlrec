@@ -14,11 +14,11 @@ helm upgrade --install juicefs-valkey valkey/valkey \
   --wait \
   --timeout "${DEPLOY_TIMEOUT}s"
 
-juicefs format \
+AWS_REGION="${RUSTFS_REGION}" AWS_DEFAULT_REGION="${RUSTFS_REGION}" juicefs format \
     --no-update \
-    --storage minio \
-    --bucket "http://${NODE_IP}:${MINIO_PORT}/bucket1" \
-    --access-key "${MINIO_USER}" \
-    --secret-key "${MINIO_PASSWORD}" \
+    --storage s3 \
+    --bucket "http://${NODE_IP}:${RUSTFS_PORT}/${RUSTFS_JUICEFS_BUCKET}" \
+    --access-key "${RUSTFS_ACCESS_KEY}" \
+    --secret-key "${RUSTFS_SECRET_KEY}" \
     "redis://${NODE_IP}:${JUICEFS_REDIS_PORT}/0" \
     myjfs

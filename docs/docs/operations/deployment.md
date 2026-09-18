@@ -57,7 +57,8 @@ bash ./bin/beeline.sh
 - 主机、Pod 和共享配置统一通过 `minikube ip` 返回的 `NODE_IP` 访问 NodePort；不保证局域网其他机器通过宿主机物理 IP 访问
 - 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
 - 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=your-version bash ./deploy_components.sh`
-- `deploy_components.sh` 默认部署 PostgreSQL、MinIO/JuiceFS、Hadoop、HMS、Flink、Spark、SQLRec，以及 Kafka、Redis、Milvus；HDFS、MongoDB、Kyuubi、Jupyter、监控等组件需单独启用对应脚本
+- RustFS 以单节点模式提供共享 S3 存储；部署脚本会创建 JuiceFS 和 Milvus 所需的 bucket。可通过 `RUSTFS_VERSION`、`RUSTFS_PORT`、`RUSTFS_ACCESS_KEY`、`RUSTFS_SECRET_KEY`、`RUSTFS_DATA_STORAGE_SIZE` 等变量覆盖默认值
+- `deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop、HMS、Flink、Spark、SQLRec，以及 Kafka、Redis、Milvus；HDFS、MongoDB、Kyuubi、Jupyter、监控等组件需单独启用对应脚本
 
 ## 生产环境部署
 
@@ -73,7 +74,7 @@ SQLRec 运行需要以下核心依赖服务：
 | **PostgreSQL** | 元数据存储，存储模型、服务、函数等定义 | 是 |
 | **Hive Metastore** | 表元数据管理，管理 Hive 表结构信息 | 是 |
 | **Flink SQL Gateway** | SQL 执行引擎，执行 Flink SQL 语句 | 是 |
-| **分布式存储** | 存储模型文件、训练数据等（MinIO/JuiceFS/HDFS） | 是 |
+| **分布式存储** | 存储模型文件、训练数据等（RustFS/JuiceFS/HDFS） | 是 |
 
 ### 可选依赖服务
 
@@ -178,7 +179,7 @@ psql -d sqlrec -f deploy/sql/master.sql
 
 6. **部署分布式存储**
 
-根据实际需求选择 MinIO、JuiceFS 或 HDFS 作为存储后端。
+根据实际需求选择 RustFS、JuiceFS 或 HDFS 作为存储后端。
 
 7. **部署 SQLRec**
 

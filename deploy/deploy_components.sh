@@ -18,7 +18,7 @@ kubectl apply -f "${dir}/pv.yaml.tmp" -n "${NAMESPACE}"
 cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/"
 cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/"
 
-bash "${dir}/minio/deploy.sh"
+bash "${dir}/rustfs/deploy.sh"
 bash "${dir}/juicefs/deploy.sh"
 bash "${dir}/hadoop/deploy.sh"
 bash "${dir}/hms/deploy.sh"
@@ -43,5 +43,7 @@ bash "${dir}/milvus/deploy.sh"
 #bash "${dir}/growthbook/deploy.sh"
 #bash "${dir}/prometheus/deploy.sh"
 #bash "${dir}/jaeger/deploy.sh"
+
+bash "${dir}/cache_images.sh" save
 
 echo "deploy components done"

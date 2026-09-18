@@ -4,7 +4,20 @@ set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
 
-mkdir -p "${CONF_DIR}" "${LIB_DIR}" "${CLIENT_DIR}" "${PV_DIR}" "${IMAGE_CACHE_DIR}"
+MINIKUBE_PROFILE=minikube
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+prepare_directories() {
+  mkdir -p "${CONF_DIR}" "${LIB_DIR}" "${CLIENT_DIR}" "${PV_DIR}" "${IMAGE_CACHE_DIR}"
+}
+
+minikube_for_profile() {
+  minikube -p "${MINIKUBE_PROFILE}" "$@"
+}
 
 find_vmnet_helper() {
   local helper_path helper_prefix
@@ -50,16 +63,13 @@ install_linux_dependencies() {
     elif command -v yum >/dev/null 2>&1; then
       run_privileged yum install -y ca-certificates curl tar gzip gettext postgresql
     else
-      echo "ERROR: cannot install required Linux commands automatically." >&2
       echo "Install curl, tar, gzip, envsubst, and psql, then rerun this script." >&2
-      exit 1
+      die "cannot install required Linux commands automatically."
     fi
   fi
 
-  if ! require_commands curl tar gzip envsubst psql; then
-    echo "ERROR: required Linux commands are still missing after installation." >&2
-    exit 1
-  fi
+  require_commands curl tar gzip envsubst psql ||
+    die "required Linux commands are still missing after installation."
 
   # refer to https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
   if command -v docker >/dev/null 2>&1; then
@@ -71,14 +81,11 @@ install_linux_dependencies() {
     if [ -n "${docker_user}" ] && [ "${docker_user}" != root ]; then
       run_privileged usermod -aG docker "${docker_user}"
     fi
-    echo "Docker was installed. Log out and back in, then rerun this script." >&2
-    exit 1
+    die "Docker was installed. Log out and back in, then rerun this script."
   fi
 
-  if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: Docker is installed but the daemon is unavailable or the current user cannot access it." >&2
-    exit 1
-  fi
+  docker info >/dev/null 2>&1 ||
+    die "Docker is installed but the daemon is unavailable or the current user cannot access it."
 
   if command -v minikube >/dev/null 2>&1; then
     echo 'skip install minikube'
@@ -99,26 +106,20 @@ install_linux_dependencies() {
   # env.sh ran before a first-time Minikube installation. Configure the
   # bundled kubectl fallback now that the minikube command is available.
   configure_host_tools
-  require_commands docker minikube kubectl helm
+  require_commands docker minikube kubectl helm ||
+    die "required Linux deployment commands are still missing after installation."
 }
 
-check_macos_dependencies() {
-  if [ "${DEPLOY_ARCH}" != arm64 ]; then
-    echo "ERROR: the macOS deployment currently supports Apple Silicon only." >&2
-    exit 1
-  fi
+install_macos_dependencies() {
+  [ "${DEPLOY_ARCH}" = arm64 ] ||
+    die "the macOS deployment currently supports Apple Silicon only."
 
   local macos_major
   macos_major="$(sw_vers -productVersion | cut -d. -f1)"
-  if [ "${macos_major}" -lt 14 ]; then
-    echo "ERROR: vfkit requires macOS 14 or later." >&2
-    exit 1
-  fi
+  [ "${macos_major}" -ge 14 ] || die "vfkit requires macOS 14 or later."
 
-  if ! command -v brew >/dev/null 2>&1; then
-    echo "ERROR: Homebrew is required. Install it from https://brew.sh/ and rerun." >&2
-    exit 1
-  fi
+  command -v brew >/dev/null 2>&1 ||
+    die "Homebrew is required. Install it from https://brew.sh/ and rerun."
 
   local formula
   local missing_formulae=()
@@ -134,10 +135,8 @@ check_macos_dependencies() {
 
   configure_host_tools
 
-  if ! require_commands minikube vfkit docker docker-buildx kubectl helm envsubst psql; then
-    echo "ERROR: required commands are still missing after Homebrew installation." >&2
-    exit 1
-  fi
+  require_commands minikube vfkit docker docker-buildx kubectl helm envsubst psql ||
+    die "required commands are still missing after Homebrew installation."
 
   # Homebrew installs Buildx outside Docker's default macOS plugin directory.
   # Add a user-scoped symlink without overwriting an existing plugin.
@@ -148,8 +147,7 @@ check_macos_dependencies() {
     mkdir -p "${HOME}/.docker/cli-plugins"
     if [ -e "${buildx_target}" ] || [ -L "${buildx_target}" ]; then
       echo "ERROR: Docker Buildx exists at ${buildx_target} but cannot be loaded." >&2
-      echo "Resolve the existing plugin and rerun this script." >&2
-      exit 1
+      die "Resolve the existing plugin and rerun this script."
     fi
     ln -s "${buildx_source}" "${buildx_target}"
     docker buildx version >/dev/null
@@ -170,132 +168,146 @@ check_macos_dependencies() {
   fi
   local vmnet_helper
   vmnet_helper="$(find_vmnet_helper || true)"
-  if [ -z "${vmnet_helper}" ]; then
-    echo "ERROR: vmnet-helper installation did not provide an executable." >&2
-    exit 1
-  fi
+  [ -n "${vmnet_helper}" ] ||
+    die "vmnet-helper installation did not provide an executable."
   prepend_path "$(dirname "${vmnet_helper}")"
   echo "Using vmnet-helper at ${vmnet_helper}"
 
   local minikube_version
   minikube_version="$(minikube version --short)"
-  if ! version_at_least "${minikube_version}" 1.37.0; then
-    echo "ERROR: Minikube 1.37.0 or later is required for vfkit VirtioFS mounts." >&2
-    exit 1
-  fi
+  version_at_least "${minikube_version}" 1.37.0 ||
+    die "Minikube 1.37.0 or later is required for vfkit VirtioFS mounts."
 }
 
-start_linux_minikube() {
-  minikube start \
-    --driver=docker \
-    --container-runtime=docker \
-    --cpus="${MINIKUBE_CPUS}" \
-    --memory="${MINIKUBE_MEMORY}" \
-    --disk-size="${MINIKUBE_DISK_SIZE}" \
-    --mount \
-    --mount-string="${DATA_DIR}:${DATA_DIR}" \
-    --ports="${PORT_RANGE_START}-${PORT_RANGE_END}:${PORT_RANGE_START}-${PORT_RANGE_END}" \
-    --ports="${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}:${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}"
+install_host_dependencies() {
+  case "${DEPLOY_OS}" in
+    linux) install_linux_dependencies ;;
+    darwin) install_macos_dependencies ;;
+  esac
 }
 
-start_macos_minikube() {
-  minikube start \
-    --driver=vfkit \
-    --network=vmnet-shared \
-    --container-runtime=docker \
-    --cpus="${MINIKUBE_CPUS}" \
-    --memory="${MINIKUBE_MEMORY}" \
-    --disk-size="${MINIKUBE_DISK_SIZE}" \
-    --mount \
+start_minikube() {
+  local driver
+  local args=(
+    --container-runtime=docker
+    --cpus="${MINIKUBE_CPUS}"
+    --memory="${MINIKUBE_MEMORY}"
+    --disk-size="${MINIKUBE_DISK_SIZE}"
+    --mount
     --mount-string="${DATA_DIR}:${DATA_DIR}"
+  )
+
+  if [ "${DEPLOY_OS}" = linux ]; then
+    driver=docker
+    args+=(
+      --driver="${driver}"
+      --ports="${PORT_RANGE_START}-${PORT_RANGE_END}:${PORT_RANGE_START}-${PORT_RANGE_END}"
+      --ports="${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}:${REDIS_CLUSTER_BUS_PORT_RANGE_START}-${REDIS_CLUSTER_BUS_PORT_RANGE_END}"
+    )
+  else
+    driver=vfkit
+    args+=(--driver="${driver}" --network=vmnet-shared)
+  fi
+
+  if ! minikube_for_profile start "${args[@]}"; then
+    if [ "${DEPLOY_OS}" = darwin ]; then
+      echo "An existing profile created with another driver must be deleted manually with 'minikube delete'." >&2
+    fi
+    die "failed to start Minikube with the ${driver} driver."
+  fi
 }
 
-if [ "${DEPLOY_OS}" = linux ]; then
-  install_linux_dependencies
-  if ! start_linux_minikube; then
-    echo "ERROR: failed to start Minikube with the Docker driver." >&2
-    exit 1
-  fi
-else
-  check_macos_dependencies
-  if ! start_macos_minikube; then
-    echo "ERROR: failed to start Minikube with the vfkit driver." >&2
-    echo "An existing profile created with another driver must be deleted manually with 'minikube delete'." >&2
-    exit 1
-  fi
-fi
+configure_cluster() {
+  NODE_IP="$(minikube_for_profile ip)"
+  [ -n "${NODE_IP}" ] || die "Minikube did not report a node IP."
 
-NODE_IP="$(minikube -p minikube ip)"
-export NODE_IP
-if [ -z "${NODE_IP}" ]; then
-  echo "ERROR: Minikube did not report a node IP." >&2
-  exit 1
-fi
-if command -v nc >/dev/null 2>&1 && ! nc -z -w 5 "${NODE_IP}" 8443; then
-  echo "ERROR: Minikube node IP ${NODE_IP} is not directly reachable from the host." >&2
-  if [ "${DEPLOY_OS}" = darwin ]; then
-    echo "Check vmnet-helper, VPN routes, and the macOS firewall." >&2
-  fi
-  exit 1
-fi
+  export NODE_IP
+  export K8S_APISERVER_ADDR="k8s://https://${NODE_IP}:8443"
+}
 
-# Verify that hostPath volumes will resolve to the same directory in the node.
-mount_probe="${DATA_DIR}/.sqlrec-mount-probe-$$"
-touch "${mount_probe}"
-if ! minikube -p minikube ssh -- test -f "${mount_probe}"; then
+verify_cluster_network() {
+  if command -v nc >/dev/null 2>&1 && ! nc -z -w 5 "${NODE_IP}" 8443; then
+    if [ "${DEPLOY_OS}" = darwin ]; then
+      echo "Check vmnet-helper, VPN routes, and the macOS firewall." >&2
+    fi
+    die "Minikube node IP ${NODE_IP} is not directly reachable from the host."
+  fi
+}
+
+verify_data_mount() {
+  local mount_probe="${DATA_DIR}/.sqlrec-mount-probe-$$"
+  touch "${mount_probe}"
+
+  if ! minikube_for_profile ssh -- test -f "${mount_probe}"; then
+    rm -f "${mount_probe}"
+    die "${DATA_DIR} is not mounted into Minikube at the same path."
+  fi
+
   rm -f "${mount_probe}"
-  echo "ERROR: ${DATA_DIR} is not mounted into Minikube at the same path." >&2
-  exit 1
-fi
-rm -f "${mount_probe}"
+}
 
-# Both host platforms use the Docker daemon inside Minikube. Docker Desktop is
-# not required on macOS.
-if ! (eval "$(minikube -p minikube docker-env)" && docker info >/dev/null); then
-  echo "ERROR: Docker CLI cannot connect to the Minikube Docker daemon." >&2
-  exit 1
-fi
+verify_minikube_docker() {
+  # Both host platforms use the Docker daemon inside Minikube. Docker Desktop
+  # is not required on macOS.
+  if ! (eval "$(minikube_for_profile docker-env)" && docker info >/dev/null); then
+    die "Docker CLI cannot connect to the Minikube Docker daemon."
+  fi
+}
 
-bash "${dir}/cache_images.sh" load
+verify_minikube() {
+  verify_cluster_network
+  verify_data_mount
+  verify_minikube_docker
+}
 
-case "${LOCAL_PATH_PROVISIONER_DATA_DIR}" in
-  /*) ;;
-  *)
-    echo "ERROR: LOCAL_PATH_PROVISIONER_DATA_DIR must be an absolute path." >&2
-    exit 1
-    ;;
-esac
+install_local_path_provisioner() {
+  case "${LOCAL_PATH_PROVISIONER_DATA_DIR}" in
+    /*) ;;
+    *) die "LOCAL_PATH_PROVISIONER_DATA_DIR must be an absolute path." ;;
+  esac
 
-# Do not patch Minikube's storage-provisioner-rancher addon: enabling that addon
-# again restores its /opt/local-path-provisioner ConfigMap. Disable the addon
-# once and install an equivalent project-managed provisioner whose configuration
-# survives Minikube restarts.
-if minikube addons list -p minikube -o json |
-  grep -q '"storage-provisioner-rancher":{[^}]*"Status":"enabled"'; then
-  minikube addons disable storage-provisioner-rancher
-  kubectl wait --for=delete namespace/local-path-storage \
-    --timeout="${DEPLOY_TIMEOUT}s"
-fi
+  # Do not patch Minikube's storage-provisioner-rancher addon: enabling that
+  # addon again restores its /opt/local-path-provisioner ConfigMap. Install a
+  # project-managed provisioner whose configuration survives restarts.
+  if minikube_for_profile addons list -o json |
+    grep -q '"storage-provisioner-rancher":{[^}]*"Status":"enabled"'; then
+    minikube_for_profile addons disable storage-provisioner-rancher
+    kubectl wait --for=delete namespace/local-path-storage \
+      --timeout="${DEPLOY_TIMEOUT}s"
+  fi
 
-render_config "${dir}/local-path-provisioner.values.yaml" \
-  '${LOCAL_PATH_PROVISIONER_DATA_DIR}'
-helm upgrade --install local-path-provisioner \
-  "${LOCAL_PATH_PROVISIONER_CHART}" \
-  --version "${LOCAL_PATH_PROVISIONER_VERSION}" \
-  --namespace local-path-storage \
-  --create-namespace \
-  --values "${dir}/local-path-provisioner.values.yaml.tmp" \
-  --wait \
-  --timeout "${DEPLOY_TIMEOUT}s"
+  render_config "${dir}/local-path-provisioner.values.yaml" \
+    '${LOCAL_PATH_PROVISIONER_DATA_DIR}'
+  helm upgrade --install local-path-provisioner \
+    "${LOCAL_PATH_PROVISIONER_CHART}" \
+    --version "${LOCAL_PATH_PROVISIONER_VERSION}" \
+    --namespace local-path-storage \
+    --create-namespace \
+    --values "${dir}/local-path-provisioner.values.yaml.tmp" \
+    --wait \
+    --timeout "${DEPLOY_TIMEOUT}s"
 
-# Keep local-path as the only default class when Minikube's standard provisioner
-# is also enabled. Static PV/PVC definitions with storageClassName: "" are not
-# affected by this annotation.
-if kubectl get storageclass standard >/dev/null 2>&1; then
-  kubectl annotate storageclass standard \
-    storageclass.kubernetes.io/is-default-class=false \
-    --overwrite
-fi
+  # Keep local-path as the only default class when Minikube's standard
+  # provisioner is also enabled.
+  if kubectl get storageclass standard >/dev/null 2>&1; then
+    kubectl annotate storageclass standard \
+      storageclass.kubernetes.io/is-default-class=false \
+      --overwrite
+  fi
+}
 
-echo "Minikube is ready at ${NODE_IP}"
-echo 'deploy minikube done'
+main() {
+  prepare_directories
+  install_host_dependencies
+  configure_minikube_resources || die "failed to configure Minikube resources."
+  start_minikube
+  configure_cluster
+  verify_minikube
+  bash "${dir}/cache_images.sh" load
+  install_local_path_provisioner
+
+  echo "Minikube is ready at ${NODE_IP}"
+  echo 'deploy minikube done'
+}
+
+main "$@"

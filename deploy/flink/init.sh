@@ -17,6 +17,10 @@ if [ ! -f "${LIB_DIR}/${SQLREC_FLINK_JAR_NAME}" ];then
 fi
 
 helm repo add flink-operator-repo \
-  https://dlcdn.apache.org/flink/flink-kubernetes-operator-1.12.1/ \
+  "${FLINK_OPERATOR_HELM_REPOSITORY}" \
   --force-update
-helm upgrade --install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator --set webhook.create=false --namespace "${NAMESPACE}"
+helm upgrade --install flink-kubernetes-operator \
+  flink-operator-repo/flink-kubernetes-operator \
+  --version "${FLINK_OPERATOR_VERSION}" \
+  --set webhook.create=false \
+  --namespace "${NAMESPACE}"

@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-create-buckets
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rustfs-create-buckets
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-buckets
+          image: rustfs/rc:${RUSTFS_RC_VERSION}
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: rustfs-secret
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              retry() {
+                description="$1"
+                shift
+                attempt=1
+                max_attempts=30
+
+                until "$@"; do
+                  if [ "$attempt" -ge "$max_attempts" ]; then
+                    echo "${description} failed after ${max_attempts} attempts" >&2
+                    return 1
+                  fi
+
+                  echo "${description} failed (attempt ${attempt}/${max_attempts}); retrying in 5 seconds..." >&2
+                  attempt=$((attempt + 1))
+                  sleep 5
+                done
+              }
+
+              retry "Configure RustFS alias" \
+                /usr/bin/rc alias set rustfs "http://${RUSTFS_SERVICE_NAME}:9000" \
+                "$RUSTFS_ACCESS_KEY" "$RUSTFS_SECRET_KEY" \
+                --region "${RUSTFS_REGION}" --bucket-lookup path
+
+              retry "Create JuiceFS bucket ${RUSTFS_JUICEFS_BUCKET}" \
+                /usr/bin/rc bucket create "rustfs/${RUSTFS_JUICEFS_BUCKET}" --ignore-existing
+
+              retry "Create Milvus bucket ${RUSTFS_MILVUS_BUCKET}" \
+                /usr/bin/rc bucket create "rustfs/${RUSTFS_MILVUS_BUCKET}" --ignore-existing
