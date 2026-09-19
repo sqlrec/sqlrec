@@ -9,18 +9,39 @@ import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalCalc;
+import org.apache.calcite.rel.rules.FilterTableScanRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.FilterableTable;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.Mappings;
-import org.immutables.value.Value;
 
-@Value.Enclosing
-public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule.Config> {
-    protected SqlRecFilterTableScanRule(Config config) {
+public class SqlRecFilterTableScanRule extends RelRule<FilterTableScanRule.Config> {
+    private SqlRecFilterTableScanRule(FilterTableScanRule.Config config) {
         super(config);
+    }
+
+    public static SqlRecFilterTableScanRule create() {
+        FilterTableScanRule.Config config = FilterTableScanRule.Config.DEFAULT
+                .withOperandSupplier(b0 ->
+                        b0.operand(Filter.class).oneInput(b1 ->
+                                b1.operand(TableScan.class)
+                                        .predicate(SqlRecFilterTableScanRule::test).noInputs()))
+                .as(FilterTableScanRule.Config.class);
+        return new SqlRecFilterTableScanRule(config);
+    }
+
+    public static SqlRecFilterTableScanRule createInterpreter() {
+        FilterTableScanRule.Config config = FilterTableScanRule.Config.INTERPRETER
+                .withOperandSupplier(b0 ->
+                        b0.operand(Filter.class).oneInput(b1 ->
+                                b1.operand(EnumerableInterpreter.class).oneInput(b2 ->
+                                        b2.operand(TableScan.class)
+                                                .predicate(SqlRecFilterTableScanRule::test).noInputs())))
+                .withDescription("SqlRecFilterTableScanRule:interpreter")
+                .as(FilterTableScanRule.Config.class);
+        return new SqlRecFilterTableScanRule(config);
     }
 
     @Override
@@ -69,25 +90,4 @@ public class SqlRecFilterTableScanRule extends RelRule<SqlRecFilterTableScanRule
         call.transformTo(LogicalCalc.create(kvTableScan, program));
     }
 
-    @Value.Immutable
-    public interface Config extends RelRule.Config {
-        SqlRecFilterTableScanRule.Config DEFAULT = ImmutableSqlRecFilterTableScanRule.Config.builder().build()
-                .withOperandSupplier(b0 ->
-                        b0.operand(Filter.class).oneInput(b1 ->
-                                b1.operand(TableScan.class)
-                                        .predicate(SqlRecFilterTableScanRule::test).noInputs()));
-
-        SqlRecFilterTableScanRule.Config INTERPRETER = ImmutableSqlRecFilterTableScanRule.Config.builder().build()
-                .withOperandSupplier(b0 ->
-                        b0.operand(Filter.class).oneInput(b1 ->
-                                b1.operand(EnumerableInterpreter.class).oneInput(b2 ->
-                                        b2.operand(TableScan.class)
-                                                .predicate(SqlRecFilterTableScanRule::test).noInputs())))
-                .withDescription("SqlRecFilterTableScanRule:interpreter");
-
-        @Override
-        default SqlRecFilterTableScanRule toRule() {
-            return new SqlRecFilterTableScanRule(this);
-        }
-    }
 }

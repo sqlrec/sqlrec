@@ -11,13 +11,15 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-import static java.util.Objects.requireNonNull;
-
-
 public class SqlrecEnumerableUnion extends EnumerableUnion {
+    private static final Method MERGE_METHOD = getMergeMethod(
+            "snakeMergeEnumerable", Iterable[].class);
+    private static final Method DISTINCT_MERGE_METHOD = getMergeMethod(
+            "snakeMergeDistinctEnumerable", EqualityComparer.class, Iterable[].class);
 
     public SqlrecEnumerableUnion(RelOptCluster cluster, RelTraitSet traitSet,
                                  List<RelNode> inputs, boolean all) {
@@ -48,34 +50,31 @@ public class SqlrecEnumerableUnion extends EnumerableUnion {
         }
 
         Expression unionExp;
-        try {
-            if (all) {
-                unionExp = Expressions.call(
-                        MergeUtils.class.getMethod("snakeMergeEnumerable", Iterable[].class),
-                        inputExps);
-            } else {
-                List<Expression> arguments = new ArrayList<>();
-                arguments.add(comparer == null
-                        ? Expressions.constant(null, EqualityComparer.class)
-                        : comparer);
-                arguments.addAll(inputExps);
-                unionExp = Expressions.call(
-                        MergeUtils.class.getMethod(
-                                "snakeMergeDistinctEnumerable",
-                                EqualityComparer.class,
-                                Iterable[].class),
-                        arguments);
-            }
-        } catch (NoSuchMethodException e) {
-            throw new RuntimeException(e);
+        if (all) {
+            unionExp = Expressions.call(MERGE_METHOD, inputExps);
+        } else {
+            List<Expression> arguments = new ArrayList<>();
+            arguments.add(comparer == null
+                    ? Expressions.constant(null, EqualityComparer.class)
+                    : comparer);
+            arguments.addAll(inputExps);
+            unionExp = Expressions.call(DISTINCT_MERGE_METHOD, arguments);
         }
 
-        builder.add(requireNonNull(unionExp, "unionExp"));
+        builder.add(unionExp);
         final PhysType physType =
                 PhysTypeImpl.of(
                         implementor.getTypeFactory(),
                         getRowType(),
                         pref.prefer(JavaRowFormat.CUSTOM));
         return implementor.result(physType, builder.toBlock());
+    }
+
+    private static Method getMergeMethod(String name, Class<?>... parameterTypes) {
+        try {
+            return MergeUtils.class.getMethod(name, parameterTypes);
+        } catch (NoSuchMethodException e) {
+            throw new ExceptionInInitializerError(e);
+        }
     }
 }

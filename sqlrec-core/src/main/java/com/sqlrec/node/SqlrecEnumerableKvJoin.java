@@ -11,7 +11,6 @@ import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -61,11 +60,6 @@ public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
                                        boolean semiJoinDone) {
         return new SqlrecEnumerableKvJoin(getCluster(), traitSet, left, right,
                 condition, variablesSet, joinType);
-    }
-
-    @Override
-    public RelWriter explainTerms(RelWriter pw) {
-        return super.explainTerms(pw);
     }
 
     @Override

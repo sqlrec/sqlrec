@@ -3,32 +3,32 @@ package com.sqlrec.rules;
 import com.sqlrec.node.SqlrecEnumerableKvJoin;
 import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
-import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rex.RexNode;
-import org.immutables.value.Value;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Value.Enclosing
-public class SqlRecKvJoinRule extends RelRule<SqlRecKvJoinRule.Config> {
+public class SqlRecKvJoinRule extends ConverterRule {
+    public static final Config DEFAULT_CONFIG = Config.INSTANCE
+            .withConversion(LogicalJoin.class, Convention.NONE,
+                    EnumerableConvention.INSTANCE, "SqlRecKvJoinRule")
+            .withRuleFactory(SqlRecKvJoinRule::new);
 
     protected SqlRecKvJoinRule(Config config) {
         super(config);
     }
 
     @Override
-    public void onMatch(RelOptRuleCall call) {
-        LogicalJoin join = call.rel(0);
-
-        RexNode condition = join.getCondition();
+    public @Nullable RelNode convert(RelNode rel) {
+        LogicalJoin join = (LogicalJoin) rel;
         try {
-            NodeUtils.getJoinKeyColIndex(condition);
+            NodeUtils.getJoinKeyColIndex(join.getCondition());
         } catch (Exception e) {
-            return;
+            return null;
         }
 
         List<RelNode> newInputs = new ArrayList<>();
@@ -38,31 +38,13 @@ public class SqlRecKvJoinRule extends RelRule<SqlRecKvJoinRule.Config> {
             }
             newInputs.add(input);
         }
-        final RelNode left = newInputs.get(0);
-        final RelNode right = newInputs.get(1);
 
-        SqlrecEnumerableKvJoin newJoin = SqlrecEnumerableKvJoin.create(
-                left,
-                right,
+        return SqlrecEnumerableKvJoin.create(
+                newInputs.get(0),
+                newInputs.get(1),
                 join.getCondition(),
                 join.getVariablesSet(),
                 join.getJoinType()
         );
-
-        call.transformTo(newJoin);
-    }
-
-    @Value.Immutable
-    public interface Config extends RelRule.Config {
-        SqlRecKvJoinRule.Config DEFAULT = ImmutableSqlRecKvJoinRule.Config.builder()
-                .build()
-                .withOperandSupplier(b1 ->
-                        b1.operand(LogicalJoin.class).anyInputs())
-                .withDescription("SqlRecKvJoinRule");
-
-        @Override
-        default SqlRecKvJoinRule toRule() {
-            return new SqlRecKvJoinRule(this);
-        }
     }
 }

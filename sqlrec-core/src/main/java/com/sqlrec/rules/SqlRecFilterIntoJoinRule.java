@@ -11,15 +11,14 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.immutables.value.Value;
 
 import java.util.List;
 
 import static org.apache.calcite.plan.RelOptUtil.conjunctions;
 
 public class SqlRecFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule {
-    protected SqlRecFilterIntoJoinRule(FilterIntoJoinRuleConfig config) {
-        super(config);
+    protected SqlRecFilterIntoJoinRule() {
+        super(FilterIntoJoinRuleConfig.DEFAULT);
     }
 
     @Override
@@ -58,34 +57,12 @@ public class SqlRecFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule 
         RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
         for (int i = 0; i < conjunctions.size(); i++) {
             RexNode node = conjunctions.get(i);
-            if (node instanceof RexCall) {
+            if (node instanceof RexCall call) {
                 conjunctions.set(i,
-                        RelOptUtil.collapseExpandedIsNotDistinctFromExpr((RexCall) node, rexBuilder));
+                        RelOptUtil.collapseExpandedIsNotDistinctFromExpr(call, rexBuilder));
             }
         }
         return conjunctions;
     }
 
-    @Value.Immutable(singleton = false)
-    public interface SqlRecFilterIntoJoinRuleConfig extends FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig {
-        SqlRecFilterIntoJoinRuleConfig DEFAULT =
-                ImmutableSqlRecFilterIntoJoinRuleConfig.of((join, joinType, exp) -> true)
-                        .withOperandSupplier(b0 ->
-                                b0.operand(Filter.class).oneInput(b1 ->
-                                        b1.operand(Join.class).anyInputs()));
-
-        @Value.Default
-        default boolean isSmart() {
-            return true;
-        }
-
-        default Config withSmart(boolean smart) {
-            return this;
-        }
-
-        @Override
-        default SqlRecFilterIntoJoinRule toRule() {
-            return new SqlRecFilterIntoJoinRule(this);
-        }
-    }
 }

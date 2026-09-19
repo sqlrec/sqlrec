@@ -1,5 +1,8 @@
 package com.sqlrec.node;
 
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.compiler.NormalSqlCompiler;
+import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.junit.jupiter.api.Test;
@@ -7,7 +10,28 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class UnionTest {
+    @Test
+    public void usesSqlrecUnionForAllAndDistinct() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+
+        BindableInterface unionAll = NormalSqlCompiler.getNormalSqlBindable(
+                "select 1 as id union all select 2 as id",
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME);
+        assertTrue(unionAll.getPhysicalPlan().contains("SqlrecEnumerableUnion"));
+        assertTrue(unionAll.getJavaExpression().contains("snakeMergeEnumerable"));
+
+        BindableInterface unionDistinct = NormalSqlCompiler.getNormalSqlBindable(
+                "select 1 as id union select 1 as id",
+                schema,
+                Consts.DEFAULT_SCHEMA_NAME);
+        assertTrue(unionDistinct.getPhysicalPlan().contains("SqlrecEnumerableUnion"));
+        assertTrue(unionDistinct.getJavaExpression().contains("snakeMergeDistinctEnumerable"));
+    }
+
     @Test
     public void testUnionSql() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);

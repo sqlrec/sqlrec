@@ -38,6 +38,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SqlRecVectorJoinRuleTest {
@@ -90,6 +91,65 @@ public class SqlRecVectorJoinRuleTest {
         assertEquals("movie", vectorTable.requests.get(1).getLeftRow()[1]);
         assertTrue(vectorTable.requests.stream()
                 .allMatch(request -> request.getFilterCondition() != null));
+    }
+
+    @Test
+    public void executesLookupWithoutFilterAndConsumesDescendingSort() throws Exception {
+        String sql = "select left_table.id as user_id, vector_table.id as item_id, "
+                + "ip(left_table.embedding, vector_table.embedding) as score "
+                + "from left_table join vector_table on 1=1 "
+                + "order by ip(left_table.embedding, vector_table.embedding) desc limit 2";
+
+        BindableInterface bindable = compile(sql);
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl()).toList();
+
+        assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
+        assertFalse(bindable.getPhysicalPlan().contains("EnumerableSort"));
+        assertEquals(0, vectorTable.scanCount);
+        assertEquals(2, vectorTable.requests.size());
+        assertTrue(vectorTable.requests.stream()
+                .allMatch(request -> request.getFilterCondition() == null));
+        assertEquals(4, rows.size());
+        assertArrayEquals(new Object[]{1, 101, 0.9d}, rows.get(0));
+        assertArrayEquals(new Object[]{2, 202, 0.8d}, rows.get(3));
+    }
+
+    @Test
+    public void rebuildsLeftFilterAndPushesCorrelatedFilter() throws Exception {
+        String sql = "select left_table.id as user_id, vector_table.id as item_id, "
+                + "vector_table.category, "
+                + "ip(left_table.embedding, vector_table.embedding) as score "
+                + "from left_table join vector_table on 1=1 "
+                + "where left_table.id = 2 "
+                + "and vector_table.category = left_table.category "
+                + "order by ip(left_table.embedding, vector_table.embedding) limit 2";
+
+        BindableInterface bindable = compile(sql);
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl()).toList();
+
+        assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
+        assertTrue(bindable.getPhysicalPlan().contains("EnumerableCalc"));
+        assertEquals(0, vectorTable.scanCount);
+        assertEquals(1, vectorTable.requests.size());
+        assertEquals(2, vectorTable.requests.get(0).getLeftRow()[0]);
+        assertNotNull(vectorTable.requests.get(0).getFilterCondition());
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{2, 201, "movie", 0.9d}, rows.get(0));
+        assertArrayEquals(new Object[]{2, 202, "movie", 0.8d}, rows.get(1));
+    }
+
+    @Test
+    public void fallsBackWhenVectorPlanCannotBeExtracted() throws Exception {
+        String sql = "select left_table.id as user_id, vector_table.id as item_id, "
+                + "ip(left_table.embedding, vector_table.embedding) as score "
+                + "from left_table join vector_table "
+                + "on left_table.id = vector_table.id "
+                + "order by ip(left_table.embedding, vector_table.embedding) limit 2";
+
+        BindableInterface bindable = compile(sql);
+
+        assertFalse(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
+        assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableKvJoin"));
     }
 
     private BindableInterface compile(String sql) throws Exception {

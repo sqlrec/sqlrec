@@ -13,7 +13,12 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.tree.ClassDeclaration;
 import org.apache.calcite.linq4j.tree.Expressions;
-import org.apache.calcite.plan.*;
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptLattice;
+import org.apache.calcite.plan.RelOptMaterialization;
+import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
@@ -38,7 +43,11 @@ import org.apache.calcite.tools.Programs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.prepare.Prepare.THREAD_EXPAND;
@@ -60,7 +69,7 @@ public class NormalSqlCompiler {
 
         // Validate the SQL query
         CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
-        SqlValidator validator = createSqlValidate(schema, defaultSchema);
+        SqlValidator validator = createSqlValidator(catalogReader);
         SqlNode validatedSqlNode = validator.validate(sqlNode);
 
         boolean containKvTable = SqlTypeChecker.isSqlContainKvTable(validatedSqlNode, schema, defaultSchema);
@@ -100,7 +109,8 @@ public class NormalSqlCompiler {
         log.info("compile javaExpression: {}", javaExpression);
 
         Map<String, Object> parameters = new HashMap<>();
-        Bindable bindable = EnumerableInterpretable.toBindable(
+        @SuppressWarnings("unchecked")
+        Bindable<Object[]> bindable = EnumerableInterpretable.toBindable(
                 parameters,
                 null,
                 (EnumerableRel) bestExp,
@@ -152,14 +162,16 @@ public class NormalSqlCompiler {
     }
 
     public static SqlValidator createSqlValidate(CalciteSchema schema, String defaultSchema) {
-        CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
-        SqlValidator validator = SqlValidatorUtil.newValidator(
+        return createSqlValidator(getCatalogReader(schema, defaultSchema));
+    }
+
+    private static SqlValidator createSqlValidator(CalciteCatalogReader catalogReader) {
+        return SqlValidatorUtil.newValidator(
                 getOperatorTable(catalogReader),
                 catalogReader,
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT),
                 SqlValidator.Config.DEFAULT
         );
-        return validator;
     }
 
     public static SqlOperatorTable getOperatorTable(CalciteCatalogReader catalogReader) {

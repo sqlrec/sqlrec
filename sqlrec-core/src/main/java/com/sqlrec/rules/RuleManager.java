@@ -12,21 +12,21 @@ import org.apache.calcite.rel.rules.CoreRules;
 
 public class RuleManager {
     public static final SqlRecFilterTableScanRule FILTER_SCAN =
-            SqlRecFilterTableScanRule.Config.DEFAULT.toRule();
+            SqlRecFilterTableScanRule.create();
     public static final SqlRecFilterTableScanRule FILTER_INTERPRETER_SCAN =
-            SqlRecFilterTableScanRule.Config.INTERPRETER.toRule();
+            SqlRecFilterTableScanRule.createInterpreter();
     public static final SqlRecFilterIntoJoinRule FILTER_INTO_JOIN =
-            SqlRecFilterIntoJoinRule.SqlRecFilterIntoJoinRuleConfig.DEFAULT.toRule();
+            new SqlRecFilterIntoJoinRule();
     public static final SqlRecKvJoinRule KV_JOIN =
-            SqlRecKvJoinRule.Config.DEFAULT.toRule();
+            SqlRecKvJoinRule.DEFAULT_CONFIG.toRule(SqlRecKvJoinRule.class);
     public static final SqlRecVectorJoinRule VECTOR_JOIN_WITH_FILTER =
-            SqlRecVectorJoinRule.Config.WITH_FILTER.toRule();
+            SqlRecVectorJoinRule.VectorJoinConfig.WITH_FILTER.toRule();
     public static final SqlRecVectorJoinRule VECTOR_JOIN_NO_FILTER =
-            SqlRecVectorJoinRule.Config.NO_FILTER.toRule();
+            SqlRecVectorJoinRule.VectorJoinConfig.NO_FILTER.toRule();
     public static final SqlRecTableModifyRule SQLREC_TABLE_MODIFY =
             SqlRecTableModifyRule.DEFAULT_CONFIG.toRule(SqlRecTableModifyRule.class);
     public static final SqlRecUnionRule SQLREC_UNION =
-            SqlRecUnionRule.Config.DEFAULT.toRule();
+            SqlRecUnionRule.DEFAULT_CONFIG.toRule(SqlRecUnionRule.class);
 
     public static VolcanoPlanner createPlanner(boolean addKvTableRules) {
         VolcanoPlanner planner = new VolcanoPlanner();

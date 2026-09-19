@@ -2,26 +2,28 @@ package com.sqlrec.rules;
 
 import com.sqlrec.node.SqlrecEnumerableUnion;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
-import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalUnion;
-import org.immutables.value.Value;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
-
-@Value.Enclosing
-public class SqlRecUnionRule extends RelRule<SqlRecUnionRule.Config> {
+public class SqlRecUnionRule extends ConverterRule {
+    public static final Config DEFAULT_CONFIG = Config.INSTANCE
+            .withConversion(LogicalUnion.class, Convention.NONE,
+                    EnumerableConvention.INSTANCE, "SqlRecUnionRule")
+            .withRuleFactory(SqlRecUnionRule::new);
 
     protected SqlRecUnionRule(Config config) {
         super(config);
     }
 
     @Override
-    public void onMatch(RelOptRuleCall call) {
-        LogicalUnion union = call.rel(0);
+    public @Nullable RelNode convert(RelNode rel) {
+        LogicalUnion union = (LogicalUnion) rel;
 
         List<RelNode> newInputs = new ArrayList<>();
         for (RelNode input : union.getInputs()) {
@@ -31,27 +33,11 @@ public class SqlRecUnionRule extends RelRule<SqlRecUnionRule.Config> {
             newInputs.add(input);
         }
 
-        SqlrecEnumerableUnion newUnion = new SqlrecEnumerableUnion(
+        return new SqlrecEnumerableUnion(
                 union.getCluster(),
                 union.getTraitSet().replace(EnumerableConvention.INSTANCE),
                 newInputs,
                 union.all
         );
-
-        call.transformTo(newUnion);
-    }
-
-    @Value.Immutable
-    public interface Config extends RelRule.Config {
-        SqlRecUnionRule.Config DEFAULT = ImmutableSqlRecUnionRule.Config.builder()
-                .build()
-                .withOperandSupplier(b1 ->
-                        b1.operand(LogicalUnion.class).anyInputs())
-                .withDescription("SqlRecUnionRule");
-
-        @Override
-        default SqlRecUnionRule toRule() {
-            return new SqlRecUnionRule(this);
-        }
     }
 }

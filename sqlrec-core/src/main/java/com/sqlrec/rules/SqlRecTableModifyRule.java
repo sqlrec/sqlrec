@@ -4,8 +4,8 @@ import com.sqlrec.node.SqlrecEnumerableTableModify;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.core.TableModify;
@@ -45,7 +45,7 @@ public class SqlRecTableModifyRule extends ConverterRule {
 
     @Override
     public boolean matches(RelOptRuleCall call) {
-        RelOptTableImpl table = (RelOptTableImpl) call.rel(0).getTable();
+        RelOptTable table = call.rel(0).getTable();
         return table != null && table.unwrap(ModifiableTable.class) != null;
     }
 }

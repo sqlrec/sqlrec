@@ -17,10 +17,9 @@ import org.immutables.value.Value;
 import java.util.List;
 import java.util.Optional;
 
-@Value.Enclosing
-public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
+public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.VectorJoinConfig> {
 
-    protected SqlRecVectorJoinRule(Config config) {
+    protected SqlRecVectorJoinRule(VectorJoinConfig config) {
         super(config);
     }
 
@@ -31,7 +30,7 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
         LogicalFilter filter = null;
         LogicalJoin join;
 
-        if (config.hasFilter()) {
+        if (call.rels.length == 4) {
             project = call.rel(1);
             filter = call.rel(2);
             join = call.rel(3);
@@ -87,9 +86,8 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
     }
 
     @Value.Immutable
-    public interface Config extends RelRule.Config {
-        SqlRecVectorJoinRule.Config WITH_FILTER = ImmutableSqlRecVectorJoinRule.Config.builder()
-                .hasFilter(true)
+    public interface VectorJoinConfig extends RelRule.Config {
+        VectorJoinConfig WITH_FILTER = ImmutableVectorJoinConfig.builder()
                 .build()
                 .withOperandSupplier(b0 ->
                         b0.operand(LogicalSort.class)
@@ -102,8 +100,7 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
                                                                                 .anyInputs()))))
                 .withDescription("SqlRecVectorJoinRule.WithFilter");
 
-        SqlRecVectorJoinRule.Config NO_FILTER = ImmutableSqlRecVectorJoinRule.Config.builder()
-                .hasFilter(false)
+        VectorJoinConfig NO_FILTER = ImmutableVectorJoinConfig.builder()
                 .build()
                 .withOperandSupplier(b0 ->
                         b0.operand(LogicalSort.class)
@@ -113,11 +110,6 @@ public class SqlRecVectorJoinRule extends RelRule<SqlRecVectorJoinRule.Config> {
                                                         b2.operand(LogicalJoin.class)
                                                                 .anyInputs())))
                 .withDescription("SqlRecVectorJoinRule.NoFilter");
-
-        @Value.Default
-        default boolean hasFilter() {
-            return true;
-        }
 
         @Override
         default SqlRecVectorJoinRule toRule() {
