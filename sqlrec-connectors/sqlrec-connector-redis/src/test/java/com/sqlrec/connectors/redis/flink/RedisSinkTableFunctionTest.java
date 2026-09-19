@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -110,6 +111,17 @@ class RedisSinkTableFunctionTest {
         sink.snapshotState(null);
         verify(mockHandler).batchInsert(argThat(rows -> rows.size() == 1));
         verify(mockHandler).batchDelete(argThat(rows -> rows.size() == 1));
+    }
+
+    @Test
+    void testMixedOperationsKeepInputOrder() throws Exception {
+        sink.invoke(row(RowKind.DELETE, "same-key", "old"), null);
+        sink.invoke(row(RowKind.INSERT, "same-key", "new"), null);
+        sink.snapshotState(null);
+
+        org.mockito.InOrder order = inOrder(mockHandler);
+        order.verify(mockHandler).batchDelete(argThat(rows -> rows.size() == 1));
+        order.verify(mockHandler).batchInsert(argThat(rows -> rows.size() == 1));
     }
 
     @Test

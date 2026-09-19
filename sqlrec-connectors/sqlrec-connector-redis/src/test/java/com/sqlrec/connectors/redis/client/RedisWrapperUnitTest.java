@@ -155,21 +155,6 @@ class RedisWrapperUnitTest {
     }
 
     @Test
-    void testExecutePipelined() {
-        when(mockConn.async()).thenReturn(mockAsync);
-
-        List<RedisFuture<?>> futures = wrapper.executePipelined(() ->
-                Collections.singletonList(wrapper.set("k".getBytes(), "v".getBytes())));
-
-        // Flushing must be suspended around the producer, commands flushed once, then resumed
-        verify(mockConn).setAutoFlushCommands(false);
-        verify(mockConn).flushCommands();
-        verify(mockConn).setAutoFlushCommands(true);
-        assertEquals(1, futures.size());
-        verify(mockAsync).set(any(), any());
-    }
-
-    @Test
     void testExpire() {
         when(mockConn.async()).thenReturn(mockAsync);
 

@@ -68,8 +68,10 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         final Set<ConfigOption<?>> options = new HashSet<>();
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.REDIS_MODE));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.DATA_STRUCTURE));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.MAX_LIST_SIZE));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.TTL));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.CACHE_TTL));
+        options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.MAX_CACHE_SIZE));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.BATCH_SIZE));
         options.add(FlinkSchemaUtils.toFlinkConfigOption(RedisOptions.FLUSH_INTERVAL));
         return options;

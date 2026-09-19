@@ -125,7 +125,8 @@ public class MilvusHandler {
             try {
                 pool.close();
             } catch (Exception e) {
-                logger.warn("Failed to close Milvus client pool for {} during invalidation: {}", key, e.getMessage());
+                // The cache key includes the authentication token; never log it.
+                logger.warn("Failed to close Milvus client pool during invalidation: {}", e.getMessage());
             }
         }
     }
@@ -139,7 +140,7 @@ public class MilvusHandler {
             try {
                 entry.getValue().close();
             } catch (Exception e) {
-                logger.warn("Failed to close Milvus client pool for {} on shutdown: {}", entry.getKey(), e.getMessage());
+                logger.warn("Failed to close Milvus client pool on shutdown: {}", e.getMessage());
             }
         }
         clientPools.clear();
@@ -167,6 +168,9 @@ public class MilvusHandler {
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
+        if (keySet == null || keySet.isEmpty()) {
+            return Collections.emptyMap();
+        }
         QueryReq queryReq = QueryReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
@@ -311,7 +315,7 @@ public class MilvusHandler {
         if (clientPools.containsKey(key)) {
             clientPools.get(key).returnClient(key, client);
         } else {
-            logger.warn("client pool {} is not found", key);
+            logger.warn("Milvus client pool is not found; closing the returned client");
             client.close();
         }
     }

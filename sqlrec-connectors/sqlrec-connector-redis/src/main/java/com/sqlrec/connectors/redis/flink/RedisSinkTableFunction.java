@@ -68,11 +68,15 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
 
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
+            // Preserve changelog order across operation types. Keeping separate buffers
+            // without this flush would reorder DELETE -> INSERT into INSERT -> DELETE.
+            flushDeleteBuffer();
             insertBuffer.add(objects);
             if (insertBuffer.size() >= batchSize) {
                 flushInsertBuffer();
             }
         } else if (kind == RowKind.DELETE) {
+            flushInsertBuffer();
             deleteBuffer.add(objects);
             if (deleteBuffer.size() >= batchSize) {
                 flushDeleteBuffer();

@@ -96,6 +96,8 @@ public class RedisOptions {
         redisConfig.ttl = TTL.getValue(options);
         redisConfig.cacheTtl = CACHE_TTL.getValue(options);
         redisConfig.maxCacheSize = MAX_CACHE_SIZE.getValue(options);
+        redisConfig.batchSize = BATCH_SIZE.getValue(options);
+        redisConfig.flushInterval = FLUSH_INTERVAL.getValue(options);
 
         return redisConfig;
     }

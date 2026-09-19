@@ -183,9 +183,6 @@ public class JdbcHandler {
         synchronized (dataSources) {
             ds = dataSources.get(key);
             if (ds == null) {
-                // A new key for an already-seen logical connection means credentials or
-                // driver/schema changed; close the now-stale pool(s) so they don't leak.
-                evictStalePoolsForSameConnection(key);
                 ds = createDataSource();
                 dataSources.put(key, ds);
             }
@@ -194,49 +191,29 @@ public class JdbcHandler {
     }
 
     /**
-     * Cache key for a pooled DataSource. Includes every identity/config parameter
-     * (url, username, driver, schema and password) so that a credential rotation or
-     * driver/schema change produces a different key and forces a fresh pool instead of
-     * silently reusing connections authenticated with the old credentials.
+     * Cache key for a pooled DataSource. Handlers with different connection or pool
+     * settings must not accidentally share a pool.
      */
     private String dataSourceKey() {
-        return connectionPrefix() + "|" + nullToEmpty(jdbcConfig.password);
-    }
-
-    /**
-     * Prefix of {@link #dataSourceKey()} that identifies a logical connection ignoring
-     * the (rotatable) password. Used to find and evict stale pools for the same
-     * connection after a credential change.
-     */
-    private String connectionPrefix() {
-        return nullToEmpty(jdbcConfig.url) + "|"
-                + nullToEmpty(jdbcConfig.username) + "|"
-                + nullToEmpty(jdbcConfig.driver) + "|"
-                + nullToEmpty(jdbcConfig.schema);
-    }
-
-    private static String nullToEmpty(String s) {
-        return s == null ? "" : s;
-    }
-
-    /**
-     * Close and remove any cached pool that targets the same logical connection as
-     * {@code currentKey} but was created with different (now stale) credentials/config.
-     */
-    private void evictStalePoolsForSameConnection(String currentKey) {
-        String prefix = connectionPrefix();
-        for (Map.Entry<String, HikariDataSource> entry : new ArrayList<>(dataSources.entrySet())) {
-            String existingKey = entry.getKey();
-            if (existingKey.startsWith(prefix) && !existingKey.equals(currentKey)) {
-                try {
-                    entry.getValue().close();
-                } catch (Exception e) {
-                    logger.warn("Failed to close stale HikariDataSource for key {}: {}", existingKey, e.getMessage());
-                }
-                dataSources.remove(existingKey);
-                logger.info("Evicted stale JDBC connection pool for key: {}", existingKey);
-            }
-        }
+        Map<String, String> properties = jdbcConfig.jdbcProperties == null
+                ? Collections.emptyMap()
+                : new TreeMap<>(jdbcConfig.jdbcProperties);
+        return Arrays.asList(
+                jdbcConfig.url,
+                jdbcConfig.username,
+                jdbcConfig.password,
+                jdbcConfig.driver,
+                jdbcConfig.schema,
+                jdbcConfig.connectionPoolSize,
+                jdbcConfig.connectionPoolMinIdle,
+                jdbcConfig.connectionPoolIdleTimeout,
+                jdbcConfig.connectionPoolMaxLifetime,
+                jdbcConfig.connectionPoolConnectionTimeout,
+                jdbcConfig.connectionPoolValidationTimeout,
+                jdbcConfig.connectionPoolKeepaliveTime,
+                jdbcConfig.connectionPoolName,
+                properties
+        ).toString();
     }
 
     /**
@@ -248,7 +225,9 @@ public class JdbcHandler {
             try {
                 entry.getValue().close();
             } catch (Exception e) {
-                logger.warn("Failed to close HikariDataSource for key {} on shutdown: {}", entry.getKey(), e.getMessage());
+                // The map key contains the password because credentials identify a pool;
+                // never include it in logs.
+                logger.warn("Failed to close JDBC connection pool on shutdown: {}", e.getMessage());
             }
         }
         dataSources.clear();

@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.mongodb.handler;
 
+import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
@@ -125,5 +127,16 @@ class MongoHandlerBatchUnitTest {
         assertTrue(handler.deleteBatch(Collections.emptyList()));
         assertTrue(handler.deleteBatch(null));
         verify(mockCollection, never()).bulkWrite(anyList());
+    }
+
+    @Test
+    void testDriverExceptionIsNotRetriedByHandler() {
+        when(mockCollection.bulkWrite(anyList()))
+                .thenThrow(new MongoTimeoutException("timed out"));
+
+        assertThrows(MongoTimeoutException.class, () -> handler.upsertBatch(
+                Collections.singletonList(new Object[]{"k1", "v1"})));
+
+        verify(mockCollection).bulkWrite(anyList());
     }
 }

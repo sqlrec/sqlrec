@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -129,6 +130,13 @@ class RedisHandlerUnitTest {
     }
 
     @Test
+    void testScanByEmptyKeySetDoesNotCallRedis() throws Exception {
+        assertTrue(handler.scan(Collections.emptySet()).get().isEmpty());
+        assertTrue(handler.scan((Set<String>) null).get().isEmpty());
+        verifyNoInteractions(mockRedisClient);
+    }
+
+    @Test
     void testDelete() throws Exception {
         // Mock del command return value
         when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
@@ -175,10 +183,7 @@ class RedisHandlerUnitTest {
     }
 
     @Test
-    void testBatchInsertUsesPipelinedSetex() throws Exception {
-        // executePipelined must invoke the producer and return its futures
-        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
-                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
+    void testBatchInsertUsesAsyncSetex() throws Exception {
         when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
         when(mockSetFuture.toCompletableFuture())
                 .thenReturn(java.util.concurrent.CompletableFuture.completedFuture("OK"));
@@ -190,6 +195,47 @@ class RedisHandlerUnitTest {
         // one SET ... EX per row, no EXPIRE
         verify(mockRedisClient, times(2)).setex(any(), any(), anyLong());
         verify(mockRedisClient, never()).expire(any(), anyLong());
+    }
+
+    @Test
+    void testBatchInsertSubmitsAllCommandsBeforeWaiting() {
+        RedisFuture<String> firstFuture = mock(RedisFuture.class);
+        RedisFuture<String> secondFuture = mock(RedisFuture.class);
+        when(mockRedisClient.setex(any(), any(), anyLong()))
+                .thenReturn(firstFuture, secondFuture);
+        when(firstFuture.toCompletableFuture())
+                .thenReturn(CompletableFuture.completedFuture("OK"));
+        when(secondFuture.toCompletableFuture())
+                .thenReturn(CompletableFuture.completedFuture("OK"));
+
+        handler.batchInsert(Arrays.asList(
+                new Object[]{"key1", "v1"},
+                new Object[]{"key2", "v2"}));
+
+        InOrder order = inOrder(mockRedisClient, firstFuture, secondFuture);
+        order.verify(mockRedisClient, times(2)).setex(any(), any(), anyLong());
+        order.verify(firstFuture).toCompletableFuture();
+        order.verify(secondFuture).toCompletableFuture();
+    }
+
+    @Test
+    void testBatchDeleteSubmitsAllCommandsAndWaits() {
+        RedisFuture<Long> firstFuture = mock(RedisFuture.class);
+        RedisFuture<Long> secondFuture = mock(RedisFuture.class);
+        when(mockRedisClient.del(any())).thenReturn(firstFuture, secondFuture);
+        when(firstFuture.toCompletableFuture())
+                .thenReturn(CompletableFuture.completedFuture(1L));
+        when(secondFuture.toCompletableFuture())
+                .thenReturn(CompletableFuture.completedFuture(1L));
+
+        handler.batchDelete(Arrays.asList(
+                new Object[]{"key1", "v1"},
+                new Object[]{"key2", "v2"}));
+
+        InOrder order = inOrder(mockRedisClient, firstFuture, secondFuture);
+        order.verify(mockRedisClient, times(2)).del(any());
+        order.verify(firstFuture).toCompletableFuture();
+        order.verify(secondFuture).toCompletableFuture();
     }
 
     @Test
@@ -270,8 +316,6 @@ class RedisHandlerUnitTest {
 
     @Test
     void testBatchInsertKeyFormat() throws Exception {
-        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
-                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
         when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
         when(mockSetFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
 
@@ -337,8 +381,6 @@ class RedisHandlerUnitTest {
     @Test
     void testListModeBatchInsertAggregatesSameKey() throws Exception {
         RedisHandler listHandler = newListModeHandler();
-        when(mockRedisClient.executePipelined(any())).thenAnswer(invocation ->
-                ((java.util.function.Supplier<List<RedisFuture<?>>>) invocation.getArgument(0)).get());
         when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
         when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
         when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);

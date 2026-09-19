@@ -20,20 +20,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
-import java.util.concurrent.ExecutionException;
-
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * Mock unit tests for the async-flushing Milvus Flink sink: verify buffering
- * until batch-size, flush on checkpoint / close, RowKind routing and async
- * error propagation.
+ * Mock unit tests for the Milvus Flink sink: verify buffering until batch-size,
+ * flush on checkpoint / close, RowKind routing and error propagation.
  */
 @ExtendWith(MockitoExtension.class)
 class MilvusSinkFunctionTest {
@@ -91,9 +89,6 @@ class MilvusSinkFunctionTest {
         verify(mockHandler, never()).addBatch(anyList());
 
         sink.invoke(row(RowKind.INSERT, "k2", "v2"), null);
-        // snapshotState waits for the async flush to finish, making the
-        // verification deterministic
-        sink.snapshotState(null);
         verify(mockHandler).addBatch(argThat(rows -> rows.size() == 2
                 && "k1".equals(rows.get(0)[0]) && "k2".equals(rows.get(1)[0])));
     }
@@ -137,6 +132,17 @@ class MilvusSinkFunctionTest {
     }
 
     @Test
+    void testMixedOperationsKeepInputOrder() throws Exception {
+        sink.invoke(row(RowKind.DELETE, "same-key", "old"), null);
+        sink.invoke(row(RowKind.INSERT, "same-key", "new"), null);
+        sink.snapshotState(null);
+
+        org.mockito.InOrder order = inOrder(mockHandler);
+        order.verify(mockHandler).removeBatch(argThat(rows -> rows.size() == 1));
+        order.verify(mockHandler).addBatch(argThat(rows -> rows.size() == 1));
+    }
+
+    @Test
     void testCloseFlushesRemainingBuffer() throws Exception {
         sink.invoke(row(RowKind.INSERT, "k1", "v1"), null);
 
@@ -146,16 +152,12 @@ class MilvusSinkFunctionTest {
 
     @Test
     @SilenceLoggers(MilvusSinkFunction.class)
-    void testAsyncFlushFailurePropagatesToCheckpoint() throws Exception {
+    void testFlushFailurePropagatesImmediately() throws Exception {
         doThrow(new RuntimeException("milvus down")).when(mockHandler).addBatch(anyList());
 
         sink.invoke(row(RowKind.INSERT, "k1", "v1"), null);
-        sink.invoke(row(RowKind.INSERT, "k2", "v2"), null);
-
-        // the async failure must surface at the next synchronous point
-        Exception ex = assertThrows(Exception.class, () -> sink.snapshotState(null));
-        // unwrap the execution wrapper to check the original cause
-        Throwable cause = ex instanceof ExecutionException && ex.getCause() != null ? ex.getCause() : ex;
-        assertTrue(cause.getMessage().contains("milvus down"));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> sink.invoke(row(RowKind.INSERT, "k2", "v2"), null));
+        assertTrue(ex.getMessage().contains("milvus down"));
     }
 }

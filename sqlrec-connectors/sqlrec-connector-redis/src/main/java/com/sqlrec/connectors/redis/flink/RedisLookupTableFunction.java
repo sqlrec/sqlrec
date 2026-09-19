@@ -43,6 +43,10 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
     }
 
     public void eval(CompletableFuture<Collection<GenericRowData>> resultFuture, Object rowkey) {
+        if (rowkey == null) {
+            resultFuture.complete(java.util.Collections.emptyList());
+            return;
+        }
         redisHandler.scan(rowkey.toString())
                 .whenComplete((result, throwable) -> {
                     if (throwable != null) {

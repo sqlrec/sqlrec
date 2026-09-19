@@ -4,8 +4,6 @@ import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
 
 import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
 
 public interface AbstractRedisWrapper {
     void open(String url);
@@ -42,13 +40,4 @@ public interface AbstractRedisWrapper {
     RedisFuture<String> ltrim(byte[] key, long start, long stop);
 
     RedisFuture<Boolean> expire(byte[] key, long seconds);
-
-    /**
-     * Issues the commands produced by {@code commandProducer} as one pipeline:
-     * command flushing is suspended while the producer runs, then all buffered
-     * commands are flushed to the network in one go instead of one TCP write per
-     * command. The producer must only issue commands and never block. The caller
-     * is responsible for awaiting the returned futures.
-     */
-    List<RedisFuture<?>> executePipelined(Supplier<List<RedisFuture<?>>> commandProducer);
 }

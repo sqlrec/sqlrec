@@ -26,6 +26,9 @@ public class RedisCalciteTable extends SqlRecKvTable {
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
+        if (keySet == null || keySet.isEmpty()) {
+            return Collections.emptyMap();
+        }
         Set<String> keySetStr = keySet.stream()
                 .map(Object::toString)
                 .collect(Collectors.toSet());

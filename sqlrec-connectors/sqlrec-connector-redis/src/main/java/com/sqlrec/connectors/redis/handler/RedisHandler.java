@@ -75,6 +75,9 @@ public class RedisHandler {
     }
 
     public CompletableFuture<Map<String, List<Object[]>>> scan(Set<String> keySet) {
+        if (keySet == null || keySet.isEmpty()) {
+            return CompletableFuture.completedFuture(Collections.emptyMap());
+        }
         if (isListMode()) {
             Map<String, CompletableFuture<List<byte[]>>> futureMap = keySet.stream()
                     .collect(Collectors.toMap(
@@ -162,10 +165,9 @@ public class RedisHandler {
 
     public void batchInsert(Collection<? extends Object[]> dataList) {
         try {
-            // Compute keys and encode values before entering the pipeline section:
+            // Compute keys and encode values before submitting any asynchronous command:
             // a malformed row (e.g. null primary key) fails the whole batch before
-            // any command is issued, and JSON encoding does not hold the
-            // autoFlush-disabled window of the shared connection.
+            // any command is issued.
             List<RedisFuture<?>> futures;
             if (isListMode()) {
                 // LPUSH is intentional: list mode keeps the newest record at the head of the list.
@@ -178,18 +180,15 @@ public class RedisHandler {
                             .add(codec.encode(data));
                 }
                 List<Map.Entry<String, List<byte[]>>> entries = new ArrayList<>(keyToValues.entrySet());
-                futures = redisClient.executePipelined(() -> {
-                    List<RedisFuture<?>> fs = new ArrayList<>();
-                    for (Map.Entry<String, List<byte[]>> entry : entries) {
-                        byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
-                        fs.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
-                        if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                            fs.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
-                        }
-                        fs.add(redisClient.expire(key, redisConfig.ttl));
+                futures = new ArrayList<>();
+                for (Map.Entry<String, List<byte[]>> entry : entries) {
+                    byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
+                    futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
+                    if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                        futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
                     }
-                    return fs;
-                });
+                    futures.add(redisClient.expire(key, redisConfig.ttl));
+                }
             } else {
                 List<byte[]> keys = new ArrayList<>(dataList.size());
                 List<byte[]> values = new ArrayList<>(dataList.size());
@@ -197,17 +196,14 @@ public class RedisHandler {
                     keys.add(getKey(data));
                     values.add(codec.encode(data));
                 }
-                // One SET ... EX per row, sent as a single pipeline. Unlike MSET +
-                // EXPIRE this halves the command count and also works in cluster
+                // One asynchronous SET ... EX per row. Unlike MSET + EXPIRE this
+                // halves the command count and also works in cluster
                 // mode (each SET is routed to the key's slot; MSET fails with
                 // CROSSSLOT for keys spanning multiple slots).
-                futures = redisClient.executePipelined(() -> {
-                    List<RedisFuture<?>> fs = new ArrayList<>(keys.size());
-                    for (int i = 0; i < keys.size(); i++) {
-                        fs.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
-                    }
-                    return fs;
-                });
+                futures = new ArrayList<>(keys.size());
+                for (int i = 0; i < keys.size(); i++) {
+                    futures.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
+                }
             }
             awaitAll(futures);
         } catch (Exception e) {
@@ -226,17 +222,14 @@ public class RedisHandler {
                     values.add(codec.encode(data));
                 }
             }
-            List<RedisFuture<?>> futures = redisClient.executePipelined(() -> {
-                List<RedisFuture<?>> fs = new ArrayList<>(keys.size());
-                for (int i = 0; i < keys.size(); i++) {
-                    if (listMode) {
-                        fs.add(redisClient.lrem(keys.get(i), values.get(i)));
-                    } else {
-                        fs.add(redisClient.del(keys.get(i)));
-                    }
+            List<RedisFuture<?>> futures = new ArrayList<>(keys.size());
+            for (int i = 0; i < keys.size(); i++) {
+                if (listMode) {
+                    futures.add(redisClient.lrem(keys.get(i), values.get(i)));
+                } else {
+                    futures.add(redisClient.del(keys.get(i)));
                 }
-                return fs;
-            });
+            }
             awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch delete data from Redis", e);
@@ -287,12 +280,13 @@ public class RedisHandler {
 
     private void maybeInvalidateOnFailure(Throwable t) {
         if (t != null && isConnectionFailure(t)) {
-            LOG.warn("Redis connection failure detected, invalidating shared connection for {}: {}",
-                    redisConfig.url, t.getMessage());
+            // Redis URLs may contain credentials; do not include them in logs.
+            LOG.warn("Redis connection failure detected, invalidating shared connection: {}",
+                    t.getMessage());
             try {
                 redisClient.invalidate();
             } catch (Exception ex) {
-                LOG.warn("Failed to invalidate Redis connection for {}: {}", redisConfig.url, ex.getMessage());
+                LOG.warn("Failed to invalidate Redis connection: {}", ex.getMessage());
             }
         }
     }

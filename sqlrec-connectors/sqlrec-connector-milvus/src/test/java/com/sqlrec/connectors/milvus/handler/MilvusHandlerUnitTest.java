@@ -316,6 +316,13 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
+    public void testGetByPrimaryKeyEmptyInputDoesNotCallMilvus() {
+        assertTrue(handler.getByPrimaryKey(Collections.emptySet()).isEmpty());
+        assertTrue(handler.getByPrimaryKey(null).isEmpty());
+        verifyNoInteractions(mockClient);
+    }
+
+    @Test
     public void testVectorSearchPushesCorrelatedFilterBeforeTopK() {
         SearchResp searchResp = mock(SearchResp.class);
         when(searchResp.getSearchResults()).thenReturn(Collections.emptyList());

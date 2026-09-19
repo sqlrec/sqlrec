@@ -8,14 +8,13 @@ import org.apache.calcite.schema.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class TableFactoryUtils {
     private static final Logger log = LoggerFactory.getLogger(TableFactoryUtils.class);
-
-    private static volatile Map<String, HmsTableFactory> tableFactories;
 
     public static Table getTableFromHmsTable(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         try {
@@ -46,20 +45,22 @@ public class TableFactoryUtils {
     }
 
     public static HmsTableFactory getTableFactory(String connector) {
-        if (tableFactories == null) {
-            getTableFactoryMap();
-        }
-        return tableFactories.getOrDefault(connector, null);
+        return getTableFactoryMap().get(connector);
     }
 
-    public static synchronized Map<String, HmsTableFactory> getTableFactoryMap() {
-        if (tableFactories == null) {
-            tableFactories = new ConcurrentHashMap<>();
-            ServiceLoader<HmsTableFactory> serviceLoader = ServiceLoader.load(HmsTableFactory.class);
-            for (HmsTableFactory tableFactory : serviceLoader) {
-                tableFactories.put(tableFactory.getConnectorName(), tableFactory);
+    public static Map<String, HmsTableFactory> getTableFactoryMap() {
+        return FactoryHolder.FACTORIES;
+    }
+
+    private static final class FactoryHolder {
+        private static final Map<String, HmsTableFactory> FACTORIES = loadFactories();
+
+        private static Map<String, HmsTableFactory> loadFactories() {
+            Map<String, HmsTableFactory> factories = new HashMap<>();
+            for (HmsTableFactory tableFactory : ServiceLoader.load(HmsTableFactory.class)) {
+                factories.put(tableFactory.getConnectorName(), tableFactory);
             }
+            return Collections.unmodifiableMap(factories);
         }
-        return tableFactories;
     }
 }

@@ -13,14 +13,11 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 
 public class RedisClusterWrapper implements AbstractRedisWrapper {
     private static final Logger LOG = LoggerFactory.getLogger(RedisClusterWrapper.class);
-    private static Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
-    private static Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
-    /** Locks serializing pipelined sections per url: autoFlush is connection-global. */
-    private static final Map<String, Object> pipelineLockMap = new ConcurrentHashMap<>();
+    private static final Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
+    private static final Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
 
     static {
         // Close all shared clients/connections on JVM shutdown (the previous no-op close()
@@ -86,22 +83,27 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
      */
     public static synchronized void invalidate(String url) {
         StatefulRedisClusterConnection<byte[], byte[]> connection = connectionMap.remove(url);
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (Exception e) {
-                LOG.warn("Failed to close Redis cluster connection for {}: {}", url, e.getMessage());
-            }
-        }
+        closeConnection(connection);
         RedisClusterClient redisClient = redisClientMap.remove(url);
         if (redisClient != null) {
             try {
                 redisClient.shutdown();
             } catch (Exception e) {
-                LOG.warn("Failed to shut down RedisClusterClient for {}: {}", url, e.getMessage());
+                LOG.warn("Failed to shut down RedisClusterClient: {}", e.getMessage());
             }
         }
-        pipelineLockMap.remove(url);
+    }
+
+    private static void closeConnection(
+            StatefulRedisClusterConnection<byte[], byte[]> connection) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (Exception e) {
+            LOG.warn("Failed to close Redis cluster connection: {}", e.getMessage());
+        }
     }
 
     /**
@@ -134,25 +136,6 @@ public class RedisClusterWrapper implements AbstractRedisWrapper {
         // Cluster mode routes each SET (with its EX argument) to the key's slot,
         // so unlike MSET this works for keys spanning multiple slots.
         return getCommands().set(key, value, SetArgs.Builder.ex(ttlSeconds));
-    }
-
-    @Override
-    public List<RedisFuture<?>> executePipelined(Supplier<List<RedisFuture<?>>> commandProducer) {
-        StatefulRedisClusterConnection<byte[], byte[]> connection = getConnection();
-        Object lock = pipelineLockMap.computeIfAbsent(url, k -> new Object());
-        // autoFlush is global to the shared cluster connection, so pipelined sections
-        // for the same url must not interleave: other threads' commands issued inside
-        // this window are simply buffered and sent by our flushCommands().
-        synchronized (lock) {
-            connection.setAutoFlushCommands(false);
-            try {
-                List<RedisFuture<?>> futures = commandProducer.get();
-                connection.flushCommands();
-                return futures;
-            } finally {
-                connection.setAutoFlushCommands(true);
-            }
-        }
     }
 
     public RedisFuture<Long> del(byte[] key) {
