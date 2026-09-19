@@ -130,7 +130,7 @@ public class MilvusFilterCompatibilityTest {
         String result = MilvusFilterBuilder.buildJoinFilter(filterCondition, leftValue, rightFieldNames);
 
         assertNotNull(result);
-        assertEquals("category <> \"category1\"", result);
+        assertEquals("category != \"category1\"", result);
     }
 
     @Test
@@ -372,7 +372,7 @@ public class MilvusFilterCompatibilityTest {
         RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.NOT_EQUALS, ref0, literal);
 
         String result = MilvusFilterBuilder.buildScanFilter(Collections.singletonList(filter), milvusFieldSchemas);
-        assertEquals("id <> 1", result);
+        assertEquals("id != 1", result);
     }
 
     @Test
@@ -415,7 +415,12 @@ public class MilvusFilterCompatibilityTest {
                 SqlStdOperatorTable.EQUALS,
                 id,
                 rexBuilder.makeExactLiteral(new java.math.BigDecimal(1)));
-        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, name);
+        RexNode unsupported = rexBuilder.makeCall(
+                SqlStdOperatorTable.NOT,
+                rexBuilder.makeCall(
+                        SqlStdOperatorTable.EQUALS,
+                        name,
+                        rexBuilder.makeLiteral("Bob")));
 
         RexNode andFilter = rexBuilder.makeCall(SqlStdOperatorTable.AND, supported, unsupported);
         RexNode orFilter = rexBuilder.makeCall(SqlStdOperatorTable.OR, supported, unsupported);
@@ -600,6 +605,21 @@ public class MilvusFilterCompatibilityTest {
     }
 
     @Test
+    public void testGetMilvusFilterSqlString_DoesNotMatchArrayFunctionByPrefix() {
+        List<FieldSchema> arrayFieldSchemas = Collections.singletonList(
+                new FieldSchema("tags", "ARRAY")
+        );
+        RexInputRef tagsRef = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.VARCHAR), 0);
+        RexNode literal = rexBuilder.makeLiteral(
+                "a", typeFactory.createSqlType(SqlTypeName.VARCHAR), false);
+        RexNode filter = rexBuilder.makeCall(ARRAY_CONTAINS_EXTRA, tagsRef, literal);
+
+        assertNull(MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(filter), arrayFieldSchemas));
+    }
+
+    @Test
     public void testGetMilvusFilterSqlString_NullLiteral() {
         // null literals must render without NPE (previously crashed on getValue().toString())
         RexInputRef ref1 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.VARCHAR), 1);
@@ -672,6 +692,26 @@ public class MilvusFilterCompatibilityTest {
     }
 
     @Test
+    public void testCanBuildMilvusJoinFilter_RejectsRightFieldArrayArgument() {
+        RexInputRef rightTags = rexBuilder.makeInputRef(
+                typeFactory.createArrayType(
+                        typeFactory.createSqlType(SqlTypeName.VARCHAR), -1),
+                1);
+        RexInputRef anotherRightTags = rexBuilder.makeInputRef(
+                typeFactory.createArrayType(
+                        typeFactory.createSqlType(SqlTypeName.VARCHAR), -1),
+                2);
+        RexNode condition = rexBuilder.makeCall(
+                ARRAY_CONTAINS_ALL, rightTags, anotherRightTags);
+
+        assertFalse(MilvusFilterBuilder.supportsJoinFilter(condition, 1, 2));
+        assertNull(MilvusFilterBuilder.buildJoinFilter(
+                condition,
+                new Object[]{Collections.singletonList("Action")},
+                Arrays.asList("tags", "other_tags")));
+    }
+
+    @Test
     public void testCanBuildMilvusJoinFilter_RejectsMixedOr() {
         RexInputRef leftId = rexBuilder.makeInputRef(
                 typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
@@ -704,6 +744,15 @@ public class MilvusFilterCompatibilityTest {
     /** Stand-in for the sqlrec-udf array_contains_all function operator. */
     private static final SqlOperator ARRAY_CONTAINS_ALL = new SqlFunction(
             "ARRAY_CONTAINS_ALL",
+            SqlKind.OTHER_FUNCTION,
+            ReturnTypes.BOOLEAN,
+            null,
+            OperandTypes.ANY_ANY,
+            SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+    /** Name-prefix collision that must not be treated as a Milvus array operator. */
+    private static final SqlOperator ARRAY_CONTAINS_EXTRA = new SqlFunction(
+            "ARRAY_CONTAINS_EXTRA",
             SqlKind.OTHER_FUNCTION,
             ReturnTypes.BOOLEAN,
             null,

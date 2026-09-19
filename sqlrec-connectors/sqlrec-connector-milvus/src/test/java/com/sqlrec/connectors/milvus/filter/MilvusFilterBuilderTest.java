@@ -1,13 +1,18 @@
 package com.sqlrec.connectors.milvus.filter;
 
+import com.google.common.collect.ImmutableRangeSet;
+import com.google.common.collect.Range;
+import com.google.common.collect.TreeRangeSet;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUnknownAs;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.Sarg;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -48,11 +53,115 @@ class MilvusFilterBuilderTest {
     }
 
     @Test
+    void buildsMatchAllFilterFromPrimaryKey() {
+        assertEquals("id IS NOT NULL", MilvusFilterBuilder.buildMatchAllFilter(fields, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> MilvusFilterBuilder.buildMatchAllFilter(fields, 2));
+    }
+
+    @Test
+    void buildsLikeScanFilter() {
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.LIKE,
+                input(1, SqlTypeName.VARCHAR),
+                rexBuilder.makeLiteral("Movie%"));
+
+        assertEquals("category like \"Movie%\"", MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(condition), fields));
+    }
+
+    @Test
+    void buildsNullFilters() {
+        RexNode category = input(1, SqlTypeName.VARCHAR);
+
+        assertEquals("category IS NULL", MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(
+                        rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, category)), fields));
+        assertEquals("category IS NOT NULL", MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(
+                        rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, category)), fields));
+    }
+
+    @Test
+    void usesMilvusNotEqualsOperator() {
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.NOT_EQUALS,
+                input(0, SqlTypeName.INTEGER),
+                integer(1));
+
+        assertEquals("id != 1", MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(condition), fields));
+    }
+
+    @Test
+    void buildsNotInFromComplementedSearchArgument() {
+        TreeRangeSet<BigDecimal> excluded = TreeRangeSet.create();
+        excluded.add(Range.singleton(BigDecimal.ONE));
+        excluded.add(Range.singleton(BigDecimal.valueOf(2)));
+        Sarg<BigDecimal> sarg = Sarg.of(RexUnknownAs.UNKNOWN, excluded.complement());
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.SEARCH,
+                input(0, SqlTypeName.INTEGER),
+                rexBuilder.makeSearchArgumentLiteral(
+                        sarg, types.createSqlType(SqlTypeName.INTEGER)));
+
+        assertEquals("id NOT IN [1, 2]", MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(condition), fields));
+    }
+
+    @Test
+    void fallsBackForRangeSearchAndComputedOperand() {
+        Sarg<BigDecimal> range = Sarg.of(
+                RexUnknownAs.UNKNOWN,
+                ImmutableRangeSet.of(Range.closed(BigDecimal.ONE, BigDecimal.TEN)));
+        RexNode between = rexBuilder.makeCall(
+                SqlStdOperatorTable.SEARCH,
+                input(0, SqlTypeName.INTEGER),
+                rexBuilder.makeSearchArgumentLiteral(
+                        range, types.createSqlType(SqlTypeName.INTEGER)));
+        RexNode computed = rexBuilder.makeCall(
+                SqlStdOperatorTable.GREATER_THAN,
+                rexBuilder.makeCall(
+                        SqlStdOperatorTable.PLUS,
+                        input(0, SqlTypeName.INTEGER),
+                        integer(1)),
+                integer(2));
+
+        assertNull(MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(between), fields));
+        assertNull(MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(computed), fields));
+    }
+
+    @Test
+    void escapesControlCharactersInStrings() {
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.EQUALS,
+                input(1, SqlTypeName.VARCHAR),
+                rexBuilder.makeLiteral("line1\nline2\t"));
+
+        assertEquals("category == \"line1\\nline2\\t\"",
+                MilvusFilterBuilder.buildScanFilter(
+                        Collections.singletonList(condition), fields));
+    }
+
+    @Test
+    void leavesUnsupportedLikeVariantsForCalcite() {
+        RexNode condition = rexBuilder.makeCall(
+                SqlStdOperatorTable.LIKE,
+                input(1, SqlTypeName.VARCHAR),
+                rexBuilder.makeLiteral("Movie\\_%"),
+                rexBuilder.makeLiteral("\\"));
+
+        assertNull(MilvusFilterBuilder.buildScanFilter(
+                Collections.singletonList(condition), fields));
+    }
+
+    @Test
     void refusesPartialCompoundScanFilter() {
         RexNode supported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
                 input(0, SqlTypeName.INTEGER), integer(1));
-        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL,
-                input(1, SqlTypeName.VARCHAR));
+        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.NOT, supported);
 
         assertNull(MilvusFilterBuilder.buildScanFilter(Collections.singletonList(
                 rexBuilder.makeCall(SqlStdOperatorTable.AND, supported, unsupported)), fields));

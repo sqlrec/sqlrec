@@ -98,6 +98,48 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
+    public void testScanUsesMatchAllFilterWhenPredicateCannotBePushedDown() {
+        QueryResp queryResp = mock(QueryResp.class);
+        when(queryResp.getQueryResults()).thenReturn(Collections.emptyList());
+        when(mockClient.query(any(QueryReq.class))).thenReturn(queryResp);
+
+        JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl();
+        RexBuilder rexBuilder = new RexBuilder(typeFactory);
+        RexNode id = rexBuilder.makeInputRef(
+                typeFactory.createSqlType(SqlTypeName.BIGINT), 0);
+        RexNode computed = rexBuilder.makeCall(
+                SqlStdOperatorTable.PLUS,
+                id,
+                rexBuilder.makeExactLiteral(java.math.BigDecimal.ONE));
+        RexNode filter = rexBuilder.makeCall(
+                SqlStdOperatorTable.GREATER_THAN,
+                computed,
+                rexBuilder.makeExactLiteral(java.math.BigDecimal.TEN));
+
+        assertTrue(handler.scan(Collections.singletonList(filter)).isEmpty());
+
+        org.mockito.ArgumentCaptor<QueryReq> captor =
+                org.mockito.ArgumentCaptor.forClass(QueryReq.class);
+        verify(mockClient).query(captor.capture());
+        assertEquals("id IS NOT NULL", captor.getValue().getFilter());
+    }
+
+    @Test
+    public void testScanWithoutPredicatesUsesMatchAllFilter() {
+        QueryResp queryResp = mock(QueryResp.class);
+        when(queryResp.getQueryResults()).thenReturn(Collections.emptyList());
+        when(mockClient.query(any(QueryReq.class))).thenReturn(queryResp);
+
+        assertTrue(handler.scan(Collections.emptyList()).isEmpty());
+
+        org.mockito.ArgumentCaptor<QueryReq> captor =
+                org.mockito.ArgumentCaptor.forClass(QueryReq.class);
+        verify(mockClient).query(captor.capture());
+        assertEquals("id IS NOT NULL", captor.getValue().getFilter());
+        assertEquals(0L, captor.getValue().getLimit());
+    }
+
+    @Test
     public void testScanNullResponse() {
         QueryResp queryResp = mock(QueryResp.class);
         when(queryResp.getQueryResults()).thenReturn(null);

@@ -148,6 +148,14 @@ public class MilvusHandler {
 
     public List<Object[]> scan(List<RexNode> filters) {
         String filterSql = MilvusFilterBuilder.buildScanFilter(filters, milvusConfig.fieldSchemas);
+        // FilterableTable keeps predicates that are not removed from the supplied list,
+        // so Calcite evaluates them after this scan. Milvus 2.6 requires a limit for an
+        // empty expression; use the non-null primary key as an unlimited match-all filter
+        // instead of imposing a fixed limit that could silently truncate a table scan.
+        if (filterSql == null || filterSql.isEmpty()) {
+            filterSql = MilvusFilterBuilder.buildMatchAllFilter(
+                    milvusConfig.fieldSchemas, milvusConfig.primaryKeyIndex);
+        }
         QueryReq queryReq = QueryReq.builder()
                 .collectionName(milvusConfig.collection)
                 .databaseName(milvusConfig.database)
