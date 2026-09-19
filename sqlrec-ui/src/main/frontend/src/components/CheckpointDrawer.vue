@@ -7,41 +7,40 @@
           <button class="drawer-close" @click="close">&times;</button>
         </div>
         <div class="drawer-body">
-          <table class="props-table">
-            <tbody>
-              <tr>
-                <td class="prop-key">Model Name</td>
-                <td class="prop-val">{{ checkpointData?.modelName }}</td>
-              </tr>
-              <tr>
-                <td class="prop-key">Type</td>
-                <td class="prop-val">{{ checkpointData?.checkpointType || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="prop-key">Status</td>
-                <td class="prop-val">{{ checkpointData?.status || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="prop-key">Created At</td>
-                <td class="prop-val">{{ checkpointData?.createdAt || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="prop-key">Updated At</td>
-                <td class="prop-val">{{ checkpointData?.updatedAt || '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="props-card">
+            <table class="props-table">
+              <tbody>
+                <tr>
+                  <td class="prop-key">Model Name</td>
+                  <td class="prop-val">{{ checkpointData?.modelName }}</td>
+                </tr>
+                <tr>
+                  <td class="prop-key">Type</td>
+                  <td class="prop-val">{{ checkpointData?.checkpointType || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="prop-key">Status</td>
+                  <td class="prop-val">{{ checkpointData?.status || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="prop-key">Created At</td>
+                  <td class="prop-val">{{ checkpointData?.createdAt || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="prop-key">Updated At</td>
+                  <td class="prop-val">{{ checkpointData?.updatedAt || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <div v-if="checkpointData?.ddl" class="code-section">
-            <div class="section-title">DDL</div>
-            <CodeBlock :code="checkpointData.ddl" language="sql" />
+            <CodeBlock title="DDL" :code="checkpointData.ddl" language="sql" max-height="none" />
           </div>
           <div v-if="checkpointData?.modelDdl" class="code-section">
-            <div class="section-title">Model DDL</div>
-            <CodeBlock :code="checkpointData.modelDdl" language="sql" />
+            <CodeBlock title="Model DDL" :code="checkpointData.modelDdl" language="sql" max-height="none" />
           </div>
           <div v-if="checkpointData?.yaml" class="code-section">
-            <div class="section-title">YAML</div>
-            <CodeBlock :code="checkpointData.yaml" language="yaml" />
+            <CodeBlock title="YAML" :code="checkpointData.yaml" language="yaml" max-height="none" />
           </div>
         </div>
       </div>
@@ -107,17 +106,18 @@ const close = () => {
   bottom: 0;
   left: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(31, 41, 55, 0.24);
   display: flex;
   justify-content: flex-end;
 }
 
 .drawer-panel {
-  width: 560px;
+  width: 520px;
   max-width: 90vw;
   height: 100%;
-  background: #fff;
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(31, 41, 55, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -127,79 +127,98 @@ const close = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #eee;
+  min-height: 52px;
+  padding: 12px 18px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .drawer-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-h);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .drawer-close {
-  background: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
   border: none;
+  border-radius: var(--radius-control);
   font-size: 22px;
-  color: #999;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0;
   line-height: 1;
 }
 
 .drawer-close:hover {
-  color: #333;
+  background: var(--brand-soft);
+  color: var(--text-h);
 }
 
 .drawer-body {
   flex: 1;
   overflow-y: auto;
   padding: 0;
+  background: var(--page-bg);
   text-align: left;
 }
 
 .props-table {
   width: 100%;
   border-collapse: collapse;
+  background: var(--surface);
   font-size: 13px;
 }
 
+.props-card {
+  margin: 16px 16px 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
 .props-table tr {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .props-table tr:last-child {
-  border-bottom: 1px solid #eee;
+  border-bottom: 0;
 }
 
 .prop-key {
-  padding: 10px 20px;
-  color: #888;
+  padding: 10px 18px;
+  color: var(--text-muted);
   white-space: nowrap;
   width: 130px;
   vertical-align: top;
 }
 
 .prop-val {
-  padding: 10px 20px 10px 0;
-  color: #333;
+  padding: 10px 18px 10px 0;
+  color: var(--text-h);
   word-break: break-all;
 }
 
 .code-section {
-  padding: 16px 20px;
-  border-top: 1px solid #eee;
+  padding: 12px 16px 0;
 }
 
-.section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 8px;
+.props-card + .code-section {
+  padding-top: 12px;
+}
+
+.code-section:last-child {
+  padding-bottom: 16px;
 }
 
 .drawer-body::-webkit-scrollbar {

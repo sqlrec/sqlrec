@@ -9,10 +9,7 @@
     <div class="detail-wrapper">
       <DetailPanel :item="selectedModel" />
       <div v-if="selectedModel?.ddl" class="code-section">
-        <div class="section-header">
-          <span class="section-title"># DDL</span>
-        </div>
-        <CodeBlock :code="selectedModel.ddl" language="sql" />
+        <CodeBlock title="# DDL" :code="selectedModel.ddl" language="sql" />
       </div>
       <CheckpointList 
         v-if="selectedModel"
@@ -107,32 +104,23 @@ onMounted(() => {
 <style scoped>
 .view-container {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--header-height));
+  height: calc(100svh - var(--header-height));
 }
 
 .detail-wrapper {
   flex: 1;
-  background: #fafafa;
+  min-width: 0;
+  background: var(--page-bg);
   overflow-y: auto;
   text-align: left;
 }
 
 .code-section {
-  padding: 0 32px 32px 32px;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--page-padding) var(--page-padding);
 }
 
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-  border-radius: 8px 8px 0 0;
-}
-
-.section-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: #667eea;
-}
 </style>

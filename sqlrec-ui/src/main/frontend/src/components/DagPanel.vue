@@ -56,7 +56,7 @@ const { fitView } = useVueFlow()
 const defaultEdgeOptions = {
   animated: true,
   type: 'default',
-  style: { stroke: '#999', strokeWidth: 1.5 }
+  style: { stroke: '#aab0bd', strokeWidth: 1.5 }
 }
 
 const calculateZScores = (nodesData) => {
@@ -203,7 +203,7 @@ const fetchDagData = async () => {
         target: edge.target,
         sourceHandle: null,
         targetHandle: null,
-        style: { stroke: '#999', strokeWidth }
+        style: { stroke: '#aab0bd', strokeWidth }
       }
     })
   } catch (e) {
@@ -237,7 +237,7 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
 .dag-flow {
   flex: 1;
   min-height: 0;
-  background: #fafafa;
+  background: var(--page-bg);
 }
 
 .loading, .error {
@@ -255,14 +255,14 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
 
 <style>
 .vue-flow__background {
-  background-color: #fafafa !important;
+  background-color: var(--page-bg) !important;
 }
 
 .vue-flow {
-  --vf-node-text: #333;
+  --vf-node-text: var(--text-h);
   --vf-node-color: transparent;
   --vf-handle: transparent;
-  --vf-connection-path: #999;
+  --vf-connection-path: #aab0bd;
 }
 
 .vue-flow__node {
@@ -274,23 +274,42 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
 
 .vue-flow__node-dag {
   color: var(--vf-node-text);
-  border: none;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: none !important;
+  border-radius: var(--radius-card);
+  box-shadow: none;
   padding: 0;
   overflow: hidden;
   font-weight: bold;
 }
 
-.vue-flow__node-dag:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-
 .vue-flow__node.selected {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border: none !important;
+  box-shadow: none;
 }
 
 .vue-flow__handle {
   visibility: hidden;
+}
+
+.vue-flow__controls {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+.vue-flow__controls-button {
+  background: var(--surface);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.vue-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.vue-flow__controls-button:hover {
+  background: var(--surface-subtle);
 }
 </style>

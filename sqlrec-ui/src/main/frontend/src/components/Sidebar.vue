@@ -55,9 +55,10 @@ const selectItem = (item) => {
 
 <style scoped>
 .sidebar {
-  width: 280px;
-  background: #ffffff;
-  border-right: 1px solid #e8e8e8;
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
@@ -72,30 +73,40 @@ const selectItem = (item) => {
 .item-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 6px 8px;
   overflow-y: auto;
   flex: 1;
 }
 
 .item {
-  padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
 .item:hover {
-  background: #f5f5f5;
+  background: #f5f6fa;
 }
 
 .item.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  border-left: 3px solid #667eea;
+  background: var(--brand-soft);
 }
 
 .item-name {
-  font-size: 15px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--text-h);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item.active .item-name {
+  color: var(--brand-hover);
   font-weight: 600;
-  color: #262626;
 }
 </style>

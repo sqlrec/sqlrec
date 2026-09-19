@@ -79,12 +79,14 @@ onMounted(() => {
 <style scoped>
 .view-container {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--header-height));
+  height: calc(100svh - var(--header-height));
 }
 
 .detail-wrapper {
   flex: 1;
-  background: #fafafa;
+  min-width: 0;
+  background: var(--page-bg);
   overflow-y: auto;
 }
 </style>

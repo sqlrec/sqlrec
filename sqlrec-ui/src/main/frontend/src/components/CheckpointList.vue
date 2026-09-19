@@ -1,41 +1,43 @@
 <template>
   <div class="checkpoint-list">
     <div v-if="checkpoints.length > 0 || loading" class="checkpoint-content">
-      <div class="section-header">
-        <span class="section-title"># Checkpoints</span>
-        <span class="total-count">{{ total }} records</span>
+      <div class="checkpoint-card">
+        <div class="section-header">
+          <span class="section-title"># Checkpoints</span>
+          <span class="total-count">{{ total }} records</span>
+        </div>
+
+        <div v-if="loading" class="loading">Loading...</div>
+
+        <table v-else class="formatted-table">
+          <thead>
+            <tr>
+              <th>Checkpoint Name</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Updated At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="checkpoint in checkpoints" :key="checkpoint.checkpointName" @click="handleClick(checkpoint.checkpointName)" class="clickable-row">
+              <td class="col-name">{{ checkpoint.checkpointName }}</td>
+              <td>
+                <span :class="['status-tag', `type-${checkpoint.checkpointType}`]">
+                  {{ checkpoint.checkpointType || '-' }}
+                </span>
+              </td>
+              <td>
+                <span :class="['status-tag', `status-${checkpoint.status}`]">
+                  {{ checkpoint.status || '-' }}
+                </span>
+              </td>
+              <td>{{ checkpoint.createdAt }}</td>
+              <td>{{ checkpoint.updatedAt }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      
-      <div v-if="loading" class="loading">Loading...</div>
-      
-      <table v-else class="formatted-table">
-        <thead>
-          <tr>
-            <th>Checkpoint Name</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Created At</th>
-            <th>Updated At</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="checkpoint in checkpoints" :key="checkpoint.checkpointName" @click="handleClick(checkpoint.checkpointName)" class="clickable-row">
-            <td class="col-name">{{ checkpoint.checkpointName }}</td>
-            <td>
-              <span :class="['status-tag', `type-${checkpoint.checkpointType}`]">
-                {{ checkpoint.checkpointType || '-' }}
-              </span>
-            </td>
-            <td>
-              <span :class="['status-tag', `status-${checkpoint.status}`]">
-                {{ checkpoint.status || '-' }}
-              </span>
-            </td>
-            <td>{{ checkpoint.createdAt }}</td>
-            <td>{{ checkpoint.updatedAt }}</td>
-          </tr>
-        </tbody>
-      </table>
       
       <div v-if="!loading && total > 0" class="pagination">
         <button 
@@ -137,71 +139,83 @@ onMounted(() => {
 
 <style scoped>
 .checkpoint-list {
-  background: #fafafa;
+  background: var(--page-bg);
 }
 
 .checkpoint-content {
-  padding: 0 32px 32px 32px;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--page-padding) var(--page-padding);
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-  border-radius: 8px 8px 0 0;
+  min-height: 40px;
+  padding: 0 16px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border);
   margin-bottom: 0;
 }
 
+.checkpoint-card {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
 .section-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: #667eea;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
 }
 
 .total-count {
-  font-size: 14px;
-  color: #8c8c8c;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .loading {
   padding: 40px;
   text-align: center;
-  color: #8c8c8c;
-  background: white;
+  color: var(--text-muted);
+  background: var(--surface);
 }
 
 .formatted-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border-radius: 0 0 8px 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
 }
 
 .formatted-table th,
 .formatted-table td {
-  padding: 12px 16px;
+  padding: 10px 16px;
   text-align: left;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
 
 .formatted-table th {
-  background: #fafafa;
+  background: var(--surface-subtle);
   font-weight: 600;
-  color: #262626;
+  color: var(--text-h);
 }
 
 .formatted-table td {
-  color: #595959;
+  color: var(--text);
+}
+
+.formatted-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .col-name {
   font-weight: 500;
-  color: #262626;
+  color: var(--text-h);
 }
 
 .clickable-row {
@@ -210,13 +224,13 @@ onMounted(() => {
 }
 
 .clickable-row:hover {
-  background-color: #f5f5f5;
+  background-color: #f5f6fa;
 }
 
 .status-tag {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 5px;
   font-size: 12px;
 }
 
@@ -239,7 +253,7 @@ onMounted(() => {
 
 .type-full {
   background: #e6f7ff;
-  color: #1890ff;
+  color: var(--brand);
 }
 
 .type-incremental {
@@ -256,43 +270,53 @@ onMounted(() => {
 }
 
 .page-btn {
-  padding: 6px 16px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  background: white;
-  color: #595959;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .page-btn:hover:not(:disabled) {
-  border-color: #1890ff;
-  color: #1890ff;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 .page-btn:disabled {
-  color: #d9d9d9;
+  background: #f8f9fb;
+  color: var(--text-muted);
   cursor: not-allowed;
+}
+
+.page-btn:focus-visible {
+  outline: 2px solid rgba(82, 100, 195, 0.28);
+  outline-offset: 2px;
 }
 
 .page-info {
   font-size: 14px;
-  color: #595959;
+  color: var(--text);
 }
 
 .page-size-select {
-  padding: 6px 8px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  background: white;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
   font-size: 14px;
-  color: #595959;
+  color: var(--text);
   cursor: pointer;
 }
 
 .page-size-select:focus {
-  outline: none;
-  border-color: #1890ff;
+  outline: 2px solid rgba(82, 100, 195, 0.2);
+  outline-offset: 1px;
+  border-color: var(--brand);
 }
 </style>

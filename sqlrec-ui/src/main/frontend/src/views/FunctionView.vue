@@ -94,14 +94,16 @@ onMounted(() => {
 <style scoped>
 .view-container {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--header-height));
+  height: calc(100svh - var(--header-height));
 }
 
 .detail-container {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: var(--page-bg);
   overflow: hidden;
 }
 

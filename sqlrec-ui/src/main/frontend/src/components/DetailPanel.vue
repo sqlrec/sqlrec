@@ -1,23 +1,30 @@
 <template>
   <div class="detail-panel">
     <div v-if="tableData.length > 0" class="detail-content">
-      <table class="formatted-table">
-        <tbody>
-          <tr v-for="(row, index) in tableData" :key="index" :class="getRowClass(row)">
-            <td class="col-name">{{ row.col_name }}</td>
-            <td class="data-type">
-              <template v-if="isLinkRow(row)">
-                <router-link :to="getLinkPath(row)" class="detail-link">
-                  {{ row.data_type }}
-                </router-link>
-              </template>
+      <div class="detail-card">
+        <table class="formatted-table">
+          <tbody>
+            <tr v-for="(row, index) in tableData" :key="index" :class="getRowClass(row)">
+              <td v-if="isSectionRow(row)" class="section-title-cell" colspan="2">
+                {{ row.col_name }}
+              </td>
               <template v-else>
-                {{ row.data_type }}
+                <td class="col-name">{{ row.col_name }}</td>
+                <td class="data-type">
+                  <template v-if="isLinkRow(row)">
+                    <router-link :to="getLinkPath(row)" class="detail-link">
+                      {{ row.data_type }}
+                    </router-link>
+                  </template>
+                  <template v-else>
+                    {{ row.data_type }}
+                  </template>
+                </td>
               </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -43,13 +50,17 @@ watch(() => props.item, (newItem) => {
 }, { immediate: true })
 
 const getRowClass = (row) => {
-  if (row.col_name.startsWith('#')) {
+  if (isSectionRow(row)) {
     return 'section-header'
   }
   if (row.col_name === '' && row.data_type === '') {
     return 'separator'
   }
   return ''
+}
+
+const isSectionRow = (row) => {
+  return row.col_name.startsWith('#')
 }
 
 const isLinkRow = (row) => {
@@ -69,66 +80,80 @@ const getLinkPath = (row) => {
 
 <style scoped>
 .detail-panel {
-  background: #fafafa;
+  background: var(--page-bg);
 }
 
 .detail-content {
-  padding: 32px;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--page-padding);
+}
+
+.detail-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
 }
 
 .formatted-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
 }
 
 .formatted-table td {
-  padding: 12px 16px;
+  padding: 10px 16px;
   text-align: left;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--border);
   font-size: 14px;
-  color: #595959;
+  color: var(--text);
+}
+
+.formatted-table tr:last-child td {
+  border-bottom: 0;
 }
 
 .col-name {
-  font-weight: 500;
-  color: #262626;
-  width: 40%;
+  font-weight: 600;
+  color: var(--text-h);
+  width: 32%;
 }
 
 .data-type {
-  color: #595959;
+  color: var(--text);
   word-break: break-word;
 }
 
 .section-header {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  background: var(--surface-subtle);
 }
 
-.section-header .col-name {
-  font-weight: 700;
-  font-size: 15px;
-  color: #667eea;
+.section-title-cell {
+  height: 40px;
+  padding: 0 16px !important;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text) !important;
 }
 
 .separator {
-  background: #fafafa;
+  background: var(--page-bg);
 }
 
 .separator td {
-  padding: 8px 16px;
+  padding: 6px 16px;
 }
 
 .detail-link {
-  color: #1890ff;
+  color: var(--brand);
   text-decoration: none;
 }
 
 .detail-link:hover {
-  color: #40a9ff;
+  color: var(--brand-hover);
   text-decoration: underline;
 }
 </style>

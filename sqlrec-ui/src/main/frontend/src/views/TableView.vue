@@ -139,44 +139,57 @@ onMounted(() => {
 <style scoped>
 .view-container {
   display: flex;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--header-height));
+  height: calc(100svh - var(--header-height));
 }
 
 .sidebar {
-  width: 280px;
-  background: #ffffff;
-  border-right: 1px solid #e8e8e8;
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
 
 .db-list {
   flex-shrink: 0;
+  padding: 6px 0;
   overflow-y: auto;
 }
 
 .collapse-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: background 0.2s ease;
   user-select: none;
 }
 
 .collapse-header:hover {
-  background: #f5f5f5;
+  background: #f5f6fa;
 }
 
 .collapse-header.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+  background: var(--brand-soft);
+}
+
+.collapse-header.active .collapse-title,
+.collapse-header.active .collapse-arrow {
+  color: var(--brand-hover);
 }
 
 .collapse-arrow {
+  position: absolute;
+  right: 12px;
   font-size: 10px;
-  color: #8c8c8c;
+  color: var(--text-muted);
   flex-shrink: 0;
   width: 12px;
   text-align: center;
@@ -184,43 +197,54 @@ onMounted(() => {
 
 .collapse-title {
   font-size: 14px;
-  font-weight: 600;
-  color: #262626;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--text-h);
 }
 
 .table-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  border-top: 1px solid #e8e8e8;
+  padding: 4px 8px 8px;
+  background: #fafbfc;
 }
 
 .item {
-  padding: 12px 20px 12px 38px;
-  border-bottom: 1px solid #f0f0f0;
-  border-left: 3px solid transparent;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: background 0.2s ease;
 }
 
 .item:hover {
-  background: #f5f5f5;
+  background: #f2f4f8;
 }
 
 .item.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  border-left: 3px solid #667eea;
+  background: var(--brand-soft);
 }
 
 .item-name {
   font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item.active .item-name {
+  color: var(--brand-hover);
   font-weight: 600;
-  color: #262626;
 }
 
 .detail-wrapper {
   flex: 1;
-  background: #fafafa;
+  min-width: 0;
+  background: var(--page-bg);
   overflow-y: auto;
   text-align: left;
 }
