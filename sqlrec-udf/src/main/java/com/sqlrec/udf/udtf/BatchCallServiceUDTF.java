@@ -2,6 +2,7 @@ package com.sqlrec.udf.udtf;
 
 import com.google.gson.*;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.udf.table.CallServiceFunction;
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
 import org.apache.flink.table.annotation.InputGroup;
@@ -9,12 +10,6 @@ import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.types.Row;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,7 +44,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         batchSize = 0;
         serviceUrl = null;
         if (predictionClient == null) {
-            predictionClient = BatchCallServiceUDTF::callPredictionService;
+            predictionClient = CallServiceFunction::callPredictionService;
         }
     }
 
@@ -136,53 +131,6 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
             throw new RuntimeException("Failed to process batch: " + e.getMessage(), e);
         } finally {
             buffer.clear();
-        }
-    }
-
-    private static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(serviceUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setDoOutput(true);
-            connection.setConnectTimeout(30000);
-            connection.setReadTimeout(30000);
-
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = jsonData.getBytes(StandardCharsets.UTF_8);
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                throw new RuntimeException("HTTP request failed with response code: " + responseCode);
-            }
-
-            StringBuilder response = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                String responseLine;
-                while ((responseLine = br.readLine()) != null) {
-                    response.append(responseLine.trim());
-                }
-            }
-
-            JsonElement jsonElement = JsonParser.parseString(response.toString());
-            JsonObject jsonObject = jsonElement.getAsJsonObject();
-            Map<String, Object> result = new LinkedHashMap<>();
-            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                result.put(entry.getKey(), gson.fromJson(entry.getValue(), Object.class));
-            }
-            return result;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to call prediction service: " + e.getMessage(), e);
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
         }
     }
 

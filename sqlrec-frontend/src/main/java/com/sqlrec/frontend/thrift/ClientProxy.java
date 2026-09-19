@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * A proxy owns one generated Thrift client and transport for a session.  Generated
  * clients and their protocols are not safe for concurrent request/response exchanges,
- * so every TCLIService entry point is synchronized for the whole reconnect/translate/
+ * so remote TCLIService calls are synchronized for the whole reconnect/translate/
  * invoke/restore sequence.
  */
 public class ClientProxy implements TCLIService.Iface {
@@ -61,7 +61,7 @@ public class ClientProxy implements TCLIService.Iface {
         return resp;
     }
 
-    private synchronized void ensureConnected() throws TException {
+    private void ensureConnected() throws TException {
         if (connected && transport != null && transport.isOpen()) {
             return;
         }
@@ -127,7 +127,7 @@ public class ClientProxy implements TCLIService.Iface {
      * next call to {@link #ensureConnected()} re-opens the remote session. Used after a
      * transport-level failure so the broken client/transport is not reused forever.
      */
-    private synchronized void markDisconnected() {
+    private void markDisconnected() {
         if (transport != null) {
             try {
                 transport.close();
@@ -244,7 +244,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     @Override
-    public synchronized TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
+    public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
         updateAccessTime();
 
         TGetInfoResp resp = new TGetInfoResp();
