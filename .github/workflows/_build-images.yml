@@ -211,8 +211,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # metadata-action adds `latest` for stable semver tags. Apply the
+          # architecture suffix to it too, so the manifest job can consume
+          # latest-amd64 and latest-arm64 just like the versioned tags.
           flavor: |
-            suffix=-${{ matrix.arch }}
+            latest=auto
+            suffix=-${{ matrix.arch }},onlatest=true
           # Semver tags fire when called by a `v*` tag release; `type=sha`
           # supplies a local-only name for the manual build caller.
           tags: |
@@ -292,6 +296,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Keep this in sync with the per-architecture metadata above.
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}-cpu
             type=semver,pattern={{major}}.{{minor}}-cpu
