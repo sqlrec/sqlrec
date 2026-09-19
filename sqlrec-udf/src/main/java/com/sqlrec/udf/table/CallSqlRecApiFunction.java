@@ -15,9 +15,23 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class CallSqlRecApiFunction {
+    private final RemoteFunctionClient client;
+
+    public CallSqlRecApiFunction() {
+        this(SqlRecApiClient::callFunctionApi);
+    }
+
+    public CallSqlRecApiFunction(RemoteFunctionClient client) {
+        this.client = Objects.requireNonNull(client, "client");
+    }
+
     public CacheTable evaluate(ReadonlyContext context, String url, CacheTable... tables) {
+        if (context == null) {
+            throw new IllegalArgumentException("context cannot be null");
+        }
         if (url == null || url.isEmpty()) {
             throw new IllegalArgumentException("url is null or empty");
         }
@@ -28,16 +42,21 @@ public class CallSqlRecApiFunction {
         // build inputs: key = table name (matches remote SQL function input placeholder)
         Map<String, List<Map<String, Object>>> inputs = new LinkedHashMap<>();
         for (CacheTable table : tables) {
+            if (table == null) {
+                throw new IllegalArgumentException("input table cannot be null");
+            }
             String tableName = table.getTableName();
             if (tableName == null || tableName.isEmpty()) {
                 throw new IllegalArgumentException("input table has no name");
+            }
+            if (inputs.containsKey(tableName)) {
+                throw new IllegalArgumentException("duplicate input table name: " + tableName);
             }
             List<Object[]> rows = DataTransformUtils.materializeRows(table);
             inputs.put(tableName, DataTransformUtils.convertToMapList(rows, table.getDataFields()));
         }
 
-        // call remote sqlrec api via common client
-        ExecuteData response = SqlRecApiClient.callFunctionApi(
+        ExecuteData response = client.call(
                 url, inputs, context.getVariables(), context.getMetricsTags());
         List<Map<String, Object>> dataRows = response.getData();
 
@@ -67,5 +86,14 @@ public class CallSqlRecApiFunction {
         }
 
         return new CacheTable("output", Linq4j.asEnumerable(outRows), dataFields);
+    }
+
+    @FunctionalInterface
+    public interface RemoteFunctionClient {
+        ExecuteData call(
+                String url,
+                Map<String, List<Map<String, Object>>> data,
+                Map<String, String> params,
+                Map<String, String> metricTags);
     }
 }

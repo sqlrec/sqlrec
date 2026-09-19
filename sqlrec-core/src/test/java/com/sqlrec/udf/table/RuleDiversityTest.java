@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RuleDiversityTest {
@@ -85,6 +86,21 @@ public class RuleDiversityTest {
         CacheTable output = greedy.evaluate(targetTable, ruleTable, "100");
         List<Object[]> result = collectRows(output);
         assertEquals(2, result.size());
+    }
+
+    @Test
+    public void testMissingRuleColumnHasClearError() {
+        CacheTable targetTable = createTargetTable(new Object[][]{{"item1", "A"}});
+        List<RelDataTypeField> fields = createRuleFields();
+        fields.remove(4);
+        CacheTable ruleTable = new CacheTable(
+                "rules", Linq4j.emptyEnumerable(), fields);
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> greedy.evaluate(targetTable, ruleTable, "1"));
+
+        assertEquals("rule table missing column: diversity_value", error.getMessage());
     }
 
     // ==================== Rule Constraint Tests ====================

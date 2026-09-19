@@ -34,32 +34,57 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     private List<Map<String, Object>> buffer;
     private int batchSize;
     private String serviceUrl;
+    private transient BatchPredictionClient predictionClient;
+
+    public BatchCallServiceUDTF() {
+    }
+
+    BatchCallServiceUDTF(BatchPredictionClient predictionClient) {
+        this.predictionClient = predictionClient;
+    }
 
     @Override
     public void open(FunctionContext context) throws Exception {
-        this.buffer = new ArrayList<>();
+        buffer = new ArrayList<>();
+        batchSize = 0;
+        serviceUrl = null;
+        if (predictionClient == null) {
+            predictionClient = BatchCallServiceUDTF::callPredictionService;
+        }
     }
 
     public void eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object... args) {
         if (args == null || args.length < 3) {
-            throw new IllegalArgumentException("At least 3 arguments required: serviceUrl, batchSize, and at least one fieldName-value pair");
+            throw new IllegalArgumentException(
+                    "At least 3 arguments required: serviceUrl, batchSize, "
+                            + "and at least one fieldName-value pair");
         }
 
         if (!(args[0] instanceof String)) {
             throw new IllegalArgumentException("First argument (serviceUrl) must be a String");
         }
-        String serviceUrl = (String) args[0];
+        String requestedServiceUrl = (String) args[0];
+        if (requestedServiceUrl.isEmpty()) {
+            throw new IllegalArgumentException("serviceUrl must not be empty");
+        }
 
         if (!(args[1] instanceof Integer)) {
             throw new IllegalArgumentException("Second argument (batchSize) must be an Integer");
         }
-        Integer batchSize = (Integer) args[1];
+        int requestedBatchSize = (Integer) args[1];
+        if (requestedBatchSize <= 0) {
+            throw new IllegalArgumentException("batchSize must be positive");
+        }
 
         if (this.serviceUrl == null) {
-            this.serviceUrl = serviceUrl;
+            this.serviceUrl = requestedServiceUrl;
+        } else if (!this.serviceUrl.equals(requestedServiceUrl)) {
+            throw new IllegalArgumentException("serviceUrl must remain constant for one function instance");
         }
         if (this.batchSize == 0) {
-            this.batchSize = batchSize != null && batchSize > 0 ? batchSize : 128;
+            this.batchSize = requestedBatchSize;
+        } else if (this.batchSize != requestedBatchSize) {
+            throw new IllegalArgumentException("batchSize must remain constant for one function instance");
         }
 
         Object[] fieldNameValuePairs = new Object[args.length - 2];
@@ -76,7 +101,10 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         Map<String, Object> row = new LinkedHashMap<>();
         for (int i = 0; i < fieldNameValuePairs.length; i += 2) {
             if (!(fieldNameValuePairs[i] instanceof String)) {
-                throw new IllegalArgumentException("Field name at position " + i + " must be a String, but got: " + fieldNameValuePairs[i].getClass().getName());
+                Object fieldName = fieldNameValuePairs[i];
+                String actualType = fieldName == null ? "null" : fieldName.getClass().getName();
+                throw new IllegalArgumentException("Field name at position " + i
+                        + " must be a String, but got: " + actualType);
             }
             String fieldName = (String) fieldNameValuePairs[i];
             Object value = fieldNameValuePairs[i + 1];
@@ -91,10 +119,8 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     }
 
     @Override
-    public void close() throws Exception {
-        if (!buffer.isEmpty()) {
-            processBatch();
-        }
+    public void finish() {
+        processBatch();
     }
 
     private void processBatch() {
@@ -104,7 +130,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
 
         try {
             String jsonData = buildJsonArray(buffer);
-            Map<String, Object> predictions = callPredictionService(serviceUrl, jsonData);
+            Map<String, Object> predictions = predictionClient.call(serviceUrl, jsonData);
             outputResults(predictions);
         } catch (Exception e) {
             throw new RuntimeException("Failed to process batch: " + e.getMessage(), e);
@@ -113,7 +139,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         }
     }
 
-    private Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
+    private static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
         HttpURLConnection connection = null;
         try {
             URL url = new URL(serviceUrl);
@@ -224,7 +250,8 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
                     List<?> list = (List<?>) value;
                     if (!list.isEmpty()) {
                         Object first = list.get(0);
-                        if (first instanceof Long || first instanceof Integer || first instanceof Short || first instanceof Byte) {
+                        if (first instanceof Long || first instanceof Integer
+                                || first instanceof Short || first instanceof Byte) {
                             Long[] arr = list.stream()
                                     .map(v -> {
                                         if (v instanceof Long) return (Long) v;
@@ -277,5 +304,10 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
             Row outputRow = Row.of(longMap, doubleMap, stringMap, longArrayMap, doubleArrayMap, stringArrayMap);
             collect(outputRow);
         }
+    }
+
+    @FunctionalInterface
+    interface BatchPredictionClient {
+        Map<String, Object> call(String serviceUrl, String jsonData);
     }
 }

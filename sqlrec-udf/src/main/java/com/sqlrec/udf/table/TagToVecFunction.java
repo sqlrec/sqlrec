@@ -2,8 +2,8 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
@@ -32,15 +32,15 @@ public class TagToVecFunction {
             throw new IllegalArgumentException("output column name already exists: " + outputColName);
         }
 
-        Enumerable<Object[]> enumerable = input.scan(null);
-        if (enumerable == null) {
+        List<Object[]> rows = DataTransformUtils.materializeRows(input);
+        if (rows.isEmpty()) {
             return new CacheTable("output", Linq4j.asEnumerable(Collections.emptyList()), newDataFields);
         }
 
         // collect all unique tags, preserving insertion order
         Map<String, Integer> tagIndexMap = new LinkedHashMap<>();
         int nextIndex = 0;
-        for (Object[] row : enumerable) {
+        for (Object[] row : rows) {
             for (String tagStr : extractTags(row[tagColIndex])) {
                 if (!tagIndexMap.containsKey(tagStr)) {
                     tagIndexMap.put(tagStr, nextIndex++);
@@ -51,8 +51,8 @@ public class TagToVecFunction {
         int vecSize = tagIndexMap.size();
 
         // build new data with multihot vector column
-        List<Object[]> newData = new ArrayList<>();
-        for (Object[] row : enumerable) {
+        List<Object[]> newData = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
             Object[] newRow = new Object[row.length + 1];
             System.arraycopy(row, 0, newRow, 0, row.length);
 

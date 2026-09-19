@@ -17,20 +17,23 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class CallServiceFunction {
-    private static volatile OkHttpClient httpClient = new OkHttpClient.Builder()
+    private static final OkHttpClient DEFAULT_HTTP_CLIENT = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
+    private final OkHttpClient httpClient;
 
-    /**
-     * Test-only: inject a mock OkHttpClient.
-     */
-    static void setHttpClientForTest(OkHttpClient mockClient) {
-        httpClient = mockClient;
+    public CallServiceFunction() {
+        this(DEFAULT_HTTP_CLIENT);
+    }
+
+    public CallServiceFunction(OkHttpClient httpClient) {
+        this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     }
 
     public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable input) {
@@ -48,6 +51,7 @@ public class CallServiceFunction {
         String jsonData = JsonUtils.toJsonArray(inputData, inputFields, input.getDataFields());
 
         Map<String, Object> predictions = callPredictionService(
+                httpClient,
                 serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
 
         List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
@@ -96,6 +100,7 @@ public class CallServiceFunction {
                 user.getDataFields(), item.getDataFields());
 
         Map<String, Object> predictions = callPredictionService(
+                httpClient,
                 serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
         List<Object[]> newData = mergePredictions(itemData, predictions, modelOutputFields);
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
@@ -132,11 +137,26 @@ public class CallServiceFunction {
     }
 
     public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
-        return callPredictionService(serviceUrl, jsonData, null);
+        return callPredictionService(DEFAULT_HTTP_CLIENT, serviceUrl, jsonData, null);
     }
 
     public static Map<String, Object> callPredictionService(
             String serviceUrl, String jsonData, Map<String, String> serviceParams) {
+        return callPredictionService(DEFAULT_HTTP_CLIENT, serviceUrl, jsonData, serviceParams);
+    }
+
+    static Map<String, Object> callPredictionService(
+            OkHttpClient httpClient,
+            String serviceUrl,
+            String jsonData) {
+        return callPredictionService(httpClient, serviceUrl, jsonData, null);
+    }
+
+    static Map<String, Object> callPredictionService(
+            OkHttpClient httpClient,
+            String serviceUrl,
+            String jsonData,
+            Map<String, String> serviceParams) {
         try {
             RequestBody body = RequestBody.create(
                     jsonData,
@@ -149,7 +169,7 @@ public class CallServiceFunction {
                     .addHeader("Accept", "application/json")
                     .build();
 
-            OkHttpClient client = clientWithServiceTimeouts(serviceParams);
+            OkHttpClient client = clientWithServiceTimeouts(httpClient, serviceParams);
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
                     throw new RuntimeException("HTTP request failed with response code: " + response.code());
@@ -163,7 +183,9 @@ public class CallServiceFunction {
         }
     }
 
-    private static OkHttpClient clientWithServiceTimeouts(Map<String, String> params) {
+    private static OkHttpClient clientWithServiceTimeouts(
+            OkHttpClient httpClient,
+            Map<String, String> params) {
         if (params == null || params.isEmpty()) {
             return httpClient;
         }
@@ -199,7 +221,10 @@ public class CallServiceFunction {
         return value;
     }
 
-    public static List<Object[]> mergePredictions(List<Object[]> inputData, Map<String, Object> predictions, List<FieldSchema> outputFields) {
+    public static List<Object[]> mergePredictions(
+            List<Object[]> inputData,
+            Map<String, Object> predictions,
+            List<FieldSchema> outputFields) {
         List<Object[]> newData = new ArrayList<>();
 
         for (int i = 0; i < inputData.size(); i++) {

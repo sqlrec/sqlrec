@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  * For each output position j (0 to maxReturn-1), select the unassigned item i
  * that minimizes violation penalty. If no violation, use original rank as tie-breaker.
  */
-public class RuleDiversity {
+public final class RuleDiversity {
 
     private static final String COL_WINDOW_SIZE = "window_size";
     private static final String COL_WINDOW_START = "window_start";
@@ -57,46 +57,30 @@ public class RuleDiversity {
             CacheTable ruleTable,
             String maxReturn
     ) {
-        int maxReturnVal = Integer.parseInt(maxReturn);
-
         List<Object[]> targetRows = readRows(targetTable);
-        int n = targetRows.size();
-        if (n == 0 || maxReturnVal <= 0) {
-            return new CacheTable(
-                    targetTable.getTableName() + "_rule_diversify_greedy",
-                    Linq4j.asEnumerable(new ArrayList<>()),
-                    targetTable.getDataFields()
-            );
+        int limit = Math.min(Integer.parseInt(maxReturn), targetRows.size());
+        if (limit <= 0) {
+            return resultTable(targetTable, Collections.emptyList());
         }
-        maxReturnVal = Math.min(maxReturnVal, n);
 
         List<Rule> rules = parseRules(ruleTable, targetTable.getDataFields());
+        List<Map<Integer, List<String>>> itemValues = extractItemValues(targetRows, rules);
+        List<WindowInfo> windows = buildWindows(rules, limit);
+        List<List<WindowInfo>> windowsPerPosition = buildWindowsPerPosition(windows, limit);
+        int[] selectedIndexes = greedyAssign(targetRows.size(), limit, itemValues, windowsPerPosition);
 
-        // Pre-extract item values: only columns referenced by rules
-        List<Map<Integer, List<String>>> itemValues = extractItemValues(targetRows, n, rules);
-
-        // Build all windows (each window holds a reference to its rule)
-        List<WindowInfo> allWindows = buildWindows(rules, maxReturnVal);
-
-        // Pre-compute: for each position, which windows are active
-        List<List<WindowInfo>> windowsPerPosition = buildWindowsPerPosition(allWindows, maxReturnVal);
-
-        // Greedy assignment
-        int[] result = greedyAssign(n, maxReturnVal, itemValues, windowsPerPosition);
-
-        // Build result rows
-        List<Object[]> resultRows = new ArrayList<>();
-        for (int j = 0; j < maxReturnVal; j++) {
-            if (result[j] >= 0) {
-                resultRows.add(targetRows.get(result[j]));
-            }
+        List<Object[]> selectedRows = new ArrayList<>(limit);
+        for (int selectedIndex : selectedIndexes) {
+            selectedRows.add(targetRows.get(selectedIndex));
         }
+        return resultTable(targetTable, selectedRows);
+    }
 
+    private static CacheTable resultTable(CacheTable source, List<Object[]> rows) {
         return new CacheTable(
-                targetTable.getTableName() + "_rule_diversify_greedy",
-                Linq4j.asEnumerable(resultRows),
-                targetTable.getDataFields()
-        );
+                source.getTableName() + "_rule_diversify_greedy",
+                Linq4j.asEnumerable(rows),
+                source.getDataFields());
     }
 
     private static List<Object[]> readRows(CacheTable table) {
@@ -111,32 +95,12 @@ public class RuleDiversity {
     }
 
     private static List<Rule> parseRules(CacheTable ruleTable, List<RelDataTypeField> targetFields) {
-        List<RelDataTypeField> ruleFields = ruleTable.getDataFields();
-        int windowSizeIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_WINDOW_SIZE);
-        int windowStartIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_WINDOW_START);
-        int windowNumIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_WINDOW_NUM);
-        int diversityColumnIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_DIVERSITY_COLUMN);
-        int diversityValueIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_DIVERSITY_VALUE);
-        int opIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_OP);
-        int diversityNumIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_DIVERSITY_NUM);
-        int weightIdx = DataTypeUtils.findFieldIndex(ruleFields, COL_WEIGHT);
-
-        if (windowSizeIdx == -1) throw new IllegalArgumentException("rule table missing column: " + COL_WINDOW_SIZE);
-        if (windowStartIdx == -1) throw new IllegalArgumentException("rule table missing column: " + COL_WINDOW_START);
-        if (windowNumIdx == -1) throw new IllegalArgumentException("rule table missing column: " + COL_WINDOW_NUM);
-        if (diversityColumnIdx == -1)
-            throw new IllegalArgumentException("rule table missing column: " + COL_DIVERSITY_COLUMN);
-        if (opIdx == -1) throw new IllegalArgumentException("rule table missing column: " + COL_OP);
-        if (diversityNumIdx == -1)
-            throw new IllegalArgumentException("rule table missing column: " + COL_DIVERSITY_NUM);
-        if (weightIdx == -1) throw new IllegalArgumentException("rule table missing column: " + COL_WEIGHT);
-
+        RuleFields fields = RuleFields.from(ruleTable.getDataFields());
         List<Rule> rules = new ArrayList<>();
         Enumerable<Object[]> ruleEnum = ruleTable.scan(null);
         if (ruleEnum != null) {
             for (Object[] row : ruleEnum) {
-                rules.add(Rule.fromRow(row, windowSizeIdx, windowStartIdx, windowNumIdx,
-                        diversityColumnIdx, diversityValueIdx, opIdx, diversityNumIdx, weightIdx, targetFields));
+                rules.add(Rule.fromRow(row, fields, targetFields));
             }
         }
         return rules;
@@ -147,23 +111,20 @@ public class RuleDiversity {
      * Each row is represented as a Map: columnIndex -> list of string values.
      */
     private static List<Map<Integer, List<String>>> extractItemValues(
-            List<Object[]> targetRows, int n, List<Rule> rules) {
-        // Collect unique column indices used by rules
+            List<Object[]> targetRows, List<Rule> rules) {
         Set<Integer> usedColumns = new HashSet<>();
         for (Rule rule : rules) {
             usedColumns.add(rule.columnIndex);
         }
 
-        List<Map<Integer, List<String>>> itemValues = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            Object[] row = targetRows.get(i);
+        List<Map<Integer, List<String>>> itemValues = new ArrayList<>(targetRows.size());
+        for (Object[] row : targetRows) {
             Map<Integer, List<String>> rowMap = new HashMap<>();
             for (int colIdx : usedColumns) {
-                if (colIdx < row.length) {
-                    rowMap.put(colIdx, toValueList(row[colIdx]));
-                } else {
-                    rowMap.put(colIdx, Collections.emptyList());
-                }
+                List<String> values = colIdx < row.length
+                        ? toValueList(row[colIdx])
+                        : Collections.emptyList();
+                rowMap.put(colIdx, values);
             }
             itemValues.add(rowMap);
         }
@@ -173,30 +134,36 @@ public class RuleDiversity {
     /**
      * Build all windows for all rules. Each window holds a reference to its rule.
      */
-    private static List<WindowInfo> buildWindows(List<Rule> rules, int maxReturnVal) {
-        List<WindowInfo> allWindows = new ArrayList<>();
+    private static List<WindowInfo> buildWindows(List<Rule> rules, int limit) {
+        List<WindowInfo> windows = new ArrayList<>();
         for (Rule rule : rules) {
-            if (!rule.isValidOp()) continue;
-            for (int w = 0; w < rule.windowNum; w++) {
-                int winStart = rule.windowStart - 1 + w;
-                int winEnd = Math.min(winStart + rule.windowSize, maxReturnVal);
-                if (winStart >= maxReturnVal) break;
-                allWindows.add(new WindowInfo(winStart, winEnd, rule));
+            if (!rule.isValidOp()) {
+                continue;
+            }
+            for (int offset = 0; offset < rule.windowNum; offset++) {
+                int start = rule.windowStart - 1 + offset;
+                int end = Math.min(start + rule.windowSize, limit);
+                if (start >= limit) {
+                    break;
+                }
+                windows.add(new WindowInfo(start, end, rule));
             }
         }
-        return allWindows;
+        return windows;
     }
 
     /**
      * Build per-position window lists.
      */
-    private static List<List<WindowInfo>> buildWindowsPerPosition(List<WindowInfo> allWindows, int maxReturnVal) {
-        List<List<WindowInfo>> windowsPerPosition = new ArrayList<>();
-        for (int j = 0; j < maxReturnVal; j++) {
+    private static List<List<WindowInfo>> buildWindowsPerPosition(
+            List<WindowInfo> windows,
+            int limit) {
+        List<List<WindowInfo>> windowsPerPosition = new ArrayList<>(limit);
+        for (int position = 0; position < limit; position++) {
             List<WindowInfo> active = new ArrayList<>();
-            for (WindowInfo win : allWindows) {
-                if (win.covers(j)) {
-                    active.add(win);
+            for (WindowInfo window : windows) {
+                if (window.covers(position)) {
+                    active.add(window);
                 }
             }
             windowsPerPosition.add(active);
@@ -204,66 +171,62 @@ public class RuleDiversity {
         return windowsPerPosition;
     }
 
-    private static int[] greedyAssign(int n, int maxReturnVal,
-                                      List<Map<Integer, List<String>>> itemValues,
-                                      List<List<WindowInfo>> windowsPerPosition) {
-        boolean[] assigned = new boolean[n];
-        int[] result = new int[maxReturnVal];
-        Arrays.fill(result, -1);
+    private static int[] greedyAssign(
+            int itemCount,
+            int limit,
+            List<Map<Integer, List<String>>> itemValues,
+            List<List<WindowInfo>> windowsPerPosition) {
+        boolean[] assigned = new boolean[itemCount];
+        int[] selection = new int[limit];
 
-        for (int j = 0; j < maxReturnVal; j++) {
-            int bestItem = -1;
+        for (int position = 0; position < limit; position++) {
+            int bestCandidate = -1;
             double bestScore = Double.MAX_VALUE;
-            List<WindowInfo> activeWindows = windowsPerPosition.get(j);
+            List<WindowInfo> activeWindows = windowsPerPosition.get(position);
 
-            for (int i = 0; i < n; i++) {
-                if (assigned[i]) continue;
+            for (int candidate = 0; candidate < itemCount; candidate++) {
+                if (assigned[candidate]) {
+                    continue;
+                }
+                if (bestCandidate == -1) {
+                    bestCandidate = candidate;
+                }
 
-                double violation = computeViolation(i, activeWindows, itemValues.get(i));
+                double violation = computeViolation(activeWindows, itemValues.get(candidate));
 
                 // Short-circuit: zero violation + iterating in order = best possible
                 if (violation == 0) {
-                    bestItem = i;
+                    bestCandidate = candidate;
                     break;
                 }
 
-                double score = violation * VIOLATION_PENALTY + (i + 1);
+                double score = violation * VIOLATION_PENALTY + (candidate + 1);
                 if (score < bestScore) {
                     bestScore = score;
-                    bestItem = i;
+                    bestCandidate = candidate;
                 }
             }
 
-            if (bestItem == -1) {
-                for (int i = 0; i < n; i++) {
-                    if (!assigned[i]) {
-                        bestItem = i;
-                        break;
-                    }
-                }
-                if (bestItem == -1) break;
-            }
-
-            result[j] = bestItem;
-            assigned[bestItem] = true;
-            updateWindowCounts(bestItem, activeWindows, itemValues.get(bestItem));
+            selection[position] = bestCandidate;
+            assigned[bestCandidate] = true;
+            updateWindowCounts(activeWindows, itemValues.get(bestCandidate));
         }
-        return result;
+        return selection;
     }
 
-    private static double computeViolation(int itemIdx, List<WindowInfo> activeWindows,
+    private static double computeViolation(List<WindowInfo> activeWindows,
                                            Map<Integer, List<String>> itemRow) {
         double violation = 0;
         for (WindowInfo win : activeWindows) {
-            violation += win.simulateViolation(itemRow, itemIdx);
+            violation += win.simulateViolation(itemRow);
         }
         return violation;
     }
 
-    private static void updateWindowCounts(int itemIdx, List<WindowInfo> activeWindows,
+    private static void updateWindowCounts(List<WindowInfo> activeWindows,
                                            Map<Integer, List<String>> itemRow) {
         for (WindowInfo win : activeWindows) {
-            win.add(itemRow, itemIdx);
+            win.add(itemRow);
         }
     }
 
@@ -338,73 +301,128 @@ public class RuleDiversity {
         }
     }
 
-    // ==================== Inner Classes ====================
+    private static final class RuleFields {
+        private final int windowSize;
+        private final int windowStart;
+        private final int windowNum;
+        private final int diversityColumn;
+        private final int diversityValue;
+        private final int operator;
+        private final int diversityNum;
+        private final int weight;
 
-    private static class Rule {
+        private RuleFields(List<RelDataTypeField> fields) {
+            windowSize = requiredIndex(fields, COL_WINDOW_SIZE);
+            windowStart = requiredIndex(fields, COL_WINDOW_START);
+            windowNum = requiredIndex(fields, COL_WINDOW_NUM);
+            diversityColumn = requiredIndex(fields, COL_DIVERSITY_COLUMN);
+            diversityValue = requiredIndex(fields, COL_DIVERSITY_VALUE);
+            operator = requiredIndex(fields, COL_OP);
+            diversityNum = requiredIndex(fields, COL_DIVERSITY_NUM);
+            weight = requiredIndex(fields, COL_WEIGHT);
+        }
+
+        private static RuleFields from(List<RelDataTypeField> fields) {
+            return new RuleFields(fields);
+        }
+
+        private static int requiredIndex(List<RelDataTypeField> fields, String name) {
+            int index = DataTypeUtils.findFieldIndex(fields, name);
+            if (index < 0) {
+                throw new IllegalArgumentException("rule table missing column: " + name);
+            }
+            return index;
+        }
+
+        private int lastIndex() {
+            return Math.max(
+                    Math.max(Math.max(windowSize, windowStart), Math.max(windowNum, diversityColumn)),
+                    Math.max(Math.max(diversityValue, operator), Math.max(diversityNum, weight)));
+        }
+    }
+
+    private static final class Rule {
         static final String OP_GT = ">";
         static final String OP_EQ = "=";
         static final String OP_LT = "<";
 
-        int windowSize;
-        int windowStart;
-        int windowNum;
-        String diversityColumn;
-        String diversityValue;
-        String op;
-        int diversityNum;
-        double weight;
-        int columnIndex;
-        boolean isNullValue;
+        final int windowSize;
+        final int windowStart;
+        final int windowNum;
+        final String diversityValue;
+        final String op;
+        final int diversityNum;
+        final double weight;
+        final int columnIndex;
+        final boolean appliesToEachValue;
 
-        static Rule fromRow(Object[] row, int windowSizeIdx, int windowStartIdx, int windowNumIdx,
-                            int diversityColumnIdx, int diversityValueIdx, int opIdx, int diversityNumIdx,
-                            int weightIdx, List<RelDataTypeField> targetFields) {
-            int maxIdx = Math.max(Math.max(Math.max(windowSizeIdx, windowStartIdx), windowNumIdx),
-                    Math.max(Math.max(diversityColumnIdx, diversityValueIdx),
-                            Math.max(Math.max(opIdx, diversityNumIdx), weightIdx)));
-            if (row.length <= maxIdx) {
-                throw new IllegalArgumentException("Rule row has " + row.length + " columns, expected at least " + (maxIdx + 1));
-            }
-            Rule rule = new Rule();
-            rule.windowSize = RuleDiversity.toInt(row[windowSizeIdx]);
-            rule.windowStart = RuleDiversity.toInt(row[windowStartIdx]);
-            rule.windowNum = RuleDiversity.toInt(row[windowNumIdx]);
-            rule.diversityColumn = RuleDiversity.toString(row[diversityColumnIdx]);
-            rule.diversityValue = row[diversityValueIdx] == null ? null : RuleDiversity.toString(row[diversityValueIdx]);
-            rule.op = RuleDiversity.normalizeOp(RuleDiversity.toString(row[opIdx]));
-            rule.diversityNum = RuleDiversity.toInt(row[diversityNumIdx]);
-            rule.weight = RuleDiversity.toDouble(row[weightIdx]);
-            rule.isNullValue = (rule.diversityValue == null || rule.diversityValue.isEmpty());
+        private Rule(
+                int windowSize,
+                int windowStart,
+                int windowNum,
+                String diversityValue,
+                String op,
+                int diversityNum,
+                double weight,
+                int columnIndex) {
+            this.windowSize = windowSize;
+            this.windowStart = windowStart;
+            this.windowNum = windowNum;
+            this.diversityValue = diversityValue;
+            this.op = op;
+            this.diversityNum = diversityNum;
+            this.weight = weight;
+            this.columnIndex = columnIndex;
+            this.appliesToEachValue = diversityValue == null || diversityValue.isEmpty();
+        }
 
-            // Validate rule parameters
-            if (rule.windowSize <= 0) {
-                throw new IllegalArgumentException("window_size must be > 0, got " + rule.windowSize);
+        static Rule fromRow(
+                Object[] row,
+                RuleFields fields,
+                List<RelDataTypeField> targetFields) {
+            if (row.length <= fields.lastIndex()) {
+                throw new IllegalArgumentException("Rule row has " + row.length
+                        + " columns, expected at least " + (fields.lastIndex() + 1));
             }
-            if (rule.windowStart < 1) {
-                throw new IllegalArgumentException("window_start must be >= 1, got " + rule.windowStart);
+
+            int windowSize = toInt(row[fields.windowSize]);
+            int windowStart = toInt(row[fields.windowStart]);
+            int windowNum = toInt(row[fields.windowNum]);
+            String diversityColumn = RuleDiversity.toString(row[fields.diversityColumn]);
+            String diversityValue = RuleDiversity.toString(row[fields.diversityValue]);
+            String op = normalizeOp(RuleDiversity.toString(row[fields.operator]));
+            int diversityNum = toInt(row[fields.diversityNum]);
+            double weight = toDouble(row[fields.weight]);
+
+            if (windowSize <= 0) {
+                throw new IllegalArgumentException("window_size must be > 0, got " + windowSize);
             }
-            if (rule.windowNum < 1) {
-                throw new IllegalArgumentException("window_num must be >= 1, got " + rule.windowNum);
+            if (windowStart < 1) {
+                throw new IllegalArgumentException("window_start must be >= 1, got " + windowStart);
             }
-            if (rule.diversityColumn == null || rule.diversityColumn.isEmpty()) {
+            if (windowNum < 1) {
+                throw new IllegalArgumentException("window_num must be >= 1, got " + windowNum);
+            }
+            if (diversityColumn == null || diversityColumn.isEmpty()) {
                 throw new IllegalArgumentException("diversity_column must not be null or empty");
             }
-            if (rule.op == null) {
+            if (op == null) {
                 throw new IllegalArgumentException("op must not be null");
             }
-            if (rule.diversityNum < 0) {
-                throw new IllegalArgumentException("diversity_num must be >= 0, got " + rule.diversityNum);
+            if (diversityNum < 0) {
+                throw new IllegalArgumentException("diversity_num must be >= 0, got " + diversityNum);
             }
-            if (rule.weight < 0) {
-                throw new IllegalArgumentException("weight must be >= 0, got " + rule.weight);
+            if (weight < 0) {
+                throw new IllegalArgumentException("weight must be >= 0, got " + weight);
             }
 
-            rule.columnIndex = DataTypeUtils.findFieldIndex(targetFields, rule.diversityColumn);
-            if (rule.columnIndex == -1) {
+            int columnIndex = DataTypeUtils.findFieldIndex(targetFields, diversityColumn);
+            if (columnIndex < 0) {
                 throw new IllegalArgumentException(
-                        "diversity_column '" + rule.diversityColumn + "' not found in target table");
+                        "diversity_column '" + diversityColumn + "' not found in target table");
             }
-            return rule;
+            return new Rule(windowSize, windowStart, windowNum, diversityValue, op,
+                    diversityNum, weight, columnIndex);
         }
 
         boolean isValidOp() {
@@ -425,7 +443,7 @@ public class RuleDiversity {
         }
     }
 
-    private static class WindowInfo {
+    private static final class WindowInfo {
         final int start;
         final int end;
         final Rule rule;
@@ -436,7 +454,7 @@ public class RuleDiversity {
             this.start = start;
             this.end = end;
             this.rule = rule;
-            this.valueCounts = rule.isNullValue ? new HashMap<>() : null;
+            this.valueCounts = rule.appliesToEachValue ? new HashMap<>() : null;
         }
 
         boolean covers(int position) {
@@ -446,11 +464,13 @@ public class RuleDiversity {
         /**
          * Simulate placing an item and compute the weighted violation penalty.
          */
-        double simulateViolation(Map<Integer, List<String>> itemRow, int itemIdx) {
+        double simulateViolation(Map<Integer, List<String>> itemRow) {
             List<String> values = itemRow.getOrDefault(rule.columnIndex, Collections.emptyList());
 
-            if (rule.isNullValue) {
-                if (values.isEmpty()) return 0;
+            if (rule.appliesToEachValue) {
+                if (values.isEmpty()) {
+                    return 0;
+                }
                 Map<String, Integer> newCounts = new HashMap<>(valueCounts);
                 for (String val : values) {
                     newCounts.merge(val, 1, Integer::sum);
@@ -458,30 +478,28 @@ public class RuleDiversity {
                 double maxViol = 0;
                 for (int count : newCounts.values()) {
                     double v = rule.calcViolation(count);
-                    if (v > maxViol) maxViol = v;
+                    if (v > maxViol) {
+                        maxViol = v;
+                    }
                 }
                 return maxViol * rule.weight;
-            } else {
-                boolean isMatched = values.contains(rule.diversityValue);
-                int newCount = matchedCount + (isMatched ? 1 : 0);
-                return rule.calcViolation(newCount) * rule.weight;
             }
+            int newCount = matchedCount + (values.contains(rule.diversityValue) ? 1 : 0);
+            return rule.calcViolation(newCount) * rule.weight;
         }
 
         /**
          * Update window counts after placing an item.
          */
-        void add(Map<Integer, List<String>> itemRow, int itemIdx) {
+        void add(Map<Integer, List<String>> itemRow) {
             List<String> values = itemRow.getOrDefault(rule.columnIndex, Collections.emptyList());
 
-            if (rule.isNullValue) {
+            if (rule.appliesToEachValue) {
                 for (String val : values) {
                     valueCounts.merge(val, 1, Integer::sum);
                 }
-            } else {
-                if (values.contains(rule.diversityValue)) {
-                    matchedCount++;
-                }
+            } else if (values.contains(rule.diversityValue)) {
+                matchedCount++;
             }
         }
     }

@@ -50,13 +50,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * with columnar predictions, e.g. {"item_tower_emb": [[...], ...]} where the
  * i-th element corresponds to the i-th input row.
  *
- * NOTE: tests always use a batchSize that flushes mid-stream. Rows buffered in
- * a trailing partial batch are flushed from TableFunction.close() - the HTTP
- * request is sent, but rows collected during close() are dropped by the Flink
- * 1.19 streaming runtime (verified experimentally, with and without operator
- * chaining). load_features.sql uses batchSize=128, so with the current runtime
- * the last (rowCount % 128) movies would be lost from item_embedding.
- *
  * Uses MiniCluster via {@link MiniClusterExtension} to run a real Flink job.
  */
 @Tag("integration")
@@ -148,8 +141,7 @@ class BatchCallServiceUdtfTest {
     /**
      * Mirrors the item_embedding INSERT of load_features.sql: field mapping
      * through the typed output maps and the JSON request format. Uses
-     * batchSize equal to the row count so the single batch is flushed
-     * mid-stream (see the close() caveat in the class javadoc).
+     * batchSize equal to the row count so the request is sent as one batch.
      */
     @Test
     void testItemEmbeddingPipeline() throws Exception {
@@ -192,27 +184,28 @@ class BatchCallServiceUdtfTest {
         }
     }
 
-    /** batchSize smaller than the row count: rows must be chunked into batches. */
+    /** A trailing partial batch is flushed from TableFunction.finish(). */
     @Test
     void testBatchingSplitsRowsIntoChunks() throws Exception {
         StreamTableEnvironment tEnv = createTableEnv();
 
-        TableResult result = tEnv.executeSql(itemEmbeddingSql(serviceUrl, 2, 4));
+        TableResult result = tEnv.executeSql(itemEmbeddingSql(serviceUrl, 2, 5));
 
         List<Row> rows = collectRows(result);
-        assertEquals(4, rows.size(), "One output row per movie");
+        assertEquals(5, rows.size(), "The trailing partial batch must not be lost");
 
-        assertEquals(2, receivedBodies.size(), "batchSize=2 over 4 rows should produce exactly 2 POSTs");
-        for (String body : receivedBodies) {
-            assertEquals(2, JsonParser.parseString(body).getAsJsonArray().size(),
-                    "Each request should carry exactly batchSize rows");
-        }
+        assertEquals(3, receivedBodies.size(), "batchSize=2 over 5 rows should produce 3 POSTs");
+        List<Integer> requestSizes = receivedBodies.stream()
+                .map(body -> JsonParser.parseString(body).getAsJsonArray().size())
+                .sorted()
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(Arrays.asList(1, 2, 2), requestSizes);
 
         Set<Long> ids = new HashSet<>();
         for (Row row : rows) {
             ids.add((Long) row.getField(0));
         }
-        assertEquals(new HashSet<>(Arrays.asList(MOVIE_IDS).subList(0, 4)), ids);
+        assertEquals(new HashSet<>(Arrays.asList(MOVIE_IDS)), ids);
     }
 
     /**

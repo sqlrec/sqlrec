@@ -112,9 +112,9 @@ public class DppDiversityTest {
     @Test
     public void testThetaZeroPureDiversity() {
         Object[][] data = {
-                {"item1", 1.0, Arrays.asList(1.0, 0.0)},
-                {"item2", 1.0, Arrays.asList(0.0, 1.0)},
-                {"item3", 1.0, Arrays.asList(0.707, 0.707)},
+                {"item1", 0.1, Arrays.asList(1.0, 0.0)},
+                {"item2", 0.01, Arrays.asList(-1.0, 0.0)},
+                {"item3", 1000.0, Arrays.asList(0.0, 1.0)},
         };
         CacheTable input = createTable(data);
 
@@ -122,11 +122,11 @@ public class DppDiversityTest {
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size());
-        // With theta=0, all scores are exp(0)=1, so selection is purely diversity-driven
-        // The two most dissimilar items (item1 and item2, orthogonal) should be selected
+        // Scores differ by five orders of magnitude, but theta=0 must ignore them.
+        // item1 and item2 point in opposite directions and map to zero similarity.
         List<String> names = result.stream().map(r -> (String) r[0]).collect(Collectors.toList());
         assertTrue(names.contains("item1") && names.contains("item2"),
-                "With theta=0, the two most dissimilar (orthogonal) items should be selected");
+                "With theta=0, score must not override the most diverse pair");
     }
 
     /**
@@ -135,21 +135,23 @@ public class DppDiversityTest {
      * its embedding is similar to already-selected items.
      */
     @Test
-    public void testHighThetaFavorsRelevance() {
-        // Two distinct embeddings, but one has much higher score
+    public void testThetaChangesRelevanceDiversityTradeoff() {
         Object[][] data = {
-                {"highScore", 10.0, Arrays.asList(1.0, 0.0)},
-                {"lowScore1", 0.1, Arrays.asList(0.0, 1.0)},
-                {"lowScore2", 0.1, Arrays.asList(-1.0, 0.0)},  // similar direction to highScore
+                {"highest", 10.0, Arrays.asList(1.0, 0.0)},
+                {"relevant", 9.0, Arrays.asList(0.999, 0.04)},
+                {"diverse", 1.0, Arrays.asList(-1.0, 0.0)},
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.9", "2");
-        List<Object[]> result = collectRows(output);
+        List<String> lowTheta = selectedNames(
+                function.evaluate(input, "embedding", "score", "0.1", "2"));
+        List<String> highTheta = selectedNames(
+                function.evaluate(input, "embedding", "score", "0.9", "2"));
 
-        assertEquals(2, result.size());
-        // With high theta, highScore must be selected first
-        assertEquals("highScore", result.get(0)[0]);
+        assertEquals(Arrays.asList("highest", "diverse"), lowTheta,
+                "Low theta should sacrifice relevance for diversity");
+        assertEquals(Arrays.asList("highest", "relevant"), highTheta,
+                "High theta should favor relevance despite embedding similarity");
     }
 
     /**
@@ -316,6 +318,103 @@ public class DppDiversityTest {
         assertEquals(2, result.size());
     }
 
+    @Test
+    public void testLargeFiniteScoresDoNotOverflowKernel() {
+        Object[][] normalScores = {
+                {"item1", 3.0, new double[]{1.0, 0.0, 0.0}},
+                {"item2", 2.0, new double[]{0.9, 0.1, 0.0}},
+                {"item3", 1.0, new double[]{0.0, 1.0, 0.0}},
+                {"item4", 0.5, new double[]{0.0, 0.0, 1.0}},
+        };
+        Object[][] shiftedScores = {
+                {"item1", 1003.0, new double[]{1.0, 0.0, 0.0}},
+                {"item2", 1002.0, new double[]{0.9, 0.1, 0.0}},
+                {"item3", 1001.0, new double[]{0.0, 1.0, 0.0}},
+                {"item4", 1000.5, new double[]{0.0, 0.0, 1.0}},
+        };
+
+        List<String> normal = selectedNames(function.evaluate(
+                createTable(normalScores), "embedding", "score", "0.5", "4"));
+        List<String> shifted = selectedNames(function.evaluate(
+                createTable(shiftedScores), "embedding", "score", "0.5", "4"));
+
+        assertEquals(normal, shifted,
+                "Adding a common score offset must not change fixed-cardinality DPP ranking");
+    }
+
+    @Test
+    public void testDoubleArrayEmbeddingIsNotModified() {
+        double[] embedding = {3.0, 4.0};
+        CacheTable input = createTable(new Object[][]{
+                {"item1", 1.0, embedding},
+        });
+
+        function.evaluate(input, "embedding", "score", "0.5", "1");
+
+        assertArrayEquals(new double[]{3.0, 4.0}, embedding);
+    }
+
+    @Test
+    public void testFastGreedyMatchesNaiveDeterminantGreedyBeyondSecondSelection() {
+        java.util.Random random = new java.util.Random(20260919L);
+
+        for (int round = 0; round < 25; round++) {
+            Object[][] data = randomData(random, 7, 8);
+            List<String> expected = naiveGreedySelection(data, 0.45, 5);
+            List<String> actual = selectedNames(function.evaluate(
+                    createTable(data), "embedding", "score", "0.45", "5"));
+
+            assertEquals(expected, actual, "Greedy order differs in random round " + round);
+        }
+    }
+
+    @Test
+    public void testEmbeddingMagnitudeDoesNotChangeSelection() {
+        Object[][] normalizedScale = {
+                {"item1", 2.0, Arrays.asList(1.0, 0.0, 0.0)},
+                {"item2", 1.8, Arrays.asList(0.8, 0.2, 0.0)},
+                {"item3", 1.5, Arrays.asList(0.0, 1.0, 0.0)},
+                {"item4", 1.0, Arrays.asList(0.0, 0.0, 1.0)},
+        };
+        Object[][] arbitraryScale = {
+                {"item1", 2.0, Arrays.asList(100.0, 0.0, 0.0)},
+                {"item2", 1.8, Arrays.asList(4.0, 1.0, 0.0)},
+                {"item3", 1.5, Arrays.asList(0.0, 0.01, 0.0)},
+                {"item4", 1.0, Arrays.asList(0.0, 0.0, 7.0)},
+        };
+
+        List<String> expected = selectedNames(function.evaluate(
+                createTable(normalizedScale), "embedding", "score", "0.4", "3"));
+        List<String> actual = selectedNames(function.evaluate(
+                createTable(arbitraryScale), "embedding", "score", "0.4", "3"));
+
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testRejectsNonFiniteThetaScoreAndEmbedding() {
+        CacheTable valid = createTable(new Object[][]{
+                {"item1", 1.0, Arrays.asList(1.0, 0.0)},
+        });
+        CacheTable infiniteScore = createTable(new Object[][]{
+                {"item1", Double.POSITIVE_INFINITY, Arrays.asList(1.0, 0.0)},
+        });
+        CacheTable nanEmbedding = createTable(new Object[][]{
+                {"item1", 1.0, Arrays.asList(Double.NaN, 0.0)},
+        });
+
+        assertAll(
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> function.evaluate(valid, "embedding", "score", "NaN", "1")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> function.evaluate(valid, "embedding", "score", "Infinity", "1")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> function.evaluate(infiniteScore, "embedding", "score", "0.5", "1")),
+                () -> assertThrows(IllegalArgumentException.class,
+                        () -> function.evaluate(nanEmbedding, "embedding", "score", "0.5", "1"))
+        );
+    }
+
     /**
      * Test that DPP produces more diverse results than pure score-based ranking.
      * Given items where top-scoring items are all similar, DPP should still
@@ -407,6 +506,124 @@ public class DppDiversityTest {
         System.out.println("=== DPP Performance Test ===");
         System.out.println("Items: " + itemSize + ", Dim: " + dim + ", MaxLength: " + maxLen);
         System.out.println("Execution time: " + elapsed + "ms");
+    }
+
+    private Object[][] randomData(java.util.Random random, int itemCount, int dimension) {
+        Object[][] data = new Object[itemCount][];
+        for (int i = 0; i < itemCount; i++) {
+            List<Double> embedding = new ArrayList<>(dimension);
+            for (int j = 0; j < dimension; j++) {
+                embedding.add(random.nextGaussian());
+            }
+            data[i] = new Object[]{"item" + i, 0.2 + 2.0 * random.nextDouble(), embedding};
+        }
+        return data;
+    }
+
+    /**
+     * Independent small-input oracle: construct the DPP kernel from the public contract and
+     * choose each item by directly recomputing the candidate submatrix determinant.
+     */
+    private List<String> naiveGreedySelection(Object[][] data, double theta, int maxLength) {
+        int itemCount = data.length;
+        double alpha = theta / (2.0 * (1.0 - theta));
+        double[][] embeddings = new double[itemCount][];
+        double[] quality = new double[itemCount];
+
+        for (int i = 0; i < itemCount; i++) {
+            List<?> values = (List<?>) data[i][2];
+            double normSquared = 0.0;
+            embeddings[i] = new double[values.size()];
+            for (int j = 0; j < values.size(); j++) {
+                double value = ((Number) values.get(j)).doubleValue();
+                embeddings[i][j] = value;
+                normSquared += value * value;
+            }
+            double norm = Math.sqrt(normSquared);
+            for (int j = 0; j < embeddings[i].length; j++) {
+                embeddings[i][j] /= norm;
+            }
+            quality[i] = Math.exp(alpha * ((Number) data[i][1]).doubleValue());
+        }
+
+        double[][] kernel = new double[itemCount][itemCount];
+        for (int i = 0; i < itemCount; i++) {
+            for (int j = 0; j < itemCount; j++) {
+                double cosine = 0.0;
+                for (int d = 0; d < embeddings[i].length; d++) {
+                    cosine += embeddings[i][d] * embeddings[j][d];
+                }
+                kernel[i][j] = quality[i] * (1.0 + cosine) / 2.0 * quality[j];
+            }
+        }
+
+        List<Integer> selected = new ArrayList<>();
+        while (selected.size() < Math.min(maxLength, itemCount)) {
+            int bestItem = -1;
+            double bestDeterminant = Double.NEGATIVE_INFINITY;
+            for (int candidate = 0; candidate < itemCount; candidate++) {
+                if (selected.contains(candidate)) {
+                    continue;
+                }
+                List<Integer> indices = new ArrayList<>(selected);
+                indices.add(candidate);
+                double candidateDeterminant = determinant(kernel, indices);
+                if (candidateDeterminant > bestDeterminant) {
+                    bestDeterminant = candidateDeterminant;
+                    bestItem = candidate;
+                }
+            }
+            selected.add(bestItem);
+        }
+
+        return selected.stream()
+                .map(index -> (String) data[index][0])
+                .collect(Collectors.toList());
+    }
+
+    private double determinant(double[][] source, List<Integer> indices) {
+        int size = indices.size();
+        double[][] matrix = new double[size][size];
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                matrix[i][j] = source[indices.get(i)][indices.get(j)];
+            }
+        }
+
+        double determinant = 1.0;
+        for (int column = 0; column < size; column++) {
+            int pivot = column;
+            for (int row = column + 1; row < size; row++) {
+                if (Math.abs(matrix[row][column]) > Math.abs(matrix[pivot][column])) {
+                    pivot = row;
+                }
+            }
+            if (Math.abs(matrix[pivot][column]) < 1e-14) {
+                return 0.0;
+            }
+            if (pivot != column) {
+                double[] swap = matrix[pivot];
+                matrix[pivot] = matrix[column];
+                matrix[column] = swap;
+                determinant = -determinant;
+            }
+
+            double pivotValue = matrix[column][column];
+            determinant *= pivotValue;
+            for (int row = column + 1; row < size; row++) {
+                double factor = matrix[row][column] / pivotValue;
+                for (int remaining = column + 1; remaining < size; remaining++) {
+                    matrix[row][remaining] -= factor * matrix[column][remaining];
+                }
+            }
+        }
+        return determinant;
+    }
+
+    private List<String> selectedNames(CacheTable table) {
+        return collectRows(table).stream()
+                .map(row -> (String) row[0])
+                .collect(Collectors.toList());
     }
 
     private CacheTable createTable(Object[][] data) {

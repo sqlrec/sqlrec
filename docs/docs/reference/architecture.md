@@ -395,7 +395,7 @@ AbstractTable
 
 ### HTTP 类 UDF（在线推理核心）
 
-- `CallServiceFunction.java`（`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`）（`call_service`）：通过重载同时支持普通输入和 User-Item 输入；`ServiceManager.getServiceConfig()` 取服务 URL（Caffeine 缓存）→ 输入表序列化为行式 JSON 数组或 User-Item 列式 JSON → POST → 解析 prediction map → `mergePredictions` 按列名拼回输入行。User 字段以单元素数组传递一次，Item 字段按行组成数组。静态 `OkHttpClient`（30s 三段超时，volatile 可测试替换）。
+- `CallServiceFunction.java`（`sqlrec-udf/src/main/java/com/sqlrec/udf/table/CallServiceFunction.java`）（`call_service`）：通过重载同时支持普通输入和 User-Item 输入；`ServiceManager.getServiceConfig()` 取服务 URL（Caffeine 缓存）→ 输入表序列化为行式 JSON 数组或 User-Item 列式 JSON → POST → 解析 prediction map → `mergePredictions` 按列名拼回输入行。User 字段以单元素数组传递一次，Item 字段按行组成数组。默认 `OkHttpClient` 的连接、读、写超时均为 30 秒；实例可注入独立客户端，无需修改全局状态。
 - `BatchCallServiceUDTF`（Flink UDTF，JDK HttpURLConnection，按 batchSize 攒批）、`CallSqlRecApiFunction`（跨 sqlrec 实例调用，走 `SqlRecApiClient`）。
 - **多样化族**：`WindowDiversify`（滑动窗口内按 tag 配额）、`DppDiversity`（行列式点过程）、`RuleDiversity`、`WeightedMerge`（复用 `MergeUtils` 加权轮询内核，并标记为类 UNION 合并节点）、`DedupFunction`、`ShuffleFunction`。
 - **特征族**：`TagToVecFunction`、`RandomVecFunction`、`FeatureCoverageMetricsFunction`、`GetGrowthbookFeaturesFunction`（GrowthBook SDK）、`Get/SetVariablesFunction`（变量传播）。

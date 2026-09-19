@@ -24,7 +24,9 @@ import java.util.List;
  * 4. Build kernel matrix L = Diag(scores) * S * Diag(scores), where S is the similarity matrix.
  * 5. Run greedy DPP MAP inference to select diverse items.
  */
-public class DppDiversity {
+public final class DppDiversity {
+    private static final double MAX_LOG_KERNEL_FACTOR =
+            0.5 * Math.log(Double.MAX_VALUE) - Math.log(2.0);
 
     public CacheTable evaluate(
             CacheTable input,
@@ -35,7 +37,7 @@ public class DppDiversity {
     ) {
         double thetaVal = Double.parseDouble(theta);
         int maxLengthVal = Integer.parseInt(maxLength);
-        if (thetaVal < 0 || thetaVal >= 1) {
+        if (!Double.isFinite(thetaVal) || thetaVal < 0 || thetaVal >= 1) {
             throw new IllegalArgumentException("theta must be in [0, 1), got: " + theta);
         }
         if (maxLengthVal <= 0) {
@@ -52,17 +54,7 @@ public class DppDiversity {
             throw new IllegalArgumentException("scoreColumnName not found: " + scoreColumnName);
         }
 
-        // Read all rows, filter out rows with null embedding or null score
-        List<Object[]> rows = new ArrayList<>();
-        Enumerable<Object[]> enumerable = input.scan(null);
-        if (enumerable != null) {
-            for (Object[] row : enumerable) {
-                if (row[scoreIndex] == null || row[embeddingIndex] == null) {
-                    continue;
-                }
-                rows.add(row);
-            }
-        }
+        List<Object[]> rows = eligibleRows(input, embeddingIndex, scoreIndex);
 
         int itemSize = rows.size();
         if (itemSize == 0) {
@@ -73,33 +65,8 @@ public class DppDiversity {
             );
         }
 
-        // Extract raw scores
-        double[] rawScores = new double[itemSize];
-        for (int i = 0; i < itemSize; i++) {
-            Object scoreObj = rows.get(i)[scoreIndex];
-            if (scoreObj instanceof Number) {
-                rawScores[i] = ((Number) scoreObj).doubleValue();
-            } else {
-                rawScores[i] = Double.parseDouble(scoreObj.toString());
-            }
-        }
-
-        // Extract embedding vectors and L2 normalize them
-        double[][] embeddings = new double[itemSize][];
-        int expectedDim = -1;
-        for (int i = 0; i < itemSize; i++) {
-            Object embObj = rows.get(i)[embeddingIndex];
-            double[] vec = DataTransformUtils.toDoubleArray(embObj);
-            if (expectedDim == -1) {
-                expectedDim = vec.length;
-            } else if (vec.length != expectedDim) {
-                throw new IllegalArgumentException(
-                        "Embedding dimension mismatch: expected " + expectedDim
-                                + " but got " + vec.length + " at row " + i);
-            }
-            DataTransformUtils.l2Normalize(vec);
-            embeddings[i] = vec;
-        }
+        double[] rawScores = extractScores(rows, scoreIndex);
+        double[][] embeddings = extractEmbeddings(rows, embeddingIndex);
 
         // Clip negative scores and apply exponential transform: exp(alpha * r)
         // where alpha = theta / (2 * (1 - theta)), theta in [0, 1)
@@ -126,6 +93,63 @@ public class DppDiversity {
         );
     }
 
+    private static List<Object[]> eligibleRows(
+            CacheTable input,
+            int embeddingIndex,
+            int scoreIndex) {
+        List<Object[]> rows = new ArrayList<>();
+        Enumerable<Object[]> enumerable = input.scan(null);
+        if (enumerable == null) {
+            return rows;
+        }
+        for (Object[] row : enumerable) {
+            if (row[scoreIndex] != null && row[embeddingIndex] != null) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    private static double[] extractScores(List<Object[]> rows, int scoreIndex) {
+        double[] scores = new double[rows.size()];
+        for (int i = 0; i < rows.size(); i++) {
+            Object value = rows.get(i)[scoreIndex];
+            double score = value instanceof Number
+                    ? ((Number) value).doubleValue()
+                    : Double.parseDouble(value.toString());
+            if (!Double.isFinite(score)) {
+                throw new IllegalArgumentException("score must be finite at row " + i);
+            }
+            scores[i] = score;
+        }
+        return scores;
+    }
+
+    private static double[][] extractEmbeddings(List<Object[]> rows, int embeddingIndex) {
+        double[][] embeddings = new double[rows.size()][];
+        int expectedDimension = -1;
+        for (int i = 0; i < rows.size(); i++) {
+            // Normalization is in-place, so always work on an owned copy. In particular,
+            // toDoubleArray returns the original reference when the input is a double[].
+            double[] vector = DataTransformUtils.toDoubleArray(rows.get(i)[embeddingIndex]).clone();
+            if (expectedDimension < 0) {
+                expectedDimension = vector.length;
+            } else if (vector.length != expectedDimension) {
+                throw new IllegalArgumentException(
+                        "Embedding dimension mismatch: expected " + expectedDimension
+                                + " but got " + vector.length + " at row " + i);
+            }
+            for (double value : vector) {
+                if (!Double.isFinite(value)) {
+                    throw new IllegalArgumentException("embedding must be finite at row " + i);
+                }
+            }
+            DataTransformUtils.l2Normalize(vector);
+            embeddings[i] = vector;
+        }
+        return embeddings;
+    }
+
     /**
      * Exponential transform for relevance scores.
      * score_i = exp(alpha * r_i), where alpha = theta / (2 * (1 - theta)).
@@ -134,15 +158,30 @@ public class DppDiversity {
      * - theta close to 0: alpha small, diversity dominates.
      * Negative scores are clipped to a small positive value (1e-10).
      */
-    private double[] expTransform(double[] rawScores, double theta) {
+    private static double[] expTransform(double[] rawScores, double theta) {
         double alpha = theta / (2.0 * (1.0 - theta));
-        double[] scores = new double[rawScores.length];
+        double[] logScores = new double[rawScores.length];
+        double maxLogScore = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < rawScores.length; i++) {
             double r = rawScores[i];
             if (r < 0) {
                 r = 1e-10;
             }
-            scores[i] = Math.exp(alpha * r);
+            double logScore = alpha * r;
+            if (!Double.isFinite(logScore)) {
+                throw new IllegalArgumentException(
+                        "score transform overflow at row " + i + "; reduce theta or score magnitude");
+            }
+            logScores[i] = logScore;
+            maxLogScore = Math.max(maxLogScore, logScore);
+        }
+
+        // A common scale factor does not change fixed-cardinality DPP ranking. Apply one only
+        // when needed, leaving enough headroom for score[i] * similarity * score[j].
+        double logScale = Math.max(0.0, maxLogScore - MAX_LOG_KERNEL_FACTOR);
+        double[] scores = new double[rawScores.length];
+        for (int i = 0; i < logScores.length; i++) {
+            scores[i] = Math.exp(logScores[i] - logScale);
         }
         return scores;
     }
@@ -155,7 +194,10 @@ public class DppDiversity {
      * - Directly writes embedding data into EJML's underlying flat array to avoid per-element set() overhead.
      * - Merges similarity transform and diagonal scaling into a single N² pass over the raw result data.
      */
-    private double[][] buildKernelMatrix(double[][] embeddings, double[] scores, int itemSize) {
+    private static double[][] buildKernelMatrix(
+            double[][] embeddings,
+            double[] scores,
+            int itemSize) {
         int dim = embeddings[0].length;
 
         // Build embedding matrix (itemSize x dim) by writing directly into EJML's flat array
@@ -193,7 +235,10 @@ public class DppDiversity {
      * Uses raw double[][] for the kernel matrix and Cholesky factor
      * to avoid per-element accessor overhead in the inner loop.
      */
-    private List<Integer> dppGreedyMap(double[][] kernelData, int maxLength, int itemSize) {
+    private static List<Integer> dppGreedyMap(
+            double[][] kernelData,
+            int maxLength,
+            int itemSize) {
         double epsilon = 1e-10;
 
         if (maxLength > itemSize) {
@@ -250,7 +295,7 @@ public class DppDiversity {
     /**
      * Find the index of the maximum value in the array, excluding already selected indices.
      */
-    private int argMax(double[] arr, boolean[] excluded) {
+    private static int argMax(double[] arr, boolean[] excluded) {
         int bestIdx = -1;
         double bestVal = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < arr.length; i++) {

@@ -11,17 +11,21 @@ import com.sqlrec.udf.scalar.RandomVecFunction;
 import com.sqlrec.udf.scalar.UuidFunction;
 import com.sqlrec.udf.table.*;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class FunctionConfigs {
+public final class FunctionConfigs {
     public static final Map<String, String> DEFAULT_SCALAR_FUNCTION_CONFIGS =
             createScalarFunctionConfigs();
     public static final Map<String, String> DEFAULT_JAVA_FUNCTION_CONFIGS =
             createJavaFunctionConfigs();
 
+    private FunctionConfigs() {
+    }
+
     private static Map<String, String> createScalarFunctionConfigs() {
-        Map<String, String> configs = new HashMap<>();
+        Map<String, String> configs = new LinkedHashMap<>();
         configs.put("ip", IpFunction.class.getName());
         configs.put("l2_norm", L2NormFunction.class.getName());
         configs.put("random_vec", RandomVecFunction.class.getName());
@@ -31,11 +35,11 @@ public class FunctionConfigs {
         configs.put("array_contains", ArrayContainsFunction.class.getName());
         configs.put("array_contains_all", ArrayContainsAllFunction.class.getName());
         configs.put("array_contains_any", ArrayContainsAnyFunction.class.getName());
-        return configs;
+        return Collections.unmodifiableMap(configs);
     }
 
     private static Map<String, String> createJavaFunctionConfigs() {
-        Map<String, String> configs = new HashMap<>();
+        Map<String, String> configs = new LinkedHashMap<>();
         configs.put("add_col", AddColFunction.class.getName());
         configs.put("shuffle", ShuffleFunction.class.getName());
         configs.put("window_diversify", WindowDiversify.class.getName());
@@ -53,6 +57,6 @@ public class FunctionConfigs {
         configs.put("json_to_table", JsonToTableFunction.class.getName());
         configs.put("get_growthbook_features", GetGrowthbookFeaturesFunction.class.getName());
         configs.put("sleep", SleepFunction.class.getName());
-        return configs;
+        return Collections.unmodifiableMap(configs);
     }
 }
