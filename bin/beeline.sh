@@ -1,5 +1,4 @@
 #!/bin/bash
-shopt -s expand_aliases
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 
 export BASE_DIR=$(dirname ${dir})/deploy
