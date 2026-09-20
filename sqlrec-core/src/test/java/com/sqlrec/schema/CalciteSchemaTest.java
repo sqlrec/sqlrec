@@ -121,7 +121,7 @@ public class CalciteSchemaTest {
         String sql = "select * from t0";
 
         System.out.println("\n" + sql);
-        SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode flinkSqlNode = CompileManager.parseSql(sql);
         BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
 
         Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());

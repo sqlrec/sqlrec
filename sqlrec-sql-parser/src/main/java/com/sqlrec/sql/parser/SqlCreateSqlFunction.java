@@ -3,10 +3,9 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
 import java.util.List;
 
-public class SqlCreateSqlFunction extends SqlCall {
+public class SqlCreateSqlFunction extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CREATE_SQL_FUNCTION", SqlKind.OTHER);
 
     private SqlIdentifier funcName;
@@ -25,7 +24,7 @@ public class SqlCreateSqlFunction extends SqlCall {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        return List.of(funcName);
     }
 
     @Override
@@ -42,6 +41,8 @@ public class SqlCreateSqlFunction extends SqlCall {
         return orReplace;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setOrReplace(boolean orReplace) {
         this.orReplace = orReplace;
     }
@@ -50,6 +51,8 @@ public class SqlCreateSqlFunction extends SqlCall {
         return funcName;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setFuncName(SqlIdentifier funcName) {
         this.funcName = funcName;
     }

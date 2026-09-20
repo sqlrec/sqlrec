@@ -16,7 +16,7 @@ class ModelEntityConverterTest {
 
     @Test
     void convertToModelNormalizesModelName() throws Exception {
-        SqlNode node = CompileManager.parseFlinkSql("create model MyModel (uid int)");
+        SqlNode node = CompileManager.parseSql("create model MyModel (uid int)");
 
         ModelConf modelConf = ModelEntityConverter.convertToModel((SqlCreateModel) node);
 
@@ -25,7 +25,7 @@ class ModelEntityConverterTest {
 
     @Test
     void convertToModelStripsBackQuotesAndNormalizes() throws Exception {
-        SqlNode node = CompileManager.parseFlinkSql("create model `MyModel` (uid int)");
+        SqlNode node = CompileManager.parseSql("create model `MyModel` (uid int)");
 
         ModelConf modelConf = ModelEntityConverter.convertToModel((SqlCreateModel) node);
 

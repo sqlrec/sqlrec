@@ -13,7 +13,7 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testParseCreateTableToHmsTable() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR) WITH ('connector' = 'redis', 'redis.uri' = 'localhost:6379')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         assertNotNull(sqlNode);
         assertTrue(sqlNode instanceof SqlCreateTable);
 
@@ -33,7 +33,7 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testParseCreateTableWithDatabase() throws Exception {
         String sql = "CREATE TABLE mydb.mytable (id BIGINT, score DOUBLE) WITH ('connector' = 'milvus')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         assertNotNull(sqlNode);
 
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
@@ -46,7 +46,7 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testParseCreateTableWithPrimaryKey() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR, PRIMARY KEY (id) NOT ENFORCED) WITH ('connector' = 'redis')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         assertNotNull(sqlNode);
 
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
@@ -57,7 +57,7 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testGenerateCreateSqlFromHmsTable() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR) WITH ('connector' = 'redis', 'redis.uri' = 'localhost:6379')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
 
         String generatedDdl = SchemaUtils.generateCreateSqlFromHmsTable(hmsTable);
@@ -72,7 +72,7 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testGenerateCreateSqlFromHmsTableWithPrimaryKey() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR, PRIMARY KEY (id) NOT ENFORCED) WITH ('connector' = 'redis')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
 
         String generatedDdl = SchemaUtils.generateCreateSqlFromHmsTable(hmsTable);
@@ -83,12 +83,12 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testFullRoundTrip() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR) WITH ('connector' = 'redis', 'redis.uri' = 'localhost:6379')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
         String generatedDdl = SchemaUtils.generateCreateSqlFromHmsTable(hmsTable);
 
         // Parse the generated DDL again and verify it produces the same structure
-        SqlNode roundTripNode = CompileManager.parseFlinkSql(generatedDdl);
+        SqlNode roundTripNode = CompileManager.parseSql(generatedDdl);
         Table roundTripTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) roundTripNode);
 
         assertEquals(hmsTable.getDbName(), roundTripTable.getDbName());
@@ -104,12 +104,12 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testFullRoundTripWithPrimaryKey() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR, PRIMARY KEY (id) NOT ENFORCED) WITH ('connector' = 'redis', 'redis.uri' = 'localhost:6379')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
         String generatedDdl = SchemaUtils.generateCreateSqlFromHmsTable(hmsTable);
 
         // Parse the generated DDL again and verify round-trip
-        SqlNode roundTripNode = CompileManager.parseFlinkSql(generatedDdl);
+        SqlNode roundTripNode = CompileManager.parseSql(generatedDdl);
         Table roundTripTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) roundTripNode);
 
         assertEquals(hmsTable.getDbName(), roundTripTable.getDbName());
@@ -121,12 +121,12 @@ public class SchemaThriftUtilsTest {
     @Test
     public void testRoundTripDdlStringEquality() throws Exception {
         String sql = "CREATE TABLE mytable (id INT, name VARCHAR) WITH ('connector' = 'redis', 'redis.uri' = 'localhost:6379')";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         Table hmsTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) sqlNode);
         String generatedDdl = SchemaUtils.generateCreateSqlFromHmsTable(hmsTable);
 
         // Generate DDL from the round-tripped HMS table should produce the same DDL
-        SqlNode roundTripNode = CompileManager.parseFlinkSql(generatedDdl);
+        SqlNode roundTripNode = CompileManager.parseSql(generatedDdl);
         Table roundTripTable = SchemaUtils.parseCreateTableToHmsTable((SqlCreateTable) roundTripNode);
         String roundTripDdl = SchemaUtils.generateCreateSqlFromHmsTable(roundTripTable);
 

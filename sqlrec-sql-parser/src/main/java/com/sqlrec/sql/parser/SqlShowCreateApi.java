@@ -3,12 +3,11 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
 import java.util.List;
 
-public class SqlShowCreateApi extends SqlCall {
+public class SqlShowCreateApi extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW CREATE API", SqlKind.OTHER);
-    private SqlIdentifier apiName;
+    private final SqlIdentifier apiName;
 
     public SqlShowCreateApi(SqlParserPos pos, SqlIdentifier apiName) {
         super(pos);
@@ -22,7 +21,7 @@ public class SqlShowCreateApi extends SqlCall {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        return List.of(apiName);
     }
 
     @Override

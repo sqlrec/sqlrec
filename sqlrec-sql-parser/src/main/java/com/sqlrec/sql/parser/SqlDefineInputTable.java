@@ -6,8 +6,9 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
-public class SqlDefineInputTable extends SqlCall {
+public class SqlDefineInputTable extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("DEFINE_INPUT_TABLE", SqlKind.OTHER);
     private SqlIdentifier tableName;
     private SqlIdentifier likeTable;
@@ -16,18 +17,21 @@ public class SqlDefineInputTable extends SqlCall {
 
     public SqlDefineInputTable(SqlParserPos pos, SqlIdentifier tableName, SqlIdentifier likeTable) {
         super(pos);
-        this.tableName = tableName;
-        this.likeTable = likeTable;
+        this.tableName = Objects.requireNonNull(tableName, "tableName");
+        this.likeTable = Objects.requireNonNull(likeTable, "likeTable");
         this.columnList = Collections.emptyList();
         this.columnTypeList = Collections.emptyList();
     }
 
     public SqlDefineInputTable(SqlParserPos pos, SqlIdentifier tableName, List<SqlIdentifier> columnList, List<SqlTypeNameSpec> columnTypeList) {
         super(pos);
-        this.tableName = tableName;
+        this.tableName = Objects.requireNonNull(tableName, "tableName");
         this.likeTable = null;
-        this.columnList = columnList;
-        this.columnTypeList = columnTypeList;
+        this.columnList = List.copyOf(Objects.requireNonNull(columnList, "columnList"));
+        this.columnTypeList = List.copyOf(Objects.requireNonNull(columnTypeList, "columnTypeList"));
+        if (this.columnList.size() != this.columnTypeList.size()) {
+            throw new IllegalArgumentException("column names and types must have the same size");
+        }
     }
 
     @Override
@@ -43,7 +47,7 @@ public class SqlDefineInputTable extends SqlCall {
             operands.add(likeTable);
         }
         operands.addAll(columnList);
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override
@@ -67,14 +71,18 @@ public class SqlDefineInputTable extends SqlCall {
         return tableName;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setTableName(SqlIdentifier tableName) {
-        this.tableName = tableName;
+        this.tableName = Objects.requireNonNull(tableName, "tableName");
     }
 
     public SqlIdentifier getLikeTable() {
         return likeTable;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setLikeTable(SqlIdentifier likeTable) {
         this.likeTable = likeTable;
     }
@@ -83,15 +91,20 @@ public class SqlDefineInputTable extends SqlCall {
         return columnList;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setColumnList(List<SqlIdentifier> columnList) {
-        this.columnList = columnList;
+        this.columnList = List.copyOf(Objects.requireNonNull(columnList, "columnList"));
     }
 
     public List<SqlTypeNameSpec> getColumnTypeList() {
         return columnTypeList;
     }
 
+    /** @deprecated SQL AST nodes should be treated as immutable. */
+    @Deprecated(forRemoval = true)
     public void setColumnTypeList(List<SqlTypeNameSpec> columnTypeList) {
-        this.columnTypeList = columnTypeList;
+        this.columnTypeList = List.copyOf(Objects.requireNonNull(columnTypeList, "columnTypeList"));
     }
+
 }

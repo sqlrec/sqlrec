@@ -6,7 +6,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlShowSqlFunction extends SqlCall {
+public class SqlShowSqlFunction extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW SQL FUNCTIONS", SqlKind.OTHER);
 
     public SqlShowSqlFunction(SqlParserPos pos) {

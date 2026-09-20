@@ -33,7 +33,7 @@ public class ModelEntityConverter {
     private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
 
     public static ModelConf convertToModel(String modelDdl) throws Exception {
-        SqlNode modelSqlNode = CompileManager.parseFlinkSql(modelDdl);
+        SqlNode modelSqlNode = CompileManager.parseSql(modelDdl);
         if (!(modelSqlNode instanceof SqlCreateModel createModel)) {
             throw new IllegalArgumentException("Invalid model DDL: " + modelDdl);
         }
@@ -122,7 +122,7 @@ public class ModelEntityConverter {
     }
 
     public static ServiceConf convertToServiceConfig(Service service) throws Exception {
-        SqlNode serviceSqlNode = CompileManager.parseFlinkSql(service.getDdl());
+        SqlNode serviceSqlNode = CompileManager.parseSql(service.getDdl());
         if (!(serviceSqlNode instanceof SqlCreateService createService)) {
             throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
         }

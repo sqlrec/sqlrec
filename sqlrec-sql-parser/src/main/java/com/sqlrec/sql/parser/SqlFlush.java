@@ -6,7 +6,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlFlush extends SqlCall {
+public class SqlFlush extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("FLUSH", SqlKind.OTHER);
 
     public SqlFlush(SqlParserPos pos) {

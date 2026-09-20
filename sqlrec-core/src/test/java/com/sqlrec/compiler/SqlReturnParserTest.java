@@ -85,7 +85,7 @@ class SqlReturnParserTest {
     }
 
     private static SqlReturn parse(String sql) throws Exception {
-        SqlNode node = CompileManager.parseFlinkSql(sql);
+        SqlNode node = CompileManager.parseSql(sql);
         return assertInstanceOf(SqlReturn.class, node);
     }
 

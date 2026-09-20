@@ -10,7 +10,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlShowModel extends SqlCall {
+public class SqlShowModel extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW_MODELS", SqlKind.OTHER_DDL);
 
     public SqlShowModel(SqlParserPos pos) {

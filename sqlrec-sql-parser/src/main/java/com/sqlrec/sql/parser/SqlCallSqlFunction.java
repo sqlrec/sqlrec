@@ -3,19 +3,20 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-public class SqlCallSqlFunction extends SqlCall {
+public class SqlCallSqlFunction extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CALL", SqlKind.OTHER);
-    private SqlIdentifier funcName;
-    private SqlGetVariable funcNameVariable;
-    private List<SqlNode> inputTableList;
-    private SqlIdentifier likeTableName;
-    private SqlNode likeFunctionName;
-    private boolean isAsync;
-    private SqlNode partitionBy;
-    private SqlNode partitionSize;
+    private final SqlIdentifier funcName;
+    private final SqlGetVariable funcNameVariable;
+    private final List<SqlNode> inputTableList;
+    private final SqlIdentifier likeTableName;
+    private final SqlNode likeFunctionName;
+    private final boolean isAsync;
+    private final SqlNode partitionBy;
+    private final SqlNode partitionSize;
 
     public SqlCallSqlFunction(
             SqlParserPos pos,
@@ -29,9 +30,15 @@ public class SqlCallSqlFunction extends SqlCall {
             SqlNode partitionSize
     ) {
         super(pos);
+        if ((funcName == null) == (funcNameVariable == null)) {
+            throw new IllegalArgumentException("call requires exactly one function name source");
+        }
+        if ((partitionBy == null) != (partitionSize == null)) {
+            throw new IllegalArgumentException("partition by and partition size must be specified together");
+        }
         this.funcName = funcName;
         this.funcNameVariable = funcNameVariable;
-        this.inputTableList = inputTableList;
+        this.inputTableList = List.copyOf(Objects.requireNonNull(inputTableList, "inputTableList"));
         this.likeTableName = likeTableName;
         this.likeFunctionName = likeFunctionName;
         this.isAsync = isAsync;
@@ -46,7 +53,27 @@ public class SqlCallSqlFunction extends SqlCall {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        List<SqlNode> operands = new ArrayList<>();
+        if (funcName != null) {
+            operands.add(funcName);
+        }
+        if (funcNameVariable != null) {
+            operands.add(funcNameVariable);
+        }
+        operands.addAll(inputTableList);
+        if (likeTableName != null) {
+            operands.add(likeTableName);
+        }
+        if (likeFunctionName != null) {
+            operands.add(likeFunctionName);
+        }
+        if (partitionBy != null) {
+            operands.add(partitionBy);
+        }
+        if (partitionSize != null) {
+            operands.add(partitionSize);
+        }
+        return List.copyOf(operands);
     }
 
     @Override

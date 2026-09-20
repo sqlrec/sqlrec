@@ -9,7 +9,7 @@ import org.apache.calcite.sql.SqlNode;
 import java.util.List;
 import java.util.ArrayList;
 
-public class SqlTrainModel extends SqlCreate {
+public class SqlTrainModel extends SqlCreate implements SqlRecStatement {
     private final SqlIdentifier modelName;
     private final SqlNode checkpoint;
     private final SqlIdentifier dataSource;
@@ -104,7 +104,7 @@ public class SqlTrainModel extends SqlCreate {
         if (propertyList != null) {
             operands.addAll(propertyList);
         }
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override

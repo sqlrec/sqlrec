@@ -20,9 +20,9 @@ class InMemoryStoreAccessInitTest {
 
     @Test
     void initNormalizesNamesFromDdlNodes() throws Exception {
-        SqlNode functionNode = CompileManager.parseFlinkSql("create sql function MyFunc");
-        SqlNode apiNode = CompileManager.parseFlinkSql("create api MyApi with MyFunc");
-        SqlNode modelNode = CompileManager.parseFlinkSql("create model MyModel (uid int)");
+        SqlNode functionNode = CompileManager.parseSql("create sql function MyFunc");
+        SqlNode apiNode = CompileManager.parseSql("create api MyApi with MyFunc");
+        SqlNode modelNode = CompileManager.parseSql("create model MyModel (uid int)");
 
         InMemoryStoreAccess access = new InMemoryStoreAccess(
                 Collections.singletonList(Collections.singletonList(functionNode)),

@@ -3,19 +3,23 @@ package com.sqlrec.sql.parser;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-public class SqlCache extends SqlCall {
+public class SqlCache extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("CACHE", SqlKind.OTHER);
 
-    private SqlIdentifier tableName;
-    private SqlNode select;
-    private SqlCallSqlFunction callSqlFunction;
+    private final SqlIdentifier tableName;
+    private final SqlNode select;
+    private final SqlCallSqlFunction callSqlFunction;
 
     public SqlCache(SqlParserPos pos, SqlIdentifier tableName, SqlNode select, SqlCallSqlFunction callSqlFunction) {
         super(pos);
-        this.tableName = tableName;
+        this.tableName = Objects.requireNonNull(tableName, "tableName");
+        if ((select == null) == (callSqlFunction == null)) {
+            throw new IllegalArgumentException("cache statement requires exactly one source");
+        }
         this.select = select;
         this.callSqlFunction = callSqlFunction;
     }
@@ -27,7 +31,15 @@ public class SqlCache extends SqlCall {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        List<SqlNode> operands = new ArrayList<>();
+        operands.add(tableName);
+        if (select != null) {
+            operands.add(select);
+        }
+        if (callSqlFunction != null) {
+            operands.add(callSqlFunction);
+        }
+        return List.copyOf(operands);
     }
 
     @Override

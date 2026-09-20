@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CompileManagerGetSqlStrTest {
 
     private static String formatSql(String sql) throws Exception {
-        return CompileManager.getSqlStr(CompileManager.parseFlinkSql(sql))
+        return CompileManager.getSqlStr(CompileManager.parseSql(sql))
                 .replace("\r\n", "\n");
     }
 

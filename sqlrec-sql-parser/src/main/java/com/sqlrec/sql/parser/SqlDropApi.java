@@ -5,9 +5,8 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.SqlNode;
 import java.util.List;
-import java.util.Collections;
 
-public class SqlDropApi extends SqlDrop {
+public class SqlDropApi extends SqlDrop implements SqlRecStatement {
     private final SqlIdentifier apiName;
     private final boolean ifExists;
 
@@ -41,6 +40,6 @@ public class SqlDropApi extends SqlDrop {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        return List.of(apiName);
     }
 }

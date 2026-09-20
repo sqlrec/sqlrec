@@ -88,7 +88,7 @@ public class SqlFileParser {
         for (String statement : statements) {
             statement = statement.trim();
             if (statement.isEmpty()) continue;
-            SqlNode sqlNode = CompileManager.parseFlinkSql(statement);
+            SqlNode sqlNode = CompileManager.parseSql(statement);
             if (currentFunctionNodes != null) {
                 currentFunctionNodes.add(sqlNode);
                 if (sqlNode instanceof SqlReturn) {

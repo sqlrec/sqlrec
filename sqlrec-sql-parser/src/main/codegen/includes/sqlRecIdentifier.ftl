@@ -344,7 +344,9 @@ SqlNode SqlCreateModel() : {
     SqlIdentifier modelName;
     SqlNodeList columnList = SqlNodeList.EMPTY;
     SqlNodeList propertyList = SqlNodeList.EMPTY;
-    SqlParserPos pos;
+    List<SqlNode> columns = new ArrayList<SqlNode>();
+    SqlNode column;
+    Span columnSpan;
 }
 {
     <CREATE>
@@ -355,20 +357,19 @@ SqlNode SqlCreateModel() : {
 
     modelName = SimpleIdentifier()
     [
-        <LPAREN> { pos = getPos(); TableCreationContext ctx = new TableCreationContext();}
-        TableColumn(ctx)
+        <LPAREN> { columnSpan = span(); }
+        column = SqlRecModelColumn() { columns.add(column); }
         (
-            <COMMA> TableColumn(ctx)
+            <COMMA> column = SqlRecModelColumn() { columns.add(column); }
         )*
         {
-            pos = pos.plus(getPos());
-            columnList = new SqlNodeList(ctx.columnList, pos);
+            columnList = new SqlNodeList(columns, columnSpan.end(this));
         }
         <RPAREN>
     ]
     [
         <WITH>
-        propertyList = TableProperties()
+        propertyList = SqlRecProperties()
     ]
     {
         return new com.sqlrec.sql.parser.SqlCreateModel(
@@ -429,7 +430,7 @@ SqlNode SqlTrainModel() : {
     ]
     [
         <WITH>
-        propertyList = TableProperties()
+        propertyList = SqlRecProperties()
     ]
     {
         return new com.sqlrec.sql.parser.SqlTrainModel(
@@ -468,7 +469,7 @@ SqlNode SqlExportModel() : {
     ]
     [
         <WITH>
-        propertyList = TableProperties()
+        propertyList = SqlRecProperties()
     ]
     {
         return new com.sqlrec.sql.parser.SqlExportModel(
@@ -504,7 +505,7 @@ SqlNode SqlCreateService() : {
     ]
     [
         <WITH>
-        propertyList = TableProperties()
+        propertyList = SqlRecProperties()
     ]
     {
         return new com.sqlrec.sql.parser.SqlCreateService(
@@ -629,4 +630,160 @@ SqlIfCache SqlIfCache() :
     {
         return new SqlIfCache(startPos.plus(getPos()), timein, condition, thenClause, elseClause);
     }
+}
+
+/** Parses the regular columns supported by CREATE MODEL. */
+SqlRecColumnDeclaration SqlRecModelColumn() :
+{
+    SqlIdentifier name;
+    SqlDataTypeSpec dataType;
+    SqlParserPos pos;
+}
+{
+    name = SimpleIdentifier() { pos = getPos(); }
+    dataType = DataType()
+    {
+        return new SqlRecColumnDeclaration(pos.plus(getPos()), name, dataType);
+    }
+}
+
+/** Parses SQLRec resource options without depending on Flink's grammar helpers. */
+SqlNodeList SqlRecProperties() :
+{
+    final List<SqlNode> properties = new ArrayList<SqlNode>();
+    SqlRecOption property;
+    final Span span;
+}
+{
+    <LPAREN> { span = span(); }
+    [
+        property = SqlRecOption() { properties.add(property); }
+        (
+            <COMMA> property = SqlRecOption() { properties.add(property); }
+        )*
+    ]
+    <RPAREN>
+    {
+        return new SqlNodeList(properties, span.end(this));
+    }
+}
+
+SqlRecOption SqlRecOption() :
+{
+    SqlNode key;
+    SqlNode value;
+    SqlParserPos pos;
+}
+{
+    key = StringLiteral() { pos = getPos(); }
+    <EQ>
+    value = StringLiteral()
+    {
+        return new SqlRecOption(pos.plus(getPos()), key, value);
+    }
+}
+
+/** ARRAY&lt;T&gt; and MULTISET&lt;T&gt; syntax used by SQLRec schemas. */
+SqlTypeNameSpec SqlRecCollectionTypeName() :
+{
+    SqlTypeName collectionType;
+    SqlTypeNameSpec elementType;
+    boolean elementNullable = true;
+    SqlParserPos pos;
+}
+{
+    (
+        <ARRAY> { collectionType = SqlTypeName.ARRAY; pos = getPos(); }
+    |
+        <MULTISET> { collectionType = SqlTypeName.MULTISET; pos = getPos(); }
+    )
+    <LT>
+    elementType = TypeName()
+    [
+        <NOT> <NULL> { elementNullable = false; }
+    |
+        <NULL> { elementNullable = true; }
+    ]
+    <GT>
+    {
+        return new SqlRecCollectionTypeNameSpec(
+            elementType,
+            collectionType,
+            elementNullable,
+            pos.plus(getPos()));
+    }
+}
+
+/** STRING and BYTES aliases used by SQLRec schemas. */
+SqlTypeNameSpec SqlRecAliasTypeName() :
+{
+    SqlTypeName typeName;
+    String alias;
+}
+{
+    (
+        <STRING>
+        {
+            typeName = SqlTypeName.VARCHAR;
+            alias = token.image;
+        }
+    |
+        <BYTES>
+        {
+            typeName = SqlTypeName.VARBINARY;
+            alias = token.image;
+        }
+    )
+    {
+        return new SqlAlienSystemTypeNameSpec(alias, typeName, Integer.MAX_VALUE, getPos());
+    }
+}
+
+/**
+ * Keeps SET usable inside IF while standard top-level SET remains owned by the
+ * dependency-provided Flink parser.
+ */
+SqlNode SqlRecSet() :
+{
+    Span span;
+    SqlNode key = null;
+    SqlNode value = null;
+}
+{
+    <SET> { span = span(); }
+    [
+        key = StringLiteral()
+        <EQ>
+        value = StringLiteral()
+    ]
+    {
+        if (key == null) {
+            return new SqlSet(span.end(this));
+        }
+        return new SqlSet(span.end(this), key, value);
+    }
+}
+
+boolean IfExistsOpt() :
+{
+}
+{
+    (
+        LOOKAHEAD(2)
+        <IF> <EXISTS> { return true; }
+    |
+        { return false; }
+    )
+}
+
+boolean IfNotExistsOpt() :
+{
+}
+{
+    (
+        LOOKAHEAD(3)
+        <IF> <NOT> <EXISTS> { return true; }
+    |
+        { return false; }
+    )
 }

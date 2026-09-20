@@ -11,7 +11,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Arrays;
 import java.util.List;
 
-public class SqlShowCreateService extends SqlCall {
+public class SqlShowCreateService extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW_CREATE_SERVICE", SqlKind.OTHER_DDL);
 
     private final SqlIdentifier serviceName;

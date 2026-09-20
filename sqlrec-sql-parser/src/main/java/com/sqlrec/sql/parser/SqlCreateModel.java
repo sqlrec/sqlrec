@@ -6,14 +6,14 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
-public class SqlCreateModel extends SqlCreate {
-    private SqlIdentifier modelName;
-    private SqlNodeList fieldList;
+public class SqlCreateModel extends SqlCreate implements SqlRecStatement {
+    private final SqlIdentifier modelName;
+    private final SqlNodeList fieldList;
     private SqlNodeList propertyList;
-    private boolean ifNotExists;
+    private final boolean ifNotExists;
 
     public SqlCreateModel(
             SqlParserPos pos,
@@ -68,6 +68,14 @@ public class SqlCreateModel extends SqlCreate {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return Collections.emptyList();
+        List<SqlNode> operands = new ArrayList<>();
+        operands.add(modelName);
+        if (fieldList != null) {
+            operands.add(fieldList);
+        }
+        if (propertyList != null) {
+            operands.add(propertyList);
+        }
+        return List.copyOf(operands);
     }
 }

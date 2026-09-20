@@ -89,7 +89,7 @@ public class AssertBindableTest {
 
         com.sqlrec.compiler.CompileManager cm = new com.sqlrec.compiler.CompileManager();
         org.apache.calcite.sql.SqlNode node =
-                com.sqlrec.compiler.CompileManager.parseFlinkSql(
+                com.sqlrec.compiler.CompileManager.parseSql(
                         "assert select count(*) > 0 from myTable");
         BindableInterface bindable = cm.compileSql(
                 node, schema, Consts.DEFAULT_SCHEMA_NAME,

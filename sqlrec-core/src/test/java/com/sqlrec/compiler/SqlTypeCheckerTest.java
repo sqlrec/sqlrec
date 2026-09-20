@@ -52,7 +52,7 @@ public class SqlTypeCheckerTest {
 
         for (SqlTestCase testCase : testCases) {
             System.out.println("\nTesting: " + testCase.sql);
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(testCase.sql);
+            SqlNode flinkSqlNode = CompileManager.parseSql(testCase.sql);
 
             List<String> actualTables = NodeUtils.getTableFromSqlNode(flinkSqlNode);
             System.out.println("Expected tables: " + testCase.expectedTables);
@@ -68,7 +68,7 @@ public class SqlTypeCheckerTest {
 
     @Test
     public void topLevelCteIsNotLocallyCompilable() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql(
+        SqlNode sqlNode = CompileManager.parseSql(
                 "with cte as (select 1 as id) select * from cte"
         );
 
@@ -82,7 +82,7 @@ public class SqlTypeCheckerTest {
     @Test
     public void cacheCteCannotBypassLocalCheckByUsingARealTableName() throws Exception {
         CalciteSchema schema = createSchema("physical_table");
-        SqlNode sqlNode = CompileManager.parseFlinkSql(
+        SqlNode sqlNode = CompileManager.parseSql(
                 "cache table result_table as "
                         + "with physical_table as (select 1 as id) "
                         + "select * from physical_table"
@@ -98,7 +98,7 @@ public class SqlTypeCheckerTest {
     @Test
     public void insertCteIsNotLocallyCompilable() throws Exception {
         CalciteSchema schema = createSchema("sink_table", "physical_table");
-        SqlNode sqlNode = CompileManager.parseFlinkSql(
+        SqlNode sqlNode = CompileManager.parseSql(
                 "insert into sink_table "
                         + "with physical_table as (select 1 as id) "
                         + "select * from physical_table"
@@ -114,7 +114,7 @@ public class SqlTypeCheckerTest {
     @Test
     public void ordinarySelectRemainsLocallyCompilable() throws Exception {
         CalciteSchema schema = createSchema("physical_table");
-        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from physical_table");
+        SqlNode sqlNode = CompileManager.parseSql("select * from physical_table");
 
         assertTrue(SqlTypeChecker.isFlinkSqlCompilable(
                 sqlNode,

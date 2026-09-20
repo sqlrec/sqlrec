@@ -25,7 +25,7 @@ class CompileManagerProxyTest {
     @Test
     void compileSqlReturnsAProxyAroundTheRawBindable() throws Exception {
         String sql = "set proxy_key=proxy_value";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
 
         BindableInterface bindable = new CompileManager().compileSql(
                 sqlNode,
@@ -46,7 +46,7 @@ class CompileManagerProxyTest {
         String sql = "IF (SELECT true) "
                 + "THEN (cache table proxy_result as SELECT 1 as id) "
                 + "ELSE (cache table proxy_result as SELECT 2 as id)";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
 
         BindableInterface bindable = new CompileManager().compileSql(
                 sqlNode,
@@ -96,7 +96,7 @@ class CompileManagerProxyTest {
     void compileReturnProducesAProxyThatPreservesReturnSemantics() throws Exception {
         String sql = "RETURN SELECT 1 AS id";
         BindableInterface bindable = new CompileManager().compileSql(
-                CompileManager.parseFlinkSql(sql),
+                CompileManager.parseSql(sql),
                 CalciteSchema.createRootSchema(false),
                 Consts.DEFAULT_SCHEMA_NAME,
                 sql

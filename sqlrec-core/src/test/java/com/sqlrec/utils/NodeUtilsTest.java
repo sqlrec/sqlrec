@@ -19,7 +19,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetTableFromSqlNodeWithSelect() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from my_table");
+        SqlNode sqlNode = CompileManager.parseSql("select * from my_table");
         List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -28,7 +28,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetTableFromSqlNodeWithJoin() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from t1 join t2 on t1.id = t2.id");
+        SqlNode sqlNode = CompileManager.parseSql("select * from t1 join t2 on t1.id = t2.id");
         List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(2, result.size());
@@ -38,7 +38,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetTableFromSqlNodeWithAliases() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql(
+        SqlNode sqlNode = CompileManager.parseSql(
                 "select * from My_Table as mt join Other_Table as ot on mt.id = ot.id"
         );
 
@@ -53,7 +53,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetTableFromSqlNodeWithAliasedSubquery() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql(
+        SqlNode sqlNode = CompileManager.parseSql(
                 "select * from (select * from Nested_Table) as nested_alias"
         );
 
@@ -64,14 +64,14 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetTableFromSqlNodeNormalizesQualifiedName() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from My_Db.My_Table as mt");
+        SqlNode sqlNode = CompileManager.parseSql("select * from My_Db.My_Table as mt");
 
         assertEquals(List.of("my_db.my_table"), NodeUtils.getTableFromSqlNode(sqlNode));
     }
 
     @Test
     public void testGetTableFromSqlNodeWithInsert() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("insert into target_table select * from source_table");
+        SqlNode sqlNode = CompileManager.parseSql("insert into target_table select * from source_table");
         List<String> result = NodeUtils.getTableFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(2, result.size());
@@ -88,7 +88,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetModifyTablesFromSqlNodeWithInsert() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("insert into target_table select * from source_table");
+        SqlNode sqlNode = CompileManager.parseSql("insert into target_table select * from source_table");
         List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -97,7 +97,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetModifyTablesFromSqlNodeWithSelect() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("select * from my_table");
+        SqlNode sqlNode = CompileManager.parseSql("select * from my_table");
         List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
         assertNotNull(result);
         assertTrue(result.isEmpty());
@@ -105,7 +105,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetModifyTablesFromSqlNodeWithUpdate() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("update target_table set col1 = 'value' where id = 1");
+        SqlNode sqlNode = CompileManager.parseSql("update target_table set col1 = 'value' where id = 1");
         List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -114,7 +114,7 @@ public class NodeUtilsTest {
 
     @Test
     public void testGetModifyTablesFromSqlNodeWithDelete() throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql("delete from target_table where id = 1");
+        SqlNode sqlNode = CompileManager.parseSql("delete from target_table where id = 1");
         List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
         assertNotNull(result);
         assertEquals(1, result.size());

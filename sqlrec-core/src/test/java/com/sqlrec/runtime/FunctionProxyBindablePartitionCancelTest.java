@@ -130,7 +130,7 @@ public class FunctionProxyBindablePartitionCancelTest {
         // Enabling partial results still reports an error when every partition fails.
         executeContext.setVariable("IGNORE_PARTITION_EXCEPTION", "true");
         String sql = "cache table r4 as call partition_fail_fun(t2) like r2 partition by t2 size 1";
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         BindableInterface bindable = new CompileManager().compileSql(
                 sqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
 

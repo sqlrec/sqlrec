@@ -230,7 +230,7 @@ public class ThriftUtils {
     }
 
     public static boolean isSqlNeedExecInRemote(String sql) throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         return sqlNode instanceof SqlUseDatabase || sqlNode instanceof SqlSet;
     }
 }

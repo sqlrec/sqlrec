@@ -6,12 +6,12 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SqlReturn extends SqlCall {
+public class SqlReturn extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("RETURN", SqlKind.OTHER);
 
-    private SqlIdentifier tableName;
-    private SqlNode select;
-    private SqlCallSqlFunction callSqlFunction;
+    private final SqlIdentifier tableName;
+    private final SqlNode select;
+    private final SqlCallSqlFunction callSqlFunction;
 
     public SqlReturn(SqlParserPos pos, SqlIdentifier tableName) {
         this(pos, tableName, null, null);
@@ -53,7 +53,7 @@ public class SqlReturn extends SqlCall {
         if (callSqlFunction != null) {
             operands.add(callSqlFunction);
         }
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override

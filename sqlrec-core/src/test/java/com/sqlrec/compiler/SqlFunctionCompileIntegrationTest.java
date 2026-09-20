@@ -1,7 +1,6 @@
 package com.sqlrec.compiler;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -94,7 +93,7 @@ public class SqlFunctionCompileIntegrationTest {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         ExecuteContextImpl executeContext = new ExecuteContextImpl();
         executeContext.setVariable("func_name", "fun1");
-        SqlNode flinkSqlNode = CompileManager.parseFlinkSql("call fun1()");
+        SqlNode flinkSqlNode = CompileManager.parseSql("call fun1()");
         BindableInterface bindable = new CompileManager().compileSql(
                 flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, "call fun1()"
         );

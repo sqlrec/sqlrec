@@ -1,6 +1,5 @@
 package com.sqlrec.compiler;
 
-import com.sqlrec.compiler.CompileManager;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.junit.jupiter.api.Test;
@@ -137,7 +136,7 @@ public class SqlParseTest {
         );
 
         for (String sql : sqlList) {
-            SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+            SqlNode sqlNode = CompileManager.parseSql(sql);
             System.out.println(sqlNode.getClass());
             System.out.println(sql);
             String unparsedSql = sqlNode.toSqlString(AnsiSqlDialect.DEFAULT).getSql();

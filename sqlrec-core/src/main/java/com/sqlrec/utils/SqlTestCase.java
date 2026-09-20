@@ -101,7 +101,7 @@ public class SqlTestCase {
         Exception actualException = null;
         Enumerable enumerable = null;
         try {
-            SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+            SqlNode flinkSqlNode = CompileManager.parseSql(sql);
             BindableInterface bindable = new CompileManager().compileSql(
                     flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
             );

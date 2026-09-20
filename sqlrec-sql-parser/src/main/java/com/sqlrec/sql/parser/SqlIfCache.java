@@ -6,13 +6,13 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SqlIfCache extends SqlCall {
+public class SqlIfCache extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("IF", SqlKind.OTHER);
 
-    private boolean timein;
-    private SqlNode condition;
-    private SqlNode thenClause;
-    private SqlNode elseClause;
+    private final boolean timein;
+    private final SqlNode condition;
+    private final SqlNode thenClause;
+    private final SqlNode elseClause;
 
     public SqlIfCache(SqlParserPos pos, boolean timein, SqlNode condition, SqlNode thenClause, SqlNode elseClause) {
         super(pos);
@@ -39,7 +39,7 @@ public class SqlIfCache extends SqlCall {
         if (elseClause != null) {
             operands.add(elseClause);
         }
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override

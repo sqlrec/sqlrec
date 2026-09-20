@@ -55,7 +55,7 @@ public class TestShowCreate {
         assertEquals("redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30017/0", url);
 
         String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "table", "genre_hot_item.sql")).trim();
-        SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
+        SqlNode sourceNode = CompileManager.parseSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
         String tableName = genreHotItem.getTableName();
         assertTrue(normalizedSource.toLowerCase().contains(tableName),
@@ -88,7 +88,7 @@ public class TestShowCreate {
         assertNotNull(rankModel.getDdl(), "model ddl should not be null");
 
         String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "model", "rank_model.sql")).trim();
-        SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
+        SqlNode sourceNode = CompileManager.parseSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
 
         assertEquals(normalizedSource, rankModel.getDdl(),
@@ -103,7 +103,7 @@ public class TestShowCreate {
         assertNotNull(rankService.getDdl(), "service ddl should not be null");
 
         String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "service", "rank_service.sql")).trim();
-        SqlNode sourceNode = CompileManager.parseFlinkSql(stripTrailingSemicolon(sourceContent));
+        SqlNode sourceNode = CompileManager.parseSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
 
         assertEquals(normalizedSource, rankService.getDdl(),
@@ -123,7 +123,7 @@ public class TestShowCreate {
         assertEquals(sourceSqlList.size(), storedSqlList.size(),
                 "sql function statement count should match");
         for (int i = 0; i < sourceSqlList.size(); i++) {
-            SqlNode sourceNode = CompileManager.parseFlinkSql(sourceSqlList.get(i));
+            SqlNode sourceNode = CompileManager.parseSql(sourceSqlList.get(i));
             String normalizedSource = CompileManager.getSqlStr(sourceNode);
             assertEquals(normalizedSource, storedSqlList.get(i),
                     "sql function statement " + i + " should match");

@@ -8,8 +8,8 @@ import java.util.List;
 
 public class SqlGetVariable extends SqlCall {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("GET_VARIABLE", SqlKind.OTHER);
-    private SqlNode variableName;
-    private SqlNode defaultValue;
+    private final SqlNode variableName;
+    private final SqlNode defaultValue;
 
     public SqlGetVariable(SqlParserPos pos, SqlNode variableName) {
         super(pos);
@@ -35,7 +35,7 @@ public class SqlGetVariable extends SqlCall {
         if (defaultValue != null) {
             operands.add(defaultValue);
         }
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override

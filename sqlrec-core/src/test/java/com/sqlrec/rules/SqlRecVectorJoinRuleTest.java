@@ -153,7 +153,7 @@ public class SqlRecVectorJoinRuleTest {
     }
 
     private BindableInterface compile(String sql) throws Exception {
-        SqlNode sqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode sqlNode = CompileManager.parseSql(sql);
         return new CompileManager().compileSql(
                 sqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
     }

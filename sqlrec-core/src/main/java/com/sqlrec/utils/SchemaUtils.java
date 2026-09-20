@@ -2,6 +2,8 @@ package com.sqlrec.utils;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.sql.parser.SqlRecColumnDeclaration;
+import com.sqlrec.sql.parser.SqlRecOption;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
@@ -72,6 +74,9 @@ public class SchemaUtils {
             String type = regularColumn.getType().toString();
             return new FieldSchema(name, type);
         }
+        if (field instanceof SqlRecColumnDeclaration column) {
+            return new FieldSchema(column.getName().toString(), column.getDataType().toString());
+        }
         log.warn("Unsupported field type: {}", field);
         throw new IllegalArgumentException("Unsupported field type: " + field);
     }
@@ -81,6 +86,10 @@ public class SchemaUtils {
         if (propertyList != null && propertyList.size() > 0) {
             for (SqlNode property : propertyList) {
                 if (property instanceof SqlTableOption option) {
+                    String key = removeQuotes(option.getKey().toString());
+                    String value = removeQuotes(option.getValue().toString());
+                    params.put(key, value);
+                } else if (property instanceof SqlRecOption option) {
                     String key = removeQuotes(option.getKey().toString());
                     String value = removeQuotes(option.getValue().toString());
                     params.put(key, value);
@@ -100,10 +109,10 @@ public class SchemaUtils {
         if (propertyList == null || propertyList == SqlNodeList.EMPTY) {
             propertyList = new SqlNodeList(SqlParserPos.ZERO);
         }
-        SqlTableOption option = new SqlTableOption(
+        SqlRecOption option = new SqlRecOption(
+                SqlParserPos.ZERO,
                 SqlLiteral.createCharString(key, SqlParserPos.ZERO),
-                SqlLiteral.createCharString(value, SqlParserPos.ZERO),
-                SqlParserPos.ZERO
+                SqlLiteral.createCharString(value, SqlParserPos.ZERO)
         );
         propertyList.add(option);
         return propertyList;

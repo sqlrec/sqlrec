@@ -6,10 +6,10 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlAssert extends SqlCall {
+public class SqlAssert extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("ASSERT", SqlKind.OTHER);
 
-    private SqlNode select;
+    private final SqlNode select;
 
     public SqlAssert(SqlParserPos pos, SqlNode select) {
         super(pos);

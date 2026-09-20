@@ -11,7 +11,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import java.util.Collections;
 import java.util.List;
 
-public class SqlShowCheckpoint extends SqlCall {
+public class SqlShowCheckpoint extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("SHOW_CHECKPOINT", SqlKind.OTHER_DDL);
 
     private final SqlIdentifier modelName;

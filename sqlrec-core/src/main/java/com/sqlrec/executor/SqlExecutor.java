@@ -53,7 +53,7 @@ public class SqlExecutor {
     }
 
     public SqlProcessResult executeSqlAsync(String sql) throws Exception {
-        SqlNode node = CompileManager.parseFlinkSql(sql);
+        SqlNode node = CompileManager.parseSql(sql);
 
         SqlProcessResult result = tryCompileFunction(node, sql);
         if (result != null) {

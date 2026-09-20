@@ -12,7 +12,7 @@ import org.apache.calcite.sql.SqlNode;
 import java.util.Arrays;
 import java.util.List;
 
-public class SqlAlterModelDropCheckpoint extends SqlCall {
+public class SqlAlterModelDropCheckpoint extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("ALTER_MODEL_DROP_CHECKPOINT", SqlKind.OTHER_DDL);
 
     private final SqlIdentifier modelName;

@@ -9,7 +9,7 @@ import org.apache.calcite.sql.SqlNode;
 import java.util.List;
 import java.util.ArrayList;
 
-public class SqlExportModel extends SqlCreate {
+public class SqlExportModel extends SqlCreate implements SqlRecStatement {
     private final SqlIdentifier modelName;
     private final SqlNode checkpoint;
     private final SqlIdentifier dataSource;
@@ -81,10 +81,16 @@ public class SqlExportModel extends SqlCreate {
         if (checkpoint != null) {
             operands.add(checkpoint);
         }
+        if (dataSource != null) {
+            operands.add(dataSource);
+        }
+        if (whereCondition != null) {
+            operands.add(whereCondition);
+        }
         if (propertyList != null) {
             operands.addAll(propertyList);
         }
-        return operands;
+        return List.copyOf(operands);
     }
 
     @Override

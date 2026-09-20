@@ -83,7 +83,7 @@ public class FunctionCompiler {
     }
 
     public void compile(String sql) throws Exception {
-        SqlNode flinkSqlNode = CompileManager.parseFlinkSql(sql);
+        SqlNode flinkSqlNode = CompileManager.parseSql(sql);
         compile(flinkSqlNode, sql);
     }
 

@@ -14,20 +14,17 @@ import com.sqlrec.sql.parser.SqlAssert;
 import com.sqlrec.sql.parser.SqlCache;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.SchemaUtils;
-import org.apache.calcite.config.Lex;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlWriterConfig;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
-import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
-import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
-import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,14 +41,9 @@ public class CompileManager {
         this.functionCache = functionCache;
     }
 
-    public static SqlNode parseFlinkSql(String sql) throws Exception {
+    public static SqlNode parseSql(String sql) throws Exception {
         sql = SqlPreProcesser.preProcessSql(sql);
-        SqlParser.Config parserConfig = SqlParser.config()
-                .withConformance(FlinkSqlConformance.DEFAULT)
-                .withParserFactory(FlinkSqlParserImpl.FACTORY)
-                .withLex(Lex.JAVA);
-        SqlParser parser = SqlParser.create(sql, parserConfig);
-        return parser.parseQuery();
+        return SqlRecSqlParser.parse(sql);
     }
 
     public static String getSqlStr(SqlNode sqlNode) {
