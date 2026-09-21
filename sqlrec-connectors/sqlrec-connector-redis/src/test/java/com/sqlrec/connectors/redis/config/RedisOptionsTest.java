@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RedisOptionsTest {
 
@@ -17,6 +18,7 @@ class RedisOptionsTest {
 
         assertEquals(RedisOptions.SINGLE_MODE, config.redisMode);
         assertEquals(RedisOptions.JSON_DATA_STRUCTURE, config.dataStructure);
+        assertEquals(RedisOptions.JSON_FORMAT, config.format);
         assertEquals(0, config.maxListSize);
         assertEquals(30 * 24 * 3600, config.ttl);
         assertEquals(30, config.cacheTtl);
@@ -49,5 +51,76 @@ class RedisOptionsTest {
         assertEquals(500, config.maxCacheSize);
         assertEquals(32, config.batchSize);
         assertEquals(9L, config.flushInterval);
+    }
+
+    @Test
+    void readsProtobufFormat() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("format", "protobuf");
+        options.put("protobuf.message-class-name", "com.google.protobuf.StringValue");
+
+        RedisConfig config = RedisOptions.getRedisConfig(options);
+
+        assertEquals(RedisOptions.PROTOBUF_FORMAT, config.format);
+        assertEquals("com.google.protobuf.StringValue", config.protobufMessageClassName);
+    }
+
+    @Test
+    void requiresMessageClassForProtobuf() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("format", "protobuf");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RedisOptions.getRedisConfig(options));
+    }
+
+    @Test
+    void rejectsBlankMessageClassForProtobuf() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("format", "protobuf");
+        options.put("protobuf.message-class-name", "   ");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RedisOptions.getRedisConfig(options));
+    }
+
+    @Test
+    void rejectsUnknownFormat() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("format", "avro");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RedisOptions.getRedisConfig(options));
+    }
+
+    @Test
+    void acceptsProtobufWithListDataStructure() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("data-structure", "list");
+        options.put("format", "protobuf");
+        options.put("protobuf.message-class-name", "com.google.protobuf.StringValue");
+
+        RedisConfig config = RedisOptions.getRedisConfig(options);
+
+        assertEquals(RedisOptions.LIST_DATA_STRUCTURE, config.dataStructure);
+        assertEquals(RedisOptions.PROTOBUF_FORMAT, config.format);
+        assertEquals("com.google.protobuf.StringValue", config.protobufMessageClassName);
+    }
+
+    @Test
+    void rejectsProtobufWithStringDataStructure() {
+        Map<String, String> options = new HashMap<>();
+        options.put("url", "redis://localhost:6379");
+        options.put("data-structure", "string");
+        options.put("format", "protobuf");
+        options.put("protobuf.message-class-name", "com.google.protobuf.StringValue");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> RedisOptions.getRedisConfig(options));
     }
 }

@@ -21,6 +21,7 @@ Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 **特性**：
 - 支持单机模式和集群模式
 - 支持 String 和 List 数据结构
+- 支持 JSON 和 Protobuf value 格式
 - 支持本地缓存加速查询
 - 支持主键过滤查询
 - 支持数据写入和删除
@@ -32,6 +33,8 @@ Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 | `url` | String | - | Redis 连接 URL，格式：`redis://password@host:port/db` |
 | `redis-mode` | String | `single` | Redis 模式，可选值：`single`（单机）、`cluster`（集群） |
 | `data-structure` | String | `json` | 数据结构，可选值：`json`、`list`、`string` |
+| `format` | String | `json` | Value 格式，可选值：`json`、`protobuf` |
+| `protobuf.message-class-name` | String | - | Protobuf generated Message 类全名；`format = protobuf` 时必填 |
 | `max-list-size` | Integer | 0 | List 最大长度，0 表示无限制 |
 | `ttl` | Integer | 2592000 | Key 过期时间（秒），默认 30 天 |
 | `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
@@ -61,12 +64,24 @@ CREATE TABLE user_interest_category1 (
   'data-structure' = 'list',
   'url' = 'redis://localhost:6379/0'
 );
+
+CREATE TABLE user_proto (
+  value STRING,
+  PRIMARY KEY (value) NOT ENFORCED
+) WITH (
+  'connector' = 'redis',
+  'url' = 'redis://localhost:6379/0',
+  'format' = 'protobuf',
+  'protobuf.message-class-name' = 'com.google.protobuf.StringValue'
+);
 ```
 
 **注意事项**：
 - Redis 连接器只支持主键相等过滤（`WHERE key = value`）
 - 使用本地缓存可以显著提升查询性能
 - List 数据结构适合存储多值场景
+- Protobuf 格式要求 generated Message 类位于 SQLRec 和 Flink 运行时 classpath
+- `format = protobuf` 不支持与 `data-structure = string` 组合使用
 
 ### 2. Milvus Connector
 
@@ -132,9 +147,8 @@ Kafka 连接器用于连接 Apache Kafka 消息队列，支持消息写入。
 
 **特性**：
 - 支持消息写入到 Kafka Topic
-- 支持 JSON 格式消息
+- 支持 JSON 和 Protobuf 格式消息
 - 支持批量发送优化
-- 支持自定义序列化器
 
 **配置参数**：
 
@@ -142,9 +156,8 @@ Kafka 连接器用于连接 Apache Kafka 消息队列，支持消息写入。
 |------|------|--------|------|
 | `properties.bootstrap.servers` | String | - | Kafka Broker 地址 |
 | `topic` | String | - | Kafka Topic 名称 |
-| `format` | String | `json` | 消息格式 |
-| `properties.producer.key.serializer` | String | `org.apache.kafka.common.serialization.StringSerializer` | Key 序列化器 |
-| `properties.producer.value.serializer` | String | `org.apache.kafka.common.serialization.StringSerializer` | Value 序列化器 |
+| `format` | String | `json` | 消息格式，可选值：`json`、`protobuf` |
+| `protobuf.message-class-name` | String | - | Protobuf generated Message 类全名；`format = protobuf` 时必填 |
 | `properties.producer.linger.ms` | Integer | 5000 | 批量发送等待时间（毫秒） |
 
 **使用示例**：
@@ -168,7 +181,7 @@ CREATE TABLE rec_log_kafka (
 **注意事项**：
 - Kafka 连接器主要用于消息写入，不支持查询操作
 - `linger.ms` 参数控制批量发送，较大的值可以提高吞吐量但增加延迟
-- 消息以 JSON 格式发送到 Kafka
+- Protobuf 格式要求 generated Message 类位于 SQLRec 运行时 classpath
 
 ### 4. JDBC Connector
 

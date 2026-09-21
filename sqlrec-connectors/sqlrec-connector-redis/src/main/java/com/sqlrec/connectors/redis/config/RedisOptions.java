@@ -15,6 +15,9 @@ public class RedisOptions {
     public static final String LIST_DATA_STRUCTURE = "list";
     public static final String STRING_DATA_STRUCTURE = "string";
 
+    public static final String JSON_FORMAT = "json";
+    public static final String PROTOBUF_FORMAT = "protobuf";
+
     public static final ConfigOption<String> URL = new ConfigOption<>(
             "url",
             null,
@@ -36,6 +39,22 @@ public class RedisOptions {
             JSON_DATA_STRUCTURE,
             "data-structure for redis, can be json, list or string",
             Arrays.asList(JSON_DATA_STRUCTURE, LIST_DATA_STRUCTURE, STRING_DATA_STRUCTURE),
+            String.class
+    );
+
+    public static final ConfigOption<String> FORMAT = new ConfigOption<>(
+            "format",
+            JSON_FORMAT,
+            "Redis value format: json or protobuf",
+            Arrays.asList(JSON_FORMAT, PROTOBUF_FORMAT),
+            String.class
+    );
+
+    public static final ConfigOption<String> PROTOBUF_MESSAGE_CLASS_NAME = new ConfigOption<>(
+            "protobuf.message-class-name",
+            null,
+            "Full name of the generated Protobuf message class",
+            null,
             String.class
     );
 
@@ -92,6 +111,19 @@ public class RedisOptions {
         redisConfig.url = URL.getValue(options);
         redisConfig.redisMode = REDIS_MODE.getValue(options);
         redisConfig.dataStructure = DATA_STRUCTURE.getValue(options);
+        redisConfig.format = FORMAT.getValue(options);
+        redisConfig.protobufMessageClassName = PROTOBUF_MESSAGE_CLASS_NAME.getValueOrNull(options);
+        if (PROTOBUF_FORMAT.equals(redisConfig.format)) {
+            if (redisConfig.protobufMessageClassName == null
+                    || redisConfig.protobufMessageClassName.trim().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "protobuf.message-class-name is required when format is protobuf");
+            }
+            if (STRING_DATA_STRUCTURE.equals(redisConfig.dataStructure)) {
+                throw new IllegalArgumentException(
+                        "format protobuf is not supported with data-structure string");
+            }
+        }
         redisConfig.maxListSize = MAX_LIST_SIZE.getValue(options);
         redisConfig.ttl = TTL.getValue(options);
         redisConfig.cacheTtl = CACHE_TTL.getValue(options);

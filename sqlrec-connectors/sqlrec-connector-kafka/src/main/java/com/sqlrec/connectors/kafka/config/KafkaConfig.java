@@ -11,8 +11,7 @@ public class KafkaConfig implements Serializable {
     public String bootstrapServers;
     public String topic;
     public String format;
+    public String protobufMessageClassName;
     public List<FieldSchema> fieldSchemas;
-    public String keySerializer;
-    public String valueSerializer;
     public int lingerMs;
 }

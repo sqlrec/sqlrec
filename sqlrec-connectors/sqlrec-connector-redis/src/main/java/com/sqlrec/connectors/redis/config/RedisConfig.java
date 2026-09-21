@@ -11,6 +11,8 @@ public class RedisConfig implements Serializable {
     public String url;
     public String redisMode;
     public String dataStructure;
+    public String format;
+    public String protobufMessageClassName;
     public Integer maxListSize;
     public Integer ttl;
     public Integer cacheTtl;

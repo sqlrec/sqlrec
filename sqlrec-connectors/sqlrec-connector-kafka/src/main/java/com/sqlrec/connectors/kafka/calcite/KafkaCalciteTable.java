@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.ProtobufRowCodec;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
@@ -22,17 +23,21 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
-    static volatile Map<String, KafkaProducer<String, String>> kafkaProducerMap = new ConcurrentHashMap<>();
+    static volatile Map<String, KafkaProducer<String, byte[]>> kafkaProducerMap = new ConcurrentHashMap<>();
     private final KafkaConfig kafkaConfig;
+    private final ProtobufRowCodec protobufRowCodec;
 
     static {
         Runtime.getRuntime().addShutdownHook(
@@ -41,6 +46,9 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
         this.kafkaConfig = kafkaConfig;
+        this.protobufRowCodec = "protobuf".equals(kafkaConfig.format)
+                ? new ProtobufRowCodec(kafkaConfig.protobufMessageClassName)
+                : null;
     }
 
     @Override
@@ -75,16 +83,16 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     }
 
     private static String getProducerConfigKey(KafkaConfig config) {
-        return config.bootstrapServers + "|" + config.keySerializer + "|" + config.valueSerializer + "|" + config.lingerMs;
+        return config.bootstrapServers + "|" + config.lingerMs;
     }
 
-    public static KafkaProducer<String, String> getKafkaProducer(KafkaConfig kafkaConfig) {
+    public static KafkaProducer<String, byte[]> getKafkaProducer(KafkaConfig kafkaConfig) {
         String configKey = getProducerConfigKey(kafkaConfig);
         return kafkaProducerMap.computeIfAbsent(configKey, k -> {
             Properties props = new Properties();
             props.put("bootstrap.servers", kafkaConfig.bootstrapServers);
-            props.put("key.serializer", kafkaConfig.keySerializer);
-            props.put("value.serializer", kafkaConfig.valueSerializer);
+            props.put("key.serializer", StringSerializer.class.getName());
+            props.put("value.serializer", ByteArraySerializer.class.getName());
             props.put("linger.ms", String.valueOf(kafkaConfig.lingerMs));
             return new KafkaProducer<>(props);
         });
@@ -92,7 +100,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
     /** Close every cached Kafka producer and clear the cache. */
     public static synchronized void closeAllProducers() {
-        for (Map.Entry<String, KafkaProducer<String, String>> entry
+        for (Map.Entry<String, KafkaProducer<String, byte[]>> entry
                 : new ArrayList<>(kafkaProducerMap.entrySet())) {
             try {
                 entry.getValue().close();
@@ -106,13 +114,13 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     }
 
     /** Test-only: inject a mock producer for the given config key. */
-    static void setKafkaProducerForTest(String configKey, KafkaProducer<String, String> mockProducer) {
+    static void setKafkaProducerForTest(String configKey, KafkaProducer<String, byte[]> mockProducer) {
         kafkaProducerMap.put(configKey, mockProducer);
     }
 
     /** Test-only: remove and close the producer for the given config key. */
     static void invalidateProducer(String configKey) {
-        KafkaProducer<String, String> producer = kafkaProducerMap.remove(configKey);
+        KafkaProducer<String, byte[]> producer = kafkaProducerMap.remove(configKey);
         if (producer != null) {
             producer.close();
         }
@@ -142,8 +150,11 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
 
         @Override
         protected boolean addImpl(Object[] objects) {
-            String msg = JsonUtils.toJson(objects, kafkaConfig.fieldSchemas);
-            KafkaProducer<String, String> producer = getKafkaProducer(kafkaConfig);
+            byte[] msg = table.protobufRowCodec != null
+                    ? table.protobufRowCodec.encode(objects, kafkaConfig.fieldSchemas)
+                    : JsonUtils.toJson(objects, kafkaConfig.fieldSchemas)
+                            .getBytes(StandardCharsets.UTF_8);
+            KafkaProducer<String, byte[]> producer = getKafkaProducer(kafkaConfig);
             // Kafka writes are intentionally fire-and-forget. The callback reports asynchronous
             // send failures, while the collection operation returns after enqueueing the record.
             producer.send(new ProducerRecord<>(kafkaConfig.topic, msg), (metadata, exception) -> {

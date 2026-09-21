@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.redis.handler;
 
+import com.google.protobuf.Field;
+import com.google.protobuf.StringValue;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.redis.client.AbstractRedisWrapper;
 import com.sqlrec.connectors.redis.config.RedisConfig;
@@ -169,6 +171,100 @@ class RedisHandlerUnitTest {
         verify(mockRedisClient).setex(any(), any(), anyLong());
         verify(mockRedisClient, never()).set(any(), any());
         verify(mockRedisClient, never()).expire(any(), anyLong());
+    }
+
+    @Test
+    void testProtobufInsertAndScan() throws Exception {
+        RedisConfig config = new RedisConfig();
+        config.url = "redis://localhost:6379";
+        config.redisMode = RedisOptions.SINGLE_MODE;
+        config.dataStructure = RedisOptions.JSON_DATA_STRUCTURE;
+        config.format = RedisOptions.PROTOBUF_FORMAT;
+        config.protobufMessageClassName = "com.google.protobuf.StringValue";
+        config.database = "testdb";
+        config.tableName = "protobuf_table";
+        config.primaryKeyIndex = 0;
+        config.primaryKey = "value";
+        config.fieldSchemas = Collections.singletonList(new FieldSchema("value", "VARCHAR"));
+        config.ttl = 3600;
+        config.maxListSize = 0;
+
+        RedisHandler protobufHandler = new RedisHandler(config);
+        protobufHandler.open();
+        protobufHandler.setRedisClientForTest(mockRedisClient);
+
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
+
+        protobufHandler.insert(new Object[]{"hello"});
+
+        ArgumentCaptor<byte[]> valueCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient).setex(any(), valueCaptor.capture(), eq(3600L));
+        assertEquals("hello", StringValue.parseFrom(valueCaptor.getValue()).getValue());
+
+        when(mockRedisClient.get(any())).thenReturn(mockGetFuture);
+        when(mockGetFuture.toCompletableFuture()).thenReturn(
+                CompletableFuture.completedFuture(StringValue.of("world").toByteArray()));
+
+        List<Object[]> rows = protobufHandler.scan("hello").get();
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{"world"}, rows.get(0));
+    }
+
+    @Test
+    void testProtobufScanMultiKeys() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(false);
+        byte[] key1Bytes = "testdb:protobuf_table:key1".getBytes(StandardCharsets.UTF_8);
+        byte[] key2Bytes = "testdb:protobuf_table:key2".getBytes(StandardCharsets.UTF_8);
+        List<KeyValue<byte[], byte[]>> values = Arrays.asList(
+                KeyValue.just(key1Bytes, Field.newBuilder()
+                        .setName("key1").setJsonName("value1").build().toByteArray()),
+                KeyValue.empty(key2Bytes));
+        when(mockRedisClient.mget(any(byte[].class), any(byte[].class))).thenReturn(mockMgetFuture);
+        when(mockMgetFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(values));
+
+        Map<String, List<Object[]>> rows = protobufHandler.scan(Set.of("key1", "key2")).get();
+
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{"key1", "value1"}, rows.get("key1").get(0));
+    }
+
+    @Test
+    void testProtobufBatchInsertEncodesEveryValue() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(false);
+        when(mockRedisClient.setex(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+
+        protobufHandler.batchInsert(Arrays.asList(
+                new Object[]{"key1", "value1"},
+                new Object[]{"key2", "value2"}));
+
+        ArgumentCaptor<byte[]> valueCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient, times(2)).setex(any(), valueCaptor.capture(), eq(60L));
+        assertEquals("value1", Field.parseFrom(valueCaptor.getAllValues().get(0)).getJsonName());
+        assertEquals("value2", Field.parseFrom(valueCaptor.getAllValues().get(1)).getJsonName());
+    }
+
+    @Test
+    void testProtobufScanFailsForMalformedPayload() {
+        RedisHandler protobufHandler = newProtobufHandler(false);
+        when(mockRedisClient.get(any())).thenReturn(mockGetFuture);
+        when(mockGetFuture.toCompletableFuture()).thenReturn(
+                CompletableFuture.completedFuture(new byte[]{0x0A, 0x05, 0x01}));
+
+        ExecutionException error = assertThrows(
+                ExecutionException.class,
+                () -> protobufHandler.scan("key").get());
+
+        assertTrue(error.getCause() instanceof IllegalArgumentException);
+    }
+
+    @Test
+    void testProtobufHandlerRejectsInvalidMessageClassOnOpen() {
+        RedisConfig config = protobufConfig(false);
+        config.protobufMessageClassName = "example.missing.Message";
+
+        assertThrows(IllegalArgumentException.class, () -> new RedisHandler(config).open());
     }
 
     @Test
@@ -356,6 +452,33 @@ class RedisHandlerUnitTest {
         return listHandler;
     }
 
+    private RedisConfig protobufConfig(boolean listMode) {
+        RedisConfig config = new RedisConfig();
+        config.url = "redis://localhost:6379";
+        config.redisMode = RedisOptions.SINGLE_MODE;
+        config.dataStructure = listMode
+                ? RedisOptions.LIST_DATA_STRUCTURE : RedisOptions.JSON_DATA_STRUCTURE;
+        config.format = RedisOptions.PROTOBUF_FORMAT;
+        config.protobufMessageClassName = "com.google.protobuf.Field";
+        config.database = "testdb";
+        config.tableName = "protobuf_table";
+        config.primaryKeyIndex = 0;
+        config.primaryKey = "name";
+        config.fieldSchemas = Arrays.asList(
+                new FieldSchema("name", "VARCHAR"),
+                new FieldSchema("json_name", "VARCHAR"));
+        config.ttl = 60;
+        config.maxListSize = 5;
+        return config;
+    }
+
+    private RedisHandler newProtobufHandler(boolean listMode) {
+        RedisHandler protobufHandler = new RedisHandler(protobufConfig(listMode));
+        protobufHandler.open();
+        protobufHandler.setRedisClientForTest(mockRedisClient);
+        return protobufHandler;
+    }
+
     @Test
     void testListModeInsertIssuesLpushLtrimExpire() throws Exception {
         RedisHandler listHandler = newListModeHandler();
@@ -418,5 +541,81 @@ class RedisHandlerUnitTest {
                 new String(keyCaptor.getValue(), StandardCharsets.UTF_8));
         // list mode must not use DEL
         verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
+    void testProtobufListInsertAndScan() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(true);
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(1L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        protobufHandler.insert(new Object[]{"rowKey", "value1"});
+
+        ArgumentCaptor<byte[][]> valuesCaptor = ArgumentCaptor.forClass(byte[][].class);
+        verify(mockRedisClient).lpush(any(), valuesCaptor.capture());
+        Field stored = Field.parseFrom(valuesCaptor.getValue()[0]);
+        assertEquals("rowKey", stored.getName());
+        assertEquals("value1", stored.getJsonName());
+
+        RedisFuture<List<byte[]>> listFuture = mock(RedisFuture.class);
+        when(mockRedisClient.lrange(any(), eq(0L), eq(-1L))).thenReturn(listFuture);
+        when(listFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
+                Field.newBuilder().setName("rowKey").setJsonName("value1").build().toByteArray(),
+                new byte[]{0x0A, 0x05, 0x01})));
+
+        List<Object[]> rows = protobufHandler.scan("rowKey").get();
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{"rowKey", "value1"}, rows.get(0));
+    }
+
+    @Test
+    void testProtobufListBatchInsertAndDelete() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(true);
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(2L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        List<Object[]> rows = Arrays.asList(
+                new Object[]{"rowKey", "value1"},
+                new Object[]{"rowKey", "value2"});
+        protobufHandler.batchInsert(rows);
+
+        ArgumentCaptor<byte[][]> batchValuesCaptor = ArgumentCaptor.forClass(byte[][].class);
+        verify(mockRedisClient).lpush(any(), batchValuesCaptor.capture());
+        assertEquals(2, batchValuesCaptor.getValue().length);
+        assertEquals("value1", Field.parseFrom(batchValuesCaptor.getValue()[0]).getJsonName());
+        assertEquals("value2", Field.parseFrom(batchValuesCaptor.getValue()[1]).getJsonName());
+
+        when(mockRedisClient.lrem(any(), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(1L));
+        protobufHandler.batchDelete(rows);
+
+        ArgumentCaptor<byte[]> deleteValueCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient, times(2)).lrem(any(), deleteValueCaptor.capture());
+        assertEquals("value1", Field.parseFrom(deleteValueCaptor.getAllValues().get(0)).getJsonName());
+        assertEquals("value2", Field.parseFrom(deleteValueCaptor.getAllValues().get(1)).getJsonName());
+        verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
+    void testProtobufListDeleteUsesEncodedMessage() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(true);
+        when(mockRedisClient.lrem(any(), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        protobufHandler.delete(new Object[]{"rowKey", "value1"});
+
+        ArgumentCaptor<byte[]> valueCaptor = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient).lrem(any(), valueCaptor.capture());
+        Field deleted = Field.parseFrom(valueCaptor.getValue());
+        assertEquals("rowKey", deleted.getName());
+        assertEquals("value1", deleted.getJsonName());
     }
 }

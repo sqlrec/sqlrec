@@ -2,6 +2,7 @@ package com.sqlrec.connectors.kafka.config;
 
 import com.sqlrec.common.config.ConfigOption;
 
+import java.util.Arrays;
 import java.util.Map;
 
 public class KafkaOptions {
@@ -25,20 +26,13 @@ public class KafkaOptions {
             "format",
             "json",
             "Kafka message format",
-            null,
+            Arrays.asList("json", "protobuf"),
             String.class
     );
-    public static final ConfigOption<String> KEY_SERIALIZER = new ConfigOption<>(
-            "properties.producer.key.serializer",
-            "org.apache.kafka.common.serialization.StringSerializer",
-            "Kafka producer key serializer",
+    public static final ConfigOption<String> PROTOBUF_MESSAGE_CLASS_NAME = new ConfigOption<>(
+            "protobuf.message-class-name",
             null,
-            String.class
-    );
-    public static final ConfigOption<String> VALUE_SERIALIZER = new ConfigOption<>(
-            "properties.producer.value.serializer",
-            "org.apache.kafka.common.serialization.StringSerializer",
-            "Kafka producer value serializer",
+            "Full name of the generated Protobuf message class",
             null,
             String.class
     );
@@ -55,8 +49,13 @@ public class KafkaOptions {
         kafkaConfig.bootstrapServers = BOOTSTRAP_SERVERS.getValue(options);
         kafkaConfig.topic = TOPIC.getValue(options);
         kafkaConfig.format = FORMAT.getValue(options);
-        kafkaConfig.keySerializer = KEY_SERIALIZER.getValue(options);
-        kafkaConfig.valueSerializer = VALUE_SERIALIZER.getValue(options);
+        kafkaConfig.protobufMessageClassName = PROTOBUF_MESSAGE_CLASS_NAME.getValueOrNull(options);
+        if ("protobuf".equals(kafkaConfig.format)
+                && (kafkaConfig.protobufMessageClassName == null
+                || kafkaConfig.protobufMessageClassName.trim().isEmpty())) {
+            throw new IllegalArgumentException(
+                    "protobuf.message-class-name is required when format is protobuf");
+        }
         kafkaConfig.lingerMs = LINGER_MS.getValue(options);
 
         return kafkaConfig;

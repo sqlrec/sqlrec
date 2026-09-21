@@ -21,6 +21,7 @@ The Redis connector is used to connect to Redis databases, supporting key-value 
 **Features**:
 - Supports standalone and cluster modes
 - Supports String and List data structures
+- Supports JSON and Protobuf value formats
 - Supports local cache for query acceleration
 - Supports primary key filter queries
 - Supports data insertion and deletion
@@ -32,6 +33,8 @@ The Redis connector is used to connect to Redis databases, supporting key-value 
 | `url` | String | - | Redis connection URL, format: `redis://password@host:port/db` |
 | `redis-mode` | String | `single` | Redis mode, options: `single` (standalone), `cluster` |
 | `data-structure` | String | `json` | Data structure, options: `json`, `list`, `string` |
+| `format` | String | `json` | Value format: `json` or `protobuf` |
+| `protobuf.message-class-name` | String | - | Fully qualified generated Protobuf Message class; required for `format = protobuf` |
 | `max-list-size` | Integer | 0 | Maximum list length, 0 means unlimited |
 | `ttl` | Integer | 2592000 | Key expiration time (seconds), default 30 days |
 | `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
@@ -61,12 +64,24 @@ CREATE TABLE user_interest_category1 (
   'data-structure' = 'list',
   'url' = 'redis://localhost:6379/0'
 );
+
+CREATE TABLE user_proto (
+  value STRING,
+  PRIMARY KEY (value) NOT ENFORCED
+) WITH (
+  'connector' = 'redis',
+  'url' = 'redis://localhost:6379/0',
+  'format' = 'protobuf',
+  'protobuf.message-class-name' = 'com.google.protobuf.StringValue'
+);
 ```
 
 **Notes**:
 - Redis connector only supports primary key equality filtering (`WHERE key = value`)
 - Using local cache can significantly improve query performance
 - List data structure is suitable for multi-value scenarios
+- Protobuf format requires the generated Message class on the SQLRec and Flink runtime classpaths
+- `format = protobuf` cannot be combined with `data-structure = string`
 
 ### 2. Milvus Connector
 
@@ -132,9 +147,8 @@ The Kafka connector is used to connect to Apache Kafka message queues, supportin
 
 **Features**:
 - Supports message writing to Kafka Topic
-- Supports JSON format messages
+- Supports JSON and Protobuf messages
 - Supports batch sending optimization
-- Supports custom serializers
 
 **Configuration Parameters**:
 
@@ -142,9 +156,8 @@ The Kafka connector is used to connect to Apache Kafka message queues, supportin
 |-----------|------|---------|-------------|
 | `properties.bootstrap.servers` | String | - | Kafka Broker address |
 | `topic` | String | - | Kafka Topic name |
-| `format` | String | `json` | Message format |
-| `properties.producer.key.serializer` | String | `org.apache.kafka.common.serialization.StringSerializer` | Key serializer |
-| `properties.producer.value.serializer` | String | `org.apache.kafka.common.serialization.StringSerializer` | Value serializer |
+| `format` | String | `json` | Message format: `json` or `protobuf` |
+| `protobuf.message-class-name` | String | - | Fully qualified generated Protobuf Message class; required for `format = protobuf` |
 | `properties.producer.linger.ms` | Integer | 5000 | Batch sending wait time (milliseconds) |
 
 **Usage Example**:
@@ -168,7 +181,7 @@ CREATE TABLE rec_log_kafka (
 **Notes**:
 - Kafka connector is mainly used for message writing, does not support query operations
 - `linger.ms` parameter controls batch sending, larger values can improve throughput but increase latency
-- Messages are sent to Kafka in JSON format
+- Protobuf format requires the generated Message class on SQLRec's runtime classpath
 
 ### 4. JDBC Connector
 

@@ -5,6 +5,7 @@ import com.sqlrec.connectors.redis.client.RedisClusterWrapper;
 import com.sqlrec.connectors.redis.client.RedisWrapper;
 import com.sqlrec.connectors.redis.codec.AbstractCodec;
 import com.sqlrec.connectors.redis.codec.JsonCodec;
+import com.sqlrec.connectors.redis.codec.ProtobufCodec;
 import com.sqlrec.connectors.redis.codec.StringCodec;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
@@ -43,8 +44,13 @@ public class RedisHandler {
         redisClient = redisConfig.redisMode.equals(RedisOptions.CLUSTER_MODE)
                 ? new RedisClusterWrapper() : new RedisWrapper();
         redisClient.open(redisConfig.url);
-        codec = redisConfig.dataStructure.equals(RedisOptions.STRING_DATA_STRUCTURE)
-                ? new StringCodec() : new JsonCodec();
+        if (RedisOptions.PROTOBUF_FORMAT.equals(redisConfig.format)) {
+            codec = new ProtobufCodec(redisConfig.protobufMessageClassName);
+        } else if (redisConfig.dataStructure.equals(RedisOptions.STRING_DATA_STRUCTURE)) {
+            codec = new StringCodec();
+        } else {
+            codec = new JsonCodec();
+        }
         codec.init(redisConfig.fieldSchemas, redisConfig.primaryKeyIndex);
         keyPrefix = redisConfig.database + ":" + redisConfig.tableName + ":";
     }
