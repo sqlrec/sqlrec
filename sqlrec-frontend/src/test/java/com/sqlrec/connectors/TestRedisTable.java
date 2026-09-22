@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -182,6 +183,67 @@ public class TestRedisTable {
     }
 
     @Test
+    public void testRedisProtobufTable() throws Exception {
+        Map<String, Table> tableMap = new HashMap<>();
+        tableMap.put("redis_proto", getProtobufRedisTable());
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return tableMap;
+            }
+        });
+        CalciteSchemaFactory.setGlobalSchema(schema);
+        UdfManager.addFunction(
+                schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false),
+                "array_contains_all",
+                "com.sqlrec.udf.scalar.ArrayContainsAllFunction"
+        );
+
+        long id = System.currentTimeMillis();
+        String columns = "(int64_value, string_value, double_value, bool_value, status, "
+                + "repeated_int32, repeated_string)";
+
+        new SqlTestCase("delete from redis_proto where int64_value = " + id, null)
+                .test(schema);
+        new SqlTestCase(
+                "insert into redis_proto " + columns + " values ("
+                        + id + ", 'Alice', 95.5, true, 'ACTIVE', "
+                        + "ARRAY[1, 2, 3], ARRAY['red', 'blue'])",
+                null).test(schema);
+        new SqlTestCase(
+                "select * from redis_proto where int64_value = " + id,
+                Collections.singletonList(new Object[]{
+                        id, "Alice", 95.5D, true, "ACTIVE",
+                        Arrays.asList(1, 2, 3), Arrays.asList("red", "blue")}))
+                .test(schema);
+
+        new SqlTestCase(
+                "update redis_proto set string_value = 'Alice-updated', "
+                        + "double_value = 99.25, bool_value = false, "
+                        + "status = 'DISABLED', repeated_int32 = ARRAY[4, 5], "
+                        + "repeated_string = ARRAY['green', 'yellow'] "
+                        + "where int64_value = " + id,
+                null).test(schema);
+        new SqlTestCase(
+                "select * from redis_proto where int64_value = " + id
+                        + " and status = 'DISABLED' "
+                        + "and array_contains_all(repeated_int32, ARRAY[4, 5])",
+                Collections.singletonList(
+                        new Object[]{
+                                id, "Alice-updated", 99.25D, false, "DISABLED",
+                                Arrays.asList(4, 5), Arrays.asList("green", "yellow")}))
+                .test(schema);
+
+        new SqlTestCase("delete from redis_proto where int64_value = " + id, null)
+                .test(schema);
+        new SqlTestCase(
+                "select * from redis_proto where int64_value = " + id,
+                Collections.emptyList()).test(schema);
+    }
+
+    @Test
     public void testRedisStringTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
         tableMap.put("t5", getStringRedisTable("t5", "ID", "INTEGER", "SCORE", "INTEGER", 0));
@@ -300,6 +362,35 @@ public class TestRedisTable {
         redisConfig.cacheTtl = 30;
         redisConfig.maxCacheSize = 100000;
         redisConfig.maxListSize = 10;
+
+        return new RedisCalciteTable(redisConfig);
+    }
+
+    public static Table getProtobufRedisTable() {
+        List<FieldSchema> fieldSchemas = new ArrayList<>();
+        fieldSchemas.add(new FieldSchema("int64_value", "BIGINT"));
+        fieldSchemas.add(new FieldSchema("string_value", "VARCHAR"));
+        fieldSchemas.add(new FieldSchema("double_value", "DOUBLE"));
+        fieldSchemas.add(new FieldSchema("bool_value", "BOOLEAN"));
+        fieldSchemas.add(new FieldSchema("status", "VARCHAR"));
+        fieldSchemas.add(new FieldSchema("repeated_int32", "ARRAY<INTEGER>"));
+        fieldSchemas.add(new FieldSchema("repeated_string", "ARRAY<VARCHAR>"));
+
+        RedisConfig redisConfig = new RedisConfig();
+        redisConfig.url = "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30017/0";
+        redisConfig.redisMode = "single";
+        redisConfig.dataStructure = "json";
+        redisConfig.format = "protobuf";
+        redisConfig.protobufMessageClassName =
+                "com.sqlrec.connectors.redis.proto.RedisAllTypes";
+        redisConfig.ttl = 10000;
+        redisConfig.database = "default";
+        redisConfig.tableName = "redis_proto";
+        redisConfig.fieldSchemas = fieldSchemas;
+        redisConfig.primaryKey = "int64_value";
+        redisConfig.primaryKeyIndex = 0;
+        redisConfig.cacheTtl = 0;
+        redisConfig.maxCacheSize = 100000;
 
         return new RedisCalciteTable(redisConfig);
     }

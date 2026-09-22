@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package sqlrec.redis.test;
+
+option java_package = "com.sqlrec.connectors.redis.proto";
+option java_outer_classname = "RedisTestMessages";
+option java_multiple_files = true;
+
+message RedisAllTypes {
+  double double_value = 1;
+  float float_value = 2;
+  int32 int32_value = 3;
+  int64 int64_value = 4;
+  uint32 uint32_value = 5;
+  uint64 uint64_value = 6;
+  sint32 sint32_value = 7;
+  sint64 sint64_value = 8;
+  fixed32 fixed32_value = 9;
+  fixed64 fixed64_value = 10;
+  sfixed32 sfixed32_value = 11;
+  sfixed64 sfixed64_value = 12;
+  bool bool_value = 13;
+  string string_value = 14;
+  bytes bytes_value = 15;
+  Status status = 16;
+  Nested nested = 17;
+
+  repeated int32 repeated_int32 = 18;
+  repeated string repeated_string = 19;
+  repeated bytes repeated_bytes = 20;
+  repeated Status repeated_status = 21;
+  repeated Nested repeated_nested = 22;
+
+  map<string, int64> attributes = 23;
+  map<string, Nested> nested_by_name = 24;
+
+  optional string optional_string = 25;
+
+  oneof choice {
+    string choice_string = 26;
+    int64 choice_number = 27;
+  }
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    DISABLED = 2;
+  }
+
+  message Nested {
+    int64 id = 1;
+    string name = 2;
+    bool enabled = 3;
+  }
+}
