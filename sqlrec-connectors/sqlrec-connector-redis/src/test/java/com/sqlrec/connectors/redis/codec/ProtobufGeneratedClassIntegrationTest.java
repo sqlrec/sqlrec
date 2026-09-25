@@ -6,6 +6,7 @@ import com.sqlrec.connectors.redis.proto.RedisAllTypes;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,34 @@ class ProtobufGeneratedClassIntegrationTest {
 
         assertEquals(RedisAllTypes.Status.ACTIVE, RedisAllTypes.parseFrom(encoded).getStatus());
         assertEquals(1, codec.decode(encoded, "ignored-primary-key")[0]);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mapEnumValuesFollowDeclaredSqlValueType() throws Exception {
+        Map<String, String> values = Collections.singletonMap("primary", "ACTIVE");
+        ProtobufCodec stringCodec = codec(Collections.singletonList(
+                new FieldSchema("status_by_name", "MAP<VARCHAR, VARCHAR>")));
+        byte[] encoded = stringCodec.encode(new Object[]{values});
+
+        assertEquals(RedisAllTypes.Status.ACTIVE,
+                RedisAllTypes.parseFrom(encoded).getStatusByNameOrThrow("primary"));
+        Map<String, Object> decoded = (Map<String, Object>) stringCodec.decode(encoded, "key")[0];
+        assertEquals("ACTIVE", decoded.get("primary"));
+
+        ProtobufCodec numericCodec = codec(Collections.singletonList(
+                new FieldSchema("status_by_name", "MAP<VARCHAR, INTEGER>")));
+        assertEquals(1, ((Map<?, ?>) numericCodec.decode(encoded, "key")[0]).get("primary"));
+
+        ProtobufCodec notNullCodec = codec(Collections.singletonList(
+                new FieldSchema("status_by_name", "MAP<STRING NOT NULL, STRING NOT NULL> NOT NULL")));
+        assertEquals("ACTIVE", ((Map<?, ?>) notNullCodec.decode(encoded, "key")[0]).get("primary"));
+
+        ProtobufCodec notNullArrayCodec = codec(Collections.singletonList(
+                new FieldSchema("repeated_status", "ARRAY<STRING NOT NULL> NOT NULL")));
+        byte[] arrayBytes = RedisAllTypes.newBuilder()
+                .addRepeatedStatus(RedisAllTypes.Status.ACTIVE).build().toByteArray();
+        assertEquals(Collections.singletonList("ACTIVE"), notNullArrayCodec.decode(arrayBytes, "key")[0]);
     }
 
     private static ProtobufCodec codec(List<FieldSchema> schemas) {

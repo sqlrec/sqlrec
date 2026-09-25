@@ -7,18 +7,38 @@ import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.UniqueConstraint;
 import org.apache.flink.table.data.ArrayData;
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GenericArrayData;
+import org.apache.flink.table.data.GenericMapData;
+import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.*;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class FlinkSchemaUtils {
     public static List<FieldSchema> getFieldSchemas(ResolvedSchema schema) {
         List<FieldSchema> fieldSchemas = new ArrayList<>();
         for (Column col : schema.getColumns()) {
-            fieldSchemas.add(new FieldSchema(col.getName(), col.getDataType().getLogicalType().getTypeRoot().name()));
+            LogicalType type = col.getDataType().getLogicalType();
+            String typeName;
+            switch (type.getTypeRoot()) {
+                case ARRAY:
+                case MAP:
+                case ROW:
+                    typeName = type.asSummaryString();
+                    break;
+                default:
+                    typeName = type.getTypeRoot().name();
+            }
+            fieldSchemas.add(new FieldSchema(col.getName(), typeName));
         }
         return fieldSchemas;
     }
@@ -65,13 +85,71 @@ public class FlinkSchemaUtils {
         throw new UnsupportedOperationException("Not supported type: " + type);
     }
 
-    public static Object[] transform(RowData record, List<org.apache.flink.table.types.DataType> dataTypes) {
+    public static Object[] transform(RowData record, List<DataType> dataTypes) {
         Object[] values = new Object[record.getArity()];
         for (int i = 0; i < record.getArity(); ++i) {
-            org.apache.flink.table.types.DataType dataType = dataTypes.get(i);
+            DataType dataType = dataTypes.get(i);
             values[i] = typeConversion(dataType.getLogicalType(), record, i);
         }
         return values;
+    }
+
+    /** Converts a decoded row to Flink's internal row representation. */
+    public static GenericRowData toRowData(Object[] values, List<DataType> dataTypes) {
+        if (values == null || dataTypes == null || values.length != dataTypes.size()) {
+            throw new IllegalArgumentException("row size must match the Flink table schema");
+        }
+        GenericRowData rowData = new GenericRowData(dataTypes.size());
+        for (int i = 0; i < dataTypes.size(); i++) {
+            rowData.setField(i, toFlinkValue(values[i], dataTypes.get(i).getLogicalType()));
+        }
+        return rowData;
+    }
+
+    /** Converts a decoded field value to the internal type required by a Flink logical type. */
+    public static Object toFlinkValue(Object value, LogicalType type) {
+        if (value == null) {
+            return null;
+        }
+        switch (type.getTypeRoot()) {
+            case CHAR:
+            case VARCHAR:
+                return StringData.fromString(value.toString());
+            case DECIMAL:
+                DecimalType decimalType = (DecimalType) type;
+                BigDecimal decimal = value instanceof BigDecimal
+                        ? (BigDecimal) value : new BigDecimal(value.toString());
+                return DecimalData.fromBigDecimal(
+                        decimal, decimalType.getPrecision(), decimalType.getScale());
+            case ARRAY:
+                ArrayType arrayType = (ArrayType) type;
+                List<?> elements = (List<?>) value;
+                Object[] converted = new Object[elements.size()];
+                for (int i = 0; i < elements.size(); i++) {
+                    converted[i] = toFlinkValue(elements.get(i), arrayType.getElementType());
+                }
+                return new GenericArrayData(converted);
+            case MAP:
+                MapType mapType = (MapType) type;
+                Map<Object, Object> convertedMap = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                    convertedMap.put(
+                            toFlinkValue(entry.getKey(), mapType.getKeyType()),
+                            toFlinkValue(entry.getValue(), mapType.getValueType()));
+                }
+                return new GenericMapData(convertedMap);
+            case ROW:
+                RowType rowType = (RowType) type;
+                Map<?, ?> fields = (Map<?, ?>) value;
+                GenericRowData nested = new GenericRowData(rowType.getFieldCount());
+                for (int i = 0; i < rowType.getFieldCount(); i++) {
+                    RowType.RowField field = rowType.getFields().get(i);
+                    nested.setField(i, toFlinkValue(fields.get(field.getName()), field.getType()));
+                }
+                return nested;
+            default:
+                return value;
+        }
     }
 
     public static Object typeConversion(LogicalType fieldType, RowData rowData, int index) {

@@ -12,9 +12,13 @@ import com.google.protobuf.StringValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Syntax;
 import com.google.protobuf.Type;
+import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -94,6 +98,53 @@ class ProtobufRowCodecTest {
         assertTrue(BoolValue.parseFrom(new ProtobufRowCodec(
                 "com.google.protobuf.BoolValue").encode(
                 new Object[]{true}, valueSchema("BOOLEAN"))).getValue());
+    }
+
+    @Test
+    void preservesUnsignedIntegerValuesAndRejectsNarrowSqlColumns() throws Exception {
+        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.UInt32Value");
+        List<FieldSchema> bigintSchema = valueSchema("BIGINT");
+        byte[] encoded = codec.encode(new Object[]{4_000_000_000L}, bigintSchema);
+
+        assertEquals(4_000_000_000L,
+                Integer.toUnsignedLong(UInt32Value.parseFrom(encoded).getValue()));
+        assertEquals(4_000_000_000L, codec.decode(encoded, bigintSchema)[0]);
+        assertThrows(IllegalArgumentException.class,
+                () -> codec.decode(encoded, valueSchema("INTEGER")));
+
+        ProtobufRowCodec uint64Codec = new ProtobufRowCodec("com.google.protobuf.UInt64Value");
+        BigInteger maxUnsigned64 = new BigInteger("18446744073709551615");
+        List<FieldSchema> decimalSchema = valueSchema("DECIMAL(20, 0)");
+        byte[] uint64Encoded = uint64Codec.encode(new Object[]{maxUnsigned64}, decimalSchema);
+        assertEquals(maxUnsigned64.toString(),
+                Long.toUnsignedString(UInt64Value.parseFrom(uint64Encoded).getValue()));
+        assertEquals(new BigDecimal(maxUnsigned64), uint64Codec.decode(uint64Encoded, decimalSchema)[0]);
+        assertThrows(IllegalArgumentException.class,
+                () -> uint64Codec.decode(uint64Encoded, bigintSchema));
+    }
+
+    @Test
+    void rejectsIntegerOverflowAndFractionalValues() {
+        ProtobufRowCodec int32Codec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
+        assertThrows(IllegalArgumentException.class,
+                () -> int32Codec.encode(new Object[]{2_147_483_648L}, valueSchema("BIGINT")));
+        assertThrows(IllegalArgumentException.class,
+                () -> int32Codec.encode(new Object[]{1.5}, valueSchema("INTEGER")));
+
+        ProtobufRowCodec uint32Codec = new ProtobufRowCodec("com.google.protobuf.UInt32Value");
+        assertThrows(IllegalArgumentException.class,
+                () -> uint32Codec.encode(new Object[]{-1}, valueSchema("INTEGER")));
+        assertThrows(IllegalArgumentException.class,
+                () -> uint32Codec.encode(new Object[]{4_294_967_296L}, valueSchema("BIGINT")));
+
+        ProtobufRowCodec int64Codec = new ProtobufRowCodec("com.google.protobuf.Int64Value");
+        assertThrows(IllegalArgumentException.class,
+                () -> int64Codec.encode(new Object[]{BigInteger.ONE.shiftLeft(63)}, valueSchema("DECIMAL")));
+
+        ProtobufRowCodec enumCodec = new ProtobufRowCodec("com.google.protobuf.Type");
+        assertThrows(IllegalArgumentException.class,
+                () -> enumCodec.encode(new Object[]{4_294_967_297L},
+                        Collections.singletonList(new FieldSchema("syntax", "BIGINT"))));
     }
 
     @Test

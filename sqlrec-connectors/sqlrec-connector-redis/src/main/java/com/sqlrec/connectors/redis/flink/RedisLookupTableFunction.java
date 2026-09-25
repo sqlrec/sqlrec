@@ -1,13 +1,14 @@
 package com.sqlrec.connectors.redis.flink;
 
+import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.functions.AsyncTableFunction;
 import org.apache.flink.table.functions.FunctionContext;
+import org.apache.flink.table.types.DataType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,12 +19,17 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
     private static final long serialVersionUID = 1L;
 
     private RedisConfig redisConfig;
-    private transient ResolvedSchema tableSchema;
+    private final List<DataType> columnDataTypes;
     private transient RedisHandler redisHandler;
 
     public RedisLookupTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
         this.redisConfig = redisConfig;
-        this.tableSchema = tableSchema;
+        this.columnDataTypes = tableSchema.getColumnDataTypes();
+    }
+
+    /** Test-only: inject a handler without opening a Redis connection. */
+    void setRedisHandlerForTest(RedisHandler handler) {
+        this.redisHandler = handler;
     }
 
     @Override
@@ -47,26 +53,25 @@ public class RedisLookupTableFunction extends AsyncTableFunction<RowData> {
             resultFuture.complete(java.util.Collections.emptyList());
             return;
         }
-        redisHandler.scan(rowkey.toString())
-                .whenComplete((result, throwable) -> {
-                    if (throwable != null) {
-                        resultFuture.completeExceptionally(throwable);
-                        return;
-                    }
-                    List<GenericRowData> rows = new ArrayList<>();
-                    for (Object[] objects : result) {
-                        GenericRowData rowData = new GenericRowData(redisConfig.fieldSchemas.size());
-                        for (int i = 0; i < redisConfig.fieldSchemas.size(); i++) {
-                            Object val = objects[i];
-                            if (val instanceof String) {
-                                rowData.setField(i, StringData.fromString((String) val));
-                            } else {
-                                rowData.setField(i, val);
-                            }
+        try {
+            redisHandler.scan(rowkey.toString())
+                    .whenComplete((result, throwable) -> {
+                        if (throwable != null) {
+                            resultFuture.completeExceptionally(throwable);
+                            return;
                         }
-                        rows.add(rowData);
-                    }
-                    resultFuture.complete(rows);
-                });
+                        try {
+                            List<GenericRowData> rows = new ArrayList<>();
+                            for (Object[] objects : result) {
+                                rows.add(FlinkSchemaUtils.toRowData(objects, columnDataTypes));
+                            }
+                            resultFuture.complete(rows);
+                        } catch (Exception e) {
+                            resultFuture.completeExceptionally(e);
+                        }
+                    });
+        } catch (Exception e) {
+            resultFuture.completeExceptionally(e);
+        }
     }
 }

@@ -33,6 +33,7 @@ message RedisAllTypes {
 
   map<string, int64> attributes = 23;
   map<string, Nested> nested_by_name = 24;
+  map<string, Status> status_by_name = 28;
 
   optional string optional_string = 25;
 

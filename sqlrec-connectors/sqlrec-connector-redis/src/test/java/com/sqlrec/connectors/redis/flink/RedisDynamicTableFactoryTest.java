@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.redis.flink;
 
+import com.sqlrec.connectors.redis.codec.ProtobufCodec;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.DataTypes;
@@ -57,6 +58,32 @@ class RedisDynamicTableFactoryTest {
         assertProtobufConfig(readConfig(source));
     }
 
+    @Test
+    void preservesMapValueTypeForProtobufEnumDecoding() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("connector", "redis");
+        options.put("url", "redis://localhost:6379");
+        options.put("format", "protobuf");
+        options.put("protobuf.message-class-name", "com.sqlrec.connectors.redis.proto.RedisAllTypes");
+        ResolvedSchema schema = new ResolvedSchema(
+                Arrays.asList(
+                        Column.physical("string_value", DataTypes.STRING()),
+                        Column.physical("status_by_name",
+                                DataTypes.MAP(DataTypes.STRING().notNull(),
+                                        DataTypes.STRING().notNull()).notNull())),
+                Collections.emptyList(),
+                UniqueConstraint.primaryKey("pk", Collections.singletonList("string_value")));
+        RedisConfig config = readConfig(new RedisDynamicTableFactory()
+                .createDynamicTableSource(context(options, schema)));
+
+        ProtobufCodec codec = new ProtobufCodec(config.protobufMessageClassName);
+        codec.init(config.fieldSchemas, config.primaryKeyIndex);
+        byte[] encoded = codec.encode(new Object[]{
+                "key", Collections.singletonMap("primary", "ACTIVE")});
+        Map<?, ?> decoded = (Map<?, ?>) codec.decode(encoded, "key")[1];
+        assertEquals("ACTIVE", decoded.get("primary"));
+    }
+
     private static DynamicTableFactory.Context context(Map<String, String> options) {
         ResolvedSchema schema = new ResolvedSchema(
                 Arrays.asList(
@@ -64,6 +91,11 @@ class RedisDynamicTableFactoryTest {
                         Column.physical("json_name", DataTypes.STRING())),
                 Collections.emptyList(),
                 UniqueConstraint.primaryKey("pk", Collections.singletonList("name")));
+        return context(options, schema);
+    }
+
+    private static DynamicTableFactory.Context context(
+            Map<String, String> options, ResolvedSchema schema) {
         ResolvedCatalogTable catalogTable = mock(ResolvedCatalogTable.class);
         when(catalogTable.getOptions()).thenReturn(options);
         when(catalogTable.getResolvedSchema()).thenReturn(schema);
