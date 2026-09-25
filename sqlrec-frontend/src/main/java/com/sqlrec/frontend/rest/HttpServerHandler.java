@@ -59,7 +59,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             response = RestUtils.error(HttpResponseStatus.BAD_REQUEST, RestUtils.errorMessage(e, "invalid request"));
         } catch (Exception e) {
             logger.error("Error processing HTTP request: uri={}", request.uri(), e);
-            response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR, "internal server error");
+            response = RestUtils.error(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    RestUtils.errorMessage(e, "internal server error"));
         }
 
         String metricsPath = requestContext == null
@@ -94,7 +95,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         if (path.startsWith(UI_STATIC_PREFIX) || path.startsWith(UI_API_PREFIX)) {
             return requireMethod(request, HttpMethod.GET, () -> handleUi(request));
         }
-        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
+        return RestUtils.error(HttpResponseStatus.NOT_FOUND, "path not found: " + path);
     }
 
     private FullHttpResponse requireMethod(RequestContext request, HttpMethod allowedMethod,
@@ -105,7 +106,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
         FullHttpResponse response = RestUtils.error(
                 HttpResponseStatus.METHOD_NOT_ALLOWED,
-                "method not allowed");
+                "method " + request.method() + " is not allowed for " + request.path()
+                        + "; use " + allowedMethod);
         response.headers().set(HttpHeaderNames.ALLOW, allowedMethod.name());
         return response;
     }
@@ -114,7 +116,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     private FullHttpResponse handleSql(String requestBody) throws Exception {
         if (!SqlRecConfigs.ENABLE_REST_SQL_API.getValue()) {
-            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "sql api is disabled");
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN,
+                    "SQL API is disabled (ENABLE_REST_SQL_API=false)");
         }
         ExecuteDataList result = RestSqlExecutor.execute(requestBody);
         return RestUtils.ok(JsonUtils.toJson(result));
@@ -126,12 +129,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "api name is required");
         }
         if (rawApiName.contains("/")) {
-            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "path not found: " + path);
         }
 
         String apiName = QueryStringDecoder.decodeComponent(rawApiName);
         if (apiName.contains("/")) {
-            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "uri not found");
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "path not found: " + path);
         }
         ExecuteData result = RestFunctionExecutor.execute(apiName, requestBody);
         return RestUtils.ok(JsonUtils.toJson(result));
@@ -143,7 +146,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     private FullHttpResponse handleUi(RequestContext request) throws Exception {
         if (!SqlRecConfigs.ENABLE_REST_UI_API.getValue()) {
-            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "ui api is disabled");
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN,
+                    "UI API is disabled (ENABLE_REST_UI_API=false)");
         }
         return uiHandler.handleRequest(request.path(), request.queryParameters());
     }

@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.rest;
 
+import com.google.gson.JsonParseException;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -10,6 +11,7 @@ import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.entity.SqlApi;
+import com.sqlrec.frontend.utils.RestUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
@@ -28,21 +30,35 @@ public class RestFunctionExecutor {
     private static final Logger logger = LoggerFactory.getLogger(RestFunctionExecutor.class);
 
     public static ExecuteData execute(String apiName, String requestData) throws Exception {
-        if (StringUtils.isEmpty(apiName)) {
-            throw new IllegalArgumentException("apiName is null or empty");
+        if (StringUtils.isBlank(apiName)) {
+            throw new IllegalArgumentException("API name is required");
         }
         apiName = ResourceNames.normalize(apiName);
+
+        if (StringUtils.isBlank(requestData)) {
+            throw new IllegalArgumentException("request body is required; expected a JSON object");
+        }
+        RequestData requestDataObj;
+        try {
+            requestDataObj = JsonUtils.fromJson(requestData, RequestData.class);
+        } catch (JsonParseException e) {
+            throw new IllegalArgumentException("invalid JSON request body: "
+                    + RestUtils.errorMessage(e, "could not parse JSON"), e);
+        }
+        if (requestDataObj == null) {
+            throw new IllegalArgumentException("request body must be a JSON object");
+        }
 
         SqlApi sqlApi = SqlApiCache.get(apiName);
         SqlFunctionBindable sqlFunctionBindable =
                 new CompileManager().getSqlFunction(sqlApi.getFunctionName());
         if (sqlFunctionBindable == null) {
-            throw new IllegalArgumentException("function not found for api: " + apiName);
+            throw new IllegalStateException("function '" + sqlApi.getFunctionName()
+                    + "' configured for API '" + apiName + "' was not found");
         }
 
         CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
 
-        RequestData requestDataObj = JsonUtils.fromJson(requestData, RequestData.class);
         addTableToSchema(schema, sqlFunctionBindable, requestDataObj.getData());
 
         ExecuteContext executeContext = new ExecuteContextImpl();
@@ -62,12 +78,13 @@ public class RestFunctionExecutor {
                 List<Object[]> results = enumerable.toList();
                 executeData.setData(DataTransformUtils.convertToMapList(results, proxyBindable.getReturnDataFields()));
             } else {
-                executeData.setMsg("function return null");
+                executeData.setMsg("API '" + apiName + "' returned no result");
             }
         } catch (Exception e) {
             logger.error("execute function error", e);
             executeContext.cancel();
-            throw new RuntimeException("execute function error: " + e.getMessage(), e);
+            throw new RuntimeException("failed to execute API '" + apiName + "': "
+                    + RestUtils.errorMessage(e, "function execution failed"), e);
         }
         return executeData;
     }
@@ -79,10 +96,10 @@ public class RestFunctionExecutor {
             List<RelDataTypeField> dataFields = tablePlaceholder.getValue();
 
             if (params == null) {
-                throw new IllegalArgumentException("params is null, need params for table: " + tableName);
+                throw new IllegalArgumentException("data is required for input table '" + tableName + "'");
             }
             if (!params.containsKey(tableName)) {
-                throw new IllegalArgumentException("table '" + tableName + "' not found in params");
+                throw new IllegalArgumentException("input table '" + tableName + "' is missing from data");
             }
 
             Enumerable<Object[]> enumerable = DataTransformUtils.convertDataToEnumerable(params.get(tableName), dataFields);

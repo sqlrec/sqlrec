@@ -69,7 +69,9 @@ class SqlApiCacheTest {
         cache.invalidateAll();
         assertEquals("function_v2", SqlApiCache.get(cache, "api").getFunctionName());
 
-        assertThrows(Exception.class, () -> SqlApiCache.get(cache, "missing"));
+        IllegalArgumentException missing = assertThrows(
+                IllegalArgumentException.class, () -> SqlApiCache.get(cache, "missing"));
+        assertEquals("API not found: missing", missing.getMessage());
         putApi("missing", "available_now");
         assertEquals("available_now", SqlApiCache.get(cache, "missing").getFunctionName());
     }

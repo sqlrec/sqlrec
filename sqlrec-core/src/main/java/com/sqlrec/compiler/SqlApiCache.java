@@ -33,7 +33,7 @@ public final class SqlApiCache {
             }
         }
         if (sqlApi == null) {
-            throw new Exception("api not found: " + normalizedName);
+            throw new IllegalArgumentException("API not found: " + normalizedName);
         }
         return sqlApi;
     }

@@ -54,7 +54,7 @@ public class UiHandler {
             if (path.startsWith(HttpServerHandler.UI_API_PREFIX)) {
                 return handleApiRequest(path, queryParameters);
             }
-            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found");
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "UI path not found: " + path);
         } catch (IllegalArgumentException e) {
             return RestUtils.error(HttpResponseStatus.BAD_REQUEST, RestUtils.errorMessage(e, "invalid request"));
         }
@@ -66,7 +66,8 @@ public class UiHandler {
         String resourcePath = decodeResourcePath(
                 path.substring(HttpServerHandler.UI_STATIC_PREFIX.length()));
         if (isForbiddenResourcePath(resourcePath)) {
-            return RestUtils.error(HttpResponseStatus.FORBIDDEN, "Forbidden resource path");
+            return RestUtils.error(HttpResponseStatus.FORBIDDEN,
+                    "static resource path is forbidden: " + resourcePath);
         }
 
         String requestedPath = resourcePath.isEmpty() ? "index.html" : resourcePath;
@@ -75,7 +76,8 @@ public class UiHandler {
             resource = loadStaticResource("index.html");
         }
         if (resource == null) {
-            return RestUtils.error(HttpResponseStatus.NOT_FOUND, "Static resource not found");
+            return RestUtils.error(HttpResponseStatus.NOT_FOUND,
+                    "static resource not found: " + requestedPath);
         }
 
         return RestUtils.ok(
@@ -133,7 +135,8 @@ public class UiHandler {
         List<String> segments = decodePathSegments(
                 path.substring(HttpServerHandler.UI_API_PREFIX.length()));
         if (segments.isEmpty()) {
-            return RestUtils.error(HttpResponseStatus.BAD_REQUEST, "API path is empty");
+            return RestUtils.error(HttpResponseStatus.BAD_REQUEST,
+                    "UI API path is empty; expected a resource after " + HttpServerHandler.UI_API_PREFIX);
         }
 
         return switch (segments.get(0)) {
