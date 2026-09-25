@@ -869,7 +869,7 @@ API 请求体中 `params` 对象的键值也会作为执行变量。变量值为
 
 ### FLUSH
 
-强制失效系统中的所有缓存。
+失效进程内的元数据、函数、API 与服务配置缓存。
 
 **语法：**
 
@@ -879,12 +879,15 @@ FLUSH
 
 **描述：**
 
-`FLUSH` 语句会立即失效 SQLRec 进程内的全部缓存，强制后续查询重新从元数据库加载最新数据。该命令会失效以下缓存：
+`FLUSH` 语句会立即失效以下进程级缓存，使后续访问重新加载相应定义：
 
 - `CalciteSchemaFactory`：数据库列表与表结构（schema）缓存
-- `JavaFunctionUtils`：Java 函数不存在性缓存
-- `CompileManager`：已编译的 SQL 函数绑定（`SqlFunctionBindable`）与 API 缓存
+- `JavaFunctionUtils`：Java 函数类缓存（包括不存在的结果）
+- `SqlFunctionCache`：已编译的 SQL 函数绑定（`SqlFunctionBindable`）
+- `SqlApiCache`：API 定义缓存
 - `ServiceManager`：服务配置缓存
+
+`FLUSH` 不直接清空已有 connector 表对象的主键行缓存，也不清除会话中的 `CACHE TABLE` 结果。schema 重新构建表对象后，新对象的行缓存为空；旧对象仍可能在其 TTL 内持有数据。参见[架构中的查询路径说明](./architecture.md#connector-表数据缓存与查询路径)。
 
 **示例：**
 
@@ -893,7 +896,7 @@ FLUSH;
 ```
 
 ::: warning 注意
-`FLUSH` 会失效所有缓存，可能导致短时间内元数据重新加载带来的开销。通常在元数据变更（例如外部修改了表结构、函数或服务定义）后手动执行，以确保后续查询看到最新状态。
+`FLUSH` 可能导致短时间内重新加载元数据。通常在外部修改表结构、函数或服务定义后执行；它不能保证已有 connector 表对象的行缓存立即更新。
 :::
 
 

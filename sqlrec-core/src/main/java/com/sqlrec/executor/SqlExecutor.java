@@ -55,6 +55,12 @@ public class SqlExecutor {
     public SqlProcessResult executeSqlAsync(String sql) throws Exception {
         SqlNode node = CompileManager.parseSql(sql);
 
+        if (SqlRecConfigs.isFileSystemMetadata() && node instanceof SqlCreateSqlFunction) {
+            throw new UnsupportedOperationException(
+                    "SQL function DDL is not supported in local SQL file metadata mode; "
+                            + "define it under SQL_SCHEMA_DIR and restart");
+        }
+
         SqlProcessResult result = tryCompileFunction(node, sql);
         if (result != null) {
             return result;

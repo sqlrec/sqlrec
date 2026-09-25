@@ -8,6 +8,10 @@ SQLRec provides multiple built-in connectors for connecting to different data st
 
 If you are new to creating and using data-source tables, start with [Connecting Data Sources](../../guides/data-sources.md).
 
+### Row Cache Scope
+
+For Redis, JDBC, and MongoDB, `cache-ttl` / `max-cache-size` control a **primary-key row cache** on each Calcite table object, rather than a cache of complete SQL results; setting either to 0 disables it. Redis primary-key equality (including a key predicate inside `AND`), standalone JDBC/MongoDB primary-key equality, and KV Joins on the right table's primary key use this cache. JDBC/MongoDB non-key, range, compound, and full-scan queries do not. Neither do Milvus, filesystem, Kafka, or Flink Redis Lookup. SQL writes invalidate relevant keys on the current table object; external and Flink writes do not proactively invalidate them, so cached values can remain until TTL expiry. See [Architecture: Connector Row Cache and Query Paths](../architecture.md#connector-row-cache-and-query-paths) for the full query matrix and `FLUSH` behavior.
+
 ## Built-in Connectors
 
 ### 1. Redis Connector
@@ -38,7 +42,7 @@ The Redis connector is used to connect to Redis databases, supporting key-value 
 | `max-list-size` | Integer | 0 | Maximum list length, 0 means unlimited |
 | `ttl` | Integer | 2592000 | Key expiration time (seconds), default 30 days |
 | `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
-| `max-cache-size` | Integer | 100000 | Maximum local cache entries |
+| `max-cache-size` | Integer | 100000 | Maximum cached primary-key entries; 0 disables caching |
 
 **Usage Example**:
 
@@ -211,7 +215,7 @@ The JDBC connector is used to connect to relational databases (e.g., PostgreSQL,
 | `password` | String | `""` | Database password |
 | `driver` | String | `""` | JDBC driver class name, e.g. `org.postgresql.Driver` |
 | `schema` | String | `""` | Database schema name (e.g. PostgreSQL schema) |
-| `max-cache-size` | Integer | 100000 | Maximum local cache entries |
+| `max-cache-size` | Integer | 100000 | Maximum cached primary-key entries; 0 disables caching |
 | `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
 | `connection.pool.size` | Integer | 0 | Connection pool max size (HikariCP maximumPoolSize), 0 means use default |
 | `connection.pool.min-idle` | Integer | 0 | Connection pool min idle connections, 0 means use default |
@@ -270,7 +274,7 @@ The MongoDB connector is used to connect to MongoDB document databases, supporti
 | `uri` | String | - | MongoDB connection URI, e.g. `mongodb://host:port` |
 | `database` | String | - | Database name |
 | `collection` | String | - | Collection name |
-| `max-cache-size` | Integer | 100000 | Maximum local cache entries |
+| `max-cache-size` | Integer | 100000 | Maximum cached primary-key entries; 0 disables caching |
 | `cache-ttl` | Integer | 30 | Local cache expiration time (seconds), 0 means no cache |
 
 **Usage Example**:

@@ -866,7 +866,7 @@ Keys and values in the API request's `params` object are also execution variable
 
 ### FLUSH
 
-Forcefully invalidate all caches in the system.
+Invalidate process-level metadata, function, API, and service configuration caches.
 
 **Syntax:**
 
@@ -876,12 +876,15 @@ FLUSH
 
 **Description:**
 
-The `FLUSH` statement immediately invalidates all in-process caches of SQLRec, forcing subsequent queries to reload the latest data from the metastore. The following caches are invalidated:
+`FLUSH` immediately invalidates these process-level caches so subsequent accesses reload their definitions:
 
 - `CalciteSchemaFactory`: database list and table schema caches
-- `JavaFunctionUtils`: Java function non-existence cache
-- `CompileManager`: compiled SQL function bindings (`SqlFunctionBindable`) and API caches
+- `JavaFunctionUtils`: Java function class cache (including absent results)
+- `SqlFunctionCache`: compiled SQL function bindings (`SqlFunctionBindable`)
+- `SqlApiCache`: API definition cache
 - `ServiceManager`: service configuration cache
+
+`FLUSH` does not directly clear the primary-key row cache on existing connector table objects or session `CACHE TABLE` results. A rebuilt schema table object starts with an empty row cache; an old object can still hold data until its TTL expires. See [the architecture query-path matrix](./architecture.md#connector-row-cache-and-query-paths).
 
 **Example:**
 
@@ -890,7 +893,7 @@ FLUSH;
 ```
 
 ::: warning Note
-`FLUSH` invalidates all caches, which may cause short-term overhead from reloading metadata. It is typically executed manually after metadata changes (e.g., external modifications to table schemas, functions, or service definitions) to ensure subsequent queries see the latest state.
+`FLUSH` may cause short-term overhead from reloading metadata. It is typically used after external changes to table schemas, functions, or service definitions; it does not guarantee that row caches on existing connector table objects update immediately.
 :::
 
 

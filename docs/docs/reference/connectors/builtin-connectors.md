@@ -8,6 +8,10 @@ SQLRec 提供了多种内置连接器，用于连接不同的数据存储系统�
 
 如果还不熟悉数据源的创建和使用方式，请先阅读[接入数据源](../../guides/data-sources.md)。
 
+### 数据行缓存范围
+
+Redis、JDBC、MongoDB 的 `cache-ttl` / `max-cache-size` 控制 Calcite 表对象上的**主键行缓存**，并非整条 SQL 的结果缓存；任一参数设为 0 即关闭。Redis 的主键等值查询（包括 `AND` 中的主键条件）、JDBC/MongoDB 的单一主键等值查询，以及右表按主键关联的 KV Join 会使用它。JDBC/MongoDB 的非主键、范围、复合条件与全表扫描不使用；Milvus、filesystem、Kafka 及 Flink Redis Lookup 也不使用。SQL 写入会失效当前表对象的相关主键，外部或 Flink 写入不会主动失效，需等待 TTL。完整路径和 `FLUSH` 的作用见[架构：Connector 表数据缓存与查询路径](../architecture.md#connector-表数据缓存与查询路径)。
+
 ## 内置连接器
 
 ### 1. Redis Connector
@@ -38,7 +42,7 @@ Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 | `max-list-size` | Integer | 0 | List 最大长度，0 表示无限制 |
 | `ttl` | Integer | 2592000 | Key 过期时间（秒），默认 30 天 |
 | `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
-| `max-cache-size` | Integer | 100000 | 本地缓存最大条目数 |
+| `max-cache-size` | Integer | 100000 | 本地缓存最大主键条目数，0 表示不缓存 |
 
 **使用示例**：
 
@@ -211,7 +215,7 @@ JDBC 连接器用于连接关系型数据库（如 PostgreSQL、MySQL 等），�
 | `password` | String | `""` | 数据库密码 |
 | `driver` | String | `""` | JDBC 驱动类名，例如 `org.postgresql.Driver` |
 | `schema` | String | `""` | 数据库 Schema 名称（如 PostgreSQL 的 schema） |
-| `max-cache-size` | Integer | 100000 | 本地缓存最大条目数 |
+| `max-cache-size` | Integer | 100000 | 本地缓存最大主键条目数，0 表示不缓存 |
 | `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
 | `connection.pool.size` | Integer | 0 | 连接池最大连接数（HikariCP maximumPoolSize），0 表示使用默认值 |
 | `connection.pool.min-idle` | Integer | 0 | 连接池最小空闲连接数，0 表示使用默认值 |
@@ -270,7 +274,7 @@ MongoDB 连接器用于连接 MongoDB 文档数据库，支持文档查询和数
 | `uri` | String | - | MongoDB 连接 URI，例如 `mongodb://host:port` |
 | `database` | String | - | 数据库名称 |
 | `collection` | String | - | 集合名称 |
-| `max-cache-size` | Integer | 100000 | 本地缓存最大条目数 |
+| `max-cache-size` | Integer | 100000 | 本地缓存最大主键条目数，0 表示不缓存 |
 | `cache-ttl` | Integer | 30 | 本地缓存过期时间（秒），0 表示不缓存 |
 
 **使用示例**：

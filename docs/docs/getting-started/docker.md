@@ -117,9 +117,9 @@ sqlrec-demo/src/main/sql/
 
 quick-start 的两张输入表通过 `${SQL_SCHEMA_DIR}` 指向内置 CSV，并在首次读取时加载到内存。filesystem 表将主键作为查找键，因此用户兴趣表能在同一 `user_id` 下保存三条记录；曝光表也以 `user_id` 为查找键，初始为空，可以保存每位用户的多条曝光。完整的 MovieLens 示例用于展示 Redis、Milvus、Kafka、模型训练和在线推理等完整链路。
 
-## 在本地元数据模式开发 DDL
+## 管理本地 SQL 定义
 
-本地元数据模式会在进程启动时从 `SQL_SCHEMA_DIR` 递归加载 SQL 文件，因此不允许通过 CLI 或 SQL API 直接执行 `CREATE TABLE`、`CREATE SQL FUNCTION`、`CREATE API` 等 DDL 语句。Demo 中默认开启的 SQL API 仅用于查询和写入测试数据。
+本地元数据模式会在进程启动时从 `SQL_SCHEMA_DIR` 递归加载 SQL 文件，不允许通过 CLI 或 SQL API 执行 DDL。Demo 中默认开启的 SQL API 主要用于查询和写入测试数据。
 
 在本地开发新的表、函数或 API 时，将定义写入宿主机上的 SQL 文件，然后把整个目录挂载到容器，并将 `SQL_SCHEMA_DIR` 指向容器内的挂载路径。例如：
 
@@ -132,7 +132,7 @@ docker run --rm -d --name sqlrec-custom \
   sqlrec/sqlrec-demo:latest
 ```
 
-`./sql` 目录应包含本次启动需要的全部 SQL 定义。修改文件后需要重启容器，SQLRec 才会重新加载这些定义。
+`./sql` 目录应包含本次启动需要的全部 SQL 定义。修改文件后需要重启容器，SQLRec 才会重新加载这些定义。线上 serving 也可以把该目录随镜像或部署配置纳入版本管理，并在更新时重新部署所有实例，减少对远程元数据服务的依赖。
 
 如果希望像使用数据库一样在会话中直接执行和持久化 DDL，请按照[服务部署](/docs/operations/deployment)搭建完整集群，再通过 beeline、JDBC 或其他客户端连接 SQLRec。
 

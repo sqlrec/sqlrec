@@ -113,9 +113,9 @@ sqlrec-demo/src/main/sql/
 
 The two quick-start input tables use `${SQL_SCHEMA_DIR}` to locate the bundled CSV files and load them into memory on first access. Filesystem tables use the primary key as a lookup key, so the user-interest table retains three rows per `user_id`. The exposure table also uses `user_id` as its lookup key; it starts empty and can retain multiple exposures per user. The complete MovieLens example demonstrates a full pipeline involving Redis, Milvus, Kafka, model training, and online inference.
 
-## Developing DDL in Local Metadata Mode
+## Managing Local SQL Definitions
 
-Local metadata mode recursively loads SQL files from `SQL_SCHEMA_DIR` when the process starts. It therefore does not allow DDL statements such as `CREATE TABLE`, `CREATE SQL FUNCTION`, or `CREATE API` to be executed through either the CLI or SQL API. The SQL API enabled by the demo is intended only for queries and test-data writes.
+Local metadata mode recursively loads SQL files from `SQL_SCHEMA_DIR` when the process starts. It does not allow DDL through the CLI or SQL API. The SQL API enabled by the demo is mainly intended for queries and test-data writes.
 
 To develop a new table, function, or API locally, write its definition in SQL files on the host, mount the complete directory into the container, and point `SQL_SCHEMA_DIR` to the mounted path. For example:
 
@@ -128,7 +128,7 @@ docker run --rm -d --name sqlrec-custom \
   sqlrec/sqlrec-demo:latest
 ```
 
-The `./sql` directory must contain every SQL definition required for that run. Restart the container after changing a file so that SQLRec reloads the definitions.
+The `./sql` directory must contain every SQL definition required for that run. Restart the container after changing a file so that SQLRec reloads the definitions. For online serving, version this directory with the image or deployment configuration and redeploy all instances when it changes, reducing dependencies on remote metadata services.
 
 If you need to execute and persist DDL interactively like a database, follow [Service Deployment](/en/docs/operations/deployment) to set up the complete cluster, then connect through beeline, JDBC, or another SQLRec client.
 
