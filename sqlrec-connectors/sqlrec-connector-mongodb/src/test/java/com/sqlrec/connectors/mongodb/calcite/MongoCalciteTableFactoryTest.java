@@ -13,11 +13,4 @@ class MongoCalciteTableFactoryTest {
         assertEquals(MongoOptions.CONNECTOR_IDENTIFIER, factory.getConnectorName());
         assertEquals("mongodb", factory.getConnectorName());
     }
-
-    @Test
-    void testGetRulesReturnsEmptyList() {
-        MongoCalciteTableFactory factory = new MongoCalciteTableFactory();
-        assertNotNull(factory.getRules());
-        assertTrue(factory.getRules().isEmpty());
-    }
 }

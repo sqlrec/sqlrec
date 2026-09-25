@@ -45,11 +45,7 @@ public class TableFactoryUtils {
     }
 
     public static HmsTableFactory getTableFactory(String connector) {
-        return getTableFactoryMap().get(connector);
-    }
-
-    public static Map<String, HmsTableFactory> getTableFactoryMap() {
-        return FactoryHolder.FACTORIES;
+        return FactoryHolder.FACTORIES.get(connector);
     }
 
     private static final class FactoryHolder {

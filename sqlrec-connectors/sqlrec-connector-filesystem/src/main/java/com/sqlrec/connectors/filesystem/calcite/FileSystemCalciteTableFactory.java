@@ -4,10 +4,6 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import com.sqlrec.connectors.filesystem.config.FileSystemOptions;
-import org.apache.calcite.plan.RelOptRule;
-
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class FileSystemCalciteTableFactory implements HmsTableFactory {
@@ -25,10 +21,5 @@ public class FileSystemCalciteTableFactory implements HmsTableFactory {
     @Override
     public String getConnectorName() {
         return FileSystemOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return new ArrayList<>();
     }
 }

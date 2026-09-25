@@ -4,11 +4,8 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.config.MilvusOptions;
-import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.Table;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class MilvusCalciteTableFactory implements HmsTableFactory {
@@ -28,10 +25,5 @@ public class MilvusCalciteTableFactory implements HmsTableFactory {
     @Override
     public String getConnectorName() {
         return MilvusOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return new ArrayList<>();
     }
 }

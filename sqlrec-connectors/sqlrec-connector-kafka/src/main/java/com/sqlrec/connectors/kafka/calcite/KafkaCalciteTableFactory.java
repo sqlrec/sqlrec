@@ -4,11 +4,8 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
 import com.sqlrec.connectors.kafka.config.KafkaOptions;
-import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.schema.Table;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 public class KafkaCalciteTableFactory implements HmsTableFactory {
@@ -23,10 +20,5 @@ public class KafkaCalciteTableFactory implements HmsTableFactory {
     @Override
     public String getConnectorName() {
         return KafkaOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return Collections.emptyList();
     }
 }

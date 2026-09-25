@@ -1,6 +1,5 @@
 package com.sqlrec.rules;
 
-import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.interpreter.Bindables;
@@ -48,7 +47,6 @@ public class RuleManager {
         planner.removeRule(EnumerableRules.ENUMERABLE_UNION_RULE);
         planner.addRule(SQLREC_UNION);
 
-        addTableFactoryRules(planner);
         return planner;
     }
 
@@ -71,11 +69,5 @@ public class RuleManager {
         planner.removeRule(CoreRules.JOIN_COMMUTE);
         planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
         planner.removeRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
-    }
-
-    private static void addTableFactoryRules(VolcanoPlanner planner) {
-        TableFactoryUtils.getTableFactoryMap()
-                .values()
-                .forEach(tableFactory -> tableFactory.getRules().forEach(planner::addRule));
     }
 }

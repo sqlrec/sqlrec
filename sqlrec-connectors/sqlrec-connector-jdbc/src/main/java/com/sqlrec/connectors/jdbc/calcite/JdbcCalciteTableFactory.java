@@ -4,10 +4,6 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.sqlrec.connectors.jdbc.config.JdbcOptions;
-import org.apache.calcite.plan.RelOptRule;
-
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class JdbcCalciteTableFactory implements HmsTableFactory {
@@ -26,10 +22,5 @@ public class JdbcCalciteTableFactory implements HmsTableFactory {
     @Override
     public String getConnectorName() {
         return JdbcOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return new ArrayList<>();
     }
 }

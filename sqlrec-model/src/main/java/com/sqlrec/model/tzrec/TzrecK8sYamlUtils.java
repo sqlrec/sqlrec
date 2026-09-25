@@ -128,9 +128,6 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
 
     /**
      * TZRec runtime env vars shared by both the training Job and the serving Deployment.
-     *
-     * <p>Note: these currently read {@code getDefaultValue()}; passing per-job overrides via
-     * {@code params} is a known follow-up (tracked separately).
      */
     private static List<EnvVar> buildRuntimeEnvVars() {
         return List.of(

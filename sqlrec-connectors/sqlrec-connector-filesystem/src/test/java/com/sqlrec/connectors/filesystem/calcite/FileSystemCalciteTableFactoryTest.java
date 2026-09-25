@@ -13,11 +13,4 @@ class FileSystemCalciteTableFactoryTest {
         assertEquals(FileSystemOptions.CONNECTOR_IDENTIFIER, factory.getConnectorName());
         assertEquals("filesystem", factory.getConnectorName());
     }
-
-    @Test
-    void testGetRulesReturnsEmptyList() {
-        FileSystemCalciteTableFactory factory = new FileSystemCalciteTableFactory();
-        assertNotNull(factory.getRules());
-        assertTrue(factory.getRules().isEmpty());
-    }
 }

@@ -171,11 +171,6 @@ public final class ExampleCalciteTableFactory implements HmsTableFactory {
     public String getConnectorName() {
         return ExampleOptions.CONNECTOR_IDENTIFIER;
     }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return Collections.emptyList();
-    }
 }
 ```
 

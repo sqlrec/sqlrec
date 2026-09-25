@@ -3,6 +3,7 @@ package com.sqlrec.frontend.rest;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
@@ -301,16 +302,17 @@ final class UiApiService {
         rows.add(createRow("Updated At:", formatTimestamp(function.getUpdatedAt())));
         rows.add(createRow("", ""));
         rows.add(createRow("# SQL Statements", ""));
-        if (function.getSqlList() == null || function.getSqlList().isEmpty()) {
+        List<String> sqlStatements = function.getSqlList() == null
+                ? null : JsonUtils.parseStringList(function.getSqlList());
+        if (sqlStatements == null || sqlStatements.isEmpty()) {
             rows.add(createRow("(none)", ""));
             return rows;
         }
 
-        String[] sqlStatements = function.getSqlList().split(";");
-        for (int i = 0; i < sqlStatements.length; i++) {
-            String sql = sqlStatements[i].trim();
-            if (!sql.isEmpty()) {
-                rows.add(createRow("SQL " + (i + 1) + ":", sql));
+        int statementNumber = 1;
+        for (String statement : sqlStatements) {
+            if (statement != null && !statement.isBlank()) {
+                rows.add(createRow("SQL " + statementNumber++ + ":", statement.trim()));
             }
         }
         return rows;

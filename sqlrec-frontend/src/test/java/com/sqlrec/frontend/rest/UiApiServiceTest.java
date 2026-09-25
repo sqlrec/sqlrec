@@ -1,6 +1,8 @@
 package com.sqlrec.frontend.rest;
 
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.entity.SqlFunction;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -12,6 +14,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class UiApiServiceTest {
+
+    @Test
+    void displaysSqlFunctionStatementsFromJsonArray() {
+        MetadataAccess metadataAccess = mock(MetadataAccess.class);
+        SqlFunction function = new SqlFunction();
+        function.setName("example");
+        function.setSqlList(JsonUtils.toJson(List.of(
+                "create sql function example",
+                "return select 'a;b' as value")));
+        when(metadataAccess.getSqlFunction("example")).thenReturn(function);
+
+        List<Map<String, String>> rows = new UiApiService(metadataAccess).getFunction("example");
+
+        assertEquals(Map.of("col_name", "SQL 1:", "data_type", "create sql function example"), rows.get(6));
+        assertEquals(Map.of("col_name", "SQL 2:", "data_type", "return select 'a;b' as value"), rows.get(7));
+        assertEquals(8, rows.size());
+    }
 
     @Test
     void mapsDatabasesToUiItems() throws Exception {

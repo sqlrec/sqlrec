@@ -4,10 +4,6 @@ import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
-import org.apache.calcite.plan.RelOptRule;
-
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class RedisCalciteTableFactory implements HmsTableFactory {
@@ -27,10 +23,5 @@ public class RedisCalciteTableFactory implements HmsTableFactory {
     @Override
     public String getConnectorName() {
         return RedisOptions.CONNECTOR_IDENTIFIER;
-    }
-
-    @Override
-    public List<RelOptRule> getRules() {
-        return new ArrayList<>();
     }
 }
