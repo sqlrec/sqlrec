@@ -268,11 +268,146 @@ class FileSystemHandlerTest {
         assertTrue(result.isEmpty());
     }
 
+    @Test
+    void testLoadsAndLooksUpMultipleCsvRowsPerKey() throws IOException {
+        Path csvFile = tempDir.resolve("list.csv");
+        Files.write(csvFile, List.of("id,name,age", "1,alice,20", "1,bob,25", "2,charlie,30"));
+        FileSystemConfig config = createConfig(csvFile.toString(), "csv");
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        assertEquals(3, handler.scan().size());
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(2, rows.size());
+        assertEquals("bob", rows.get(0)[1]);
+        assertEquals("alice", rows.get(1)[1]);
+
+        rows.get(0)[1] = "changed";
+        assertEquals("bob", handler.getByPrimaryKey(Set.of(1)).get(1).get(0)[1]);
+    }
+
+    @Test
+    void testLoadsMultipleJsonRowsPerKey() throws IOException {
+        Path jsonFile = tempDir.resolve("list.json");
+        Files.writeString(jsonFile, "[{\"id\":1,\"name\":\"alice\",\"age\":20},"
+                + "{\"id\":1,\"name\":\"bob\",\"age\":25}]");
+        FileSystemConfig config = createConfig(jsonFile.toString(), "json");
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        assertEquals(2, handler.getByPrimaryKey(Set.of(1)).get(1).size());
+    }
+
+    @Test
+    void testInsertAndDeleteMatchingRowsUnderOneKey() {
+        FileSystemConfig config = createConfig(null, "csv");
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        handler.insert(new Object[]{1, "alice", 20});
+        handler.insert(new Object[]{1, "bob", 25});
+        handler.insert(new Object[]{1, "bob", 25});
+        assertEquals(3, handler.getByPrimaryKey(Set.of(1)).get(1).size());
+        assertFalse(handler.delete(new Object[]{1, "missing", 25}));
+        assertTrue(handler.delete(new Object[]{1, "bob", 25}));
+        List<Object[]> remaining = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(1, remaining.size());
+        assertEquals("alice", remaining.get(0)[1]);
+        assertTrue(handler.delete(new Object[]{1, "alice", 20}));
+        assertFalse(handler.getByPrimaryKey(Set.of(1)).containsKey(1));
+    }
+
+    @Test
+    void testReplaceAllRemovesOldRowsBeforeInsertingNewRows() {
+        FileSystemHandler handler = new FileSystemHandler(createConfig(null, "csv"));
+        handler.insert(new Object[]{1, "alice", 20});
+        handler.insert(new Object[]{1, "alice", 21});
+        handler.insert(new Object[]{1, "bob", 30});
+        List<Object[]> previousSnapshot = handler.scan();
+
+        assertEquals(2, handler.replaceAll(
+                List.of(new Object[]{1, "alice", 20}, new Object[]{1, "alice", 21}),
+                List.of(new Object[]{1, "alice", 21}, new Object[]{1, "alice", 22})));
+
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(3, rows.size());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("alice") && row[2].equals(21)).count());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("alice") && row[2].equals(22)).count());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("bob") && row[2].equals(30)).count());
+        assertEquals(1, previousSnapshot.stream()
+                .filter(row -> row[1].equals("alice") && row[2].equals(20)).count());
+    }
+
+    @Test
+    void testReplaceAllValidatesEntireBatchBeforeChangingData() {
+        FileSystemHandler handler = new FileSystemHandler(createConfig(null, "csv"));
+        handler.insert(new Object[]{1, "alice", 20});
+
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceAll(
+                List.of(new Object[]{1, "alice", 20}, new Object[]{null, "missing", 30}),
+                List.of(new Object[]{1, "alice", 21}, new Object[]{2, "bob", 31})));
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceAll(
+                Collections.singletonList(new Object[]{1, "alice", 20}),
+                Collections.singletonList(new Object[]{null, "alice", 21})));
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceAll(
+                Collections.singletonList(new Object[]{1, "alice", 20}), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceAll(
+                Collections.singletonList(new Object[]{1, "alice", 20}),
+                Collections.singletonList(new Object[]{1, "alice"})));
+
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{1, "alice", 20}, rows.get(0));
+        assertEquals(1, handler.scan().size());
+    }
+
+    @Test
+    void testReplaceAllCountsOnlyMatchingDuplicateRows() {
+        FileSystemHandler handler = new FileSystemHandler(createConfig(null, "csv"));
+        handler.insert(new Object[]{1, "alice", 20});
+        handler.insert(new Object[]{1, "alice", 20});
+        handler.insert(new Object[]{1, "bob", 30});
+
+        assertEquals(2, handler.replaceAll(
+                List.of(new Object[]{1, "alice", 20}, new Object[]{1, "alice", 20},
+                        new Object[]{1, "missing", 40}),
+                List.of(new Object[]{1, "alice", 21}, new Object[]{1, "alice", 22},
+                        new Object[]{1, "missing", 41})));
+
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(3, rows.size());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("alice") && row[2].equals(21)).count());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("alice") && row[2].equals(22)).count());
+        assertEquals(1, rows.stream().filter(row -> row[1].equals("bob") && row[2].equals(30)).count());
+        assertEquals(0, handler.replaceAll(
+                Collections.singletonList(new Object[]{1, "missing", 40}),
+                Collections.singletonList(new Object[]{1, "missing", 41})));
+    }
+
+    @Test
+    void testBatchInsertAndDeleteValidateBeforeChangingData() {
+        FileSystemHandler handler = new FileSystemHandler(createConfig(null, "csv"));
+
+        assertFalse(handler.insertAll(List.of()));
+        assertFalse(handler.deleteAll(List.of()));
+        assertEquals(0, handler.replaceAll(List.of(), List.of()));
+
+        assertThrows(IllegalArgumentException.class, () -> handler.insertAll(List.of(
+                new Object[]{1, "alice", 20}, new Object[]{null, "invalid", 30})));
+        assertTrue(handler.scan().isEmpty());
+        assertTrue(handler.insertAll(List.of(
+                new Object[]{1, "alice", 20}, new Object[]{1, "bob", 25})));
+
+        assertThrows(IllegalArgumentException.class, () -> handler.deleteAll(List.of(
+                new Object[]{1, "alice", 20}, new Object[]{null, "invalid", 30})));
+        assertEquals(2, handler.getByPrimaryKey(Set.of(1)).get(1).size());
+        assertTrue(handler.deleteAll(List.of(
+                new Object[]{1, "alice", 20}, new Object[]{1, "bob", 25})));
+        assertTrue(handler.scan().isEmpty());
+    }
+
     // ===== Write (Memory-Only) Tests =====
 
     @Test
-    void testUpsertInsert() throws IOException {
-        Path csvFile = tempDir.resolve("upsert.csv");
+    void testInsertNewKey() throws IOException {
+        Path csvFile = tempDir.resolve("insert.csv");
         Files.write(csvFile, Arrays.asList(
                 "id,name,age",
                 "1,alice,20"
@@ -281,15 +416,15 @@ class FileSystemHandlerTest {
         FileSystemConfig config = createConfig(csvFile.toString(), "csv");
         FileSystemHandler handler = new FileSystemHandler(config);
 
-        handler.upsert(new Object[]{2, "bob", 25});
+        handler.insert(new Object[]{2, "bob", 25});
 
         List<Object[]> rows = handler.scan();
         assertEquals(2, rows.size());
     }
 
     @Test
-    void testUpsertUpdate() throws IOException {
-        Path csvFile = tempDir.resolve("upsert_update.csv");
+    void testInsertRetainsExistingRowWithSameKey() throws IOException {
+        Path csvFile = tempDir.resolve("insert_same_key.csv");
         Files.write(csvFile, Arrays.asList(
                 "id,name,age",
                 "1,alice,20"
@@ -298,12 +433,13 @@ class FileSystemHandlerTest {
         FileSystemConfig config = createConfig(csvFile.toString(), "csv");
         FileSystemHandler handler = new FileSystemHandler(config);
 
-        handler.upsert(new Object[]{1, "alice_updated", 21});
+        handler.insert(new Object[]{1, "alice_updated", 21});
 
-        List<Object[]> rows = handler.scan();
-        assertEquals(1, rows.size());
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(2, rows.size());
         assertEquals("alice_updated", rows.get(0)[1]);
         assertEquals(21, rows.get(0)[2]);
+        assertEquals("alice", rows.get(1)[1]);
     }
 
     @Test
@@ -326,31 +462,42 @@ class FileSystemHandlerTest {
     }
 
     @Test
-    void testUpsertOnEmptyTable() {
+    void testInsertOnEmptyTable() {
         FileSystemConfig config = createConfig(null, "csv");
         FileSystemHandler handler = new FileSystemHandler(config);
 
-        handler.upsert(new Object[]{1, "alice", 20});
+        handler.insert(new Object[]{1, "alice", 20});
 
         List<Object[]> rows = handler.scan();
         assertEquals(1, rows.size());
     }
 
     @Test
-    void testUpsertRejectsNullPrimaryKey() {
+    void testInsertRejectsNullPrimaryKey() {
         FileSystemConfig config = createConfig(null, "csv");
         FileSystemHandler handler = new FileSystemHandler(config);
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> handler.upsert(new Object[]{null, "alice", 20})
+                () -> handler.insert(new Object[]{null, "alice", 20})
         );
 
         assertTrue(exception.getMessage().contains("Primary key"));
     }
 
     @Test
-    void testUpsertNormalizesRowTypes() {
+    void testInsertRejectsWrongFieldCount() {
+        FileSystemHandler handler = new FileSystemHandler(createConfig(null, "csv"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> handler.insert(new Object[]{1, "alice"}));
+        assertThrows(IllegalArgumentException.class,
+                () -> handler.insert(new Object[]{1, "alice", 20, "extra"}));
+        assertTrue(handler.scan().isEmpty());
+    }
+
+    @Test
+    void testInsertNormalizesRowTypes() {
         FileSystemConfig config = new FileSystemConfig();
         config.fieldSchemas = Arrays.asList(
                 new FieldSchema("id", "BIGINT"),
@@ -360,7 +507,7 @@ class FileSystemHandlerTest {
         config.primaryKeyIndex = 0;
         FileSystemHandler handler = new FileSystemHandler(config);
 
-        handler.upsert(new Object[]{1, 100.0D});
+        handler.insert(new Object[]{1, 100.0D});
 
         Map<Object, List<Object[]>> result = handler.getByPrimaryKey(Collections.singleton(1L));
         assertEquals(1, result.get(1L).size());

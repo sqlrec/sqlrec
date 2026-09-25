@@ -46,28 +46,33 @@ docker run --rm -d --name sqlrec-demo \
   sqlrec/sqlrec-demo:latest
 ```
 
-Demo 的示例数据保存在进程内存中。先向 HTTP 服务进程写入测试数据：
+Demo 内置五个用户（每人三个兴趣类目）、五个类目（`pc`、`phone`、`book`、`sports`、`home`）和 25 个热门商品的 CSV 数据，各进程首次访问时会加载到内存。
+
+也可以从宿主机直接运行容器中的 `cli.sh`，在 `sqlrec>` 提示符下执行以分号结束的 SQL：
 
 ```bash
-curl -X POST http://localhost:30001/sql/v1 \
-  -H "Content-Type: application/json" \
-  -d @- <<'JSON'
-{
-  "sqls": [
-    "insert into demo_user_interest_category values (1000001, 'pc', 100)",
-    "insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"
-  ]
-}
-JSON
+docker exec -it sqlrec-demo /app/cli.sh
 ```
 
-调用内置的推荐 API：
+```sql
+show tables;
+select * from demo_user_interest_category;
+
+cache table quick_start_user as
+select cast(1000001 as bigint) as user_id;
+
+call demo_rec(quick_start_user);
+```
+
+`quick_start_user` 是传给推荐函数的输入表，`CALL` 会返回推荐结果。按 `Ctrl+D` 退出 SQL 命令行。CLI 和 HTTP 服务的内存数据彼此独立。也可以从宿主机用 `1000001` 至 `1000005` 的用户 ID 调用内置推荐 API：
 
 ```bash
 curl -X POST http://localhost:30001/api/v1/demo_rec \
   -H "Content-Type: application/json" \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
+
+API 会在内存中记录曝光并过滤已返回的商品。样例商品用完后，重启容器即可重置 Demo。
 
 ### 创建自己的表和函数
 

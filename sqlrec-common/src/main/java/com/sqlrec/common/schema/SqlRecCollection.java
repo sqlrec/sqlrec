@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public abstract class SqlRecCollection implements Collection<Object[]> {
@@ -33,6 +34,43 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
     protected abstract boolean addImpl(Object[] objects);
 
     protected abstract boolean removeImpl(Object[] objects);
+
+    protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+        return addAllImpl(newRows) ? newRows.size() : 0;
+    }
+
+    /**
+     * Applies SQL UPDATE rows. Key-value connectors use their normal upsert path;
+     * list-backed connectors can override this to replace the selected old rows.
+     */
+    public boolean replaceAll(List<Object[]> oldRows, List<Object[]> newRows) {
+        if (oldRows.size() != newRows.size()) {
+            throw new IllegalArgumentException("UPDATE row counts do not match");
+        }
+        long startTime = System.currentTimeMillis();
+        String status = "success";
+        try {
+            int updated = replaceAllImpl(oldRows, newRows);
+            size += updated;
+            for (Object[] row : oldRows) {
+                invalidateCacheIfNeeded(row);
+            }
+            for (Object[] row : newRows) {
+                invalidateCacheIfNeeded(row);
+            }
+            return updated > 0;
+        } catch (Throwable e) {
+            log.error("replaceAll in table {} error", tableName, e);
+            status = "error";
+            throw e;
+        } finally {
+            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName,
+                    "operation", "addAll", "status", status);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, tags)
+                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+        }
+    }
 
     protected boolean addAllImpl(Collection<? extends Object[]> c) {
         boolean modified = false;

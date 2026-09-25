@@ -45,7 +45,7 @@ public Collection getModifiableCollection();
 public int getPrimaryKeyIndex();
 ```
 
-`scanImpl()` performs a scan or handles filters that can be pushed down. `getByPrimaryKeyImpl()` should fetch all keys in one batch instead of making one network request per key.
+`scanImpl()` performs a scan or handles filters that can be pushed down. `getByPrimaryKeyImpl()` should fetch all keys in one batch instead of making one network request per key. Its `List<Object[]>` result allows multiple rows per lookup key; retain every matching row when the source permits duplicate keys.
 
 Keep the default `onlyFilterByPrimaryKey()` if the source supports only key filters. Override it only when the connector correctly handles broader filters, as JDBC and MongoDB do.
 

@@ -20,11 +20,11 @@ Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 
 **特性**：
 - 支持单机模式和集群模式
-- 支持 String 和 List 数据结构
+- 支持 `json`、`list` 和 `string` 数据结构
 - 支持 JSON 和 Protobuf value 格式
 - 支持本地缓存加速查询
 - 支持主键过滤查询
-- 支持数据写入和删除
+- 支持 `INSERT`、`UPDATE` 和 `DELETE`
 
 **配置参数**：
 
@@ -77,9 +77,11 @@ CREATE TABLE user_proto (
 ```
 
 **注意事项**：
-- Redis 连接器只支持主键相等过滤（`WHERE key = value`）
+- 查询必须包含主键等值条件（如 `WHERE user_id = 42`）；取回该键下的数据后，还可按其他列过滤，不支持全表扫描
 - 使用本地缓存可以显著提升查询性能
-- List 数据结构适合存储多值场景
+- `list` 模式下，主键是 Redis 列表的索引键，不要求行唯一；同一个键可以保存多条记录。`INSERT` 将新行写到列表头部，`max-list-size` 限制写入后的列表长度
+- `list` 模式的 `UPDATE` 按查询条件选中旧行，每条旧行只移除列表中一条完全相同的记录，再将新行写入列表头部；修改主键时，新行写到新键下。旧行已不存在时不会补插新行
+- `list` 模式的 `DELETE` 会移除与选中行完全相同的所有列表记录；`UPDATE` 则为每条选中的旧行移除一个匹配项。`UPDATE` 的移除和写入是多条 Redis 命令，不保证原子性
 - Protobuf 格式要求 generated Message 类位于 SQLRec 和 Flink 运行时 classpath
 - `format = protobuf` 不支持与 `data-structure = string` 组合使用
 
@@ -275,11 +277,12 @@ MongoDB 连接器用于连接 MongoDB 文档数据库，支持文档查询和数
 
 ```sql
 CREATE TABLE user_behavior (
+  event_id BIGINT,
   user_id BIGINT,
   item_id BIGINT,
   action STRING,
   timestamp BIGINT,
-  PRIMARY KEY (user_id) NOT ENFORCED
+  PRIMARY KEY (event_id) NOT ENFORCED
 ) WITH (
   'connector' = 'mongodb',
   'uri' = 'mongodb://localhost:27017',
@@ -293,6 +296,7 @@ CREATE TABLE user_behavior (
 - 无法下推的过滤条件将由 Calcite 在内存中处理
 - 相同 URI 共享 MongoClient 实例
 - Upsert 操作基于主键自动判断插入或更新
+- 行为记录使用 `event_id` 作为主键；若改用 `user_id`，同一用户的后续写入会替换已有记录
 
 ### 6. Filesystem Connector
 
@@ -306,7 +310,8 @@ Filesystem 连接器用于读取本地文件系统中的数据文件，支持 CS
 - 支持 CSV 和 JSON 两种文件格式
 - 数据仅在首次访问时加载一次，后续访问直接使用内存数据
 - 支持主键查询和过滤查询
-- 支持数据 Upsert 和删除（仅修改内存，不写回文件系统）
+- 主键是查找键，同一主键可保存多行
+- 支持内存中的插入、更新和删除（不写回文件系统）
 - 如果未配置路径或路径不存在，自动初始化为空表
 
 **配置参数**：
@@ -351,11 +356,24 @@ CREATE TABLE temp_table (
 ) WITH (
   'connector' = 'filesystem'
 );
+
+-- 同一用户可以有多条兴趣记录
+CREATE TABLE user_interest (
+  user_id BIGINT,
+  category STRING,
+  PRIMARY KEY (user_id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/user_interest.csv'
+);
 ```
 
 **注意事项**：
 - CSV 文件第一行为表头，会被自动跳过
-- CSV 文件支持双引号包裹的字段（RFC 4180）
+- CSV 文件支持双引号包裹的字段、字段中的逗号及双引号转义；暂不支持字段内换行
 - JSON 文件支持数组格式 `[{...}, {...}]` 和单对象格式 `{...}`
 - 数据写入操作仅修改内存中的数据，不会写回到文件系统
 - 如果路径不存在或格式无效，表会被初始化为空表，不会抛出异常
+- 加载 CSV/JSON 时保留同键的全部记录；写入会追加到该键的列表头部，删除按整行内容匹配并移除全部相同记录
+- `UPDATE` 按查询条件选中旧行，并逐行替换；更新查找键时，其他同键记录仍会保留
+- 仍需声明单列主键，但它只是查找键，不要求每行唯一

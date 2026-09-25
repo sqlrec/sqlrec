@@ -37,7 +37,13 @@ Redis, Milvus, JDBC, MongoDB, and Filesystem tables should generally declare a p
 PRIMARY KEY (user_id) NOT ENFORCED
 ```
 
-SQLRec can use the key to optimize a Join into a batched lookup. The key must match the external store. SQLRec does not verify uniqueness in the source data.
+SQLRec can use this field for batched lookups and Join optimization. `NOT ENFORCED` means the declaration does not guarantee uniqueness. Whether one key can identify multiple rows depends on the connector's storage mode:
+
+- Redis `list` mode and Filesystem use the primary key as a lookup key. Multiple rows, including identical rows, can share one key. Choose a field that groups the rows to retrieve, such as `user_id`.
+- Redis `json` and `string` modes store one value per key; a write to the same key overwrites the old value.
+- For other connectors, uniqueness and write behavior depend on the implementation and the underlying store. See the [connector reference](../reference/connectors/builtin-connectors.md).
+
+Declaring `PRIMARY KEY` therefore does not mean every row must have a unique key. In multi-row modes, it locates a group of rows.
 
 ### Data Types
 

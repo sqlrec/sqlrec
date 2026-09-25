@@ -71,10 +71,11 @@ public class TestFileSystemTable {
         new SqlTestCase("select * from t1 where id = 2 and name = 'Bob'",
                 Collections.singletonList(new Object[]{2, "Bob", 25})).test(schema);
 
-        // upsert: insert with same primary key updates the row
-        new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice2', 31)", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1",
-                Collections.singletonList(new Object[]{1, "Alice2", 31})).test(schema);
+        // The primary key is a lookup key, so another row with the same key is retained.
+        new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice2', 31)",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 order by name desc",
+                Arrays.asList(new Object[]{1, "Alice2", 31}, new Object[]{1, "Alice", 30})).test(schema);
 
         // insert new row (memory only)
         new SqlTestCase("insert into t1 (id, name, age) values (4, 'Dave', 40)", null).test(schema);
@@ -87,13 +88,18 @@ public class TestFileSystemTable {
                 Collections.emptyList()).test(schema);
 
         // join with local table
-        new SqlTestCase("select * from t2 join t1 on t2.id = t1.id",
-                Arrays.asList(new Object[]{1, "Alice", 1, "Alice2", 31}, new Object[]{2, "Bob", 2, "Bob", 25})).test(schema);
-
-        // left join
-        new SqlTestCase("select * from t2 left join t1 on t2.id = t1.id",
+        new SqlTestCase("select * from t2 join t1 on t2.id = t1.id order by t2.id, t1.name desc",
                 Arrays.asList(
                         new Object[]{1, "Alice", 1, "Alice2", 31},
+                        new Object[]{1, "Alice", 1, "Alice", 30},
+                        new Object[]{2, "Bob", 2, "Bob", 25}
+                )).test(schema);
+
+        // left join
+        new SqlTestCase("select * from t2 left join t1 on t2.id = t1.id order by t2.id, t1.name desc",
+                Arrays.asList(
+                        new Object[]{1, "Alice", 1, "Alice2", 31},
+                        new Object[]{1, "Alice", 1, "Alice", 30},
                         new Object[]{2, "Bob", 2, "Bob", 25},
                         new Object[]{3, "Charlie", null, null, null}
                 )).test(schema);
@@ -103,8 +109,21 @@ public class TestFileSystemTable {
                 Collections.singletonList(new Object[]{1, "Alice", 1, "Alice2", 31})).test(schema);
 
         // select with projection
-        new SqlTestCase("select t1.id, t1.name from t2 join t1 on t2.id = t1.id",
-                Arrays.asList(new Object[]{1, "Alice2"}, new Object[]{2, "Bob"})).test(schema);
+        new SqlTestCase("select t1.id, t1.name from t2 join t1 on t2.id = t1.id order by t1.id, t1.name desc",
+                Arrays.asList(new Object[]{1, "Alice2"}, new Object[]{1, "Alice"}, new Object[]{2, "Bob"})).test(schema);
+
+        // DELETE must remove only the selected row when another row shares its lookup key.
+        new SqlTestCase("delete from t1 where id = 1 and name = 'Alice2'",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice", 30})).test(schema);
+
+        // The updated value of one row can equal the old value of another row.
+        new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice', 31)", null).test(schema);
+        new SqlTestCase("update t1 set age = age + 1 where id = 1 and name = 'Alice'",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 order by age",
+                Arrays.asList(new Object[]{1, "Alice", 31}, new Object[]{1, "Alice", 32})).test(schema);
     }
 
     @Test
@@ -129,15 +148,20 @@ public class TestFileSystemTable {
         new SqlTestCase("select * from t1 where price > 20",
                 Collections.singletonList(new Object[]{1, "Book", 50})).test(schema);
 
-        // upsert
+        // Another row with the same lookup key is retained.
         new SqlTestCase("insert into t1 (id, name, price) values (1, 'Book2', 60)", null).test(schema);
-        new SqlTestCase("select * from t1 where id = 1",
-                Collections.singletonList(new Object[]{1, "Book2", 60})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 order by name desc",
+                Arrays.asList(new Object[]{1, "Book2", 60}, new Object[]{1, "Book", 50})).test(schema);
 
         // insert new row
         new SqlTestCase("insert into t1 (id, name, price) values (3, 'Notebook', 30)", null).test(schema);
         new SqlTestCase("select * from t1 where id = 3",
                 Collections.singletonList(new Object[]{3, "Notebook", 30})).test(schema);
+
+        new SqlTestCase("update t1 set price = 55 where id = 1 and name = 'Book'",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 order by name",
+                Arrays.asList(new Object[]{1, "Book", 55}, new Object[]{1, "Book2", 60})).test(schema);
 
         // delete
         new SqlTestCase("delete from t1 where id = 2", null).test(schema);
@@ -167,6 +191,52 @@ public class TestFileSystemTable {
         new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice', 30)", null).test(schema);
         new SqlTestCase("select * from t1",
                 Collections.singletonList(new Object[]{1, "Alice", 30})).test(schema);
+
+        new SqlTestCase("insert into t1 (id, name, age) values (2, 'Bob', 25), (2, 'Carol', 26)",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 2 order by name",
+                Arrays.asList(new Object[]{2, "Bob", 25}, new Object[]{2, "Carol", 26})).test(schema);
+        new SqlTestCase("delete from t1 where id = 2",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 2", Collections.emptyList()).test(schema);
+    }
+
+    @Test
+    public void testUpdateOnlyMatchingRowUnderSharedLookupKey() throws Exception {
+        Map<String, Table> tableMap = new HashMap<>();
+        tableMap.put("t1", getCsvUsersTable());
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
+            @Override
+            protected Map<String, Table> getTableMap() {
+                return tableMap;
+            }
+        });
+        CalciteSchemaFactory.setGlobalSchema(schema);
+
+        new SqlTestCase("insert into t1 (id, name, age) values (1, 'Alice2', 31)", null).test(schema);
+        new SqlTestCase("update t1 set name = 'Updated' where id = 1 and name = 'Alice'",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1 order by name",
+                Arrays.asList(new Object[]{1, "Alice2", 31}, new Object[]{1, "Updated", 30})).test(schema);
+
+        // Moving a row to a different lookup key must leave its sibling in place.
+        new SqlTestCase("update t1 set id = 9 where id = 1 and name = 'Updated'",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice2", 31})).test(schema);
+        new SqlTestCase("select * from t1 where id = 9",
+                Collections.singletonList(new Object[]{9, "Updated", 30})).test(schema);
+        new SqlTestCase("update t1 set age = 30 where id = 9",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 9",
+                Collections.singletonList(new Object[]{9, "Updated", 30})).test(schema);
+        new SqlTestCase("update t1 set name = 'Renamed', age = age + 2 where id = 9",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 9",
+                Collections.singletonList(new Object[]{9, "Renamed", 32})).test(schema);
+        new SqlTestCase("update t1 set age = 99 where id = 99",
+                Collections.singletonList(new Object[]{0L})).test(schema);
     }
 
     public static Table getCsvUsersTable() {

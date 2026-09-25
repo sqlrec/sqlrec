@@ -390,7 +390,7 @@ The six connectors share the same structure: `config/` (Options parsing of table
 
 | Connector | Read Path | Write Path | Key Points |
 | --- | --- | --- | --- |
-| **redis** | `RedisCalciteTable` (KV table): primary key `get/mget/lrange`; non-primary key full scan with filter | `RedisSinkTableFunction` (lpush/setex etc., codec: String/Json) | `RedisWrapper`/`RedisClusterWrapper` static connection pools (per URL); pipeline serialized with a global lock (autoFlush is connection-level global); released via shutdown hook; Flink side has an additional Lookup source |
+| **redis** | `RedisCalciteTable` (KV table): primary-key `get/mget/lrange`; no full-table scan | SQL writes use `RedisCollection`/`RedisHandler`; Flink writes use `RedisSinkTableFunction` | `RedisWrapper`/`RedisClusterWrapper` static connection pools (per URL); in list mode the primary key is a lookup key shared by multiple rows; pipeline serialized with a global lock (autoFlush is connection-level global); released via shutdown hook; Flink also has a Lookup source |
 | **jdbc** | `JdbcCalciteTable`: `JdbcHandler.scan(filters)` generates select with where | upsert/delete (including `upsertBatch`/`deleteBatch`) | HikariCP pool (key = url+user+driver+schema+password, credential rotation auto-evicts old pools); primary key point lookup uses IN batch |
 | **mongodb** | `MongoCalciteTable` (KV table) | same | `MongoHandler` |
 | **milvus** | `MilvusCalciteTable` implements `VectorSearchable`: ANN retrieval | `MilvusDynamicTableSink` (Flink write) | Right table for vector join; Flink DynamicTableFactory dual-stack |

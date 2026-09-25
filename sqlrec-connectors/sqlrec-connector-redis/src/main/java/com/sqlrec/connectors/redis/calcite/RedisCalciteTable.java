@@ -98,6 +98,13 @@ public class RedisCalciteTable extends SqlRecKvTable {
         }
 
         @Override
+        protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+            return redisHandler.isListMode()
+                    ? redisHandler.replaceListRows(oldRows, newRows)
+                    : super.replaceAllImpl(oldRows, newRows);
+        }
+
+        @Override
         protected boolean removeAllImpl(Collection<?> c) {
             redisHandler.batchDelete((Collection<? extends Object[]>) c);
             return true;

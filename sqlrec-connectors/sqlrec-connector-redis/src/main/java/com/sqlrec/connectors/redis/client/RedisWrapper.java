@@ -158,7 +158,12 @@ public class RedisWrapper implements AbstractRedisWrapper {
     }
 
     public RedisFuture<Long> lrem(byte[] key, byte[] value) {
-        return getCommands().lrem(key, 0, value);
+        return lrem(key, 0, value);
+    }
+
+    @Override
+    public RedisFuture<Long> lrem(byte[] key, long count, byte[] value) {
+        return getCommands().lrem(key, count, value);
     }
 
     public RedisFuture<String> ltrim(byte[] key, long start, long stop) {

@@ -174,47 +174,86 @@ public class RedisHandler {
             // Compute keys and encode values before submitting any asynchronous command:
             // a malformed row (e.g. null primary key) fails the whole batch before
             // any command is issued.
-            List<RedisFuture<?>> futures;
             if (isListMode()) {
-                // LPUSH is intentional: list mode keeps the newest record at the head of the list.
-                // Aggregate rows by key: byte[] has reference equality, so the map key
-                // is the key string (UTF-8 encoded back to bytes when issuing commands).
                 Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();
                 for (Object[] data : dataList) {
                     byte[] key = getKey(data);
                     keyToValues.computeIfAbsent(new String(key, StandardCharsets.UTF_8), k -> new ArrayList<>())
                             .add(codec.encode(data));
                 }
-                List<Map.Entry<String, List<byte[]>>> entries = new ArrayList<>(keyToValues.entrySet());
-                futures = new ArrayList<>();
-                for (Map.Entry<String, List<byte[]>> entry : entries) {
-                    byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
-                    futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
-                    if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                        futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
-                    }
-                    futures.add(redisClient.expire(key, redisConfig.ttl));
-                }
-            } else {
-                List<byte[]> keys = new ArrayList<>(dataList.size());
-                List<byte[]> values = new ArrayList<>(dataList.size());
-                for (Object[] data : dataList) {
-                    keys.add(getKey(data));
-                    values.add(codec.encode(data));
-                }
-                // One asynchronous SET ... EX per row. Unlike MSET + EXPIRE this
-                // halves the command count and also works in cluster
-                // mode (each SET is routed to the key's slot; MSET fails with
-                // CROSSSLOT for keys spanning multiple slots).
-                futures = new ArrayList<>(keys.size());
-                for (int i = 0; i < keys.size(); i++) {
-                    futures.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
-                }
+                pushListRows(keyToValues);
+                return;
+            }
+            List<byte[]> keys = new ArrayList<>(dataList.size());
+            List<byte[]> values = new ArrayList<>(dataList.size());
+            for (Object[] data : dataList) {
+                keys.add(getKey(data));
+                values.add(codec.encode(data));
+            }
+            // Each SET with expiry is routed to its own cluster slot.
+            List<RedisFuture<?>> futures = new ArrayList<>(keys.size());
+            for (int i = 0; i < keys.size(); i++) {
+                futures.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
             }
             awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch insert data to Redis", e);
         }
+    }
+
+    /** Replace one occurrence of each selected list row, then prepend its new value. */
+    public int replaceListRows(List<Object[]> oldRows, List<Object[]> newRows) {
+        if (!isListMode()) {
+            throw new IllegalStateException("Row replacement requires Redis list mode");
+        }
+        if (oldRows.size() != newRows.size()) {
+            throw new IllegalArgumentException("UPDATE row counts do not match");
+        }
+        List<byte[]> oldKeys = new ArrayList<>(oldRows.size());
+        List<byte[]> oldValues = new ArrayList<>(oldRows.size());
+        List<byte[]> newKeys = new ArrayList<>(newRows.size());
+        List<byte[]> newValues = new ArrayList<>(newRows.size());
+        // Encode every row before changing Redis so malformed input cannot remove old rows.
+        for (int i = 0; i < oldRows.size(); i++) {
+            oldKeys.add(getKey(oldRows.get(i)));
+            oldValues.add(codec.encode(oldRows.get(i)));
+            newKeys.add(getKey(newRows.get(i)));
+            newValues.add(codec.encode(newRows.get(i)));
+        }
+
+        Map<String, List<byte[]>> replacements = new LinkedHashMap<>();
+        int replaced = 0;
+        try {
+            // Remove all selected old rows before pushing new values. Otherwise a new
+            // value could be mistaken for the next selected old row.
+            for (int i = 0; i < oldKeys.size(); i++) {
+                Long removed = await(redisClient.lrem(oldKeys.get(i), 1, oldValues.get(i)));
+                if (removed != null && removed > 0) {
+                    String key = new String(newKeys.get(i), StandardCharsets.UTF_8);
+                    replacements.computeIfAbsent(key, ignored -> new ArrayList<>())
+                            .add(newValues.get(i));
+                    replaced++;
+                }
+            }
+            pushListRows(replacements);
+            return replaced;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to replace Redis list rows", e);
+        }
+    }
+
+    private void pushListRows(Map<String, List<byte[]>> keyToValues) throws Exception {
+        List<RedisFuture<?>> futures = new ArrayList<>(keyToValues.size() * 3);
+        for (Map.Entry<String, List<byte[]>> entry : keyToValues.entrySet()) {
+            byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
+            // LPUSH with multiple values has the same order as repeated LPUSH calls.
+            futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
+            if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+                futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+            }
+            futures.add(redisClient.expire(key, redisConfig.ttl));
+        }
+        awaitAll(futures);
     }
 
     public void batchDelete(Collection<? extends Object[]> dataList) {
@@ -242,13 +281,13 @@ public class RedisHandler {
         }
     }
 
-    private boolean isListMode() {
+    public boolean isListMode() {
         return redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE);
     }
 
-    private void await(RedisFuture<?> future) throws Exception {
+    private <T> T await(RedisFuture<T> future) throws Exception {
         try {
-            future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (Exception e) {
             maybeInvalidateOnFailure(e);
             throw e;

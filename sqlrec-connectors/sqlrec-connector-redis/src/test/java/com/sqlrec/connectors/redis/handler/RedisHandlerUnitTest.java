@@ -544,6 +544,88 @@ class RedisHandlerUnitTest {
     }
 
     @Test
+    void testListModeUpdateRemovesSelectedRowsBeforePushingReplacements() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.lrem(any(), eq(1L), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L, 1L, 0L);
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(1L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        int updated = listHandler.replaceListRows(
+                Arrays.asList(new Object[]{"k1", "a"}, new Object[]{"k1", "b"},
+                        new Object[]{"k1", "missing"}),
+                Arrays.asList(new Object[]{"k1", "b"}, new Object[]{"k2", "moved"},
+                        new Object[]{"k1", "ignored"}));
+
+        assertEquals(2, updated);
+        InOrder order = inOrder(mockRedisClient);
+        order.verify(mockRedisClient, times(3)).lrem(any(), eq(1L), any());
+        order.verify(mockRedisClient, times(2)).lpush(any(), any(byte[][].class));
+        ArgumentCaptor<byte[]> keyCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<byte[][]> valuesCaptor = ArgumentCaptor.forClass(byte[][].class);
+        verify(mockRedisClient, times(2)).lpush(keyCaptor.capture(), valuesCaptor.capture());
+        assertEquals("testdb:testtable:k1", new String(keyCaptor.getAllValues().get(0), StandardCharsets.UTF_8));
+        assertEquals("testdb:testtable:k2", new String(keyCaptor.getAllValues().get(1), StandardCharsets.UTF_8));
+        assertEquals(1, valuesCaptor.getAllValues().get(0).length);
+        assertEquals(1, valuesCaptor.getAllValues().get(1).length);
+        assertTrue(new String(valuesCaptor.getAllValues().get(0)[0], StandardCharsets.UTF_8).contains("\"b\""));
+        assertTrue(new String(valuesCaptor.getAllValues().get(1)[0], StandardCharsets.UTF_8).contains("moved"));
+        verify(mockRedisClient, times(2)).ltrim(any(), eq(0L), eq(4L));
+        verify(mockRedisClient, times(2)).expire(any(), eq(60L));
+    }
+
+    @Test
+    void testListModeUpdateSkipsMissingRow() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.lrem(any(), eq(1L), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(0L);
+
+        assertEquals(0, listHandler.replaceListRows(
+                Collections.singletonList(new Object[]{"k1", "missing"}),
+                Collections.singletonList(new Object[]{"k1", "new"})));
+        verify(mockRedisClient, never()).lpush(any(), any(byte[][].class));
+        verify(mockRedisClient, never()).expire(any(), anyLong());
+    }
+
+    @Test
+    void testListModeUpdateReplacesDuplicateRowsOneAtATime() throws Exception {
+        RedisHandler listHandler = newListModeHandler();
+        when(mockRedisClient.lrem(any(), eq(1L), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(2L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        assertEquals(2, listHandler.replaceListRows(
+                Arrays.asList(new Object[]{"k1", "old"}, new Object[]{"k1", "old"}),
+                Arrays.asList(new Object[]{"k1", "new"}, new Object[]{"k1", "new"})));
+
+        verify(mockRedisClient, times(2)).lrem(any(), eq(1L), any());
+        ArgumentCaptor<byte[][]> values = ArgumentCaptor.forClass(byte[][].class);
+        verify(mockRedisClient).lpush(any(), values.capture());
+        assertEquals(2, values.getValue().length);
+    }
+
+    @Test
+    void testListModeUpdateValidatesBatchBeforeRemovingRows() {
+        RedisHandler listHandler = newListModeHandler();
+
+        assertThrows(IllegalArgumentException.class, () -> listHandler.replaceListRows(
+                Collections.singletonList(new Object[]{"k1", "old"}),
+                Collections.singletonList(new Object[]{null, "new"})));
+        assertThrows(IllegalArgumentException.class, () -> listHandler.replaceListRows(
+                Collections.singletonList(new Object[]{"k1", "old"}), Collections.emptyList()));
+        verifyNoInteractions(mockRedisClient);
+    }
+
+    @Test
     void testProtobufListInsertAndScan() throws Exception {
         RedisHandler protobufHandler = newProtobufHandler(true);
         when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
@@ -617,5 +699,29 @@ class RedisHandlerUnitTest {
         Field deleted = Field.parseFrom(valueCaptor.getValue());
         assertEquals("rowKey", deleted.getName());
         assertEquals("value1", deleted.getJsonName());
+    }
+
+    @Test
+    void testProtobufListUpdateUsesEncodedOldAndNewRows() throws Exception {
+        RedisHandler protobufHandler = newProtobufHandler(true);
+        when(mockRedisClient.lrem(any(), eq(1L), any())).thenReturn(mockLremFuture);
+        when(mockLremFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+        when(mockRedisClient.lpush(any(), any(byte[][].class))).thenReturn(mockLpushFuture);
+        when(mockRedisClient.ltrim(any(), anyLong(), anyLong())).thenReturn(mockLtrimFuture);
+        when(mockRedisClient.expire(any(), anyLong())).thenReturn(mockExpireFuture);
+        when(mockLpushFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(1L));
+        when(mockLtrimFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture("OK"));
+        when(mockExpireFuture.toCompletableFuture()).thenReturn(CompletableFuture.completedFuture(true));
+
+        assertEquals(1, protobufHandler.replaceListRows(
+                Collections.singletonList(new Object[]{"rowKey", "old"}),
+                Collections.singletonList(new Object[]{"rowKey", "new"})));
+
+        ArgumentCaptor<byte[]> oldValue = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<byte[][]> newValues = ArgumentCaptor.forClass(byte[][].class);
+        verify(mockRedisClient).lrem(any(), eq(1L), oldValue.capture());
+        verify(mockRedisClient).lpush(any(), newValues.capture());
+        assertEquals("old", Field.parseFrom(oldValue.getValue()).getJsonName());
+        assertEquals("new", Field.parseFrom(newValues.getValue()[0]).getJsonName());
     }
 }

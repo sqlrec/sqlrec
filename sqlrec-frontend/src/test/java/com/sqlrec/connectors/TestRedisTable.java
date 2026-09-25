@@ -140,6 +140,37 @@ public class TestRedisTable {
                 "select t3.id id1, t2.id id2 from t3 join t2 on t3.id = t2.id where t2.name = 'Alice3'" +
                 ") t2 ",
                 Arrays.asList(new Object[]{1, 1}, new Object[]{1, 1})).test(schema);
+
+        // UPDATE replaces only the matching list entry under the shared index key.
+        new SqlTestCase("update t2 set name = 'Alice3' where id = 1 and name = 'Alice2'",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t2 where id = 1 order by cnt",
+                Arrays.asList(new Object[]{1, "Alice3", 2}, new Object[]{1, "Alice3", 3})).test(schema);
+
+        // One new row equals another selected old row; both must still be updated.
+        new SqlTestCase("update t2 set cnt = cnt + 1 where id = 1",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t2 where id = 1 order by cnt",
+                Arrays.asList(new Object[]{1, "Alice3", 3}, new Object[]{1, "Alice3", 4})).test(schema);
+
+        new SqlTestCase("update t2 set id = 2 where id = 1 and cnt = 4",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t2 where id = 1",
+                Collections.singletonList(new Object[]{1, "Alice3", 3})).test(schema);
+        new SqlTestCase("select * from t2 where id = 2",
+                Collections.singletonList(new Object[]{2, "Alice3", 4})).test(schema);
+
+        // Identical list values are separate rows, so UPDATE must replace both.
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
+        new SqlTestCase("update t2 set name = 'Updated' where id = 1",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t2 where id = 1",
+                Arrays.asList(new Object[]{1, "Updated", 3}, new Object[]{1, "Updated", 3})).test(schema);
+        new SqlTestCase("update t2 set name = 'Missing' where id = 99",
+                Collections.singletonList(new Object[]{0L})).test(schema);
+
+        new SqlTestCase("delete from t2 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t2 where id = 2", null).test(schema);
     }
 
     @Test

@@ -37,7 +37,13 @@ Redis、Milvus、JDBC、MongoDB 和 Filesystem 表通常应声明主键：
 PRIMARY KEY (user_id) NOT ENFORCED
 ```
 
-SQLRec 可以利用主键批量查询优化 Join。主键应与外部存储中的键保持一致；SQLRec 不会自动检查外部数据是否唯一。
+SQLRec 可以利用这个字段进行批量查找并优化 Join。`NOT ENFORCED` 表示声明本身不保证数据唯一；同一主键值能否对应多行，取决于 Connector 的存储方式：
+
+- Redis 的 `list` 模式和 Filesystem 将主键当作索引键，同一键下允许多行，包括内容完全相同的行。建表时应选择用于分组查找的字段，例如 `user_id`。
+- Redis 的 `json`、`string` 模式每个键只保存一个值，写入相同键会覆盖原值。
+- 其他 Connector 的唯一性和写入行为由对应实现及底层存储决定，请查看各自的[连接器说明](../reference/connectors/builtin-connectors.md)。
+
+因此，声明 `PRIMARY KEY` 不等于要求每行都有唯一的键；对于支持多行的模式，它只用于定位一组记录。
 
 ### 数据类型
 

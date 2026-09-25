@@ -377,7 +377,7 @@ AbstractTable
 
 | Connector | 读路径 | 写路径 | 要点 |
 | --- | --- | --- | --- |
-| **redis** | `RedisCalciteTable`（KV 表）：主键 `get/mget/lrange`；非主键全扫过滤 | `RedisSinkTableFunction`（lpush/setex 等，codec：String/Json） | `RedisWrapper`/`RedisClusterWrapper` 静态连接池（按 URL）；pipeline 用全局锁串行（autoFlush 是连接级全局）；shutdown hook 释放；Flink 侧另有 Lookup 源 |
+| **redis** | `RedisCalciteTable`（KV 表）：按主键 `get/mget/lrange`，不支持全表扫描 | SQL 写入经 `RedisCollection`/`RedisHandler`；Flink 写入经 `RedisSinkTableFunction` | `RedisWrapper`/`RedisClusterWrapper` 静态连接池（按 URL）；list 模式主键是可对应多行的索引键；pipeline 用全局锁串行（autoFlush 是连接级全局）；shutdown hook 释放；Flink 侧另有 Lookup 源 |
 | **jdbc** | `JdbcCalciteTable`：`JdbcHandler.scan(filters)` 生成带 where 的 select | upsert/delete（含 `upsertBatch`/`deleteBatch`） | HikariCP 池（key= url+user+driver+schema+password，凭据轮换自动驱逐旧池）；主键点查走 IN 批量 |
 | **mongodb** | `MongoCalciteTable`（KV 表） | 同 | `MongoHandler` |
 | **milvus** | `MilvusCalciteTable` 实现 `VectorSearchable`：ANN 检索 | `MilvusDynamicTableSink`（Flink 写入） | 向量 join 的右表；Flink DynamicTableFactory 双栈 |

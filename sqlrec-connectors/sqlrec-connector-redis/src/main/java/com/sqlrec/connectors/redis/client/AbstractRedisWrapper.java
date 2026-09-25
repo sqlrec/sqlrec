@@ -37,6 +37,9 @@ public interface AbstractRedisWrapper {
 
     RedisFuture<Long> lrem(byte[] key, byte[] value);
 
+    /** Remove at most {@code count} matching list entries; 0 removes all. */
+    RedisFuture<Long> lrem(byte[] key, long count, byte[] value);
+
     RedisFuture<String> ltrim(byte[] key, long start, long stop);
 
     RedisFuture<Boolean> expire(byte[] key, long seconds);

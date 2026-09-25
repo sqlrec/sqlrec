@@ -21,40 +21,41 @@ docker logs -f sqlrec-demo
 
 ## 进入 SQLRec CLI
 
-执行下面的命令进入容器内置的 SQLRec CLI，其使用方式与通过 beeline 连接 SQLRec 基本一致：
+从宿主机直接运行容器中的 `cli.sh`，进入 SQL 命令行：
 
 ```bash
-docker exec -it sqlrec-demo bash /app/cli.sh
+docker exec -it sqlrec-demo /app/cli.sh
 ```
 
-可以先查看 Demo 已经加载的对象：
+看到 `sqlrec>` 提示符后，就进入了 SQL 命令行，可以直接输入以分号结束的 SQL。例如，查看 Demo 已加载的对象和数据：
 
 ```sql
 show tables;
 show functions;
 show apis;
+select * from demo_user_interest_category;
 ```
 
-## 写入测试数据
+按 `Ctrl+D` 退出 SQL 命令行。CLI 在容器内启动独立进程，其内存数据与 HTTP 服务进程不共享。
 
-quick-start 的 filesystem 表启动时为空。在 CLI 中写入一条用户偏好和五条热门商品：
+## 查看内置测试数据
+
+quick-start 内置五个用户、每人三条兴趣偏好，以及 25 条热门商品，覆盖 `pc`、`phone`、`book`、`sports`、`home` 五个类目，分别保存在两个 CSV 文件中。CLI 首次查询时会将数据加载到当前进程的内存：
+
+| 用户 ID | 兴趣类目 |
+| --- | --- |
+| `1000001` | `pc`、`phone`、`book` |
+| `1000002` | `phone`、`sports`、`home` |
+| `1000003` | `book`、`home`、`pc` |
+| `1000004` | `sports`、`pc`、`phone` |
+| `1000005` | `home`、`book`、`sports` |
 
 ```sql
-insert into demo_user_interest_category values
-  (1000001, 'pc', 100);
-
-insert into demo_category_hot_item values
-  ('pc', 1000001, 100),
-  ('pc', 1000002, 90),
-  ('pc', 1000003, 80),
-  ('pc', 1000004, 70),
-  ('pc', 1000005, 60);
-
 select * from demo_user_interest_category;
 select * from demo_category_hot_item;
 ```
 
-数据只存在于当前 CLI 进程的内存中，退出 CLI 后会被清除。
+也可以通过 `INSERT` 增加或更新数据。修改只保存在当前 CLI 进程的内存中，退出 CLI 后会恢复到 CSV 中的初始数据。
 
 ## 获取推荐结果
 
@@ -67,28 +68,13 @@ select cast(1000001 as bigint) as user_id;
 call demo_rec(quick_start_user);
 ```
 
-函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。如果结果为空，先确认写入和调用是在同一个 CLI 会话中完成的。
+函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。
 
-曝光结果会写入当前进程内存中的 `demo_exposure_item` 表；再次调用时，`demo_rec` 会使用这些记录进行去重。如果继续重复调用，当前准备的候选商品最终都会被过滤；重新进入 CLI 或写入新商品即可继续测试。
+曝光结果会写入当前进程内存中的 `demo_exposure_item` 表；再次调用时，`demo_rec` 会使用这些记录进行去重。如果继续重复调用，内置候选商品最终都会被过滤；重新进入 CLI 或写入新商品即可继续测试。
 
 ## 通过 API 调用推荐接口
 
-容器中的 CLI 和 HTTP 服务运行在不同进程中，因此它们各自维护独立的 filesystem 内存数据。Demo 镜像默认开启 SQL API，先通过 `/sql/v1` 向 HTTP 服务进程写入测试数据：
-
-```bash
-curl -X POST http://localhost:30001/sql/v1 \
-  -H "Content-Type: application/json" \
-  -d @- <<'JSON'
-{
-  "sqls": [
-    "insert into demo_user_interest_category values (1000001, 'pc', 100)",
-    "insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90), ('pc', 1000003, 80)"
-  ]
-}
-JSON
-```
-
-然后调用 `demo_rec` 推荐 API：
+容器中的 CLI 和 HTTP 服务运行在不同进程中，各自从内置 CSV 加载初始数据。启动后可直接调用 `demo_rec` 推荐 API：
 
 ```bash
 curl -X POST http://localhost:30001/api/v1/demo_rec \
@@ -96,7 +82,7 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-接口会返回 `demo_rec` 的推荐结果。如果 API 结果为空，请确认已通过 `/sql/v1` 为 HTTP 进程写入数据；CLI 中的数据对 HTTP 进程不可见。通过 SQL API 写入的测试数据和推荐产生的曝光数据都会保留在 HTTP 服务进程内，直到容器停止。
+接口会返回 `demo_rec` 的推荐结果。推荐产生的曝光数据保留在 HTTP 服务进程内，再次调用会过滤已曝光商品；内置候选商品用完后，重启容器即可重置。Demo 镜像仍默认开启 `/sql/v1`，可用它向 HTTP 服务进程增加测试数据；CLI 中的修改对 HTTP 进程不可见。
 
 ## 查看 UI
 
@@ -112,6 +98,9 @@ Demo 镜像中的 `SQL_SCHEMA_DIR` 设置为 `/app/sql`，SQLRec 会递归加载
 sqlrec-demo/src/main/sql/
 ├── quick_start/
 │   ├── api/demo_rec.sql
+│   ├── data/
+│   │   ├── demo_category_hot_item.csv
+│   │   └── demo_user_interest_category.csv
 │   ├── function/demo_rec.sql
 │   └── table/
 │       ├── demo_category_hot_item.sql
@@ -126,7 +115,7 @@ sqlrec-demo/src/main/sql/
     └── udf/
 ```
 
-quick-start 的三张表只配置 `'connector' = 'filesystem'`，不指定数据文件路径。完整的 MovieLens 示例用于展示 Redis、Milvus、Kafka、模型训练和在线推理等完整链路。
+quick-start 的两张输入表通过 `${SQL_SCHEMA_DIR}` 指向内置 CSV，并在首次读取时加载到内存。filesystem 表将主键作为查找键，因此用户兴趣表能在同一 `user_id` 下保存三条记录；曝光表也以 `user_id` 为查找键，初始为空，可以保存每位用户的多条曝光。完整的 MovieLens 示例用于展示 Redis、Milvus、Kafka、模型训练和在线推理等完整链路。
 
 ## 在本地元数据模式开发 DDL
 

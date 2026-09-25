@@ -20,11 +20,11 @@ The Redis connector is used to connect to Redis databases, supporting key-value 
 
 **Features**:
 - Supports standalone and cluster modes
-- Supports String and List data structures
+- Supports `json`, `list`, and `string` data structures
 - Supports JSON and Protobuf value formats
 - Supports local cache for query acceleration
 - Supports primary key filter queries
-- Supports data insertion and deletion
+- Supports `INSERT`, `UPDATE`, and `DELETE`
 
 **Configuration Parameters**:
 
@@ -77,9 +77,11 @@ CREATE TABLE user_proto (
 ```
 
 **Notes**:
-- Redis connector only supports primary key equality filtering (`WHERE key = value`)
+- Queries require a primary-key equality condition (for example, `WHERE user_id = 42`); other columns can be filtered after the key lookup, but full-table scans are unsupported
 - Using local cache can significantly improve query performance
-- List data structure is suitable for multi-value scenarios
+- In `list` mode, the primary key is a Redis list lookup key, not a unique row identifier. Multiple rows can share one key. `INSERT` prepends rows, and `max-list-size` limits the list length after writes
+- In `list` mode, `UPDATE` selects old rows using the SQL predicate, removes one exact list entry per selected row, then prepends each new row. Changing the primary key moves the row to the new key. A missing old row is not inserted
+- In `list` mode, `DELETE` removes all list entries identical to a selected row, while `UPDATE` removes one matching entry for each selected old row. The remove and insert commands in `UPDATE` are not atomic
 - Protobuf format requires the generated Message class on the SQLRec and Flink runtime classpaths
 - `format = protobuf` cannot be combined with `data-structure = string`
 
@@ -275,11 +277,12 @@ The MongoDB connector is used to connect to MongoDB document databases, supporti
 
 ```sql
 CREATE TABLE user_behavior (
+  event_id BIGINT,
   user_id BIGINT,
   item_id BIGINT,
   action STRING,
   timestamp BIGINT,
-  PRIMARY KEY (user_id) NOT ENFORCED
+  PRIMARY KEY (event_id) NOT ENFORCED
 ) WITH (
   'connector' = 'mongodb',
   'uri' = 'mongodb://localhost:27017',
@@ -293,6 +296,7 @@ CREATE TABLE user_behavior (
 - Filter conditions that cannot be pushed down will be handled by Calcite in memory
 - MongoClient instances are shared for the same URI
 - Upsert operations automatically determine insert or update based on primary key
+- Behavior records use `event_id` as the primary key; using `user_id` would make later writes for the same user replace an existing record
 
 ### 6. Filesystem Connector
 
@@ -306,7 +310,8 @@ The Filesystem connector is used to read data files from the local file system, 
 - Supports CSV and JSON file formats
 - Data is loaded only once on first access; subsequent accesses use in-memory data
 - Supports primary key queries and filter queries
-- Supports data upsert and deletion (modifies memory only, does not write back to the file system)
+- Uses the primary key as a lookup key and retains multiple rows per key
+- Supports in-memory inserts, updates, and deletes (does not write back to the file system)
 - Automatically initializes as an empty table if no path is configured or the path does not exist
 
 **Configuration Parameters**:
@@ -351,11 +356,24 @@ CREATE TABLE temp_table (
 ) WITH (
   'connector' = 'filesystem'
 );
+
+-- Multiple interests can share one user ID
+CREATE TABLE user_interest (
+  user_id BIGINT,
+  category STRING,
+  PRIMARY KEY (user_id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem',
+  'path' = '/data/user_interest.csv'
+);
 ```
 
 **Notes**:
 - The first line of a CSV file is treated as a header and is automatically skipped
-- CSV files support double-quoted fields (RFC 4180)
+- CSV files support quoted fields, commas inside fields, and escaped double quotes; newlines inside fields are not supported
 - JSON files support array format `[{...}, {...}]` and single object format `{...}`
 - Write operations only modify in-memory data and do not write back to the file system
 - If the path does not exist or the format is invalid, the table is initialized as an empty table without throwing an exception
+- All CSV/JSON rows with the same key are retained; writes prepend a row and deletes remove every matching full row
+- `UPDATE` replaces each selected old row; changing its lookup key preserves other rows under the old key
+- A single-column primary key is still required, but it is only a lookup key and need not be unique per row

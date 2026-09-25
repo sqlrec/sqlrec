@@ -154,6 +154,11 @@ public class TestJdbcTable {
                         new Object[]{2, "Bob", 2, "Bob", 25},
                         new Object[]{3, "Charlie", null, null, null}
                 )).test(schema);
+
+        // UPDATE still uses the existing key-value connector upsert path.
+        new SqlTestCase("update t1 set name = 'Bobby' where id = 2", null).test(schema);
+        new SqlTestCase("select * from t1 where id = 2",
+                Collections.singletonList(new Object[]{2, "Bobby", 25})).test(schema);
     }
 
     public static Table getUsersTable() {

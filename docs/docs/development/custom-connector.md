@@ -45,7 +45,7 @@ public Collection getModifiableCollection();
 public int getPrimaryKeyIndex();
 ```
 
-`scanImpl()` 负责扫描或处理能下推的过滤。`getByPrimaryKeyImpl()` 应一次批量查询所有 key，避免为每个 key 单独建立网络请求。
+`scanImpl()` 负责扫描或处理能下推的过滤。`getByPrimaryKeyImpl()` 应一次批量查询所有 key，避免为每个 key 单独建立网络请求。返回类型中的 `List<Object[]>` 允许一个查找键对应多行；若数据源允许同键多行，应保留全部匹配记录，不要按主键去重。
 
 如果数据源只支持主键过滤，保持 `onlyFilterByPrimaryKey()` 的默认值。如果能够正确处理更复杂的过滤，可以像 JDBC 或 MongoDB Connector 一样覆盖它。
 

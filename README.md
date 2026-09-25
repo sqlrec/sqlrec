@@ -46,28 +46,31 @@ docker run --rm -d --name sqlrec-demo \
   sqlrec/sqlrec-demo:latest
 ```
 
-The demo stores its example data in process memory. Insert data into the HTTP service process:
+The demo includes CSV data for five users with three interests each, five categories (`pc`, `phone`, `book`, `sports`, `home`), and 25 hot items. Each process loads it into memory on first use. Run `cli.sh` inside the container directly from the host to execute SQL at the `sqlrec>` prompt; end each statement with a semicolon:
 
 ```bash
-curl -X POST http://localhost:30001/sql/v1 \
-  -H "Content-Type: application/json" \
-  -d @- <<'JSON'
-{
-  "sqls": [
-    "insert into demo_user_interest_category values (1000001, 'pc', 100)",
-    "insert into demo_category_hot_item values ('pc', 1000001, 100), ('pc', 1000002, 90)"
-  ]
-}
-JSON
+docker exec -it sqlrec-demo /app/cli.sh
 ```
 
-Call the built-in recommendation API:
+```sql
+show tables;
+select * from demo_user_interest_category;
+
+cache table quick_start_user as
+select cast(1000001 as bigint) as user_id;
+
+call demo_rec(quick_start_user);
+```
+
+`quick_start_user` supplies the input row to the recommendation function, and `CALL` returns its recommendations. Press `Ctrl+D` to leave the SQL CLI. Its in-memory data is separate from the HTTP service's data. From the host, you can also call the built-in recommendation API with user IDs `1000001` through `1000005`:
 
 ```bash
 curl -X POST http://localhost:30001/api/v1/demo_rec \
   -H "Content-Type: application/json" \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
+
+The API records exposures in memory and excludes previously returned items. After the sample items are exhausted, restart the container to reset the demo.
 
 ### Define Your Own Table and Function
 

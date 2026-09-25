@@ -1,7 +1,9 @@
 package com.sqlrec.node;
 
+import com.sqlrec.common.schema.SqlRecCollection;
 import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.tree.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.prepare.Prepare;
@@ -17,10 +19,20 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-// UPDATE is intentionally emitted as an insert-like operation. Downstream
-// storage guarantees UPSERT semantics, so rows with the same key replace the
-// existing rows instead of creating duplicates.
 public class SqlrecEnumerableTableModify extends EnumerableTableModify {
+    public static void replaceRows(Collection<Object[]> collection,
+                                   Collection<Object[]> oldRows, Collection<Object[]> newRows) {
+        if (oldRows.size() != newRows.size()) {
+            throw new IllegalArgumentException("UPDATE row counts do not match");
+        }
+        if (collection instanceof SqlRecCollection) {
+            ((SqlRecCollection) collection).replaceAll(
+                    new ArrayList<>(oldRows), new ArrayList<>(newRows));
+        } else {
+            collection.addAll(newRows);
+        }
+    }
+
     public SqlrecEnumerableTableModify(
             RelOptCluster cluster,
             RelTraitSet traits,
@@ -90,6 +102,7 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                         Expressions.call(collectionParameter, "size"),
                         false);
         Expression convertedChildExp;
+        Expression originalChildExp = null;
         if (!getInput().getRowType().equals(getRowType())) {
             final JavaTypeFactory typeFactory =
                     (JavaTypeFactory) getCluster().getTypeFactory();
@@ -97,23 +110,28 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
             PhysType physType =
                     PhysTypeImpl.of(typeFactory, table.getRowType(), format);
             List<Expression> expressionList = new ArrayList<>();
+            List<Expression> originalExpressionList = new ArrayList<>();
             final PhysType childPhysType = result.physType;
             final ParameterExpression o_ =
                     Expressions.parameter(childPhysType.getJavaRowType(), "o");
             final int fieldCount =
                     childPhysType.getRowType().getFieldCount();
 
-            // select column here
-            if (getOperation().equals(Operation.UPDATE) && getUpdateColumnList() != null) {
-                for (int i = 0; i < fieldCount - getUpdateColumnList().size(); i++) {
-                    int relIndex = i;
+            // UPDATE input contains the original table row followed by SET values.
+            if (getOperation() == Operation.UPDATE) {
+                List<String> updateColumns = getUpdateColumnList();
+                if (updateColumns == null) {
+                    throw new IllegalStateException("UPDATE columns are missing");
+                }
+                int updateValueStart = fieldCount - updateColumns.size();
+                for (int i = 0; i < updateValueStart; i++) {
                     String fieldName = getInput().getRowType().getFieldList().get(i).getName();
-                    if (getUpdateColumnList().contains(fieldName)) {
-                        relIndex = getInput().getRowType().getFieldList().size()
-                                - getUpdateColumnList().size() + getUpdateColumnList().indexOf(fieldName);
-                    }
+                    int updateIndex = updateColumns.indexOf(fieldName);
+                    int relIndex = updateIndex < 0 ? i : updateValueStart + updateIndex;
                     expressionList.add(
                             childPhysType.fieldReference(o_, relIndex, physType.getJavaFieldType(i)));
+                    originalExpressionList.add(
+                            childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
                 }
             } else {
                 for (int i = 0; i < fieldCount; i++) {
@@ -122,11 +140,23 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                 }
             }
 
+            // Materialize UPDATE input once so the old and new projections use
+            // exactly the same selected rows, even for a stateful input query.
+            Expression projectionSource = childExp;
+            if (getOperation() == Operation.UPDATE) {
+                Expression inputRows = builder.append("updateInputRows",
+                        Expressions.call(childExp, BuiltInMethod.INTO.method,
+                                Expressions.new_(ArrayList.class)));
+                projectionSource = Expressions.call(Linq4j.class, "asEnumerable", inputRows);
+                originalChildExp = builder.append("originalChild",
+                        Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
+                                Expressions.lambda(physType.record(originalExpressionList), o_)));
+            }
             convertedChildExp =
                     builder.append(
                             "convertedChild",
                             Expressions.call(
-                                    childExp,
+                                    projectionSource,
                                     BuiltInMethod.SELECT.method,
                                     Expressions.lambda(
                                             physType.record(expressionList), o_)));
@@ -135,6 +165,17 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
         }
         switch (getOperation()) {
             case UPDATE:
+                if (originalChildExp == null) {
+                    throw new IllegalStateException("UPDATE input must contain original rows");
+                }
+                builder.add(Expressions.statement(Expressions.call(
+                        SqlrecEnumerableTableModify.class, "replaceRows",
+                        collectionParameter,
+                        Expressions.call(originalChildExp, BuiltInMethod.INTO.method,
+                                Expressions.new_(ArrayList.class)),
+                        Expressions.call(convertedChildExp, BuiltInMethod.INTO.method,
+                                Expressions.new_(ArrayList.class)))));
+                break;
             case INSERT:
                 builder.add(
                         Expressions.statement(

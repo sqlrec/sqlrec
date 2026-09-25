@@ -168,8 +168,10 @@ class RedisWrapperUnitTest {
         when(mockConn.async()).thenReturn(mockAsync);
 
         wrapper.lrem("key".getBytes(), "value".getBytes());
+        wrapper.lrem("key".getBytes(), 1, "value".getBytes());
 
         verify(mockAsync).lrem(any(), eq(0L), any());
+        verify(mockAsync).lrem(any(), eq(1L), any());
     }
 
     @Test

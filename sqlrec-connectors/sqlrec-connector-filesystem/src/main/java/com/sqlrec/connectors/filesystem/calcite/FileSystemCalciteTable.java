@@ -89,12 +89,27 @@ public class FileSystemCalciteTable extends SqlRecKvTable {
 
         @Override
         protected boolean addImpl(Object[] objects) {
-            return fileSystemHandler.upsert(objects);
+            return fileSystemHandler.insert(objects);
+        }
+
+        @Override
+        protected boolean addAllImpl(Collection<? extends Object[]> rows) {
+            return fileSystemHandler.insertAll(rows);
         }
 
         @Override
         protected boolean removeImpl(Object[] objects) {
             return fileSystemHandler.delete(objects);
+        }
+
+        @Override
+        protected boolean removeAllImpl(Collection<?> rows) {
+            return fileSystemHandler.deleteAll(rows);
+        }
+
+        @Override
+        protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+            return fileSystemHandler.replaceAll(oldRows, newRows);
         }
     }
 }
