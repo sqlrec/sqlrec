@@ -10,10 +10,8 @@ source ${BASE_DIR}/env.sh
 # ---------------------------------------------------------------------------
 echo "=== Step 1: Download and preprocess Criteo 1M ==="
 
-python3 -m venv ${dir}/.venv
-source ${dir}/.venv/bin/activate
-pip install -r ${dir}/requirements.txt
-python ${dir}/download_data.py
+bash "${dir}/../../bin/setup_python_env.sh"
+"${dir}/../../.venv/bin/python" "${dir}/download_data.py"
 
 PARQUET="${dir}/criteo.parquet"
 

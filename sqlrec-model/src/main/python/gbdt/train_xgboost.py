@@ -13,7 +13,6 @@ import logging
 import os
 import tempfile
 
-import numpy as np
 import pandas as pd
 import xgboost as xgb
 
@@ -97,16 +96,6 @@ def train(config: dict) -> None:
             f"have non-float dtypes: {', '.join(f'{c}={X[c].dtype}' for c in non_float_cols)}. "
             f"Consider using CatBoost for categorical/integer features."
         )
-
-    # Validate that no feature column contains array/list data.
-    for c in feature_cols:
-        if X[c].dtype == object or X[c].dtype.name == "category":
-            sample = X[c].dropna().iloc[0] if not X[c].dropna().empty else None
-            if isinstance(sample, (list, tuple, np.ndarray)):
-                raise ValueError(
-                    f"XGBoost does not support array-type features, but column '{c}' "
-                    f"contains {type(sample).__name__} values"
-                )
 
     params = _build_xgb_params(params_block)
     num_iterations = int(params_block.get("num_iterations", 100))

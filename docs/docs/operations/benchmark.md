@@ -65,6 +65,8 @@ cd benchmark/movielens
 bash init.sh
 ```
 
+初始化脚本与 `mvn test` 共用仓库根目录的 `.venv`。脚本会在需要时创建环境并安装 benchmark 依赖；如需指定创建环境所用的 Python（需 3.10 或更新），可设置 `PYTHON_BOOTSTRAP`。
+
 脚本会执行：
 
 1. 部署 Kyuubi 并准备 `wrk`。

@@ -23,7 +23,6 @@ from common.filesystem import (
     copy_file,
     apply_monkeypatch,
     remove_monkeypatch,
-    clear_filesystem_cache,
 )
 
 __all__ = [
@@ -40,5 +39,4 @@ __all__ = [
     "copy_file",
     "apply_monkeypatch",
     "remove_monkeypatch",
-    "clear_filesystem_cache",
 ]

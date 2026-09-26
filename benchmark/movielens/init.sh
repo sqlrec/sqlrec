@@ -99,11 +99,8 @@ curl --request POST \
     \"indexParams\": $indexParams
 }"
 
-python3 -m venv ${dir}/.venv
-source ${dir}/.venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r ${dir}/requirements.txt
-python ${dir}/download_data.py
+bash "${dir}/../../bin/setup_python_env.sh"
+"${dir}/../../.venv/bin/python" "${dir}/download_data.py"
 
 HDFS_WAREHOUSE_DIR="/user/hive/warehouse"
 PARTITION_DATE="dt=2024-01-01"

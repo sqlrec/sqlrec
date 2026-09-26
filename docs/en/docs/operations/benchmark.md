@@ -65,6 +65,8 @@ cd benchmark/movielens
 bash init.sh
 ```
 
+The initialization script and `mvn test` share the repository root `.venv`. The script creates it when needed and installs benchmark dependencies. Set `PYTHON_BOOTSTRAP` to choose the base Python interpreter (3.10 or newer).
+
 The script:
 
 1. Deploys Kyuubi and prepares `wrk`.

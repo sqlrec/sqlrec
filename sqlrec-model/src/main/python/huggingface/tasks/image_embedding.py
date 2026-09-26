@@ -45,8 +45,12 @@ class ImageEmbeddingAdapter(TaskAdapter):
                         raise ValueError("pooling=pooler requested but the model has no pooler_output")
                 elif self.pooling == "mean":
                     embeddings = outputs.last_hidden_state.mean(dim=1)
-                else:
+                elif self.pooling == "cls":
                     embeddings = outputs.last_hidden_state[:, 0]
+                elif self.pooling == "last_token":
+                    embeddings = outputs.last_hidden_state[:, -1]
+                else:
+                    raise ValueError(f"unsupported image pooling: {self.pooling}")
         if self.normalize:
             embeddings = functional.normalize(embeddings.float(), p=2, dim=1)
         return {"embedding": embeddings.float().cpu().tolist()}

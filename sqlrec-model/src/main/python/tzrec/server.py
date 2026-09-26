@@ -3,8 +3,9 @@ import os
 from typing import Any
 
 import torch
-import pyarrow as pa
 from pyarrow import Array
+
+from request_data import json_to_array_map, parse_request_data
 
 from tzrec.datasets.data_parser import DataParser
 from tzrec.features.feature import create_features
@@ -14,58 +15,9 @@ from tzrec.constant import Mode
 from tzrec.utils.logging_util import logger
 
 
-_model: torch.jit.ScriptModule = None
-_data_parser: DataParser = None
-_device: torch.device = None
-
-
-def columnar_to_row(data: dict[str, list[Any]]) -> list[dict[str, Any]]:
-    keys = list(data.keys())
-    if not keys:
-        return []
-    
-    lengths = [len(v) for v in data.values()]
-    unique_lengths = set(lengths)
-    
-    if len(unique_lengths) == 1:
-        n = lengths[0]
-    else:
-        if 1 not in unique_lengths:
-            raise ValueError("All lists in columnar format must have the same length or some can have length 1")
-        non_1_lengths = [l for l in unique_lengths if l != 1]
-        if len(non_1_lengths) != 1:
-            raise ValueError("All non-length-1 lists in columnar format must have the same length")
-        n = non_1_lengths[0]
-    
-    result = []
-    for i in range(n):
-        row = {}
-        for key in keys:
-            if len(data[key]) == 1:
-                row[key] = data[key][0]
-            else:
-                row[key] = data[key][i]
-        result.append(row)
-    return result
-
-
-def parse_request_data(request_data: Any) -> list[dict[str, Any]]:
-    if isinstance(request_data, list):
-        return request_data
-    if isinstance(request_data, dict):
-        for key, value in request_data.items():
-            if not isinstance(value, list):
-                raise ValueError("Map values must be lists")
-        return columnar_to_row(request_data)
-    raise ValueError("Input data must be a list of JSON objects or a map with string keys and list values")
-
-
-def json_to_array_map(data: list[dict[str, Any]]) -> dict[str, Array]:
-    table = pa.Table.from_pylist(data)
-    input_data: dict[str, pa.Array] = {}
-    for field_name in table.schema.names:
-        input_data[field_name] = table.column(field_name).combine_chunks()
-    return input_data
+_model: torch.jit.ScriptModule | None = None
+_data_parser: DataParser | None = None
+_device: torch.device | None = None
 
 
 def get_device() -> torch.device:
@@ -113,7 +65,7 @@ def _init_model(scripted_model_path: str) -> None:
 def _forward(input_data: dict[str, Array]) -> dict[str, Any]:
     parsed_data = _data_parser.parse(input_data)
     parsed_data = {k: v.to(_device) for k, v in parsed_data.items()}
-    with torch.no_grad():
+    with torch.inference_mode():
         predictions = _model(parsed_data, _device)
     result = {}
     for key, value in predictions.items():
@@ -144,7 +96,7 @@ def predict():
     except ValueError as e:
         return flask.jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
+        logger.exception("Prediction error")
         return flask.jsonify({"error": str(e)}), 500
 
 

@@ -8,7 +8,6 @@ categorical column names are passed via ``cat_features``.
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import logging
 import os
@@ -53,6 +52,24 @@ def _build_cb_params(p: dict) -> dict:
         "verbose": False,
         "allow_writing_files": False,
     }
+
+
+def _load_base_model(path: str) -> cb.CatBoost:
+    """Load a local checkpoint directly, staging remote files for CatBoost."""
+    model = cb.CatBoost()
+    fs, _ = common.url_to_fs(path)
+    if fs is None:
+        model.load_model(path)
+        return model
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".cbm")
+    os.close(fd)
+    try:
+        common.copy_file(path, tmp_path)
+        model.load_model(tmp_path)
+        return model
+    finally:
+        os.remove(tmp_path)
 
 
 def train(config: dict) -> None:
@@ -110,9 +127,7 @@ def train(config: dict) -> None:
     if base_model_dir:
         base_path = f"{base_model_dir}/model.cbm"
         logger.info("Loading base model from %s for incremental training", base_path)
-        base_bytes = common.read_binary(base_path)
-        init_model = cb.CatBoost()
-        init_model.load_model(io.BytesIO(base_bytes))
+        init_model = _load_base_model(base_path)
 
     model = cb.CatBoost(params)
 

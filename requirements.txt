@@ -1,0 +1,9 @@
+fsspec==2026.9.0
+httpx==0.28.1
+Pillow==11.3.0
+pyarrow==25.0.1
+pandas
+requests
+redis
+pymilvus==2.6.3
+kagglehub

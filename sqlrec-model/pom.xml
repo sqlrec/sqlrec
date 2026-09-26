@@ -15,6 +15,8 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <python.executable>${project.basedir}/../.venv/bin/python</python.executable>
+        <skipPythonTests>false</skipPythonTests>
     </properties>
 
     <dependencies>
@@ -46,5 +48,57 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.4</version>
+                <executions>
+                    <execution>
+                        <id>prepare-python-env</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>${project.basedir}/../bin/setup_python_env.sh</argument>
+                            </arguments>
+                            <skip>${skipPythonTests}</skip>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>python-unit-tests</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.executable}</executable>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <arguments>
+                                <argument>-m</argument>
+                                <argument>unittest</argument>
+                                <argument>discover</argument>
+                                <argument>-s</argument>
+                                <argument>src/test/python</argument>
+                                <argument>-p</argument>
+                                <argument>test_*.py</argument>
+                                <argument>-v</argument>
+                            </arguments>
+                            <environmentVariables>
+                                <PYTHONPATH>${project.basedir}/src/main/python</PYTHONPATH>
+                                <PYTHONDONTWRITEBYTECODE>1</PYTHONDONTWRITEBYTECODE>
+                            </environmentVariables>
+                            <skip>${skipPythonTests}</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

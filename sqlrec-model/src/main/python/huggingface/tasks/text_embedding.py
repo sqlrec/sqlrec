@@ -33,15 +33,18 @@ class TextEmbeddingAdapter(TaskAdapter):
         if self.pooling == "cls":
             embeddings = hidden[:, 0]
         elif self.pooling == "last_token":
-            indices = mask.sum(dim=1) - 1
+            # Find the last non-padding token for both left- and right-padded batches.
+            indices = mask.shape[1] - 1 - mask.flip(dims=[1]).long().argmax(dim=1)
             embeddings = hidden[torch.arange(hidden.shape[0], device=hidden.device), indices]
         elif self.pooling == "pooler":
             if getattr(outputs, "pooler_output", None) is None:
                 raise ValueError("pooling=pooler requested but the model has no pooler_output")
             embeddings = outputs.pooler_output
-        else:
+        elif self.pooling == "mean":
             expanded = mask.unsqueeze(-1).to(hidden.dtype)
             embeddings = (hidden * expanded).sum(dim=1) / expanded.sum(dim=1).clamp(min=1e-9)
+        else:
+            raise ValueError(f"unsupported text pooling: {self.pooling}")
         if self.normalize:
             embeddings = functional.normalize(embeddings.float(), p=2, dim=1)
         return {"embedding": embeddings.float().cpu().tolist()}
