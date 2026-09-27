@@ -140,7 +140,7 @@ onUnmounted(() => {
 
 <style scoped>
 .code-block {
-  background: #f8f9fb;
+  background: var(--surface);
   border-radius: 8px;
   border: 1px solid var(--border);
   overflow: hidden;

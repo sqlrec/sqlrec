@@ -2,7 +2,7 @@
   <header class="header">
     <div class="header-left">
       <div class="logo">SQLRec</div>
-      <nav class="nav-tabs">
+      <nav class="nav-tabs" aria-label="Main navigation">
         <router-link 
           v-for="tab in leftTabs" 
           :key="tab.name"
@@ -20,6 +20,7 @@
         :key="link.name"
         :href="link.url"
         target="_blank"
+        rel="noopener noreferrer"
         class="nav-link"
       >
         {{ link.label }}
@@ -142,11 +143,12 @@ const isActiveTab = (tab) => {
 
   .nav-tabs {
     overflow-x: auto;
-    scrollbar-width: none;
+    min-width: 0;
+    scrollbar-width: thin;
   }
 
   .nav-tabs::-webkit-scrollbar {
-    display: none;
+    height: 3px;
   }
 
   .nav-tab {

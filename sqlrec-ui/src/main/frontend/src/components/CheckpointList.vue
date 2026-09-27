@@ -1,45 +1,53 @@
 <template>
   <div class="checkpoint-list">
-    <div v-if="checkpoints.length > 0 || loading" class="checkpoint-content">
+    <div class="checkpoint-content">
       <div class="checkpoint-card">
         <div class="section-header">
-          <span class="section-title"># Checkpoints</span>
+          <span class="section-title">Checkpoints</span>
           <span class="total-count">{{ total }} records</span>
         </div>
 
-        <div v-if="loading" class="loading">Loading...</div>
+        <div v-if="loading" class="loading" role="status">Loading checkpoints...</div>
+        <div v-else-if="error" class="loading" role="alert">{{ error }} <button type="button" @click="fetchCheckpoints">Retry</button></div>
+        <div v-else-if="checkpoints.length === 0" class="loading">No checkpoints available</div>
 
-        <table v-else class="formatted-table">
-          <thead>
-            <tr>
-              <th>Checkpoint Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Created At</th>
-              <th>Updated At</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="checkpoint in checkpoints" :key="checkpoint.checkpointName" @click="handleClick(checkpoint.checkpointName)" class="clickable-row">
-              <td class="col-name">{{ checkpoint.checkpointName }}</td>
-              <td>
-                <span :class="['status-tag', `type-${checkpoint.checkpointType}`]">
-                  {{ checkpoint.checkpointType || '-' }}
-                </span>
-              </td>
-              <td>
-                <span :class="['status-tag', `status-${checkpoint.status}`]">
-                  {{ checkpoint.status || '-' }}
-                </span>
-              </td>
-              <td>{{ checkpoint.createdAt }}</td>
-              <td>{{ checkpoint.updatedAt }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="table-scroll">
+          <table class="formatted-table">
+            <thead>
+              <tr>
+                <th>Checkpoint Name</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Updated At</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="checkpoint in checkpoints" :key="checkpoint.checkpointName" class="clickable-row">
+                <td class="col-name">
+                  <button type="button" class="checkpoint-link" @click="handleClick(checkpoint.checkpointName)">
+                    {{ checkpoint.checkpointName }}
+                  </button>
+                </td>
+                <td>
+                  <span :class="['status-tag', `type-${checkpoint.checkpointType}`]">
+                    {{ checkpoint.checkpointType || '-' }}
+                  </span>
+                </td>
+                <td>
+                  <span :class="['status-tag', `status-${checkpoint.status}`]">
+                    {{ checkpoint.status || '-' }}
+                  </span>
+                </td>
+                <td>{{ checkpoint.createdAt }}</td>
+                <td>{{ checkpoint.updatedAt }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       
-      <div v-if="!loading && total > 0" class="pagination">
+      <div v-if="!loading && !error && total > 0" class="pagination">
         <button 
           class="page-btn" 
           :disabled="page === 1" 
@@ -57,7 +65,7 @@
         >
           Next
         </button>
-        <select v-model="localPageSize" class="page-size-select" @change="handlePageSizeChange">
+        <select v-model="localPageSize" class="page-size-select" aria-label="Items per page" @change="handlePageSizeChange">
           <option :value="10">10/page</option>
           <option :value="20">20/page</option>
           <option :value="50">50/page</option>
@@ -69,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { encodePathSegment } from '../utils/url.js'
 
 const props = defineProps({
@@ -86,27 +94,34 @@ const pageSize = ref(10)
 const localPageSize = ref(10)
 const total = ref(0)
 const totalPages = ref(0)
+const error = ref('')
+let controller
 
 const emit = defineEmits(['checkpoint-click'])
 
 const fetchCheckpoints = async () => {
   if (!props.modelName) return
-  
+  controller?.abort()
+  controller = new AbortController()
+  const currentController = controller
   loading.value = true
+  error.value = ''
   try {
     const response = await fetch(
-      `/ui/api/models/${encodePathSegment(props.modelName)}/checkpoints?page=${page.value}&pageSize=${pageSize.value}`
+      `/ui/api/models/${encodePathSegment(props.modelName)}/checkpoints?page=${page.value}&pageSize=${pageSize.value}`,
+      { signal: currentController.signal }
     )
-    if (response.ok) {
-      const data = await response.json()
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    if (!currentController.signal.aborted) {
       checkpoints.value = data.items
       total.value = data.total
       totalPages.value = data.totalPages
     }
-  } catch (error) {
-    console.error('Failed to fetch checkpoints:', error)
+  } catch (reason) {
+    if (!currentController.signal.aborted) error.value = 'Checkpoint Failed to load the list. Please retry.'
   } finally {
-    loading.value = false
+    if (controller === currentController) loading.value = false
   }
 }
 
@@ -129,12 +144,16 @@ const handleClick = (checkpointName) => {
 
 watch(() => props.modelName, () => {
   page.value = 1
+  checkpoints.value = []
+  total.value = 0
+  totalPages.value = 0
   fetchCheckpoints()
 })
 
 onMounted(() => {
   fetchCheckpoints()
 })
+onUnmounted(() => controller?.abort())
 </script>
 
 <style scoped>
@@ -184,9 +203,15 @@ onMounted(() => {
   color: var(--text-muted);
   background: var(--surface);
 }
+.loading button { margin-left: 8px; border: 0; background: transparent; color: var(--brand); cursor: pointer; }
+.table-scroll { overflow-x: auto; }
+.checkpoint-link { border: 0; padding: 0; background: transparent; color: var(--brand); font: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+.checkpoint-link:hover { text-decoration: underline; }
+.checkpoint-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 .formatted-table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
   background: var(--surface);
 }

@@ -1,7 +1,10 @@
 <template>
   <div class="dag-container">
     <div v-if="loading" class="loading">Loading DAG...</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
+    <div v-else-if="error" class="error" role="alert">
+      {{ error }} <button type="button" @click="fetchDagData">Retry</button>
+    </div>
+    <div v-else-if="nodes.length === 0" class="loading">No execution nodes available</div>
     <div v-else class="dag-flow">
       <VueFlow
         v-model:nodes="nodes"
@@ -26,7 +29,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onUnmounted } from 'vue'
 import { VueFlow, useVueFlow, Position } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -50,6 +53,7 @@ const nodes = ref([])
 const edges = ref([])
 const loading = ref(false)
 const error = ref(null)
+let controller
 
 const { fitView } = useVueFlow()
 
@@ -176,16 +180,23 @@ const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
 
 const fetchDagData = async () => {
   if (!props.functionName) return
-  
+  controller?.abort()
+  controller = new AbortController()
+  const currentController = controller
+  nodes.value = []
+  edges.value = []
   loading.value = true
   error.value = null
   
   try {
-    const response = await fetch(`/ui/api/functions-dag/${encodePathSegment(props.functionName)}`)
+    const response = await fetch(`/ui/api/functions-dag/${encodePathSegment(props.functionName)}`, {
+      signal: currentController.signal
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch DAG data')
     }
     const data = await response.json()
+    if (currentController.signal.aborted) return
     
     const nodesWithZScore = calculateZScores(data.nodes)
     const nodesWithDataCountZScore = calculateDataCountZScores(nodesWithZScore)
@@ -207,9 +218,9 @@ const fetchDagData = async () => {
       }
     })
   } catch (e) {
-    error.value = e.message
+    if (!currentController.signal.aborted) error.value = 'Failed to load the execution graph. Please retry.'
   } finally {
-    loading.value = false
+    if (controller === currentController) loading.value = false
   }
 }
 
@@ -224,6 +235,7 @@ const onNodesInitialized = () => {
 }
 
 watch(() => props.functionName, fetchDagData, { immediate: true })
+onUnmounted(() => controller?.abort())
 </script>
 
 <style scoped>
@@ -251,6 +263,7 @@ watch(() => props.functionName, fetchDagData, { immediate: true })
 .error {
   color: #f56c6c;
 }
+.error button { margin-left: 8px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--brand); cursor: pointer; }
 </style>
 
 <style>

@@ -30,10 +30,10 @@ const nodeColor = computed(() => {
   
   const clampedZ = Math.max(-2, Math.min(2, z))
   
-  // 单色绿色阶：浅绿 → 深绿
-  // Z = -2 → 浅绿 (最快) → lightness = 92%
-  // Z = 0  → 中绿 (平均) → lightness = 62%
-  // Z = +2 → 深绿 (最慢) → lightness = 32%
+  // Single green scale: light to dark
+  // Z = -2 → light green (fastest) → lightness = 92%
+  // Z = 0  → medium green (average) → lightness = 62%
+  // Z = +2 → dark green (slowest) → lightness = 32%
   const lightness = 62 - clampedZ * 15
   
   return `hsl(140, 50%, ${lightness}%)`

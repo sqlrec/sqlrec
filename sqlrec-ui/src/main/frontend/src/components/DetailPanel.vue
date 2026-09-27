@@ -6,7 +6,7 @@
           <tbody>
             <tr v-for="(row, index) in tableData" :key="index" :class="getRowClass(row)">
               <td v-if="isSectionRow(row)" class="section-title-cell" colspan="2">
-                {{ row.col_name }}
+                {{ row.col_name.replace(/^#\s*/, '') }}
               </td>
               <template v-else>
                 <td class="col-name">{{ row.col_name }}</td>
@@ -25,6 +25,9 @@
           </tbody>
         </table>
       </div>
+    </div>
+    <div v-else-if="item" class="detail-content">
+      <div class="empty-detail">No details available</div>
     </div>
   </div>
 </template>
@@ -87,7 +90,11 @@ const getLinkPath = (row) => {
   width: 100%;
   max-width: var(--content-max-width);
   margin: 0 auto;
-  padding: var(--page-padding);
+  padding: var(--page-padding) var(--page-padding) var(--section-gap);
+}
+
+.detail-panel:last-child .detail-content {
+  padding-bottom: var(--page-padding);
 }
 
 .detail-card {
@@ -97,6 +104,7 @@ const getLinkPath = (row) => {
   border-radius: var(--radius-card);
   overflow: hidden;
 }
+.empty-detail { padding: 40px 24px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--text-muted); text-align: center; }
 
 .formatted-table {
   width: 100%;
@@ -117,13 +125,14 @@ const getLinkPath = (row) => {
 }
 
 .col-name {
-  font-weight: 600;
-  color: var(--text-h);
+  font-weight: 500;
+  color: var(--text);
   width: 32%;
 }
 
 .data-type {
-  color: var(--text);
+  color: var(--text-h);
+  font-weight: 500;
   word-break: break-word;
 }
 
@@ -136,7 +145,7 @@ const getLinkPath = (row) => {
   padding: 0 16px !important;
   font-weight: 600;
   font-size: 13px;
-  color: var(--text) !important;
+  color: var(--text-h) !important;
 }
 
 .separator {

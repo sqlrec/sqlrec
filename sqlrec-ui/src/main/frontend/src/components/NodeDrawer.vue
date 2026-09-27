@@ -1,10 +1,10 @@
 <template>
   <Transition name="drawer">
     <div v-if="visible" class="drawer-mask" @click.self="close">
-      <div class="drawer-panel">
+      <div ref="panelRef" class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="node-drawer-title">
         <div class="drawer-header">
-          <span class="drawer-title">{{ nodeData?.label || 'Node Detail' }}</span>
-          <button class="drawer-close" @click="close">&times;</button>
+          <span id="node-drawer-title" class="drawer-title">{{ nodeData?.label || 'Node Detail' }}</span>
+          <button class="drawer-close" type="button" aria-label="Close node details" @click="close">&times;</button>
         </div>
         <div class="drawer-body">
           <div class="props-card">
@@ -21,12 +21,13 @@
                 <tr v-if="nodeData?.type === 'function' && dependencyFunctions.length">
                   <td class="prop-key">Call Function</td>
                   <td class="prop-val">
-                    <span
+                    <button
                       v-for="fn in dependencyFunctions"
                       :key="fn"
                       class="function-link"
+                      type="button"
                       @click="onNavigateFunction(fn)"
-                    >{{ fn }}</span>
+                    >{{ fn }}</button>
                   </td>
                 </tr>
               </tbody>
@@ -54,8 +55,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import CodeBlock from './CodeBlock.vue'
+import { useDrawerBehavior } from '../composables/useDrawerBehavior.js'
 
 const props = defineProps({
   visible: {
@@ -69,6 +71,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'navigate-function'])
+const panelRef = ref(null)
+useDrawerBehavior(() => props.visible, panelRef, () => emit('close'))
 
 const cacheTableSchema = computed(() => {
   if (!props.nodeData?.cacheTableName || !props.nodeData?.cacheTableDataFields?.length) return null
@@ -147,8 +151,8 @@ const onNavigateFunction = (functionName) => {
 }
 
 .drawer-close {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -166,6 +170,7 @@ const onNavigateFunction = (functionName) => {
   background: var(--brand-soft);
   color: var(--text-h);
 }
+.drawer-close:focus-visible, .function-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 .drawer-body {
   flex: 1;
@@ -213,6 +218,10 @@ const onNavigateFunction = (functionName) => {
 }
 
 .function-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
   color: var(--brand);
   cursor: pointer;
   text-decoration: underline;
@@ -225,11 +234,7 @@ const onNavigateFunction = (functionName) => {
 }
 
 .code-section {
-  padding: 12px 16px 0;
-}
-
-.props-card + .code-section {
-  padding-top: 12px;
+  padding: var(--section-gap) 16px 0;
 }
 
 .code-section:last-child {
