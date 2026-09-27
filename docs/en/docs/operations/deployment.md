@@ -48,6 +48,8 @@ bash ./bin/beeline.sh
 
 If Beeline connects and `SHOW TABLES;` succeeds, the core SQLRec service is ready. If pods are still starting or pulling images, wait for required components in `kubectl get pods --all-namespaces` before retrying.
 
+See [Observability](./observability.md) for metrics, traces, and logs after deployment.
+
 **Notes**:
 - The Minikube-based deployment solution above is for testing only
 - If you need to redeploy, you can first delete the cluster via `minikube delete`

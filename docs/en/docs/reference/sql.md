@@ -1,456 +1,18 @@
 # SQLRec SQL Syntax Reference
 
-This document introduces the extended SQL syntax supported by SQLRec.
-
-## Model Management
-
-### CREATE MODEL
-
-Create a new machine learning model definition.
-
-**Syntax:**
-
-```sql
-CREATE MODEL [IF NOT EXISTS] model_name 
-    [(column_name column_type [, ...])]
-    [WITH (property_name = property_value [, ...])]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF NOT EXISTS` | Optional. If the model already exists, no new model is created and no error is raised |
-| `model_name` | Model name, must be a valid identifier |
-| `column_name` | Column name |
-| `column_type` | Column data type |
-| `property_name` | Property name |
-| `property_value` | Property value |
-
-**Examples:**
-
-```sql
-CREATE MODEL my_model (
-    id INT,
-    name VARCHAR(100),
-    score DOUBLE
-) WITH (
-    model_type = 'classification',
-    version = '1.0'
-);
-
-CREATE MODEL IF NOT EXISTS my_model;
-```
-
-
-### DROP MODEL
-
-Drop an existing model.
-
-**Syntax:**
-
-```sql
-DROP MODEL [IF EXISTS] model_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the model doesn't exist, no error is raised |
-| `model_name` | Name of the model to drop |
-
-**Examples:**
-
-```sql
-DROP MODEL my_model;
-
-DROP MODEL IF EXISTS my_model;
-```
-
-
-### TRAIN MODEL
-
-Train a model and create a checkpoint.
-
-**Syntax:**
-
-```sql
-TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
-    ON data_source
-    [WHERE condition]
-    [FROM 'existing_checkpoint']
-    [WITH (property_name = property_value [, ...])]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `model_name` | Name of the model to train |
-| `checkpoint_name` | Checkpoint name to identify training results |
-| `data_source` | Training data source table name |
-| `condition` | Optional. WHERE condition to filter training data |
-| `existing_checkpoint` | Optional. Continue training from existing checkpoint |
-| `property_name` | Optional. Training property name |
-| `property_value` | Optional. Training property value |
-
-**Examples:**
-
-```sql
-TRAIN MODEL my_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WHERE status = 'active';
-
-TRAIN MODEL my_model CHECKPOINT = 'v2.0'
-    ON training_data
-    FROM 'v1.0'
-    WITH (epochs = 100, learning_rate = 0.01);
-```
-
-
-### EXPORT MODEL
-
-Export model training results.
-
-**Syntax:**
-
-```sql
-EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
-    [ON data_source]
-    [WHERE condition]
-    [WITH (property_name = property_value [, ...])]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `model_name` | Name of the model to export |
-| `checkpoint_name` | Checkpoint name |
-| `data_source` | Optional. Export target data source |
-| `condition` | Optional. WHERE condition |
-| `property_name` | Optional. Export property name |
-| `property_value` | Optional. Export property value |
-
-**Examples:**
-
-```sql
-EXPORT MODEL my_model CHECKPOINT = 'v1.0'
-    ON export_table;
-
-EXPORT MODEL my_model CHECKPOINT = 'v1.0'
-    ON export_table
-    WHERE status = 'valid'
-    WITH (format = 'parquet');
-```
-
-
-### SHOW MODELS
-
-Show list of all models.
-
-**Syntax:**
-
-```sql
-SHOW MODELS
-```
-
-**Example:**
-
-```sql
-SHOW MODELS;
-```
-
-
-### DESCRIBE MODEL
-
-Show model creation statement or checkpoint information.
-
-**Syntax:**
-
-```sql
-{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `FORMATTED` | Optional. Display detailed information in a formatted table, including model information, input fields, output fields, and model parameters |
-| `model_name` | Model name |
-| `checkpoint_name` | Optional. Checkpoint name, if specified shows detailed information for that checkpoint |
-
-**Examples:**
-
-```sql
-DESCRIBE MODEL my_model;
-
-DESC MODEL my_model CHECKPOINT = 'v1.0';
-
-DESCRIBE FORMATTED MODEL my_model;
-
-DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
-```
-
-
-### SHOW CHECKPOINTS
-
-Show list of all checkpoints for a specified model.
-
-**Syntax:**
-
-```sql
-SHOW CHECKPOINTS model_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `model_name` | Model name |
-
-**Example:**
-
-```sql
-SHOW CHECKPOINTS my_model;
-```
-
-
-### ALTER MODEL DROP CHECKPOINT
-
-Drop a specified checkpoint of a model.
-
-**Syntax:**
-
-```sql
-ALTER MODEL model_name DROP [IF EXISTS] CHECKPOINT = 'checkpoint_name'
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `model_name` | Model name |
-| `IF EXISTS` | Optional. If the checkpoint doesn't exist, no error is raised |
-| `checkpoint_name` | Name of the checkpoint to drop |
-
-**Examples:**
-
-```sql
-ALTER MODEL my_model DROP CHECKPOINT = 'v1.0';
-
-ALTER MODEL my_model DROP IF EXISTS CHECKPOINT = 'v1.0';
-```
-
-
-## Service Management
-
-### CREATE SERVICE
-
-Create a model service.
-
-**Syntax:**
-
-```sql
-CREATE SERVICE [IF NOT EXISTS] service_name
-    ON MODEL model_name
-    [CHECKPOINT = 'checkpoint_name']
-    [WITH (property_name = property_value [, ...])]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF NOT EXISTS` | Optional. If the service already exists, no new service is created and no error is raised |
-| `service_name` | Service name |
-| `model_name` | Associated model name |
-| `checkpoint_name` | Optional. Checkpoint name to use |
-| `property_name` | Optional. Service property name |
-| `property_value` | Optional. Service property value |
-
-**Examples:**
-
-```sql
-CREATE SERVICE my_service
-    ON MODEL my_model
-    CHECKPOINT = 'v1.0';
-
-CREATE SERVICE IF NOT EXISTS my_service
-    ON MODEL my_model
-    CHECKPOINT = 'v1.0'
-    WITH (port = 8080, replicas = 3);
-```
-
-
-### DROP SERVICE
-
-Drop an existing service.
-
-**Syntax:**
-
-```sql
-DROP SERVICE [IF EXISTS] service_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the service doesn't exist, no error is raised |
-| `service_name` | Name of the service to drop |
-
-**Examples:**
-
-```sql
-DROP SERVICE my_service;
-
-DROP SERVICE IF EXISTS my_service;
-```
-
-
-### SHOW SERVICES
-
-Show list of all services.
-
-**Syntax:**
-
-```sql
-SHOW SERVICES
-```
-
-**Example:**
-
-```sql
-SHOW SERVICES;
-```
-
-
-### DESCRIBE SERVICE
-
-Show service creation statement.
-
-**Syntax:**
-
-```sql
-{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `FORMATTED` | Optional. Display detailed information in a formatted table, including service information, associated model information, and model fields |
-| `service_name` | Service name |
-
-**Examples:**
-
-```sql
-DESCRIBE SERVICE my_service;
-
-DESC SERVICE my_service;
-
-DESCRIBE FORMATTED SERVICE my_service;
-```
-
-
-## API Management
-
-### CREATE API
-
-Create an API interface, associated with a specified SQL function.
-
-**Syntax:**
-
-```sql
-CREATE [OR REPLACE] API api_name WITH function_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `OR REPLACE` | Optional. If the API already exists, replace the existing definition |
-| `api_name` | API name |
-| `function_name` | Associated SQL function name |
-
-**Examples:**
-
-```sql
-CREATE API my_api WITH my_function;
-
-CREATE OR REPLACE API my_api WITH my_function;
-```
-
-
-### DROP API
-
-Drop an existing API.
-
-**Syntax:**
-
-```sql
-DROP API [IF EXISTS] api_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the API doesn't exist, no error is raised |
-| `api_name` | Name of the API to drop |
-
-**Examples:**
-
-```sql
-DROP API my_api;
-
-DROP API IF EXISTS my_api;
-```
-
-
-### SHOW APIS
-
-Show list of all APIs.
-
-**Syntax:**
-
-```sql
-SHOW APIS
-```
-
-**Example:**
-
-```sql
-SHOW APIS;
-```
-
-
-### DESCRIBE API
-
-Show API creation statement.
-
-**Syntax:**
-
-```sql
-{DESCRIBE | DESC} API api_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `api_name` | API name |
-
-**Examples:**
-
-```sql
-DESCRIBE API my_api;
-
-DESC API my_api;
-```
-
+This page covers SQLRec's extended SQL syntax. For ordinary `SELECT`, `INSERT`, and table creation, start with [Writing a Recommendation Flow](../guides/recommendation-flow.md) and [Connecting Data Sources](../guides/data-sources.md).
+
+Find a statement by task:
+
+| What you want to do | Start here |
+| --- | --- |
+| Define and manage SQL functions | [CREATE SQL FUNCTION](#create-sql-function), [SHOW SQL FUNCTIONS](#show-sql-functions) |
+| Write a recommendation flow | [DEFINE INPUT TABLE](#define-input-table), [CACHE TABLE](#cache-table), [CALL](#call), [IF](#if), [ASSERT](#assert), [RETURN](#return) |
+| Set and read execution variables | [SET](#set), [GET / GET_OR_DEFAULT](#get) |
+| Publish and manage APIs | [CREATE API](#create-api), [SHOW APIS](#show-apis) |
+| Define, train, and export models | [CREATE MODEL](#create-model), [TRAIN MODEL](#train-model), [EXPORT MODEL](#export-model), [SHOW CHECKPOINTS](#show-checkpoints) |
+| Deploy and manage model services | [CREATE SERVICE](#create-service), [SHOW SERVICES](#show-services) |
+| Refresh in-process definition caches | [FLUSH](#flush) |
 
 ## SQL Function Management
 
@@ -483,6 +45,74 @@ CREATE SQL FUNCTION my_function;
 CREATE OR REPLACE SQL FUNCTION my_function;
 ```
 
+### DROP SQL FUNCTION
+
+Drop an existing SQL function.
+
+**Syntax:**
+
+```sql
+DROP SQL FUNCTION [IF EXISTS] function_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF EXISTS` | Optional. If the function doesn't exist, no error is raised |
+| `function_name` | Name of the function to drop |
+
+**Note:** If the function is referenced by an API, it cannot be dropped.
+
+**Examples:**
+
+```sql
+DROP SQL FUNCTION my_function;
+
+DROP SQL FUNCTION IF EXISTS my_function;
+```
+
+### SHOW SQL FUNCTIONS
+
+Show list of all SQL functions.
+
+**Syntax:**
+
+```sql
+SHOW SQL FUNCTIONS
+```
+
+**Example:**
+
+```sql
+SHOW SQL FUNCTIONS;
+```
+
+### DESCRIBE SQL FUNCTION
+
+Show SQL function creation statement.
+
+**Syntax:**
+
+```sql
+{DESCRIBE | DESC} SQL FUNCTION function_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `function_name` | Function name |
+
+**Examples:**
+
+```sql
+DESCRIBE SQL FUNCTION my_function;
+
+DESC SQL FUNCTION my_function;
+```
+
+## Recommendation Flow Statements
 
 ### DEFINE INPUT TABLE
 
@@ -531,134 +161,6 @@ DEFINE INPUT TABLE input_data (
 DEFINE INPUT TABLE input_data LIKE source_table;
 ```
 
-
-### RETURN
-
-Return a result from a SQL function and finish the current invocation early. `RETURN` can return a cache table directly, or execute a `SELECT` or synchronous `CALL` and return its result.
-
-**Syntax:**
-
-```sql
-RETURN
-RETURN table_name
-RETURN select_statement
-RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `table_name` | Name of a cache table (`CacheTable`) to return; ordinary external tables are not accepted |
-| `select_statement` | SELECT query whose result becomes the function result |
-| `CALL ...` | Invoke a SQL/Java function and return its result; dynamic calls still require `LIKE` to declare the result schema |
-
-**Rules:**
-
-- `RETURN;` completes the function normally without returning data.
-- A top-level `RETURN` terminates the SQL function definition. Even when an `IF` in the body can return early, the definition must still end with a top-level `RETURN`. No function-body statement may follow it.
-- A `RETURN` inside an `IF` only exits the invocation at runtime; it does not terminate the function definition at compile time.
-- If only the THEN branch returns, a false condition continues execution. The final top-level `RETURN` is an actual return point for that path and must be compatible with the THEN result schema.
-- If both THEN and ELSE are `RETURN` statements, the IF covers every runtime path. It must be followed immediately by exactly one bare `RETURN;` that terminates the function definition. No statement may appear between them, and the terminator cannot be `RETURN table_name`, `RETURN SELECT ...`, or `RETURN CALL ...`. This empty terminator does not participate in result-schema inference.
-- Every return point that can execute must use one consistent result schema: either all are empty, or all return the same column count, names, and types. The final empty terminator in the exhaustive-IF case above is compile-time syntax, not a runtime return point.
-- `RETURN CALL ... ASYNC` is not supported because an asynchronous invocation cannot provide the synchronous result of the current function.
-
-**Examples:**
-
-```sql
--- Empty return
-RETURN;
-
--- Return an existing cache table
-RETURN result_table;
-
--- Return a query directly without creating an anonymous cache table
-RETURN SELECT id, score FROM candidates ORDER BY score DESC;
-
--- Return a function invocation
-RETURN CALL rerank(candidates);
-
--- Return early from IF. The final top-level RETURN still terminates the
--- function definition and is the fallback when the condition is false.
-IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
-);
-RETURN SELECT id FROM candidates;
-```
-
-
-### DROP SQL FUNCTION
-
-Drop an existing SQL function.
-
-**Syntax:**
-
-```sql
-DROP SQL FUNCTION [IF EXISTS] function_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the function doesn't exist, no error is raised |
-| `function_name` | Name of the function to drop |
-
-**Note:** If the function is referenced by an API, it cannot be dropped.
-
-**Examples:**
-
-```sql
-DROP SQL FUNCTION my_function;
-
-DROP SQL FUNCTION IF EXISTS my_function;
-```
-
-
-### SHOW SQL FUNCTIONS
-
-Show list of all SQL functions.
-
-**Syntax:**
-
-```sql
-SHOW SQL FUNCTIONS
-```
-
-**Example:**
-
-```sql
-SHOW SQL FUNCTIONS;
-```
-
-
-### DESCRIBE SQL FUNCTION
-
-Show SQL function creation statement.
-
-**Syntax:**
-
-```sql
-{DESCRIBE | DESC} SQL FUNCTION function_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `function_name` | Function name |
-
-**Examples:**
-
-```sql
-DESCRIBE SQL FUNCTION my_function;
-
-DESC SQL FUNCTION my_function;
-```
-
-
-## Cache Management
-
 ### CACHE TABLE
 
 Cache query results or function call results to a specified table.
@@ -666,7 +168,7 @@ Cache query results or function call results to a specified table.
 **Syntax:**
 
 ```sql
-CACHE TABLE table_name AS 
+CACHE TABLE table_name AS
     {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
      | select_statement}
 ```
@@ -676,8 +178,8 @@ CACHE TABLE table_name AS
 | Parameter | Description |
 |-----------|-------------|
 | `table_name` | Cache table name |
-| `function_name` | Function name to call, can be an identifier or `GET()` expression |
-| `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
+| `function_name` | Function name to call; an identifier or a `GET()` / `GET_OR_DEFAULT()` expression |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` / `GET_OR_DEFAULT()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
@@ -710,6 +212,46 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 The `ASYNC` keyword is parsed in `CACHE TABLE` syntax but throws an exception at runtime (`async function not support in cache`). To execute asynchronously, use a standalone `CALL` statement.
 :::
 
+### CALL
+
+Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()` / `GET_OR_DEFAULT()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
+
+**Syntax:**
+
+```sql
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `function_name` | Function name; an identifier or a `GET()` / `GET_OR_DEFAULT()` expression |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` / `GET_OR_DEFAULT()` expressions, or string literals |
+| `like_table` | Optional. Specify template table for result table |
+| `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
+| `ASYNC` | Optional. Execute asynchronously |
+
+`ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.
+
+**Examples:**
+
+```sql
+CALL my_function('param1', 'param2');
+
+CALL my_function(GET('var1'), 'param2') LIKE template_table;
+
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
+
+CALL my_function('param1') ASYNC;
+
+CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
+
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
+```
 
 ### IF
 
@@ -802,7 +344,6 @@ IF TIMEIN (SELECT 1000) THEN (
 RETURN;
 ```
 
-
 ### ASSERT
 
 Executes a SELECT query and asserts that the result is true. If any field of the query result is not `true`, an exception is thrown and execution is aborted.
@@ -840,6 +381,61 @@ ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
 ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
 ```
 
+### RETURN
+
+Return a result from a SQL function and finish the current invocation early. `RETURN` can return a cache table directly, or execute a `SELECT` or synchronous `CALL` and return its result.
+
+**Syntax:**
+
+```sql
+RETURN
+RETURN table_name
+RETURN select_statement
+RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `table_name` | Name of a cache table (`CacheTable`) to return; ordinary external tables are not accepted |
+| `select_statement` | SELECT query whose result becomes the function result |
+| `CALL ...` | Invoke a SQL/Java function and return its result; dynamic calls still require `LIKE` to declare the result schema |
+
+**Rules:**
+
+- `RETURN;` completes the function normally without returning data.
+- A top-level `RETURN` terminates the SQL function definition. Even when an `IF` in the body can return early, the definition must still end with a top-level `RETURN`. No function-body statement may follow it.
+- A `RETURN` inside an `IF` only exits the invocation at runtime; it does not terminate the function definition at compile time.
+- If only the THEN branch returns, a false condition continues execution. The final top-level `RETURN` is an actual return point for that path and must be compatible with the THEN result schema.
+- If both THEN and ELSE are `RETURN` statements, the IF covers every runtime path. It must be followed immediately by exactly one bare `RETURN;` that terminates the function definition. No statement may appear between them, and the terminator cannot be `RETURN table_name`, `RETURN SELECT ...`, or `RETURN CALL ...`. This empty terminator does not participate in result-schema inference.
+- Every return point that can execute must use one consistent result schema: either all are empty, or all return the same column count, names, and types. The final empty terminator in the exhaustive-IF case above is compile-time syntax, not a runtime return point.
+- `RETURN CALL ... ASYNC` is not supported because an asynchronous invocation cannot provide the synchronous result of the current function.
+
+**Examples:**
+
+```sql
+-- Empty return
+RETURN;
+
+-- Return an existing cache table
+RETURN result_table;
+
+-- Return a query directly without creating an anonymous cache table
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+
+-- Return a function invocation
+RETURN CALL rerank(candidates);
+
+-- Return early from IF. The final top-level RETURN still terminates the
+-- function definition and is the fallback when the condition is false.
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+);
+RETURN SELECT id FROM candidates;
+```
+
+## Execution Variables
 
 ### SET
 
@@ -863,6 +459,475 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 Keys and values in the API request's `params` object are also execution variables. Values are strings; cast them explicitly when using them as numbers or Booleans.
 
+### GET
+
+Read an execution variable as a dynamic function name in `CALL`, a string argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` and `GET_OR_DEFAULT` are available in these positions; neither is a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.
+
+**Syntax:**
+
+```sql
+GET('variable_name')
+GET_OR_DEFAULT('variable_name', 'default_value')
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `variable_name` | Variable name, must be a string literal |
+| `default_value` | Optional fallback when the variable is absent; must be a string literal |
+
+**Examples:**
+
+```sql
+SET 'rank_fun' = 'default_rank';
+
+CALL GET('rank_fun')(input_table) LIKE FUNCTION 'default_rank';
+
+CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(input_table)
+LIKE FUNCTION 'default_rank';
+```
+
+In ordinary SQL expressions such as `SELECT`, use the scalar function `` `get`('variable_name') `` or `` `get_or_default`('variable_name', 'default_value') ``. See [Scalar Functions](./udf/scalar-functions.md#get) for the syntax and supported positions.
+
+## API Management
+
+### CREATE API
+
+Create an API interface, associated with a specified SQL function.
+
+**Syntax:**
+
+```sql
+CREATE [OR REPLACE] API api_name WITH function_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `OR REPLACE` | Optional. If the API already exists, replace the existing definition |
+| `api_name` | API name |
+| `function_name` | Associated SQL function name |
+
+**Examples:**
+
+```sql
+CREATE API my_api WITH my_function;
+
+CREATE OR REPLACE API my_api WITH my_function;
+```
+
+### DROP API
+
+Drop an existing API.
+
+**Syntax:**
+
+```sql
+DROP API [IF EXISTS] api_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF EXISTS` | Optional. If the API doesn't exist, no error is raised |
+| `api_name` | Name of the API to drop |
+
+**Examples:**
+
+```sql
+DROP API my_api;
+
+DROP API IF EXISTS my_api;
+```
+
+### SHOW APIS
+
+Show list of all APIs.
+
+**Syntax:**
+
+```sql
+SHOW APIS
+```
+
+**Example:**
+
+```sql
+SHOW APIS;
+```
+
+### DESCRIBE API
+
+Show API creation statement.
+
+**Syntax:**
+
+```sql
+{DESCRIBE | DESC} API api_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `api_name` | API name |
+
+**Examples:**
+
+```sql
+DESCRIBE API my_api;
+
+DESC API my_api;
+```
+
+## Models and Checkpoints
+
+### CREATE MODEL
+
+Create a new machine learning model definition.
+
+**Syntax:**
+
+```sql
+CREATE MODEL [IF NOT EXISTS] model_name
+    [(column_name column_type [, ...])]
+    [WITH (property_name = property_value [, ...])]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF NOT EXISTS` | Optional. If the model already exists, no new model is created and no error is raised |
+| `model_name` | Model name, must be a valid identifier |
+| `column_name` | Column name |
+| `column_type` | Column data type |
+| `property_name` | Property name |
+| `property_value` | Property value |
+
+**Examples:**
+
+```sql
+CREATE MODEL rank_model (
+    user_id BIGINT,
+    item_id BIGINT,
+    price DOUBLE,
+    is_click INT
+) WITH (
+    model = 'tzrec.wide_and_deep',
+    label_columns = 'is_click'
+);
+
+CREATE MODEL IF NOT EXISTS external_rank_model WITH (
+    model = 'external',
+    output_columns = 'score:FLOAT'
+);
+```
+
+### DROP MODEL
+
+Drop an existing model.
+
+**Syntax:**
+
+```sql
+DROP MODEL [IF EXISTS] model_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF EXISTS` | Optional. If the model doesn't exist, no error is raised |
+| `model_name` | Name of the model to drop |
+
+**Examples:**
+
+```sql
+DROP MODEL my_model;
+
+DROP MODEL IF EXISTS my_model;
+```
+
+### TRAIN MODEL
+
+Train a model and create a checkpoint.
+
+**Syntax:**
+
+```sql
+TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
+    ON data_source
+    [WHERE condition]
+    [FROM 'existing_checkpoint']
+    [WITH (property_name = property_value [, ...])]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `model_name` | Name of the model to train |
+| `checkpoint_name` | Checkpoint name to identify training results |
+| `data_source` | Training data source table name |
+| `condition` | Optional. WHERE condition to filter training data |
+| `existing_checkpoint` | Optional. Continue training from existing checkpoint |
+| `property_name` | Optional. Training property name |
+| `property_value` | Optional. Training property value |
+
+**Examples:**
+
+```sql
+TRAIN MODEL my_model CHECKPOINT = 'v1.0'
+    ON training_data
+    WHERE status = 'active';
+
+TRAIN MODEL my_model CHECKPOINT = 'v2.0'
+    ON training_data
+    FROM 'v1.0'
+    WITH (num_epochs = 10, sparse_lr = 0.01);
+```
+
+### EXPORT MODEL
+
+Export model training results.
+
+**Syntax:**
+
+```sql
+EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
+    [ON data_source]
+    [WHERE condition]
+    [WITH (property_name = property_value [, ...])]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `model_name` | Name of the model to export |
+| `checkpoint_name` | Checkpoint name |
+| `data_source` | Optional. Export target data source |
+| `condition` | Optional. WHERE condition |
+| `property_name` | Optional. Export property name |
+| `property_value` | Optional. Export property value |
+
+**Examples:**
+
+```sql
+EXPORT MODEL my_model CHECKPOINT = 'v1.0'
+    ON export_table;
+
+EXPORT MODEL my_model CHECKPOINT = 'v1.0'
+    ON export_table
+    WHERE status = 'valid'
+    WITH (format = 'parquet');
+```
+
+### SHOW MODELS
+
+Show list of all models.
+
+**Syntax:**
+
+```sql
+SHOW MODELS
+```
+
+**Example:**
+
+```sql
+SHOW MODELS;
+```
+
+### DESCRIBE MODEL
+
+Show model creation statement or checkpoint information.
+
+**Syntax:**
+
+```sql
+{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `FORMATTED` | Optional. Display detailed information in a formatted table, including model information, input fields, output fields, and model parameters |
+| `model_name` | Model name |
+| `checkpoint_name` | Optional. Checkpoint name, if specified shows detailed information for that checkpoint |
+
+**Examples:**
+
+```sql
+DESCRIBE MODEL my_model;
+
+DESC MODEL my_model CHECKPOINT = 'v1.0';
+
+DESCRIBE FORMATTED MODEL my_model;
+
+DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
+```
+
+### SHOW CHECKPOINTS
+
+Show list of all checkpoints for a specified model.
+
+**Syntax:**
+
+```sql
+SHOW CHECKPOINTS model_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `model_name` | Model name |
+
+**Example:**
+
+```sql
+SHOW CHECKPOINTS my_model;
+```
+
+### ALTER MODEL DROP CHECKPOINT
+
+Drop a specified checkpoint of a model.
+
+**Syntax:**
+
+```sql
+ALTER MODEL model_name DROP [IF EXISTS] CHECKPOINT = 'checkpoint_name'
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `model_name` | Model name |
+| `IF EXISTS` | Optional. If the checkpoint doesn't exist, no error is raised |
+| `checkpoint_name` | Name of the checkpoint to drop |
+
+**Examples:**
+
+```sql
+ALTER MODEL my_model DROP CHECKPOINT = 'v1.0';
+
+ALTER MODEL my_model DROP IF EXISTS CHECKPOINT = 'v1.0';
+```
+
+## Model Service Management
+
+### CREATE SERVICE
+
+Create a model service.
+
+**Syntax:**
+
+```sql
+CREATE SERVICE [IF NOT EXISTS] service_name
+    ON MODEL model_name
+    [CHECKPOINT = 'checkpoint_name']
+    [WITH (property_name = property_value [, ...])]
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF NOT EXISTS` | Optional. If the service already exists, no new service is created and no error is raised |
+| `service_name` | Service name |
+| `model_name` | Associated model name |
+| `checkpoint_name` | Optional. Checkpoint name to use |
+| `property_name` | Optional. Service property name |
+| `property_value` | Optional. Service property value |
+
+**Examples:**
+
+```sql
+CREATE SERVICE rank_service
+    ON MODEL rank_model
+    CHECKPOINT = 'v1.0_export';
+
+CREATE SERVICE IF NOT EXISTS external_rank_service
+    ON MODEL external_rank_model
+    WITH (url = 'http://rank-service:8080/predict');
+```
+
+### DROP SERVICE
+
+Drop an existing service.
+
+**Syntax:**
+
+```sql
+DROP SERVICE [IF EXISTS] service_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `IF EXISTS` | Optional. If the service doesn't exist, no error is raised |
+| `service_name` | Name of the service to drop |
+
+**Examples:**
+
+```sql
+DROP SERVICE my_service;
+
+DROP SERVICE IF EXISTS my_service;
+```
+
+### SHOW SERVICES
+
+Show list of all services.
+
+**Syntax:**
+
+```sql
+SHOW SERVICES
+```
+
+**Example:**
+
+```sql
+SHOW SERVICES;
+```
+
+### DESCRIBE SERVICE
+
+Show service creation statement.
+
+**Syntax:**
+
+```sql
+{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `FORMATTED` | Optional. Display detailed information in a formatted table, including service information, associated model information, and model fields |
+| `service_name` | Service name |
+
+**Examples:**
+
+```sql
+DESCRIBE SERVICE my_service;
+
+DESC SERVICE my_service;
+
+DESCRIBE FORMATTED SERVICE my_service;
+```
+
+## Metadata Refresh
 
 ### FLUSH
 
@@ -895,72 +960,3 @@ FLUSH;
 ::: warning Note
 `FLUSH` may cause short-term overhead from reloading metadata. It is typically used after external changes to table schemas, functions, or service definitions; it does not guarantee that row caches on existing connector table objects update immediately.
 :::
-
-
-## Function Calls
-
-### CALL
-
-Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
-
-**Syntax:**
-
-```sql
-CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `function_name` | Function name, can be an identifier or `GET()` expression |
-| `arg1, arg2, ...` | Function parameters, can be identifiers, `GET()` expressions, or string literals |
-| `like_table` | Optional. Specify template table for result table |
-| `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
-| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
-| `ASYNC` | Optional. Execute asynchronously |
-
-`ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.
-
-**Examples:**
-
-```sql
-CALL my_function('param1', 'param2');
-
-CALL my_function(GET('var1'), 'param2') LIKE template_table;
-
-CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
-
-CALL my_function('param1') ASYNC;
-
-CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
-
-CALL my_function(t1) PARTITION BY t1 SIZE 100;
-
-CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
-```
-
-
-### GET
-
-Get the value of a runtime variable.
-
-**Syntax:**
-
-```sql
-GET('variable_name')
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `variable_name` | Variable name, must be a string literal |
-
-**Examples:**
-
-```sql
-GET('my_variable');
-
-CALL my_function(GET('input_table'));
-```

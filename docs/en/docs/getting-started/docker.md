@@ -68,7 +68,9 @@ select cast(1000001 as bigint) as user_id;
 call demo_rec(quick_start_user);
 ```
 
-The function returns two hot items with their recommendation reasons, request timestamp, and request ID. Exposure records are written to the current process's in-memory `demo_exposure_item` table; later calls use these records for deduplication.
+The first call usually returns two items. The result includes `item_id`, `rec_reason`, `req_time`, and `req_id`; the timestamp and request ID change on each call.
+
+Exposure records are written to the current process's in-memory `demo_exposure_item` table. Later calls use them for deduplication. After repeated calls exhaust the bundled candidates, restart the CLI or add new items to continue testing.
 
 ## Call the Recommendation API
 
@@ -80,15 +82,17 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-The endpoint returns the result of `demo_rec`. Exposure data stays in the HTTP service process, so later calls exclude previously returned items. Restart the container after the bundled candidates are exhausted. The demo also enables `/sql/v1` for adding test data to the HTTP process; changes made in the CLI are not visible there.
+On the first request, the response's `data` array usually contains two recommendations. Later requests may return different items because previously recommended items are recorded as exposures. Exposure data stays in the HTTP service process; restart the container after the bundled candidates are exhausted. The demo also enables `/sql/v1` for adding test data to the HTTP process; changes made in the CLI are not visible there.
 
 ## Open the UI
 
 Open [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) to inspect tables, APIs, SQL functions, and their execution DAGs.
 
-## Demo Directory Layout
+## Modify the Demo SQL
 
-`SQL_SCHEMA_DIR` is consistently set to `/app/sql`, and SQLRec recursively loads both example directories. The two examples use distinct table, function, and API identifiers:
+To change the example, start with the three kinds of SQL files in `sqlrec-demo/src/main/sql/quick_start/`: `table/` defines tables, `function/` defines the recommendation flow, and `api/` publishes the function as an HTTP API.
+
+The demo image sets `SQL_SCHEMA_DIR` to `/app/sql`. SQLRec recursively loads the following directory:
 
 ```text
 sqlrec-demo/src/main/sql/

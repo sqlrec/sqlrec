@@ -2,6 +2,8 @@
 
 SQLRec uses SQL to manage model definitions, training results, and online inference services. The exact lifecycle depends on the backend:
 
+**Prerequisites:** The training, export, and service deployment steps in this guide require the [full service environment](../operations/deployment.md), including Kubernetes and model storage; the standalone Docker demo does not provide them. Training jobs must also be able to reach the data source named in the SQL. `training_sample` is a placeholder table name; prepare a training table with the example fields before running the statements.
+
 | Model type | Data source | Train | Export | Checkpoint used by Service |
 |------------|-------------|-------|--------|----------------------------|
 | tzrec Wide & Deep / DSSM | SQL table | Yes | Yes | `export` |
@@ -192,10 +194,6 @@ TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
 ```
 
 The resulting `origin` checkpoint can be used directly by a Service, and `EXPORT MODEL` is not supported. See [Built-in Models](../reference/models/builtin-models.md) for the complete task and options.
-
-## Prerequisites
-
-Training, export, and Service deployment require Kubernetes and configured model storage. tzrec and GBDT jobs must also be able to reach the SQL data source. See [Service Deployment](../operations/deployment.md).
 
 ## Troubleshooting
 

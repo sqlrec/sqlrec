@@ -2,6 +2,8 @@
 
 SQLRec 可以用 SQL 管理模型定义、训练结果和在线推理服务。不同模型后端的流程并不完全相同：
 
+**运行前提**：本文的训练、导出和服务部署步骤需要[完整服务环境](../operations/deployment.md)，包括 Kubernetes 和模型存储；Docker 快速开始中的独立 Demo 不具备这些条件。训练任务还需要能访问 SQL 中指定的数据源。`training_sample` 是示例表名，执行前请准备包含示例字段的训练表。
+
 | 模型类型 | 数据来源 | 需要训练 | 需要导出 | 创建服务时的 Checkpoint |
 |----------|----------|----------|----------|----------------------------|
 | tzrec Wide & Deep / DSSM | SQL 表 | 是 | 是 | export |
@@ -192,10 +194,6 @@ TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
 ```
 
 该 checkpoint 的类型为 origin，可以直接创建服务；当前不支持 `EXPORT MODEL`。完整的任务和参数见[内置模型](../reference/models/builtin-models.md)。
-
-## 运行前提
-
-训练、导出和 Service 部署依赖 Kubernetes 以及已配置的模型存储。对 tzrec 和 GBDT 模型，还必须保证训练任务能访问 SQL 中指定的数据源。具体环境要求见[服务部署](../operations/deployment.md)。
 
 ## 常见问题
 

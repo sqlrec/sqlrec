@@ -4,7 +4,12 @@
 
 ## 发布函数
 
-假设已经定义了名为 `recommend` 的 SQL 函数：
+先确认使用的元数据模式：
+
+- **Docker Demo（本地文件模式）**：内置的 `demo_rec` 已发布，可以直接按[快速开始](../getting-started/docker.md#通过-api-调用推荐接口)调用。要发布自己的 API，把函数定义和下面的 API 定义分别保存为挂载目录中的 `.sql` 文件，再重启容器；不能在 CLI 或 `/sql/v1` 中执行 `CREATE API`。文件结构见[修改 Demo SQL](../getting-started/docker.md#修改-demo-sql)，挂载方法见[管理本地 SQL 定义](../getting-started/docker.md#管理本地-sql-定义)。
+- **完整服务（远程元数据模式）**：通过 Beeline 或 JDBC 连接 SQLRec 后，执行下面的 `CREATE API` 语句。部署方法见[服务部署](../operations/deployment.md)。
+
+假设已经定义了名为 `recommend` 的 SQL 函数，API 定义为：
 
 ```sql
 CREATE OR REPLACE API recommend WITH recommend;
@@ -16,7 +21,7 @@ CREATE OR REPLACE API recommend WITH recommend;
 POST /api/v1/recommend
 ```
 
-如需覆盖同名 API，使用 `OR REPLACE`。SQL 函数的编写方法见[编写推荐流程](./recommendation-flow.md)。
+如需覆盖同名 API，使用 `OR REPLACE`。下面的 `/api/v1/recommend` 请求示例只有在你已经定义并发布 `recommend` 后才能调用；直接体验 Docker Demo 时请使用 `/api/v1/demo_rec`。SQL 函数的编写方法见[编写推荐流程](./recommendation-flow.md)。
 
 ## 发起请求
 
@@ -89,6 +94,8 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 }
 ```
 
+`metricTags` 的作用范围和标签取值建议见[可观测性](../operations/observability.md#常用指标)。
+
 ## 读取响应
 
 调用成功时，`data` 是函数 `RETURN` 的结果行，`params` 是执行结束时的变量：
@@ -119,7 +126,7 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 ### API 找不到
 
-确认已经执行 `CREATE API`，请求路径中只有一个 API 名称，并且调用的是 `/api/v1/{api_name}`。
+确认 API 已发布，且请求路径中只有一个 API 名称：`/api/v1/{api_name}`。Docker Demo 中检查挂载目录是否包含 API 定义文件，并在修改文件后重启容器；完整服务中可用 `SHOW APIS` 检查是否已创建。
 
 ### `/sql/v1` 和 `/api/v1` 有什么区别
 

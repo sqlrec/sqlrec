@@ -68,7 +68,7 @@ select cast(1000001 as bigint) as user_id;
 call demo_rec(quick_start_user);
 ```
 
-函数会返回两条热门商品及其推荐理由、请求时间和请求 ID。
+首次调用通常会返回两条商品。结果中可以看到 `item_id`、`rec_reason`、`req_time` 和 `req_id`；时间和请求 ID 每次都会变化。
 
 曝光结果会写入当前进程内存中的 `demo_exposure_item` 表；再次调用时，`demo_rec` 会使用这些记录进行去重。如果继续重复调用，内置候选商品最终都会被过滤；重新进入 CLI 或写入新商品即可继续测试。
 
@@ -82,7 +82,7 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-接口会返回 `demo_rec` 的推荐结果。推荐产生的曝光数据保留在 HTTP 服务进程内，再次调用会过滤已曝光商品；内置候选商品用完后，重启容器即可重置。Demo 镜像仍默认开启 `/sql/v1`，可用它向 HTTP 服务进程增加测试数据；CLI 中的修改对 HTTP 进程不可见。
+首次请求的响应中，`data` 通常包含两条推荐结果；再次请求可能返回不同商品，因为已推荐的商品会记入曝光表。推荐产生的曝光数据保留在 HTTP 服务进程内；内置候选商品用完后，重启容器即可重置。Demo 镜像仍默认开启 `/sql/v1`，可用它向 HTTP 服务进程增加测试数据；CLI 中的修改对 HTTP 进程不可见。
 
 ## 查看 UI
 

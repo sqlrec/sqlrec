@@ -48,6 +48,8 @@ bash ./bin/beeline.sh
 
 能通过 Beeline 连接并成功执行 `SHOW TABLES;` 即表示 SQLRec 基本服务已就绪。如果 Pod 仍在启动或拉取镜像，先等待 `kubectl get pods --all-namespaces` 中必需组件就绪，再执行连接验证。
 
+部署后查看指标、Trace 和日志的方法见[可观测性](./observability.md)。
+
 **注意事项**：
 - 上述基于 Minikube 的部署方案仅用于测试
 - 如果需要重新部署，可以先通过 `minikube delete` 删除集群

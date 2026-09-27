@@ -72,6 +72,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '服务部署', link: '/docs/operations/deployment' },
+              { text: '可观测性', link: '/docs/operations/observability' },
               { text: '性能测试', link: '/docs/operations/benchmark' }
             ]
           },
@@ -156,6 +157,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Service Deployment', link: '/en/docs/operations/deployment' },
+              { text: 'Observability', link: '/en/docs/operations/observability' },
               { text: 'Benchmark', link: '/en/docs/operations/benchmark' }
             ]
           },

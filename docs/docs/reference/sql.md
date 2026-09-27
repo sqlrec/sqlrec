@@ -1,459 +1,18 @@
 # SQLRec SQL 语法参考
 
-本文档介绍 SQLRec 支持的扩展 SQL 语法。
-
-## 模型管理
-
-### CREATE MODEL
-
-创建一个新的机器学习模型定义。
-
-**语法：**
-
-```sql
-CREATE MODEL [IF NOT EXISTS] model_name 
-    [(column_name column_type [, ...])]
-    [WITH (property_name = property_value [, ...])]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF NOT EXISTS` | 可选。如果模型已存在，则不创建新模型，也不报错 |
-| `model_name` | 模型名称，必须是有效的标识符 |
-| `column_name` | 列名 |
-| `column_type` | 列数据类型 |
-| `property_name` | 属性名 |
-| `property_value` | 属性值 |
-
-**示例：**
-
-```sql
-CREATE MODEL rank_model (
-    user_id BIGINT,
-    item_id BIGINT,
-    price DOUBLE,
-    is_click INT
-) WITH (
-    model = 'tzrec.wide_and_deep',
-    label_columns = 'is_click'
-);
-
-CREATE MODEL IF NOT EXISTS external_rank_model WITH (
-    model = 'external',
-    output_columns = 'score:FLOAT'
-);
-```
-
-
-### DROP MODEL
-
-删除一个已存在的模型。
-
-**语法：**
-
-```sql
-DROP MODEL [IF EXISTS] model_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果模型不存在，则不报错 |
-| `model_name` | 要删除的模型名称 |
-
-**示例：**
-
-```sql
-DROP MODEL my_model;
-
-DROP MODEL IF EXISTS my_model;
-```
-
-
-### TRAIN MODEL
-
-训练一个模型并创建检查点。
-
-**语法：**
-
-```sql
-TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
-    ON data_source
-    [WHERE condition]
-    [FROM 'existing_checkpoint']
-    [WITH (property_name = property_value [, ...])]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `model_name` | 要训练的模型名称 |
-| `checkpoint_name` | 检查点名称，用于标识训练结果 |
-| `data_source` | 训练数据源表名 |
-| `condition` | 可选。WHERE 条件，用于过滤训练数据 |
-| `existing_checkpoint` | 可选。基于已有检查点继续训练 |
-| `property_name` | 可选。训练属性名 |
-| `property_value` | 可选。训练属性值 |
-
-**示例：**
-
-```sql
-TRAIN MODEL my_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WHERE status = 'active';
-
-TRAIN MODEL my_model CHECKPOINT = 'v2.0'
-    ON training_data
-    FROM 'v1.0'
-    WITH (num_epochs = 10, sparse_lr = 0.01);
-```
-
-
-### EXPORT MODEL
-
-导出模型的训练结果。
-
-**语法：**
-
-```sql
-EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
-    [ON data_source]
-    [WHERE condition]
-    [WITH (property_name = property_value [, ...])]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `model_name` | 要导出的模型名称 |
-| `checkpoint_name` | 检查点名称 |
-| `data_source` | 可选。导出目标数据源 |
-| `condition` | 可选。WHERE 条件 |
-| `property_name` | 可选。导出属性名 |
-| `property_value` | 可选。导出属性值 |
-
-**示例：**
-
-```sql
-EXPORT MODEL my_model CHECKPOINT = 'v1.0'
-    ON export_table;
-
-EXPORT MODEL my_model CHECKPOINT = 'v1.0'
-    ON export_table
-    WHERE status = 'valid'
-    WITH (format = 'parquet');
-```
-
-
-### SHOW MODELS
-
-显示所有模型列表。
-
-**语法：**
-
-```sql
-SHOW MODELS
-```
-
-**示例：**
-
-```sql
-SHOW MODELS;
-```
-
-
-### DESCRIBE MODEL
-
-显示模型的创建语句或检查点信息。
-
-**语法：**
-
-```sql
-{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括模型信息、输入字段、输出字段和模型参数 |
-| `model_name` | 模型名称 |
-| `checkpoint_name` | 可选。检查点名称，如果指定则显示该检查点的详细信息 |
-
-**示例：**
-
-```sql
-DESCRIBE MODEL my_model;
-
-DESC MODEL my_model CHECKPOINT = 'v1.0';
-
-DESCRIBE FORMATTED MODEL my_model;
-
-DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
-```
-
-
-### SHOW CHECKPOINTS
-
-显示指定模型的所有检查点列表。
-
-**语法：**
-
-```sql
-SHOW CHECKPOINTS model_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `model_name` | 模型名称 |
-
-**示例：**
-
-```sql
-SHOW CHECKPOINTS my_model;
-```
-
-
-### ALTER MODEL DROP CHECKPOINT
-
-删除模型的指定检查点。
-
-**语法：**
-
-```sql
-ALTER MODEL model_name DROP [IF EXISTS] CHECKPOINT = 'checkpoint_name'
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `model_name` | 模型名称 |
-| `IF EXISTS` | 可选。如果检查点不存在，则不报错 |
-| `checkpoint_name` | 要删除的检查点名称 |
-
-**示例：**
-
-```sql
-ALTER MODEL my_model DROP CHECKPOINT = 'v1.0';
-
-ALTER MODEL my_model DROP IF EXISTS CHECKPOINT = 'v1.0';
-```
-
-
-## 服务管理
-
-### CREATE SERVICE
-
-创建一个模型服务。
-
-**语法：**
-
-```sql
-CREATE SERVICE [IF NOT EXISTS] service_name
-    ON MODEL model_name
-    [CHECKPOINT = 'checkpoint_name']
-    [WITH (property_name = property_value [, ...])]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF NOT EXISTS` | 可选。如果服务已存在，则不创建新服务，也不报错 |
-| `service_name` | 服务名称 |
-| `model_name` | 关联的模型名称 |
-| `checkpoint_name` | 可选。使用的检查点名称 |
-| `property_name` | 可选。服务属性名 |
-| `property_value` | 可选。服务属性值 |
-
-**示例：**
-
-```sql
-CREATE SERVICE rank_service
-    ON MODEL rank_model
-    CHECKPOINT = 'v1.0_export';
-
-CREATE SERVICE IF NOT EXISTS external_rank_service
-    ON MODEL external_rank_model
-    WITH (url = 'http://rank-service:8080/predict');
-```
-
-
-### DROP SERVICE
-
-删除一个已存在的服务。
-
-**语法：**
-
-```sql
-DROP SERVICE [IF EXISTS] service_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果服务不存在，则不报错 |
-| `service_name` | 要删除的服务名称 |
-
-**示例：**
-
-```sql
-DROP SERVICE my_service;
-
-DROP SERVICE IF EXISTS my_service;
-```
-
-
-### SHOW SERVICES
-
-显示所有服务列表。
-
-**语法：**
-
-```sql
-SHOW SERVICES
-```
-
-**示例：**
-
-```sql
-SHOW SERVICES;
-```
-
-
-### DESCRIBE SERVICE
-
-显示服务的创建语句。
-
-**语法：**
-
-```sql
-{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括服务信息、关联模型信息和模型字段 |
-| `service_name` | 服务名称 |
-
-**示例：**
-
-```sql
-DESCRIBE SERVICE my_service;
-
-DESC SERVICE my_service;
-
-DESCRIBE FORMATTED SERVICE my_service;
-```
-
-
-## API 管理
-
-### CREATE API
-
-创建一个 API 接口，关联到指定的 SQL 函数。
-
-**语法：**
-
-```sql
-CREATE [OR REPLACE] API api_name WITH function_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `OR REPLACE` | 可选。如果 API 已存在，则替换现有定义 |
-| `api_name` | API 名称 |
-| `function_name` | 关联的 SQL 函数名称 |
-
-**示例：**
-
-```sql
-CREATE API my_api WITH my_function;
-
-CREATE OR REPLACE API my_api WITH my_function;
-```
-
-
-### DROP API
-
-删除一个已存在的 API。
-
-**语法：**
-
-```sql
-DROP API [IF EXISTS] api_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果 API 不存在，则不报错 |
-| `api_name` | 要删除的 API 名称 |
-
-**示例：**
-
-```sql
-DROP API my_api;
-
-DROP API IF EXISTS my_api;
-```
-
-
-### SHOW APIS
-
-显示所有 API 列表。
-
-**语法：**
-
-```sql
-SHOW APIS
-```
-
-**示例：**
-
-```sql
-SHOW APIS;
-```
-
-
-### DESCRIBE API
-
-显示 API 的创建语句。
-
-**语法：**
-
-```sql
-{DESCRIBE | DESC} API api_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `api_name` | API 名称 |
-
-**示例：**
-
-```sql
-DESCRIBE API my_api;
-
-DESC API my_api;
-```
-
+本文档介绍 SQLRec 支持的扩展 SQL 语法。普通 `SELECT`、`INSERT` 和建表操作可从[编写推荐流程](../guides/recommendation-flow.md)与[接入数据源](../guides/data-sources.md)入手。
+
+按任务查找：
+
+| 你要做什么 | 从这里开始 |
+| --- | --- |
+| 定义和管理 SQL 函数 | [CREATE SQL FUNCTION](#create-sql-function)、[SHOW SQL FUNCTIONS](#show-sql-functions) |
+| 编写推荐流程 | [DEFINE INPUT TABLE](#define-input-table)、[CACHE TABLE](#cache-table)、[CALL](#call)、[IF](#if)、[ASSERT](#assert)、[RETURN](#return) |
+| 设置和读取执行变量 | [SET](#set)、[GET / GET_OR_DEFAULT](#get) |
+| 发布和管理 API | [CREATE API](#create-api)、[SHOW APIS](#show-apis) |
+| 定义、训练和导出模型 | [CREATE MODEL](#create-model)、[TRAIN MODEL](#train-model)、[EXPORT MODEL](#export-model)、[SHOW CHECKPOINTS](#show-checkpoints) |
+| 部署和管理模型服务 | [CREATE SERVICE](#create-service)、[SHOW SERVICES](#show-services) |
+| 刷新进程内定义缓存 | [FLUSH](#flush) |
 
 ## SQL 函数管理
 
@@ -486,6 +45,74 @@ CREATE SQL FUNCTION my_function;
 CREATE OR REPLACE SQL FUNCTION my_function;
 ```
 
+### DROP SQL FUNCTION
+
+删除一个已存在的 SQL 函数。
+
+**语法：**
+
+```sql
+DROP SQL FUNCTION [IF EXISTS] function_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF EXISTS` | 可选。如果函数不存在，则不报错 |
+| `function_name` | 要删除的函数名称 |
+
+**注意：** 如果函数被 API 引用，则无法删除。
+
+**示例：**
+
+```sql
+DROP SQL FUNCTION my_function;
+
+DROP SQL FUNCTION IF EXISTS my_function;
+```
+
+### SHOW SQL FUNCTIONS
+
+显示所有 SQL 函数列表。
+
+**语法：**
+
+```sql
+SHOW SQL FUNCTIONS
+```
+
+**示例：**
+
+```sql
+SHOW SQL FUNCTIONS;
+```
+
+### DESCRIBE SQL FUNCTION
+
+显示 SQL 函数的创建语句。
+
+**语法：**
+
+```sql
+{DESCRIBE | DESC} SQL FUNCTION function_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `function_name` | 函数名称 |
+
+**示例：**
+
+```sql
+DESCRIBE SQL FUNCTION my_function;
+
+DESC SQL FUNCTION my_function;
+```
+
+## 推荐流程语句
 
 ### DEFINE INPUT TABLE
 
@@ -534,134 +161,6 @@ DEFINE INPUT TABLE input_data (
 DEFINE INPUT TABLE input_data LIKE source_table;
 ```
 
-
-### RETURN
-
-从 SQL 函数中返回结果并提前结束本次函数执行。`RETURN` 可以直接返回缓存表，也可以执行 `SELECT` 或同步 `CALL` 并返回其结果。
-
-**语法：**
-
-```sql
-RETURN
-RETURN table_name
-RETURN select_statement
-RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `table_name` | 要返回的缓存表（`CacheTable`）名称，不能是普通外部表 |
-| `select_statement` | 作为函数结果返回的 SELECT 查询 |
-| `CALL ...` | 调用 SQL/Java 函数并返回其结果；动态调用仍需通过 `LIKE` 指定返回模式 |
-
-**规则：**
-
-- `RETURN;` 表示函数正常结束但不返回数据。
-- 顶层 `RETURN` 是 SQL 函数定义的结束标志；即使函数体中的 `IF` 已包含提前返回，函数定义仍需以顶层 `RETURN` 结束。顶层 `RETURN` 之后不能再定义其他函数体语句。
-- `IF` 分支内的 `RETURN` 只在运行时提前结束函数，不会在编译时结束函数定义。
-- 如果 IF 只有 THEN 分支返回，条件为 false 时仍会继续执行；末尾顶层 `RETURN` 是该路径的实际返回点，必须与 THEN 的返回模式兼容。
-- 如果 IF 的 THEN 和 ELSE 都是 `RETURN`，IF 已覆盖所有运行路径。该 IF 后必须立即且只能写一条不携带数据的 `RETURN;` 作为函数定义结束标志；不能插入其他语句，也不能改写为 `RETURN table_name`、`RETURN SELECT ...` 或 `RETURN CALL ...`。这条空 RETURN 不参与返回模式推导。
-- 函数内所有可能执行的返回点必须具有一致的返回模式：要么全部为空返回，要么全部返回列数、列名和列类型一致的数据。上述双分支场景中的末尾空 RETURN 只是编译结束标志，不属于运行时返回点。
-- `RETURN CALL ... ASYNC` 不受支持，因为异步调用无法作为当前函数的同步返回值。
-
-**示例：**
-
-```sql
--- 空返回
-RETURN;
-
--- 返回已有缓存表
-RETURN result_table;
-
--- 直接返回查询结果，无需先创建匿名缓存表
-RETURN SELECT id, score FROM candidates ORDER BY score DESC;
-
--- 返回函数调用结果
-RETURN CALL rerank(candidates);
-
--- IF 中提前返回；最后一条顶层 RETURN 仍是函数定义结束标志，
--- 并在条件为 false 时作为后备返回
-IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
-);
-RETURN SELECT id FROM candidates;
-```
-
-
-### DROP SQL FUNCTION
-
-删除一个已存在的 SQL 函数。
-
-**语法：**
-
-```sql
-DROP SQL FUNCTION [IF EXISTS] function_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果函数不存在，则不报错 |
-| `function_name` | 要删除的函数名称 |
-
-**注意：** 如果函数被 API 引用，则无法删除。
-
-**示例：**
-
-```sql
-DROP SQL FUNCTION my_function;
-
-DROP SQL FUNCTION IF EXISTS my_function;
-```
-
-
-### SHOW SQL FUNCTIONS
-
-显示所有 SQL 函数列表。
-
-**语法：**
-
-```sql
-SHOW SQL FUNCTIONS
-```
-
-**示例：**
-
-```sql
-SHOW SQL FUNCTIONS;
-```
-
-
-### DESCRIBE SQL FUNCTION
-
-显示 SQL 函数的创建语句。
-
-**语法：**
-
-```sql
-{DESCRIBE | DESC} SQL FUNCTION function_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `function_name` | 函数名称 |
-
-**示例：**
-
-```sql
-DESCRIBE SQL FUNCTION my_function;
-
-DESC SQL FUNCTION my_function;
-```
-
-
-## 缓存管理
-
 ### CACHE TABLE
 
 缓存查询结果或函数调用结果到指定表。
@@ -669,7 +168,7 @@ DESC SQL FUNCTION my_function;
 **语法：**
 
 ```sql
-CACHE TABLE table_name AS 
+CACHE TABLE table_name AS
     {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
      | select_statement}
 ```
@@ -679,8 +178,8 @@ CACHE TABLE table_name AS
 | 参数 | 描述 |
 |------|------|
 | `table_name` | 缓存表名称 |
-| `function_name` | 要调用的函数名称，可以是标识符或 `GET()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
+| `function_name` | 要调用的函数名称，可以是标识符或 `GET()` / `GET_OR_DEFAULT()` 表达式 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` / `GET_OR_DEFAULT()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
@@ -713,6 +212,46 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 `ASYNC` 关键字在 `CACHE TABLE` 语法中会被解析，但运行时会抛出异常（`async function not support in cache`）。如需异步执行，请使用独立的 `CALL` 语句。
 :::
 
+### CALL
+
+调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量，或通过 `GET()` / `GET_OR_DEFAULT()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
+
+**语法：**
+
+```sql
+CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `function_name` | 函数名称，可以是标识符或 `GET()` / `GET_OR_DEFAULT()` 表达式 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` / `GET_OR_DEFAULT()` 表达式或字符串字面量 |
+| `like_table` | 可选。指定结果表的模板表 |
+| `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
+| `ASYNC` | 可选。异步执行 |
+
+`ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
+
+**示例：**
+
+```sql
+CALL my_function('param1', 'param2');
+
+CALL my_function(GET('var1'), 'param2') LIKE template_table;
+
+CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
+
+CALL my_function('param1') ASYNC;
+
+CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
+
+CALL my_function(t1) PARTITION BY t1 SIZE 100;
+
+CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
+```
 
 ### IF
 
@@ -805,7 +344,6 @@ IF TIMEIN (SELECT 1000) THEN (
 RETURN;
 ```
 
-
 ### ASSERT
 
 执行 SELECT 查询并断言结果为真。如果查询结果的任何字段不为 `true`，则抛出异常中止执行。
@@ -843,6 +381,61 @@ ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
 ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
 ```
 
+### RETURN
+
+从 SQL 函数中返回结果并提前结束本次函数执行。`RETURN` 可以直接返回缓存表，也可以执行 `SELECT` 或同步 `CALL` 并返回其结果。
+
+**语法：**
+
+```sql
+RETURN
+RETURN table_name
+RETURN select_statement
+RETURN CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `table_name` | 要返回的缓存表（`CacheTable`）名称，不能是普通外部表 |
+| `select_statement` | 作为函数结果返回的 SELECT 查询 |
+| `CALL ...` | 调用 SQL/Java 函数并返回其结果；动态调用仍需通过 `LIKE` 指定返回模式 |
+
+**规则：**
+
+- `RETURN;` 表示函数正常结束但不返回数据。
+- 顶层 `RETURN` 是 SQL 函数定义的结束标志；即使函数体中的 `IF` 已包含提前返回，函数定义仍需以顶层 `RETURN` 结束。顶层 `RETURN` 之后不能再定义其他函数体语句。
+- `IF` 分支内的 `RETURN` 只在运行时提前结束函数，不会在编译时结束函数定义。
+- 如果 IF 只有 THEN 分支返回，条件为 false 时仍会继续执行；末尾顶层 `RETURN` 是该路径的实际返回点，必须与 THEN 的返回模式兼容。
+- 如果 IF 的 THEN 和 ELSE 都是 `RETURN`，IF 已覆盖所有运行路径。该 IF 后必须立即且只能写一条不携带数据的 `RETURN;` 作为函数定义结束标志；不能插入其他语句，也不能改写为 `RETURN table_name`、`RETURN SELECT ...` 或 `RETURN CALL ...`。这条空 RETURN 不参与返回模式推导。
+- 函数内所有可能执行的返回点必须具有一致的返回模式：要么全部为空返回，要么全部返回列数、列名和列类型一致的数据。上述双分支场景中的末尾空 RETURN 只是编译结束标志，不属于运行时返回点。
+- `RETURN CALL ... ASYNC` 不受支持，因为异步调用无法作为当前函数的同步返回值。
+
+**示例：**
+
+```sql
+-- 空返回
+RETURN;
+
+-- 返回已有缓存表
+RETURN result_table;
+
+-- 直接返回查询结果，无需先创建匿名缓存表
+RETURN SELECT id, score FROM candidates ORDER BY score DESC;
+
+-- 返回函数调用结果
+RETURN CALL rerank(candidates);
+
+-- IF 中提前返回；最后一条顶层 RETURN 仍是函数定义结束标志，
+-- 并在条件为 false 时作为后备返回
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+);
+RETURN SELECT id FROM candidates;
+```
+
+## 执行变量
 
 ### SET
 
@@ -866,6 +459,475 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 API 请求体中 `params` 对象的键值也会作为执行变量。变量值为字符串；用作数字或布尔值时需要显式转换。
 
+### GET
+
+在 `CALL` 的动态函数名、Java 表函数的字符串参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 和 `GET_OR_DEFAULT` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。
+
+**语法：**
+
+```sql
+GET('variable_name')
+GET_OR_DEFAULT('variable_name', 'default_value')
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `variable_name` | 变量名称，必须是字符串字面量 |
+| `default_value` | 可选的默认值，变量不存在时使用，必须是字符串字面量 |
+
+**示例：**
+
+```sql
+SET 'rank_fun' = 'default_rank';
+
+CALL GET('rank_fun')(input_table) LIKE FUNCTION 'default_rank';
+
+CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(input_table)
+LIKE FUNCTION 'default_rank';
+```
+
+在 `SELECT` 等普通 SQL 表达式中，使用标量函数 `` `get`('variable_name') `` 或 `` `get_or_default`('variable_name', 'default_value') ``；写法和适用位置见[标量函数](./udf/scalar-functions.md#get)。
+
+## API 管理
+
+### CREATE API
+
+创建一个 API 接口，关联到指定的 SQL 函数。
+
+**语法：**
+
+```sql
+CREATE [OR REPLACE] API api_name WITH function_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `OR REPLACE` | 可选。如果 API 已存在，则替换现有定义 |
+| `api_name` | API 名称 |
+| `function_name` | 关联的 SQL 函数名称 |
+
+**示例：**
+
+```sql
+CREATE API my_api WITH my_function;
+
+CREATE OR REPLACE API my_api WITH my_function;
+```
+
+### DROP API
+
+删除一个已存在的 API。
+
+**语法：**
+
+```sql
+DROP API [IF EXISTS] api_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF EXISTS` | 可选。如果 API 不存在，则不报错 |
+| `api_name` | 要删除的 API 名称 |
+
+**示例：**
+
+```sql
+DROP API my_api;
+
+DROP API IF EXISTS my_api;
+```
+
+### SHOW APIS
+
+显示所有 API 列表。
+
+**语法：**
+
+```sql
+SHOW APIS
+```
+
+**示例：**
+
+```sql
+SHOW APIS;
+```
+
+### DESCRIBE API
+
+显示 API 的创建语句。
+
+**语法：**
+
+```sql
+{DESCRIBE | DESC} API api_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `api_name` | API 名称 |
+
+**示例：**
+
+```sql
+DESCRIBE API my_api;
+
+DESC API my_api;
+```
+
+## 模型与 Checkpoint
+
+### CREATE MODEL
+
+创建一个新的机器学习模型定义。
+
+**语法：**
+
+```sql
+CREATE MODEL [IF NOT EXISTS] model_name
+    [(column_name column_type [, ...])]
+    [WITH (property_name = property_value [, ...])]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF NOT EXISTS` | 可选。如果模型已存在，则不创建新模型，也不报错 |
+| `model_name` | 模型名称，必须是有效的标识符 |
+| `column_name` | 列名 |
+| `column_type` | 列数据类型 |
+| `property_name` | 属性名 |
+| `property_value` | 属性值 |
+
+**示例：**
+
+```sql
+CREATE MODEL rank_model (
+    user_id BIGINT,
+    item_id BIGINT,
+    price DOUBLE,
+    is_click INT
+) WITH (
+    model = 'tzrec.wide_and_deep',
+    label_columns = 'is_click'
+);
+
+CREATE MODEL IF NOT EXISTS external_rank_model WITH (
+    model = 'external',
+    output_columns = 'score:FLOAT'
+);
+```
+
+### DROP MODEL
+
+删除一个已存在的模型。
+
+**语法：**
+
+```sql
+DROP MODEL [IF EXISTS] model_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF EXISTS` | 可选。如果模型不存在，则不报错 |
+| `model_name` | 要删除的模型名称 |
+
+**示例：**
+
+```sql
+DROP MODEL my_model;
+
+DROP MODEL IF EXISTS my_model;
+```
+
+### TRAIN MODEL
+
+训练一个模型并创建检查点。
+
+**语法：**
+
+```sql
+TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
+    ON data_source
+    [WHERE condition]
+    [FROM 'existing_checkpoint']
+    [WITH (property_name = property_value [, ...])]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `model_name` | 要训练的模型名称 |
+| `checkpoint_name` | 检查点名称，用于标识训练结果 |
+| `data_source` | 训练数据源表名 |
+| `condition` | 可选。WHERE 条件，用于过滤训练数据 |
+| `existing_checkpoint` | 可选。基于已有检查点继续训练 |
+| `property_name` | 可选。训练属性名 |
+| `property_value` | 可选。训练属性值 |
+
+**示例：**
+
+```sql
+TRAIN MODEL my_model CHECKPOINT = 'v1.0'
+    ON training_data
+    WHERE status = 'active';
+
+TRAIN MODEL my_model CHECKPOINT = 'v2.0'
+    ON training_data
+    FROM 'v1.0'
+    WITH (num_epochs = 10, sparse_lr = 0.01);
+```
+
+### EXPORT MODEL
+
+导出模型的训练结果。
+
+**语法：**
+
+```sql
+EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
+    [ON data_source]
+    [WHERE condition]
+    [WITH (property_name = property_value [, ...])]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `model_name` | 要导出的模型名称 |
+| `checkpoint_name` | 检查点名称 |
+| `data_source` | 可选。导出目标数据源 |
+| `condition` | 可选。WHERE 条件 |
+| `property_name` | 可选。导出属性名 |
+| `property_value` | 可选。导出属性值 |
+
+**示例：**
+
+```sql
+EXPORT MODEL my_model CHECKPOINT = 'v1.0'
+    ON export_table;
+
+EXPORT MODEL my_model CHECKPOINT = 'v1.0'
+    ON export_table
+    WHERE status = 'valid'
+    WITH (format = 'parquet');
+```
+
+### SHOW MODELS
+
+显示所有模型列表。
+
+**语法：**
+
+```sql
+SHOW MODELS
+```
+
+**示例：**
+
+```sql
+SHOW MODELS;
+```
+
+### DESCRIBE MODEL
+
+显示模型的创建语句或检查点信息。
+
+**语法：**
+
+```sql
+{DESCRIBE | DESC} [FORMATTED] MODEL model_name [CHECKPOINT = 'checkpoint_name']
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括模型信息、输入字段、输出字段和模型参数 |
+| `model_name` | 模型名称 |
+| `checkpoint_name` | 可选。检查点名称，如果指定则显示该检查点的详细信息 |
+
+**示例：**
+
+```sql
+DESCRIBE MODEL my_model;
+
+DESC MODEL my_model CHECKPOINT = 'v1.0';
+
+DESCRIBE FORMATTED MODEL my_model;
+
+DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
+```
+
+### SHOW CHECKPOINTS
+
+显示指定模型的所有检查点列表。
+
+**语法：**
+
+```sql
+SHOW CHECKPOINTS model_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `model_name` | 模型名称 |
+
+**示例：**
+
+```sql
+SHOW CHECKPOINTS my_model;
+```
+
+### ALTER MODEL DROP CHECKPOINT
+
+删除模型的指定检查点。
+
+**语法：**
+
+```sql
+ALTER MODEL model_name DROP [IF EXISTS] CHECKPOINT = 'checkpoint_name'
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `model_name` | 模型名称 |
+| `IF EXISTS` | 可选。如果检查点不存在，则不报错 |
+| `checkpoint_name` | 要删除的检查点名称 |
+
+**示例：**
+
+```sql
+ALTER MODEL my_model DROP CHECKPOINT = 'v1.0';
+
+ALTER MODEL my_model DROP IF EXISTS CHECKPOINT = 'v1.0';
+```
+
+## 模型服务管理
+
+### CREATE SERVICE
+
+创建一个模型服务。
+
+**语法：**
+
+```sql
+CREATE SERVICE [IF NOT EXISTS] service_name
+    ON MODEL model_name
+    [CHECKPOINT = 'checkpoint_name']
+    [WITH (property_name = property_value [, ...])]
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF NOT EXISTS` | 可选。如果服务已存在，则不创建新服务，也不报错 |
+| `service_name` | 服务名称 |
+| `model_name` | 关联的模型名称 |
+| `checkpoint_name` | 可选。使用的检查点名称 |
+| `property_name` | 可选。服务属性名 |
+| `property_value` | 可选。服务属性值 |
+
+**示例：**
+
+```sql
+CREATE SERVICE rank_service
+    ON MODEL rank_model
+    CHECKPOINT = 'v1.0_export';
+
+CREATE SERVICE IF NOT EXISTS external_rank_service
+    ON MODEL external_rank_model
+    WITH (url = 'http://rank-service:8080/predict');
+```
+
+### DROP SERVICE
+
+删除一个已存在的服务。
+
+**语法：**
+
+```sql
+DROP SERVICE [IF EXISTS] service_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `IF EXISTS` | 可选。如果服务不存在，则不报错 |
+| `service_name` | 要删除的服务名称 |
+
+**示例：**
+
+```sql
+DROP SERVICE my_service;
+
+DROP SERVICE IF EXISTS my_service;
+```
+
+### SHOW SERVICES
+
+显示所有服务列表。
+
+**语法：**
+
+```sql
+SHOW SERVICES
+```
+
+**示例：**
+
+```sql
+SHOW SERVICES;
+```
+
+### DESCRIBE SERVICE
+
+显示服务的创建语句。
+
+**语法：**
+
+```sql
+{DESCRIBE | DESC} [FORMATTED] SERVICE service_name
+```
+
+**参数：**
+
+| 参数 | 描述 |
+|------|------|
+| `FORMATTED` | 可选。以格式化表格形式显示详细信息，包括服务信息、关联模型信息和模型字段 |
+| `service_name` | 服务名称 |
+
+**示例：**
+
+```sql
+DESCRIBE SERVICE my_service;
+
+DESC SERVICE my_service;
+
+DESCRIBE FORMATTED SERVICE my_service;
+```
+
+## 元数据刷新
 
 ### FLUSH
 
@@ -898,72 +960,3 @@ FLUSH;
 ::: warning 注意
 `FLUSH` 可能导致短时间内重新加载元数据。通常在外部修改表结构、函数或服务定义后执行；它不能保证已有 connector 表对象的行缓存立即更新。
 :::
-
-
-## 函数调用
-
-### CALL
-
-调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量或通过 `GET()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
-
-**语法：**
-
-```sql
-CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `function_name` | 函数名称，可以是标识符或 `GET()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
-| `like_table` | 可选。指定结果表的模板表 |
-| `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
-| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
-| `ASYNC` | 可选。异步执行 |
-
-`ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
-
-**示例：**
-
-```sql
-CALL my_function('param1', 'param2');
-
-CALL my_function(GET('var1'), 'param2') LIKE template_table;
-
-CALL my_function(GET('var1'), 'param2') LIKE FUNCTION 'template_function';
-
-CALL my_function('param1') ASYNC;
-
-CALL GET('fun1')(GET('id'), t1, '10') LIKE t1;
-
-CALL my_function(t1) PARTITION BY t1 SIZE 100;
-
-CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100 ASYNC;
-```
-
-
-### GET
-
-获取运行时变量的值。
-
-**语法：**
-
-```sql
-GET('variable_name')
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `variable_name` | 变量名称，必须是字符串字面量 |
-
-**示例：**
-
-```sql
-GET('my_variable');
-
-CALL my_function(GET('input_table'));
-```

@@ -187,7 +187,7 @@ CREATE MODEL → TRAIN MODEL → 检查 Checkpoint 状态
 
 ## 运行边界
 
-远程模式运行在线查询需要元数据服务（HMS、PostgreSQL）和实际使用的存储系统；转发语句需要 Flink SQL Gateway，自托管模型的训练和部署需要 Kubernetes。本地 SQL 文件模式也适合线上 serving，可减少元数据服务依赖并把定义纳入版本管理。REST 把同步业务执行放在独立线程组，Thrift 按会话管理执行器；指标和 Trace 用于观察请求与节点执行。部署依赖、端口和资源要求见[服务部署](../operations/deployment.md)。
+远程模式运行在线查询需要元数据服务（HMS、PostgreSQL）和实际使用的存储系统；转发语句需要 Flink SQL Gateway，自托管模型的训练和部署需要 Kubernetes。本地 SQL 文件模式也适合线上 serving，可减少元数据服务依赖并把定义纳入版本管理。REST 把同步业务执行放在独立线程组，Thrift 按会话管理执行器；指标和 Trace 用于观察请求与节点执行，使用方法见[可观测性](../operations/observability.md)。部署依赖、端口和资源要求见[服务部署](../operations/deployment.md)。
 
 读这个架构时要记住三个边界：SQLRec 的本地查询在进程内物化；`CACHE TABLE` 只在当前执行范围内可见；外部数据、模型服务和 Flink 作业各自有独立的生命周期。部署依赖与资源规模应按实际启用的路径选择。
 

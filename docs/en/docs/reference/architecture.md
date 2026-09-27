@@ -187,7 +187,7 @@ Training and export submit Kubernetes Jobs. Successful submission does not mean 
 
 ## Runtime Boundaries
 
-Online queries in remote mode require metadata services (HMS and PostgreSQL) and the storage systems they use. Forwarded statements require Flink SQL Gateway; training and deploying hosted models require Kubernetes. Local SQL-file mode also suits online serving: it reduces metadata-service dependencies and keeps definitions under version control. REST runs synchronous business work on a separate executor group; Thrift manages an executor per session. Metrics and traces cover requests and execution nodes. See [Service Deployment](../operations/deployment.md) for dependencies, ports, and resource requirements.
+Online queries in remote mode require metadata services (HMS and PostgreSQL) and the storage systems they use. Forwarded statements require Flink SQL Gateway; training and deploying hosted models require Kubernetes. Local SQL-file mode also suits online serving: it reduces metadata-service dependencies and keeps definitions under version control. REST runs synchronous business work on a separate executor group; Thrift manages an executor per session. Metrics and traces cover requests and execution nodes; see [Observability](../operations/observability.md) for how to use them. See [Service Deployment](../operations/deployment.md) for dependencies, ports, and resource requirements.
 
 Keep three boundaries in mind: local SQLRec queries materialize in process memory; `CACHE TABLE` is visible only within its execution scope; external data, model services, and Flink jobs have separate lifecycles. Size deployment dependencies and resources for the paths you actually enable.
 

@@ -2,7 +2,15 @@
 
 ## Introduction
 
-A recommendation engine that supports SQL development, aiming to enable data science practitioners, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SQLRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
+SQLRec is an engine for writing recommendation flows in SQL. Data analysts, data engineers, and backend developers can use SQL to connect data sources, organize recall and ranking, and publish results as APIs.
+
+### Where to Start
+
+- To see recommendations first, follow the [Docker Quick Start](./docker.md) to run the demo and call its built-in function and API.
+- To change recommendation logic, read [Writing a Recommendation Flow](../guides/recommendation-flow.md), then review the [demo SQL files](./docker.md#modify-the-demo-sql) and how SQLRec loads them.
+- To train models or deploy the full service, check the requirements in [Service Deployment](../operations/deployment.md), then read [Model Training and Online Inference](../guides/model-lifecycle.md).
+
+The diagram below shows the main components. You do not need to understand all of them before trying the demo.
 
 ![system_architecture](/sqlrec_arch.svg)
 
@@ -17,14 +25,14 @@ SQLRec has the following features:
 
 ### When will version 1.0 be released?
 
-Versions before 1.0 are beta versions, not recommended for production use, and do not guarantee interface compatibility. There is no planned release date yet; it will be released after the following features are completed:
+Versions before 1.0 are beta releases. They are not recommended for production use and do not guarantee interface compatibility. There is no scheduled date for 1.0. The following work is planned before release; completed items are crossed out:
 
 - Comprehensive unit test, integration test, and effectiveness test coverage
 - Code quality optimization, many details still need refinement
-- Support for degradation and timeout configuration
-- Complete version management methods for easy rollback to previous versions
-- Optimize metric monitoring system
-- C++ model serving
+- ~~Support for fallback and timeout configuration~~ (see [Timeouts and Recovery](../guides/exception-recovery.md))
+- ~~Version management with rollback to previous versions~~ (using filesystem schemas and Docker image versions)
+- ~~Metric monitoring system~~ (the `/metrics` endpoint and Prometheus/Grafana deployment configuration are available)
+- ~~C++ model serving~~ (available for LightGBM, XGBoost, and CatBoost models)
 
 ### Future Feature Plans
 
