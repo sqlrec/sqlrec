@@ -12,11 +12,7 @@ The benchmark calls the `main_rec` API and includes:
 - asynchronous recommendation-log writes to Kafka;
 - exposure-history writes to Redis.
 
-::: warning Test scope
-The default initialization script does not train or call a model service. It generates random item embeddings during import and calls `random_vec('64')` for each user request. The result therefore excludes real model-inference latency and says nothing about recommendation quality.
-:::
-
-Model creation, training, export, and invocation examples are in `benchmark/movielens/init_model.sql`; `init.sh` does not run that file automatically.
+`init.sh` runs `init_model.sql` to train, export, and deploy the recall and ranking models. Loading item features calls the DSSM item tower Service and writes its embeddings to Milvus. These preparation steps are outside the timed `wrk` run. By default, benchmark requests do not call an online model Service.
 
 ## Dataset and Flow
 
@@ -36,12 +32,12 @@ The recommendation flow is defined in `benchmark/movielens/init_sqlrec_sql.sql`.
 | Global popularity | Read 300 rows from `global_hot_item` |
 | Genre recall | Query `genre_hot_item` from `user_interest_genre`, limit 300 |
 | ItemCF recall | Query `itemcf_i2i` from `user_recent_click_item`, limit 300 |
-| Vector recall | Query Milvus with a random user vector, limit 300 |
+| Vector recall | Query Milvus with a local random user vector, limit 300 |
 | Deduplication | Remove items exposed within the last hour |
-| Ranking | `rank_fun_simple` joins item information |
+| Ranking | `rank_fun_simple` joins item information without inference |
 | Diversification | Window 3, at most 1 item per genre, return 10 |
 
-Request `params` can override `recall_fun` or `rank_fun`. A model-based ranking function requires its model and Service to be deployed first.
+`request.lua` explicitly sets `use_recall_service=false` and `rank_fun=rank_fun_simple` to keep the timed workload stable. To exercise online inference, set request `params` to `{"use_recall_service":"true","rank_fun":"rank_fun"}`. That path calls the DSSM user tower and Wide & Deep ranking Services. Random user vectors in the default benchmark are for performance measurement, not recommendation-quality evaluation.
 
 ## Prerequisites
 
@@ -74,9 +70,10 @@ The script:
 3. Downloads MovieLens 1M, converts it to Parquet, and uploads it to HDFS.
 4. Creates offline and online connector tables.
 5. Computes popularity, genre, and ItemCF features with Spark SQL.
-6. Writes features to Redis and random item vectors to Milvus.
-7. Registers SQL functions and the `main_rec` API.
-8. Calls `main_rec` once through Beeline as a basic check.
+6. Trains, exports, and deploys the Wide & Deep and DSSM models.
+7. Writes features to Redis and model-generated item vectors to Milvus.
+8. Registers SQL functions and the `main_rec` API.
+9. Calls `main_rec` through Beeline in both default and model-backed modes as basic checks.
 
 `init.sh` changes HDFS, Redis, Milvus, Kafka, and SQLRec metadata in the target environment. Do not run it against a shared or production environment.
 
@@ -87,11 +84,13 @@ cd benchmark/movielens
 bash benchmark.sh
 ```
 
-The current script uses a 10-second warm-up with one thread and connection, followed by a 30-second run with 10 threads and 10 connections against `/api/v1/main_rec`. Each request chooses a user ID from 0 to 5000.
+The current script uses a 10-second warm-up with one thread and connection, followed by a 30-second run with 10 threads and 10 connections against `/api/v1/main_rec`. Each request chooses a valid MovieLens user ID from 1 to 6040.
 
 Treat the current `benchmark.sh` and `request.lua` as authoritative. Record concurrency and duration with the result whenever you change them.
 
 ## Historical Result
+
+The following result was measured with the earlier mock-item-vector setup and a different user-ID range. The current setup imports model-generated item vectors, so the numbers are not directly comparable.
 
 ```text
 Running 30s test @ http://192.168.49.2:30001/api/v1/main_rec

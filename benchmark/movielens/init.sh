@@ -129,8 +129,14 @@ echo "Computing features from MovieLens data..."
 beeline -u "jdbc:hive2://${NODE_IP}:${KYUUBI_PORT}/default" -f ${dir}/compute_features.sql
 echo "Feature computation completed"
 
+echo "Training and deploying MovieLens models..."
+envsubst '${NAMESPACE}' < "${dir}/init_model.sql" > "${dir}/init_model.sql.tmp"
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f "${dir}/init_model.sql.tmp"
+echo "Model services are ready"
+
 echo "Loading features to Redis..."
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/load_features.sql
+envsubst '${NAMESPACE}' < "${dir}/load_features.sql" > "${dir}/load_features.sql.tmp"
+beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f "${dir}/load_features.sql.tmp"
 echo "Features loaded successfully"
 
 beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_sqlrec_sql.sql
@@ -138,5 +144,8 @@ beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -
 echo "Test rec..."
 beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -e "
 cache table t1 as select cast(1 as bigint) as user_id;
+call main_rec(t1);
+set rank_fun=rank_fun;
+set use_recall_service=true;
 call main_rec(t1);
 "

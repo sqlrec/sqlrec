@@ -2,11 +2,11 @@
 math.randomseed(os.time())
 
 function request()
-    -- Generate random ID between 0-5000
-    local random_id = math.random(0, 5000)
+    -- MovieLens-1M user IDs are 1 through 6040.
+    local random_id = math.random(1, 6040)
     
     -- Construct request body
-    local request_body = string.format('{"data":{"user_info":[{"user_id":%d}]},"params":{"recall_fun":"recall_fun"}}', random_id)
+    local request_body = string.format('{"data":{"user_info":[{"user_id":%d}]},"params":{"recall_fun":"recall_fun","use_recall_service":"false","rank_fun":"rank_fun_simple"}}', random_id)
     
     -- Configure HTTP request
     wrk.method = "POST"
