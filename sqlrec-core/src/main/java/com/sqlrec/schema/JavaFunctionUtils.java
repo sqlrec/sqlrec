@@ -1,12 +1,14 @@
 package com.sqlrec.schema;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Ticker;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.CacheUtils;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.slf4j.Logger;
@@ -16,20 +18,35 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 public class JavaFunctionUtils {
     private static final Logger log = LoggerFactory.getLogger(JavaFunctionUtils.class);
     private static volatile boolean skipHmsQuery = false;
     private static final LoadingCache<String, Optional<Class<?>>> javaFunctionClassCache =
-            CacheUtils.createRefreshCache(
+            createCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
-                    JavaFunctionUtils::loadJavaFunctionClass
+                    ExecutorServiceUtils.getCacheRefreshExecutorService(),
+                    Ticker.systemTicker()
             );
 
     private static final Map<String, Class<?>> registeredJavaFunctionClassMap = new ConcurrentHashMap<>();
 
     public static void invalidateCache() {
         javaFunctionClassCache.invalidateAll();
+    }
+
+    static LoadingCache<String, Optional<Class<?>>> createCache(
+            Duration refreshInterval,
+            Executor executor,
+            Ticker ticker
+    ) {
+        return CacheUtils.createRefreshCache(
+                refreshInterval,
+                executor,
+                ticker,
+                JavaFunctionUtils::loadJavaFunctionClass
+        );
     }
 
     public static void setSkipHmsQuery(boolean skip) {
@@ -49,6 +66,14 @@ public class JavaFunctionUtils {
     }
 
     public static Class<?> getTableFunctionClass(String db, String funName) {
+        return getTableFunctionClass(db, funName, javaFunctionClassCache);
+    }
+
+    static Class<?> getTableFunctionClass(
+            String db,
+            String funName,
+            LoadingCache<String, Optional<Class<?>>> cache
+    ) {
         String normalizedDb = ResourceNames.normalize(db);
         String normalizedFunName = ResourceNames.normalize(funName);
         String mapKey = getMapKey(normalizedDb, normalizedFunName);
@@ -58,7 +83,7 @@ public class JavaFunctionUtils {
         }
 
         try {
-            return javaFunctionClassCache.get(mapKey).orElse(null);
+            return cache.get(mapKey).orElse(null);
         } catch (JavaFunctionLoadException e) {
             log.warn("Exception when get table function: db={}, funName={}",
                     normalizedDb, normalizedFunName, e.getCause());
@@ -109,6 +134,12 @@ public class JavaFunctionUtils {
         registeredJavaFunctionClassMap.put(
                 getMapKey(ResourceNames.normalize(db), ResourceNames.normalize(funName)),
                 clazz
+        );
+    }
+
+    static void unregisterTableFunction(String db, String funName) {
+        registeredJavaFunctionClassMap.remove(
+                getMapKey(ResourceNames.normalize(db), ResourceNames.normalize(funName))
         );
     }
 

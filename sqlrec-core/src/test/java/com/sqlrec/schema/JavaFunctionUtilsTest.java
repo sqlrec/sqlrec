@@ -1,6 +1,7 @@
 package com.sqlrec.schema;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Ticker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.SchemaAccess;
@@ -14,10 +15,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.Queue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class JavaFunctionUtilsTest {
     private MetadataAccess savedMetadataAccess;
     private final AtomicReference<Function> remoteFunction = new AtomicReference<>();
+    private ManualTicker ticker;
+    private QueuedExecutor executor;
+    private LoadingCache<String, Optional<Class<?>>> cache;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -37,13 +45,15 @@ class JavaFunctionUtilsTest {
                 new LocalHdfsAccess()
         ));
 
+        ticker = new ManualTicker();
+        executor = new QueuedExecutor();
+        cache = JavaFunctionUtils.createCache(Duration.ofSeconds(1), executor, ticker);
         JavaFunctionUtils.setSkipHmsQuery(false);
-        JavaFunctionUtils.invalidateCache();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        JavaFunctionUtils.invalidateCache();
+        JavaFunctionUtils.unregisterTableFunction("default", "local_fun");
         JavaFunctionUtils.setSkipHmsQuery(false);
         getMetadataAccessField().set(null, savedMetadataAccess);
     }
@@ -53,18 +63,27 @@ class JavaFunctionUtilsTest {
         remoteFunction.set(functionFor(FirstTableFunction.class));
         assertEquals(
                 FirstTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun")
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache)
         );
 
         remoteFunction.set(functionFor(SecondTableFunction.class));
         assertEquals(
                 FirstTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun"),
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache),
                 "definition should remain cached before its refresh interval"
         );
 
-        refreshDefinition("default", "remote_fun");
-        awaitFunctionClass(SecondTableFunction.class);
+        ticker.advance(Duration.ofMillis(1100));
+        assertEquals(
+                FirstTableFunction.class,
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache),
+                "definition should remain cached until the queued refresh runs"
+        );
+        executor.runAll();
+        assertEquals(
+                SecondTableFunction.class,
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache)
+        );
     }
 
     @Test
@@ -72,23 +91,23 @@ class JavaFunctionUtilsTest {
         remoteFunction.set(functionFor(FirstTableFunction.class));
         assertEquals(
                 FirstTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun")
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache)
         );
 
         remoteFunction.set(null);
-        invalidateDefinition("default", "remote_fun");
-        assertNull(JavaFunctionUtils.getTableFunctionClass("default", "remote_fun"));
+        cache.invalidate("default.remote_fun");
+        assertNull(JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache));
 
         remoteFunction.set(functionFor(SecondTableFunction.class));
         assertNull(
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun"),
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache),
                 "a missing definition should also be cached"
         );
 
-        invalidateDefinition("default", "remote_fun");
+        cache.invalidate("default.remote_fun");
         assertEquals(
                 SecondTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun")
+                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache)
         );
     }
 
@@ -97,13 +116,13 @@ class JavaFunctionUtilsTest {
         remoteFunction.set(functionFor(FirstTableFunction.class));
         assertEquals(
                 FirstTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass(" DEFAULT ", " ReMoTe_FuN ")
+                JavaFunctionUtils.getTableFunctionClass(" DEFAULT ", " ReMoTe_FuN ", cache)
         );
 
         JavaFunctionUtils.registerTableFunction(" DEFAULT ", " LoCaL_FuN ", SecondTableFunction.class);
         assertEquals(
                 SecondTableFunction.class,
-                JavaFunctionUtils.getTableFunctionClass("default", "local_fun")
+                JavaFunctionUtils.getTableFunctionClass("default", "local_fun", cache)
         );
     }
 
@@ -113,35 +132,6 @@ class JavaFunctionUtilsTest {
         function.setFunctionName("remote_fun");
         function.setClassName(clazz.getName());
         return function;
-    }
-
-    private static void refreshDefinition(String db, String functionName) throws Exception {
-        getJavaFunctionClassCache().refresh(db + "." + functionName);
-    }
-
-    private static void awaitFunctionClass(Class<?> expectedClass) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (System.nanoTime() < deadline) {
-            if (expectedClass.equals(JavaFunctionUtils.getTableFunctionClass("default", "remote_fun"))) {
-                return;
-            }
-            Thread.sleep(10);
-        }
-        assertEquals(
-                expectedClass,
-                JavaFunctionUtils.getTableFunctionClass("default", "remote_fun")
-        );
-    }
-
-    private static void invalidateDefinition(String db, String functionName) throws Exception {
-        getJavaFunctionClassCache().invalidate(db + "." + functionName);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static LoadingCache<String, Optional<Class<?>>> getJavaFunctionClassCache() throws Exception {
-        Field cacheField = JavaFunctionUtils.class.getDeclaredField("javaFunctionClassCache");
-        cacheField.setAccessible(true);
-        return (LoadingCache<String, Optional<Class<?>>>) cacheField.get(null);
     }
 
     private static Field getMetadataAccessField() throws Exception {
@@ -154,6 +144,35 @@ class JavaFunctionUtilsTest {
     }
 
     public static class SecondTableFunction {
+    }
+
+    private static final class ManualTicker implements Ticker {
+        private final AtomicLong nanos = new AtomicLong();
+
+        @Override
+        public long read() {
+            return nanos.get();
+        }
+
+        void advance(Duration duration) {
+            nanos.addAndGet(duration.toNanos());
+        }
+    }
+
+    private static final class QueuedExecutor implements Executor {
+        private final Queue<Runnable> tasks = new ArrayDeque<>();
+
+        @Override
+        public void execute(Runnable command) {
+            tasks.add(command);
+        }
+
+        void runAll() {
+            Runnable task;
+            while ((task = tasks.poll()) != null) {
+                task.run();
+            }
+        }
     }
 
     private static final class MutableFunctionSchemaAccess implements SchemaAccess {
