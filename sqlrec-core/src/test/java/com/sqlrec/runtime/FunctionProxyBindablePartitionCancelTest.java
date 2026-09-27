@@ -12,6 +12,7 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -23,6 +24,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class FunctionProxyBindablePartitionCancelTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+    }
 
     public static final AtomicBoolean CANCEL_OBSERVED = new AtomicBoolean(false);
 

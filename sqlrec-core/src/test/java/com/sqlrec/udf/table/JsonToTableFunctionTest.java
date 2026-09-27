@@ -10,6 +10,7 @@ import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -18,6 +19,10 @@ import java.util.List;
 import java.util.Map;
 
 public class JsonToTableFunctionTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+    }
 
     @Test
     public void testJsonObject() throws Exception {

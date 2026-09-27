@@ -15,11 +15,17 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
 public class JavaFunctionSchemaCheckTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+    }
+
 
     /**
      * Function that returns a CacheTable with schema (name VARCHAR, age INTEGER).

@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.utils.SqlTestCase;
@@ -18,6 +19,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +38,14 @@ public class IfBindableTest {
                 return Collections.singletonMap("myTable", new MyTable());
             }
         });
+        CalciteSchemaFactory.setGlobalSchema(schema);
+        JavaFunctionUtils.setSkipHmsQuery(true);
+    }
+
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+        JavaFunctionUtils.setSkipHmsQuery(false);
     }
 
     @Test

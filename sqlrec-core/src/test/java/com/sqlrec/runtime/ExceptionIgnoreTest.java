@@ -7,12 +7,19 @@ import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class ExceptionIgnoreTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+        JavaFunctionUtils.setSkipHmsQuery(false);
+    }
+
     @Test
     @SilenceLoggers(ProxyAllBindable.class)
     public void testExceptionIgnore() throws Exception {

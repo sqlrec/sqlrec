@@ -6,6 +6,7 @@ import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,11 @@ import java.util.List;
  * {@code SqlStdOperatorTable} through SQLRec's complete compile and execute path.
  */
 public class CalciteBuiltInFunctionSupportTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+    }
+
     private CalciteSchema schema;
     private ExecuteContextImpl executeContext;
 

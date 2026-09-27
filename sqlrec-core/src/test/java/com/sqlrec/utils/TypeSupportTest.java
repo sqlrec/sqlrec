@@ -17,6 +17,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -25,6 +26,11 @@ import java.util.List;
 import java.util.Map;
 
 public class TypeSupportTest {
+    @AfterEach
+    public void tearDown() {
+        CalciteSchemaFactory.setGlobalSchema(null);
+    }
+
     @Test
     public void testTypeSupport() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
