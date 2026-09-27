@@ -1,11 +1,16 @@
 package com.sqlrec.k8s;
 
+import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.api.model.batch.v1.JobCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,10 +18,15 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
+    private static final long DELETE_WAIT_SECONDS = 60;
     static volatile KubernetesClient kubernetesClient;
 
     static {
@@ -142,6 +152,42 @@ public class K8sManager {
         }
     }
 
+    /**
+     * Delete resources before recreating a checkpoint with the same Kubernetes names.
+     * Unlike best-effort cleanup, a retry must not apply new YAML while the old Job
+     * or ConfigMap is still terminating.
+     */
+    public static void deleteYamlAndWait(String yamlContent) {
+        if (yamlContent == null || yamlContent.isEmpty()) {
+            return;
+        }
+
+        try {
+            KubernetesClient client = getKubernetesClient();
+            List<HasMetadata> resources = K8sYamlUtils.parseK8sYaml(yamlContent);
+            // Stop the old workload before removing the resources it depends on.
+            resources.sort(Comparator.comparingInt(resource -> "Job".equals(resource.getKind()) ? 0 : 1));
+            for (HasMetadata resource : resources) {
+                String name = resource.getMetadata() != null ? resource.getMetadata().getName() : null;
+                if (name == null || name.isEmpty()) {
+                    throw new IllegalArgumentException("Cannot delete " + resource.getKind() + " without a name");
+                }
+
+                Resource<HasMetadata> handle = client.resource(resource);
+                handle.delete();
+                handle.waitUntilCondition(Objects::isNull, DELETE_WAIT_SECONDS, TimeUnit.SECONDS);
+                log.info("Deleted {} before checkpoint retry: {}/{}", resource.getKind(),
+                        resource.getMetadata().getNamespace(), name);
+            }
+        } catch (Exception e) {
+            log.error("Failed to delete old checkpoint resources: {}", e.getMessage(), e);
+            if (isK8sClientFailure(e)) {
+                resetClient();
+            }
+            throw new RuntimeException("Failed to delete old checkpoint resources: " + e.getMessage(), e);
+        }
+    }
+
     private static boolean checkResourceExists(KubernetesClient client, String kind, String name, String namespace) {
         switch (kind) {
             case "Deployment":
@@ -161,39 +207,116 @@ public class K8sManager {
         }
     }
 
-    private static String checkJobStatusByName(String jobName, String namespace) {
+    public record JobStatus(String state, String detail) {
+    }
+
+    private static JobStatus checkJobStatusByName(String jobName, String namespace) {
         try {
+            String resolvedNamespace = namespace != null ? namespace : "default";
             Job job = getKubernetesClient().batch().v1().jobs()
-                    .inNamespace(namespace != null ? namespace : "default")
+                    .inNamespace(resolvedNamespace)
                     .withName(jobName)
                     .get();
 
             if (job == null) {
-                log.error("Job not found: {}/{}", namespace != null ? namespace : "default", jobName);
-                return "failed";
+                String detail = "Job not found: " + resolvedNamespace + "/" + jobName;
+                log.error(detail);
+                return new JobStatus("failed", detail);
             }
 
             if (job.getStatus() != null) {
+                if (job.getStatus().getConditions() != null) {
+                    for (JobCondition condition : job.getStatus().getConditions()) {
+                        if ("Failed".equals(condition.getType()) && "True".equals(condition.getStatus())) {
+                            String detail = condition.getMessage();
+                            log.error("Job failed: {}/{}, reason: {}, message: {}",
+                                    resolvedNamespace, jobName, condition.getReason(), detail);
+                            return new JobStatus("failed", "Job failed: " + resolvedNamespace + "/" + jobName
+                                    + (detail == null || detail.isBlank() ? "" : " (" + detail + ")"));
+                        }
+                    }
+                }
                 Integer succeeded = job.getStatus().getSucceeded();
                 Integer completions = job.getSpec() != null ? job.getSpec().getCompletions() : null;
-                if (succeeded != null && completions != null && succeeded >= completions) {
-                    log.info("Job completed successfully: {}/{}", namespace != null ? namespace : "default", jobName);
-                    return "succeeded";
+                // Kubernetes defaults completions to one when the field is omitted.
+                if (succeeded != null && succeeded >= (completions != null ? completions : 1)) {
+                    log.info("Job completed successfully: {}/{}", resolvedNamespace, jobName);
+                    return new JobStatus("succeeded", null);
                 }
-                if (job.getStatus().getFailed() != null && job.getStatus().getFailed() > 0) {
-                    log.error("Job failed: {}/{}", namespace != null ? namespace : "default", jobName);
-                    return "failed";
+
+                // Ready Pods have already started all their containers. Avoid listing Pods
+                // while every active Pod is ready; a new or replacement Pod makes the
+                // counts diverge, so image-pull checks resume automatically.
+                Integer active = job.getStatus().getActive();
+                Integer ready = job.getStatus().getReady();
+                if (active != null && active > 0 && active.equals(ready)) {
+                    return new JobStatus("running", null);
                 }
             }
 
-            return "running";
+            String imagePullFailure = findImagePullFailure(job, resolvedNamespace);
+            return imagePullFailure == null
+                    ? new JobStatus("running", null)
+                    : new JobStatus("failed", imagePullFailure);
         } catch (Exception e) {
             log.error("Failed to check job status: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
                 resetClient();
             }
-            return "running";
+            return new JobStatus("running", null);
         }
+    }
+
+    private static String findImagePullFailure(Job job, String namespace) {
+        String jobName = job.getMetadata().getName();
+        Map<String, String> labels = job.getSpec() != null && job.getSpec().getSelector() != null
+                ? job.getSpec().getSelector().getMatchLabels() : null;
+        PodList podList = labels != null && !labels.isEmpty()
+                ? getKubernetesClient().pods().inNamespace(namespace).withLabels(labels).list()
+                : getKubernetesClient().pods().inNamespace(namespace)
+                        .withLabel("batch.kubernetes.io/job-name", jobName).list();
+        // Older Kubernetes versions use the unprefixed Job label.
+        if ((podList == null || podList.getItems() == null || podList.getItems().isEmpty())
+                && (labels == null || labels.isEmpty())) {
+            podList = getKubernetesClient().pods().inNamespace(namespace)
+                    .withLabel("job-name", jobName).list();
+        }
+        if (podList == null || podList.getItems() == null) {
+            return null;
+        }
+        for (Pod pod : podList.getItems()) {
+            String failure = imagePullFailure(pod);
+            if (failure != null) {
+                String podName = pod.getMetadata() != null ? pod.getMetadata().getName() : "unknown";
+                return "Job " + namespace + "/" + jobName + ", Pod " + podName + ": " + failure;
+            }
+        }
+        return null;
+    }
+
+    static String imagePullFailure(Pod pod) {
+        if (pod == null || pod.getStatus() == null) {
+            return null;
+        }
+        for (List<ContainerStatus> statuses : List.of(
+                pod.getStatus().getInitContainerStatuses() != null
+                        ? pod.getStatus().getInitContainerStatuses() : List.<ContainerStatus>of(),
+                pod.getStatus().getContainerStatuses() != null
+                        ? pod.getStatus().getContainerStatuses() : List.<ContainerStatus>of())) {
+            for (ContainerStatus status : statuses) {
+                if (status.getState() == null || status.getState().getWaiting() == null) {
+                    continue;
+                }
+                String reason = status.getState().getWaiting().getReason();
+                if ("ErrImagePull".equals(reason) || "ImagePullBackOff".equals(reason)
+                        || "InvalidImageName".equals(reason)) {
+                    String message = status.getState().getWaiting().getMessage();
+                    return "container " + status.getName() + " is waiting: " + reason
+                            + (message == null || message.isBlank() ? "" : " (" + message + ")");
+                }
+            }
+        }
+        return null;
     }
 
     private static boolean isDeploymentReadyByName(String deploymentName, String namespace) {
@@ -258,39 +381,47 @@ public class K8sManager {
     }
 
     public static String checkJobsStatusFromYaml(String k8sYaml) {
+        return checkJobsStatusDetailFromYaml(k8sYaml).state();
+    }
+
+    public static JobStatus checkJobsStatusDetailFromYaml(String k8sYaml) {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
-            return "succeeded";
+            return new JobStatus("succeeded", null);
         }
 
         List<Job> jobs = K8sYamlUtils.parseK8sYamlAndGetJobs(k8sYaml);
 
         if (jobs.isEmpty()) {
-            return "succeeded";
+            return new JobStatus("succeeded", null);
         }
 
         boolean anyFailed = false;
         boolean anyRunning = false;
+        String failureDetail = null;
 
         for (Job job : jobs) {
             String namespace = job.getMetadata() != null ? job.getMetadata().getNamespace() : null;
             String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
             if (name != null) {
-                String status = checkJobStatusByName(name, namespace);
-                if ("failed".equals(status)) {
+                JobStatus status = checkJobStatusByName(name, namespace);
+                if ("failed".equals(status.state())) {
                     anyFailed = true;
-                } else if ("running".equals(status)) {
+                    if (failureDetail == null) {
+                        failureDetail = status.detail();
+                    }
+                } else if ("running".equals(status.state())) {
                     anyRunning = true;
                 }
             }
         }
 
         if (anyFailed) {
-            return "failed";
+            return new JobStatus("failed", failureDetail);
         }
         if (anyRunning) {
-            return "running";
+            return new JobStatus("running", null);
         }
-        return "succeeded";
+        return new JobStatus("succeeded", null);
     }
 
     public static boolean isDeploymentReadyFromYaml(String k8sYaml) {

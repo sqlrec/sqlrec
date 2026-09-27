@@ -104,17 +104,17 @@ public class ModelManager {
         Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
             String status = existingCheckpoint.getStatus();
-            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
+            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)
+                    && canReuseCreatedCheckpoint(db, existingCheckpoint)) {
                 log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info",
                         modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
                 List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
-            } else {
-                log.info("Model {} re train checkpoint {}, deleting old first",
-                        modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
-                deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
             }
+            log.info("Model {} re train checkpoint {}, deleting old first",
+                    modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
+            deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
         }
 
         if (modelController.requiresTrainingData()
@@ -168,7 +168,8 @@ public class ModelManager {
             Checkpoint existingCheckpoint = db.getCheckpoint(modelExportConf.getModelName(), exportCheckpointName);
             if (existingCheckpoint != null) {
                 existingCheckpoints.add(existingCheckpoint);
-                if (Consts.CHECKPOINT_STATUS_CREATED.equals(existingCheckpoint.getStatus())) {
+                if (Consts.CHECKPOINT_STATUS_CREATED.equals(existingCheckpoint.getStatus())
+                        && canReuseCreatedCheckpoint(db, existingCheckpoint)) {
                     log.info("Model {} has export checkpoint {} in progress",
                             modelExportConf.getModelName(), exportCheckpointName);
                     createdCheckpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
@@ -256,7 +257,7 @@ public class ModelManager {
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
             String k8sYaml = checkpoint.getYaml();
             if (!StringUtils.isEmpty(k8sYaml)) {
-                K8sManager.deleteYaml(k8sYaml);
+                K8sManager.deleteYamlAndWait(k8sYaml);
             }
         }
 
@@ -326,13 +327,14 @@ public class ModelManager {
                     continue;
                 }
 
-                String jobStatus = K8sManager.checkJobsStatusFromYaml(k8sYaml);
-                if ("succeeded".equals(jobStatus)) {
+                K8sManager.JobStatus jobStatus = K8sManager.checkJobsStatusDetailFromYaml(k8sYaml);
+                if ("succeeded".equals(jobStatus.state())) {
                     updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     yamlsToDelete.add(k8sYaml);
-                } else if ("failed".equals(jobStatus)) {
+                } else if ("failed".equals(jobStatus.state())) {
                     updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
-                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
+                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName()
+                            + (jobStatus.detail() == null ? "" : " (" + jobStatus.detail() + ")"));
                 } else {
                     allCompleted = false;
                 }
@@ -350,6 +352,16 @@ public class ModelManager {
         }
 
         return allCompleted;
+    }
+
+    static boolean canReuseCreatedCheckpoint(MetadataAccess db, Checkpoint checkpoint) {
+        String yaml = checkpoint.getYaml();
+        if (!StringUtils.isEmpty(yaml)
+                && !"failed".equals(K8sManager.checkJobsStatusDetailFromYaml(yaml).state())) {
+            return true;
+        }
+        updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
+        return false;
     }
 
     private static void updateCheckpointStatus(
