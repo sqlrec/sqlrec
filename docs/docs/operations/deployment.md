@@ -229,23 +229,26 @@ bash ./bin/build_sqlrec_docker.sh
 
 # 构建模型镜像
 bash ./bin/build_model_docker.sh
+
+# 只构建一个模型镜像
+bash ./bin/build_model_docker.sh tzrec
+bash ./bin/build_model_docker.sh gbdt
+bash ./bin/build_model_docker.sh transformers
 ```
 
 ::: tip 提示
 脚本会自动切换到项目根目录执行构建，无需手动 cd；脚本内部会 `source deploy/env.sh` 读取版本号等配置。
 :::
 
-**Minikube 环境**：
+**模型依赖与 Docker 环境**：
 
-如果检测到 Minikube 环境，构建脚本会自动配置 Minikube 的 Docker 环境，使构建的镜像可以直接被 Minikube 使用：
+模型构建脚本会自动初始化并更新 `submodules/` 下的 `juicefs-src`、`tzrec-src`、`compat-src` submodule，使用 `.gitmodules` 中配置的分支。若要使用 SQLRec 当前提交记录的 submodule 版本，可设置 `MODEL_SOURCE_UPDATE=0`。脚本分别构建目标架构和 Python 版本所需的 wheel，保存在 `build/model-wheels/<架构>/`，并为每个镜像创建仅包含所需文件的临时构建上下文。构建平台取 Docker 服务端的原生架构；所选 Buildx builder 必须绑定该 Docker 服务端，不使用 QEMU。
 
-```bash
-if command -v minikube >/dev/null 2>&1; then
-  eval $(minikube -p minikube docker-env)
-fi
-```
+模型脚本优先使用当前 Docker 引擎；没有可用引擎且 Minikube 正在运行时，自动切换到 Minikube 的 Docker 引擎。构建后的镜像位于所选引擎中。
 
-macOS 只安装 Docker CLI，不运行 Docker Desktop，因此构建镜像前必须先启动 Minikube。GBDT 镜像同时支持 AMD64 和 ARM64。tzrec 基础镜像的 ARM64 支持尚未确认，因此 tzrec 模型镜像仍不属于 ARM64 核心部署的保证范围。
+本仓库的模型 Dockerfile 使用 BuildKit pip 缓存。首次构建仍需下载依赖；后续在同一 Docker builder 上构建，即使某个安装步骤失败重试，也可以复用已下载的 Python 包。清理 Docker builder 缓存后需要重新下载。
+
+如果 macOS 只安装 Docker CLI、没有运行 Docker Desktop，则构建前必须启动 Minikube。GBDT 镜像支持 AMD64 和 ARM64；TZRec 的 AMD64 镜像使用上游基础镜像，ARM64 镜像使用 PyTorch CPU 和本项目的 pyfg/graphlearn 兼容包。
 
 **手动构建**：
 
@@ -261,6 +264,6 @@ export SQLREC_VERSION=your-version
 # 构建 SQLRec 服务镜像
 docker build -t sqlrec/sqlrec:${SQLREC_VERSION} -f ./docker/Dockerfile .
 
-# 构建 tzrec 模型镜像
-docker build -t sqlrec/tzrec:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+# 构建 tzrec 模型镜像（自动准备与架构匹配的 wheel）
+bash ./bin/build_model_docker.sh tzrec
 ```

@@ -26,6 +26,11 @@ on:
         required: false
         default: 'feat/sqlrec'
         type: string
+      arm_compat_ref:
+        description: 'sqlrec-arm-compat branch'
+        required: false
+        default: 'master'
+        type: string
 
 # This caller deliberately has no write permission and passes no publishing
 # secrets to the reusable workflow.
@@ -40,3 +45,4 @@ jobs:
       publish_images: false
       juicefs_ref: ${{ inputs.juicefs_ref }}
       tzrec_ref: ${{ inputs.tzrec_ref }}
+      arm_compat_ref: ${{ inputs.arm_compat_ref }}

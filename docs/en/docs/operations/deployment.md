@@ -229,23 +229,26 @@ bash ./bin/build_sqlrec_docker.sh
 
 # Build model images
 bash ./bin/build_model_docker.sh
+
+# Build just one model image
+bash ./bin/build_model_docker.sh tzrec
+bash ./bin/build_model_docker.sh gbdt
+bash ./bin/build_model_docker.sh transformers
 ```
 
 ::: tip Tip
 The scripts automatically switch to the project root directory to execute the build, no manual cd is needed; the scripts internally `source deploy/env.sh` to read the version number and other configurations.
 :::
 
-**Minikube Environment**:
+**Model Dependencies and Docker Environment**:
 
-If a Minikube environment is detected, the build scripts will automatically configure Minikube's Docker environment so that built images can be directly used by Minikube:
+The model build script initializes and updates the `juicefs-src`, `tzrec-src`, and `compat-src` submodules under `submodules/` from the branches in `.gitmodules`. Set `MODEL_SOURCE_UPDATE=0` to use the submodule revisions recorded by the current SQLRec commit. It builds the wheels required by each image's architecture and Python version into `build/model-wheels/<architecture>/`, then creates a small build context containing only that image's files. The build platform matches the Docker server's native architecture; the selected Buildx builder must use that server, without QEMU.
 
-```bash
-if command -v minikube >/dev/null 2>&1; then
-  eval $(minikube -p minikube docker-env)
-fi
-```
+The model script uses the selected Docker engine. If none is available and Minikube is running, it switches to Minikube's Docker engine. Built images remain in the selected engine.
 
-macOS installs only the Docker CLI and does not run Docker Desktop, so Minikube must be running before building images. The GBDT image supports both AMD64 and ARM64. ARM64 support in the tzrec base image is not confirmed, so the tzrec model image remains outside the guaranteed core ARM64 deployment scope.
+The model Dockerfiles in this repository use a BuildKit pip cache. The first build still downloads dependencies; later builds on the same Docker builder can reuse downloaded Python packages, including after a failed install step. Pruning the builder cache requires downloading them again.
+
+If macOS has only the Docker CLI and no running Docker Desktop, start Minikube before building. GBDT supports AMD64 and ARM64. TZRec uses the upstream base image on AMD64 and PyTorch CPU with the pyfg/graphlearn compatibility packages on ARM64.
 
 **Manual Build**:
 
@@ -261,6 +264,6 @@ export SQLREC_VERSION=your-version
 # Build SQLRec service image
 docker build -t sqlrec/sqlrec:${SQLREC_VERSION} -f ./docker/Dockerfile .
 
-# Build model image
-docker build -t sqlrec/tzrec:${SQLREC_VERSION}-cpu -f ./docker/sqlrec-model-tzrec.Dockerfile .
+# Build the TZRec image, including architecture-matched wheels
+bash ./bin/build_model_docker.sh tzrec
 ```

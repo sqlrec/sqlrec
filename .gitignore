@@ -55,4 +55,5 @@ __pycache__/
 .venv
 *.parquet
 *.zip
+*.whl
 ml-1m

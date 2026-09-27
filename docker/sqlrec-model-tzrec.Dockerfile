@@ -1,17 +1,61 @@
-FROM mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easyrec/tzrec-devel:1.3-cpu
+# syntax=docker/dockerfile:1
+
+ARG TARGETARCH
+
+FROM --platform=linux/amd64 mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easyrec/tzrec-devel:1.3-cpu AS tzrec-amd64
+
+FROM --platform=linux/arm64 python:3.11-slim-bookworm AS tzrec-arm64
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libgomp1 libnuma1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# TorchRec uses the fbgemm_gpu Python module supplied by fbgemm-gpu-cpu.
+# Install TorchRec without its fbgemm-gpu distribution dependency.
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    pip install --timeout 120 --retries 5 --index-url https://download.pytorch.org/whl/cpu \
+        'torch==2.12.1+cpu' \
+    && pip install --timeout 120 --retries 5 \
+        'fbgemm-gpu-cpu==1.7.0' \
+        'torchmetrics==1.0.3' \
+        tensordict tqdm pyre-extensions iopath \
+    && pip install --timeout 120 --retries 5 --no-deps 'torchrec==1.7.0'
+
+# TorchEasyRec imports its dataset and feature modules at startup. Install the
+# runtime dependencies except the x86_64-only pyfg and graphlearn wheels.
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    pip install --timeout 120 --retries 5 \
+        'alibabacloud_credentials>=1.0.2,<2.0.0' \
+        anytree \
+        'common_io @ https://tzrec.oss-accelerate.aliyuncs.com/third_party/common_io-0.4.1%2Btunnel-py2.py3-none-any.whl' \
+        confluent-kafka \
+        'feature_store_py @ https://feature-store-py.oss-cn-beijing.aliyuncs.com/package/feature_store_py-2.2.7-py3-none-any.whl' \
+        fsspec \
+        'grpcio-tools<1.63.0' \
+        'numpy>=1.24,<3' packaging pandas psutil \
+        'pyodps==0.12.5.1' \
+        'pyarrow>=14,<26' safetensors scikit-learn tensorboard faiss-cpu
+
+# These wheels are built from the same sqlrec-arm-compat revision tested in CI.
+# pyfarmhash contains the native ARM extension used by pyfg ID hashing.
+COPY pyfarmhash-*.whl pyfg-*.whl graphlearn-*.whl /tmp/
+RUN pip install --no-cache-dir --no-deps \
+        /tmp/pyfarmhash-*.whl \
+        /tmp/pyfg-*.whl \
+        /tmp/graphlearn-*.whl \
+    && rm -f /tmp/*.whl
+
+FROM tzrec-${TARGETARCH} AS runtime
 
 COPY juicefs-*.whl /tmp/
 COPY tzrec-*.whl /tmp/
 
-# tzrec's runtime deps (torch/torchrec/fbgemm/graphlearn/pyfg/...) are already
-# provided by the tzrec-devel base image; --no-deps avoids pip reinstalling or
-# upgrading them. juicefs is not in the base image, so install it normally.
-RUN pip install /tmp/juicefs-*.whl \
+# tzrec's runtime dependencies are installed in the architecture-specific base.
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    pip install /tmp/juicefs-*.whl \
     && pip install --no-deps /tmp/tzrec-*.whl \
-    && pip install flask
-
-RUN rm -rf /tmp/*.whl \
-    && rm -rf /root/.cache/pip \
+    && pip install flask \
+    && rm -f /tmp/*.whl \
     && mkdir -p /app
 
 WORKDIR /app

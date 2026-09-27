@@ -1,6 +1,5 @@
 deploy/
 .*
-juicefs-src/
-tzrec-src/
+submodules/
 **/__pycache__/
 **/*.py[cod]

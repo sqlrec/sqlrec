@@ -75,6 +75,12 @@ jobs:
 
   publish-images:
     needs: build-test-release
+    # Version-series and latest tags are shared by releases. Keep complete
+    # image publish runs in order so manifests cannot mix release versions.
+    concurrency:
+      group: sqlrec-image-publish
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
     uses: ./.github/workflows/_build-images.yml
@@ -83,6 +89,7 @@ jobs:
       publish_images: true
       juicefs_ref: feat/sqlrec
       tzrec_ref: feat/sqlrec
+      arm_compat_ref: master
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

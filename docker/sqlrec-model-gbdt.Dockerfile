@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # ===========================================================================
 # Stage 1: builder
 #   Compiles the C++ inference servers and assembles a self-contained Python
@@ -35,7 +37,8 @@ ENV VIRTUAL_ENV=/opt/venv
 #   - scikit-learn: required by onnxmltools initial_types
 #   - pyarrow: HDFS access via HadoopFileSystem + parquet IO
 #   - fsspec, pandas: dataset loading helpers
-RUN pip install --no-cache-dir --timeout 120 --retries 5 \
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    pip install --timeout 120 --retries 5 \
         lightgbm \
         xgboost-cpu \
         catboost==${CATBOOST_VERSION} \

@@ -9,7 +9,8 @@ FROM --platform=linux/amd64 pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime AS tra
 
 FROM --platform=linux/arm64 python:3.11-slim-bookworm AS transformers-arm64
 
-RUN pip install --no-cache-dir "torch==2.5.1"
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    pip install --timeout 120 --retries 5 "torch==2.5.1"
 
 FROM transformers-${TARGETARCH} AS runtime
 
@@ -17,10 +18,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update \
+RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
+    apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir \
+    && pip install --timeout 120 --retries 5 \
         "transformers>=4.50,<5" \
         huggingface-hub \
         accelerate \

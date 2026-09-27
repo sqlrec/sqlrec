@@ -1,0 +1,12 @@
+[submodule "juicefs-src"]
+	path = submodules/juicefs-src
+	url = https://github.com/sqlrec/juicefs.git
+	branch = feat/sqlrec
+[submodule "tzrec-src"]
+	path = submodules/tzrec-src
+	url = https://github.com/sqlrec/TorchEasyRec.git
+	branch = feat/sqlrec
+[submodule "compat-src"]
+	path = submodules/compat-src
+	url = https://github.com/sqlrec/sqlrec-arm-compat.git
+	branch = master
