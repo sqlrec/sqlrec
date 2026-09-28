@@ -3,16 +3,24 @@ set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
 
+require_commands kubectl || exit 1
+validate_runtime_resources || exit 1
+
 if [ -z "${NODE_IP}" ]; then
-  echo "ERROR: NODE_IP is not set; start Minikube first or provide NODE_IP." >&2
+  echo "ERROR: NODE_IP is not set; provide a reachable worker address or check for a Ready worker node." >&2
+  exit 1
+fi
+
+if [ -z "${K8S_APISERVER_ADDR}" ]; then
+  echo "ERROR: K8S_APISERVER_ADDR is not set; provide it or check the current kubectl context." >&2
   exit 1
 fi
 
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace "${NAMESPACE}-milvus" --dry-run=client -o yaml | kubectl apply -f -
 
-render_config "${dir}/pv.yaml"
-kubectl apply -f "${dir}/pv.yaml.tmp" -n "${NAMESPACE}"
+mkdir -p "${CONF_DIR}"
+bash "${dir}/storage/deploy.sh"
 
 # juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
 cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/"
@@ -21,14 +29,9 @@ cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAM
 bash "${dir}/rustfs/deploy.sh"
 bash "${dir}/juicefs/deploy.sh"
 bash "${dir}/hadoop/deploy.sh"
+bash "${dir}/spark/deploy.sh"
 bash "${dir}/hms/deploy.sh"
 bash "${dir}/flink/deploy.sh"
-bash "${dir}/spark/deploy.sh"
-
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/etc/hadoop/"
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}/conf/"
-cp "${CONF_DIR}"/* "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/conf/"
-
 bash "${dir}/sqlrec/deploy.sh"
 
 # extra components, deploy them if needed
@@ -44,6 +47,5 @@ bash "${dir}/milvus/deploy.sh"
 #bash "${dir}/prometheus/deploy.sh"
 #bash "${dir}/jaeger/deploy.sh"
 
-bash "${dir}/cache_images.sh" save
-
 echo "deploy components done"
+echo "For Minikube image caching, run: bash ${dir}/cache_images.sh save"

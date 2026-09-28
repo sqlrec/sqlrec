@@ -1,271 +1,228 @@
 # 服务部署
 
-本文档介绍如何部署 SQLRec 系统。
+部署分为两步：准备 Kubernetes 集群，再部署 SQLRec 和依赖组件。Minikube 和已有集群使用相同的 `download_resource.sh`、`deploy_components.sh`，客户端文件的存储方式由 `STORAGE_MODE` 决定。
 
 ## 系统要求
 
-部署脚本支持 AMD64 和 ARM64 Linux，以及 Apple Silicon macOS。Linux 使用 Minikube Docker driver；macOS 使用 vfkit、vmnet-shared 网络和 VirtioFS 挂载。具体的系统和工具版本要求会随部署脚本更新，以当前 `deploy/` 目录中的检查逻辑和配置为准。生产环境应由运维统一管理 Kubernetes 及相关依赖。
+部署机器支持 AMD64/ARM64 Linux 和 Apple Silicon macOS。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
 
-macOS 不需要安装 Docker Desktop。部署脚本会通过 Homebrew 安装缺少的命令行依赖，等效命令如下：
+| 部署方式 | 准备工作 |
+|----------|----------|
+| Minikube 开发环境 | Linux 使用 Docker driver；macOS 使用 vfkit、vmnet-shared 网络和 VirtioFS 挂载。`deploy_minikube.sh` 安装缺少的工具并启动集群 |
+| 已有 Kubernetes 集群 | 配置 kubeconfig，安装 `kubectl`、`helm`、`curl`、`tar`、`gzip`、`envsubst`、`psql`，以及 `sha256sum` 或 `shasum`；无需安装 Minikube |
+
+macOS 的 Minikube 部署需要 macOS 14 或更高版本，以及预先安装 Homebrew。脚本安装的主要依赖等效于：
 
 ```bash
 brew install minikube vfkit docker docker-buildx helm gettext libpq
 ```
 
-部署脚本还会配置 Homebrew Buildx 插件，并按照 [Minikube vfkit 官方文档](https://minikube.sigs.k8s.io/docs/drivers/vfkit/)中对应 macOS 版本的方式安装 `vmnet-helper`。
-
-Minikube 示例把磁盘配额设为 256GB，并且会同时启动多个依赖服务；实际内存和磁盘需求取决于启用的组件及数据量，不能把 32GB/256GB 视为生产环境的固定规格。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
+缺少 `kubectl` 时脚本还会安装 `kubernetes-cli`，并配置 Buildx 和 `vmnet-helper`。macOS 不需要 Docker Desktop。具体工具版本要求以 `deploy/` 中的检查逻辑为准。
 
 ## 快速部署（Minikube）
 
-使用 Minikube 可以快速部署一个测试环境：
-
 ```bash
-# clone sqlrec repository
 git clone https://github.com/sqlrec/sqlrec.git
-cd ./sqlrec/deploy
+cd sqlrec/deploy
 
-# deploy minikube
-./deploy_minikube.sh
+# 安装工具、启动集群并配置默认 StorageClass
+bash ./deploy_minikube.sh
+kubectl get nodes -o wide
 
-# verify pod status, wait all pod ready
-alias kubectl="minikube kubectl --"
+# 下载客户端/JAR，添加 Helm 仓库并安装所需 Operator
+bash ./download_resource.sh
+
+# 部署 SQLRec 和依赖组件
+bash ./deploy_components.sh
 kubectl get pods --all-namespaces
 
-# download resource
-./download_resource.sh
-
-# deploy sqlrec and dependencies services
-./deploy_components.sh
-
-# verify pod status, wait all pod ready
-kubectl get pods --all-namespaces
-
-# verify sqlrec service
+# 待必需组件就绪后验证连接
 cd ..
 bash ./bin/beeline.sh
 ```
 
-能通过 Beeline 连接并成功执行 `SHOW TABLES;` 即表示 SQLRec 基本服务已就绪。如果 Pod 仍在启动或拉取镜像，先等待 `kubectl get pods --all-namespaces` 中必需组件就绪，再执行连接验证。
+在 Beeline 中执行 `SHOW TABLES;` 成功，表示 SQLRec 基本服务已就绪。
 
-部署后查看指标、Trace 和日志的方法见[可观测性](./observability.md)。
+Minikube 的配置说明：
 
-**注意事项**：
-- 上述基于 Minikube 的部署方案仅用于测试
-- 如果需要重新部署，可以先通过 `minikube delete` 删除集群
-- 部署成功后，工作负载镜像会保存到 `deploy/data/image-cache/<arch>`；重新创建集群时会自动加载
-- macOS 默认按宿主机物理核心数给 Minikube 分配 CPU、按宿主机总内存的 80% 分配内存，并分配 256GB 磁盘；可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY_PERCENT`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖，其中显式设置 `MINIKUBE_MEMORY` 时不再按比例计算
-- 动态 Local PV 默认保存在 Minikube 节点的 `/data/local-path-provisioner`。部署脚本通过 Rancher 官方 Helm chart 安装项目自管的 local-path provisioner，避免 `minikube start` 重新应用已启用 addon 的内置清单时把路径恢复为 `/opt/local-path-provisioner`。可在运行 `deploy_minikube.sh` 前通过 `LOCAL_PATH_PROVISIONER_DATA_DIR` 指定其他绝对路径
-- 主机、Pod 和共享配置统一通过 `minikube ip` 返回的 `NODE_IP` 访问 NodePort；不保证局域网其他机器通过宿主机物理 IP 访问
-- 有一些组件没有默认部署，比如 Kyuubi、Jupyter 等，如果需要，可以在 deploy 目录执行对应的部署脚本
-- 部署脚本会读取 `deploy/env.sh`；可在执行前通过同名环境变量覆盖版本、命名空间、密码和端口，例如 `NAMESPACE=dev SQLREC_VERSION=your-version bash ./deploy_components.sh`
-- RustFS 以单节点模式提供共享 S3 存储；部署脚本会创建 JuiceFS 和 Milvus 所需的 bucket。可通过 `RUSTFS_VERSION`、`RUSTFS_PORT`、`RUSTFS_ACCESS_KEY`、`RUSTFS_SECRET_KEY`、`RUSTFS_DATA_STORAGE_SIZE` 等变量覆盖默认值
-- `deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop、HMS、Flink、Spark、SQLRec，以及 Kafka、Redis、Milvus；HDFS、MongoDB、Kyuubi、Jupyter、监控等组件需单独启用对应脚本
+- 脚本将本机 `data` 目录挂载到 Minikube 中的相同路径；客户端和 JAR 直接使用本机文件，不再上传一份到 PVC。
+- macOS 默认使用宿主机物理核心数、总内存的 80% 和 256GB 磁盘。可通过 `MINIKUBE_CPUS`、`MINIKUBE_MEMORY_PERCENT`、`MINIKUBE_MEMORY`、`MINIKUBE_DISK_SIZE` 覆盖；显式设置 `MINIKUBE_MEMORY` 时优先使用该值。实际资源需求取决于启用的组件和数据量。
+- 动态卷默认使用项目安装的 `local-path` StorageClass，数据位于节点的 `/data/local-path-provisioner`；启动前可用 `LOCAL_PATH_PROVISIONER_DATA_DIR` 指定其他绝对路径。这些动态卷与挂载本机客户端目录的 hostPath PV 不同。
+- NodePort 使用 Minikube 节点地址，不保证局域网其他机器可通过宿主机物理 IP 访问。
 
-## 生产环境部署
+### 手动保存镜像缓存
 
-生产环境不要直接照搬 Minikube 脚本。应先准备 Kubernetes、对象/分布式存储、PostgreSQL、Hive Metastore 和 Flink SQL Gateway，再按实际网络、存储类和安全策略改写相应 YAML。仓库中的 `deploy/*.yaml` 使用 `hostPath` 和 NodePort，主要用于单节点/测试环境。
-
-### 核心依赖服务
-
-SQLRec 运行需要以下核心依赖服务：
-
-| 服务 | 用途 | 必需 |
-|------|------|------|
-| **Kubernetes** | 容器编排平台，用于部署和管理模型训练、导出、服务 | 是 |
-| **PostgreSQL** | 元数据存储，存储模型、服务、函数等定义 | 是 |
-| **Hive Metastore** | 表元数据管理，管理 Hive 表结构信息 | 是 |
-| **Flink SQL Gateway** | SQL 执行引擎，执行 Flink SQL 语句 | 是 |
-| **分布式存储** | 存储模型文件、训练数据等（RustFS/JuiceFS/HDFS） | 是 |
-
-### 可选依赖服务
-
-| 服务 | 用途 |
-|------|------|
-| Kafka | 消息队列，用于流式数据处理 |
-| Redis | 缓存服务 |
-| Milvus | 向量数据库，用于向量搜索 |
-| Spark | 分布式计算引擎 |
-| Kyuubi | SQL 网关，提供多租户 SQL 服务 |
-| Jupyter | Notebook 环境，用于交互式开发 |
-
-### PersistentVolume 配置
-
-SQLRec 依赖 Kubernetes PersistentVolume (PV) 来存储客户端组件和配置文件。生产环境需要预先准备以下 PV：
-
-**必需的 PV**：
-
-| PV 名称 | 用途 | 大小建议 |
-|---------|------|----------|
-| `sqlrec-lib-pv` / `sqlrec-lib-pvc` | 依赖 JAR（例如 JuiceFS Hadoop JAR） | 128Gi（示例默认值） |
-| `sqlrec-client-pv` / `sqlrec-client-pvc` | Hadoop、Hive、Spark、Java 客户端及配置 | 128Gi（示例默认值） |
-
-`deploy/pv.yaml` 中的 PV 是 `hostPath`、`ReadWriteOnce`，并使用 `Retain` 回收策略；生产环境应替换为集群可用的 StorageClass/PV，并确认 SQLRec、Flink、Spark、HMS 对客户端文件和配置的访问方式。
-
-**客户端文件和 Hadoop 配置**：
-
-SQLRec 容器通过 `HADOOP_HOME`、`HADOOP_CONF_DIR` 和 `CLASSPATH` 访问客户端。部署脚本会把 `deploy/data/conf` 中的配置复制到 Hadoop、Hive 和 Spark 客户端目录；手工部署时至少要保证这些客户端和配置在挂载卷中可读。
-
-**关键配置文件**：
-
-| 文件 | 说明 | 必需配置项 |
-|------|------|------------|
-| `core-site.xml` | Hadoop 核心配置 | `fs.defaultFS`、JuiceFS 相关配置 |
-| `hdfs-site.xml` | HDFS 配置 | 副本数、块大小等 |
-| `hive-site.xml` | Hive 配置 | `hive.metastore.uris`（使用 Hive 表时） |
-
-### SQLRec 服务配置
-
-SQLRec 服务通过 Kubernetes Deployment 部署，主要配置项如下：
-
-**必需环境变量**：
-
-| 环境变量 | 说明 |
-|----------|------|
-| `NAMESPACE` | Kubernetes 命名空间 |
-| `MODEL_BASE_PATH` | 模型存储基础路径；仓库示例 YAML 当前固定为 `/user/sqlrec/models`，生产环境应按存储后端修改 YAML |
-| `META_DB_URL` | PostgreSQL 连接 URL |
-| `META_DB_USER` | PostgreSQL 用户名 |
-| `META_DB_PASSWORD` | PostgreSQL 密码 |
-| `HIVE_METASTORE_URI` | Hive Metastore Thrift URI |
-| `FLINK_SQL_GATEWAY_ADDRESS` | Flink SQL Gateway 地址 |
-| `FLINK_SQL_GATEWAY_PORT` | Flink SQL Gateway 端口 |
-
-**服务端口**：
-
-| 端口 | 服务 | 说明 |
-|------|------|------|
-| 30000 | Thrift Server | JDBC/Beeline 连接端口 |
-| 30001 | REST Server | REST API 端口 |
-| 30002 | Debug | 远程调试端口 |
-
-**Kubernetes 权限**：
-
-SQLRec 需要在目标命名空间创建/管理模型训练 Job 和服务 Deployment。`deploy/sqlrec/deploy.sh` 会创建名为 `sqlrec` 的 ServiceAccount，并绑定集群级 `edit` 角色；生产环境应按最小权限原则改为命名空间级、资源范围受限的 Role/RoleBinding。
+组件部署完成后，按需执行：
 
 ```bash
-# 创建 ServiceAccount
-kubectl create serviceaccount sqlrec -n ${NAMESPACE}
-
-# 授予编辑权限
-kubectl create clusterrolebinding sqlrec-role \
-  --clusterrole=edit \
-  --serviceaccount=${NAMESPACE}:sqlrec \
-  --namespace=${NAMESPACE}
+# 在 deploy 目录执行；保存已拉取的工作负载镜像
+bash ./cache_images.sh save
 ```
 
-### 部署步骤
+缓存保存到 `data/image-cache/<arch>`。之后运行 `deploy_minikube.sh` 会自动加载已有缓存；`deploy_components.sh` 只提示保存命令，不会自动保存。镜像缓存不包含数据库数据，删除 Minikube 集群会丢失节点动态卷中的数据。
 
-1. **准备 Kubernetes 集群**
+## 在已有 Kubernetes 集群上部署
 
-确保 Kubernetes 集群已正确配置，可以访问容器镜像仓库。
+此流程在当前 kubeconfig context 指向的集群中安装组件，不会创建集群。
 
-2. **准备客户端 PV**
+### 部署前准备
 
-创建 PV 和 PVC，并在客户端目录中准备好 Hadoop、Hive、Spark 客户端和配置文件。
+1. 确认部署账号可以创建命名空间、安装 Operator/CRD 和创建脚本所需的 RBAC 资源。`download_resource.sh` 除了下载文件，还会安装 CloudNativePG、Flink 等 Operator，并配置 Helm 仓库。
+2. 准备支持 **ReadWriteMany（RWX）** 的 StorageClass，通过 `STORAGE_CLASS` 指定，供客户端和 JAR 跨节点共享。脚本会检查 StorageClass 是否存在，实际 RWX 能力需由集群管理员确认。
+3. 确保集群有可用的默认 StorageClass，供 PostgreSQL、RustFS 等组件创建数据卷。它可以与客户端使用的 RWX StorageClass 不同。
+4. 选择部署机器和 Pod 都能访问的工作节点地址作为 `NODE_IP`，并确认所用 NodePort 可达。自动发现只选择 Ready、未被 cordon 的工作节点，排除管控面节点；默认取工作节点的 InternalIP。部署机器无法访问 InternalIP 时应显式设置可达地址。
+5. 如果部署机器和集群节点架构不同，在下载资源前设置 `CONTAINER_ARCH=amd64` 或 `arm64`，用于选择容器内 Java。它不会改变部署机器使用的 Java 架构，也不会自动统一集群中不同节点的架构。
 
-3. **部署 PostgreSQL**
+### 部署示例
 
-```bash
-# 初始化表结构
-psql -d sqlrec -f deploy/sql/master.sql
-```
-
-4. **部署 Hive Metastore**
-
-确保 Hive Metastore 服务已启动并可访问。
-
-5. **部署 Flink SQL Gateway**
-
-确保 Flink SQL Gateway 服务已启动并可访问。
-
-6. **部署分布式存储**
-
-根据实际需求选择 RustFS、JuiceFS 或 HDFS 作为存储后端。
-
-7. **部署 SQLRec**
+以下命令在同一个终端执行，将示例 context、地址和 StorageClass 替换为实际值：
 
 ```bash
-# 应用 Kubernetes 配置
-bash deploy/sqlrec/deploy.sh
-```
+cd /path/to/sqlrec
+kubectl config use-context your-cluster-context
+kubectl get nodes -o wide
+kubectl get storageclass
 
-不要只执行 `envsubst`：`deploy/sqlrec/deploy.sh` 还负责初始化 PostgreSQL、导入 `deploy/sql/master.sql`、创建 ServiceAccount 和渲染临时 YAML。生产环境可复用这些步骤，但应先审查脚本中的数据库地址、权限、NodePort 和存储配置。
+export NAMESPACE=sqlrec
+export NODE_IP=10.0.0.10
+export STORAGE_MODE=shared
+export STORAGE_CLASS=nfs-rwx
+export CONTAINER_ARCH=amd64
 
-8. **验证部署**
+bash ./deploy/download_resource.sh
+bash ./deploy/deploy_components.sh
 
-```bash
-# 检查 Pod 状态
-kubectl get pod -n ${NAMESPACE}
-
-# 连接测试
+kubectl get pods -n "${NAMESPACE}"
+kubectl get pvc -n "${NAMESPACE}"
 bash ./bin/beeline.sh
 ```
 
-## 镜像构建
+`K8S_APISERVER_ADDR` 默认从当前 kubeconfig 中读取，格式为 `k8s://https://...`；它用于访问 Kubernetes API，与 NodePort 使用的 `NODE_IP` 不同。
 
-SQLRec 提供了两个镜像构建脚本：
+`deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop 配置、Spark 配置、HMS、Flink SQL Gateway、SQLRec，以及 Kafka、Redis、Milvus。Milvus 位于 `${NAMESPACE}-milvus` 命名空间。HDFS、MongoDB、Kyuubi、Jupyter、监控等组件通过各自脚本单独启用。
 
-| 脚本 | 构建的镜像 |
-|------|-----------|
-| `bin/build_sqlrec_docker.sh` | SQLRec 服务相关镜像 |
-| `bin/build_model_docker.sh` | 模型训练/推理镜像 |
+## 存储与资源同步
 
-**构建的镜像**：
+### 两种存储模式
 
-| 镜像 | Dockerfile | 说明 |
-|------|------------|------|
-| `sqlrec/sqlrec:${SQLREC_VERSION}` | `docker/Dockerfile` | SQLRec 服务镜像 |
-| `sqlrec/sqlrec-demo:${SQLREC_VERSION}` | `docker/demo.Dockerfile` | SQLRec Demo 镜像 |
-| `sqlrec/tzrec:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-tzrec.Dockerfile` | tzrec 模型训练/推理镜像（CPU 版本） |
-| `sqlrec/gbdt:${SQLREC_VERSION}-cpu` | `docker/sqlrec-model-gbdt.Dockerfile` | GBDT (LightGBM/XGBoost/CatBoost) 训练/推理镜像（CPU 版本） |
-| `sqlrec/transformers:${SQLREC_VERSION}` | `docker/sqlrec-model-transformers.Dockerfile` | Hugging Face Transformers 模型镜像 |
+| 项目 | `hostpath`（Minikube） | `shared`（已有集群） |
+|------|-----------------------|---------------------|
+| 模板 | `deploy/storage/hostpath_pvc.yaml` | `deploy/storage/shared_pvc.yaml` |
+| 资源 | 静态 hostPath PV + PVC，ReadWriteOnce | 由指定 StorageClass 提供 PVC，ReadWriteMany |
+| 文件来源 | Minikube 挂载的本机目录 | 从部署机器上传到共享 PVC |
+| 上传行为 | 只复制本机配置，跳过上传 | 临时 Pod 挂载 PVC，按文件内容增量上传 |
 
-镜像版本号 `SQLREC_VERSION` 来自 `deploy/env.sh`，可在执行前通过环境变量覆盖。文档不固定列出默认版本，以当前部署脚本为准。
+未指定 `STORAGE_MODE` 时，context 名为 `minikube` 使用 `hostpath`，其他 context 使用 `shared`。`deploy_minikube.sh` 自身始终使用 `hostpath`。远程集群应使用 `shared`，部署机器的本机目录不会自动出现在远程节点上。
 
-**构建步骤**：
+| PVC 默认名称 | 内容 | 容量配置 |
+|--------------|------|----------|
+| `sqlrec-lib-pvc` | 依赖 JAR | `LIB_STORAGE_SIZE`，默认 `128Gi` |
+| `sqlrec-client-pvc` | Hadoop、Hive、Spark、容器 Java 客户端及配置 | `CLIENT_STORAGE_SIZE`，默认 `128Gi` |
+
+PVC 名称可通过 `LIB_PVC_NAME`、`CLIENT_PVC_NAME` 设置。已有 PVC 的 StorageClass 和访问模式不能原地切换，脚本遇到不匹配会停止；切换存储方案时使用新的 PVC 名称并安排文件迁移。hostPath PV 使用 `Retain` 回收策略，名称可通过 `LIB_PV_NAME`、`CLIENT_PV_NAME` 设置。
+
+RustFS 以单节点模式提供 S3 存储，部署脚本创建 JuiceFS 和 Milvus 所需的 bucket。数据卷统一使用集群默认 StorageClass，客户端/JAR 的 `STORAGE_CLASS` 不影响 RustFS。容量通过 `RUSTFS_DATA_STORAGE_SIZE`、`RUSTFS_LOG_STORAGE_SIZE` 设置，默认分别为 `128Gi`、`1Gi`。
+
+### 目录和同步流程
+
+默认文件存放在 `deploy/data`；设置 `BASE_DIR` 后则存放在 `${BASE_DIR}/data`：
+
+| 目录 | 内容 |
+|------|------|
+| `conf` | 生成的 Hadoop、Hive、Spark 配置 |
+| `lib` | 依赖 JAR |
+| `client` | 客户端、Java 和下载的归档文件 |
+| `image-cache` | 手动保存的 Minikube 镜像缓存 |
+
+`download_resource.sh` 自动创建 `conf/lib/client`；组件单独下载资源时也会创建目标目录，已有下载文件会被复用。
+
+存储由 `deploy/storage/deploy.sh` 创建，无需手动应用 PV/PVC 模板。部署时先创建存储、生成配置，再由 HMS 部署脚本调用 `deploy/storage/sync.sh`，在启动 HMS 初始化 Job 前准备好卷内文件。无需单独执行 HMS 配置准备脚本。
+
+共享模式仅上传运行所需的客户端、容器 Java 和 JAR，不上传下载归档、仅供宿主机使用的 Java 或 Minikube 工具。同步时检查远端实际文件的 SHA-256、文件类型和可执行属性，跳过一致的文件，更新新增或变化的文件；配置重新生成后参与相同检查。同步不会清理远端多余文件，也不代表所有组件部署步骤都完全幂等。
+
+已有卷和客户端准备好后，可在项目根目录手动同步：
 
 ```bash
-# 构建 SQLRec 服务镜像
-bash ./bin/build_sqlrec_docker.sh
-
-# 构建模型镜像
-bash ./bin/build_model_docker.sh
-
-# 只构建一个模型镜像
-bash ./bin/build_model_docker.sh tzrec
-bash ./bin/build_model_docker.sh gbdt
-bash ./bin/build_model_docker.sh transformers
+bash ./deploy/storage/sync.sh
 ```
 
-::: tip 提示
-脚本会自动切换到项目根目录执行构建，无需手动 cd；脚本内部会 `source deploy/env.sh` 读取版本号等配置。
-:::
+同步使用临时 Pod 和 ConfigMap，结束时自动清理。同一命名空间内不要并发执行同步；默认同步 Pod 名为 `sqlrec-resource-sync`，已有同名 Pod 时脚本会停止。
 
-**模型依赖与 Docker 环境**：
+关键配置文件包括 `core-site.xml`（文件系统/JuiceFS）、`hdfs-site.xml`（HDFS）和 `hive-site.xml`（Hive Metastore）。共享卷在容器内挂载到脚本计算的 `CLIENT_DIR`、`LIB_DIR` 路径。
 
-模型构建脚本会自动初始化并更新 `submodules/` 下的 `juicefs-src`、`tzrec-src`、`compat-src` submodule，使用 `.gitmodules` 中配置的分支。若要使用 SQLRec 当前提交记录的 submodule 版本，可设置 `MODEL_SOURCE_UPDATE=0`。脚本分别构建目标架构和 Python 版本所需的 wheel，保存在 `build/model-wheels/<架构>/`，并为每个镜像创建仅包含所需文件的临时构建上下文。构建平台取 Docker 服务端的原生架构；所选 Buildx builder 必须绑定该 Docker 服务端，不使用 QEMU。
+## 生产环境配置
 
-模型脚本优先使用当前 Docker 引擎；没有可用引擎且 Minikube 正在运行时，自动切换到 Minikube 的 Docker 引擎。构建后的镜像位于所选引擎中。
+已有集群部署流程可以复用，但生产环境仍需由 SRE 审查组件容量、持久化存储、网络、凭据和权限。当前默认部署包含单实例服务和 NodePort，应按实际运维方案调整。
 
-本仓库的模型 Dockerfile 使用 BuildKit pip 缓存。首次构建仍需下载依赖；后续在同一 Docker builder 上构建，即使某个安装步骤失败重试，也可以复用已下载的 Python 包。清理 Docker builder 缓存后需要重新下载。
+### 依赖服务
 
-如果 macOS 只安装 Docker CLI、没有运行 Docker Desktop，则构建前必须启动 Minikube。GBDT 镜像支持 AMD64 和 ARM64；TZRec 的 AMD64 镜像使用上游基础镜像，ARM64 镜像使用 PyTorch CPU 和本项目的 pyfg/graphlearn 兼容包。
+| 服务 | 用途 |
+|------|------|
+| Kubernetes | 部署和管理模型训练、导出及服务 |
+| PostgreSQL | 模型、服务、函数等元数据 |
+| Hive Metastore | Hive 表元数据 |
+| Flink SQL Gateway | Flink SQL 执行 |
+| 分布式存储 | 模型文件和训练数据，默认使用 RustFS + JuiceFS |
 
-**手动构建**：
+Kafka、Redis、Milvus、Spark、Kyuubi、Jupyter 等按业务需求使用，其中 Kafka、Redis、Milvus 已包含在默认组件部署流程中。
 
-如果需要手动构建镜像：
+### 脚本参数与容器配置
+
+脚本读取 `deploy/env.sh`，可在执行前用同名环境变量覆盖它支持的参数，例如：
 
 ```bash
-# 进入项目根目录
-cd /path/to/sqlrec
-
-# 先指定要构建的版本
+export NAMESPACE=dev
 export SQLREC_VERSION=your-version
-
-# 构建 SQLRec 服务镜像
-docker build -t sqlrec/sqlrec:${SQLREC_VERSION} -f ./docker/Dockerfile .
-
-# 构建 tzrec 模型镜像（自动准备与架构匹配的 wheel）
-bash ./bin/build_model_docker.sh tzrec
+bash ./deploy/download_resource.sh
+bash ./deploy/deploy_components.sh
 ```
+
+需在下载资源和部署时保持命名空间、版本、路径和架构配置一致。主要参数如下：
+
+| 参数 | 作用 |
+|------|------|
+| `NODE_IP` | NodePort 访问地址，应同时对部署机器和 Pod 可达 |
+| `SQLREC_POSTGRESQL_USER` / `SQLREC_POSTGRESQL_PASSWORD` | SQLRec 元数据库凭据 |
+| `HMS_POSTGRESQL_USER` / `HMS_POSTGRESQL_PASSWORD` | HMS 元数据库凭据 |
+| `SQLREC_POSTGRESQL_PORT` / `HMS_POSTGRESQL_PORT` | 数据库 NodePort |
+| `HMS_PORT` / `SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePort |
+| `SQLREC_THRIFT_PORT` / `SQLREC_REST_PORT` | JDBC/Beeline / REST NodePort，默认 `30000` / `30001` |
+| `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | 共享 S3 凭据 |
+| `DEPLOY_TIMEOUT` | 部署等待超时，默认 `3600` 秒 |
+
+SQLRec 容器的 `META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 等由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
+
+使用 SRE 运维的已有依赖时，需要调整对应部署步骤和 YAML 中的连接配置。当前脚本没有“设置外部组件地址就自动跳过部署”的机制；仅导出 `META_DB_URL` 或 `HIVE_METASTORE_URI` 不会替换模板中的地址。单独运行 `deploy/sqlrec/deploy.sh` 也会先部署 PostgreSQL。
+
+SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 ClusterRoleBinding 授予集群级 `edit` 权限。生产环境应按所需资源和命名空间调整为受限 Role/RoleBinding。
+
+### SQL 初始化
+
+`deploy/sqlrec/deploy.sh` 会先等待 PostgreSQL 可连接，再执行 `deploy/sql/master.sql`，成功后才应用 SQLRec Deployment。无需在正常脚本部署前手动导入 SQL。
+
+| 参数 | 默认值 | 要求 |
+|------|--------|------|
+| `PSQL_MAX_ATTEMPTS` | `30` | 正整数，数据库连接最大尝试次数 |
+| `PSQL_RETRY_INTERVAL` | `5` 秒 | 非负整数，连接重试间隔 |
+| `PGCONNECT_TIMEOUT` | `10` 秒 | 正整数，单次连接超时 |
+
+参数非法时在创建资源前报错。连接失败会按上表重试；建表 SQL 使用 `ON_ERROR_STOP=1` 和单个事务，SQL 错误会停止部署并回滚本次初始化，不会重复执行建表 SQL。已有表通过 `CREATE TABLE IF NOT EXISTS` 复用，该文件不负责已有表的结构迁移。
+
+## 验证与排障
+
+以下命令在项目根目录执行；未设置 `NAMESPACE` 时使用默认值 `sqlrec`：
+
+```bash
+kubectl get pods -n "${NAMESPACE:-sqlrec}"
+kubectl get pvc -n "${NAMESPACE:-sqlrec}"
+bash ./bin/beeline.sh
+```
+
+| 现象 | 检查方法 |
+|------|----------|
+| 提示缺少或损坏的客户端/JAR | 先运行 `deploy/download_resource.sh`；如仍报错，移除损坏的对应文件或解压目录后重跑 |
+| 共享 PVC 或同步 Pod 一直 Pending | `kubectl describe pvc <名称> -n <命名空间>`，确认 StorageClass 的 RWX 能力、容量和权限；使用 WaitForFirstConsumer 的类会在同步 Pod 创建后开始绑定 |
+| PostgreSQL 连接重试耗尽 | 确认数据库 Pod 就绪，并检查 `NODE_IP`、NodePort、路由和凭据；SQL 错误应按 `psql` 输出修正 |
+| 提示已有同步 Pod | 等待正在进行的同步完成；只有确认前一次同步已停止后，才清理残留 Pod |
+
+部署后查看指标、Trace 和日志的方法见[可观测性](./observability.md)。

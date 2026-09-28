@@ -2,6 +2,7 @@
 set -exo pipefail
 
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+export STORAGE_MODE=hostpath
 source "${dir}/env.sh"
 
 MINIKUBE_PROFILE=minikube
@@ -12,7 +13,8 @@ die() {
 }
 
 prepare_directories() {
-  mkdir -p "${CONF_DIR}" "${LIB_DIR}" "${CLIENT_DIR}" "${PV_DIR}" "${IMAGE_CACHE_DIR}"
+  prepare_resource_directories
+  mkdir -p "${IMAGE_CACHE_DIR}"
 }
 
 minikube_for_profile() {
@@ -44,10 +46,37 @@ find_vmnet_helper() {
   return 1
 }
 
+install_linux_kubectl() {
+  if command -v kubectl >/dev/null 2>&1; then
+    echo 'skip install kubectl'
+    return
+  fi
+
+  require_commands sha256sum ||
+    die "sha256sum is required to verify the kubectl download."
+
+  local version binary checksum url expected actual
+  version="$(minikube_for_profile kubectl -- get nodes \
+    -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')" ||
+    die "failed to determine the Minikube Kubernetes version."
+  [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die "unexpected kubectl version: ${version}"
+
+  binary="${CLIENT_DIR}/kubectl-${version}-linux-${DEPLOY_ARCH}"
+  checksum="${binary}.sha256"
+  url="https://dl.k8s.io/release/${version}/bin/linux/${DEPLOY_ARCH}/kubectl"
+  download_file "${url}" "${binary}"
+  download_file "${url}.sha256" "${checksum}"
+  expected="$(tr -d '[:space:]' < "${checksum}")"
+  actual="$(sha256sum "${binary}" | awk '{print $1}')"
+  [ "${actual}" = "${expected}" ] || die "kubectl checksum verification failed."
+  run_privileged install -m 0755 "${binary}" /usr/local/bin/kubectl
+}
+
 install_linux_dependencies() {
   local command_name docker_user
   local missing_cli=false
-  for command_name in curl tar gzip envsubst psql; do
+  for command_name in curl tar gzip envsubst psql sha256sum; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
       missing_cli=true
       break
@@ -57,18 +86,18 @@ install_linux_dependencies() {
   if [ "${missing_cli}" = true ]; then
     if command -v apt-get >/dev/null 2>&1; then
       run_privileged apt-get update
-      run_privileged apt-get install -y ca-certificates curl tar gzip gettext-base postgresql-client
+      run_privileged apt-get install -y ca-certificates curl tar gzip coreutils gettext-base postgresql-client
     elif command -v dnf >/dev/null 2>&1; then
-      run_privileged dnf install -y ca-certificates curl tar gzip gettext postgresql
+      run_privileged dnf install -y ca-certificates curl tar gzip coreutils gettext postgresql
     elif command -v yum >/dev/null 2>&1; then
-      run_privileged yum install -y ca-certificates curl tar gzip gettext postgresql
+      run_privileged yum install -y ca-certificates curl tar gzip coreutils gettext postgresql
     else
-      echo "Install curl, tar, gzip, envsubst, and psql, then rerun this script." >&2
+      echo "Install curl, tar, gzip, sha256sum, envsubst, and psql, then rerun this script." >&2
       die "cannot install required Linux commands automatically."
     fi
   fi
 
-  require_commands curl tar gzip envsubst psql ||
+  require_commands curl tar gzip envsubst psql sha256sum ||
     die "required Linux commands are still missing after installation."
 
   # refer to https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
@@ -103,10 +132,7 @@ install_linux_dependencies() {
     bash "${CLIENT_DIR}/get-helm-3.sh"
   fi
 
-  # env.sh ran before a first-time Minikube installation. Configure the
-  # bundled kubectl fallback now that the minikube command is available.
-  configure_host_tools
-  require_commands docker minikube kubectl helm ||
+  require_commands docker minikube helm ||
     die "required Linux deployment commands are still missing after installation."
 }
 
@@ -131,6 +157,10 @@ install_macos_dependencies() {
   if [ "${#missing_formulae[@]}" -gt 0 ]; then
     echo "Installing missing Homebrew packages: ${missing_formulae[*]}"
     brew install "${missing_formulae[@]}"
+  fi
+
+  if ! command -v kubectl >/dev/null 2>&1; then
+    brew install kubernetes-cli
   fi
 
   configure_host_tools
@@ -276,14 +306,14 @@ install_local_path_provisioner() {
       --timeout="${DEPLOY_TIMEOUT}s"
   fi
 
-  render_config "${dir}/local-path-provisioner.values.yaml" \
+  render_config "${dir}/storage/local-path-provisioner.values.yaml" \
     '${LOCAL_PATH_PROVISIONER_DATA_DIR}'
   helm upgrade --install local-path-provisioner \
     "${LOCAL_PATH_PROVISIONER_CHART}" \
     --version "${LOCAL_PATH_PROVISIONER_VERSION}" \
     --namespace local-path-storage \
     --create-namespace \
-    --values "${dir}/local-path-provisioner.values.yaml.tmp" \
+    --values "${dir}/storage/local-path-provisioner.values.yaml.tmp" \
     --wait \
     --timeout "${DEPLOY_TIMEOUT}s"
 
@@ -301,6 +331,10 @@ main() {
   install_host_dependencies
   configure_minikube_resources || die "failed to configure Minikube resources."
   start_minikube
+  if [ "${DEPLOY_OS}" = linux ]; then
+    install_linux_kubectl
+  fi
+  require_commands kubectl || die "kubectl is required after starting Minikube."
   configure_cluster
   verify_minikube
   bash "${dir}/cache_images.sh" load

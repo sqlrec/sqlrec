@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${RESOURCE_SYNC_POD_NAME}
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: sync
+      image: ${RESOURCE_SYNC_IMAGE}
+      command: ["sh", "-c", "sleep infinity"]
+      volumeMounts:
+        - name: client
+          mountPath: /sync/client
+        - name: lib
+          mountPath: /sync/lib
+        - name: script
+          mountPath: /scripts
+          readOnly: true
+  volumes:
+    - name: client
+      persistentVolumeClaim:
+        claimName: ${CLIENT_PVC_NAME}
+    - name: lib
+      persistentVolumeClaim:
+        claimName: ${LIB_PVC_NAME}
+    - name: script
+      configMap:
+        name: ${RESOURCE_SYNC_CONFIGMAP_NAME}

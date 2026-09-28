@@ -36,13 +36,50 @@ detect_deploy_platform() {
     esac
 }
 
+discover_node_ip() {
+    local nodes node_name unschedulable ready address taints
+    local node_template='{range .items[*]}{.metadata.name}{"|"}{.spec.unschedulable}{"|"}{.status.conditions[?(@.type=="Ready")].status}{"|"}{.status.addresses[?(@.type=="InternalIP")].address}{"|"}{.spec.taints[*].key}{"\n"}{end}'
+
+    # Prefer a ready, uncordoned worker. Exclude both current and legacy
+    # control-plane roles, including nodes identified only by a role taint.
+    nodes="$(kubectl get nodes --request-timeout=5s \
+        --selector='!node-role.kubernetes.io/control-plane,!node-role.kubernetes.io/master' \
+        --sort-by=.metadata.name -o jsonpath="${node_template}" 2>/dev/null)" || return 1
+    while IFS='|' read -r node_name unschedulable ready address taints; do
+        [ "${ready}" = True ] && [ "${unschedulable}" != true ] && [ -n "${address}" ] || continue
+        case " ${taints} " in
+            *node-role.kubernetes.io/control-plane*|*node-role.kubernetes.io/master*) continue ;;
+        esac
+        printf '%s\n' "${address%% *}"
+        return 0
+    done <<< "${nodes}"
+
+    # A single-node Minikube cluster also runs its workloads on the control plane.
+    [ "$(kubectl config current-context 2>/dev/null)" = minikube ] || return 1
+    nodes="$(kubectl get nodes --request-timeout=5s \
+        -o jsonpath="${node_template}" 2>/dev/null)" || return 1
+    [ "$(printf '%s\n' "${nodes}" | sed '/^$/d' | wc -l | tr -d '[:space:]')" = 1 ] || return 1
+    IFS='|' read -r node_name unschedulable ready address taints <<< "${nodes}"
+    [ "${ready}" = True ] && [ "${unschedulable}" != true ] && [ -n "${address}" ] || return 1
+    printf '%s\n' "${address%% *}"
+}
+
 configure_cluster_address() {
     export NODE_IP="${NODE_IP:-}"
-    if [ -z "${NODE_IP}" ] && command -v minikube >/dev/null 2>&1; then
-        export NODE_IP="$(minikube -p minikube ip 2>/dev/null || true)"
-    fi
-    if [ -n "${NODE_IP}" ]; then
-        export K8S_APISERVER_ADDR="k8s://https://${NODE_IP}:8443"
+    export K8S_APISERVER_ADDR="${K8S_APISERVER_ADDR:-}"
+    if command -v kubectl >/dev/null 2>&1; then
+        if [ -z "${NODE_IP}" ]; then
+            NODE_IP="$(discover_node_ip || true)"
+            export NODE_IP
+        fi
+        if [ -z "${K8S_APISERVER_ADDR}" ]; then
+            local api_server
+            api_server="$(kubectl config view --minify \
+                -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+            if [ -n "${api_server}" ]; then
+                export K8S_APISERVER_ADDR="k8s://${api_server}"
+            fi
+        fi
     fi
 }
 
@@ -90,12 +127,11 @@ configure_minikube_resources() {
 }
 
 configure_java_distribution() {
-    local java_platform
+    local java_platform container_platform
     if [ "${DEPLOY_OS}" = darwin ]; then
         export JAVA_CLIENT_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-macosx-aarch64.tar.gz"
         export JAVA_CLIENT_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-macosx-aarch64.tar.gz"
         export JAVA_CLIENT_DIR_NAME="amazon-corretto-8.jdk/Contents/Home"
-        java_platform=linux-aarch64
     else
         case "${DEPLOY_ARCH}" in
             amd64) java_platform=linux-x64 ;;
@@ -106,9 +142,17 @@ configure_java_distribution() {
         export JAVA_CLIENT_DIR_NAME="amazon-corretto-${JAVA_VERSION}-${java_platform}"
     fi
 
-    export CONTAINER_JAVA_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-${java_platform}.tar.gz"
-    export CONTAINER_JAVA_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-${java_platform}.tar.gz"
-    export CONTAINER_JAVA_DIR_NAME="amazon-corretto-${JAVA_VERSION}-${java_platform}"
+    # The deployment machine and the remote Kubernetes nodes may have different
+    # architectures. Keep the host Java distribution independent of the target.
+    export CONTAINER_ARCH="${CONTAINER_ARCH:-${DEPLOY_ARCH}}"
+    case "${CONTAINER_ARCH}" in
+        amd64) container_platform=linux-x64 ;;
+        arm64) container_platform=linux-aarch64 ;;
+        *) echo 'ERROR: CONTAINER_ARCH must be amd64 or arm64.' >&2; return 1 ;;
+    esac
+    export CONTAINER_JAVA_URL="https://corretto.aws/downloads/resources/${JAVA_VERSION}/amazon-corretto-${JAVA_VERSION}-${container_platform}.tar.gz"
+    export CONTAINER_JAVA_ARCH_NAME="amazon-corretto-${JAVA_VERSION}-${container_platform}.tar.gz"
+    export CONTAINER_JAVA_DIR_NAME="amazon-corretto-${JAVA_VERSION}-${container_platform}"
 }
 
 configure_host_tools() {
@@ -118,15 +162,5 @@ configure_host_tools() {
         [ -n "${prefix}" ] && prepend_path "${prefix}/bin"
         prefix="$(brew --prefix libpq 2>/dev/null || true)"
         [ -n "${prefix}" ] && prepend_path "${prefix}/bin"
-    fi
-
-    # Fall back to Minikube's bundled kubectl when no standalone CLI exists.
-    if ! command -v kubectl >/dev/null 2>&1 && command -v minikube >/dev/null 2>&1; then
-        kubectl() {
-            minikube kubectl -- "$@"
-        }
-        if [ -n "${BASH_VERSION:-}" ]; then
-            export -f kubectl
-        fi
     fi
 }

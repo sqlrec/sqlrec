@@ -25,7 +25,6 @@ export DATA_DIR="${BASE_DIR}/data"
 export CONF_DIR="${DATA_DIR}/conf"
 export LIB_DIR="${DATA_DIR}/lib"
 export CLIENT_DIR="${DATA_DIR}/client"
-export PV_DIR="${DATA_DIR}/pv"
 export IMAGE_CACHE_DIR="${DATA_DIR}/image-cache"
 
 # Kubernetes and Minikube defaults
@@ -34,6 +33,19 @@ export LIB_PVC_NAME="${LIB_PVC_NAME:-sqlrec-lib-pvc}"
 export CLIENT_PV_NAME="${CLIENT_PV_NAME:-sqlrec-client-pv}"
 export CLIENT_PVC_NAME="${CLIENT_PVC_NAME:-sqlrec-client-pvc}"
 export NAMESPACE="${NAMESPACE:-sqlrec}"
+# Preserve mapped host directories for the default Minikube context. Other
+# clusters must explicitly supply a StorageClass that supports ReadWriteMany.
+if [ -z "${STORAGE_MODE:-}" ]; then
+    if command -v kubectl >/dev/null 2>&1 && [ "$(kubectl config current-context 2>/dev/null)" = minikube ]; then
+        STORAGE_MODE=hostpath
+    else
+        STORAGE_MODE=shared
+    fi
+fi
+export STORAGE_MODE
+export STORAGE_CLASS="${STORAGE_CLASS:-}"
+export CLIENT_STORAGE_SIZE="${CLIENT_STORAGE_SIZE:-128Gi}"
+export LIB_STORAGE_SIZE="${LIB_STORAGE_SIZE:-128Gi}"
 # Unified timeout for all deployment waits, in seconds.
 export DEPLOY_TIMEOUT="${DEPLOY_TIMEOUT:-3600}"
 
@@ -47,6 +59,8 @@ export LOCAL_PATH_PROVISIONER_CHART="${LOCAL_PATH_PROVISIONER_CHART:-oci://ghcr.
 export LOCAL_PATH_PROVISIONER_VERSION="${LOCAL_PATH_PROVISIONER_VERSION:-0.0.37}"
 
 export DEBIAN_IMAGE_VERSION="${DEBIAN_IMAGE_VERSION:-12-slim}"
+export RESOURCE_SYNC_IMAGE="${RESOURCE_SYNC_IMAGE:-debian:${DEBIAN_IMAGE_VERSION}}"
+export RESOURCE_SYNC_POD_NAME="${RESOURCE_SYNC_POD_NAME:-sqlrec-resource-sync}"
 
 # Component versions, ports, and credentials
 # Service ports are allocated from this range; Minikube maps it as a unit.
@@ -95,7 +109,6 @@ export RUSTFS_CONSOLE_PORT="${RUSTFS_CONSOLE_PORT:-30015}"
 export RUSTFS_ACCESS_KEY="${RUSTFS_ACCESS_KEY:-rootuser}"
 export RUSTFS_SECRET_KEY="${RUSTFS_SECRET_KEY:-rootpass123}"
 export RUSTFS_REGION="${RUSTFS_REGION:-us-east-1}"
-export RUSTFS_STORAGE_CLASS="${RUSTFS_STORAGE_CLASS:-local-path}"
 export RUSTFS_DATA_STORAGE_SIZE="${RUSTFS_DATA_STORAGE_SIZE:-128Gi}"
 export RUSTFS_LOG_STORAGE_SIZE="${RUSTFS_LOG_STORAGE_SIZE:-1Gi}"
 export RUSTFS_JUICEFS_BUCKET="${RUSTFS_JUICEFS_BUCKET:-bucket1}"
@@ -230,7 +243,7 @@ export POSTGRESQL_CONNECTOR_JAR_URL="https://repo1.maven.org/maven2/org/postgres
 
 # Java distribution
 export JAVA_VERSION="${JAVA_VERSION:-8.472.08.1}"
-configure_java_distribution
+configure_java_distribution || { return 1 2>/dev/null || exit 1; }
 
 # Runtime locations
 export HADOOP_HOME="${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}"

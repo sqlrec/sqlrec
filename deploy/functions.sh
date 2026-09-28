@@ -17,12 +17,19 @@ append_path() {
     export PATH
 }
 
+prepare_resource_directories() {
+    mkdir -p "${CONF_DIR}" "${LIB_DIR}" "${CLIENT_DIR}"
+}
+
 # Download a file without depending on wget, which is not installed by default
 # on macOS. Existing files are left untouched by the callers.
 download_file() {
     local url=$1
     local destination=$2
     local temporary="${destination}.tmp.$$"
+
+    # Component init scripts can also be run without deploy_minikube.sh.
+    mkdir -p "$(dirname -- "${destination}")" || return 1
 
     # Write downloads atomically. A failed curl must not leave a partial file
     # that a later run mistakes for a completed download.
@@ -46,6 +53,44 @@ require_commands() {
         echo "ERROR: missing required commands:${missing}" >&2
         return 1
     fi
+}
+
+# Check the files referenced by the core workload manifests before creating
+# services or uploading resources. A directory alone is not a complete client.
+validate_runtime_resources() {
+    local name resource_path
+    local libraries=("${JUICEFS_HADOOP_JAR_NAME}" "${POSTGRESQL_CONNECTOR_JAR_NAME}")
+    local executables=("${HADOOP_HOME}/bin/hadoop" "${HIVE_HOME}/bin/hive" \
+        "${HIVE_HOME}/bin/schematool" "${CONTAINER_JAVA_HOME}/bin/java")
+    local config_directories=("${HADOOP_HOME}/etc/hadoop" "${HIVE_HOME}/conf")
+    case "${1:-all}" in
+        all)
+            libraries+=("${FLINK_HADOOP_JAR_NAME}" "${FLINK_SQL_CONNECTOR_HIVE_JAR_NAME}" "${SQLREC_FLINK_JAR_NAME}")
+            executables+=("${SPARK_HOME}/bin/spark-submit")
+            config_directories+=("${SPARK_HOME}/conf")
+            ;;
+        hms) ;;
+        *) echo 'ERROR: unknown runtime resource scope.' >&2; return 1 ;;
+    esac
+    for name in "${libraries[@]}"; do
+        resource_path="${LIB_DIR}/${name}"
+        if [ ! -f "${resource_path}" ] || [ ! -s "${resource_path}" ]; then
+            echo "ERROR: missing or empty dependency ${resource_path}; run download_resource.sh first." >&2
+            return 1
+        fi
+    done
+    for resource_path in "${executables[@]}"; do
+        if [ ! -f "${resource_path}" ] || [ ! -s "${resource_path}" ] || [ ! -x "${resource_path}" ]; then
+            echo "ERROR: missing or unusable client ${resource_path}; run download_resource.sh first." >&2
+            return 1
+        fi
+    done
+    for resource_path in "${config_directories[@]}"; do
+        if [ ! -d "${resource_path}" ]; then
+            echo "ERROR: incomplete client, missing directory ${resource_path}; run download_resource.sh first." >&2
+            return 1
+        fi
+    done
 }
 
 # Render a configuration template while keeping the generated file available
@@ -124,5 +169,5 @@ wait_for_job() {
 # the function definitions and does not provide the Bash-compatible export that
 # the deployment scripts need.
 if [ -n "${BASH_VERSION:-}" ]; then
-    export -f prepend_path append_path download_file require_commands render_config version_at_least wait_for_job
+    export -f prepend_path append_path prepare_resource_directories download_file require_commands validate_runtime_resources render_config version_at_least wait_for_job
 fi

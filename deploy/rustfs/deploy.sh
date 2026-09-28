@@ -5,6 +5,8 @@ source "${dir}/../env.sh"
 
 credentials_checksum="$(printf '%s\0%s' "${RUSTFS_ACCESS_KEY}" "${RUSTFS_SECRET_KEY}" | cksum | awk '{print $1}')"
 
+# Override the chart's local-path default with an empty name so standalone
+# PVCs omit storageClassName and use the cluster's default StorageClass.
 helm upgrade --install rustfs rustfs/rustfs \
   --version "${RUSTFS_VERSION}" \
   --namespace "${NAMESPACE}" \
@@ -20,7 +22,7 @@ helm upgrade --install rustfs rustfs/rustfs \
   --set service.type=NodePort \
   --set service.endpoint.nodePort="${RUSTFS_PORT}" \
   --set service.console.nodePort="${RUSTFS_CONSOLE_PORT}" \
-  --set-string storageclass.name="${RUSTFS_STORAGE_CLASS}" \
+  --set-string storageclass.name="" \
   --set-string storageclass.dataStorageSize="${RUSTFS_DATA_STORAGE_SIZE}" \
   --set-string storageclass.logStorageSize="${RUSTFS_LOG_STORAGE_SIZE}" \
   --set resources.requests.memory=2Gi \

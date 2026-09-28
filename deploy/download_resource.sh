@@ -3,6 +3,8 @@ set -exo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/env.sh"
 
+prepare_resource_directories
+
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 bash "${dir}/postgresql/init.sh"

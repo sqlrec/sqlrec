@@ -5,7 +5,7 @@ metadata:
 spec:
   storageClassName: ""
   capacity:
-    storage: 128Gi
+    storage: ${LIB_STORAGE_SIZE}
   accessModes:
     - ReadWriteOnce
   hostPath:
@@ -23,7 +23,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 128Gi
+      storage: ${LIB_STORAGE_SIZE}
   volumeName: ${LIB_PV_NAME}
 ---
 apiVersion: v1
@@ -33,7 +33,7 @@ metadata:
 spec:
   storageClassName: ""
   capacity:
-    storage: 128Gi
+    storage: ${CLIENT_STORAGE_SIZE}
   accessModes:
     - ReadWriteOnce
   hostPath:
@@ -51,5 +51,5 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 128Gi
+      storage: ${CLIENT_STORAGE_SIZE}
   volumeName: ${CLIENT_PV_NAME}
