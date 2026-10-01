@@ -87,6 +87,18 @@ public class SqlPreProcesserTest {
     }
 
     @Test
+    public void testTransformSetStatementWithTerminator() {
+        assertEquals("set 'parallelism.default'='2'",
+                SqlPreProcesser.preProcessSql("  SET parallelism.default = 2;  "));
+    }
+
+    @Test
+    public void testTransformSetStatementPreservesQuotedSemicolon() {
+        String sql = "SET 'param'='value;';";
+        assertEquals(sql, SqlPreProcesser.preProcessSql(sql));
+    }
+
+    @Test
     public void testTransformSetStatementWithMultipleEquals() {
         String result = SqlPreProcesser.transformSetStatement("set param=test=value");
         assertEquals("set param=test=value", result);

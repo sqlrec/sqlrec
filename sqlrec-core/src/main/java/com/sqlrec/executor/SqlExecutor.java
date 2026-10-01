@@ -20,7 +20,13 @@ import com.sqlrec.sql.parser.SqlFlush;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlReplaceTableAs;
+import org.apache.flink.sql.parser.ddl.SqlUseCatalog;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
+import org.apache.flink.sql.parser.ddl.SqlSet;
+import org.apache.flink.sql.parser.ddl.SqlReset;
+import com.sqlrec.utils.SchemaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +41,7 @@ public class SqlExecutor {
     private final ExecuteContext context;
     private String defaultSchema;
     private FunctionCompiler functionCompiler;
+    private final java.util.LinkedHashMap<String, String> sessionSettings = new java.util.LinkedHashMap<>();
 
     public SqlExecutor() {
         schema = CalciteSchemaFactory.createCalciteSchema();
@@ -52,7 +59,25 @@ public class SqlExecutor {
         return context;
     }
 
-    public SqlProcessResult executeSqlAsync(String sql) throws Exception {
+    public String getDefaultSchema() {
+        return defaultSchema;
+    }
+
+    public synchronized Map<String, String> getSessionSettings() {
+        return new java.util.LinkedHashMap<>(sessionSettings);
+    }
+
+    /** Called only after a forwarded RESET has completed successfully. */
+    public synchronized void resetSessionSettings(String key) {
+        if (key == null) {
+            sessionSettings.keySet().forEach(setting -> context.setVariable(setting, null));
+            sessionSettings.clear();
+        } else if (sessionSettings.remove(key) != null) {
+            context.setVariable(key, null);
+        }
+    }
+
+    public synchronized SqlProcessResult executeSqlAsync(String sql) throws Exception {
         SqlNode node = CompileManager.parseSql(sql);
 
         if (SqlRecConfigs.isFileSystemMetadata() && node instanceof SqlCreateSqlFunction) {
@@ -65,13 +90,58 @@ public class SqlExecutor {
         if (result != null) {
             return result;
         }
+        if (node instanceof SqlUseCatalog) {
+            throw new UnsupportedOperationException("USE CATALOG is not supported; SQLRec uses the configured Hive catalog");
+        }
+        if ((node instanceof SqlCreateTable create && create.isTemporary())
+                || (node instanceof SqlReplaceTableAs replace && replace.isTemporary())) {
+            throw new UnsupportedOperationException("Creating temporary tables is not supported");
+        }
+        if (MetadataDdlExecutor.handles(node)) {
+            return MetadataDdlExecutor.execute(MetadataAccessFactory.getInstance(), sql, defaultSchema);
+        }
         if (node instanceof SqlUseDatabase command) {
-            defaultSchema = command.getDatabaseName().getSimple();
+            java.util.List<String> names = command.getDatabaseName().names;
+            if (names.size() > 2 || names.size() == 2 &&
+                    !Consts.HIVE_CATALOG_NAME.equals(names.get(0))) {
+                throw new IllegalArgumentException("database catalog is not configured: " + command.getDatabaseName());
+            }
+            defaultSchema = names.get(names.size() - 1);
             return message("database changed to " + defaultSchema);
+        }
+        if (node instanceof SqlSet set) {
+            if (set.getKey() == null || set.getValue() == null) {
+                // Listing Flink's full configuration remains a Gateway operation.
+                return null;
+            }
+            String key = SchemaUtils.getValueOfStringLiteral(set.getKey());
+            String value = SchemaUtils.getValueOfStringLiteral(set.getValue());
+            context.setVariable(key, value);
+            sessionSettings.put(key, value);
+            return message("setting saved in SQLRec session; Flink settings apply before the next remote operation");
+        }
+        if (node instanceof SqlReset) {
+            return null;
         }
         if (node instanceof SqlFlush) {
             CacheManager.invalidateAll();
             return message("all caches flushed");
+        }
+
+        if (!SqlRecConfigs.isFileSystemMetadata()) {
+            if (node instanceof org.apache.flink.sql.parser.dql.SqlShowFunctions) {
+                return MetadataAccessFactory.getInstance().executeMetadataQuery(sql, defaultSchema);
+            }
+            java.util.List<String> object = null;
+            if (node instanceof org.apache.flink.sql.parser.dql.SqlShowCreateTable show) {
+                object = show.getTableName().names;
+            } else if (node instanceof org.apache.flink.sql.parser.dql.SqlRichDescribeTable describe) {
+                object = java.util.Arrays.asList(describe.fullTableName());
+            }
+            // Request-local cache tables remain owned by SQLRec; durable definitions use the full Catalog schema.
+            if (object != null && !(object.size() == 1 && schema.getTable(object.get(0), false) != null)) {
+                return MetadataAccessFactory.getInstance().executeMetadataQuery(sql, defaultSchema);
+            }
         }
 
         result = new ResourceQueryExecutor(MetadataAccessFactory.getInstance(), schema)
@@ -88,7 +158,11 @@ public class SqlExecutor {
 
         result = new ResourceCommandExecutor(MetadataAccessFactory.getInstance())
                 .execute(node, defaultSchema);
-        invalidateCaches(node);
+        if (result != null) {
+            invalidateCaches(node);
+        } else if (node instanceof com.sqlrec.sql.parser.SqlRecStatement) {
+            throw new UnsupportedOperationException("SQLRec statement cannot execute locally and cannot be forwarded to Flink");
+        }
         return result;
     }
 

@@ -2,6 +2,34 @@
 
 部署分为两步：准备 Kubernetes 集群，再部署 SQLRec 和依赖组件。Minikube 和已有集群使用相同的 `download_resource.sh`、`deploy_components.sh`，客户端文件的存储方式由 `STORAGE_MODE` 决定。
 
+## Flink SQL Gateway 默认部署与转发配置
+
+部署脚本默认下载和安装 Flink Operator、Session Cluster 和 Gateway，并为 SQLRec 配置节点上的 Gateway 地址和端口。共享元数据模式仍需要 HMS 和 PostgreSQL；本地 SQL、`USE`、`SET`、JDBC 元数据以及持久表、库和 UDF 的纯元数据 DDL 不依赖 Gateway。DDL 使用 Flink 1.19 default 方言，通过进程内官方 HiveCatalog 的 Hive 客户端直接写 HMS，不创建 TableEnvironment 或 Planner。表 DDL 支持普通列、metadata 列、主键和分区，不支持计算列和 WATERMARK；需要解析表结构的查询和修改也会拒绝这些已有定义。
+
+沿用 `FLINK_SQL_GATEWAY_ADDRESS` 主机地址和 `FLINK_SQL_GATEWAY_PORT` 端口配置，使用 HiveServer2/Thrift 接口。部署时未指定地址就使用 `NODE_IP`；显式空地址或只包含空白时禁用转发。应用自身也保留原有默认 Gateway 地址。
+
+默认部署无需额外配置端口。`FLINK_SQL_GATEWAY_PORT` 同时用于 Gateway 的 NodePort 和 SQLRec 连接，默认 `30018`；部署 Gateway 服务时，自定义值须位于集群允许的 NodePort 范围。
+
+如已准备好依赖组件，需要单独部署 SQLRec 并连接外部 Gateway，可配置外部端口：
+
+```bash
+# 使用外部 HiveServer2/Thrift Gateway
+export FLINK_SQL_GATEWAY_ADDRESS=your-gateway-host
+export FLINK_SQL_GATEWAY_PORT=10000
+bash ./deploy/sqlrec/deploy.sh
+
+# 或者关闭 SQLRec 的远程转发
+export FLINK_SQL_GATEWAY_ADDRESS=""
+```
+
+外部端口示例仅用于 SQLRec 部署，不能把 `10000` 同时用作默认集群中的 Gateway NodePort。
+
+连接和 RPC 读取超时保持原有配置方式，均使用 `FLINK_SQL_GATEWAY_CONNECT_TIMEOUT`，默认 600000 毫秒（10 分钟）。本地可处理的 SQL、JDBC 元数据及客户端会话信息不建立 Gateway 连接；需要远程能力的 SQL/RPC 才连接 Gateway，转发禁用时返回 `FLINK_GATEWAY_DISABLED`。REST/CLI 保持本地执行边界。
+
+不支持 `USE CATALOG` 和创建临时表（包括临时 CTAS/RTAS），这些语句直接报错。`USE database` 不校验会话 schema 中是否存在该数据库，后续操作按实际元数据执行。临时函数、视图及持久表的 CTAS/RTAS 等未纳入本地执行的语句保留 Thrift 远程路由。保存表/UDF 定义不代表 SQLRec 本地支持其全部 Connector、列语义或函数接口。SQL 文件元数据模式继续限制运行时 DDL 和远程转发，但不新增 Gateway 配置的启动冲突检查。
+
+显式空地址仅关闭 SQLRec 转发，不改变默认组件部署，也不删除已有 Flink 组件或作业。清理仍使用显式卸载脚本。
+
 ## 系统要求
 
 部署机器支持 AMD64/ARM64 Linux 和 Apple Silicon macOS。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
@@ -191,7 +219,7 @@ bash ./deploy/deploy_components.sh
 | `SQLREC_POSTGRESQL_USER` / `SQLREC_POSTGRESQL_PASSWORD` | SQLRec 元数据库凭据 |
 | `HMS_POSTGRESQL_USER` / `HMS_POSTGRESQL_PASSWORD` | HMS 元数据库凭据 |
 | `SQLREC_POSTGRESQL_PORT` / `HMS_POSTGRESQL_PORT` | 数据库 NodePort |
-| `HMS_PORT` / `SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePort |
+| `HMS_PORT` / `FLINK_SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePort；Gateway 端口也供 SQLRec 连接使用 |
 | `SQLREC_THRIFT_PORT` / `SQLREC_REST_PORT` | JDBC/Beeline / REST NodePort，默认 `30000` / `30001` |
 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | 共享 S3 凭据 |
 | `DEPLOY_TIMEOUT` | 部署等待超时，默认 `3600` 秒 |

@@ -2,6 +2,34 @@
 
 Deployment has two stages: prepare a Kubernetes cluster, then deploy SQLRec and its dependencies. Minikube and existing clusters use the same `download_resource.sh` and `deploy_components.sh`; `STORAGE_MODE` selects how client files are stored.
 
+## Default Flink SQL Gateway Deployment and Forwarding
+
+Deployment scripts download and install the Flink operator, session cluster, and Gateway by default, and configure SQLRec with the node's Gateway address and port. Shared metadata mode still requires HMS and PostgreSQL. Local SQL, `USE`, `SET`, JDBC metadata, and persistent table/database/UDF metadata DDL work independently of Gateway. DDL uses the Flink 1.19 default dialect and writes HMS through the official in-process HiveCatalog's Hive client, without creating a TableEnvironment or planner. Table DDL supports physical columns, metadata columns, primary keys, and partitions. Computed columns and watermarks are unsupported; queries and alterations that resolve an existing table schema also reject those definitions.
+
+`FLINK_SQL_GATEWAY_ADDRESS` retains the existing host setting, with `FLINK_SQL_GATEWAY_PORT` for the HiveServer2/Thrift port. During deployment, an unset address defaults to `NODE_IP`; an explicitly empty or whitespace-only address disables forwarding. The application also retains its original default Gateway address.
+
+Default deployment requires no extra port configuration. `FLINK_SQL_GATEWAY_PORT` is shared by the Gateway NodePort and SQLRec's connection and defaults to `30018`. When deploying the Gateway service, a custom value must belong to the cluster's allowed NodePort range.
+
+With dependencies already prepared, deploy SQLRec separately to connect to an external Gateway:
+
+```bash
+# Connect to an external HiveServer2/Thrift Gateway
+export FLINK_SQL_GATEWAY_ADDRESS=your-gateway-host
+export FLINK_SQL_GATEWAY_PORT=10000
+bash ./deploy/sqlrec/deploy.sh
+
+# Or disable SQLRec's remote forwarding
+export FLINK_SQL_GATEWAY_ADDRESS=""
+```
+
+The external port example applies only to SQLRec deployment; do not use `10000` as the default cluster's Gateway NodePort.
+
+Connection and RPC read timeouts retain the original behavior: both use `FLINK_SQL_GATEWAY_CONNECT_TIMEOUT`, which defaults to 600000 ms (10 minutes). Locally supported SQL, JDBC metadata, and client session information do not open a Gateway connection. SQL/RPC requests requiring remote capabilities connect on demand; disabled forwarding returns `FLINK_GATEWAY_DISABLED`. REST and CLI retain their local execution boundary.
+
+`USE CATALOG` and temporary table creation (including temporary CTAS/RTAS) are unsupported and return an error. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. Temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode retains its runtime DDL and remote forwarding restrictions without adding a Gateway configuration conflict check at startup.
+
+An explicitly empty address only disables SQLRec forwarding. Default component deployment continues, and existing Flink components and jobs remain. Use the explicit uninstall scripts for cleanup.
+
 ## System Requirements
 
 The deployment machine can run AMD64/ARM64 Linux or Apple Silicon macOS. The first deployment needs access to image registries, Helm repositories, and resource download URLs.
@@ -191,7 +219,7 @@ Keep namespace, version, path, and architecture settings consistent between reso
 | `SQLREC_POSTGRESQL_USER` / `SQLREC_POSTGRESQL_PASSWORD` | SQLRec metadata database credentials |
 | `HMS_POSTGRESQL_USER` / `HMS_POSTGRESQL_PASSWORD` | HMS metadata database credentials |
 | `SQLREC_POSTGRESQL_PORT` / `HMS_POSTGRESQL_PORT` | Database NodePorts |
-| `HMS_PORT` / `SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePorts |
+| `HMS_PORT` / `FLINK_SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePorts; SQLRec also uses the Gateway port to connect |
 | `SQLREC_THRIFT_PORT` / `SQLREC_REST_PORT` | JDBC/Beeline / REST NodePorts, default `30000` / `30001` |
 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | Shared S3 credentials |
 | `DEPLOY_TIMEOUT` | Deployment wait timeout, default `3600` seconds |

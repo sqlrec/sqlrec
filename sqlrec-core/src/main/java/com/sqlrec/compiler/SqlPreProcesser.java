@@ -46,6 +46,9 @@ public class SqlPreProcesser {
         }
 
         sql = sql.trim();
+        if (sql.endsWith(";")) {
+            sql = sql.substring(0, sql.length() - 1).trim();
+        }
 
         // Extract the part after "set "
         String content = sql.substring(4).trim();

@@ -33,6 +33,14 @@ public class MetadataAccess {
         return schemaAccess.getDatabases();
     }
 
+    public void executeMetadataDdl(String sql, String database) throws Exception {
+        schemaAccess.executeMetadataDdl(sql, database);
+    }
+
+    public com.sqlrec.executor.SqlProcessResult executeMetadataQuery(String sql, String database) throws Exception {
+        return schemaAccess.executeMetadataQuery(sql, database);
+    }
+
     public List<Table> getTables(String database) throws Exception {
         return schemaAccess.getTables(database);
     }

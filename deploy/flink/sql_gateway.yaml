@@ -157,7 +157,7 @@ spec:
     - protocol: TCP
       port: 10000
       targetPort: 10000
-      nodePort: ${SQL_GATEWAY_PORT}
+      nodePort: ${FLINK_SQL_GATEWAY_PORT}
 ---
 apiVersion: v1
 kind: Service

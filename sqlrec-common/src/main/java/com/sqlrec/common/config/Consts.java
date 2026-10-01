@@ -2,6 +2,9 @@ package com.sqlrec.common.config;
 
 public class Consts {
     public static final String DEFAULT_SCHEMA_NAME = "default";
+    // Version-pinned HiveCatalog compatibility baseline; these are not deployment settings.
+    public static final String HIVE_CATALOG_NAME = "hive";
+    public static final String HIVE_CLIENT_VERSION = "3.1.3";
 
     public static final String CHECKPOINT_TYPE_ORIGIN = "origin";
     public static final String CHECKPOINT_TYPE_EXPORT = "export";

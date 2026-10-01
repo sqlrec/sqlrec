@@ -2,7 +2,7 @@ package com.sqlrec.db.remote;
 
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.SchemaAccess;
-import com.sqlrec.udf.config.FunctionConfigs;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.slf4j.Logger;
@@ -19,6 +19,20 @@ public class HmsSchemaAccess implements SchemaAccess {
     private final Map<String, Map<String, Long>> tableUpdateTimesMap = new ConcurrentHashMap<>();
 
     @Override
+    public void executeMetadataDdl(String sql, String database) throws Exception {
+        try {
+            FlinkHiveDdlAdapter.executeDdl(sql, database);
+        } finally {
+            tableUpdateTimesMap.clear();
+        }
+    }
+
+    @Override
+    public com.sqlrec.executor.SqlProcessResult executeMetadataQuery(String sql, String database) throws Exception {
+        return FlinkHiveDdlAdapter.executeQuery(sql, database);
+    }
+
+    @Override
     public List<String> getDatabases() throws Exception {
         return HmsClient.getAllDatabases();
     }
@@ -26,16 +40,22 @@ public class HmsSchemaAccess implements SchemaAccess {
     @Override
     public List<Table> getTables(String database) throws Exception {
         List<Table> tables = new ArrayList<>();
-        Map<String, Long> tableUpdateTimes = tableUpdateTimesMap.computeIfAbsent(database, k -> new ConcurrentHashMap<>());
+        Map<String, Long> tableUpdateTimes = new ConcurrentHashMap<>();
         try {
             List<String> tableNames = HmsClient.getAllTables(database);
             for (String tableName : tableNames) {
-                Table tableObj = HmsClient.getTableObj(database, tableName);
+                Table tableObj;
+                try {
+                    tableObj = HmsClient.getTableObj(database, tableName);
+                } catch (NoSuchObjectException e) {
+                    continue; // The table was dropped after listing it.
+                }
                 if (tableObj == null) continue;
                 long modTime = HiveTableUtils.getTableModificationTime(tableObj);
                 tableUpdateTimes.put(tableName, modTime);
                 tables.add(tableObj);
             }
+            tableUpdateTimesMap.put(database, tableUpdateTimes);
         } catch (Exception e) {
             log.error("Error while getting table metas for schema {}", database, e);
             throw new RuntimeException(e);
@@ -54,7 +74,12 @@ public class HmsSchemaAccess implements SchemaAccess {
         try {
             List<String> functionNames = HmsClient.getAllFunctions(database);
             for (String functionName : functionNames) {
-                Function functionObj = HmsClient.getFunctionObj(database, functionName);
+                Function functionObj;
+                try {
+                    functionObj = HmsClient.getFunctionObj(database, functionName);
+                } catch (NoSuchObjectException e) {
+                    continue;
+                }
                 if (functionObj != null) {
                     functions.add(functionObj);
                 }

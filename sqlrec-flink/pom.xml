@@ -249,7 +249,7 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
-            <version>3.4.3</version>
+            <version>${hadoop.version}</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -275,7 +275,6 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-auth</artifactId>
-            <version>3.4.3</version>
             <scope>test</scope>
         </dependency>
         <!-- Datanucleus/JDO: needed by embedded Hive Metastore (Derby backend) -->
@@ -312,6 +311,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>
+                        ${argLine}
                         --add-opens java.base/java.net=ALL-UNNAMED
                         --add-opens java.base/java.lang=ALL-UNNAMED
                         --add-opens java.base/java.lang.reflect=ALL-UNNAMED

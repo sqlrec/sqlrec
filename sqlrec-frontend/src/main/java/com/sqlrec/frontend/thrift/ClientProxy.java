@@ -17,6 +17,10 @@ import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -36,6 +40,29 @@ public class ClientProxy implements TCLIService.Iface {
 
     private volatile boolean connected;
     private TOpenSessionReq pendingOpenSessionReq;
+    private String desiredDatabase = Consts.DEFAULT_SCHEMA_NAME;
+    private Map<String, String> desiredSettings = new LinkedHashMap<>();
+    private long stateVersion;
+    private long appliedStateVersion = -1;
+    private final Set<THandleIdentifier> remoteOperations = new HashSet<>();
+
+    public synchronized void setSessionState(String database, Map<String, String> settings) {
+        if (!database.equals(desiredDatabase) || !settings.equals(desiredSettings)) {
+            desiredDatabase = database;
+            desiredSettings = new LinkedHashMap<>(settings);
+            stateVersion++;
+        }
+    }
+
+    private void requireGatewayEnabled() throws TException {
+        if (!SqlRecConfigs.isFlinkSqlGatewayEnabled()) {
+            throw new TException("FLINK_GATEWAY_DISABLED: this statement requires Flink execution; "
+                    + "configure FLINK_SQL_GATEWAY_ADDRESS to enable forwarding");
+        }
+        if (SqlRecConfigs.isFileSystemMetadata()) {
+            throw new TException("Remote connection is not allowed in file system meta mode");
+        }
+    }
 
     public ClientProxy() {
         this.lastAccessTime = new AtomicLong(System.currentTimeMillis());
@@ -45,7 +72,7 @@ public class ClientProxy implements TCLIService.Iface {
     @Override
     public synchronized TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
         this.localSessionId = ThriftUtils.getHandleIdentifier();
-        this.pendingOpenSessionReq = req;
+        this.pendingOpenSessionReq = req.deepCopy();
 
         TOpenSessionResp resp = new TOpenSessionResp();
         resp.setStatus(new TStatus(TStatusCode.SUCCESS_STATUS));
@@ -57,37 +84,24 @@ public class ClientProxy implements TCLIService.Iface {
                 .counter(Consts.METRICS_SESSION_OPEN_COUNT)
                 .increment();
 
-        logger.info("Session opened (mock), sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId));
+        logger.info("Local session opened, sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId));
         return resp;
     }
 
     private void ensureConnected() throws TException {
+        requireGatewayEnabled();
         if (connected && transport != null && transport.isOpen()) {
             return;
         }
 
-        // Clean up any stale transport left over from a previous broken connection.
-        if (transport != null) {
-            try {
-                transport.close();
-            } catch (Exception ignore) {
-                // ignore
-            }
-            this.client = null;
-            this.transport = null;
-            this.remoteSessionId = null;
-        }
-        this.connected = false;
+        markDisconnected();
 
-        if (SqlRecConfigs.isFileSystemMetadata()) {
-            throw new TException("Remote connection is not allowed in file system meta mode");
-        }
         if (pendingOpenSessionReq == null) {
             throw new TException("Cannot (re)connect: OpenSession was never called");
         }
 
         TTransport transport = new TSocket(
-                SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getValue(),
+                SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getValue().trim(),
                 SqlRecConfigs.FLINK_SQL_GATEWAY_PORT.getValue(),
                 SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue()
         );
@@ -97,6 +111,10 @@ public class ClientProxy implements TCLIService.Iface {
             transport.open();
 
             TOpenSessionResp remoteResp = client.OpenSession(pendingOpenSessionReq);
+            requireSuccess(remoteResp.getStatus());
+            if (remoteResp.getSessionHandle() == null) {
+                throw new TException("Gateway OpenSession returned no session handle");
+            }
             THandleIdentifier remoteSessionId = copyHandleId(remoteResp.getSessionHandle().getSessionId());
 
             // All remote operations succeeded, commit state atomically.
@@ -106,6 +124,7 @@ public class ClientProxy implements TCLIService.Iface {
             this.transport = transport;
             this.remoteSessionId = remoteSessionId;
             this.connected = true;
+            this.appliedStateVersion = -1;
 
             logger.info("Remote connection opened, localSessionGuid: {}, remoteSessionGuid: {}",
                     ThriftUtils.safeHandleId(localSessionId), ThriftUtils.safeHandleId(remoteSessionId));
@@ -118,7 +137,7 @@ public class ClientProxy implements TCLIService.Iface {
             }
             this.client = null;
             this.transport = null;
-            throw e;
+            throw new TException("FLINK_GATEWAY_UNAVAILABLE: could not open a Gateway session: " + e.getMessage(), e);
         }
     }
 
@@ -139,6 +158,8 @@ public class ClientProxy implements TCLIService.Iface {
         this.transport = null;
         this.remoteSessionId = null;
         this.connected = false;
+        this.appliedStateVersion = -1;
+        this.remoteOperations.clear();
         // keep localSessionId and pendingOpenSessionReq for reconnect
     }
 
@@ -175,8 +196,122 @@ public class ClientProxy implements TCLIService.Iface {
 
     private <T> T invokeConnected(RemoteCall<T> call) throws TException {
         updateAccessTime();
-        ensureConnected();
+        requireGatewayEnabled();
+        if (!connected || transport == null || !transport.isOpen()) {
+            throw new TException("FLINK_REMOTE_SESSION_LOST: remote operation handles cannot be resumed after reconnect");
+        }
         return invokeRemote(call);
+    }
+
+    private static void requireSuccess(TStatus status) throws TException {
+        if (!ThriftUtils.isSuccess(status)) {
+            throw new TException(status == null ? "Gateway returned no status" : status.getErrorMessage());
+        }
+    }
+
+    private void prepareStatement() throws TException {
+        requireGatewayEnabled();
+        ensureConnected();
+        if (appliedStateVersion == stateVersion) {
+            return;
+        }
+        String synchronizing = "table.sql-dialect";
+        try {
+            String dialect = desiredSettings.get("table.sql-dialect");
+            if (dialect != null) {
+                applyStateStatement("SET 'table.sql-dialect' = " + literal(dialect));
+            }
+            for (Map.Entry<String, String> setting : desiredSettings.entrySet()) {
+                if (!setting.getKey().equals("table.sql-dialect")) {
+                    synchronizing = setting.getKey();
+                    applyStateStatement("SET " + literal(setting.getKey()) + " = " + literal(setting.getValue()));
+                }
+            }
+            synchronizing = "current database";
+            applyStateStatement("USE `" + desiredDatabase.replace("`", "``") + "`");
+            appliedStateVersion = stateVersion;
+        } catch (TException e) {
+            throw new TException("FLINK_SESSION_STATE_SYNC_FAILED: could not apply " + synchronizing
+                    + "; correct this setting and retry the remote statement", e);
+        }
+    }
+
+    private static String literal(String value) {
+        return "'" + value.replace("'", "''") + "'";
+    }
+
+    private void applyStateStatement(String sql) throws TException {
+        executeStateStatement(sql);
+        if (!connected) {
+            // Cleanup may lose the transport after the command succeeded. A new session must replay all state.
+            throw new TException("Gateway connection lost while synchronizing session state");
+        }
+    }
+
+    /** Confirm a remote configuration command before changing SQLRec's saved session overrides. */
+    public synchronized void executeSessionCommand(String sql) throws TException {
+        updateAccessTime();
+        // RESET must work even if a pending SET is invalid; do not replay pending overrides first.
+        ensureConnected();
+        executeStateStatement(sql);
+    }
+
+    private void executeStateStatement(String sql) throws TException {
+        TExecuteStatementReq request = new TExecuteStatementReq(new TSessionHandle(remoteSessionId), sql);
+        request.setRunAsync(false);
+        TExecuteStatementResp response = invokeRemote(() -> client.ExecuteStatement(request));
+        requireSuccess(response.getStatus());
+        TOperationHandle handle = response.getOperationHandle();
+        if (handle == null) {
+            throw new TException("Gateway state statement returned no operation handle");
+        }
+        try {
+            // runAsync=false asks the endpoint to finish the statement before responding.
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
+                    SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue());
+            while (true) {
+                TGetOperationStatusResp status = invokeRemote(() -> client.GetOperationStatus(new TGetOperationStatusReq(handle)));
+                requireSuccess(status.getStatus());
+                if (status.getOperationState() == TOperationState.FINISHED_STATE) {
+                    break;
+                }
+                if (status.getOperationState() != TOperationState.RUNNING_STATE
+                        && status.getOperationState() != TOperationState.PENDING_STATE
+                        && status.getOperationState() != TOperationState.INITIALIZED_STATE) {
+                    throw new TException("Gateway state statement failed: " + status.getErrorMessage());
+                }
+                if (System.nanoTime() >= deadline) {
+                    throw new TException("Gateway session state synchronization timed out");
+                }
+                try {
+                    Thread.sleep(25);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new TException("Gateway state synchronization interrupted", e);
+                }
+            }
+        } finally {
+            if (connected) {
+                try {
+                    requireSuccess(invokeRemote(() -> client.CloseOperation(new TCloseOperationReq(handle))).getStatus());
+                } catch (TException cleanupFailure) {
+                    // Cleanup must not hide a completed command or replace its original error.
+                    logger.warn("Failed to close Gateway session-state operation", cleanupFailure);
+                }
+            }
+        }
+    }
+
+    private void requireRemoteOperation(TOperationHandle handle) throws TException {
+        if (handle == null || !remoteOperations.contains(handle.getOperationId())) {
+            throw new TException("FLINK_REMOTE_SESSION_LOST: remote operation is unknown or belongs to an earlier session");
+        }
+    }
+
+    private void trackRemoteOperation(TStatus status, TOperationHandle handle) {
+        if (ThriftUtils.isSuccess(status) && handle != null) {
+            remoteOperations.add(copyHandleId(handle.getOperationId()));
+        }
     }
 
     private THandleIdentifier translateSessionHandle(TSessionHandle sessionHandle) {
@@ -226,17 +361,8 @@ public class ClientProxy implements TCLIService.Iface {
                 return new TCloseSessionResp(new TStatus(TStatusCode.SUCCESS_STATUS));
             }
         } finally {
-            if (transport != null) {
-                try {
-                    transport.close();
-                } catch (Exception e) {
-                    logger.warn("Failed to close transport for sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId), e);
-                }
-            }
-            connected = false;
-            client = null;
-            transport = null;
-            remoteSessionId = null;
+            markDisconnected();
+            pendingOpenSessionReq = null;
             MetricsUtils.getCompositeMeterRegistry()
                     .counter(Consts.METRICS_SESSION_CLOSE_COUNT)
                     .increment();
@@ -255,8 +381,8 @@ public class ClientProxy implements TCLIService.Iface {
             case CLI_DBMS_NAME -> "Apache Hive";
             case CLI_DBMS_VER -> "3.1.3";
             case CLI_SERVER_NAME, CLI_DATA_SOURCE_NAME -> "SQLRec";
-            case CLI_CATALOG_NAME -> "hive";
-            case CLI_DATA_SOURCE_READ_ONLY -> "N";
+            case CLI_CATALOG_NAME -> Consts.HIVE_CATALOG_NAME;
+            case CLI_DATA_SOURCE_READ_ONLY -> SqlRecConfigs.isFileSystemMetadata() ? "Y" : "N";
             default -> "";
         };
         resp.setInfoValue(TGetInfoValue.stringValue(infoValue));
@@ -266,10 +392,13 @@ public class ClientProxy implements TCLIService.Iface {
 
     @Override
     public synchronized TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
-        return invokeWithSessionHandle(
+        prepareStatement();
+        TExecuteStatementResp response = invokeWithSessionHandle(
                 tExecuteStatementReq.getSessionHandle(),
                 () -> client.ExecuteStatement(tExecuteStatementReq)
         );
+        trackRemoteOperation(response.getStatus(), response.getOperationHandle());
+        return response;
     }
 
     @Override
@@ -338,34 +467,45 @@ public class ClientProxy implements TCLIService.Iface {
 
     @Override
     public synchronized TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
-        return invokeWithSessionHandle(
+        TGetCrossReferenceResp response = invokeWithSessionHandle(
                 tGetCrossReferenceReq.getSessionHandle(),
                 () -> client.GetCrossReference(tGetCrossReferenceReq)
         );
+        trackRemoteOperation(response.getStatus(), response.getOperationHandle());
+        return response;
     }
 
     @Override
     public synchronized TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
+        requireRemoteOperation(tGetOperationStatusReq.getOperationHandle());
         return invokeConnected(() -> client.GetOperationStatus(tGetOperationStatusReq));
     }
 
     @Override
     public synchronized TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
+        requireRemoteOperation(tCancelOperationReq.getOperationHandle());
         return invokeConnected(() -> client.CancelOperation(tCancelOperationReq));
     }
 
     @Override
     public synchronized TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
-        return invokeConnected(() -> client.CloseOperation(tCloseOperationReq));
+        requireRemoteOperation(tCloseOperationReq.getOperationHandle());
+        TCloseOperationResp response = invokeConnected(() -> client.CloseOperation(tCloseOperationReq));
+        if (ThriftUtils.isSuccess(response.getStatus())) {
+            remoteOperations.remove(tCloseOperationReq.getOperationHandle().getOperationId());
+        }
+        return response;
     }
 
     @Override
     public synchronized TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
+        requireRemoteOperation(tGetResultSetMetadataReq.getOperationHandle());
         return invokeConnected(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
     }
 
     @Override
     public synchronized TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
+        requireRemoteOperation(tFetchResultsReq.getOperationHandle());
         return invokeConnected(() -> client.FetchResults(tFetchResultsReq));
     }
 
@@ -395,6 +535,7 @@ public class ClientProxy implements TCLIService.Iface {
 
     @Override
     public synchronized TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
+        requireRemoteOperation(tGetQueryIdReq.getOperationHandle());
         return invokeConnected(() -> client.GetQueryId(tGetQueryIdReq));
     }
 

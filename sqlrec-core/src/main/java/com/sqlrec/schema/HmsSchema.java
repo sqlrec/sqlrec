@@ -114,7 +114,7 @@ public class HmsSchema extends AbstractSchema {
                     if (scalarFunction != null) {
                         functionMap.put(functionMeta.getFunctionName(), scalarFunction);
                     }
-                } catch (Exception e) {
+                } catch (Exception | LinkageError e) {
                     log.error("Failed to create scalar function {} from class {}",
                             functionMeta.getFunctionName(), functionMeta.getClassName(), e);
                 }
@@ -125,7 +125,7 @@ public class HmsSchema extends AbstractSchema {
                     if (scalarFunction != null) {
                         functionMap.put(entry.getKey(), scalarFunction);
                     }
-                } catch (Exception e) {
+                } catch (Exception | LinkageError e) {
                     log.error("Failed to create scalar function {} from class {}",
                             entry.getKey(), entry.getValue(), e);
                 }

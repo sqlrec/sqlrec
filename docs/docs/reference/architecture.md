@@ -61,7 +61,7 @@ SQLRec 用 SQL 编排推荐流程：读取特征与候选集、调用函数和�
 
 SQLRec 使用两个解析器：标准 Flink SQL 优先由 Flink 解析器处理，SQLRec 的 `CACHE TABLE`、`CALL`、模型管理等扩展语句由独立的 SQLRec 解析器处理。解析后，执行器按语句类型决定由本地 Calcite 执行、操作元数据，还是交给 Flink。
 
-本地路径负责面向在线请求的 SQL 查询、数据写入、SQL 函数和控制语句。Calcite 将查询编译成可执行代码，执行时通过 Connector 读取或写入数据。`SHOW`、模型与服务等资源命令由 SQLRec 自己处理。远程元数据模式下，Thrift 会话把未由本地处理的语句（例如部分流式 DDL）转发到 Flink SQL Gateway；`USE` 和 `SET` 同时作用于本地与远程会话。REST `/sql/v1` 和 CLI 没有这条透明转发路径，本地文件元数据模式也不依赖 Flink Gateway。
+本地路径负责面向在线请求的 SQL 查询、数据写入、SQL 函数和控制语句。Calcite 将查询编译成可执行代码，执行时通过 Connector 读取或写入数据。`SHOW`、模型与服务等资源命令由 SQLRec 自己处理。远程元数据模式下，持久表、库和 UDF 的纯元数据 DDL 由本地适配器通过官方 HiveCatalog 写入 HMS，无需创建 TableEnvironment 或连接 Gateway。计算列和 WATERMARK 不在本地表 DDL 支持范围内。Thrift 会话把其他未由本地处理的语句转发到 Flink SQL Gateway；`USE` 和 `SET` 同时作用于本地与远程会话。REST `/sql/v1` 和 CLI 没有这条透明转发路径，本地文件元数据模式也不依赖 Flink Gateway。
 
 一个 Thrift 会话持有自己的 SQL 执行器；REST `/sql/v1` 每个请求新建一个执行器，同一请求中的多条 SQL 依次运行。`POST /api/v1/<name>` 则查找已发布的 API 和对应的 SQL 函数，为每次调用建立执行数据和输入表。API 的发布与请求格式见[发布和调用 API](../guides/api.md)。
 
@@ -167,7 +167,7 @@ KV Join 在右表关联列是主键时批量点查；非主键关联逐键扫描
 | --- | --- | --- |
 | 表和 Java UDF | 从 Hive Metastore（HMS）读取数据库、表结构和函数定义 | 启动时递归解析 `SQL_SCHEMA_DIR` 下的 `.sql` 文件，在进程内建立 schema |
 | SQL 函数、API、模型、Checkpoint、Service | 保存在 PostgreSQL，由 SQLRec 的管理命令读取或更新 | SQL 文件中的函数、API、模型和 Service 定义初始化为进程内对象；没有共享的元数据存储 |
-| 更新定义 | 资源命令更新 PostgreSQL；远程模式的 Thrift 会话可将表等 Flink DDL 转发给 Flink SQL Gateway，由其更新 HMS | 修改 SQL 文件并重启或重新部署实例；`FLUSH` 不重新解析文件 |
+| 更新定义 | 资源命令更新 PostgreSQL；支持的持久表、库和 UDF 元数据 DDL 在本地通过 HiveCatalog 更新 HMS | 修改 SQL 文件并重启或重新部署实例；`FLUSH` 不重新解析文件 |
 | 依赖与用途 | 需要 HMS 和 PostgreSQL，适合多实例共享定义；Flink Gateway 只在需要转发语句时使用 | 适合 Demo、本地开发和线上 serving：SQL 文件可随镜像或部署配置纳入版本管理，省去 HMS、PostgreSQL 和 Flink Gateway；实际使用的 Connector、模型端点仍需可访问 |
 
 本地 SQL 文件模式**不允许执行 DDL**。定义只能通过 SQL 文件加载；查询、数据写入、`CACHE TABLE` 和调用已定义的函数仍可执行。线上 serving 可把完整 SQL 目录与应用版本一起发布，让每个实例启动时加载同一版本；修改定义后需重新部署或重启所有实例。

@@ -4,6 +4,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.flink.table.catalog.CatalogPropertiesUtil;
 
 import java.util.*;
 
@@ -46,12 +47,47 @@ public class HiveTableUtils {
         if (tableProperties != null) {
             for (Map.Entry<String, String> entry : tableProperties.entrySet()) {
                 if (entry.getKey().startsWith("flink.")) {
-                    flinkTableOptions.put(entry.getKey().substring(6), entry.getValue());
+                    String key = entry.getKey().substring(6);
+                    flinkTableOptions.put(key, entry.getValue());
                 }
             }
         }
 
+        if (flinkTableOptions.containsKey("schema.0.name")) {
+            Map<String, String> options = new LinkedHashMap<>(
+                    CatalogPropertiesUtil.deserializeCatalogTable(flinkTableOptions).getOptions());
+            options.remove("is_generic");
+            return options;
+        }
+        flinkTableOptions.keySet().removeIf(key -> key.startsWith("schema.") || key.startsWith("partition.keys.")
+                || key.equals("comment") || key.equals("snapshot") || key.equals("is_generic"));
         return flinkTableOptions;
+    }
+
+    /** Fields for metadata display, preserving Flink's serialized types and nullability. */
+    public static List<FieldSchema> getMetadataFields(org.apache.hadoop.hive.metastore.api.Table tableObj) {
+        Map<String, String> properties = tableObj.getParameters();
+        if (properties != null && properties.containsKey("flink.schema.0.name")) {
+            List<FieldSchema> fields = new ArrayList<>();
+            for (int i = 0; properties.containsKey("flink.schema." + i + ".name"); i++) {
+                String prefix = "flink.schema." + i + ".";
+                // Keep nullability and nested field names exactly as serialized by Flink.
+                String type = properties.get(prefix + "data-type");
+                if (type == null) {
+                    throw new IllegalArgumentException("Missing Flink type for " + properties.get(prefix + "name"));
+                }
+                fields.add(new FieldSchema(properties.get(prefix + "name"), type));
+            }
+            return fields;
+        }
+        List<FieldSchema> result = new ArrayList<>();
+        if (tableObj.getSd() != null && tableObj.getSd().getCols() != null) {
+            tableObj.getSd().getCols().forEach(c -> result.add(new FieldSchema(c.getName(), c.getType())));
+        }
+        if (tableObj.getPartitionKeys() != null) {
+            tableObj.getPartitionKeys().forEach(c -> result.add(new FieldSchema(c.getName(), c.getType())));
+        }
+        return result;
     }
 
     public static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj) {

@@ -231,7 +231,7 @@ public class SqlRecConfigs {
     public static final ConfigOption<String> FLINK_SQL_GATEWAY_ADDRESS = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_ADDRESS",
             DEFAULT_TEST_IP.getValue(),
-            "flink sql gateway to proxy",
+            "optional Gateway host; blank disables SQL forwarding",
             null,
             String.class
     );
@@ -249,6 +249,10 @@ public class SqlRecConfigs {
             null,
             Integer.class
     );
+
+    public static boolean isFlinkSqlGatewayEnabled() {
+        return StringUtils.isNotBlank(FLINK_SQL_GATEWAY_ADDRESS.getValue());
+    }
 
     public static final ConfigOption<Long> SESSION_CHECK_INTERVAL = new ConfigOption<>(
             "SESSION_CHECK_INTERVAL",

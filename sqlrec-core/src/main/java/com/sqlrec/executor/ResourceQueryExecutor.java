@@ -1,5 +1,6 @@
 package com.sqlrec.executor;
 
+import com.sqlrec.common.config.Consts;
 import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTransformUtils;
@@ -19,6 +20,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.dql.*;
+import org.apache.flink.table.functions.SqlLikeUtils;
 
 import com.sqlrec.sql.parser.*;
 
@@ -105,11 +107,17 @@ final class ResourceQueryExecutor {
     }
 
     private SqlProcessResult showTables(SqlShowTables command, String defaultSchema) throws Exception {
-        String database = command.fullDatabaseName().length == 0
-                ? defaultSchema : command.fullDatabaseName()[0];
-        if (schema.getSubSchema(database, false) == null) {
+        String[] name = command.fullDatabaseName();
+        if (name.length > 2 || name.length == 2
+                && !Consts.HIVE_CATALOG_NAME.equals(name[0])) {
+            throw new IllegalArgumentException("database catalog is not configured");
+        }
+        String database = name.length == 0 ? defaultSchema : name[name.length - 1];
+        CalciteSchema databaseSchema = schema.getSubSchema(database, false);
+        if (databaseSchema == null) {
             throw new RuntimeException("database not exists: " + database);
         }
+        database = databaseSchema.name;
         List<String> names = metadata.getTables(database).stream()
                 .map(org.apache.hadoop.hive.metastore.api.Table::getTableName)
                 .collect(Collectors.toList());
@@ -117,7 +125,10 @@ final class ResourceQueryExecutor {
             names.addAll(schema.getTableNames());
         }
         return SqlProcessResult.stringList(
-                names.stream().distinct().collect(Collectors.toList()), "table name");
+                names.stream().distinct()
+                        .filter(tableName -> !command.isWithLike()
+                                || command.isNotLike() != SqlLikeUtils.like(tableName, command.getLikeSqlPattern(), "\\"))
+                        .sorted().collect(Collectors.toList()), "table name");
     }
 
     private SqlProcessResult describeTable(SqlRichDescribeTable command, String defaultSchema) {

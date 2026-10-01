@@ -62,11 +62,9 @@ spec:
             - name: HIVE_METASTORE_URI
               value: thrift://${NODE_IP}:${HMS_PORT}
             - name: FLINK_SQL_GATEWAY_ADDRESS
-              value: ${NODE_IP}
+              value: "${FLINK_SQL_GATEWAY_ADDRESS}"
             - name: FLINK_SQL_GATEWAY_PORT
-              value: "${SQL_GATEWAY_PORT}"
-            - name: FLINK_SQL_GATEWAY_CONNECT_TIMEOUT
-              value: "600000"
+              value: "${FLINK_SQL_GATEWAY_PORT}"
             - name: SQLREC_VERSION
               value: "${SQLREC_VERSION}"
             - name: DEBUG_TRACE

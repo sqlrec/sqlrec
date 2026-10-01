@@ -26,8 +26,7 @@ public class SchemaUtils {
         if (value == null) {
             return null;
         }
-        String valueStr = value.toString();
-        return removeQuotes(valueStr);
+        return value.getNlsString().getValue();
     }
 
     public static String getValueOfStringLiteral(SqlNode value) {
@@ -219,7 +218,7 @@ public class SchemaUtils {
 
         sb.append(")");
 
-        Map<String, String> flinkOptions = getFlinkOptions(parameters);
+        Map<String, String> flinkOptions = com.sqlrec.common.utils.HiveTableUtils.getFlinkTableOptions(hmsTable);
         if (!flinkOptions.isEmpty()) {
             appendTableOptions(sb, flinkOptions);
         }
@@ -238,20 +237,6 @@ public class SchemaUtils {
             org.apache.hadoop.hive.metastore.api.FieldSchema column = columns.get(i);
             sql.append(column.getName()).append(" ").append(column.getType());
         }
-    }
-
-    private static Map<String, String> getFlinkOptions(Map<String, String> parameters) {
-        Map<String, String> flinkOptions = new LinkedHashMap<>();
-        if (parameters == null) {
-            return flinkOptions;
-        }
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
-            if (entry.getKey().startsWith("flink.")
-                    && !entry.getKey().equals("flink.schema.primary-key.columns")) {
-                flinkOptions.put(entry.getKey().substring(6), entry.getValue());
-            }
-        }
-        return flinkOptions;
     }
 
     private static void appendTableOptions(StringBuilder sql, Map<String, String> options) {

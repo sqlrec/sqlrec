@@ -1,12 +1,8 @@
 package com.sqlrec.frontend.utils;
 
 import com.sqlrec.common.utils.DataTransformUtils;
-import com.sqlrec.compiler.CompileManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.flink.sql.parser.ddl.SqlSet;
-import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.hive.service.rpc.thrift.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +12,11 @@ import java.util.*;
 
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
+
+    public static boolean isSuccess(TStatus status) {
+        return status != null && (status.getStatusCode() == TStatusCode.SUCCESS_STATUS
+                || status.getStatusCode() == TStatusCode.SUCCESS_WITH_INFO_STATUS);
+    }
 
     public static TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
         TRowSet tRowSet = new TRowSet();
@@ -153,6 +154,12 @@ public class ThriftUtils {
         if (clazz == Float.class) {
             return (T) (Float) 0.0f;
         }
+        if (clazz == Short.class) {
+            return (T) (Short) (short) 0;
+        }
+        if (clazz == Byte.class) {
+            return (T) (Byte) (byte) 0;
+        }
         if (clazz == Boolean.class) {
             return (T) (Boolean) false;
         }
@@ -229,8 +236,4 @@ public class ThriftUtils {
         return UUID.randomUUID().toString();
     }
 
-    public static boolean isSqlNeedExecInRemote(String sql) throws Exception {
-        SqlNode sqlNode = CompileManager.parseSql(sql);
-        return sqlNode instanceof SqlUseDatabase || sqlNode instanceof SqlSet;
-    }
 }

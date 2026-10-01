@@ -19,5 +19,16 @@ public interface SchemaAccess {
 
     long getTableUpdateTime(String database, String table);
 
+    /** Execute one persistent metadata DDL through the Hive client, never through a SQL gateway. */
+    default void executeMetadataDdl(String sql, String database) throws Exception {
+        throw new UnsupportedOperationException(
+                "Metadata DDL is not supported in local SQL file metadata mode; edit SQL_SCHEMA_DIR and restart");
+    }
+
+    /** Full Catalog descriptions, including definitions the local query engine cannot execute. */
+    default com.sqlrec.executor.SqlProcessResult executeMetadataQuery(String sql, String database) throws Exception {
+        return null;
+    }
+
     List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception;
 }

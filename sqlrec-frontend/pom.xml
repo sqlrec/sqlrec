@@ -27,9 +27,8 @@
             <artifactId>sqlrec-core</artifactId>
             <version>${sqlrec.version}</version>
             <exclusions>
-                <!-- Heavy unused deps from hive-exec / hive-metastore transitives.
-                     Only deps confirmed unused at runtime AND >2MB are listed here.
-                     Smaller transitives are automatically removed by excluding their parents. -->
+                <!-- Frontend executes Flink metadata DDL, not Flink jobs or embedded HMS.
+                     Keep the metadata APIs, Hive client, Hadoop authentication and JobConf. -->
                 <exclusion>
                     <groupId>org.apache.hbase</groupId>
                     <artifactId>hbase-client</artifactId>
@@ -63,11 +62,7 @@
                     <groupId>org.apache.hadoop</groupId>
                     <artifactId>hadoop-yarn-registry</artifactId>
                 </exclusion>
-                <!-- hive-shims pulls in hadoop-yarn-server-* stack (~20MB) -->
-                <exclusion>
-                    <groupId>org.apache.hive</groupId>
-                    <artifactId>hive-shims</artifactId>
-                </exclusion>
+                <!-- Hive shims are needed by the in-process HiveCatalog DDL adapter. -->
                 <!-- tephra pulls in fastutil (10K+ classes) + guice + twill (~15MB) -->
                 <exclusion>
                     <groupId>co.cask.tephra</groupId>
@@ -104,6 +99,84 @@
                 <exclusion>
                     <groupId>org.apache.parquet</groupId>
                     <artifactId>parquet-hadoop-bundle</artifactId>
+                </exclusion>
+                <!-- ICU is used only by Flink's terminal table printer; metadata rows are returned directly. -->
+                <exclusion>
+                    <groupId>com.ibm.icu</groupId>
+                    <artifactId>icu4j</artifactId>
+                </exclusion>
+                <!-- Flink file source/sink execution is unused by metadata-only HiveCatalog access. -->
+                <exclusion>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-connector-files</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-file-sink-common</artifactId>
+                </exclusion>
+                <!-- YARN/HDFS job clients and servers. RemoteHdfsAccess invokes the external Hadoop CLI. -->
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-yarn-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-hdfs-client</artifactId>
+                </exclusion>
+                <!-- JobConf also pulls in Netty's all-in-one dependency; connectors declare their own Netty modules. -->
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-all</artifactId>
+                </exclusion>
+                <!-- Hive execution engines are unused by Hive UDF APIs and the remote metastore client. -->
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-llap-tez</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-vector-code-gen</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.calcite</groupId>
+                    <artifactId>calcite-druid</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ant</groupId>
+                    <artifactId>ant</artifactId>
+                </exclusion>
+                <!-- Embedded HMS persistence and console; production connects to remote HMS. -->
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-api-jdo</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>datanucleus-rdbms</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.derby</groupId>
+                    <artifactId>derby</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>sqlline</groupId>
+                    <artifactId>sqlline</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-upgrade-acid</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -236,6 +309,11 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <manifestEntries>
+                                        <Multi-Release>true</Multi-Release>
+                                    </manifestEntries>
+                                </transformer>
                             </transformers>
                             <filters>
                                 <filter>
@@ -248,7 +326,8 @@
                                         <exclude>module-info.class</exclude>
                                         <exclude>META-INF/maven/**</exclude>
                                         <exclude>**/*.proto</exclude>
-                                        <exclude>META-INF/versions/**</exclude>
+                                        <!-- Keep versioned implementations such as dnsjava's Java 18+ resolver. -->
+                                        <exclude>META-INF/versions/**/module-info.class</exclude>
                                         <exclude>about.html</exclude>
                                         <exclude>plugin/**</exclude>
                                     </excludes>

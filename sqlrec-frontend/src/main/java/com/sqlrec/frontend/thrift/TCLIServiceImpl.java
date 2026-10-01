@@ -1,10 +1,33 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.executor.SqlProcessResult;
+import java.util.concurrent.Callable;
+
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 
 public class TCLIServiceImpl implements TCLIService.Iface {
     private final SessionManager sessionManager = new SessionManager();
+
+    private JdbcMetadataExecutor metadata() {
+        return new JdbcMetadataExecutor(MetadataAccessFactory.getInstance());
+    }
+
+    private record MetadataOutcome(TStatus status, TOperationHandle handle) {}
+
+    private MetadataOutcome metadataOperation(TSessionHandle session, TOperationType type,
+            Callable<SqlProcessResult> query) {
+        try {
+            return new MetadataOutcome(new TStatus(TStatusCode.SUCCESS_STATUS),
+                    sessionManager.openMetadataOperation(session, type, query));
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
+            status.setSqlState(e instanceof UnsupportedOperationException ? "0A000" : "HY000");
+            status.setErrorMessage(e.getMessage());
+            return new MetadataOutcome(status, null);
+        }
+    }
 
     public TCLIServiceImpl() {
         sessionManager.startTimeoutChecker();
@@ -26,7 +49,12 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
-        return sessionManager.getClient(tGetInfoReq.getSessionHandle().getSessionId()).GetInfo(tGetInfoReq);
+        TCLIService.Iface client = sessionManager.getClient(tGetInfoReq.getSessionHandle().getSessionId());
+        if (client == null) {
+            return new TGetInfoResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS),
+                    TGetInfoValue.stringValue(""));
+        }
+        return client.GetInfo(tGetInfoReq);
     }
 
     @Override
@@ -35,48 +63,96 @@ public class TCLIServiceImpl implements TCLIService.Iface {
     }
 
     @Override
-    public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
-        return sessionManager.getClient(tGetTypeInfoReq.getSessionHandle().getSessionId()).GetTypeInfo(tGetTypeInfoReq);
+    public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TYPE_INFO,
+                () -> metadata().typeInfo());
+        TGetTypeInfoResp response = new TGetTypeInfoResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
-        return sessionManager.getClient(tGetCatalogsReq.getSessionHandle().getSessionId()).GetCatalogs(tGetCatalogsReq);
+    public TGetCatalogsResp GetCatalogs(TGetCatalogsReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_CATALOGS,
+                () -> metadata().catalogs());
+        TGetCatalogsResp response = new TGetCatalogsResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
-        return sessionManager.getClient(tGetSchemasReq.getSessionHandle().getSessionId()).GetSchemas(tGetSchemasReq);
+    public TGetSchemasResp GetSchemas(TGetSchemasReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_SCHEMAS,
+                () -> metadata().schemas(req.getCatalogName(), req.getSchemaName()));
+        TGetSchemasResp response = new TGetSchemasResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
-        return sessionManager.getClient(tGetTablesReq.getSessionHandle().getSessionId()).GetTables(tGetTablesReq);
+    public TGetTablesResp GetTables(TGetTablesReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TABLES,
+                () -> metadata().tables(req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getTableTypes()));
+        TGetTablesResp response = new TGetTablesResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
-        return sessionManager.getClient(tGetTableTypesReq.getSessionHandle().getSessionId()).GetTableTypes(tGetTableTypesReq);
+    public TGetTableTypesResp GetTableTypes(TGetTableTypesReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TABLE_TYPES,
+                () -> metadata().tableTypes());
+        TGetTableTypesResp response = new TGetTableTypesResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
-        return sessionManager.getClient(tGetColumnsReq.getSessionHandle().getSessionId()).GetColumns(tGetColumnsReq);
+    public TGetColumnsResp GetColumns(TGetColumnsReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_COLUMNS,
+                () -> metadata().columns(req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getColumnName()));
+        TGetColumnsResp response = new TGetColumnsResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
-        return sessionManager.getClient(tGetFunctionsReq.getSessionHandle().getSessionId()).GetFunctions(tGetFunctionsReq);
+    public TGetFunctionsResp GetFunctions(TGetFunctionsReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_FUNCTIONS,
+                () -> metadata().functions(req.getCatalogName(), req.getSchemaName(), req.getFunctionName()));
+        TGetFunctionsResp response = new TGetFunctionsResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
-        return sessionManager.getClient(tGetPrimaryKeysReq.getSessionHandle().getSessionId()).GetPrimaryKeys(tGetPrimaryKeysReq);
+    public TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq req) throws TException {
+        MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.UNKNOWN,
+                () -> metadata().primaryKeys(req.getCatalogName(), req.getSchemaName(), req.getTableName()));
+        TGetPrimaryKeysResp response = new TGetPrimaryKeysResp(result.status());
+        if (result.handle() != null) {
+            response.setOperationHandle(result.handle());
+        }
+        return response;
     }
 
     @Override
-    public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
-        return sessionManager.getClient(tGetCrossReferenceReq.getSessionHandle().getSessionId()).GetCrossReference(tGetCrossReferenceReq);
+    public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq req) throws TException {
+        return sessionManager.GetCrossReference(req);
     }
 
     @Override
@@ -105,18 +181,24 @@ public class TCLIServiceImpl implements TCLIService.Iface {
     }
 
     @Override
-    public TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
-        return sessionManager.getClient(tGetDelegationTokenReq.getSessionHandle().getSessionId()).GetDelegationToken(tGetDelegationTokenReq);
+    public TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq req) throws TException {
+        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        return client == null ? new TGetDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
+                : client.GetDelegationToken(req);
     }
 
     @Override
-    public TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
-        return sessionManager.getClient(tCancelDelegationTokenReq.getSessionHandle().getSessionId()).CancelDelegationToken(tCancelDelegationTokenReq);
+    public TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq req) throws TException {
+        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        return client == null ? new TCancelDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
+                : client.CancelDelegationToken(req);
     }
 
     @Override
-    public TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
-        return sessionManager.getClient(tRenewDelegationTokenReq.getSessionHandle().getSessionId()).RenewDelegationToken(tRenewDelegationTokenReq);
+    public TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq req) throws TException {
+        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        return client == null ? new TRenewDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
+                : client.RenewDelegationToken(req);
     }
 
     @Override
@@ -126,6 +208,9 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
-        return sessionManager.getClient(tSetClientInfoReq.getSessionHandle().getSessionId()).SetClientInfo(tSetClientInfoReq);
+        if (sessionManager.getClient(tSetClientInfoReq.getSessionHandle().getSessionId()) == null) {
+            return new TSetClientInfoResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
+        }
+        return new TSetClientInfoResp(new TStatus(TStatusCode.SUCCESS_STATUS));
     }
 }

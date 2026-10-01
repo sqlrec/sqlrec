@@ -107,6 +107,12 @@ public class HmsClient {
         return withRetry(c -> c.getFunctions(database, "*"));
     }
 
+    public synchronized static List<org.apache.hadoop.hive.metastore.api.SQLPrimaryKey> getPrimaryKeys(
+            String database, String table) throws TException {
+        return withRetry(c -> c.getPrimaryKeys(
+                new org.apache.hadoop.hive.metastore.api.PrimaryKeysRequest(database, table)));
+    }
+
     public synchronized static org.apache.hadoop.hive.metastore.api.Function getFunctionObj(
             String database,
             String function
