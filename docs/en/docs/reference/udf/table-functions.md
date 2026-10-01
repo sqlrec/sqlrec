@@ -6,11 +6,11 @@ SQLRec table functions are called with `CALL`. They accept one or more cached ta
 
 | Scenario | Functions |
 |----------|-----------|
-| Result processing | [`dedup`](#dedup), [`shuffle`](#shuffle), [`add_col`](#add_col), [`truncate_table`](#truncate_table) |
-| Diversity | [`window_diversify`](#window_diversify), [`dpp_diversity`](#dpp_diversity), [`rule_diversity`](#rule_diversity) |
-| Conversion and merging | [`json_to_table`](#json_to_table), [`tag_to_vec`](#tag_to_vec), [`weighted_merge`](#weighted_merge) |
-| External services | [`call_service`](#call_service), [`batch_call_service`](#batch_call_service), [`call_sqlrec_api`](#call_sqlrec_api), [`get_growthbook_features`](#get_growthbook_features) |
-| Variables and observability | [`get_variables`](#get_variables), [`set_variables`](#set_variables), [`feature_coverage_metrics`](#feature_coverage_metrics) |
+| Result processing | [`dedup`](#dedup), [`shuffle`](#shuffle), [`add_col`](#add-col), [`truncate_table`](#truncate-table) |
+| Diversity | [`window_diversify`](#window-diversify), [`dpp_diversity`](#dpp-diversity), [`rule_diversity`](#rule-diversity) |
+| Conversion and merging | [`json_to_table`](#json-to-table), [`tag_to_vec`](#tag-to-vec), [`weighted_merge`](#weighted-merge) |
+| External services | [`call_service`](#call-service), [`batch_call_service`](#batch-call-service), [`call_sqlrec_api`](#call-sqlrec-api), [`get_growthbook_features`](#get-growthbook-features) |
+| Variables and observability | [`get_variables`](#get-variables), [`set_variables`](#set-variables), [`feature_coverage_metrics`](#feature-coverage-metrics) |
 | Testing utility | [`sleep`](#sleep) |
 
 ### dedup
@@ -130,6 +130,8 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 ### call_service
 
 Model service call function used to call deployed model services for inference. See [Model Training and Online Inference](../../guides/model-lifecycle.md#call-a-model-service) for details.
+
+See [the model guide](../../guides/model-lifecycle.md#call-a-model-service) for calls and output templates. Use `LIKE` to declare the input columns plus model outputs.
 
 SQL supports these two call forms:
 
@@ -449,16 +451,19 @@ Remote SQLRec API call function. Invokes an API published on a remote SQLRec ins
 **Usage Example**:
 
 ```sql
--- Prepare input data
-CACHE TABLE user_input AS
-SELECT 1001 AS user_id, 'Alice' AS user_name;
+CACHE TABLE user_info AS
+SELECT CAST(1000001 AS BIGINT) AS user_id;
 
--- Call a recommendation API published on a remote SQLRec instance
+CACHE TABLE output_template AS
+SELECT CAST(NULL AS BIGINT) AS item_id,
+       CAST(NULL AS DOUBLE) AS score
+LIMIT 0;
+
 CACHE TABLE remote_rec AS
 CALL call_sqlrec_api(
     'http://remote-sqlrec:30001/api/v1/recommend',
-    user_input
-);
+    user_info
+) LIKE output_template;
 
 SELECT * FROM remote_rec;
 ```
@@ -468,6 +473,8 @@ SELECT * FROM remote_rec;
 - At least one input table is required, and each input table must have a name
 - An exception is thrown when the remote API call fails (empty data or error message returned)
 - The input table name must match the input table placeholder in the remote function definition
+- This example assumes an input named `user_info` and outputs `item_id BIGINT, score DOUBLE`; adjust both to the remote contract
+- Use `LIKE output_template` explicitly to avoid calling the remote API to infer its schema before execution
 
 ---
 
@@ -546,7 +553,7 @@ Set variables function that reads key-value pairs from a table and sets them in 
 ```sql
 -- Create variable table
 CACHE TABLE var_table AS
-SELECT 'user_id' AS key, '12345' AS value
+SELECT 'user_id' AS `key`, '12345' AS `value`
 UNION ALL
 SELECT 'limit', '100';
 
@@ -618,6 +625,12 @@ GrowthBook feature retrieval function that fetches A/B experiment feature values
 **Usage Example**:
 
 ```sql
+CACHE TABLE gb_output AS
+SELECT CAST(NULL AS VARCHAR) AS experiment_id,
+       CAST(NULL AS VARCHAR) AS variation_id,
+       CAST(NULL AS VARCHAR) AS user_id
+LIMIT 0;
+
 -- Get GrowthBook features and set variables
 CACHE TABLE gb_tracking AS
 CALL get_growthbook_features(
@@ -626,7 +639,7 @@ CALL get_growthbook_features(
     user_info,
     'new_recommendation_algo',
     'ui_theme'
-);
+) LIKE gb_output;
 
 -- Use the set experiment variables
 SELECT `get`('new_recommendation_algo') AS algo;
@@ -638,6 +651,7 @@ SELECT `get`('new_recommendation_algo') AS algo;
 - At least one `featureKey` must be specified
 - An exception will be thrown if GrowthBookClient initialization fails
 - The same client instance is reused for the same `apiHost` and `clientKey` combination
+- Use `LIKE gb_output` to declare the result schema without accessing GrowthBook before execution
 
 ---
 

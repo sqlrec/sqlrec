@@ -50,7 +50,7 @@ Minikube configuration:
 - Dynamic volumes use the project-installed `local-path` StorageClass by default, with data at `/data/local-path-provisioner` on the node. Set `LOCAL_PATH_PROVISIONER_DATA_DIR` before startup to use another absolute path. These dynamic volumes are separate from the hostPath PVs mounting host client directories.
 - NodePorts use the Minikube node address. Access through the host's physical IP from other LAN machines is not guaranteed.
 
-### Save Image Caches Manually
+::: details Save Image Caches Manually
 
 After deploying components, optionally run:
 
@@ -60,6 +60,7 @@ bash ./cache_images.sh save
 ```
 
 Caches are stored in `data/image-cache/<arch>`. Later runs of `deploy_minikube.sh` load existing caches automatically. `deploy_components.sh` prints the save command but does not save images automatically. Image caches do not contain database data; deleting the Minikube cluster loses data in node dynamic volumes.
+:::
 
 ## Deploy to an Existing Kubernetes Cluster
 
@@ -123,7 +124,11 @@ Override PVC names with `LIB_PVC_NAME` and `CLIENT_PVC_NAME`. Existing PVC stora
 
 RustFS provides S3 storage in standalone mode, and the deployment creates the buckets required by JuiceFS and Milvus. Data volumes always use the cluster's default StorageClass; `STORAGE_CLASS` for clients/JARs does not affect RustFS. Set capacities with `RUSTFS_DATA_STORAGE_SIZE` and `RUSTFS_LOG_STORAGE_SIZE`, defaulting to `128Gi` and `1Gi` respectively.
 
-### Directories and Synchronization
+### Resource Synchronization
+
+Deployment scripts prepare clients, JARs, and configuration automatically. No manual PV/PVC template application or separate HMS configuration step is needed. After updating prepared resources, run `bash ./deploy/storage/sync.sh` from the repository root. Synchronization does not remove extra remote files; do not run it concurrently in one namespace.
+
+::: details Directories and Synchronization Details
 
 Files are stored in `deploy/data` by default, or `${BASE_DIR}/data` when `BASE_DIR` is set:
 
@@ -149,6 +154,7 @@ bash ./deploy/storage/sync.sh
 The temporary sync pod and ConfigMap are cleaned up on exit. Do not run synchronization concurrently in the same namespace. The default pod name is `sqlrec-resource-sync`; the script stops if a pod with that name already exists.
 
 Key configuration files are `core-site.xml` (filesystem/JuiceFS), `hdfs-site.xml` (HDFS), and `hive-site.xml` (Hive Metastore). Shared volumes mount at the `CLIENT_DIR` and `LIB_DIR` paths computed by the scripts.
+:::
 
 ## Production Configuration
 
@@ -200,6 +206,8 @@ SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `ed
 
 `deploy/sqlrec/deploy.sh` waits until PostgreSQL is reachable, executes `deploy/sql/master.sql`, and applies the SQLRec Deployment only after success. Normal script deployment does not require a separate manual SQL import.
 
+::: details Initialization Retries and Transactions
+
 | Parameter | Default | Requirement |
 |-----------|---------|-------------|
 | `PSQL_MAX_ATTEMPTS` | `30` | Positive integer; maximum connection attempts |
@@ -207,6 +215,7 @@ SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `ed
 | `PGCONNECT_TIMEOUT` | `10` seconds | Positive integer; timeout per connection attempt |
 
 Invalid parameters fail before resources are created. Connection failures are retried according to these settings. Schema SQL uses `ON_ERROR_STOP=1` and a single transaction: SQL errors stop deployment and roll back the initialization attempt, without retrying schema SQL. Existing tables are reused with `CREATE TABLE IF NOT EXISTS`; the file does not migrate existing table definitions.
+:::
 
 ## Verification and Troubleshooting
 

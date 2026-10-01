@@ -50,7 +50,7 @@ Minikube 的配置说明：
 - 动态卷默认使用项目安装的 `local-path` StorageClass，数据位于节点的 `/data/local-path-provisioner`；启动前可用 `LOCAL_PATH_PROVISIONER_DATA_DIR` 指定其他绝对路径。这些动态卷与挂载本机客户端目录的 hostPath PV 不同。
 - NodePort 使用 Minikube 节点地址，不保证局域网其他机器可通过宿主机物理 IP 访问。
 
-### 手动保存镜像缓存
+::: details 手动保存镜像缓存
 
 组件部署完成后，按需执行：
 
@@ -60,6 +60,7 @@ bash ./cache_images.sh save
 ```
 
 缓存保存到 `data/image-cache/<arch>`。之后运行 `deploy_minikube.sh` 会自动加载已有缓存；`deploy_components.sh` 只提示保存命令，不会自动保存。镜像缓存不包含数据库数据，删除 Minikube 集群会丢失节点动态卷中的数据。
+:::
 
 ## 在已有 Kubernetes 集群上部署
 
@@ -123,7 +124,11 @@ PVC 名称可通过 `LIB_PVC_NAME`、`CLIENT_PVC_NAME` 设置。已有 PVC 的 S
 
 RustFS 以单节点模式提供 S3 存储，部署脚本创建 JuiceFS 和 Milvus 所需的 bucket。数据卷统一使用集群默认 StorageClass，客户端/JAR 的 `STORAGE_CLASS` 不影响 RustFS。容量通过 `RUSTFS_DATA_STORAGE_SIZE`、`RUSTFS_LOG_STORAGE_SIZE` 设置，默认分别为 `128Gi`、`1Gi`。
 
-### 目录和同步流程
+### 资源同步
+
+部署脚本会自动准备客户端、JAR 和配置；无需手动应用 PV/PVC 模板或单独准备 HMS 配置。已有资源更新后，可在项目根目录执行 `bash ./deploy/storage/sync.sh`。同步不会删除远端多余文件，同一命名空间内不要并发执行。
+
+::: details 目录和同步细节
 
 默认文件存放在 `deploy/data`；设置 `BASE_DIR` 后则存放在 `${BASE_DIR}/data`：
 
@@ -149,6 +154,7 @@ bash ./deploy/storage/sync.sh
 同步使用临时 Pod 和 ConfigMap，结束时自动清理。同一命名空间内不要并发执行同步；默认同步 Pod 名为 `sqlrec-resource-sync`，已有同名 Pod 时脚本会停止。
 
 关键配置文件包括 `core-site.xml`（文件系统/JuiceFS）、`hdfs-site.xml`（HDFS）和 `hive-site.xml`（Hive Metastore）。共享卷在容器内挂载到脚本计算的 `CLIENT_DIR`、`LIB_DIR` 路径。
+:::
 
 ## 生产环境配置
 
@@ -200,6 +206,8 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 
 `deploy/sqlrec/deploy.sh` 会先等待 PostgreSQL 可连接，再执行 `deploy/sql/master.sql`，成功后才应用 SQLRec Deployment。无需在正常脚本部署前手动导入 SQL。
 
+::: details 初始化重试参数和事务行为
+
 | 参数 | 默认值 | 要求 |
 |------|--------|------|
 | `PSQL_MAX_ATTEMPTS` | `30` | 正整数，数据库连接最大尝试次数 |
@@ -207,6 +215,7 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 | `PGCONNECT_TIMEOUT` | `10` 秒 | 正整数，单次连接超时 |
 
 参数非法时在创建资源前报错。连接失败会按上表重试；建表 SQL 使用 `ON_ERROR_STOP=1` 和单个事务，SQL 错误会停止部署并回滚本次初始化，不会重复执行建表 SQL。已有表通过 `CREATE TABLE IF NOT EXISTS` 复用，该文件不负责已有表的结构迁移。
+:::
 
 ## 验证与排障
 

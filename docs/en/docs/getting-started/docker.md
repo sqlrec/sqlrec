@@ -1,6 +1,6 @@
 # Quick Start
 
-Docker is all you need to try SQLRec. The demo image includes the tables, SQL function, and API required by the quick start. Its example tables use the `filesystem` connector and keep data in process memory, so Redis, PostgreSQL, Hive Metastore, Flink, and Kubernetes are not required.
+Docker is the only prerequisite. The demo includes sample data, a recommendation function, and its API; no external services are needed.
 
 ## Start the Demo
 
@@ -11,70 +11,15 @@ docker run --rm -d --name sqlrec-demo \
   sqlrec/sqlrec-demo:latest
 ```
 
-Follow the logs to confirm that the service has started:
+Watch the startup log:
 
 ```bash
 docker logs -f sqlrec-demo
 ```
 
-After startup completes, press `Ctrl+C` to stop following the logs. The container continues running in the background.
-
-## Open the SQLRec CLI
-
-Run `cli.sh` inside the container directly from the host to open the SQL CLI:
-
-```bash
-docker exec -it sqlrec-demo /app/cli.sh
-```
-
-At the `sqlrec>` prompt, you can run SQL statements directly. End each statement with a semicolon. For example, inspect the demo objects and data:
-
-```sql
-show tables;
-show functions;
-show apis;
-select * from demo_user_interest_category;
-```
-
-Press `Ctrl+D` to leave the SQL CLI. The CLI runs in its own process inside the container, with memory separate from the HTTP service.
-
-## Inspect the Bundled Test Data
-
-The quick start includes five users with three interests each and 25 hot items across five categories (`pc`, `phone`, `book`, `sports`, `home`) in two CSV files. The CLI loads them into its process memory on first access:
-
-| User ID | Interest categories |
-| --- | --- |
-| `1000001` | `pc`, `phone`, `book` |
-| `1000002` | `phone`, `sports`, `home` |
-| `1000003` | `book`, `home`, `pc` |
-| `1000004` | `sports`, `pc`, `phone` |
-| `1000005` | `home`, `book`, `sports` |
-
-```sql
-select * from demo_user_interest_category;
-select * from demo_category_hot_item;
-```
-
-You can still use `INSERT` to add or update rows. Those changes remain in the current CLI process and reset to the CSV contents when you exit.
-
-## Get Recommendations
-
-The demo defines a `demo_rec` SQL function. Continue in the same CLI session, create its input table, and call it:
-
-```sql
-cache table quick_start_user as
-select cast(1000001 as bigint) as user_id;
-
-call demo_rec(quick_start_user);
-```
-
-The first call usually returns two items. The result includes `item_id`, `rec_reason`, `req_time`, and `req_id`; the timestamp and request ID change on each call.
-
-Exposure records are written to the current process's in-memory `demo_exposure_item` table. Later calls use them for deduplication. After repeated calls exhaust the bundled candidates, restart the CLI or add new items to continue testing.
+After startup, press `Ctrl+C` to leave the log viewer. The container keeps running in the background.
 
 ## Call the Recommendation API
-
-The CLI and HTTP service run in separate processes inside the container. Each loads the bundled CSV data into its own memory, so you can call the `demo_rec` API immediately:
 
 ```bash
 curl -X POST http://localhost:30001/api/v1/demo_rec \
@@ -82,46 +27,119 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-On the first request, the response's `data` array usually contains two recommendations. Later requests may return different items because previously recommended items are recorded as exposures. Exposure data stays in the HTTP service process; restart the container after the bundled candidates are exhausted. The demo also enables `/sql/v1` for adding test data to the HTTP process; changes made in the CLI are not visible there.
+The first call usually returns two items. The response's `data` contains result rows with `user_id`, `item_id`, `item_name`, `rec_reason`, `req_time`, and `req_id`. This excerpt shows fields from one result row; the item may differ:
 
-## Open the UI
+```json
+{
+  "data": [
+    {"item_id": 1000001, "rec_reason": "user_category_interest_recall:book"}
+  ]
+}
+```
 
-Open [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) to inspect tables, APIs, SQL functions, and their execution DAGs.
+Use user IDs `1000001` through `1000005`. Repeated calls exclude previously recommended items. Restart the container when the sample candidates are exhausted.
+
+## View the UI
+
+Open [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) to inspect tables, functions, APIs, and execution DAGs.
+
+## Stop the Demo
+
+```bash
+docker stop sqlrec-demo
+```
+
+The container is removed automatically because it was started with `--rm`.
+
+## Optional: Open the SQLRec CLI
+
+While the demo is running, open the SQL CLI from the host:
+
+```bash
+docker exec -it sqlrec-demo /app/cli.sh
+```
+
+At the `sqlrec>` prompt, enter statements ending with a semicolon:
+
+```sql
+show tables;
+show functions;
+show apis;
+select * from demo_user_interest_category;
+
+cache table quick_start_user as
+select cast(1000001 as bigint) as user_id;
+
+call demo_rec(quick_start_user);
+```
+
+`quick_start_user` is the function's input table. Press `Ctrl+D` to exit.
+
+::: tip Demo Data Scope
+Data is held in memory. The CLI and HTTP service have separate data, so CLI changes do not affect the API. Reopening the CLI restores its initial data; restarting the container resets the HTTP service's data.
+
+Use `INSERT` to add rows and `UPDATE` to change them. To write test data to the HTTP service, use `/sql/v1`; local CLI changes are not visible to it.
+:::
 
 ## Modify the Demo SQL
 
-To change the example, start with the three kinds of SQL files in `sqlrec-demo/src/main/sql/quick_start/`: `table/` defines tables, `function/` defines the recommendation flow, and `api/` publishes the function as an HTTP API.
+The recommendation logic is in `sqlrec-demo/src/main/sql/quick_start/function/demo_rec.sql`. Alongside it, `table/` defines tables, `api/` publishes the function, and `data/` holds initial CSV data.
 
-The demo image sets `SQL_SCHEMA_DIR` to `/app/sql`. SQLRec recursively loads the following directory:
-
-```text
-sqlrec-demo/src/main/sql/
-├── quick_start/
-│   ├── api/demo_rec.sql
-│   ├── data/
-│   │   ├── demo_category_hot_item.csv
-│   │   └── demo_user_interest_category.csv
-│   ├── function/demo_rec.sql
-│   └── table/
-│       ├── demo_category_hot_item.sql
-│       ├── demo_exposure_item.sql
-│       └── demo_user_interest_category.sql
-└── movielens/
-    ├── api/
-    ├── function/
-    ├── model/
-    ├── service/
-    ├── table/
-    └── udf/
-```
-
-The two quick-start input tables use `${SQL_SCHEMA_DIR}` to locate the bundled CSV files and load them into memory on first access. Filesystem tables use the primary key as a lookup key, so the user-interest table retains three rows per `user_id`. The exposure table also uses `user_id` as its lookup key; it starts empty and can retain multiple exposures per user. The complete MovieLens example demonstrates a full pipeline involving Redis, Milvus, Kafka, model training, and online inference.
+The image loads definitions through `SQL_SCHEMA_DIR=/app/sql`. See [Writing a Recommendation Flow](../guides/recommendation-flow.md) for SQL logic. To load your own files, prepare a complete SQL directory as shown below.
 
 ## Managing Local SQL Definitions
 
-Local metadata mode recursively loads SQL files from `SQL_SCHEMA_DIR` when the process starts. It does not allow DDL through the CLI or SQL API. The SQL API enabled by the demo is mainly intended for queries and test-data writes.
+Local file mode loads SQL definitions at startup. It does not accept DDL through the CLI or `/sql/v1`; restart the container after changing files. This example defines a hot-item table, a recommendation function, and an API.
 
-To develop a new table, function, or API locally, write its definition in SQL files on the host, mount the complete directory into the container, and point `SQL_SCHEMA_DIR` to the mounted path. For example:
+### Prepare the SQL Files
+
+Create the directories on the host:
+
+```bash
+mkdir -p sql/table sql/function sql/api
+```
+
+Save the following definitions in separate files.
+
+`sql/table/hot_item.sql`:
+
+```sql
+CREATE TABLE hot_item (
+  item_id BIGINT,
+  score FLOAT,
+  PRIMARY KEY (item_id) NOT ENFORCED
+) WITH (
+  'connector' = 'filesystem'
+);
+```
+
+`sql/function/recommend.sql`:
+
+```sql
+CREATE OR REPLACE SQL FUNCTION recommend;
+
+DEFINE INPUT TABLE user_info (
+  user_id BIGINT
+);
+
+CACHE TABLE result_table AS
+SELECT item_id, score
+FROM hot_item
+ORDER BY score DESC
+LIMIT 10;
+
+RETURN result_table;
+```
+
+`sql/api/recommend.sql`:
+
+```sql
+CREATE OR REPLACE API recommend WITH recommend;
+```
+
+### Load and Call
+
+Mount the complete directory and set `SQL_SCHEMA_DIR`:
 
 ```bash
 docker run --rm -d --name sqlrec-custom \
@@ -132,16 +150,20 @@ docker run --rm -d --name sqlrec-custom \
   sqlrec/sqlrec-demo:latest
 ```
 
-The `./sql` directory must contain every SQL definition required for that run. Restart the container after changing a file so that SQLRec reloads the definitions. For online serving, version this directory with the image or deployment configuration and redeploy all instances when it changes, reducing dependencies on remote metadata services.
-
-If you need to execute and persist DDL interactively like a database, follow [Service Deployment](/en/docs/operations/deployment) to set up the complete cluster, then connect through beeline, JDBC, or another SQLRec client.
-
-## Stop the Demo
+`./sql` must contain all definitions needed for this startup. Write data to the HTTP service, then call the API:
 
 ```bash
-docker stop sqlrec-demo
+curl -X POST http://localhost:30001/sql/v1 \
+  -H "Content-Type: application/json" \
+  -d '{"sqls":["insert into hot_item values (1001, 0.9), (1002, 0.8)"]}'
+
+curl -X POST http://localhost:30001/api/v1/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-Because the container was started with `--rm`, Docker removes it after it stops.
+This API returns hot items ordered by score without using user features. Extend the function to add your own recommendation logic.
 
-For more data-source configuration, see [Built-in Connectors](/en/docs/reference/connectors/builtin-connectors).
+Filesystem tables are for demos and tests; writes do not update source files. See [Built-in Connectors](../reference/connectors/builtin-connectors.md) for configuration and data limits.
+
+For online serving, version the complete SQL directory with the image or deployment configuration and redeploy instances when it changes. To execute and persist DDL in a session, prepare the remote metadata environment described in [Service Deployment](../operations/deployment.md) and connect through Beeline or JDBC.

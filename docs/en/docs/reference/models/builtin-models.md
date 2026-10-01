@@ -2,6 +2,24 @@
 
 This document introduces SQLRec built-in model types and their usage.
 
+## Common Lifecycle and Resources
+
+Model, training, export, and Service `WITH` options use string keys and values, such as `'batch_size' = '8192'`. SQLRec converts values to the declared option types.
+
+For trained models, follow [the model guide](../../guides/model-lifecycle.md#lifecycle-for-a-trained-model) to create, train, export, and deploy a service. Trained-model examples focus on Model definitions; prepare training tables such as `training_sample` separately. Training settings can be Model defaults and can be overridden in `TRAIN MODEL ... WITH (...)`.
+
+These resource settings apply to self-hosted tzrec, GBDT, and Hugging Face jobs or services. `replicas` applies to online services.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pod_cpu_cores` | Integer | 1 | Pod CPU core count |
+| `pod_memory` | String | "2Gi" | Pod memory |
+| `pod_cpu_limit` | String | - | Pod CPU limit |
+| `pod_memory_limit` | String | - | Pod memory limit |
+| `replicas` | Integer | 1 | Service replica count |
+
+Default images are `sqlrec/tzrec` for tzrec and `sqlrec/gbdt` for GBDT, with version `${SQLREC_VERSION}-cpu`. Hugging Face uses `sqlrec/transformers:${SQLREC_VERSION}`. Override them with `image` and `version`.
+
 ## Built-in Model Types
 
 SQLRec has the following built-in model types:
@@ -29,15 +47,20 @@ External models are used to interface with existing external model services and 
 **Usage Example**:
 
 ```sql
-CREATE MODEL external_model WITH (
-    model = 'external',
-    output_columns = 'score:FLOAT,label:VARCHAR'
+CREATE MODEL external_model (
+    user_id BIGINT,
+    item_id BIGINT,
+    category VARCHAR,
+    price DOUBLE
+) WITH (
+    'model' = 'external',
+    'output_columns' = 'score:FLOAT,label:VARCHAR'
 );
 
 CREATE SERVICE external_service
     ON MODEL external_model
     WITH (
-        url = 'http://external-service:8080/predict'
+        'url' = 'http://external-service:8080/predict'
     );
 ```
 
@@ -88,18 +111,6 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 | `nproc_per_node` | Integer | 1 | Processes per node |
 | `master_port` | Integer | 29500 | Distributed training master port |
 
-**Resource Configuration Parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `image` | String | "sqlrec/tzrec" | Docker image name |
-| `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU core count |
-| `pod_memory` | String | "2Gi" | Pod memory |
-| `pod_cpu_limit` | String | - | Pod CPU limit |
-| `pod_memory_limit` | String | - | Pod memory limit |
-| `replicas` | Integer | 1 | Service replica count |
-
 **Column-level Configuration Parameters**:
 
 Can configure parameters separately for each feature column:
@@ -119,34 +130,13 @@ CREATE MODEL rec_model (
     price DOUBLE,
     label INT
 ) WITH (
-    model = 'tzrec.wide_and_deep',
-    label_columns = 'label',
-    embedding_dim = 32,
-    hidden_units = '512,256,128',
-    column.user_id.embedding_dim = 64,
-    column.item_id.embedding_dim = 64
+    'model' = 'tzrec.wide_and_deep',
+    'label_columns' = 'label',
+    'embedding_dim' = '32',
+    'hidden_units' = '512,256,128',
+    'column.user_id.embedding_dim' = '64',
+    'column.item_id.embedding_dim' = '64'
 );
-
-TRAIN MODEL rec_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_epochs = 10,
-        batch_size = 4096,
-        sparse_lr = 0.01,
-        nnodes = 2,
-        nproc_per_node = 4
-    );
-
-EXPORT MODEL rec_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE rec_service
-    ON MODEL rec_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 3. DSSM Model
@@ -204,18 +194,6 @@ DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemente
 | `nproc_per_node` | Integer | 1 | Processes per node |
 | `master_port` | Integer | 29500 | Distributed training master port |
 
-**Resource Configuration Parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `image` | String | "sqlrec/tzrec" | Docker image name |
-| `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU core count |
-| `pod_memory` | String | "2Gi" | Pod memory |
-| `pod_cpu_limit` | String | - | Pod CPU limit |
-| `pod_memory_limit` | String | - | Pod memory limit |
-| `replicas` | Integer | 1 | Service replica count |
-
 **Column-level Configuration Parameters**:
 
 Can configure parameters separately for each feature column:
@@ -235,49 +213,27 @@ CREATE MODEL dssm_model (
     item_category VARCHAR,
     label INT
 ) WITH (
-    model = 'tzrec.dssm',
-    user_features = 'user_id,user_age',
-    item_features = 'item_id,item_category',
-    embedding_dim = 64,
-    hidden_units = '256,128,64'
+    'model' = 'tzrec.dssm',
+    'user_features' = 'user_id,user_age',
+    'item_features' = 'item_id,item_category',
+    'embedding_dim' = '64',
+    'hidden_units' = '256,128,64'
 );
 
-TRAIN MODEL dssm_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_epochs = 10,
-        batch_size = 4096,
-        nnodes = 2,
-        nproc_per_node = 4
-    );
-
-EXPORT MODEL dssm_model CHECKPOINT = 'v1.0';
-
--- DSSM is a dual-tower model; export produces two export checkpoints:
---   v1.0_export/item (item tower) and v1.0_export/user (user tower)
--- When creating a service, specify the concrete tower checkpoint
+-- After training and exporting as in the model guide, DSSM produces:
+-- v1.0_export/item and v1.0_export/user
 CREATE SERVICE dssm_item_service
     ON MODEL dssm_model
-    CHECKPOINT = 'v1.0_export/item'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
+    CHECKPOINT = 'v1.0_export/item';
 
 CREATE SERVICE dssm_user_service
     ON MODEL dssm_model
-    CHECKPOINT = 'v1.0_export/user'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
+    CHECKPOINT = 'v1.0_export/user';
 ```
 
 ### 4. LightGBM Model
 
-The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
+The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framework, supporting the full train/export/serve lifecycle. Training data and artifacts use the configured storage; export produces ONNX format for online inference.
 
 **Model name**: `gbdt.lightgbm`
 
@@ -317,18 +273,6 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 | `min_data_in_leaf` | Integer | 20 | Minimum samples in a leaf |
 | `l2_regularization` | Double | 1.0 | L2 regularization coefficient |
 
-**Resource parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `image` | String | "sqlrec/gbdt" | Docker image name |
-| `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
-| `pod_memory` | String | "2Gi" | Pod memory |
-| `pod_cpu_limit` | String | - | Pod CPU limit |
-| `pod_memory_limit` | String | - | Pod memory limit |
-| `replicas` | Integer | 1 | Service replica count |
-
 **Usage Example**:
 
 ```sql
@@ -339,29 +283,12 @@ CREATE MODEL lgb_model (
     item_price FLOAT,
     label INT
 ) WITH (
-    model = 'gbdt.lightgbm',
-    label_columns = 'label',
-    num_iterations = 200,
-    learning_rate = 0.05,
-    num_leaves = 127
+    'model' = 'gbdt.lightgbm',
+    'label_columns' = 'label',
+    'num_iterations' = '200',
+    'learning_rate' = '0.05',
+    'num_leaves' = '127'
 );
-
-TRAIN MODEL lgb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_iterations = 500
-    );
-
-EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE lgb_service
-    ON MODEL lgb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 5. XGBoost Model
@@ -404,18 +331,6 @@ The XGBoost model is based on the GBDT (Gradient Boosting Decision Tree) framewo
 | `min_child_weight` | Integer | 1 | Minimum sum of instance weight in a child |
 | `l2_regularization` | Double | 1.0 | L2 regularization coefficient (XGBoost reg_lambda) |
 
-**Resource parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `image` | String | "sqlrec/gbdt" | Docker image name |
-| `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
-| `pod_memory` | String | "2Gi" | Pod memory |
-| `pod_cpu_limit` | String | - | Pod CPU limit |
-| `pod_memory_limit` | String | - | Pod memory limit |
-| `replicas` | Integer | 1 | Service replica count |
-
 **Usage Example**:
 
 ```sql
@@ -426,34 +341,17 @@ CREATE MODEL xgb_model (
     item_price FLOAT,
     label INT
 ) WITH (
-    model = 'gbdt.xgboost',
-    label_columns = 'label',
-    num_iterations = 200,
-    learning_rate = 0.05,
-    max_depth = 8
+    'model' = 'gbdt.xgboost',
+    'label_columns' = 'label',
+    'num_iterations' = '200',
+    'learning_rate' = '0.05',
+    'max_depth' = '8'
 );
-
-TRAIN MODEL xgb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_iterations = 500
-    );
-
-EXPORT MODEL xgb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE xgb_service
-    ON MODEL xgb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 6. CatBoost Model
 
-The CatBoost model is based on the GBDT framework with native categorical feature handling. It supports the full train/export/serve lifecycle. Training data and model artifacts are stored on HDFS; export produces ONNX format for online inference.
+The CatBoost model is based on the GBDT framework with native categorical feature handling. It supports the full train/export/serve lifecycle. Training data and artifacts use the configured storage; export produces native `.cbm` format for online inference.
 
 **Model name**: `gbdt.catboost`
 
@@ -488,18 +386,6 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 leaf regularization |
 | `learning_rate` | Double | 0.1 | Learning rate |
 
-**Resource parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `image` | String | "sqlrec/gbdt" | Docker image name |
-| `version` | String | "0.1.0-cpu" | Docker image version |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU cores |
-| `pod_memory` | String | "2Gi" | Pod memory |
-| `pod_cpu_limit` | String | - | Pod CPU limit |
-| `pod_memory_limit` | String | - | Pod memory limit |
-| `replicas` | Integer | 1 | Service replica count |
-
 **Usage Example**:
 
 ```sql
@@ -511,26 +397,12 @@ CREATE MODEL cb_model (
     item_category VARCHAR,
     label INT
 ) WITH (
-    model = 'gbdt.catboost',
-    label_columns = 'label',
-    cb_iterations = 1000,
-    cb_depth = 8,
-    learning_rate = 0.03
+    'model' = 'gbdt.catboost',
+    'label_columns' = 'label',
+    'cb_iterations' = '1000',
+    'cb_depth' = '8',
+    'learning_rate' = '0.03'
 );
-
-TRAIN MODEL cb_model CHECKPOINT = 'v1.0'
-    ON training_data;
-
-EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE cb_service
-    ON MODEL cb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 7. Hugging Face Transformers Model
@@ -541,29 +413,62 @@ For this backend, `TRAIN MODEL` downloads a selected Hugging Face Hub revision a
 
 The initial tasks are `text-classification`, `text-generation`, `embedding`, and `image-embedding`. Text generation accepts plain prompts only; image embedding accepts HTTP/HTTPS URLs only.
 
+#### Hugging Face Task Options
+
+`task` and `repo_id` are required. Declare the input column as `STRING` in the Model and select the column option for the task:
+
+| task | Required input option | Output fields |
+| --- | --- | --- |
+| `text-classification` | `text_column` | `label` (STRING), `score` (FLOAT) |
+| `text-generation` | `prompt_column` | `generated_text` (STRING) |
+| `embedding` | `text_column` | `embedding` (ARRAY&lt;FLOAT&gt;) |
+| `image-embedding` | `image_column` | `embedding` (ARRAY&lt;FLOAT&gt;) |
+
+`repo_id` identifies the Hub repository. `revision` selects a branch, tag, or commit and defaults to `main`; pin a commit for reproducible downloads. This example defines a text embedding model:
+
 ```sql
 CREATE MODEL text_embedding_model (
     text STRING
 ) WITH (
-    model = 'huggingface.transformers',
-    task = 'embedding',
-    repo_id = 'intfloat/multilingual-e5-small',
-    text_column = 'text',
-    pooling = 'mean',
-    normalize = 'true'
+    'model' = 'huggingface.transformers',
+    'task' = 'embedding',
+    'repo_id' = 'intfloat/multilingual-e5-small',
+    'text_column' = 'text',
+    'pooling' = 'mean',
+    'normalize' = 'true'
 );
 
 TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
-    revision = 'main'
+    'revision' = 'main'
 );
 
 CREATE SERVICE text_embedding_service
     ON MODEL text_embedding_model
     CHECKPOINT = 'v1'
     WITH (
-        device = 'auto',
-        inference_batch_size = '32'
+        'device' = 'auto',
+        'inference_batch_size' = '32'
     );
 ```
 
 Private repositories can reference a Kubernetes Secret with `hf_token_secret` and `hf_token_secret_key` in the TRAIN parameters. Serving reads only from the checkpoint and does not contact the Hub.
+
+#### Hugging Face Service Options
+
+Set these as needed in `CREATE SERVICE ... WITH (...)`:
+
+| Parameter | Default | Usage |
+| --- | --- | --- |
+| `device` | `auto` | `auto`, `cpu`, or `cuda` |
+| `inference_batch_size` | `8` | Internal inference batch size |
+| `dtype` | `auto` | `auto`, `float32`, `float16`, or `bfloat16` |
+| `pod_gpu` | `0` | GPU count; request a positive number and provide available GPU nodes for GPU inference |
+| `pod_gpu_resource` | `nvidia.com/gpu` | GPU resource name in the cluster |
+
+For GPU inference, set `'device' = 'cuda', 'pod_gpu' = '1'`. The cluster also needs compatible GPU drivers, a device plugin, and a runtime.
+
+::: details Task-Specific Options
+Text embeddings support `pooling` (default `mean`) and `normalize` (default `true`). Text classification can use `text_pair_column` for a second text column. Text generation supports `max_new_tokens` (default `128`), `do_sample` (default `false`), `temperature`, and `top_p`.
+
+For image embeddings, `image_column` must contain HTTP/HTTPS URLs. Limit downloads with `image_url_allowed_hosts`, `image_download_timeout_ms` (default `5000`), `image_max_bytes` (default 10 MiB), and `image_max_pixels` (default 20 million).
+:::

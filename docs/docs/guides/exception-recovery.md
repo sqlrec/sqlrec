@@ -16,15 +16,15 @@
 
 ```sql
 IF TIMEIN (SELECT 100 FROM config_table) THEN (
-    CACHE TABLE result AS CALL remote_rank_service(candidate_items)
+    CACHE TABLE result_table AS CALL remote_rank_service(candidate_items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM local_rank_fallback
+    CACHE TABLE result_table AS SELECT * FROM local_rank_fallback
 );
 ```
 
 上面的 `100` 是毫秒数：
 
-- THEN 在 100ms 内成功：使用 THEN 的 `result`；
+- THEN 在 100ms 内成功：使用 THEN 的 `result_table`；
 - THEN 超时：取消 THEN，执行 ELSE；
 - THEN 抛出普通异常：执行 ELSE；
 - 父请求已经取消：不再执行 ELSE，直接结束请求。
@@ -33,11 +33,11 @@ IF TIMEIN (SELECT 100 FROM config_table) THEN (
 
 ```sql
 IF TIMEIN (
-    SELECT CAST(get_or_default('rank_timeout_ms', '80') AS BIGINT)
+    SELECT CAST(`get_or_default`('rank_timeout_ms', '80') AS BIGINT)
 ) THEN (
-    CACHE TABLE result AS CALL rank_service(items)
+    CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM items
+    CACHE TABLE result_table AS SELECT * FROM items
 );
 ```
 
@@ -45,9 +45,9 @@ IF TIMEIN (
 
 ```sql
 IF TIMEIN (SELECT 0) THEN (
-    CACHE TABLE result AS CALL rank_service(items)
+    CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM items
+    CACHE TABLE result_table AS SELECT * FROM items
 );
 ```
 
@@ -61,6 +61,8 @@ IF TIMEIN (SELECT 50) THEN (
 ) ELSE (
     RETURN SELECT * FROM cached_result
 );
+-- 结束函数定义
+RETURN;
 ```
 
 只有成功完成的 THEN 才会提交返回值；超时或异常不会提交 THEN 的半成品结果。

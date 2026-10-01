@@ -1,17 +1,86 @@
 # Model Training and Online Inference
 
-SQLRec uses SQL to manage model definitions, training results, and online inference services. The exact lifecycle depends on the backend:
+Choose a path based on what you already have:
 
-**Prerequisites:** The training, export, and service deployment steps in this guide require the [full service environment](../operations/deployment.md), including Kubernetes and model storage; the standalone Docker demo does not provide them. Training jobs must also be able to reach the data source named in the SQL. `training_sample` is a placeholder table name; prepare a training table with the example fields before running the statements.
+- Existing HTTP model service: use `external` below, without SQLRec training, export, or inference-container deployment.
+- Train and deploy with SQLRec: prepare the [service environment](../operations/deployment.md), then follow [the trained-model lifecycle](#lifecycle-for-a-trained-model).
+- Hugging Face model: download a Hub snapshot and create a service directly; see [backend differences](#how-hugging-face-differs).
 
-| Model type | Data source | Train | Export | Checkpoint used by Service |
-|------------|-------------|-------|--------|----------------------------|
-| tzrec Wide & Deep / DSSM | SQL table | Yes | Yes | `export` |
-| LightGBM / XGBoost / CatBoost | SQL table | Yes | Yes | `export` |
-| Hugging Face Transformers | Hugging Face Hub snapshot | Yes, without an `ON` table | No | `origin` |
-| `external` | Existing HTTP service | No | No | None |
+## Connect an Existing HTTP Model Service
 
-See [Built-in Models](../reference/models/builtin-models.md) for backend-specific options.
+Prepare an inference URL reachable from SQLRec and declare the service's input and output fields:
+
+```sql
+CREATE MODEL external_rank_model (
+  user_id BIGINT,
+  item_id BIGINT,
+  category VARCHAR,
+  price DOUBLE
+) WITH (
+  'model' = 'external',
+  'output_columns' = 'score:FLOAT'
+);
+
+CREATE SERVICE external_rank_service
+ON MODEL external_rank_model
+WITH (
+  'url' = 'http://rank-service:8080/predict'
+);
+```
+
+In local file mode, save these definitions separately as `model/external_rank_model.sql` and `service/external_rank_service.sql` under the complete `SQL_SCHEMA_DIR`, then restart. See [the Docker guide](../getting-started/docker.md#managing-local-sql-definitions) for loading files. In remote metadata mode, execute the definitions through Beeline or JDBC.
+
+Prepare a cached `rank_input` table containing those fields. Declare the result schema with an empty table, then call the service:
+
+```sql
+CACHE TABLE external_rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS score FROM rank_input LIMIT 0;
+
+CACHE TABLE result_table AS
+CALL call_service('external_rank_service', rank_input)
+LIKE external_rank_output;
+```
+
+The result keeps the input columns and appends `score`. Connecting an existing service does not require a Kubernetes training environment; the inference service must implement the protocol below.
+
+::: details HTTP Inference Protocol (Service Providers)
+The service accepts POST requests. A single-table call sends an array of JSON objects containing only Model input fields:
+
+```json
+[
+  {"user_id": 1, "item_id": 101, "category": "phone", "price": 3999.0},
+  {"user_id": 1, "item_id": 102, "category": "tablet", "price": 2999.0}
+]
+```
+
+The response maps each output field to an array with the same row count and order as the input:
+
+```json
+{"score": [0.85, 0.72]}
+```
+
+For the User-Item call below, the request is column-oriented. User fields are single-element arrays; Item fields follow item row order:
+
+```json
+{
+  "user_id": [1],
+  "item_id": [101, 102],
+  "category": ["phone", "tablet"],
+  "price": [3999.0, 2999.0]
+}
+```
+:::
+
+## Choose a Backend
+
+| Model type | Data source | TRAIN MODEL | EXPORT MODEL | Service checkpoint |
+| --- | --- | --- | --- | --- |
+| tzrec Wide & Deep / DSSM | SQL table | Train | Required | export |
+| LightGBM / XGBoost / CatBoost | SQL table | Train | Required | export |
+| Hugging Face Transformers | Hub snapshot | Download, without an ON table | Unsupported | origin |
+| external | Existing HTTP service | Unsupported | Unsupported | None |
+
+See [Built-in Models](../reference/models/builtin-models.md) for options.
 
 ## Core Objects
 
@@ -30,6 +99,8 @@ Checkpoint names are user-defined version identifiers. Use a traceable value suc
 
 ## Lifecycle for a Trained Model
 
+Training, export, and self-hosted serving require the [full service environment](../operations/deployment.md), including Kubernetes and model storage. The Docker demo does not provide these components. Prepare an accessible `training_sample` table with fields compatible with the model before running the statements.
+
 ### 1. Create the Model
 
 ```sql
@@ -40,8 +111,8 @@ CREATE MODEL rank_model (
   price DOUBLE,
   is_click INT
 ) WITH (
-  model = 'tzrec.wide_and_deep',
-  label_columns = 'is_click'
+  'model' = 'tzrec.wide_and_deep',
+  'label_columns' = 'is_click'
 );
 ```
 
@@ -54,8 +125,8 @@ TRAIN MODEL rank_model CHECKPOINT = '2026_09_13'
 ON training_sample
 WHERE dt = '2026-09-13'
 WITH (
-  num_epochs = 1,
-  batch_size = 8192
+  'num_epochs' = '1',
+  'batch_size' = '8192'
 );
 ```
 
@@ -84,9 +155,9 @@ CREATE SERVICE rank_service
 ON MODEL rank_model
 CHECKPOINT = '2026_09_13_export'
 WITH (
-  replicas = 1,
-  pod_cpu_cores = 1,
-  pod_memory = '2Gi'
+  'replicas' = '1',
+  'pod_cpu_cores' = '1',
+  'pod_memory' = '2Gi'
 );
 ```
 
@@ -100,88 +171,42 @@ DESCRIBE FORMATTED SERVICE rank_service;
 
 ## Call a Model Service
 
-The built-in `call_service` table function finds the Service, builds the HTTP request, and appends model outputs to the input rows.
+`call_service` appends model outputs to the input data. Declare input fields in the Model and supply matching fields in the input table.
 
 ### Row-Oriented Input
 
 ```sql
 CACHE TABLE rank_input AS
-SELECT user_id, item_id, category, price
-FROM candidate_item;
+SELECT user_id, item_id, category, price FROM candidate_item;
+
+CACHE TABLE rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS probs FROM rank_input LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', rank_input);
+CALL call_service('rank_service', rank_input) LIKE rank_output;
 ```
 
-Only fields present in the model definition are sent. The result keeps all input columns and appends the model output columns.
-
-The request sent to the service is an array of JSON objects:
-
-```json
-[
-  {"user_id": 1, "item_id": 101, "category": "phone", "price": 3999.0},
-  {"user_id": 1, "item_id": 102, "category": "tablet", "price": 2999.0}
-]
-```
-
-The service returns a JSON object whose keys are output fields and whose values are arrays:
-
-```json
-{"probs": [0.85, 0.72]}
-```
-
-Each output array must have the same length as the input.
+This Wide & Deep example keeps input columns and appends `probs`. See [Built-in Models](../reference/models/builtin-models.md) for other output fields.
 
 ### User-Item Input
 
-For ranking, pass one user row and multiple candidate rows separately to avoid repeating user features in the request:
+For ranking, pass one user row and multiple item rows separately to avoid repeating user features:
 
 ```sql
+CACHE TABLE item_rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS probs FROM item_candidates LIMIT 0;
+
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', user_features, item_candidates);
+CALL call_service('rank_service', user_features, item_candidates)
+LIKE item_rank_output;
 ```
 
-In this form:
+- User must contain exactly one row; Item may contain many.
+- Duplicate input field names are read from User, and remaining model fields from Item.
+- The result keeps Item fields and appends model outputs.
+- Empty Item input returns a correctly typed empty table without an HTTP request.
 
-- the User table must contain exactly one row; the Item table may contain many;
-- duplicate field names are read from User, and other model fields are read from Item;
-- the result keeps Item fields and appends model outputs;
-- an empty Item table returns a correctly typed empty result without an HTTP request.
-
-The request uses column-oriented JSON:
-
-```json
-{
-  "user_id": [1],
-  "item_id": [101, 102],
-  "category": ["phone", "tablet"],
-  "price": [3999.0, 2999.0]
-}
-```
-
-## Connect an Existing HTTP Model Service
-
-Use an `external` model for an existing service that implements the request and response protocol above. It requires neither `TRAIN MODEL` nor `EXPORT MODEL`:
-
-```sql
-CREATE MODEL external_rank_model WITH (
-  model = 'external',
-  output_columns = 'score:FLOAT'
-);
-
-CREATE SERVICE external_rank_service
-ON MODEL external_rank_model
-WITH (
-  url = 'http://rank-service:8080/predict'
-);
-```
-
-Call it like any other Service:
-
-```sql
-CACHE TABLE result AS
-CALL call_service('external_rank_service', rank_input);
-```
+See [the HTTP inference protocol](#connect-an-existing-http-model-service) for external service request and response formats.
 
 ## How Hugging Face Differs
 
@@ -189,7 +214,7 @@ For the Hugging Face backend, `TRAIN MODEL` downloads a selected Hub revision in
 
 ```sql
 TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
-  revision = 'main'
+  'revision' = 'main'
 );
 ```
 
@@ -203,7 +228,7 @@ Use the type required by the backend: `export` for tzrec and GBDT, `origin` for 
 
 ### Training fields do not match
 
-Compare `SHOW CREATE MODEL` with the training table. Check field names and types, label columns, and backend-specific user/item feature settings.
+Compare `DESCRIBE MODEL` with the training table. Check field names and types, label columns, and backend-specific user/item feature settings.
 
 ### `call_service` returns the wrong row count
 

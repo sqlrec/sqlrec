@@ -16,9 +16,9 @@ An occasional remote-service, recall-source, or partition failure does not alway
 
 ```sql
 IF TIMEIN (SELECT 100 FROM config_table) THEN (
-    CACHE TABLE result AS CALL remote_rank_service(candidate_items)
+    CACHE TABLE result_table AS CALL remote_rank_service(candidate_items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM local_rank_fallback
+    CACHE TABLE result_table AS SELECT * FROM local_rank_fallback
 );
 ```
 
@@ -33,11 +33,11 @@ The timeout can come from a variable:
 
 ```sql
 IF TIMEIN (
-    SELECT CAST(get_or_default('rank_timeout_ms', '80') AS BIGINT)
+    SELECT CAST(`get_or_default`('rank_timeout_ms', '80') AS BIGINT)
 ) THEN (
-    CACHE TABLE result AS CALL rank_service(items)
+    CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM items
+    CACHE TABLE result_table AS SELECT * FROM items
 );
 ```
 
@@ -45,9 +45,9 @@ A non-positive timeout means that no timeout is configured and THEN may run inde
 
 ```sql
 IF TIMEIN (SELECT 0) THEN (
-    CACHE TABLE result AS CALL rank_service(items)
+    CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM items
+    CACHE TABLE result_table AS SELECT * FROM items
 );
 ```
 
@@ -61,6 +61,8 @@ IF TIMEIN (SELECT 50) THEN (
 ) ELSE (
     RETURN SELECT * FROM cached_result
 );
+-- End the function definition
+RETURN;
 ```
 
 Only a successfully completed THEN commits its return value. A timeout or exception cannot commit a partial THEN result. Ordinary `IF` does not automatically fall back after a THEN exception; use `IF TIMEIN` for that behavior.

@@ -51,10 +51,10 @@ Calcite 官方参考页可能对应比 SQLRec 依赖更新的版本，并且包�
 
 | 用途 | 函数 |
 |------|------|
-| 数组判断 | [`array_contains`](#array_contains)、[`array_contains_all`](#array_contains_all)、[`array_contains_any`](#array_contains_any) |
-| 向量计算 | [`random_vec`](#random_vec)、[`l2_norm`](#l2_norm)、[`ip`](#ip) |
+| 数组判断 | [`array_contains`](#array-contains)、[`array_contains_all`](#array-contains-all)、[`array_contains_any`](#array-contains-any) |
+| 向量计算 | [`random_vec`](#random-vec)、[`l2_norm`](#l2-norm)、[`ip`](#ip) |
 | 请求标识 | [`uuid`](#uuid) |
-| 执行变量 | [`get`](#get)、[`get_or_default`](#get_or_default) |
+| 执行变量 | [`get`](#get)、[`get_or_default`](#get-or-default) |
 
 ### array_contains
 
@@ -318,18 +318,12 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 **使用示例**：
 
 ```sql
--- 设置变量
-SET 'func_name' = 'add_col';
+SET 'limit_count' = '10';
 
--- 获取变量值，如果不存在则使用默认值
-SELECT `get_or_default`('user_id', 'default_user') AS user_id;
-
--- 动态调用函数：变量存在时使用变量值
-CALL `get_or_default`('func_name', 'shuffle')(my_table);
-
--- 动态调用函数：变量不存在时使用默认值
-CALL `get_or_default`('unknown_func', 'shuffle')(my_table);
+SELECT CAST(`get_or_default`('limit_count', '50') AS INT) AS limit_count;
 ```
+
+动态选择被调函数时使用 `GET_OR_DEFAULT(...)`，写法见[推荐流程指南](../../guides/recommendation-flow.md#动态选择函数)。
 
 **典型应用场景**：
 - 动态函数调用，提供兜底函数

@@ -169,7 +169,7 @@ DEFINE INPUT TABLE input_data LIKE source_table;
 
 ```sql
 CACHE TABLE table_name AS
-    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
      | select_statement}
 ```
 
@@ -183,7 +183,6 @@ CACHE TABLE table_name AS
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
-| `ASYNC` | 可选。异步执行（仅在独立的 CALL 语句中支持，CACHE TABLE 中暂不支持） |
 | `select_statement` | SELECT 查询语句 |
 
 **示例：**
@@ -209,7 +208,7 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 ```
 
 ::: warning 注意
-`ASYNC` 关键字在 `CACHE TABLE` 语法中会被解析，但运行时会抛出异常（`async function not support in cache`）。如需异步执行，请使用独立的 `CALL` 语句。
+`CACHE TABLE ... AS CALL` 只支持同步调用。如需异步执行，请使用独立的 `CALL ... ASYNC` 语句。
 :::
 
 ### CALL
@@ -298,15 +297,15 @@ IF 语句支持两种执行模式：
 
 ```sql
 IF (SELECT COUNT(*) > 100 FROM source_table) THEN (
-    CACHE TABLE result AS SELECT * FROM source_table
+    CACHE TABLE result_table AS SELECT * FROM source_table
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM backup_table
+    CACHE TABLE result_table AS SELECT * FROM backup_table
 );
 
 IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
-    CACHE TABLE result AS CALL slow_function('param')
+    CACHE TABLE result_table AS CALL slow_function('param')
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM default_table
+    CACHE TABLE result_table AS SELECT * FROM default_table
 );
 
 -- 分支为任意可执行语句
@@ -322,7 +321,7 @@ IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
 
 -- SQL 函数中提前返回：无 ELSE 时，条件为 false 会继续执行
 IF (SELECT COUNT(*) = 0 FROM source_table) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+    RETURN SELECT CAST(NULL AS BIGINT) AS id LIMIT 0
 );
 RETURN SELECT id FROM source_table;
 
@@ -430,7 +429,7 @@ RETURN CALL rerank(candidates);
 -- IF 中提前返回；最后一条顶层 RETURN 仍是函数定义结束标志，
 -- 并在条件为 false 时作为后备返回
 IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+    RETURN SELECT CAST(NULL AS BIGINT) AS id LIMIT 0
 );
 RETURN SELECT id FROM candidates;
 ```
@@ -594,7 +593,7 @@ DESC API my_api;
 ```sql
 CREATE MODEL [IF NOT EXISTS] model_name
     [(column_name column_type [, ...])]
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **参数：**
@@ -617,13 +616,13 @@ CREATE MODEL rank_model (
     price DOUBLE,
     is_click INT
 ) WITH (
-    model = 'tzrec.wide_and_deep',
-    label_columns = 'is_click'
+    'model' = 'tzrec.wide_and_deep',
+    'label_columns' = 'is_click'
 );
 
 CREATE MODEL IF NOT EXISTS external_rank_model WITH (
-    model = 'external',
-    output_columns = 'score:FLOAT'
+    'model' = 'external',
+    'output_columns' = 'score:FLOAT'
 );
 ```
 
@@ -654,16 +653,18 @@ DROP MODEL IF EXISTS my_model;
 
 ### TRAIN MODEL
 
-训练一个模型并创建检查点。
+训练或下载模型并创建检查点。
+
+训练型后端需要 `ON` 数据表；Hugging Face 后端用 `TRAIN MODEL` 下载模型，不需要 `ON`。后端差异见[模型指南](../guides/model-lifecycle.md)。
 
 **语法：**
 
 ```sql
 TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
-    ON data_source
+    [ON data_source]
     [WHERE condition]
     [FROM 'existing_checkpoint']
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **参数：**
@@ -672,7 +673,7 @@ TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
 |------|------|
 | `model_name` | 要训练的模型名称 |
 | `checkpoint_name` | 检查点名称，用于标识训练结果 |
-| `data_source` | 训练数据源表名 |
+| `data_source` | 训练数据表；训练型后端必填，Hugging Face 下载模型时不需要 |
 | `condition` | 可选。WHERE 条件，用于过滤训练数据 |
 | `existing_checkpoint` | 可选。基于已有检查点继续训练 |
 | `property_name` | 可选。训练属性名 |
@@ -688,12 +689,14 @@ TRAIN MODEL my_model CHECKPOINT = 'v1.0'
 TRAIN MODEL my_model CHECKPOINT = 'v2.0'
     ON training_data
     FROM 'v1.0'
-    WITH (num_epochs = 10, sparse_lr = 0.01);
+    WITH ('num_epochs' = '10', 'sparse_lr' = '0.01');
 ```
 
 ### EXPORT MODEL
 
 导出模型的训练结果。
+
+`ON` 指定导出过程读取的数据表，不是模型产物的写入目标。模型产物保存在配置的模型存储中，格式由模型后端决定。
 
 **语法：**
 
@@ -701,7 +704,7 @@ TRAIN MODEL my_model CHECKPOINT = 'v2.0'
 EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
     [ON data_source]
     [WHERE condition]
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **参数：**
@@ -710,7 +713,7 @@ EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
 |------|------|
 | `model_name` | 要导出的模型名称 |
 | `checkpoint_name` | 检查点名称 |
-| `data_source` | 可选。导出目标数据源 |
+| `data_source` | 可选。导出过程读取的数据表，是否需要由模型后端决定 |
 | `condition` | 可选。WHERE 条件 |
 | `property_name` | 可选。导出属性名 |
 | `property_value` | 可选。导出属性值 |
@@ -723,8 +726,7 @@ EXPORT MODEL my_model CHECKPOINT = 'v1.0'
 
 EXPORT MODEL my_model CHECKPOINT = 'v1.0'
     ON export_table
-    WHERE status = 'valid'
-    WITH (format = 'parquet');
+    WHERE status = 'valid';
 ```
 
 ### SHOW MODELS
@@ -833,7 +835,7 @@ ALTER MODEL my_model DROP IF EXISTS CHECKPOINT = 'v1.0';
 CREATE SERVICE [IF NOT EXISTS] service_name
     ON MODEL model_name
     [CHECKPOINT = 'checkpoint_name']
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **参数：**
@@ -856,7 +858,7 @@ CREATE SERVICE rank_service
 
 CREATE SERVICE IF NOT EXISTS external_rank_service
     ON MODEL external_rank_model
-    WITH (url = 'http://rank-service:8080/predict');
+    WITH ('url' = 'http://rank-service:8080/predict');
 ```
 
 ### DROP SERVICE
@@ -941,15 +943,9 @@ FLUSH
 
 **描述：**
 
-`FLUSH` 语句会立即失效以下进程级缓存，使后续访问重新加载相应定义：
+`FLUSH` 使当前进程中的数据库和表定义、Java/SQL 函数、API、模型服务配置缓存失效，后续访问会重新加载定义。
 
-- `CalciteSchemaFactory`：数据库列表与表结构（schema）缓存
-- `JavaFunctionUtils`：Java 函数类缓存（包括不存在的结果）
-- `SqlFunctionCache`：已编译的 SQL 函数绑定（`SqlFunctionBindable`）
-- `SqlApiCache`：API 定义缓存
-- `ServiceManager`：服务配置缓存
-
-`FLUSH` 不直接清空已有 connector 表对象的主键行缓存，也不清除会话中的 `CACHE TABLE` 结果。schema 重新构建表对象后，新对象的行缓存为空；旧对象仍可能在其 TTL 内持有数据。参见[架构中的查询路径说明](./architecture.md#connector-表数据缓存与查询路径)。
+它不清除会话中的 `CACHE TABLE` 结果，也不保证已有 Connector 的业务数据缓存立即更新。本地 SQL 文件的改动仍需重启进程才能生效。精确的缓存范围见[架构设计](./architecture.md#connector-表数据缓存与查询路径)。
 
 **示例：**
 
@@ -957,6 +953,4 @@ FLUSH
 FLUSH;
 ```
 
-::: warning 注意
-`FLUSH` 可能导致短时间内重新加载元数据。通常在外部修改表结构、函数或服务定义后执行；它不能保证已有 connector 表对象的行缓存立即更新。
-:::
+通常在远程元数据被外部修改后使用；重新加载定义可能带来短暂额外开销。

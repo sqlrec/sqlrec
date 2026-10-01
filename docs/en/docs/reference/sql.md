@@ -169,7 +169,7 @@ Cache query results or function call results to a specified table.
 
 ```sql
 CACHE TABLE table_name AS
-    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size] [ASYNC]
+    {CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_name'}] [PARTITION BY table_name SIZE partition_size]
      | select_statement}
 ```
 
@@ -183,7 +183,6 @@ CACHE TABLE table_name AS
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
-| `ASYNC` | Optional. Execute asynchronously (only supported in standalone CALL statements, not in CACHE TABLE) |
 | `select_statement` | SELECT query statement |
 
 **Examples:**
@@ -209,7 +208,7 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 ```
 
 ::: warning Note
-The `ASYNC` keyword is parsed in `CACHE TABLE` syntax but throws an exception at runtime (`async function not support in cache`). To execute asynchronously, use a standalone `CALL` statement.
+`CACHE TABLE ... AS CALL` supports synchronous calls only. Use a standalone `CALL ... ASYNC` for asynchronous execution.
 :::
 
 ### CALL
@@ -298,15 +297,15 @@ The IF statement supports two execution modes:
 
 ```sql
 IF (SELECT COUNT(*) > 100 FROM source_table) THEN (
-    CACHE TABLE result AS SELECT * FROM source_table
+    CACHE TABLE result_table AS SELECT * FROM source_table
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM backup_table
+    CACHE TABLE result_table AS SELECT * FROM backup_table
 );
 
 IF TIMEIN (SELECT timeout_ms FROM config_table) THEN (
-    CACHE TABLE result AS CALL slow_function('param')
+    CACHE TABLE result_table AS CALL slow_function('param')
 ) ELSE (
-    CACHE TABLE result AS SELECT * FROM default_table
+    CACHE TABLE result_table AS SELECT * FROM default_table
 );
 
 -- Branches as arbitrary executable statements
@@ -322,7 +321,7 @@ IF (SELECT COUNT(*) > 0 FROM source_table) THEN (
 
 -- Early return in a SQL function. With no ELSE, false continues execution.
 IF (SELECT COUNT(*) = 0 FROM source_table) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+    RETURN SELECT CAST(NULL AS BIGINT) AS id LIMIT 0
 );
 RETURN SELECT id FROM source_table;
 
@@ -430,7 +429,7 @@ RETURN CALL rerank(candidates);
 -- Return early from IF. The final top-level RETURN still terminates the
 -- function definition and is the fallback when the condition is false.
 IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
-    RETURN SELECT CAST(NULL AS BIGINT) AS id WHERE FALSE
+    RETURN SELECT CAST(NULL AS BIGINT) AS id LIMIT 0
 );
 RETURN SELECT id FROM candidates;
 ```
@@ -594,7 +593,7 @@ Create a new machine learning model definition.
 ```sql
 CREATE MODEL [IF NOT EXISTS] model_name
     [(column_name column_type [, ...])]
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **Parameters:**
@@ -617,13 +616,13 @@ CREATE MODEL rank_model (
     price DOUBLE,
     is_click INT
 ) WITH (
-    model = 'tzrec.wide_and_deep',
-    label_columns = 'is_click'
+    'model' = 'tzrec.wide_and_deep',
+    'label_columns' = 'is_click'
 );
 
 CREATE MODEL IF NOT EXISTS external_rank_model WITH (
-    model = 'external',
-    output_columns = 'score:FLOAT'
+    'model' = 'external',
+    'output_columns' = 'score:FLOAT'
 );
 ```
 
@@ -654,16 +653,18 @@ DROP MODEL IF EXISTS my_model;
 
 ### TRAIN MODEL
 
-Train a model and create a checkpoint.
+Train or download a model and create a checkpoint.
+
+Training backends require an `ON` table. For Hugging Face, `TRAIN MODEL` downloads a model without `ON`. See [the model guide](../guides/model-lifecycle.md) for backend differences.
 
 **Syntax:**
 
 ```sql
 TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
-    ON data_source
+    [ON data_source]
     [WHERE condition]
     [FROM 'existing_checkpoint']
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **Parameters:**
@@ -672,7 +673,7 @@ TRAIN MODEL model_name CHECKPOINT = 'checkpoint_name'
 |-----------|-------------|
 | `model_name` | Name of the model to train |
 | `checkpoint_name` | Checkpoint name to identify training results |
-| `data_source` | Training data source table name |
+| `data_source` | Training table; required by training backends, omitted for Hugging Face downloads |
 | `condition` | Optional. WHERE condition to filter training data |
 | `existing_checkpoint` | Optional. Continue training from existing checkpoint |
 | `property_name` | Optional. Training property name |
@@ -688,12 +689,14 @@ TRAIN MODEL my_model CHECKPOINT = 'v1.0'
 TRAIN MODEL my_model CHECKPOINT = 'v2.0'
     ON training_data
     FROM 'v1.0'
-    WITH (num_epochs = 10, sparse_lr = 0.01);
+    WITH ('num_epochs' = '10', 'sparse_lr' = '0.01');
 ```
 
 ### EXPORT MODEL
 
 Export model training results.
+
+`ON` names a data table read during export, rather than the artifact destination. Artifacts are saved in the configured model storage; their format is determined by the backend.
 
 **Syntax:**
 
@@ -701,7 +704,7 @@ Export model training results.
 EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
     [ON data_source]
     [WHERE condition]
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **Parameters:**
@@ -710,7 +713,7 @@ EXPORT MODEL model_name CHECKPOINT = 'checkpoint_name'
 |-----------|-------------|
 | `model_name` | Name of the model to export |
 | `checkpoint_name` | Checkpoint name |
-| `data_source` | Optional. Export target data source |
+| `data_source` | Optional. Data table read during export; requirements depend on the backend |
 | `condition` | Optional. WHERE condition |
 | `property_name` | Optional. Export property name |
 | `property_value` | Optional. Export property value |
@@ -723,8 +726,7 @@ EXPORT MODEL my_model CHECKPOINT = 'v1.0'
 
 EXPORT MODEL my_model CHECKPOINT = 'v1.0'
     ON export_table
-    WHERE status = 'valid'
-    WITH (format = 'parquet');
+    WHERE status = 'valid';
 ```
 
 ### SHOW MODELS
@@ -833,7 +835,7 @@ Create a model service.
 CREATE SERVICE [IF NOT EXISTS] service_name
     ON MODEL model_name
     [CHECKPOINT = 'checkpoint_name']
-    [WITH (property_name = property_value [, ...])]
+    [WITH ('property_name' = 'property_value' [, ...])]
 ```
 
 **Parameters:**
@@ -856,7 +858,7 @@ CREATE SERVICE rank_service
 
 CREATE SERVICE IF NOT EXISTS external_rank_service
     ON MODEL external_rank_model
-    WITH (url = 'http://rank-service:8080/predict');
+    WITH ('url' = 'http://rank-service:8080/predict');
 ```
 
 ### DROP SERVICE
@@ -941,15 +943,9 @@ FLUSH
 
 **Description:**
 
-`FLUSH` immediately invalidates these process-level caches so subsequent accesses reload their definitions:
+`FLUSH` invalidates the current process's cached database and table definitions, Java/SQL functions, APIs, and model-service configuration. Later accesses reload their definitions.
 
-- `CalciteSchemaFactory`: database list and table schema caches
-- `JavaFunctionUtils`: Java function class cache (including absent results)
-- `SqlFunctionCache`: compiled SQL function bindings (`SqlFunctionBindable`)
-- `SqlApiCache`: API definition cache
-- `ServiceManager`: service configuration cache
-
-`FLUSH` does not directly clear the primary-key row cache on existing connector table objects or session `CACHE TABLE` results. A rebuilt schema table object starts with an empty row cache; an old object can still hold data until its TTL expires. See [the architecture query-path matrix](./architecture.md#connector-row-cache-and-query-paths).
+It does not clear session `CACHE TABLE` results or guarantee immediate updates to existing connectors' business-data caches. Changes to local SQL files still require a process restart. See [Architecture](./architecture.md#connector-row-cache-and-query-paths) for exact cache coverage.
 
 **Example:**
 
@@ -957,6 +953,4 @@ FLUSH
 FLUSH;
 ```
 
-::: warning Note
-`FLUSH` may cause short-term overhead from reloading metadata. It is typically used after external changes to table schemas, functions, or service definitions; it does not guarantee that row caches on existing connector table objects update immediately.
-:::
+Use it after external changes to remote metadata. Reloading definitions may cause short-term overhead.

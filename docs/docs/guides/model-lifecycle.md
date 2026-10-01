@@ -1,17 +1,86 @@
 # 模型训练与在线推理
 
-SQLRec 可以用 SQL 管理模型定义、训练结果和在线推理服务。不同模型后端的流程并不完全相同：
+按你已有的条件选择路径：
 
-**运行前提**：本文的训练、导出和服务部署步骤需要[完整服务环境](../operations/deployment.md)，包括 Kubernetes 和模型存储；Docker 快速开始中的独立 Demo 不具备这些条件。训练任务还需要能访问 SQL 中指定的数据源。`training_sample` 是示例表名，执行前请准备包含示例字段的训练表。
+- 已有 HTTP 模型服务：使用下面的 `external` 模型接入，不需要 SQLRec 训练、导出或部署推理容器。
+- 需要 SQLRec 训练并部署模型：先准备[服务环境](../operations/deployment.md)，再按[训练型模型流程](#训练型模型的完整流程)操作。
+- 使用 Hugging Face 模型：下载 Hub 快照后直接创建服务，见[后端差异](#hugging-face-模型的不同之处)。
 
-| 模型类型 | 数据来源 | 需要训练 | 需要导出 | 创建服务时的 Checkpoint |
-|----------|----------|----------|----------|----------------------------|
-| tzrec Wide & Deep / DSSM | SQL 表 | 是 | 是 | export |
-| LightGBM / XGBoost / CatBoost | SQL 表 | 是 | 是 | export |
-| Hugging Face Transformers | Hugging Face Hub 快照 | 是，但不需要 `ON` 数据表 | 否 | origin |
-| external | 已有 HTTP 服务 | 否 | 否 | 不需要 |
+## 接入已有 HTTP 模型服务
 
-各模型的配置参数见[内置模型](../reference/models/builtin-models.md)。
+准备 SQLRec 可访问的推理地址，并声明服务的输入、输出字段：
+
+```sql
+CREATE MODEL external_rank_model (
+  user_id BIGINT,
+  item_id BIGINT,
+  category VARCHAR,
+  price DOUBLE
+) WITH (
+  'model' = 'external',
+  'output_columns' = 'score:FLOAT'
+);
+
+CREATE SERVICE external_rank_service
+ON MODEL external_rank_model
+WITH (
+  'url' = 'http://rank-service:8080/predict'
+);
+```
+
+本地文件模式将两份定义分别保存为 `model/external_rank_model.sql` 和 `service/external_rank_service.sql`，放在完整的 `SQL_SCHEMA_DIR` 下并重启；加载方法见[Docker 指南](../getting-started/docker.md#管理本地-sql-定义)。远程元数据模式通过 Beeline 或 JDBC 执行定义。
+
+先准备包含上述字段的 `rank_input` 缓存表，再调用服务。用空表声明输出结构：
+
+```sql
+CACHE TABLE external_rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS score FROM rank_input LIMIT 0;
+
+CACHE TABLE result_table AS
+CALL call_service('external_rank_service', rank_input)
+LIKE external_rank_output;
+```
+
+结果保留输入列，并追加 `score`。仅接入已有服务时，不需要 Kubernetes 训练环境；推理服务仍须遵循以下协议。
+
+::: details HTTP 推理协议（服务提供方）
+服务接受 POST 请求。单表调用发送 JSON 对象数组，只包含 Model 声明的输入字段：
+
+```json
+[
+  {"user_id": 1, "item_id": 101, "category": "phone", "price": 3999.0},
+  {"user_id": 1, "item_id": 102, "category": "tablet", "price": 2999.0}
+]
+```
+
+服务返回按输出字段组织的 JSON 数组；每个数组长度必须与输入行数一致，顺序与输入对应：
+
+```json
+{"score": [0.85, 0.72]}
+```
+
+使用下方的 User-Item 调用形式时，请求为列式 JSON，User 字段为单元素数组，Item 字段按行排列：
+
+```json
+{
+  "user_id": [1],
+  "item_id": [101, 102],
+  "category": ["phone", "tablet"],
+  "price": [3999.0, 2999.0]
+}
+```
+:::
+
+## 选择模型后端
+
+| 模型类型 | 数据来源 | TRAIN MODEL | EXPORT MODEL | 服务使用的 Checkpoint |
+| --- | --- | --- | --- | --- |
+| tzrec Wide & Deep / DSSM | SQL 表 | 训练 | 需要 | export |
+| LightGBM / XGBoost / CatBoost | SQL 表 | 训练 | 需要 | export |
+| Hugging Face Transformers | Hub 快照 | 下载，不需要 ON 表 | 不支持 | origin |
+| external | 已有 HTTP 服务 | 不支持 | 不支持 | 不需要 |
+
+配置参数见[内置模型](../reference/models/builtin-models.md)。
 
 ## 核心对象
 
@@ -30,6 +99,8 @@ Checkpoint 名称是用户自定义的版本标识。建议使用可追溯的值
 
 ## 训练型模型的完整流程
 
+以下训练、导出和自托管服务部署需要[完整服务环境](../operations/deployment.md)，包括 Kubernetes 和模型存储。Docker Demo 不提供这些组件。执行前还需准备可访问的 `training_sample` 训练表，字段与模型定义兼容。
+
 ### 1. 创建模型
 
 ```sql
@@ -40,8 +111,8 @@ CREATE MODEL rank_model (
   price DOUBLE,
   is_click INT
 ) WITH (
-  model = 'tzrec.wide_and_deep',
-  label_columns = 'is_click'
+  'model' = 'tzrec.wide_and_deep',
+  'label_columns' = 'is_click'
 );
 ```
 
@@ -54,8 +125,8 @@ TRAIN MODEL rank_model CHECKPOINT = '2026_09_13'
 ON training_sample
 WHERE dt = '2026-09-13'
 WITH (
-  num_epochs = 1,
-  batch_size = 8192
+  'num_epochs' = '1',
+  'batch_size' = '8192'
 );
 ```
 
@@ -84,9 +155,9 @@ CREATE SERVICE rank_service
 ON MODEL rank_model
 CHECKPOINT = '2026_09_13_export'
 WITH (
-  replicas = 1,
-  pod_cpu_cores = 1,
-  pod_memory = '2Gi'
+  'replicas' = '1',
+  'pod_cpu_cores' = '1',
+  'pod_memory' = '2Gi'
 );
 ```
 
@@ -100,88 +171,42 @@ DESCRIBE FORMATTED SERVICE rank_service;
 
 ## 调用模型服务
 
-SQLRec 内置的 `call_service` 表函数负责查找 Service、组装 HTTP 请求，并将模型输出追加到输入数据。
+`call_service` 将模型输出追加到输入数据。模型服务的输入字段应在 Model 中声明，并与传入表的字段对应。
 
 ### 行式输入
 
 ```sql
 CACHE TABLE rank_input AS
-SELECT user_id, item_id, category, price
-FROM candidate_item;
+SELECT user_id, item_id, category, price FROM candidate_item;
+
+CACHE TABLE rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS probs FROM rank_input LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', rank_input);
+CALL call_service('rank_service', rank_input) LIKE rank_output;
 ```
 
-函数只会发送模型定义中存在的输入字段。返回表保留输入表的列，并在末尾追加模型输出列。
-
-发往模型服务的请求为 JSON 对象数组：
-
-```json
-[
-  {"user_id": 1, "item_id": 101, "category": "phone", "price": 3999.0},
-  {"user_id": 1, "item_id": 102, "category": "tablet", "price": 2999.0}
-]
-```
-
-服务应返回以输出字段为键、数组为值的 JSON 对象：
-
-```json
-{"probs": [0.85, 0.72]}
-```
-
-每个输出数组的长度必须与输入行数一致。
+这个 Wide & Deep 示例保留输入列，并追加 `probs`；其他模型的输出字段见[内置模型](../reference/models/builtin-models.md)。
 
 ### User-Item 输入
 
-排序场景中，可以分开传入一行用户特征和多行候选物品，避免在请求体中重复用户数据：
+排序时可分开传入一行用户特征和多行候选物品，避免重复发送用户数据：
 
 ```sql
+CACHE TABLE item_rank_output AS
+SELECT *, CAST(NULL AS FLOAT) AS probs FROM item_candidates LIMIT 0;
+
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', user_features, item_candidates);
+CALL call_service('rank_service', user_features, item_candidates)
+LIKE item_rank_output;
 ```
 
-使用该形式时：
+- User 表必须恰好一行；Item 表可以有多行。
+- 同名输入字段优先从 User 表取值，其余模型字段从 Item 表取值。
+- 结果保留 Item 表字段，并追加模型输出字段。
+- Item 表为空时不发 HTTP 请求，直接返回结构完整的空表。
 
-- User 表必须恰好有一行，Item 表可以有多行。
-- 同名字段优先从 User 表取值，其余模型输入字段从 Item 表取值。
-- 返回表保留 Item 表字段，并追加模型输出字段。
-- Item 表为空时不发起 HTTP 请求，直接返回结构完整的空表。
-
-请求体为列式 JSON：
-
-```json
-{
-  "user_id": [1],
-  "item_id": [101, 102],
-  "category": ["phone", "tablet"],
-  "price": [3999.0, 2999.0]
-}
-```
-
-## 接入已有 HTTP 模型服务
-
-如果已经有符合上述请求和响应协议的服务，可以使用 `external` 模型，不需要执行 `TRAIN MODEL` 和 `EXPORT MODEL`：
-
-```sql
-CREATE MODEL external_rank_model WITH (
-  model = 'external',
-  output_columns = 'score:FLOAT'
-);
-
-CREATE SERVICE external_rank_service
-ON MODEL external_rank_model
-WITH (
-  url = 'http://rank-service:8080/predict'
-);
-```
-
-SQL 中的调用方式与其他 Service 一致：
-
-```sql
-CACHE TABLE result AS
-CALL call_service('external_rank_service', rank_input);
-```
+外部服务的请求和响应约定见[HTTP 推理协议](#接入已有-http-模型服务)。
 
 ## Hugging Face 模型的不同之处
 
@@ -189,7 +214,7 @@ Hugging Face 后端的 `TRAIN MODEL` 表示从 Hub 下载指定 revision，不�
 
 ```sql
 TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
-  revision = 'main'
+  'revision' = 'main'
 );
 ```
 
@@ -203,7 +228,7 @@ TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
 
 ### 训练数据字段不匹配
 
-对比 `SHOW CREATE MODEL` 结果与训练表字段，确认字段名、类型、标签列以及模型特有的 user/item 特征配置。
+对比 `DESCRIBE MODEL` 结果与训练表字段，确认字段名、类型、标签列以及模型特有的 user/item 特征配置。
 
 ### `call_service` 返回行数不正确
 

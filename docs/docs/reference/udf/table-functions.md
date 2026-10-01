@@ -6,11 +6,11 @@ SQLRec 表函数通过 `CALL` 调用，以一张或多张缓存表为输入，�
 
 | 场景 | 函数 |
 |------|------|
-| 结果处理 | [`dedup`](#dedup)、[`shuffle`](#shuffle)、[`add_col`](#add_col)、[`truncate_table`](#truncate_table) |
-| 多样性 | [`window_diversify`](#window_diversify)、[`dpp_diversity`](#dpp_diversity)、[`rule_diversity`](#rule_diversity) |
-| 数据转换与合并 | [`json_to_table`](#json_to_table)、[`tag_to_vec`](#tag_to_vec)、[`weighted_merge`](#weighted_merge) |
-| 外部服务 | [`call_service`](#call_service)、[`batch_call_service`](#batch_call_service)、[`call_sqlrec_api`](#call_sqlrec_api)、[`get_growthbook_features`](#get_growthbook_features) |
-| 变量与可观测性 | [`get_variables`](#get_variables)、[`set_variables`](#set_variables)、[`feature_coverage_metrics`](#feature_coverage_metrics) |
+| 结果处理 | [`dedup`](#dedup)、[`shuffle`](#shuffle)、[`add_col`](#add-col)、[`truncate_table`](#truncate-table) |
+| 多样性 | [`window_diversify`](#window-diversify)、[`dpp_diversity`](#dpp-diversity)、[`rule_diversity`](#rule-diversity) |
+| 数据转换与合并 | [`json_to_table`](#json-to-table)、[`tag_to_vec`](#tag-to-vec)、[`weighted_merge`](#weighted-merge) |
+| 外部服务 | [`call_service`](#call-service)、[`batch_call_service`](#batch-call-service)、[`call_sqlrec_api`](#call-sqlrec-api)、[`get_growthbook_features`](#get-growthbook-features) |
+| 变量与可观测性 | [`get_variables`](#get-variables)、[`set_variables`](#set-variables)、[`feature_coverage_metrics`](#feature-coverage-metrics) |
 | 测试辅助 | [`sleep`](#sleep) |
 
 ### dedup
@@ -130,6 +130,8 @@ CALL add_col(recall_item, 'rec_time', '2024-01-01');
 ### call_service
 
 模型服务调用函数，用于调用已部署的模型服务进行推理。详见[模型训练与在线推理](../../guides/model-lifecycle.md#调用模型服务)。
+
+调用示例和输出模板见[模型指南](../../guides/model-lifecycle.md#调用模型服务)。使用 `LIKE` 声明输入列加模型输出列的结果结构。
 
 SQL 调用支持以下两种形式：
 
@@ -449,16 +451,19 @@ CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
 **使用示例**：
 
 ```sql
--- 准备输入数据
-CACHE TABLE user_input AS
-SELECT 1001 AS user_id, 'Alice' AS user_name;
+CACHE TABLE user_info AS
+SELECT CAST(1000001 AS BIGINT) AS user_id;
 
--- 调用远端 SQLRec 实例上已发布的推荐 API
+CACHE TABLE output_template AS
+SELECT CAST(NULL AS BIGINT) AS item_id,
+       CAST(NULL AS DOUBLE) AS score
+LIMIT 0;
+
 CACHE TABLE remote_rec AS
 CALL call_sqlrec_api(
     'http://remote-sqlrec:30001/api/v1/recommend',
-    user_input
-);
+    user_info
+) LIKE output_template;
 
 SELECT * FROM remote_rec;
 ```
@@ -468,6 +473,8 @@ SELECT * FROM remote_rec;
 - 至少需要传入一个输入表，且每个输入表必须有表名
 - 远端 API 调用失败（返回空数据或错误消息）时会抛出异常
 - 输入表的表名需与远端函数定义中的输入表占位符匹配
+- 示例假设远端输入表为 `user_info`，输出为 `item_id BIGINT, score DOUBLE`；按实际协议修改输入名和输出模板
+- 显式使用 `LIKE output_template`，避免在正式执行前为推断结构调用远端 API
 
 ---
 
@@ -546,7 +553,7 @@ SELECT * FROM all_vars;
 ```sql
 -- 创建变量表
 CACHE TABLE var_table AS
-SELECT 'user_id' AS key, '12345' AS value
+SELECT 'user_id' AS `key`, '12345' AS `value`
 UNION ALL
 SELECT 'limit', '100';
 
@@ -618,6 +625,12 @@ GrowthBook 特征获取函数，从 GrowthBook 平台获取 A/B 实验特征值�
 **使用示例**：
 
 ```sql
+CACHE TABLE gb_output AS
+SELECT CAST(NULL AS VARCHAR) AS experiment_id,
+       CAST(NULL AS VARCHAR) AS variation_id,
+       CAST(NULL AS VARCHAR) AS user_id
+LIMIT 0;
+
 -- 获取 GrowthBook 特征并设置变量
 CACHE TABLE gb_tracking AS
 CALL get_growthbook_features(
@@ -626,7 +639,7 @@ CALL get_growthbook_features(
     user_info,
     'new_recommendation_algo',
     'ui_theme'
-);
+) LIKE gb_output;
 
 -- 使用设置的实验变量
 SELECT `get`('new_recommendation_algo') AS algo;
@@ -638,6 +651,7 @@ SELECT `get`('new_recommendation_algo') AS algo;
 - 至少需要指定一个 `featureKey`
 - GrowthBookClient 初始化失败时会抛出异常
 - 同一组 `apiHost` 和 `clientKey` 会复用同一个客户端实例
+- 使用 `LIKE gb_output` 声明结果结构，避免在正式执行前访问 GrowthBook
 
 ---
 

@@ -2,6 +2,8 @@
 
 SQLRec uses SQL to orchestrate recommendation workflows: read features and candidates, call functions and model services, return results, and write to external stores. The module overview comes first; the rest of the page follows a request to explain the execution model and data boundaries. Links at the end cover syntax, parameters, and deployment steps.
 
+![SQLRec component architecture](/sqlrec_arch.svg)
+
 ## Module Overview
 
 ```text

@@ -2,6 +2,24 @@
 
 本文档介绍 SQLRec 内置的模型类型及其使用方法。
 
+## 通用流程与资源配置
+
+Model、训练、导出和 Service 的 `WITH` 选项使用字符串键和值，例如 `'batch_size' = '8192'`；SQLRec 会按参数类型解析值。
+
+训练型模型按[模型指南](../../guides/model-lifecycle.md#训练型模型的完整流程)执行创建、训练、导出和服务部署。训练型模型的示例以 Model 定义为主，`training_sample` 等训练表需另行准备。训练配置可作为 Model 默认值，并在 `TRAIN MODEL ... WITH (...)` 中覆盖。
+
+下表的资源配置适用于 tzrec、GBDT 和 Hugging Face 自托管任务或服务；`replicas` 用于在线服务。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
+| `pod_memory` | String | "2Gi" | Pod 内存 |
+| `pod_cpu_limit` | String | - | Pod CPU 上限 |
+| `pod_memory_limit` | String | - | Pod 内存上限 |
+| `replicas` | Integer | 1 | 服务副本数 |
+
+镜像默认值：tzrec 使用 `sqlrec/tzrec`，GBDT 使用 `sqlrec/gbdt`，版本为 `${SQLREC_VERSION}-cpu`；Hugging Face 使用 `sqlrec/transformers:${SQLREC_VERSION}`。可用 `image`、`version` 覆盖。
+
 ## 内置模型类型
 
 SQLRec 内置了以下模型类型：
@@ -29,15 +47,20 @@ SQLRec 内置了以下模型类型：
 **使用示例**：
 
 ```sql
-CREATE MODEL external_model WITH (
-    model = 'external',
-    output_columns = 'score:FLOAT,label:VARCHAR'
+CREATE MODEL external_model (
+    user_id BIGINT,
+    item_id BIGINT,
+    category VARCHAR,
+    price DOUBLE
+) WITH (
+    'model' = 'external',
+    'output_columns' = 'score:FLOAT,label:VARCHAR'
 );
 
 CREATE SERVICE external_service
     ON MODEL external_model
     WITH (
-        url = 'http://external-service:8080/predict'
+        'url' = 'http://external-service:8080/predict'
     );
 ```
 
@@ -88,18 +111,6 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 | `nproc_per_node` | Integer | 1 | 每节点进程数 |
 | `master_port` | Integer | 29500 | 分布式训练主端口 |
 
-**资源配置参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `image` | String | "sqlrec/tzrec" | Docker 镜像名称 |
-| `version` | String | `${SQLREC_VERSION}-cpu` | Docker 镜像版本，默认跟随当前 SQLRec 版本 |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
-| `pod_memory` | String | "2Gi" | Pod 内存 |
-| `pod_cpu_limit` | String | - | Pod CPU 上限 |
-| `pod_memory_limit` | String | - | Pod 内存上限 |
-| `replicas` | Integer | 1 | 服务副本数 |
-
 **列级配置参数**：
 
 可以为每个特征列单独配置参数：
@@ -119,34 +130,13 @@ CREATE MODEL rec_model (
     price DOUBLE,
     label INT
 ) WITH (
-    model = 'tzrec.wide_and_deep',
-    label_columns = 'label',
-    embedding_dim = 32,
-    hidden_units = '512,256,128',
-    column.user_id.embedding_dim = 64,
-    column.item_id.embedding_dim = 64
+    'model' = 'tzrec.wide_and_deep',
+    'label_columns' = 'label',
+    'embedding_dim' = '32',
+    'hidden_units' = '512,256,128',
+    'column.user_id.embedding_dim' = '64',
+    'column.item_id.embedding_dim' = '64'
 );
-
-TRAIN MODEL rec_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_epochs = 10,
-        batch_size = 4096,
-        sparse_lr = 0.01,
-        nnodes = 2,
-        nproc_per_node = 4
-    );
-
-EXPORT MODEL rec_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE rec_service
-    ON MODEL rec_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 3. DSSM 模型
@@ -204,18 +194,6 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 | `nproc_per_node` | Integer | 1 | 每节点进程数 |
 | `master_port` | Integer | 29500 | 分布式训练主端口 |
 
-**资源配置参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `image` | String | "sqlrec/tzrec" | Docker 镜像名称 |
-| `version` | String | `${SQLREC_VERSION}-cpu` | Docker 镜像版本，默认跟随当前 SQLRec 版本 |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
-| `pod_memory` | String | "2Gi" | Pod 内存 |
-| `pod_cpu_limit` | String | - | Pod CPU 上限 |
-| `pod_memory_limit` | String | - | Pod 内存上限 |
-| `replicas` | Integer | 1 | 服务副本数 |
-
 **列级配置参数**：
 
 可以为每个特征列单独配置参数：
@@ -235,49 +213,27 @@ CREATE MODEL dssm_model (
     item_category VARCHAR,
     label INT
 ) WITH (
-    model = 'tzrec.dssm',
-    user_features = 'user_id,user_age',
-    item_features = 'item_id,item_category',
-    embedding_dim = 64,
-    hidden_units = '256,128,64'
+    'model' = 'tzrec.dssm',
+    'user_features' = 'user_id,user_age',
+    'item_features' = 'item_id,item_category',
+    'embedding_dim' = '64',
+    'hidden_units' = '256,128,64'
 );
 
-TRAIN MODEL dssm_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_epochs = 10,
-        batch_size = 4096,
-        nnodes = 2,
-        nproc_per_node = 4
-    );
-
-EXPORT MODEL dssm_model CHECKPOINT = 'v1.0';
-
--- DSSM 为双塔模型，导出后会生成两个 export checkpoint：
---   v1.0_export/item（物品塔）和 v1.0_export/user（用户塔）
--- 创建服务时需指定具体的 tower checkpoint
+-- 按模型指南完成训练和导出后，DSSM 生成两个 tower checkpoint：
+-- v1.0_export/item 和 v1.0_export/user
 CREATE SERVICE dssm_item_service
     ON MODEL dssm_model
-    CHECKPOINT = 'v1.0_export/item'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
+    CHECKPOINT = 'v1.0_export/item';
 
 CREATE SERVICE dssm_user_service
     ON MODEL dssm_model
-    CHECKPOINT = 'v1.0_export/user'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
+    CHECKPOINT = 'v1.0_export/user';
 ```
 
 ### 4. LightGBM 模型
 
-LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，支持完整的训练、导出和服务部署流程。训练数据和模型文件均存储在 HDFS 上，导出时转换为 ONNX 格式用于在线推理。
+LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，支持完整的训练、导出和服务部署流程。训练数据和模型文件使用配置的存储，导出时转换为 ONNX 格式用于在线推理。
 
 **模型名称**：`gbdt.lightgbm`
 
@@ -317,18 +273,6 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 | `min_data_in_leaf` | Integer | 20 | 叶子节点最小样本数 |
 | `l2_regularization` | Double | 1.0 | L2 正则化系数 |
 
-**资源配置参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `image` | String | "sqlrec/gbdt" | Docker 镜像名称 |
-| `version` | String | `${SQLREC_VERSION}-cpu` | Docker 镜像版本，默认跟随当前 SQLRec 版本 |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
-| `pod_memory` | String | "2Gi" | Pod 内存 |
-| `pod_cpu_limit` | String | - | Pod CPU 上限 |
-| `pod_memory_limit` | String | - | Pod 内存上限 |
-| `replicas` | Integer | 1 | 服务副本数 |
-
 **使用示例**：
 
 ```sql
@@ -339,29 +283,12 @@ CREATE MODEL lgb_model (
     item_price FLOAT,
     label INT
 ) WITH (
-    model = 'gbdt.lightgbm',
-    label_columns = 'label',
-    num_iterations = 200,
-    learning_rate = 0.05,
-    num_leaves = 127
+    'model' = 'gbdt.lightgbm',
+    'label_columns' = 'label',
+    'num_iterations' = '200',
+    'learning_rate' = '0.05',
+    'num_leaves' = '127'
 );
-
-TRAIN MODEL lgb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_iterations = 500
-    );
-
-EXPORT MODEL lgb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE lgb_service
-    ON MODEL lgb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 5. XGBoost 模型
@@ -404,18 +331,6 @@ XGBoost 模型是基于 GBDT（梯度提升决策树）框架实现的模型，�
 | `min_child_weight` | Integer | 1 | 子节点最小权重和 |
 | `l2_regularization` | Double | 1.0 | L2 正则化系数（对应 XGBoost reg_lambda） |
 
-**资源配置参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `image` | String | "sqlrec/gbdt" | Docker 镜像名称 |
-| `version` | String | `${SQLREC_VERSION}-cpu` | Docker 镜像版本，默认跟随当前 SQLRec 版本 |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
-| `pod_memory` | String | "2Gi" | Pod 内存 |
-| `pod_cpu_limit` | String | - | Pod CPU 上限 |
-| `pod_memory_limit` | String | - | Pod 内存上限 |
-| `replicas` | Integer | 1 | 服务副本数 |
-
 **使用示例**：
 
 ```sql
@@ -426,34 +341,17 @@ CREATE MODEL xgb_model (
     item_price FLOAT,
     label INT
 ) WITH (
-    model = 'gbdt.xgboost',
-    label_columns = 'label',
-    num_iterations = 200,
-    learning_rate = 0.05,
-    max_depth = 8
+    'model' = 'gbdt.xgboost',
+    'label_columns' = 'label',
+    'num_iterations' = '200',
+    'learning_rate' = '0.05',
+    'max_depth' = '8'
 );
-
-TRAIN MODEL xgb_model CHECKPOINT = 'v1.0'
-    ON training_data
-    WITH (
-        num_iterations = 500
-    );
-
-EXPORT MODEL xgb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE xgb_service
-    ON MODEL xgb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 6. CatBoost 模型
 
-CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征处理，支持完整的训练、导出和服务部署流程。训练数据和模型文件均存储在 HDFS 上，导出时转换为 ONNX 格式用于在线推理。
+CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征处理，支持完整的训练、导出和服务部署流程。训练数据和模型文件使用配置的存储，导出原生 `.cbm` 格式用于在线推理。
 
 **模型名称**：`gbdt.catboost`
 
@@ -488,18 +386,6 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 | `cb_l2_leaf_reg` | Double | 3.0 | L2 叶子正则化系数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
 
-**资源配置参数**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `image` | String | "sqlrec/gbdt" | Docker 镜像名称 |
-| `version` | String | `${SQLREC_VERSION}-cpu` | Docker 镜像版本，默认跟随当前 SQLRec 版本 |
-| `pod_cpu_cores` | Integer | 1 | Pod CPU 核数 |
-| `pod_memory` | String | "2Gi" | Pod 内存 |
-| `pod_cpu_limit` | String | - | Pod CPU 上限 |
-| `pod_memory_limit` | String | - | Pod 内存上限 |
-| `replicas` | Integer | 1 | 服务副本数 |
-
 **使用示例**：
 
 ```sql
@@ -511,26 +397,12 @@ CREATE MODEL cb_model (
     item_category VARCHAR,
     label INT
 ) WITH (
-    model = 'gbdt.catboost',
-    label_columns = 'label',
-    cb_iterations = 1000,
-    cb_depth = 8,
-    learning_rate = 0.03
+    'model' = 'gbdt.catboost',
+    'label_columns' = 'label',
+    'cb_iterations' = '1000',
+    'cb_depth' = '8',
+    'learning_rate' = '0.03'
 );
-
-TRAIN MODEL cb_model CHECKPOINT = 'v1.0'
-    ON training_data;
-
-EXPORT MODEL cb_model CHECKPOINT = 'v1.0';
-
-CREATE SERVICE cb_service
-    ON MODEL cb_model
-    CHECKPOINT = 'v1.0_export'
-    WITH (
-        replicas = 3,
-        pod_cpu_cores = 4,
-        pod_memory = '16Gi'
-    );
 ```
 
 ### 7. Hugging Face Transformers 模型
@@ -541,29 +413,62 @@ CREATE SERVICE cb_service
 
 首期任务包括 `text-classification`、`text-generation`、`embedding` 和 `image-embedding`。文本生成仅接受普通 prompt；图片 embedding 仅接受 HTTP/HTTPS URL。
 
+#### Hugging Face 任务配置
+
+`task` 和 `repo_id` 必填。输入列必须在 Model 字段列表中声明为 `STRING`，并按任务选择列名配置：
+
+| task | 必填输入配置 | 输出字段 |
+| --- | --- | --- |
+| `text-classification` | `text_column` | `label`（STRING）、`score`（FLOAT） |
+| `text-generation` | `prompt_column` | `generated_text`（STRING） |
+| `embedding` | `text_column` | `embedding`（ARRAY&lt;FLOAT&gt;） |
+| `image-embedding` | `image_column` | `embedding`（ARRAY&lt;FLOAT&gt;） |
+
+`repo_id` 是 Hub 仓库名称；`revision` 可指定分支、标签或 commit，默认 `main`。固定 commit 可让下载版本更容易复现。下面定义一个文本 embedding 模型：
+
 ```sql
 CREATE MODEL text_embedding_model (
     text STRING
 ) WITH (
-    model = 'huggingface.transformers',
-    task = 'embedding',
-    repo_id = 'intfloat/multilingual-e5-small',
-    text_column = 'text',
-    pooling = 'mean',
-    normalize = 'true'
+    'model' = 'huggingface.transformers',
+    'task' = 'embedding',
+    'repo_id' = 'intfloat/multilingual-e5-small',
+    'text_column' = 'text',
+    'pooling' = 'mean',
+    'normalize' = 'true'
 );
 
 TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
-    revision = 'main'
+    'revision' = 'main'
 );
 
 CREATE SERVICE text_embedding_service
     ON MODEL text_embedding_model
     CHECKPOINT = 'v1'
     WITH (
-        device = 'auto',
-        inference_batch_size = '32'
+        'device' = 'auto',
+        'inference_batch_size' = '32'
     );
 ```
 
 私有仓库可在 TRAIN 参数中通过 `hf_token_secret` 和 `hf_token_secret_key` 引用 Kubernetes Secret。服务仅从 checkpoint 加载模型，不访问 Hub。
+
+#### Hugging Face 服务配置
+
+在 `CREATE SERVICE ... WITH (...)` 中按需设置：
+
+| 参数 | 默认值 | 用法 |
+| --- | --- | --- |
+| `device` | `auto` | 可选 `auto`、`cpu`、`cuda` |
+| `inference_batch_size` | `8` | 服务内部推理批次大小 |
+| `dtype` | `auto` | 可选 `auto`、`float32`、`float16`、`bfloat16` |
+| `pod_gpu` | `0` | 请求的 GPU 数量；GPU 推理需设为正数，并准备可用 GPU 节点 |
+| `pod_gpu_resource` | `nvidia.com/gpu` | 集群的 GPU 资源名称 |
+
+GPU 推理可设置 `'device' = 'cuda', 'pod_gpu' = '1'`；还需要集群提供匹配的 GPU 驱动、设备插件和运行环境。
+
+::: details 按任务调整
+文本 embedding 可配置 `pooling`（默认 `mean`）和 `normalize`（默认 `true`）；文本分类可用 `text_pair_column` 指定第二个文本列。文本生成可配置 `max_new_tokens`（默认 `128`）、`do_sample`（默认 `false`）、`temperature` 和 `top_p`。
+
+图片 embedding 的 `image_column` 必须包含 HTTP/HTTPS URL。需要限制下载来源或大小时，可设置 `image_url_allowed_hosts`、`image_download_timeout_ms`（默认 `5000`）、`image_max_bytes`（默认 10 MiB）和 `image_max_pixels`（默认 2000 万）。
+:::

@@ -4,13 +4,15 @@
 
 ## 概述
 
-SQLRec 提供了多种内置连接器，用于连接不同的数据存储系统。连接器基于 Calcite 表抽象实现，支持 SQL 查询和数据写入操作。
+SQLRec 提供了多种内置连接器，用于连接不同的数据存储系统。连接器支持的查询和写入能力取决于数据源类型。
 
 如果还不熟悉数据源的创建和使用方式，请先阅读[接入数据源](../../guides/data-sources.md)。
 
-### 数据行缓存范围
+### 查询缓存
 
-Redis、JDBC、MongoDB 的 `cache-ttl` / `max-cache-size` 控制 Calcite 表对象上的**主键行缓存**，并非整条 SQL 的结果缓存；任一参数设为 0 即关闭。Redis 的主键等值查询（包括 `AND` 中的主键条件）、JDBC/MongoDB 的单一主键等值查询，以及右表按主键关联的 KV Join 会使用它。JDBC/MongoDB 的非主键、范围、复合条件与全表扫描不使用；Milvus、filesystem、Kafka 及 Flink Redis Lookup 也不使用。SQL 写入会失效当前表对象的相关主键，外部或 Flink 写入不会主动失效，需等待 TTL。完整路径和 `FLUSH` 的作用见[架构：Connector 表数据缓存与查询路径](../architecture.md#connector-表数据缓存与查询路径)。
+Redis、JDBC、MongoDB 支持主键查询缓存，`cache-ttl` 控制过期时间，`max-cache-size` 控制容量；任一参数设为 0 即关闭。SQLRec 之外的写入要等 TTL 才会被当前缓存看到，需要更及时的数据时可缩短 TTL 或关闭缓存。
+
+它与请求中的 `CACHE TABLE` 不同。精确的查询范围和 `FLUSH` 行为见[架构中的缓存说明](../architecture.md#connector-表数据缓存与查询路径)。
 
 ## 内置连接器
 
@@ -19,8 +21,6 @@ Redis、JDBC、MongoDB 的 `cache-ttl` / `max-cache-size` 控制 Calcite 表对�
 Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 
 **连接器标识符**：`redis`
-
-**继承类型**：`SqlRecKvTable`
 
 **特性**：
 - 支持单机模式和集群模式
@@ -70,8 +70,8 @@ CREATE TABLE user_interest_category1 (
 );
 
 CREATE TABLE user_proto (
-  value STRING,
-  PRIMARY KEY (value) NOT ENFORCED
+  `value` STRING,
+  PRIMARY KEY (`value`) NOT ENFORCED
 ) WITH (
   'connector' = 'redis',
   'url' = 'redis://localhost:6379/0',
@@ -94,8 +94,6 @@ CREATE TABLE user_proto (
 Milvus 连接器用于连接 Milvus 向量数据库，支持向量相似度检索。
 
 **连接器标识符**：`milvus`
-
-**继承类型**：`SqlRecKvTable`（implements `VectorSearchable`）
 
 **特性**：
 - 支持向量相似度搜索（ANN）
@@ -149,8 +147,6 @@ Kafka 连接器用于连接 Apache Kafka 消息队列，支持消息写入。
 
 **连接器标识符**：`kafka`
 
-**继承类型**：`SqlRecTable`
-
 **特性**：
 - 支持消息写入到 Kafka Topic
 - 支持 JSON 和 Protobuf 格式消息
@@ -194,8 +190,6 @@ CREATE TABLE rec_log_kafka (
 JDBC 连接器用于连接关系型数据库（如 PostgreSQL、MySQL 等），支持 SQL 查询和数据写入。
 
 **连接器标识符**：`jdbc`
-
-**继承类型**：`SqlRecKvTable`
 
 **特性**：
 - 支持多种 JDBC 数据库（PostgreSQL、MySQL 等）
@@ -258,8 +252,6 @@ MongoDB 连接器用于连接 MongoDB 文档数据库，支持文档查询和数
 
 **连接器标识符**：`mongodb`
 
-**继承类型**：`SqlRecKvTable`
-
 **特性**：
 - 支持 MongoDB 连接 URI
 - 支持主键查询和本地缓存加速
@@ -285,7 +277,7 @@ CREATE TABLE user_behavior (
   user_id BIGINT,
   item_id BIGINT,
   action STRING,
-  timestamp BIGINT,
+  `timestamp` BIGINT,
   PRIMARY KEY (event_id) NOT ENFORCED
 ) WITH (
   'connector' = 'mongodb',
@@ -307,8 +299,6 @@ CREATE TABLE user_behavior (
 Filesystem 连接器用于读取本地文件系统中的数据文件，支持 CSV 和 JSON 格式。
 
 **连接器标识符**：`filesystem`
-
-**继承类型**：`SqlRecKvTable`
 
 **特性**：
 - 支持 CSV 和 JSON 两种文件格式

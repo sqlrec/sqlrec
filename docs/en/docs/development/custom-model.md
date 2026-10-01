@@ -143,8 +143,8 @@ CREATE MODEL my_model (
   feature1 VARCHAR,
   feature2 DOUBLE
 ) WITH (
-  model = 'my_model_type',
-  image = 'example/my-model'
+  'model' = 'my_model_type',
+  'image' = 'example/my-model'
 );
 ```
 

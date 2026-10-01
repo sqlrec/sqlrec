@@ -4,13 +4,15 @@ This document introduces the built-in data connectors in SQLRec and their usage.
 
 ## Overview
 
-SQLRec provides multiple built-in connectors for connecting to different data storage systems. Connectors are implemented based on Calcite table abstractions, supporting SQL queries and data write operations.
+SQLRec provides multiple built-in connectors for connecting to different data storage systems. Query and write capabilities depend on the data source.
 
 If you are new to creating and using data-source tables, start with [Connecting Data Sources](../../guides/data-sources.md).
 
-### Row Cache Scope
+### Query Caching
 
-For Redis, JDBC, and MongoDB, `cache-ttl` / `max-cache-size` control a **primary-key row cache** on each Calcite table object, rather than a cache of complete SQL results; setting either to 0 disables it. Redis primary-key equality (including a key predicate inside `AND`), standalone JDBC/MongoDB primary-key equality, and KV Joins on the right table's primary key use this cache. JDBC/MongoDB non-key, range, compound, and full-scan queries do not. Neither do Milvus, filesystem, Kafka, or Flink Redis Lookup. SQL writes invalidate relevant keys on the current table object; external and Flink writes do not proactively invalidate them, so cached values can remain until TTL expiry. See [Architecture: Connector Row Cache and Query Paths](../architecture.md#connector-row-cache-and-query-paths) for the full query matrix and `FLUSH` behavior.
+Redis, JDBC, and MongoDB support primary-key query caching. `cache-ttl` controls expiration and `max-cache-size` controls capacity; setting either to 0 disables caching. Writes outside SQLRec become visible to an existing cache after TTL expiry. Shorten the TTL or disable caching when freshness is more important.
+
+This differs from request-local `CACHE TABLE` results. See [the architecture cache reference](../architecture.md#connector-row-cache-and-query-paths) for exact query coverage and `FLUSH` behavior.
 
 ## Built-in Connectors
 
@@ -19,8 +21,6 @@ For Redis, JDBC, and MongoDB, `cache-ttl` / `max-cache-size` control a **primary
 The Redis connector is used to connect to Redis databases, supporting key-value storage and queries.
 
 **Connector Identifier**: `redis`
-
-**Inheritance Type**: `SqlRecKvTable`
 
 **Features**:
 - Supports standalone and cluster modes
@@ -70,8 +70,8 @@ CREATE TABLE user_interest_category1 (
 );
 
 CREATE TABLE user_proto (
-  value STRING,
-  PRIMARY KEY (value) NOT ENFORCED
+  `value` STRING,
+  PRIMARY KEY (`value`) NOT ENFORCED
 ) WITH (
   'connector' = 'redis',
   'url' = 'redis://localhost:6379/0',
@@ -94,8 +94,6 @@ CREATE TABLE user_proto (
 The Milvus connector is used to connect to Milvus vector databases, supporting vector similarity retrieval.
 
 **Connector Identifier**: `milvus`
-
-**Inheritance Type**: `SqlRecKvTable` (implements `VectorSearchable`)
 
 **Features**:
 - Supports vector similarity search (ANN)
@@ -149,8 +147,6 @@ The Kafka connector is used to connect to Apache Kafka message queues, supportin
 
 **Connector Identifier**: `kafka`
 
-**Inheritance Type**: `SqlRecTable`
-
 **Features**:
 - Supports message writing to Kafka Topic
 - Supports JSON and Protobuf messages
@@ -194,8 +190,6 @@ CREATE TABLE rec_log_kafka (
 The JDBC connector is used to connect to relational databases (e.g., PostgreSQL, MySQL), supporting SQL queries and data writes.
 
 **Connector Identifier**: `jdbc`
-
-**Inheritance Type**: `SqlRecKvTable`
 
 **Features**:
 - Supports various JDBC databases (PostgreSQL, MySQL, etc.)
@@ -258,8 +252,6 @@ The MongoDB connector is used to connect to MongoDB document databases, supporti
 
 **Connector Identifier**: `mongodb`
 
-**Inheritance Type**: `SqlRecKvTable`
-
 **Features**:
 - Supports MongoDB connection URI
 - Supports primary key queries and local cache acceleration
@@ -285,7 +277,7 @@ CREATE TABLE user_behavior (
   user_id BIGINT,
   item_id BIGINT,
   action STRING,
-  timestamp BIGINT,
+  `timestamp` BIGINT,
   PRIMARY KEY (event_id) NOT ENFORCED
 ) WITH (
   'connector' = 'mongodb',
@@ -307,8 +299,6 @@ CREATE TABLE user_behavior (
 The Filesystem connector is used to read data files from the local file system, supporting CSV and JSON formats.
 
 **Connector Identifier**: `filesystem`
-
-**Inheritance Type**: `SqlRecKvTable`
 
 **Features**:
 - Supports CSV and JSON file formats

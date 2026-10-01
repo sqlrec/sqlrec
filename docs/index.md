@@ -12,11 +12,11 @@ hero:
 
 features:
   - title: 开发简单
-    details: 推荐所有流程均支持SQL开发，包括召回、排序、业务规则、模型训练等
+    details: 用 SQL 编写召回、排序和业务规则，并将流程发布为 API
   - title: 云原生
-    details: 支持基于minikube一键部署整个大数据环境
+    details: 提供 Docker Demo 和 Minikube 开发环境部署脚本
   - title: 基于已有大数据生态
     details: 上手简单，与当前大数据开发相通
   - title: 扩展性强
-    details: 可自定义UDF、Table类型、Model类型等
+    details: 按需扩展函数、数据源和模型后端
 ---

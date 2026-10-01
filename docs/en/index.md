@@ -11,11 +11,11 @@ hero:
 
 features:
   - title: Simple Development
-    details: The entire recommendation pipeline supports SQL development, including recall, ranking, business rules, model training, etc.
+    details: Write recall, ranking, and business rules in SQL, then publish the flow as an API
   - title: Cloud Native
-    details: Supports one-click deployment of the entire big data environment based on minikube
+    details: Includes a Docker demo and scripts for a Minikube development environment
   - title: Based on Existing Big Data Ecosystem
     details: Easy to get started, compatible with current big data development practices
   - title: Highly Extensible
-    details: Customizable UDFs, Table types, Model types, etc.
+    details: Extend functions, data sources, and model backends as needed
 ---

@@ -1,46 +1,40 @@
 # SQLRec
 
-## Introduction
+SQLRec is an engine for recommendation flows written in SQL. Connect data sources, organize recall and ranking, call model services, and publish results as HTTP APIs.
 
-SQLRec is an engine for writing recommendation flows in SQL. Data analysts, data engineers, and backend developers can use SQL to connect data sources, organize recall and ranking, and publish results as APIs.
+## Why SQLRec
 
-### Where to Start
+- **Develop in SQL:** Write recall, ranking, and other recommendation logic, then publish it as an API.
+- **Execute online flows:** Run SQL with Calcite, with caching, parallel calls, timeouts, and fallbacks.
+- **Reuse your big data ecosystem:** Use existing HMS tables and data on HDFS directly.
+- **Manage models through SQL:** Train, deploy, and call models, or connect existing model services.
+- **Deploy on Kubernetes:** Manage training and inference with Kubernetes and provided deployment scripts.
+- **Extend as needed:** Add custom functions, data sources, and model backends.
+- **Troubleshoot easily:** Inspect flows and diagnose issues with the UI, metrics, and traces.
 
-- To see recommendations first, follow the [Docker Quick Start](./docker.md) to run the demo and call its built-in function and API.
-- To change recommendation logic, read [Writing a Recommendation Flow](../guides/recommendation-flow.md), then review the [demo SQL files](./docker.md#modify-the-demo-sql) and how SQLRec loads them.
-- To train models or deploy the full service, check the requirements in [Service Deployment](../operations/deployment.md), then read [Model Training and Online Inference](../guides/model-lifecycle.md).
+## Where to Start
 
-The diagram below shows the main components. You do not need to understand all of them before trying the demo.
+| Your task | Start here |
+| --- | --- |
+| See recommendation results | [Docker Quick Start](./docker.md) |
+| Change recommendation logic | [Write a Recommendation Flow](../guides/recommendation-flow.md) |
+| Connect your own data | [Connect Data Sources](../guides/data-sources.md) |
+| Connect an existing model service or train a model | [Model Training and Online Inference](../guides/model-lifecycle.md) |
+| Deploy a complete development environment | [Service Deployment](../operations/deployment.md) |
 
-![system_architecture](/sqlrec_arch.svg)
+The Docker demo includes sample data and a flow solely for trying the features, with no external services required. To integrate SQLRec into your application, define your own tables connected to business data, SQL recommendation flows, and APIs. Manage business definitions as local SQL files; prepare additional services when you need mutable shared definitions, model training, or Flink. See [Architecture](../reference/architecture.md) for components and execution details.
 
-SQLRec has the following features:
-- Cloud native, with built-in minikube-based deployment scripts for one-click deployment of SQLRec system and related dependency services
-- Extended SQL syntax, making it possible to describe recommendation system business logic using SQL
-- Implemented an efficient SQL execution engine based on Calcite, meeting the real-time requirements of recommendation systems
-- Based on existing big data ecosystem, easy to integrate
-- Easy to extend, supporting custom UDFs, Table types, and Model types
+## Current Status
 
-## Roadmap
+The current release is beta. Production use is not recommended, and interface compatibility is not guaranteed. There is no scheduled date for 1.0.
 
-### When will version 1.0 be released?
+Available features include SQL recommendation flows, HTTP APIs, a UI, Redis/JDBC/MongoDB/Milvus/Kafka data sources, model training and inference, timeout recovery, metrics, and tracing.
 
-Versions before 1.0 are beta releases. They are not recommended for production use and do not guarantee interface compatibility. There is no scheduled date for 1.0. The following work is planned before release; completed items are crossed out:
+## Future Plans
 
-- Comprehensive unit test, integration test, and effectiveness test coverage
-- Code quality optimization, many details still need refinement
-- ~~Support for fallback and timeout configuration~~ (see [Timeouts and Recovery](../guides/exception-recovery.md))
-- ~~Version management with rollback to previous versions~~ (using filesystem schemas and Docker image versions)
-- ~~Metric monitoring system~~ (the `/metrics` endpoint and Prometheus/Grafana deployment configuration are available)
-- ~~C++ model serving~~ (available for LightGBM, XGBoost, and CatBoost models)
-
-### Future Feature Plans
-
-- Further enhance frontend UI with more management and monitoring features
-- Further optimize SQL syntax compatibility and runtime performance
-- More ready-to-use UDFs, models, etc.
-- Support for more external data sources, such as Elasticsearch, etc.
-- Tensorboard visualization of model training process
-- GPU training and inference support
-- Support for authentication and authorization
-- Best practice tutorials, including search, recommendation, etc.
+- Improve unit, integration, and effectiveness testing, SQL compatibility, and runtime performance.
+- Add more complete model and service version management and rollback.
+- Improve UI management, monitoring, and training visualization.
+- Add UDFs, models, and data-source adapters.
+- Extend GPU support for training and other model backends; Hugging Face GPU inference already has [configuration options](../reference/models/builtin-models.md#hugging-face-service-options).
+- Add authentication, authorization, and search and recommendation tutorials.

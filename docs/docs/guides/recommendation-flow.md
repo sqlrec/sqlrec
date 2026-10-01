@@ -6,6 +6,8 @@ SQLRec 把一段由多条 SQL 组成的业务流程定义为 **SQL 函数**。�
 
 ## 一个最小函数
 
+先按[Docker 指南](../getting-started/docker.md#管理本地-sql-定义)准备 `hot_item` 表。在本地文件模式中，将下面的定义保存为 `function/recommend.sql` 并重启容器；远程元数据模式可通过 Beeline 或 JDBC 执行定义。
+
 ```sql
 CREATE OR REPLACE SQL FUNCTION recommend;
 
@@ -13,13 +15,13 @@ DEFINE INPUT TABLE user_info (
   user_id BIGINT
 );
 
-CACHE TABLE result AS
+CACHE TABLE result_table AS
 SELECT item_id, score
 FROM hot_item
 ORDER BY score DESC
 LIMIT 10;
 
-RETURN result;
+RETURN result_table;
 ```
 
 这段 SQL 包含四个要点：
@@ -30,6 +32,19 @@ RETURN result;
 4. 顶层 `RETURN` 返回结果并结束函数定义。
 
 多语句函数中的每条顶层语句都应以分号结尾。
+
+## 准备输入并调用
+
+在同一个 CLI 或 Beeline 会话中创建输入表，再调用函数：
+
+```sql
+CACHE TABLE quick_start_user AS
+SELECT CAST(1000001 AS BIGINT) AS user_id;
+
+CALL recommend(quick_start_user);
+```
+
+`quick_start_user` 与函数声明的输入结构一致。函数验证完成后，按[发布和调用 API](./api.md)将它提供给业务方。
 
 ## 输入表
 
@@ -102,17 +117,6 @@ CALL window_diversify(ranked_item, 'category', '3', '1', '10');
 
 表参数直接写缓存表名，字符串参数使用单引号。完整的内置函数清单见 [表函数](../reference/udf/table-functions.md)。
 
-### 动态选择函数
-
-执行变量可用于在运行时选择函数：
-
-```sql
-CALL `get_or_default`('rank_fun', 'default_rank')(user_info, recall_result)
-LIKE FUNCTION 'default_rank';
-```
-
-动态调用时，编译器无法仅根据函数名确定返回字段，因此应通过 `LIKE FUNCTION` 或 `LIKE table_name` 声明结果结构。
-
 ## 返回结果
 
 SQL 函数必须以一条顶层 `RETURN` 结束定义。可以返回缓存表、查询结果或同步函数调用：
@@ -129,50 +133,45 @@ RETURN;
 
 `RETURN;` 表示正常结束但不返回数据。`RETURN CALL ... ASYNC` 不受支持，因为异步调用无法同步提供函数结果。
 
-## 条件执行
+## 完整示例
 
-### 普通 IF
-
-```sql
-IF (SELECT COUNT(*) > 0 FROM recall_result) THEN (
-  CACHE TABLE result AS SELECT * FROM recall_result
-) ELSE (
-  CACHE TABLE result AS SELECT * FROM fallback_result
-);
-```
-
-条件查询必须返回一行一列的布尔值，`NULL` 按 `false` 处理。两个分支同时写缓存表时，必须写入同名且结构兼容的表。
-
-### 超时或异常时回退
+下面的精简示例复用 Demo 表，串联召回、曝光去重和返回结果。它不写入曝光、不添加请求信息，函数名使用 `example_rec`，以便与内置 `demo_rec` 分开：
 
 ```sql
-IF TIMEIN (SELECT 100) THEN (
-  CACHE TABLE result AS CALL online_rank(recall_result)
-) ELSE (
-  CACHE TABLE result AS SELECT * FROM recall_result
-);
+CREATE OR REPLACE SQL FUNCTION example_rec;
+
+DEFINE INPUT TABLE user_info(user_id BIGINT);
+
+CACHE TABLE exposed_item AS
+SELECT item_id
+FROM user_info
+JOIN demo_exposure_item
+  ON demo_exposure_item.user_id = user_info.user_id;
+
+CACHE TABLE interested_category AS
+SELECT category
+FROM user_info
+JOIN demo_user_interest_category
+  ON demo_user_interest_category.user_id = user_info.user_id
+LIMIT 10;
+
+CACHE TABLE recall_result AS
+SELECT item_id,
+       'category_recall:' || interested_category.category AS rec_reason
+FROM interested_category
+JOIN demo_category_hot_item
+  ON demo_category_hot_item.category = interested_category.category
+LIMIT 300;
+
+CACHE TABLE dedup_result AS
+CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
+
+RETURN SELECT item_id, rec_reason FROM dedup_result LIMIT 10;
 ```
 
-`TIMEIN` 的条件返回毫秒数：
+可直接运行的 Demo 定义位于 `sqlrec-demo/src/main/sql/quick_start/`。
 
-- 大于 0：为 THEN 分支设置超时；THEN 超时或抛出异常时执行 ELSE。
-- 小于等于 0：不设置超时，但 THEN 抛出普通异常时仍会执行 ELSE。
-
-`IF TIMEIN` 必须有 ELSE。两个分支必须都是 `CACHE TABLE` 或都是 `RETURN`。更多降级方式见[超时、降级与异常恢复](./exception-recovery.md)。
-
-### 在 IF 中提前返回
-
-```sql
-IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
-  RETURN SELECT CAST(NULL AS BIGINT) AS item_id WHERE FALSE
-);
-
-RETURN SELECT item_id FROM candidates;
-```
-
-IF 分支中的 `RETURN` 会提前结束当前调用，但不会在编译时结束函数定义，因此仍需要最后的顶层 `RETURN`。
-
-如果 THEN 和 ELSE 都返回，两个结果的列数、列名和类型必须兼容，并且 IF 后必须紧跟一条空 `RETURN;` 结束定义。
+后续章节介绍按需使用的变量、动态调用、条件、并发和异步能力；完整规则见 [SQL 参考](../reference/sql.md)。
 
 ## 执行变量
 
@@ -202,12 +201,68 @@ API 请求体中的 `params` 也会进入执行上下文：
 
 `get` 是 SQL 关键字，作为标量函数调用时应写成 `` `get`('name') ``。
 
+## 动态选择函数
+
+执行变量可用于在运行时选择函数：
+
+```sql
+CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(user_info, recall_result)
+LIKE FUNCTION 'default_rank';
+```
+
+动态调用时，编译器无法仅根据函数名确定返回字段，因此应通过 `LIKE FUNCTION` 或 `LIKE table_name` 声明结果结构。
+
+## 条件执行
+
+### 普通 IF
+
+```sql
+IF (SELECT COUNT(*) > 0 FROM recall_result) THEN (
+  CACHE TABLE result_table AS SELECT * FROM recall_result
+) ELSE (
+  CACHE TABLE result_table AS SELECT * FROM fallback_result
+);
+```
+
+条件查询必须返回一行一列的布尔值，`NULL` 按 `false` 处理。两个分支同时写缓存表时，必须写入同名且结构兼容的表。
+
+### 超时或异常时回退
+
+```sql
+IF TIMEIN (SELECT 100) THEN (
+  CACHE TABLE result_table AS CALL online_rank(recall_result)
+) ELSE (
+  CACHE TABLE result_table AS SELECT * FROM recall_result
+);
+```
+
+`TIMEIN` 的条件返回毫秒数：
+
+- 大于 0：为 THEN 分支设置超时；THEN 超时或抛出异常时执行 ELSE。
+- 小于等于 0：不设置超时，但 THEN 抛出普通异常时仍会执行 ELSE。
+
+`IF TIMEIN` 必须有 ELSE。两个分支必须都是 `CACHE TABLE` 或都是 `RETURN`。更多降级方式见[超时、降级与异常恢复](./exception-recovery.md)。
+
+### 在 IF 中提前返回
+
+```sql
+IF (SELECT COUNT(*) = 0 FROM candidates) THEN (
+  RETURN SELECT CAST(NULL AS BIGINT) AS item_id LIMIT 0
+);
+
+RETURN SELECT item_id FROM candidates;
+```
+
+IF 分支中的 `RETURN` 会提前结束当前调用，但不会在编译时结束函数定义，因此仍需要最后的顶层 `RETURN`。
+
+如果 THEN 和 ELSE 都返回，两个结果的列数、列名和类型必须兼容，并且 IF 后必须紧跟一条空 `RETURN;` 结束定义。
+
 ## 分区并发调用
 
 对大表执行独立的批量处理时，可以将一个输入缓存表分区后并发调用：
 
 ```sql
-CACHE TABLE result AS
+CACHE TABLE result_table AS
 CALL process_batch(input_table)
 LIKE input_table
 PARTITION BY input_table SIZE 100;
@@ -249,46 +304,6 @@ LIMIT 300;
 ```
 
 Connector 支持的查询和写入能力见[接入数据源](./data-sources.md)。
-
-函数验证完成后，可继续阅读[发布和调用 API](./api.md)，将 SQL 函数提供给业务方调用。
-
-## 完整示例
-
-下面的精简示例串联了召回、曝光去重和返回结果：
-
-```sql
-CREATE OR REPLACE SQL FUNCTION demo_rec;
-
-DEFINE INPUT TABLE user_info(user_id BIGINT);
-
-CACHE TABLE exposed_item AS
-SELECT item_id
-FROM user_info
-JOIN demo_exposure_item
-  ON demo_exposure_item.user_id = user_info.user_id;
-
-CACHE TABLE interested_category AS
-SELECT category
-FROM user_info
-JOIN demo_user_interest_category
-  ON demo_user_interest_category.user_id = user_info.user_id
-LIMIT 10;
-
-CACHE TABLE recall_result AS
-SELECT item_id,
-       'category_recall:' || interested_category.category AS rec_reason
-FROM interested_category
-JOIN demo_category_hot_item
-  ON demo_category_hot_item.category = interested_category.category
-LIMIT 300;
-
-CACHE TABLE dedup_result AS
-CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
-
-RETURN SELECT item_id, rec_reason FROM dedup_result LIMIT 10;
-```
-
-可直接运行的 Demo 定义位于 `sqlrec-demo/src/main/sql/quick_start/`。
 
 ## 常见问题
 

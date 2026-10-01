@@ -51,10 +51,10 @@ The Calcite reference may describe a newer version than the one used by SQLRec a
 
 | Purpose | Functions |
 |---------|-----------|
-| Array predicates | [`array_contains`](#array_contains), [`array_contains_all`](#array_contains_all), [`array_contains_any`](#array_contains_any) |
-| Vector operations | [`random_vec`](#random_vec), [`l2_norm`](#l2_norm), [`ip`](#ip) |
+| Array predicates | [`array_contains`](#array-contains), [`array_contains_all`](#array-contains-all), [`array_contains_any`](#array-contains-any) |
+| Vector operations | [`random_vec`](#random-vec), [`l2_norm`](#l2-norm), [`ip`](#ip) |
 | Request identifiers | [`uuid`](#uuid) |
-| Execution variables | [`get`](#get), [`get_or_default`](#get_or_default) |
+| Execution variables | [`get`](#get), [`get_or_default`](#get-or-default) |
 
 ### array_contains
 
@@ -318,18 +318,12 @@ Variable retrieval function with default value that gets the value of a variable
 **Usage Example**:
 
 ```sql
--- Set variable
-SET 'func_name' = 'add_col';
+SET 'limit_count' = '10';
 
--- Get variable value, use default if not exists
-SELECT `get_or_default`('user_id', 'default_user') AS user_id;
-
--- Dynamic function call: use variable value when exists
-CALL `get_or_default`('func_name', 'shuffle')(my_table);
-
--- Dynamic function call: use default value when variable doesn't exist
-CALL `get_or_default`('unknown_func', 'shuffle')(my_table);
+SELECT CAST(`get_or_default`('limit_count', '50') AS INT) AS limit_count;
 ```
+
+To select a function dynamically, use `GET_OR_DEFAULT(...)` as shown in [Writing a Recommendation Flow](../../guides/recommendation-flow.md#select-a-function-dynamically).
 
 **Typical Use Cases**:
 - Dynamic function calls with fallback functions

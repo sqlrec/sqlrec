@@ -19,25 +19,33 @@
   </a>
 </p>
 
-## Project Introduction
+## About SQLRec
 
-A recommendation engine that supports SQL-based development. The goal is to enable data scientists, including data analysts, data engineers, and backend developers, to quickly build production-ready recommendation systems. The system architecture is shown in the figure below. SQLRec encapsulates underlying component access, model training, inference, and other processes using SQL, allowing upper-level recommendation business logic to be described using only SQL.
+SQLRec is an engine for building recommendation systems in SQL. Developers familiar with SQL can write recall, deduplication, ranking, and diversification logic, then publish the flow as an HTTP API. The engine handles data-source access, model training, and inference so users can focus on recommendation logic.
 
-![system_architecture](docs/public/sqlrec_arch.svg)
+The current release is beta. Production use is not recommended, and interface compatibility is not guaranteed.
 
-SQLRec has the following features:
+## Why SQLRec
 
-- Cloud-native, comes with minikube-based deployment scripts for one-click deployment of the SQLRec system and related dependency services
-- Extended SQL syntax, making it possible to describe recommendation system business logic using SQL
-- Implemented an efficient SQL execution engine based on Calcite, meeting the real-time requirements of recommendation systems
-- Built on existing big data ecosystem, easy to integrate
-- Easy to extend, supports custom UDFs, Table types, and Model types
+- **Develop in SQL:** Write recall, ranking, and other recommendation logic, then publish it as an API.
+- **Execute online flows:** Run SQL with Calcite, with caching, parallel calls, timeouts, and fallbacks.
+- **Reuse your big data ecosystem:** Use existing HMS tables and data on HDFS directly.
+- **Manage models through SQL:** Train, deploy, and call models, or connect existing model services.
+- **Deploy on Kubernetes:** Manage training and inference with Kubernetes and provided deployment scripts.
+- **Extend as needed:** Add custom functions, data sources, and model backends.
+- **Troubleshoot easily:** Inspect flows and diagnose issues with the UI, metrics, and traces.
 
-For detailed information, refer to the [SQLRec User Manual](https://sqlrec.github.io/sqlrec/en/).
+## System Architecture
 
-## Quick Experience
+![SQLRec system architecture](docs/public/sqlrec_arch.svg)
 
-Run the dependency-free Docker demo:
+See [Architecture](https://sqlrec.github.io/sqlrec/en/docs/reference/architecture) for component responsibilities and execution details.
+
+## Try It
+
+The Docker demo includes sample data, a recommendation flow, and an API solely for trying the features. It requires no external services. To integrate SQLRec into your application, define your own tables connected to business data, SQL recommendation flows, and APIs, then configure model services and deployment as needed.
+
+Start the demo with Docker:
 
 ```bash
 docker run --rm -d --name sqlrec-demo \
@@ -46,23 +54,7 @@ docker run --rm -d --name sqlrec-demo \
   sqlrec/sqlrec-demo:latest
 ```
 
-The demo includes CSV data for five users with three interests each, five categories (`pc`, `phone`, `book`, `sports`, `home`), and 25 hot items. Each process loads it into memory on first use. Run `cli.sh` inside the container directly from the host to execute SQL at the `sqlrec>` prompt; end each statement with a semicolon:
-
-```bash
-docker exec -it sqlrec-demo /app/cli.sh
-```
-
-```sql
-show tables;
-select * from demo_user_interest_category;
-
-cache table quick_start_user as
-select cast(1000001 as bigint) as user_id;
-
-call demo_rec(quick_start_user);
-```
-
-`quick_start_user` supplies the input row to the recommendation function, and `CALL` returns its recommendations. Press `Ctrl+D` to leave the SQL CLI. Its in-memory data is separate from the HTTP service's data. From the host, you can also call the built-in recommendation API with user IDs `1000001` through `1000005`:
+Call the built-in recommendation API:
 
 ```bash
 curl -X POST http://localhost:30001/api/v1/demo_rec \
@@ -70,120 +62,37 @@ curl -X POST http://localhost:30001/api/v1/demo_rec \
   -d '{"data":{"user_info":[{"user_id":1000001}]}}'
 ```
 
-The API records exposures in memory and excludes previously returned items. After the sample items are exhausted, restart the container to reset the demo.
+The first call usually returns two items with fields such as `item_id` and `rec_reason`. Use user IDs `1000001` through `1000005`. Repeated calls exclude previously recommended items; restart the container when the candidates are exhausted.
 
-### Define Your Own Table and Function
+Open the [SQLRec UI](http://localhost:30001/ui/static/index.html) to inspect tables, functions, APIs, and execution DAGs.
 
-In the Docker demo, tables, SQL functions, and APIs are loaded from `.sql` files under `SQL_SCHEMA_DIR`. For example, prepare this directory on the host:
+### Optional: Call It with SQL
 
-```text
-sql/
-├── table/hot_item.sql
-├── function/recommend.sql
-└── api/recommend.sql
+```bash
+docker exec -it sqlrec-demo /app/cli.sh
 ```
-
-Define a table in `sql/table/hot_item.sql`:
 
 ```sql
-CREATE TABLE hot_item (
-  item_id BIGINT,
-  score FLOAT,
-  PRIMARY KEY (item_id) NOT ENFORCED
-) WITH (
-  'connector' = 'filesystem'
-);
+cache table quick_start_user as
+select cast(1000001 as bigint) as user_id;
+
+call demo_rec(quick_start_user);
 ```
 
-Define a SQL function in `sql/function/recommend.sql`:
+End each statement with a semicolon and press `Ctrl+D` to exit. The CLI and HTTP service keep separate in-memory data; CLI changes do not affect the API.
 
-```sql
-CREATE OR REPLACE SQL FUNCTION recommend;
-
-DEFINE INPUT TABLE user_info (
-  user_id BIGINT
-);
-
-CACHE TABLE result AS
-SELECT item_id, score
-FROM hot_item
-ORDER BY score DESC
-LIMIT 10;
-
-RETURN result;
-```
-
-Publish the function in `sql/api/recommend.sql`:
-
-```sql
-CREATE OR REPLACE API recommend WITH recommend;
-```
-
-Stop the built-in demo, then mount the complete definition directory and restart SQLRec:
+Stop the container when finished; `--rm` removes it automatically:
 
 ```bash
 docker stop sqlrec-demo
-
-docker run --rm -d --name sqlrec-custom \
-  -p 30000:30000 \
-  -p 30001:30001 \
-  -v "$(pwd)/sql:/workspace/sql:ro" \
-  -e SQL_SCHEMA_DIR=/workspace/sql \
-  sqlrec/sqlrec-demo:latest
 ```
 
-Local metadata mode does not accept DDL through the CLI or `/sql/v1`. Edit the SQL files and restart the container whenever a definition changes. Filesystem table data is held in memory and is intended only for demos and tests.
+## Build Your Own Recommendation Flow
 
-Insert data and call the newly published API:
+- [Connect Data Sources](https://sqlrec.github.io/sqlrec/en/docs/guides/data-sources): define tables connected to your business stores.
+- [Write a Recommendation Flow](https://sqlrec.github.io/sqlrec/en/docs/guides/recommendation-flow): define inputs and SQL functions to compose your business logic.
+- [Publish and Call an API](https://sqlrec.github.io/sqlrec/en/docs/guides/api): publish your recommendation function for application calls.
+- [Model Training and Online Inference](https://sqlrec.github.io/sqlrec/en/docs/guides/model-lifecycle): connect an existing model service or train a model as needed.
+- [Service Deployment](https://sqlrec.github.io/sqlrec/en/docs/operations/deployment): prepare the runtime environment. See the [Docker Quick Start](https://sqlrec.github.io/sqlrec/en/docs/getting-started/docker#managing-local-sql-definitions) for an example of loading custom SQL locally.
 
-```bash
-curl -X POST http://localhost:30001/sql/v1 \
-  -H "Content-Type: application/json" \
-  -d '{"sqls":["insert into hot_item values (1001, 0.9), (1002, 0.8)"]}'
-
-curl -X POST http://localhost:30001/api/v1/recommend \
-  -H "Content-Type: application/json" \
-  -d '{"data":{"user_info":[{"user_id":1000001}]}}'
-```
-
-Open [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html) to inspect the loaded tables, functions, APIs, and execution DAG. Stop and remove the demo when finished:
-
-```bash
-docker stop sqlrec-custom
-```
-
-For more CLI, data-loading, and API examples, see the [Docker Quick Start](https://sqlrec.github.io/sqlrec/en/docs/getting-started/docker).
-
-### Complete Service Mode
-
-Compared with the Docker demo's local metadata mode, the complete service mode primarily adds persistent, mutable metadata. Through Beeline, JDBC, or another Hive Thrift client, you can execute and retain management statements such as:
-
-- `CREATE TABLE`, `CREATE SQL FUNCTION`, and `CREATE API`;
-- `CREATE MODEL`, `TRAIN MODEL`, and `EXPORT MODEL`;
-- `CREATE SERVICE` and other model-service lifecycle operations.
-
-The bundled Minikube scripts are intended for development and testing. System requirements and component versions evolve with the scripts; use the current `deploy/` configuration as authoritative. See [Service Deployment](https://sqlrec.github.io/sqlrec/en/docs/operations/deployment) for the complete deployment process and production considerations.
-
-## Roadmap
-
-### When will version 1.0 be released
-
-Versions before 1.0 are beta versions, not recommended for production use, and interface compatibility is not guaranteed. There is no planned release date yet. It will be released after the following features are completed:
-
-- Comprehensive unit test, integration test, and effectiveness test coverage
-- Code quality optimization, many details still need to be polished
-- Support for degradation and timeout configuration
-- Complete version management method, easy to roll back to previous versions
-- Metric monitoring system improvement
-- C++ model serving
-
-### Future Feature Planning
-
-- Frontend UI for viewing current execution DAG, SQL code, statistics, etc.
-- Further optimize SQL syntax compatibility and runtime performance
-- More ready-to-use UDFs, models, etc.
-- Support for more external data sources, such as JDBC, MongoDB, etc.
-- Tensorboard visualization of model training process
-- GPU training and inference support
-- Support for authentication and authorization
-- Best practice tutorials, including search, recommendation, etc.
+See the [SQLRec User Manual](https://sqlrec.github.io/sqlrec/en/) for more.
