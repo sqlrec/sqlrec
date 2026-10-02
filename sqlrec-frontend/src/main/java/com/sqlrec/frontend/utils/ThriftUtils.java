@@ -13,6 +13,15 @@ import java.util.*;
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
 
+    public static TStatus errorStatus(Exception error) {
+        TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
+        String message = error.getMessage();
+        status.setErrorMessage(message);
+        status.setSqlState(error instanceof UnsupportedOperationException ? "0A000"
+                : message != null && message.startsWith("FLINK_GATEWAY_UNAVAILABLE") ? "08001" : "HY000");
+        return status;
+    }
+
     public static boolean isSuccess(TStatus status) {
         return status != null && (status.getStatusCode() == TStatusCode.SUCCESS_STATUS
                 || status.getStatusCode() == TStatusCode.SUCCESS_WITH_INFO_STATUS);

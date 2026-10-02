@@ -15,19 +15,19 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /** Exercises remote state and handle ownership without opening a network connection. */
-class ClientProxyStateTest {
+class GatewayClientStateTest {
     @Test
     void lostConnectionDuringStateCleanupRequiresReplayBeforeTheNextSql() throws Exception {
         try (Remote remote = new Remote()) {
             when(remote.client.CloseOperation(any())).thenThrow(new TTransportException("cleanup connection lost"));
-            TException failure = assertThrows(TException.class, () -> remote.proxy.ExecuteStatement(
+            TException failure = assertThrows(TException.class, () -> remote.proxy.executeStatement(
                     new TExecuteStatementReq(remote.session, "SELECT 1")));
             assertTrue(failure.getMessage().startsWith("FLINK_SESSION_STATE_SYNC_FAILED"));
             ArgumentCaptor<TExecuteStatementReq> first = ArgumentCaptor.forClass(TExecuteStatementReq.class);
             verify(remote.client).ExecuteStatement(first.capture());
             assertEquals("USE `default`", first.getValue().getStatement());
 
-            remote.proxy.ExecuteStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
             assertEquals(2, remote.sockets.constructed().size());
             TCLIService.Client reconnected = remote.clients.constructed().get(1);
             ArgumentCaptor<TExecuteStatementReq> replay = ArgumentCaptor.forClass(TExecuteStatementReq.class);
@@ -44,8 +44,8 @@ class ClientProxyStateTest {
             settings.put("custom.key", "it's quoted");
             settings.put("table.sql-dialect", "default");
             remote.proxy.setSessionState("db`name", settings);
-            remote.proxy.ExecuteStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
-            remote.proxy.ExecuteStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
             ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
             verify(remote.client, times(5)).ExecuteStatement(requests.capture());
             assertEquals(java.util.List.of("SET 'table.sql-dialect' = 'default'",
@@ -87,16 +87,16 @@ class ClientProxyStateTest {
     @Test
     void failedStateSynchronizationKeepsExistingOperationsUsable() throws Exception {
         try (Remote remote = new Remote()) {
-            TOperationHandle previous = remote.proxy.ExecuteStatement(
+            TOperationHandle previous = remote.proxy.executeStatement(
                     new TExecuteStatementReq(remote.session, "SELECT 1")).getOperationHandle();
             remote.proxy.setSessionState("default", java.util.Map.of("invalid.setting", "bad"));
             when(remote.client.ExecuteStatement(any())).thenReturn(new TExecuteStatementResp(error("invalid value")));
 
-            TException failure = assertThrows(TException.class, () -> remote.proxy.ExecuteStatement(
+            TException failure = assertThrows(TException.class, () -> remote.proxy.executeStatement(
                     new TExecuteStatementReq(remote.session, "SELECT 2")));
             assertTrue(failure.getMessage().startsWith("FLINK_SESSION_STATE_SYNC_FAILED"));
             assertEquals(TOperationState.FINISHED_STATE,
-                    remote.proxy.GetOperationStatus(new TGetOperationStatusReq(previous)).getOperationState());
+                    remote.proxy.getOperationStatus(new TGetOperationStatusReq(previous)).getOperationState());
             verify(remote.sockets.constructed().get(0), never()).close();
         }
     }
@@ -107,12 +107,12 @@ class ClientProxyStateTest {
             TGetCrossReferenceReq request = new TGetCrossReferenceReq();
             request.setSessionHandle(remote.session);
             TSessionHandle original = remote.session.deepCopy();
-            TOperationHandle handle = remote.proxy.GetCrossReference(request).getOperationHandle();
+            TOperationHandle handle = remote.proxy.getCrossReference(request).getOperationHandle();
             assertEquals(original, request.getSessionHandle());
-            assertDoesNotThrow(() -> remote.proxy.FetchResults(
+            assertDoesNotThrow(() -> remote.proxy.fetchResults(
                     new TFetchResultsReq(handle, TFetchOrientation.FETCH_NEXT, 10)));
-            remote.proxy.CloseOperation(new TCloseOperationReq(handle));
-            assertThrows(TException.class, () -> remote.proxy.GetOperationStatus(new TGetOperationStatusReq(handle)));
+            remote.proxy.closeOperation(new TCloseOperationReq(handle));
+            assertThrows(TException.class, () -> remote.proxy.getOperationStatus(new TGetOperationStatusReq(handle)));
             assertEquals(1, remote.sockets.constructed().size());
         }
     }
@@ -120,12 +120,12 @@ class ClientProxyStateTest {
     @Test
     void transportFailureInvalidatesOldHandlesWithoutReconnectingForFetch() throws Exception {
         try (Remote remote = new Remote()) {
-            TOperationHandle handle = remote.proxy.ExecuteStatement(
+            TOperationHandle handle = remote.proxy.executeStatement(
                     new TExecuteStatementReq(remote.session, "SELECT 1")).getOperationHandle();
             when(remote.client.GetOperationStatus(any())).thenThrow(new TTransportException("connection lost"));
             assertThrows(TTransportException.class,
-                    () -> remote.proxy.GetOperationStatus(new TGetOperationStatusReq(handle)));
-            assertThrows(TException.class, () -> remote.proxy.FetchResults(
+                    () -> remote.proxy.getOperationStatus(new TGetOperationStatusReq(handle)));
+            assertThrows(TException.class, () -> remote.proxy.fetchResults(
                     new TFetchResultsReq(handle, TFetchOrientation.FETCH_NEXT, 10)));
             assertEquals(1, remote.sockets.constructed().size());
             verify(remote.sockets.constructed().get(0)).close();
@@ -135,14 +135,53 @@ class ClientProxyStateTest {
     @Test
     void unsuccessfulExecuteResponseDoesNotRegisterItsHandle() throws Exception {
         try (Remote remote = new Remote()) {
-            remote.proxy.ExecuteStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
             TOperationHandle handle = operation();
             TExecuteStatementResp failed = new TExecuteStatementResp(error("execution rejected"));
             failed.setOperationHandle(handle);
             when(remote.client.ExecuteStatement(any())).thenReturn(failed);
-            remote.proxy.ExecuteStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
             assertThrows(TException.class,
-                    () -> remote.proxy.GetOperationStatus(new TGetOperationStatusReq(handle)));
+                    () -> remote.proxy.getOperationStatus(new TGetOperationStatusReq(handle)));
+        }
+    }
+
+    @Test
+    void forwardsACopyOfTheRequestWithTheRemoteHandle() throws Exception {
+        try (Remote remote = new Remote()) {
+            TExecuteStatementReq request = new TExecuteStatementReq(remote.session, "SELECT 1");
+            request.setConfOverlay(java.util.Map.of("key", "value"));
+            TExecuteStatementReq original = request.deepCopy();
+            remote.proxy.executeStatement(request);
+            ArgumentCaptor<TExecuteStatementReq> forwarded = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.client, times(2)).ExecuteStatement(forwarded.capture());
+            TExecuteStatementReq sql = forwarded.getAllValues().get(1);
+            assertNotSame(request, sql);
+            assertNotEquals(original.getSessionHandle(), sql.getSessionHandle());
+            assertEquals(original.getConfOverlay(), sql.getConfOverlay());
+            assertEquals(original, request);
+        }
+    }
+
+    @Test
+    void transportFailureDoesNotRetrySqlAndTheNextSqlReplaysState() throws Exception {
+        try (Remote remote = new Remote()) {
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+            clearInvocations(remote.client);
+            when(remote.client.ExecuteStatement(any())).thenThrow(new TTransportException("response lost"));
+            TExecuteStatementReq request = new TExecuteStatementReq(remote.session, "INSERT INTO items VALUES (1)");
+            TExecuteStatementReq original = request.deepCopy();
+            assertThrows(TTransportException.class, () -> remote.proxy.executeStatement(request));
+            verify(remote.client).ExecuteStatement(any());
+            assertEquals(1, remote.sockets.constructed().size());
+            assertEquals(original, request);
+
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
+            assertEquals(2, remote.sockets.constructed().size());
+            ArgumentCaptor<TExecuteStatementReq> replay = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.clients.constructed().get(1), times(2)).ExecuteStatement(replay.capture());
+            assertEquals(java.util.List.of("USE `default`", "SELECT 2"),
+                    replay.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
         }
     }
 
@@ -165,7 +204,7 @@ class ClientProxyStateTest {
         private final String oldSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getDefaultValue();
         private final MockedConstruction<TSocket> sockets;
         private final MockedConstruction<TCLIService.Client> clients;
-        private final ClientProxy proxy = new ClientProxy();
+        private final GatewayClient proxy = new GatewayClient(new TOpenSessionReq());
         private final TSessionHandle session;
         private final TCLIService.Client client;
 
@@ -177,7 +216,7 @@ class ClientProxyStateTest {
                 TOpenSessionResp open = new TOpenSessionResp(success(), TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10);
                 open.setSessionHandle(new TSessionHandle(ThriftUtils.getHandleIdentifier()));
                 when(mock.OpenSession(any())).thenReturn(open);
-                when(mock.GetTypeInfo(any())).thenReturn(new TGetTypeInfoResp(success()));
+                when(mock.GetDelegationToken(any())).thenReturn(new TGetDelegationTokenResp(success()));
                 when(mock.ExecuteStatement(any())).thenAnswer(invocation -> {
                     TExecuteStatementResp response = new TExecuteStatementResp(success());
                     response.setOperationHandle(operation());
@@ -192,10 +231,10 @@ class ClientProxyStateTest {
                 cross.setOperationHandle(operation());
                 when(mock.GetCrossReference(any())).thenReturn(cross);
             });
-            session = proxy.OpenSession(new TOpenSessionReq()).getSessionHandle();
-            TGetTypeInfoReq request = new TGetTypeInfoReq();
+            session = new TSessionHandle(ThriftUtils.getHandleIdentifier());
+            TGetDelegationTokenReq request = new TGetDelegationTokenReq();
             request.setSessionHandle(session);
-            proxy.GetTypeInfo(request); // Establish one mocked remote connection without state replay.
+            proxy.getDelegationToken(request); // Establish a connection without state replay.
             client = clients.constructed().get(0);
             clearInvocations(client);
         }

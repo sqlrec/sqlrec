@@ -8,6 +8,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.compiler.SqlTypeChecker;
+import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -21,6 +22,15 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlCreateTableAs;
+import org.apache.flink.sql.parser.ddl.SqlDropTable;
+import org.apache.flink.sql.parser.ddl.SqlAlterTable;
+import org.apache.flink.sql.parser.ddl.SqlCreateDatabase;
+import org.apache.flink.sql.parser.ddl.SqlAlterDatabase;
+import org.apache.flink.sql.parser.ddl.SqlDropDatabase;
+import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
+import org.apache.flink.sql.parser.ddl.SqlAlterFunction;
+import org.apache.flink.sql.parser.ddl.SqlDropFunction;
 import org.apache.flink.sql.parser.ddl.SqlReplaceTableAs;
 import org.apache.flink.sql.parser.ddl.SqlUseCatalog;
 import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
@@ -97,8 +107,15 @@ public class SqlExecutor {
                 || (node instanceof SqlReplaceTableAs replace && replace.isTemporary())) {
             throw new UnsupportedOperationException("Creating temporary tables is not supported");
         }
-        if (MetadataDdlExecutor.handles(node)) {
-            return MetadataDdlExecutor.execute(MetadataAccessFactory.getInstance(), sql, defaultSchema);
+        if (isMetadataDdl(node)) {
+            MetadataAccess metadata = MetadataAccessFactory.getInstance();
+            try {
+                metadata.executeMetadataDdl(node, defaultSchema);
+            } finally {
+                // A failed DDL may have changed metadata partially or lost its response after committing.
+                CacheManager.invalidateAll();
+            }
+            return message("metadata DDL completed");
         }
         if (node instanceof SqlUseDatabase command) {
             java.util.List<String> names = command.getDatabaseName().names;
@@ -130,7 +147,7 @@ public class SqlExecutor {
 
         if (!SqlRecConfigs.isFileSystemMetadata()) {
             if (node instanceof org.apache.flink.sql.parser.dql.SqlShowFunctions) {
-                return MetadataAccessFactory.getInstance().executeMetadataQuery(sql, defaultSchema);
+                return MetadataAccessFactory.getInstance().executeMetadataQuery(node, defaultSchema);
             }
             java.util.List<String> object = null;
             if (node instanceof org.apache.flink.sql.parser.dql.SqlShowCreateTable show) {
@@ -140,7 +157,7 @@ public class SqlExecutor {
             }
             // Request-local cache tables remain owned by SQLRec; durable definitions use the full Catalog schema.
             if (object != null && !(object.size() == 1 && schema.getTable(object.get(0), false) != null)) {
-                return MetadataAccessFactory.getInstance().executeMetadataQuery(sql, defaultSchema);
+                return MetadataAccessFactory.getInstance().executeMetadataQuery(node, defaultSchema);
             }
         }
 
@@ -216,6 +233,30 @@ public class SqlExecutor {
         } else {
             CacheManager.invalidateAll();
         }
+    }
+
+    private static boolean isMetadataDdl(SqlNode node) {
+        // CTAS/RTAS require an execution engine and are left to the remote route.
+        if (node instanceof SqlCreateTableAs || node instanceof SqlReplaceTableAs) {
+            return false;
+        }
+        if (node instanceof SqlCreateTable create) {
+            return !create.isTemporary();
+        }
+        if (node instanceof SqlDropTable drop) {
+            return !drop.isTemporary();
+        }
+        if (node instanceof SqlCreateFunction create) {
+            return !create.isTemporary() && !create.isSystemFunction();
+        }
+        if (node instanceof SqlAlterFunction alter) {
+            return !alter.isTemporary() && !alter.isSystemFunction();
+        }
+        if (node instanceof SqlDropFunction drop) {
+            return !drop.isTemporary() && !drop.isSystemFunction();
+        }
+        return node instanceof SqlAlterTable || node instanceof SqlCreateDatabase
+                || node instanceof SqlAlterDatabase || node instanceof SqlDropDatabase;
     }
 
     private static void waitForCompletion(SqlProcessResult result, String sql)

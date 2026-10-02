@@ -12,6 +12,7 @@ Find a statement by task:
 | Publish and manage APIs | [CREATE API](#create-api), [SHOW APIS](#show-apis) |
 | Define, train, and export models | [CREATE MODEL](#create-model), [TRAIN MODEL](#train-model), [EXPORT MODEL](#export-model), [SHOW CHECKPOINTS](#show-checkpoints) |
 | Deploy and manage model services | [CREATE SERVICE](#create-service), [SHOW SERVICES](#show-services) |
+| Understand table, database, and UDF DDL support | [Metadata DDL](#metadata-ddl) |
 | Refresh in-process definition caches | [FLUSH](#flush) |
 
 ## SQL Function Management
@@ -439,6 +440,8 @@ RETURN SELECT id FROM candidates;
 ### SET
 
 Set a string variable in the current execution context. A SQL function can read it with `` `get` `` or `` `get_or_default` ``.
+
+In a Thrift session, top-level `SET 'key' = 'value'` also saves session settings without connecting to Gateway. Settings synchronize before the next remote SQL statement; successful local saving does not mean remote validation succeeded. Non-assignment `SET` (such as `SET;`) reads Flink configuration and still requires Gateway. `RESET` or `RESET 'key'` clears all or the specified saved local session settings only after Gateway confirms success; disabled forwarding or remote execution failure leaves the settings unchanged. REST and CLI do not provide transparent Gateway forwarding. See [Execution Boundaries](./architecture.md#gateway-forwarding-boundaries).
 
 **Syntax:**
 
@@ -928,6 +931,12 @@ DESC SERVICE my_service;
 
 DESCRIBE FORMATTED SERVICE my_service;
 ```
+
+## Metadata DDL
+
+In shared metadata mode, persistent table/database/UDF metadata DDL uses the Flink 1.19 default dialect and writes HMS through the official HiveCatalog's Hive client, without creating a TableEnvironment or planner or connecting to Gateway. Table DDL supports physical columns, metadata columns, primary keys, and partitions. Computed columns and watermarks are unsupported; queries and alterations that resolve an existing table schema also reject those definitions.
+
+`USE CATALOG` and temporary table creation, including temporary CTAS/RTAS, are unsupported. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. Temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode does not support these persistent metadata DDL statements or Gateway forwarding.
 
 ## Metadata Refresh
 

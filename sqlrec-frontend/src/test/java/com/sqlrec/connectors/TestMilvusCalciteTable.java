@@ -9,6 +9,13 @@ import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.udf.UdfManager;
 import com.sqlrec.utils.SqlTestCase;
+import io.milvus.v2.client.ConnectConfig;
+import io.milvus.v2.client.MilvusClientV2;
+import io.milvus.v2.common.DataType;
+import io.milvus.v2.common.IndexParam;
+import io.milvus.v2.service.collection.request.CreateCollectionReq;
+import io.milvus.v2.service.collection.request.DropCollectionReq;
+import io.milvus.v2.service.collection.request.HasCollectionReq;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -23,14 +30,77 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 
 import java.util.*;
 
 @Tag("integration")
 public class TestMilvusCalciteTable {
+    private static final String MILVUS_URL =
+            "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30022";
+    private static final String TEST_COLLECTION = "sqlrec_calcite_test_"
+            + UUID.randomUUID().toString().replace("-", "");
     private static final long TEST_ID_BASE = 9_000_000_000L;
     private static final long VISIBILITY_TIMEOUT_MILLIS = 15_000L;
     private static final long VISIBILITY_POLL_INTERVAL_MILLIS = 100L;
+    private static MilvusClientV2 collectionClient;
+
+    @BeforeAll
+    static void createTestCollection() {
+        collectionClient = new MilvusClientV2(ConnectConfig.builder()
+                .uri(MILVUS_URL)
+                .token("root:Milvus")
+                .dbName("default")
+                .build());
+        CreateCollectionReq.CollectionSchema collectionSchema = CreateCollectionReq.CollectionSchema.builder()
+                .enableDynamicField(false)
+                .fieldSchemaList(Arrays.asList(
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("id").dataType(DataType.Int64)
+                                .isPrimaryKey(true).autoID(false).build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("title").dataType(DataType.VarChar).maxLength(512).build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("genres").dataType(DataType.Array).elementType(DataType.VarChar)
+                                .maxCapacity(64).maxLength(256).build(),
+                        CreateCollectionReq.FieldSchema.builder()
+                                .name("embedding").dataType(DataType.FloatVector).dimension(64).build()))
+                .build();
+        IndexParam embeddingIndex = IndexParam.builder()
+                .fieldName("embedding")
+                .indexName("embedding")
+                .indexType(IndexParam.IndexType.AUTOINDEX)
+                .metricType(IndexParam.MetricType.COSINE)
+                .build();
+        collectionClient.createCollection(CreateCollectionReq.builder()
+                .databaseName("default")
+                .collectionName(TEST_COLLECTION)
+                .collectionSchema(collectionSchema)
+                .indexParams(Collections.singletonList(embeddingIndex))
+                .build());
+    }
+
+    @AfterAll
+    static void dropTestCollection() {
+        if (collectionClient == null) {
+            return;
+        }
+        try {
+            // Creation also builds the index and loads the collection. Clean up
+            // a partially created collection if either of those steps failed.
+            if (collectionClient.hasCollection(HasCollectionReq.builder()
+                    .collectionName(TEST_COLLECTION)
+                    .build())) {
+                collectionClient.dropCollection(DropCollectionReq.builder()
+                        .databaseName("default")
+                        .collectionName(TEST_COLLECTION)
+                        .build());
+            }
+        } finally {
+            collectionClient.close();
+        }
+    }
 
     @Test
     public void testMilvusTable() throws Exception {
@@ -67,212 +137,207 @@ public class TestMilvusCalciteTable {
                 "com.sqlrec.udf.scalar.ArrayContainsAnyFunction"
         );
 
-        cleanupTestRows(schema);
-        try {
-            new SqlTestCase(insertSql(TEST_ID_BASE, "SqlRec Coverage Movie Alpha", "Action", "Drama"), null).test(schema);
-            new SqlTestCase(insertSql(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta", "Comedy"), null).test(schema);
-            new SqlTestCase(insertSql(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma", "Thriller", "Action"), null).test(schema);
-            new SqlTestCase(insertSql(TEST_ID_BASE + 3, "SqlRec Coverage Movie Deleted", "Sci-Fi"), null).test(schema);
-            new SqlTestCase(insertSql(TEST_ID_BASE + 4, "SqlRec Coverage \"Quoted\"", "Drama"), null).test(schema);
+        new SqlTestCase(insertSql(TEST_ID_BASE, "SqlRec Coverage Movie Alpha", "Action", "Drama"), null).test(schema);
+        new SqlTestCase(insertSql(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta", "Comedy"), null).test(schema);
+        new SqlTestCase(insertSql(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma", "Thriller", "Action"), null).test(schema);
+        new SqlTestCase(insertSql(TEST_ID_BASE + 3, "SqlRec Coverage Movie Deleted", "Sci-Fi"), null).test(schema);
+        new SqlTestCase(insertSql(TEST_ID_BASE + 4, "SqlRec Coverage \"Quoted\"", "Drama"), null).test(schema);
 
-            awaitRowsVisible(
-                    schema,
-                    "select id, title from t1 where id between " + TEST_ID_BASE + " and "
-                            + (TEST_ID_BASE + 4) + " order by id",
-                    rows(
-                            row(TEST_ID_BASE, "SqlRec Coverage Movie Alpha"),
-                            row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
-                            row(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"),
-                            row(TEST_ID_BASE + 3, "SqlRec Coverage Movie Deleted"),
-                            row(TEST_ID_BASE + 4, "SqlRec Coverage \"Quoted\"")));
+        awaitRowsVisible(
+                schema,
+                "select id, title from t1 where id between " + TEST_ID_BASE + " and "
+                        + (TEST_ID_BASE + 4) + " order by id",
+                rows(
+                        row(TEST_ID_BASE, "SqlRec Coverage Movie Alpha"),
+                        row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
+                        row(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"),
+                        row(TEST_ID_BASE + 3, "SqlRec Coverage Movie Deleted"),
+                        row(TEST_ID_BASE + 4, "SqlRec Coverage \"Quoted\"")));
 
-            new SqlTestCase("select id, title from t1 where id = " + (TEST_ID_BASE + 1),
-                    rows(row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"))).test(schema);
-            new SqlTestCase("select id, title from t1 where id = " + (TEST_ID_BASE + 1)
-                    + " and title = 'SqlRec Coverage Movie Beta'",
-                    rows(row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"))).test(schema);
-            new SqlTestCase("select id, title from t1 where id > " + TEST_ID_BASE
-                    + " and id <= " + (TEST_ID_BASE + 2) + " order by id",
-                    rows(
-                            row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
-                            row(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"))).test(schema);
-            new SqlTestCase("select id from t1 where id >= " + (TEST_ID_BASE + 1)
-                    + " and id < " + (TEST_ID_BASE + 3) + " order by id",
-                    rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where (id = " + TEST_ID_BASE
-                    + " or id = " + (TEST_ID_BASE + 1) + ") and not (id = "
-                    + (TEST_ID_BASE + 3) + ") order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4) + " and id <> " + (TEST_ID_BASE + 1) + " order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2),
-                            row(TEST_ID_BASE + 3), row(TEST_ID_BASE + 4))).test(schema);
-            new SqlTestCase("select id from t1 where id in (" + TEST_ID_BASE + ", "
-                    + (TEST_ID_BASE + 2) + ") order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4) + " and id not in (" + TEST_ID_BASE + ", "
-                    + (TEST_ID_BASE + 2) + ") order by id",
-                    rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 3),
-                            row(TEST_ID_BASE + 4))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + (TEST_ID_BASE + 1)
-                    + " and " + (TEST_ID_BASE + 2) + " order by id",
-                    rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where id + 1 > " + (TEST_ID_BASE + 1)
-                    + " and id <= " + (TEST_ID_BASE + 2) + " order by id",
-                    rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where title like 'SqlRec Coverage Movie %' order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 3))).test(schema);
-            new SqlTestCase("select id from t1 where title is null and id between "
-                    + TEST_ID_BASE + " and " + (TEST_ID_BASE + 4), Collections.emptyList()).test(schema);
-            new SqlTestCase("select id from t1 where title is not null and id between "
-                    + TEST_ID_BASE + " and " + (TEST_ID_BASE + 4) + " order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2),
-                            row(TEST_ID_BASE + 3), row(TEST_ID_BASE + 4))).test(schema);
-            new SqlTestCase("select id from t1 where title = 'SqlRec Coverage \"Quoted\"'",
-                    rows(row(TEST_ID_BASE + 4))).test(schema);
-            // Exercises the non-empty match-all predicate used for scans without filters.
-            new SqlTestCase("select id from t1 limit 1", null).test(schema);
+        new SqlTestCase("select id, title from t1 where id = " + (TEST_ID_BASE + 1),
+                rows(row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"))).test(schema);
+        new SqlTestCase("select id, title from t1 where id = " + (TEST_ID_BASE + 1)
+                + " and title = 'SqlRec Coverage Movie Beta'",
+                rows(row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"))).test(schema);
+        new SqlTestCase("select id, title from t1 where id > " + TEST_ID_BASE
+                + " and id <= " + (TEST_ID_BASE + 2) + " order by id",
+                rows(
+                        row(TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
+                        row(TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"))).test(schema);
+        new SqlTestCase("select id from t1 where id >= " + (TEST_ID_BASE + 1)
+                + " and id < " + (TEST_ID_BASE + 3) + " order by id",
+                rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where (id = " + TEST_ID_BASE
+                + " or id = " + (TEST_ID_BASE + 1) + ") and not (id = "
+                + (TEST_ID_BASE + 3) + ") order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4) + " and id <> " + (TEST_ID_BASE + 1) + " order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2),
+                        row(TEST_ID_BASE + 3), row(TEST_ID_BASE + 4))).test(schema);
+        new SqlTestCase("select id from t1 where id in (" + TEST_ID_BASE + ", "
+                + (TEST_ID_BASE + 2) + ") order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4) + " and id not in (" + TEST_ID_BASE + ", "
+                + (TEST_ID_BASE + 2) + ") order by id",
+                rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 3),
+                        row(TEST_ID_BASE + 4))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + (TEST_ID_BASE + 1)
+                + " and " + (TEST_ID_BASE + 2) + " order by id",
+                rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where id + 1 > " + (TEST_ID_BASE + 1)
+                + " and id <= " + (TEST_ID_BASE + 2) + " order by id",
+                rows(row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where title like 'SqlRec Coverage Movie %' order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 3))).test(schema);
+        new SqlTestCase("select id from t1 where title is null and id between "
+                + TEST_ID_BASE + " and " + (TEST_ID_BASE + 4), Collections.emptyList()).test(schema);
+        new SqlTestCase("select id from t1 where title is not null and id between "
+                + TEST_ID_BASE + " and " + (TEST_ID_BASE + 4) + " order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2),
+                        row(TEST_ID_BASE + 3), row(TEST_ID_BASE + 4))).test(schema);
+        new SqlTestCase("select id from t1 where title = 'SqlRec Coverage \"Quoted\"'",
+                rows(row(TEST_ID_BASE + 4))).test(schema);
+        // Exercises the non-empty match-all predicate used for scans without filters.
+        new SqlTestCase("select id from t1 limit 1", null).test(schema);
 
-            new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on t2.ID = t1.id order by t2.ID",
-                    rows(
-                            row(TEST_ID_BASE, TEST_ID_BASE, "SqlRec Coverage Movie Alpha"),
-                            row(TEST_ID_BASE + 1, TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
-                            row(TEST_ID_BASE + 2, TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"))).test(schema);
-            new SqlTestCase("update t1 set title = 'SqlRec Coverage Movie Beta Updated' where id = "
-                    + (TEST_ID_BASE + 1), null).test(schema);
-            // Milvus queries use eventual consistency by default. Verify that the upsert
-            // keeps the row addressable, but do not make this integration test depend on
-            // when the updated scalar value becomes visible.
-            new SqlTestCase("select id from t1 where id = " + (TEST_ID_BASE + 1),
-                    rows(row(TEST_ID_BASE + 1))).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
-            new SqlTestCase("cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
-            new SqlTestCase("select * from tmp", null).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    """
-                            LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
-                              LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
-                                LogicalJoin(condition=[true], joinType=[inner])
-                                  LogicalTableScan(table=[[default, t2]])
-                                  LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
-                              SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    """
-                            LogicalSort(sort0=[$4], dir0=[ASC], fetch=[10])
-                              LogicalProject(id=[$4], title=[$5], genres=[$6], embedding=[$7], EXPR$4=[ip($3, $7)])
-                                LogicalJoin(condition=[true], joinType=[inner])
-                                  LogicalTableScan(table=[[default, t2]])
-                                  LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], id=[$t4], title=[$t5], genres=[$t6], embedding=[$t7], EXPR$4=[$t8])
-                              SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null,
-                    """
-                            LogicalSort(sort0=[$3], dir0=[ASC])
-                              LogicalProject(ID=[$0], id0=[$4], title=[$5], EXPR$3=[ip($3, $7)])
-                                LogicalJoin(condition=[true], joinType=[inner])
-                                  LogicalTableScan(table=[[default, t2]])
-                                  LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
-                              SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    """
-                            LogicalSort(sort0=[$3], dir0=[ASC], fetch=[10])
-                              LogicalProject(ID=[$0], id0=[$4], title=[$5], EXPR$3=[ip($3, $7)])
-                                LogicalJoin(condition=[true], joinType=[inner])
-                                  LogicalTableScan(table=[[default, t2]])
-                                  LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
-                              SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 where t2.title = t1.title order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    """
-                            LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
-                              LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
-                                LogicalFilter(condition=[=($1, $5)])
-                                  LogicalJoin(condition=[true], joinType=[inner])
-                                    LogicalTableScan(table=[[default, t2]])
-                                    LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
-                              SqlrecEnumerableVectorLookupJoin(pushedFilter=[=($1, $5)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    """
-                            LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
-                              LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
-                                LogicalFilter(condition=[>=($4, 1)])
-                                  LogicalJoin(condition=[true], joinType=[inner])
-                                    LogicalTableScan(table=[[default, t2]])
-                                    LogicalTableScan(table=[[default, t1]])""",
-                    """
-                            EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
-                              SqlrecEnumerableVectorLookupJoin(pushedFilter=[>=($4, 1)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
-                                EnumerableTableScan(table=[[default, t2]])
-                                EnumerableTableScan(table=[[default, t1]])""",
-                    null).test(schema);
-            // An unsupported right-side predicate must prevent the vector lookup rule
-            // from firing, so the original Calcite plan keeps the complete condition.
-            new SqlTestCase("select * from t2 join t1 on 1=1 " +
-                    "where t2.title = t1.title and t1.id + 1 > 1 " +
-                    "order by ip(t2.embedding, t1.embedding) limit 10", null,
-                    new RelOptPlanner.CannotPlanException("Unsupported vector filter")).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 " +
-                    "where t2.ID > " + TEST_ID_BASE
-                    + " and t1.title = 'SqlRec Coverage Movie Beta Updated' " +
-                    "order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4) + " and array_contains(genres, 'Action') order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4) + " and array_contains(genres, 'Comedy') order by id",
-                    rows(row(TEST_ID_BASE + 1))).test(schema);
-            new SqlTestCase("select id from t1 where id = " + (TEST_ID_BASE + 1)
-                    + " and array_contains(genres, 'Comedy')",
-                    rows(row(TEST_ID_BASE + 1))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4)
-                    + " and array_contains_all(genres, ARRAY['Action', 'Drama']) order by id",
-                    rows(row(TEST_ID_BASE))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4)
-                    + " and array_contains_any(genres, ARRAY['Action', 'Comedy']) order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4)
-                    + " and array_contains_all(genres, ARRAY['Action']) order by id",
-                    rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
-            new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
-                    + (TEST_ID_BASE + 4)
-                    + " and array_contains_any(genres, ARRAY['Sci-Fi', 'Thriller']) order by id",
-                    rows(row(TEST_ID_BASE + 2), row(TEST_ID_BASE + 3))).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains(t1.genres, t2.title) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_all(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
-            new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_any(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
-            // Execute DELETE after result assertions because Milvus query visibility is
-            // eventually consistent; finally performs idempotent cleanup as well.
-            new SqlTestCase("delete from t1 where id = " + (TEST_ID_BASE + 3), null).test(schema);
-        } finally {
-            cleanupTestRows(schema);
-        }
+        new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on t2.ID = t1.id order by t2.ID",
+                rows(
+                        row(TEST_ID_BASE, TEST_ID_BASE, "SqlRec Coverage Movie Alpha"),
+                        row(TEST_ID_BASE + 1, TEST_ID_BASE + 1, "SqlRec Coverage Movie Beta"),
+                        row(TEST_ID_BASE + 2, TEST_ID_BASE + 2, "SqlRec Coverage Film Gamma"))).test(schema);
+        new SqlTestCase("update t1 set title = 'SqlRec Coverage Movie Beta Updated' where id = "
+                + (TEST_ID_BASE + 1), null).test(schema);
+        // Milvus queries use eventual consistency by default. Verify that the upsert
+        // keeps the row addressable, but do not make this integration test depend on
+        // when the updated scalar value becomes visible.
+        new SqlTestCase("select id from t1 where id = " + (TEST_ID_BASE + 1),
+                rows(row(TEST_ID_BASE + 1))).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
+        new SqlTestCase("cache table tmp as select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null).test(schema);
+        new SqlTestCase("select * from tmp", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t1.* from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$4], dir0=[ASC], fetch=[10])
+                          LogicalProject(id=[$4], title=[$5], genres=[$6], embedding=[$7], EXPR$4=[ip($3, $7)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], id=[$t4], title=[$t5], genres=[$t6], embedding=[$t7], EXPR$4=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding)", null,
+                """
+                        LogicalSort(sort0=[$3], dir0=[ASC])
+                          LogicalProject(ID=[$0], id0=[$4], title=[$5], EXPR$3=[ip($3, $7)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select t2.ID, t1.id, t1.title from t2 join t1 on 1=1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$3], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], id0=[$4], title=[$5], EXPR$3=[ip($3, $7)])
+                            LogicalJoin(condition=[true], joinType=[inner])
+                              LogicalTableScan(table=[[default, t2]])
+                              LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], ID=[$t0], id0=[$t4], title=[$t5], EXPR$3=[$t8])
+                          SqlrecEnumerableVectorLookupJoin(leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t2.title = t1.title order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
+                            LogicalFilter(condition=[=($1, $5)])
+                              LogicalJoin(condition=[true], joinType=[inner])
+                                LogicalTableScan(table=[[default, t2]])
+                                LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(pushedFilter=[=($1, $5)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where t1.id >= 1 order by ip(t2.embedding, t1.embedding) limit 10", null,
+                """
+                        LogicalSort(sort0=[$8], dir0=[ASC], fetch=[10])
+                          LogicalProject(ID=[$0], title=[$1], genres=[$2], embedding=[$3], id0=[$4], title0=[$5], genres0=[$6], embedding0=[$7], EXPR$8=[ip($3, $7)])
+                            LogicalFilter(condition=[>=($4, 1)])
+                              LogicalJoin(condition=[true], joinType=[inner])
+                                LogicalTableScan(table=[[default, t2]])
+                                LogicalTableScan(table=[[default, t1]])""",
+                """
+                        EnumerableCalc(expr#0..8=[{inputs}], proj#0..8=[{exprs}])
+                          SqlrecEnumerableVectorLookupJoin(pushedFilter=[>=($4, 1)], leftEmbeddingIndex=[3], rightEmbeddingField=[embedding], topKPerLeftRow=[10])
+                            EnumerableTableScan(table=[[default, t2]])
+                            EnumerableTableScan(table=[[default, t1]])""",
+                null).test(schema);
+        // An unsupported right-side predicate must prevent the vector lookup rule
+        // from firing, so the original Calcite plan keeps the complete condition.
+        new SqlTestCase("select * from t2 join t1 on 1=1 " +
+                "where t2.title = t1.title and t1.id + 1 > 1 " +
+                "order by ip(t2.embedding, t1.embedding) limit 10", null,
+                new RelOptPlanner.CannotPlanException("Unsupported vector filter")).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 " +
+                "where t2.ID > " + TEST_ID_BASE
+                + " and t1.title = 'SqlRec Coverage Movie Beta Updated' " +
+                "order by ip(t2.embedding, t1.embedding) limit 10", null).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4) + " and array_contains(genres, 'Action') order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4) + " and array_contains(genres, 'Comedy') order by id",
+                rows(row(TEST_ID_BASE + 1))).test(schema);
+        new SqlTestCase("select id from t1 where id = " + (TEST_ID_BASE + 1)
+                + " and array_contains(genres, 'Comedy')",
+                rows(row(TEST_ID_BASE + 1))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4)
+                + " and array_contains_all(genres, ARRAY['Action', 'Drama']) order by id",
+                rows(row(TEST_ID_BASE))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4)
+                + " and array_contains_any(genres, ARRAY['Action', 'Comedy']) order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 1), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4)
+                + " and array_contains_all(genres, ARRAY['Action']) order by id",
+                rows(row(TEST_ID_BASE), row(TEST_ID_BASE + 2))).test(schema);
+        new SqlTestCase("select id from t1 where id between " + TEST_ID_BASE + " and "
+                + (TEST_ID_BASE + 4)
+                + " and array_contains_any(genres, ARRAY['Sci-Fi', 'Thriller']) order by id",
+                rows(row(TEST_ID_BASE + 2), row(TEST_ID_BASE + 3))).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains(t1.genres, t2.title) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_all(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
+        new SqlTestCase("select * from t2 join t1 on 1=1 where array_contains_any(t1.genres, t2.genres) order by ip(t2.embedding, t1.embedding) limit 1", null).test(schema);
+        // Execute DELETE after result assertions because query visibility is
+        // eventually consistent. AfterAll drops the entire test collection.
+        new SqlTestCase("delete from t1 where id = " + (TEST_ID_BASE + 3), null).test(schema);
     }
 
     private static Object[] row(Object... values) {
@@ -326,14 +391,6 @@ public class TestMilvusCalciteTable {
                 lastFailure);
     }
 
-    private static void cleanupTestRows(CalciteSchema schema) throws Exception {
-        for (int i = 0; i < 5; i++) {
-            new SqlTestCase("delete from t1 where id = " + (TEST_ID_BASE + i), null)
-                    .setDebugOutput(false)
-                    .test(schema);
-        }
-    }
-
     public static class MyTable extends SqlRecTable implements ScannableTable {
         @Override
         public @Nullable Enumerable<Object[]> scan(DataContext root) {
@@ -371,10 +428,10 @@ public class TestMilvusCalciteTable {
         fieldSchemas.add(new FieldSchema("embedding", "ARRAY<FLOAT>"));
 
         MilvusConfig milvusConfig = new MilvusConfig();
-        milvusConfig.url = "http://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30022";
+        milvusConfig.url = MILVUS_URL;
         milvusConfig.token = "root:Milvus";
         milvusConfig.database = "default";
-        milvusConfig.collection = "item_embedding";
+        milvusConfig.collection = TEST_COLLECTION;
         milvusConfig.fieldSchemas = fieldSchemas;
         milvusConfig.primaryKey = "id";
         milvusConfig.primaryKeyIndex = 0;

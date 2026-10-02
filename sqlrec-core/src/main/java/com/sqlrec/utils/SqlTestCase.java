@@ -128,8 +128,8 @@ public class SqlTestCase {
         } else {
             if (actualException != null) {
                 log.error("Exception during execution:", actualException);
+                throw new AssertionError("SQL execution failed: " + sql, actualException);
             }
-            assert actualException == null;
         }
 
         List<Object[]> actualResults = new ArrayList<>();

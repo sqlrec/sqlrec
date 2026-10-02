@@ -2,6 +2,8 @@ package com.sqlrec.db.remote;
 
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.SchemaAccess;
+import com.sqlrec.executor.SqlProcessResult;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -13,23 +15,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class HmsSchemaAccess implements SchemaAccess {
+public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(HmsSchemaAccess.class);
 
     private final Map<String, Map<String, Long>> tableUpdateTimesMap = new ConcurrentHashMap<>();
+    private final FlinkHiveDdlAdapter ddlAdapter = new FlinkHiveDdlAdapter();
 
     @Override
-    public void executeMetadataDdl(String sql, String database) throws Exception {
+    public void close() {
+        ddlAdapter.close();
+    }
+
+    @Override
+    public void executeMetadataDdl(SqlNode node, String database) throws Exception {
         try {
-            FlinkHiveDdlAdapter.executeDdl(sql, database);
+            ddlAdapter.executeDdl(node, database);
         } finally {
             tableUpdateTimesMap.clear();
         }
     }
 
     @Override
-    public com.sqlrec.executor.SqlProcessResult executeMetadataQuery(String sql, String database) throws Exception {
-        return FlinkHiveDdlAdapter.executeQuery(sql, database);
+    public SqlProcessResult executeMetadataQuery(SqlNode node, String database) throws Exception {
+        return ddlAdapter.executeQuery(node, database);
     }
 
     @Override

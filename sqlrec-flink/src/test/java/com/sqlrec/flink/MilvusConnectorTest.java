@@ -11,6 +11,7 @@ import io.milvus.v2.common.DataType;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.DropCollectionReq;
+import io.milvus.v2.service.collection.request.HasCollectionReq;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
@@ -123,10 +124,14 @@ class MilvusConnectorTest {
             return;
         }
         try {
-            collectionClient.dropCollection(DropCollectionReq.builder()
-                    .databaseName(MILVUS_DB)
+            if (collectionClient.hasCollection(HasCollectionReq.builder()
                     .collectionName(TEST_COLLECTION)
-                    .build());
+                    .build())) {
+                collectionClient.dropCollection(DropCollectionReq.builder()
+                        .databaseName(MILVUS_DB)
+                        .collectionName(TEST_COLLECTION)
+                        .build());
+            }
         } finally {
             collectionClient.close();
         }

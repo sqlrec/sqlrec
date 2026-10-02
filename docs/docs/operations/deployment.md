@@ -2,34 +2,6 @@
 
 部署分为两步：准备 Kubernetes 集群，再部署 SQLRec 和依赖组件。Minikube 和已有集群使用相同的 `download_resource.sh`、`deploy_components.sh`，客户端文件的存储方式由 `STORAGE_MODE` 决定。
 
-## Flink SQL Gateway 默认部署与转发配置
-
-部署脚本默认下载和安装 Flink Operator、Session Cluster 和 Gateway，并为 SQLRec 配置节点上的 Gateway 地址和端口。共享元数据模式仍需要 HMS 和 PostgreSQL；本地 SQL、`USE`、`SET`、JDBC 元数据以及持久表、库和 UDF 的纯元数据 DDL 不依赖 Gateway。DDL 使用 Flink 1.19 default 方言，通过进程内官方 HiveCatalog 的 Hive 客户端直接写 HMS，不创建 TableEnvironment 或 Planner。表 DDL 支持普通列、metadata 列、主键和分区，不支持计算列和 WATERMARK；需要解析表结构的查询和修改也会拒绝这些已有定义。
-
-沿用 `FLINK_SQL_GATEWAY_ADDRESS` 主机地址和 `FLINK_SQL_GATEWAY_PORT` 端口配置，使用 HiveServer2/Thrift 接口。部署时未指定地址就使用 `NODE_IP`；显式空地址或只包含空白时禁用转发。应用自身也保留原有默认 Gateway 地址。
-
-默认部署无需额外配置端口。`FLINK_SQL_GATEWAY_PORT` 同时用于 Gateway 的 NodePort 和 SQLRec 连接，默认 `30018`；部署 Gateway 服务时，自定义值须位于集群允许的 NodePort 范围。
-
-如已准备好依赖组件，需要单独部署 SQLRec 并连接外部 Gateway，可配置外部端口：
-
-```bash
-# 使用外部 HiveServer2/Thrift Gateway
-export FLINK_SQL_GATEWAY_ADDRESS=your-gateway-host
-export FLINK_SQL_GATEWAY_PORT=10000
-bash ./deploy/sqlrec/deploy.sh
-
-# 或者关闭 SQLRec 的远程转发
-export FLINK_SQL_GATEWAY_ADDRESS=""
-```
-
-外部端口示例仅用于 SQLRec 部署，不能把 `10000` 同时用作默认集群中的 Gateway NodePort。
-
-连接和 RPC 读取超时保持原有配置方式，均使用 `FLINK_SQL_GATEWAY_CONNECT_TIMEOUT`，默认 600000 毫秒（10 分钟）。本地可处理的 SQL、JDBC 元数据及客户端会话信息不建立 Gateway 连接；需要远程能力的 SQL/RPC 才连接 Gateway，转发禁用时返回 `FLINK_GATEWAY_DISABLED`。REST/CLI 保持本地执行边界。
-
-不支持 `USE CATALOG` 和创建临时表（包括临时 CTAS/RTAS），这些语句直接报错。`USE database` 不校验会话 schema 中是否存在该数据库，后续操作按实际元数据执行。临时函数、视图及持久表的 CTAS/RTAS 等未纳入本地执行的语句保留 Thrift 远程路由。保存表/UDF 定义不代表 SQLRec 本地支持其全部 Connector、列语义或函数接口。SQL 文件元数据模式继续限制运行时 DDL 和远程转发，但不新增 Gateway 配置的启动冲突检查。
-
-显式空地址仅关闭 SQLRec 转发，不改变默认组件部署，也不删除已有 Flink 组件或作业。清理仍使用显式卸载脚本。
-
 ## 系统要求
 
 部署机器支持 AMD64/ARM64 Linux 和 Apple Silicon macOS。首次部署需要能访问镜像仓库、Helm 仓库和资源下载地址。
@@ -195,7 +167,7 @@ bash ./deploy/storage/sync.sh
 | Kubernetes | 部署和管理模型训练、导出及服务 |
 | PostgreSQL | 模型、服务、函数等元数据 |
 | Hive Metastore | Hive 表元数据 |
-| Flink SQL Gateway | Flink SQL 执行 |
+| Flink SQL Gateway | 可选；执行需要转发的 Flink SQL/RPC |
 | 分布式存储 | 模型文件和训练数据，默认使用 RustFS + JuiceFS |
 
 Kafka、Redis、Milvus、Spark、Kyuubi、Jupyter 等按业务需求使用，其中 Kafka、Redis、Milvus 已包含在默认组件部署流程中。
@@ -211,7 +183,7 @@ bash ./deploy/download_resource.sh
 bash ./deploy/deploy_components.sh
 ```
 
-需在下载资源和部署时保持命名空间、版本、路径和架构配置一致。主要参数如下：
+需在下载资源和部署时保持命名空间、版本、路径和架构配置一致。主要脚本参数和容器配置如下：
 
 | 参数 | 作用 |
 |------|------|
@@ -219,16 +191,32 @@ bash ./deploy/deploy_components.sh
 | `SQLREC_POSTGRESQL_USER` / `SQLREC_POSTGRESQL_PASSWORD` | SQLRec 元数据库凭据 |
 | `HMS_POSTGRESQL_USER` / `HMS_POSTGRESQL_PASSWORD` | HMS 元数据库凭据 |
 | `SQLREC_POSTGRESQL_PORT` / `HMS_POSTGRESQL_PORT` | 数据库 NodePort |
-| `HMS_PORT` / `FLINK_SQL_GATEWAY_PORT` | HMS / Flink SQL Gateway NodePort；Gateway 端口也供 SQLRec 连接使用 |
+| `HMS_PORT` | HMS NodePort |
+| `FLINK_SQL_GATEWAY_ADDRESS` | Gateway 主机地址；部署时默认 `NODE_IP`，空地址禁用转发 |
+| `FLINK_SQL_GATEWAY_PORT` | Gateway NodePort 和 SQLRec 连接端口，默认 `30018` |
+| `FLINK_SQL_GATEWAY_CONNECT_TIMEOUT` | SQLRec 容器运行时配置；连接和 RPC 读取超时，默认 `600000` 毫秒（10 分钟） |
 | `SQLREC_THRIFT_PORT` / `SQLREC_REST_PORT` | JDBC/Beeline / REST NodePort，默认 `30000` / `30001` |
 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` | 共享 S3 凭据 |
 | `DEPLOY_TIMEOUT` | 部署等待超时，默认 `3600` 秒 |
 
-SQLRec 容器的 `META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 等由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
+SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
 
 使用 SRE 运维的已有依赖时，需要调整对应部署步骤和 YAML 中的连接配置。当前脚本没有“设置外部组件地址就自动跳过部署”的机制；仅导出 `META_DB_URL` 或 `HIVE_METASTORE_URI` 不会替换模板中的地址。单独运行 `deploy/sqlrec/deploy.sh` 也会先部署 PostgreSQL。
 
 SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 ClusterRoleBinding 授予集群级 `edit` 权限。生产环境应按所需资源和命名空间调整为受限 Role/RoleBinding。
+
+### Gateway 转发配置
+
+部署脚本默认安装 Flink SQL Gateway，并配置 SQLRec 的连接地址。Gateway 仅供需要 Flink 执行的请求使用；本地 SQL、JDBC 元数据和持久表、库、UDF 的纯元数据 DDL 不依赖 Gateway。
+
+默认配置无需调整。连接外部 Gateway 时，设置上表中的地址和端口，使用该服务的 HiveServer2/Thrift 接口。将地址设为空并重新部署 SQLRec，可关闭远程转发；这不会跳过默认 Flink 组件部署或删除已有组件。
+
+```bash
+export FLINK_SQL_GATEWAY_ADDRESS=""
+bash ./deploy/sqlrec/deploy.sh
+```
+
+SQL 执行范围见[架构说明](../reference/architecture.md#gateway-转发边界)，SET/RESET 行为见[SQL 参考](../reference/sql.md#set)。
 
 ### SQL 初始化
 

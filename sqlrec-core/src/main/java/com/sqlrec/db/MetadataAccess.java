@@ -6,6 +6,8 @@ import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
+import com.sqlrec.executor.SqlProcessResult;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
 
@@ -33,12 +35,12 @@ public class MetadataAccess {
         return schemaAccess.getDatabases();
     }
 
-    public void executeMetadataDdl(String sql, String database) throws Exception {
-        schemaAccess.executeMetadataDdl(sql, database);
+    public void executeMetadataDdl(SqlNode node, String database) throws Exception {
+        schemaAccess.executeMetadataDdl(node, database);
     }
 
-    public com.sqlrec.executor.SqlProcessResult executeMetadataQuery(String sql, String database) throws Exception {
-        return schemaAccess.executeMetadataQuery(sql, database);
+    public SqlProcessResult executeMetadataQuery(SqlNode node, String database) throws Exception {
+        return schemaAccess.executeMetadataQuery(node, database);
     }
 
     public List<Table> getTables(String database) throws Exception {

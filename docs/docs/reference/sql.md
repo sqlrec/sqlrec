@@ -12,6 +12,7 @@
 | 发布和管理 API | [CREATE API](#create-api)、[SHOW APIS](#show-apis) |
 | 定义、训练和导出模型 | [CREATE MODEL](#create-model)、[TRAIN MODEL](#train-model)、[EXPORT MODEL](#export-model)、[SHOW CHECKPOINTS](#show-checkpoints) |
 | 部署和管理模型服务 | [CREATE SERVICE](#create-service)、[SHOW SERVICES](#show-services) |
+| 了解表、库和 UDF 的 DDL 支持范围 | [元数据 DDL](#元数据-ddl) |
 | 刷新进程内定义缓存 | [FLUSH](#flush) |
 
 ## SQL 函数管理
@@ -439,6 +440,8 @@ RETURN SELECT id FROM candidates;
 ### SET
 
 设置当前执行上下文中的字符串变量。SQL 函数可以通过 `` `get` `` 或 `` `get_or_default` `` 读取变量。
+
+在 Thrift 会话中，顶层 `SET 'key' = 'value'` 还会保存会话设置，无需连接 Gateway；设置在下一次远程 SQL 执行前同步到 Gateway，本地保存成功不代表远程验证成功。无赋值的 `SET`（如 `SET;`）查询 Flink 配置，仍需 Gateway。`RESET` 或 `RESET 'key'` 经 Gateway 确认成功后才清除本地保存的全部或指定会话设置；转发禁用或远程执行失败时，原设置保持不变。REST/CLI 不提供透明 Gateway 转发，详见[执行边界](./architecture.md#gateway-转发边界)。
 
 **语法：**
 
@@ -928,6 +931,12 @@ DESC SERVICE my_service;
 
 DESCRIBE FORMATTED SERVICE my_service;
 ```
+
+## 元数据 DDL
+
+共享元数据模式下，持久表、库和 UDF 的纯元数据 DDL 使用 Flink 1.19 default 方言，通过官方 HiveCatalog 的 Hive 客户端直接写 HMS，不创建 TableEnvironment 或 Planner，也不连接 Gateway。表 DDL 支持普通列、metadata 列、主键和分区，不支持计算列和 WATERMARK；需要解析已有表结构的查询和修改也会拒绝这些定义。
+
+不支持 `USE CATALOG` 和创建临时表（包括临时 CTAS/RTAS）。`USE database` 不校验会话 schema 中是否存在该数据库，后续操作按实际元数据执行。临时函数、视图及持久表的 CTAS/RTAS 保留 Thrift 远程路由。保存表/UDF 定义不代表 SQLRec 本地支持其全部 Connector、列语义或函数接口。SQL 文件元数据模式不支持这些持久元数据 DDL，也不提供 Gateway 转发。
 
 ## 元数据刷新
 

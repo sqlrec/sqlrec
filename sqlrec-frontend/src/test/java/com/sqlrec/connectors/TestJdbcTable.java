@@ -19,6 +19,7 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
@@ -29,7 +30,8 @@ import java.util.*;
 
 public class TestJdbcTable {
 
-    private static final String JDBC_URL = "jdbc:h2:mem:testjdbc;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+    private static final String JDBC_URL = "jdbc:h2:mem:testjdbc_"
+            + UUID.randomUUID().toString().replace("-", "") + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
     private static final String JDBC_USERNAME = "sa";
     private static final String JDBC_PASSWORD = "";
 
@@ -38,16 +40,24 @@ public class TestJdbcTable {
         Class.forName("org.h2.Driver");
         try (Connection conn = DriverManager.getConnection(JDBC_URL, JDBC_USERNAME, JDBC_PASSWORD);
              Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
+            stmt.execute("CREATE TABLE users (" +
                     "id INT PRIMARY KEY, " +
                     "name VARCHAR(100), " +
                     "age INT)");
-            stmt.execute("CREATE TABLE IF NOT EXISTS products (" +
+            stmt.execute("CREATE TABLE products (" +
                     "id INT PRIMARY KEY, " +
                     "name VARCHAR(100), " +
                     "price INT)");
-            stmt.execute("DELETE FROM users");
-            stmt.execute("DELETE FROM products");
+        }
+    }
+
+    @AfterAll
+    public static void dropTestTables() throws Exception {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL, JDBC_USERNAME, JDBC_PASSWORD);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS users");
+            stmt.execute("DROP TABLE IF EXISTS products");
+            stmt.execute("SHUTDOWN");
         }
     }
 

@@ -50,7 +50,10 @@ public class MetadataAccessFactory {
                 ServiceManager.saveServiceInDb((SqlCreateService) node, instance, true, true);
             }
         } else {
-            instance = new MetadataAccess(new HmsSchemaAccess(), new DbStoreAccess(), new RemoteHdfsAccess());
+            HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
+            MetadataAccess metadata = new MetadataAccess(schemaAccess, new DbStoreAccess(), new RemoteHdfsAccess());
+            Runtime.getRuntime().addShutdownHook(new Thread(schemaAccess::close, "sqlrec-hive-ddl"));
+            instance = metadata;
         }
     }
 }

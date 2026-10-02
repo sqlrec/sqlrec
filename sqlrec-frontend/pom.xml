@@ -219,7 +219,6 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-http</artifactId>
-            <version>4.1.107.Final</version>
         </dependency>
 
         <!-- CLI dependencies: Picocli for arg parsing, JLine for interactive REPL -->

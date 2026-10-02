@@ -53,15 +53,18 @@ These objects appear throughout the execution flow:
 ```text
 Client
   ├─ Thrift / REST SQL / CLI ─→ parse and route SQL
-  │                              ├─ local ─→ compile with Calcite ─→ execute ─→ return results
-  │                              │                            └─ Connectors / SQL functions
-  │                              └─ other SQL ─→ Flink SQL Gateway (remote-mode Thrift sessions)
+  │                              ├─ local queries/writes ─→ Calcite ─→ execute ─→ return results
+  │                              │                                    └─ Connectors / SQL functions
+  │                              ├─ table/database/UDF metadata DDL ─→ HiveCatalog ─→ HMS
+  │                              └─ SQL requiring Flink ─→ Gateway (remote-mode Thrift sessions)
   └─ REST API ─→ resolve API to SQL function ─→ execute function ─→ return JSON
 ```
 
 SQLRec uses two parsers. The Flink parser gets the first chance to parse standard Flink SQL; a separate SQLRec parser handles extensions such as `CACHE TABLE`, `CALL`, and model management. The executor then routes the statement to local Calcite execution, metadata handling, or Flink.
 
-The local path handles online SQL queries and writes, SQL functions, and control statements. Calcite compiles queries into executable code, which reads or writes data through Connectors. SQLRec handles resource commands such as `SHOW` and model or service management itself. In remote metadata mode, a local adapter writes persistent table, database, and UDF metadata DDL to HMS through the official HiveCatalog, without creating a TableEnvironment or connecting to Gateway. Computed columns and watermarks are outside the local table DDL support scope. Thrift sessions forward other statements not handled locally to Flink SQL Gateway. `USE` and `SET` apply to both local and remote sessions. REST `/sql/v1` and CLI have no transparent forwarding path, and local file metadata mode does not depend on Flink Gateway.
+The local path handles online SQL queries and writes, SQL functions, and control statements. Calcite compiles queries into executable code, which reads or writes data through Connectors. SQLRec handles resource commands such as `SHOW` and model or service management itself. In remote metadata mode, a local adapter writes persistent table, database, and UDF metadata DDL to HMS through the official HiveCatalog, without creating a TableEnvironment or connecting to Gateway. See the [SQL Reference](./sql.md#metadata-ddl) for DDL support limits. Thrift sessions forward other statements not handled locally to Flink SQL Gateway. REST `/sql/v1` and CLI have no transparent forwarding path, and local file metadata mode does not depend on Flink Gateway.
+
+`TCLIServiceImpl` adapts the Thrift protocol, `SessionManager` owns sessions and their local/remote operation entries, `GatewayClient` handles only remote connections, state synchronization, and Gateway calls, and `JdbcMetadataExecutor` provides local JDBC metadata results.
 
 A Thrift session owns its SQL executor. REST `/sql/v1` creates one executor per request and runs that request's statements in order. `POST /api/v1/<name>` resolves the published API and its SQL function, then creates input tables and an execution context for that call. See [Publishing and Calling APIs](../guides/api.md) for the API contract.
 
@@ -73,6 +76,22 @@ The entry point determines how long state remains visible and whether forwarding
 | REST `/sql/v1` | Statements in one request share an executor, released afterward | No transparent forwarding |
 | CLI | A local executor for the current CLI run | No transparent forwarding |
 | REST `/api/v1/<name>` | Function input tables and execution context created for each call | No forwarding |
+
+### Gateway Forwarding Boundaries
+
+Thrift sessions are created locally and do not require an available Gateway. Local failures do not fall back to Gateway; only requests requiring remote capabilities open a remote connection.
+
+| Request | Gateway dependency |
+| --- | --- |
+| Locally supported SQL and persistent table/database/UDF metadata DDL | None |
+| Top-level `USE database`, `SET 'key' = 'value'` | None; state is saved locally and synchronized before the next remote SQL statement |
+| JDBC type, catalog, schema, table, column, function, and primary-key queries | None |
+| Client session information, local operation status, and local result fetching | None |
+| Non-assignment `SET`, `RESET` | Required; see [SET/RESET](./sql.md#set) for details |
+| Other SQL requiring Flink execution, `GetCrossReference`, and Delegation Token RPCs | Required; connects on demand |
+| Remote operation status, fetching, cancellation, and closing | Require the original remote session and a valid operation handle |
+
+See [Service Deployment](../operations/deployment.md#gateway-forwarding-configuration) for connection settings and [Error Recovery](../guides/exception-recovery.md#gateway-connection-and-execution-failures) for connection loss and execution errors.
 
 ## Execution Model
 

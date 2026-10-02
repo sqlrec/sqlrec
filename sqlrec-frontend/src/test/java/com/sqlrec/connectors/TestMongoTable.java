@@ -8,6 +8,8 @@ import com.sqlrec.connectors.mongodb.calcite.MongoCalciteTable;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -21,6 +23,8 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -28,11 +32,34 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Tag("integration")
 public class TestMongoTable {
 
     private static final String MONGO_URI = "mongodb://sqlrec:abc123456@" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30029";
+    private static final String TEST_DATABASE = "sqlrec_test";
+    private static final String TEST_COLLECTION = "sqlrec_mongo_test_"
+            + UUID.randomUUID().toString().replace("-", "");
+    private static MongoClient collectionClient;
+
+    @BeforeAll
+    static void createTestCollection() {
+        collectionClient = MongoClients.create(MONGO_URI);
+        collectionClient.getDatabase(TEST_DATABASE).createCollection(TEST_COLLECTION);
+    }
+
+    @AfterAll
+    static void dropTestCollection() {
+        if (collectionClient == null) {
+            return;
+        }
+        try {
+            collectionClient.getDatabase(TEST_DATABASE).getCollection(TEST_COLLECTION).drop();
+        } finally {
+            collectionClient.close();
+        }
+    }
 
     @Test
     public void testMongoTable() throws Exception {
@@ -125,8 +152,8 @@ public class TestMongoTable {
 
         MongoConfig mongoConfig = new MongoConfig();
         mongoConfig.uri = MONGO_URI;
-        mongoConfig.database = "sqlrec_test";
-        mongoConfig.collection = "test_mongo_table";
+        mongoConfig.database = TEST_DATABASE;
+        mongoConfig.collection = TEST_COLLECTION;
         mongoConfig.fieldSchemas = fieldSchemas;
         mongoConfig.primaryKey = "id";
         mongoConfig.primaryKeyIndex = 0;

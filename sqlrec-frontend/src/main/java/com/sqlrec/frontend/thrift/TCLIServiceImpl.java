@@ -1,11 +1,14 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.executor.SqlProcessResult;
-import java.util.concurrent.Callable;
-
+import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
+
+import java.util.concurrent.Callable;
 
 public class TCLIServiceImpl implements TCLIService.Iface {
     private final SessionManager sessionManager = new SessionManager();
@@ -22,10 +25,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
             return new MetadataOutcome(new TStatus(TStatusCode.SUCCESS_STATUS),
                     sessionManager.openMetadataOperation(session, type, query));
         } catch (Exception e) {
-            TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
-            status.setSqlState(e instanceof UnsupportedOperationException ? "0A000" : "HY000");
-            status.setErrorMessage(e.getMessage());
-            return new MetadataOutcome(status, null);
+            return new MetadataOutcome(ThriftUtils.errorStatus(e), null);
         }
     }
 
@@ -49,17 +49,23 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
-        TCLIService.Iface client = sessionManager.getClient(tGetInfoReq.getSessionHandle().getSessionId());
-        if (client == null) {
-            return new TGetInfoResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS),
-                    TGetInfoValue.stringValue(""));
+        if (!sessionManager.hasSession(tGetInfoReq.getSessionHandle())) {
+            return new TGetInfoResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS), TGetInfoValue.stringValue(""));
         }
-        return client.GetInfo(tGetInfoReq);
+        String value = switch (tGetInfoReq.getInfoType()) {
+            case CLI_DBMS_NAME -> "Apache Hive";
+            case CLI_DBMS_VER -> "3.1.3";
+            case CLI_SERVER_NAME, CLI_DATA_SOURCE_NAME -> "SQLRec";
+            case CLI_CATALOG_NAME -> Consts.HIVE_CATALOG_NAME;
+            case CLI_DATA_SOURCE_READ_ONLY -> SqlRecConfigs.isFileSystemMetadata() ? "Y" : "N";
+            default -> "";
+        };
+        return new TGetInfoResp(new TStatus(TStatusCode.SUCCESS_STATUS), TGetInfoValue.stringValue(value));
     }
 
     @Override
     public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
-        return sessionManager.ExecuteStatement(tExecuteStatementReq);
+        return sessionManager.executeStatement(tExecuteStatementReq);
     }
 
     @Override
@@ -152,63 +158,63 @@ public class TCLIServiceImpl implements TCLIService.Iface {
 
     @Override
     public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq req) throws TException {
-        return sessionManager.GetCrossReference(req);
+        return sessionManager.getCrossReference(req);
     }
 
     @Override
     public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
-        return sessionManager.GetOperationStatus(tGetOperationStatusReq);
+        return sessionManager.getOperationStatus(tGetOperationStatusReq);
     }
 
     @Override
     public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
-        return sessionManager.CancelOperation(tCancelOperationReq);
+        return sessionManager.cancelOperation(tCancelOperationReq);
     }
 
     @Override
     public TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
-        return sessionManager.CloseOperation(tCloseOperationReq);
+        return sessionManager.closeOperation(tCloseOperationReq);
     }
 
     @Override
     public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
-        return sessionManager.GetResultSetMetadata(tGetResultSetMetadataReq);
+        return sessionManager.getResultSetMetadata(tGetResultSetMetadataReq);
     }
 
     @Override
     public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
-        return sessionManager.FetchResults(tFetchResultsReq);
+        return sessionManager.fetchResults(tFetchResultsReq);
     }
 
     @Override
     public TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq req) throws TException {
-        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        GatewayClient client = sessionManager.getGateway(req.getSessionHandle().getSessionId());
         return client == null ? new TGetDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
-                : client.GetDelegationToken(req);
+                : client.getDelegationToken(req);
     }
 
     @Override
     public TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq req) throws TException {
-        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        GatewayClient client = sessionManager.getGateway(req.getSessionHandle().getSessionId());
         return client == null ? new TCancelDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
-                : client.CancelDelegationToken(req);
+                : client.cancelDelegationToken(req);
     }
 
     @Override
     public TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq req) throws TException {
-        TCLIService.Iface client = sessionManager.getClient(req.getSessionHandle().getSessionId());
+        GatewayClient client = sessionManager.getGateway(req.getSessionHandle().getSessionId());
         return client == null ? new TRenewDelegationTokenResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS))
-                : client.RenewDelegationToken(req);
+                : client.renewDelegationToken(req);
     }
 
     @Override
     public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
-        return sessionManager.GetQueryId(tGetQueryIdReq);
+        return sessionManager.getQueryId(tGetQueryIdReq);
     }
 
     @Override
     public TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
-        if (sessionManager.getClient(tSetClientInfoReq.getSessionHandle().getSessionId()) == null) {
+        if (!sessionManager.hasSession(tSetClientInfoReq.getSessionHandle())) {
             return new TSetClientInfoResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
         }
         return new TSetClientInfoResp(new TStatus(TStatusCode.SUCCESS_STATUS));

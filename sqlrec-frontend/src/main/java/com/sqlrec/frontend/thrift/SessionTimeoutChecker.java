@@ -1,32 +1,21 @@
 package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.frontend.utils.ThriftUtils;
-import org.apache.hive.service.rpc.thrift.THandleIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongConsumer;
 
 public class SessionTimeoutChecker {
     private static final Logger logger = LoggerFactory.getLogger(SessionTimeoutChecker.class);
 
     private final ScheduledExecutorService timeoutChecker = Executors.newScheduledThreadPool(1);
-    private final Map<THandleIdentifier, ClientProxy> clientProxyMap;
-    private final SessionExpirationHandler expirationHandler;
+    private final LongConsumer expirationHandler;
 
-    public interface SessionExpirationHandler {
-        void onSessionExpired(THandleIdentifier sessionId);
-    }
-
-    public SessionTimeoutChecker(Map<THandleIdentifier, ClientProxy> clientProxyMap,
-                                 SessionExpirationHandler expirationHandler) {
-        this.clientProxyMap = clientProxyMap;
+    public SessionTimeoutChecker(LongConsumer expirationHandler) {
         this.expirationHandler = expirationHandler;
     }
 
@@ -47,17 +36,7 @@ public class SessionTimeoutChecker {
 
         timeoutChecker.scheduleAtFixedRate(() -> {
             try {
-                long now = System.currentTimeMillis();
-                List<THandleIdentifier> expiredSessions = new ArrayList<>();
-                clientProxyMap.forEach((sessionId, proxy) -> {
-                    if (now - proxy.getLastAccessTime() > sessionTimeout) {
-                        expiredSessions.add(sessionId);
-                    }
-                });
-                for (THandleIdentifier sessionId : expiredSessions) {
-                    logger.warn("Session timeout, cleaning up, sessionGuid: {}", ThriftUtils.safeHandleId(sessionId));
-                    expirationHandler.onSessionExpired(sessionId);
-                }
+                expirationHandler.accept(sessionTimeout);
             } catch (Exception e) {
                 logger.error("Error in timeout checker", e);
             }

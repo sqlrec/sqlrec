@@ -2,7 +2,6 @@ package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
@@ -14,43 +13,31 @@ import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * A proxy owns one generated Thrift client and transport for a session.  Generated
- * clients and their protocols are not safe for concurrent request/response exchanges,
- * so remote TCLIService calls are synchronized for the whole reconnect/translate/
- * invoke/restore sequence.
- */
-public class ClientProxy implements TCLIService.Iface {
-    private static final Logger logger = LoggerFactory.getLogger(ClientProxy.class);
+/** Owns one Gateway connection. Generated Thrift clients must be used serially. */
+public final class GatewayClient {
+    private static final Logger logger = LoggerFactory.getLogger(GatewayClient.class);
 
-    private THandleIdentifier localSessionId;
     private THandleIdentifier remoteSessionId;
     private TCLIService.Client client;
     private TTransport transport;
-    private final AtomicLong lastAccessTime;
 
-    private volatile boolean connected;
+    private boolean connected;
     private TOpenSessionReq pendingOpenSessionReq;
     private String desiredDatabase = Consts.DEFAULT_SCHEMA_NAME;
     private Map<String, String> desiredSettings = new LinkedHashMap<>();
-    private long stateVersion;
-    private long appliedStateVersion = -1;
+    private boolean stateDirty = true;
     private final Set<THandleIdentifier> remoteOperations = new HashSet<>();
 
     public synchronized void setSessionState(String database, Map<String, String> settings) {
         if (!database.equals(desiredDatabase) || !settings.equals(desiredSettings)) {
             desiredDatabase = database;
             desiredSettings = new LinkedHashMap<>(settings);
-            stateVersion++;
+            stateDirty = true;
         }
     }
 
@@ -64,28 +51,8 @@ public class ClientProxy implements TCLIService.Iface {
         }
     }
 
-    public ClientProxy() {
-        this.lastAccessTime = new AtomicLong(System.currentTimeMillis());
-        this.connected = false;
-    }
-
-    @Override
-    public synchronized TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
-        this.localSessionId = ThriftUtils.getHandleIdentifier();
-        this.pendingOpenSessionReq = req.deepCopy();
-
-        TOpenSessionResp resp = new TOpenSessionResp();
-        resp.setStatus(new TStatus(TStatusCode.SUCCESS_STATUS));
-        resp.setSessionHandle(new TSessionHandle(localSessionId));
-        resp.setServerProtocolVersion(TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10);
-        resp.setConfiguration(new HashMap<>());
-
-        MetricsUtils.getCompositeMeterRegistry()
-                .counter(Consts.METRICS_SESSION_OPEN_COUNT)
-                .increment();
-
-        logger.info("Local session opened, sessionGuid: {}", ThriftUtils.safeHandleId(localSessionId));
-        return resp;
+    public GatewayClient(TOpenSessionReq request) {
+        this.pendingOpenSessionReq = request.deepCopy();
     }
 
     private void ensureConnected() throws TException {
@@ -97,7 +64,7 @@ public class ClientProxy implements TCLIService.Iface {
         markDisconnected();
 
         if (pendingOpenSessionReq == null) {
-            throw new TException("Cannot (re)connect: OpenSession was never called");
+            throw new TException("Gateway client was closed");
         }
 
         TTransport transport = new TSocket(
@@ -115,19 +82,16 @@ public class ClientProxy implements TCLIService.Iface {
             if (remoteResp.getSessionHandle() == null) {
                 throw new TException("Gateway OpenSession returned no session handle");
             }
-            THandleIdentifier remoteSessionId = copyHandleId(remoteResp.getSessionHandle().getSessionId());
+            THandleIdentifier remoteSessionId = remoteResp.getSessionHandle().getSessionId().deepCopy();
 
-            // All remote operations succeeded, commit state atomically.
-            // NOTE: pendingOpenSessionReq is intentionally retained so the session can be
-            // re-opened after a future transport failure (see markDisconnected).
+            // Publish the connection only after OpenSession succeeds. Retain the request for reconnect.
             this.client = client;
             this.transport = transport;
             this.remoteSessionId = remoteSessionId;
             this.connected = true;
-            this.appliedStateVersion = -1;
+            this.stateDirty = true;
 
-            logger.info("Remote connection opened, localSessionGuid: {}, remoteSessionGuid: {}",
-                    ThriftUtils.safeHandleId(localSessionId), ThriftUtils.safeHandleId(remoteSessionId));
+            logger.info("Gateway session opened, remoteSessionGuid: {}", ThriftUtils.safeHandleId(remoteSessionId));
         } catch (Exception e) {
             logger.error("Failed to open remote connection: {}", e.getMessage(), e);
             try {
@@ -142,7 +106,7 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     /**
-     * Tear down the current remote connection without dropping session identity, so the
+     * Tear down the current remote connection while retaining the open request, so the
      * next call to {@link #ensureConnected()} re-opens the remote session. Used after a
      * transport-level failure so the broken client/transport is not reused forever.
      */
@@ -158,9 +122,9 @@ public class ClientProxy implements TCLIService.Iface {
         this.transport = null;
         this.remoteSessionId = null;
         this.connected = false;
-        this.appliedStateVersion = -1;
+        this.stateDirty = true;
         this.remoteOperations.clear();
-        // keep localSessionId and pendingOpenSessionReq for reconnect
+        // Keep the open request for reconnect.
     }
 
     @FunctionalInterface
@@ -171,7 +135,7 @@ public class ClientProxy implements TCLIService.Iface {
     /**
      * Invoke a remote thrift call, and on a transport-level failure mark the connection
      * disconnected so the next call re-opens it. The current call still fails (the
-     * connection is genuinely broken), but the proxy recovers instead of staying broken.
+     * connection is genuinely broken), but the client recovers instead of staying broken.
      */
     private <T> T invokeRemote(RemoteCall<T> call) throws TException {
         try {
@@ -182,20 +146,7 @@ public class ClientProxy implements TCLIService.Iface {
         }
     }
 
-    private <T> T invokeWithSessionHandle(TSessionHandle sessionHandle, RemoteCall<T> call)
-            throws TException {
-        updateAccessTime();
-        ensureConnected();
-        THandleIdentifier originalSessionId = translateSessionHandle(sessionHandle);
-        try {
-            return invokeRemote(call);
-        } finally {
-            restoreSessionHandle(sessionHandle, originalSessionId);
-        }
-    }
-
     private <T> T invokeConnected(RemoteCall<T> call) throws TException {
-        updateAccessTime();
         requireGatewayEnabled();
         if (!connected || transport == null || !transport.isOpen()) {
             throw new TException("FLINK_REMOTE_SESSION_LOST: remote operation handles cannot be resumed after reconnect");
@@ -210,9 +161,8 @@ public class ClientProxy implements TCLIService.Iface {
     }
 
     private void prepareStatement() throws TException {
-        requireGatewayEnabled();
         ensureConnected();
-        if (appliedStateVersion == stateVersion) {
+        if (!stateDirty) {
             return;
         }
         String synchronizing = "table.sql-dialect";
@@ -229,7 +179,7 @@ public class ClientProxy implements TCLIService.Iface {
             }
             synchronizing = "current database";
             applyStateStatement("USE `" + desiredDatabase.replace("`", "``") + "`");
-            appliedStateVersion = stateVersion;
+            stateDirty = false;
         } catch (TException e) {
             throw new TException("FLINK_SESSION_STATE_SYNC_FAILED: could not apply " + synchronizing
                     + "; correct this setting and retry the remote statement", e);
@@ -250,7 +200,6 @@ public class ClientProxy implements TCLIService.Iface {
 
     /** Confirm a remote configuration command before changing SQLRec's saved session overrides. */
     public synchronized void executeSessionCommand(String sql) throws TException {
-        updateAccessTime();
         // RESET must work even if a pending SET is invalid; do not replay pending overrides first.
         ensureConnected();
         executeStateStatement(sql);
@@ -310,185 +259,56 @@ public class ClientProxy implements TCLIService.Iface {
 
     private void trackRemoteOperation(TStatus status, TOperationHandle handle) {
         if (ThriftUtils.isSuccess(status) && handle != null) {
-            remoteOperations.add(copyHandleId(handle.getOperationId()));
+            remoteOperations.add(handle.getOperationId().deepCopy());
         }
     }
 
-    private THandleIdentifier translateSessionHandle(TSessionHandle sessionHandle) {
-        if (sessionHandle != null && remoteSessionId != null) {
-            THandleIdentifier originalSessionId = copyHandleId(sessionHandle.getSessionId());
-            sessionHandle.setSessionId(copyHandleId(remoteSessionId));
-            return originalSessionId;
-        }
-        return null;
-    }
-
-    private void restoreSessionHandle(TSessionHandle sessionHandle, THandleIdentifier originalSessionId) {
-        if (sessionHandle != null && originalSessionId != null) {
-            sessionHandle.setSessionId(originalSessionId);
-        }
-    }
-
-    private static THandleIdentifier copyHandleId(THandleIdentifier source) {
-        byte[] guidBytes = Arrays.copyOf(source.getGuid(), source.getGuid().length);
-        byte[] secretBytes = Arrays.copyOf(source.getSecret(), source.getSecret().length);
-        return new THandleIdentifier(ByteBuffer.wrap(guidBytes), ByteBuffer.wrap(secretBytes));
-    }
-
-    public THandleIdentifier getSessionId() {
-        return localSessionId;
-    }
-
-    public long getLastAccessTime() {
-        return lastAccessTime.get();
-    }
-
-    public void updateAccessTime() {
-        lastAccessTime.set(System.currentTimeMillis());
-    }
-
-    @Override
-    public synchronized TCloseSessionResp CloseSession(TCloseSessionReq req) throws TException {
+    public synchronized TCloseSessionResp closeSession() throws TException {
         try {
-            if (connected) {
-                THandleIdentifier originalSessionId = translateSessionHandle(req.getSessionHandle());
-                try {
-                    return invokeRemote(() -> client.CloseSession(req));
-                } finally {
-                    restoreSessionHandle(req.getSessionHandle(), originalSessionId);
-                }
-            } else {
+            if (!connected) {
                 return new TCloseSessionResp(new TStatus(TStatusCode.SUCCESS_STATUS));
             }
+            TCloseSessionReq request = new TCloseSessionReq(remoteSessionHandle());
+            return invokeRemote(() -> client.CloseSession(request));
         } finally {
             markDisconnected();
             pendingOpenSessionReq = null;
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_SESSION_CLOSE_COUNT)
-                    .increment();
         }
     }
 
-    @Override
-    public TGetInfoResp GetInfo(TGetInfoReq tGetInfoReq) throws TException {
-        updateAccessTime();
-
-        TGetInfoResp resp = new TGetInfoResp();
-        resp.setStatus(new TStatus(TStatusCode.SUCCESS_STATUS));
-
-        TGetInfoType infoType = tGetInfoReq.getInfoType();
-        String infoValue = switch (infoType) {
-            case CLI_DBMS_NAME -> "Apache Hive";
-            case CLI_DBMS_VER -> "3.1.3";
-            case CLI_SERVER_NAME, CLI_DATA_SOURCE_NAME -> "SQLRec";
-            case CLI_CATALOG_NAME -> Consts.HIVE_CATALOG_NAME;
-            case CLI_DATA_SOURCE_READ_ONLY -> SqlRecConfigs.isFileSystemMetadata() ? "Y" : "N";
-            default -> "";
-        };
-        resp.setInfoValue(TGetInfoValue.stringValue(infoValue));
-
-        return resp;
+    private TSessionHandle remoteSessionHandle() {
+        return new TSessionHandle(remoteSessionId.deepCopy());
     }
 
-    @Override
-    public synchronized TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
+    public synchronized TExecuteStatementResp executeStatement(TExecuteStatementReq request) throws TException {
         prepareStatement();
-        TExecuteStatementResp response = invokeWithSessionHandle(
-                tExecuteStatementReq.getSessionHandle(),
-                () -> client.ExecuteStatement(tExecuteStatementReq)
-        );
+        TExecuteStatementReq remote = request.deepCopy();
+        remote.setSessionHandle(remoteSessionHandle());
+        TExecuteStatementResp response = invokeRemote(() -> client.ExecuteStatement(remote));
         trackRemoteOperation(response.getStatus(), response.getOperationHandle());
         return response;
     }
 
-    @Override
-    public synchronized TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq tGetTypeInfoReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetTypeInfoReq.getSessionHandle(),
-                () -> client.GetTypeInfo(tGetTypeInfoReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetCatalogsResp GetCatalogs(TGetCatalogsReq tGetCatalogsReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetCatalogsReq.getSessionHandle(),
-                () -> client.GetCatalogs(tGetCatalogsReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetSchemasResp GetSchemas(TGetSchemasReq tGetSchemasReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetSchemasReq.getSessionHandle(),
-                () -> client.GetSchemas(tGetSchemasReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetTablesResp GetTables(TGetTablesReq tGetTablesReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetTablesReq.getSessionHandle(),
-                () -> client.GetTables(tGetTablesReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetTableTypesResp GetTableTypes(TGetTableTypesReq tGetTableTypesReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetTableTypesReq.getSessionHandle(),
-                () -> client.GetTableTypes(tGetTableTypesReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetColumnsResp GetColumns(TGetColumnsReq tGetColumnsReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetColumnsReq.getSessionHandle(),
-                () -> client.GetColumns(tGetColumnsReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetFunctionsResp GetFunctions(TGetFunctionsReq tGetFunctionsReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetFunctionsReq.getSessionHandle(),
-                () -> client.GetFunctions(tGetFunctionsReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq tGetPrimaryKeysReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetPrimaryKeysReq.getSessionHandle(),
-                () -> client.GetPrimaryKeys(tGetPrimaryKeysReq)
-        );
-    }
-
-    @Override
-    public synchronized TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq tGetCrossReferenceReq) throws TException {
-        TGetCrossReferenceResp response = invokeWithSessionHandle(
-                tGetCrossReferenceReq.getSessionHandle(),
-                () -> client.GetCrossReference(tGetCrossReferenceReq)
-        );
+    public synchronized TGetCrossReferenceResp getCrossReference(TGetCrossReferenceReq request) throws TException {
+        ensureConnected();
+        TGetCrossReferenceReq remote = request.deepCopy();
+        remote.setSessionHandle(remoteSessionHandle());
+        TGetCrossReferenceResp response = invokeRemote(() -> client.GetCrossReference(remote));
         trackRemoteOperation(response.getStatus(), response.getOperationHandle());
         return response;
     }
 
-    @Override
-    public synchronized TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
+    public synchronized TGetOperationStatusResp getOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
         requireRemoteOperation(tGetOperationStatusReq.getOperationHandle());
         return invokeConnected(() -> client.GetOperationStatus(tGetOperationStatusReq));
     }
 
-    @Override
-    public synchronized TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
+    public synchronized TCancelOperationResp cancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
         requireRemoteOperation(tCancelOperationReq.getOperationHandle());
         return invokeConnected(() -> client.CancelOperation(tCancelOperationReq));
     }
 
-    @Override
-    public synchronized TCloseOperationResp CloseOperation(TCloseOperationReq tCloseOperationReq) throws TException {
+    public synchronized TCloseOperationResp closeOperation(TCloseOperationReq tCloseOperationReq) throws TException {
         requireRemoteOperation(tCloseOperationReq.getOperationHandle());
         TCloseOperationResp response = invokeConnected(() -> client.CloseOperation(tCloseOperationReq));
         if (ThriftUtils.isSuccess(response.getStatus())) {
@@ -497,53 +317,40 @@ public class ClientProxy implements TCLIService.Iface {
         return response;
     }
 
-    @Override
-    public synchronized TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
+    public synchronized TGetResultSetMetadataResp getResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
         requireRemoteOperation(tGetResultSetMetadataReq.getOperationHandle());
         return invokeConnected(() -> client.GetResultSetMetadata(tGetResultSetMetadataReq));
     }
 
-    @Override
-    public synchronized TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
+    public synchronized TFetchResultsResp fetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
         requireRemoteOperation(tFetchResultsReq.getOperationHandle());
         return invokeConnected(() -> client.FetchResults(tFetchResultsReq));
     }
 
-    @Override
-    public synchronized TGetDelegationTokenResp GetDelegationToken(TGetDelegationTokenReq tGetDelegationTokenReq) throws TException {
-        return invokeWithSessionHandle(
-                tGetDelegationTokenReq.getSessionHandle(),
-                () -> client.GetDelegationToken(tGetDelegationTokenReq)
-        );
+    public synchronized TGetDelegationTokenResp getDelegationToken(TGetDelegationTokenReq request) throws TException {
+        ensureConnected();
+        TGetDelegationTokenReq remote = request.deepCopy();
+        remote.setSessionHandle(remoteSessionHandle());
+        return invokeRemote(() -> client.GetDelegationToken(remote));
     }
 
-    @Override
-    public synchronized TCancelDelegationTokenResp CancelDelegationToken(TCancelDelegationTokenReq tCancelDelegationTokenReq) throws TException {
-        return invokeWithSessionHandle(
-                tCancelDelegationTokenReq.getSessionHandle(),
-                () -> client.CancelDelegationToken(tCancelDelegationTokenReq)
-        );
+    public synchronized TCancelDelegationTokenResp cancelDelegationToken(TCancelDelegationTokenReq request) throws TException {
+        ensureConnected();
+        TCancelDelegationTokenReq remote = request.deepCopy();
+        remote.setSessionHandle(remoteSessionHandle());
+        return invokeRemote(() -> client.CancelDelegationToken(remote));
     }
 
-    @Override
-    public synchronized TRenewDelegationTokenResp RenewDelegationToken(TRenewDelegationTokenReq tRenewDelegationTokenReq) throws TException {
-        return invokeWithSessionHandle(
-                tRenewDelegationTokenReq.getSessionHandle(),
-                () -> client.RenewDelegationToken(tRenewDelegationTokenReq)
-        );
+    public synchronized TRenewDelegationTokenResp renewDelegationToken(TRenewDelegationTokenReq request) throws TException {
+        ensureConnected();
+        TRenewDelegationTokenReq remote = request.deepCopy();
+        remote.setSessionHandle(remoteSessionHandle());
+        return invokeRemote(() -> client.RenewDelegationToken(remote));
     }
 
-    @Override
-    public synchronized TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
+    public synchronized TGetQueryIdResp getQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
         requireRemoteOperation(tGetQueryIdReq.getOperationHandle());
         return invokeConnected(() -> client.GetQueryId(tGetQueryIdReq));
     }
 
-    @Override
-    public synchronized TSetClientInfoResp SetClientInfo(TSetClientInfoReq tSetClientInfoReq) throws TException {
-        return invokeWithSessionHandle(
-                tSetClientInfoReq.getSessionHandle(),
-                () -> client.SetClientInfo(tSetClientInfoReq)
-        );
-    }
 }

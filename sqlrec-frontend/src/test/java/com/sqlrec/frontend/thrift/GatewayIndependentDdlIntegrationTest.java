@@ -2,11 +2,11 @@ package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.HdfsAccess;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.StoreAccess;
-import com.sqlrec.db.remote.FlinkHiveDdlAdapter;
 import com.sqlrec.db.remote.HmsSchemaAccess;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -33,7 +33,8 @@ class GatewayIndependentDdlIntegrationTest {
         String previousAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
         SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue("");
         CalciteSchemaFactory.setGlobalSchema(CalciteSchema.createRootSchema(false));
-        MetadataAccess metadata = new MetadataAccess(new HmsSchemaAccess(), mock(StoreAccess.class), mock(HdfsAccess.class));
+        HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
+        MetadataAccess metadata = new MetadataAccess(schemaAccess, mock(StoreAccess.class), mock(HdfsAccess.class));
         TCLIServiceImpl service = new TCLIServiceImpl();
         HiveConf conf = new HiveConf();
         conf.set(HiveConf.ConfVars.METASTOREURIS.varname, SqlRecConfigs.HIVE_METASTORE_URI.getValue());
@@ -88,7 +89,8 @@ class GatewayIndependentDdlIntegrationTest {
                 assertFalse(reader.databaseExists(database));
             } finally {
                 try {
-                    FlinkHiveDdlAdapter.executeDdl("DROP DATABASE IF EXISTS " + database + " CASCADE", "default");
+                    schemaAccess.executeMetadataDdl(CompileManager.parseSql(
+                            "DROP DATABASE IF EXISTS " + database + " CASCADE"), "default");
                 } finally {
                     service.CloseSession(new TCloseSessionReq(session));
                 }
@@ -96,10 +98,11 @@ class GatewayIndependentDdlIntegrationTest {
         } finally {
             service.stop();
             try {
-                reader.close();
-                var close = FlinkHiveDdlAdapter.class.getDeclaredMethod("closeCatalog");
-                close.setAccessible(true);
-                close.invoke(null);
+                try {
+                    reader.close();
+                } finally {
+                    schemaAccess.close();
+                }
             } finally {
                 CalciteSchemaFactory.setGlobalSchema(null);
                 SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(previousAddress);

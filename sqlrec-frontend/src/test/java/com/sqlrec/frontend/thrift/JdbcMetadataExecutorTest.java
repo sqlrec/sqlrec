@@ -130,16 +130,16 @@ class JdbcMetadataExecutorTest {
         // Nullable SMALLINT metadata needs a valid placeholder plus the Thrift null bitmap.
         assertDoesNotThrow(() -> ThriftUtils.convertObjectArrayToTRowSet(columns.getEnumerable(), columns.getFields()));
 
-        SqlOperation operation = SqlOperation.metadata(columns, ThriftUtils.getHandleIdentifier(), "metadata");
+        SqlOperation operation = SqlOperation.metadata(columns, "metadata");
         var first = operation.fetch(TFetchOrientation.FETCH_NEXT, 1);
-        assertEquals(0, first.offset());
+        assertEquals(0, first.rows().getStartRowOffset());
         assertTrue(first.hasMoreRows());
         var second = operation.fetch(TFetchOrientation.FETCH_NEXT, Long.MAX_VALUE);
-        assertEquals(1, second.offset());
+        assertEquals(1, second.rows().getStartRowOffset());
         assertFalse(second.hasMoreRows());
-        assertEquals(1, second.rows().toList().size());
-        assertEquals(2, operation.fetch(TFetchOrientation.FETCH_FIRST, 10).rows().toList().size());
-        assertTrue(operation.fetch(TFetchOrientation.FETCH_NEXT, 10).rows().toList().isEmpty());
+        assertEquals(1, second.rows().getColumns().get(0).getStringVal().getValuesSize());
+        assertEquals(2, operation.fetch(TFetchOrientation.FETCH_FIRST, 10).rows().getColumns().get(0).getStringVal().getValuesSize());
+        assertTrue(operation.fetch(TFetchOrientation.FETCH_NEXT, 10).rows().getColumns().get(0).getStringVal().getValues().isEmpty());
         assertThrows(IllegalArgumentException.class, () -> operation.fetch(TFetchOrientation.FETCH_NEXT, 0));
         assertThrows(UnsupportedOperationException.class, () -> operation.fetch(TFetchOrientation.FETCH_PRIOR, 1));
         verify(metadata, times(1)).getTables("default");

@@ -7,7 +7,6 @@ import com.sqlrec.db.HdfsAccess;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.StoreAccess;
-import com.sqlrec.db.remote.FlinkHiveDdlAdapter;
 import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.db.remote.HmsSchemaAccess;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -40,7 +39,8 @@ class LocalDdlLifecycleTest {
         Map<String, Table> tables = new HashMap<>();
         Map<String, Database> databases = new HashMap<>();
         HiveMetastoreClientWrapper client = metastore(tables, databases);
-        MetadataAccess metadata = new MetadataAccess(new HmsSchemaAccess(), mock(StoreAccess.class), mock(HdfsAccess.class));
+        HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
+        MetadataAccess metadata = new MetadataAccess(schemaAccess, mock(StoreAccess.class), mock(HdfsAccess.class));
         TCLIServiceImpl service = new TCLIServiceImpl();
         try (var clients = mockStatic(HiveMetastoreClientFactory.class);
              var factory = mockStatic(MetadataAccessFactory.class);
@@ -117,9 +117,7 @@ class LocalDdlLifecycleTest {
         } finally {
             service.stop();
             try {
-                var close = FlinkHiveDdlAdapter.class.getDeclaredMethod("closeCatalog");
-                close.setAccessible(true);
-                close.invoke(null);
+                schemaAccess.close();
             } finally {
                 CalciteSchemaFactory.setGlobalSchema(null);
                 SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(previousAddress);

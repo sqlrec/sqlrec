@@ -1,17 +1,22 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.executor.SqlProcessResult;
+import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
-import org.apache.hive.service.rpc.thrift.TFetchOrientation;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.hive.service.rpc.thrift.THandleIdentifier;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.hive.service.rpc.thrift.TFetchOrientation;
+import org.apache.hive.service.rpc.thrift.TOperationState;
+import org.apache.hive.service.rpc.thrift.TRowSet;
 
 import java.util.List;
 
+/** Local execution result and its fetch cursor. */
 public class SqlOperation {
     private final SqlProcessResult coreResult;
-    private final THandleIdentifier handleIdentifier;
     private final String queryId;
     private final boolean metadataOperation;
     private String msg;
@@ -19,12 +24,30 @@ public class SqlOperation {
     private List<Object[]> resultRows;
     private int fetchOffset;
 
-    public record ResultPage(Enumerable<Object[]> rows, long offset, boolean hasMoreRows) {}
+    public record ResultPage(TRowSet rows, boolean hasMoreRows) {}
 
-    /** Materialize JDBC metadata once; ordinary SQL results retain their original fetch behavior. */
+    public SqlOperation(SqlProcessResult result, String queryId) {
+        this(result, queryId, false);
+    }
+
+    private SqlOperation(SqlProcessResult result, String queryId, boolean metadataOperation) {
+        this.coreResult = result;
+        this.queryId = queryId;
+        this.metadataOperation = metadataOperation;
+    }
+
+    public static SqlOperation metadata(SqlProcessResult result, String queryId) {
+        return new SqlOperation(result, queryId, true);
+    }
+
+    /** Ordinary SQL consumes all rows once; JDBC metadata supports bounded, rewindable pages. */
     public synchronized ResultPage fetch(TFetchOrientation orientation, long maxRows) {
         if (!metadataOperation) {
-            throw new IllegalStateException("Pagination is only supported for JDBC metadata operations");
+            Enumerable<Object[]> rows = coreResult.getFields() == null
+                    ? DataTransformUtils.getMsgEnumerable("no output") : coreResult.getEnumerable();
+            ResultPage page = resultPage(rows, 0, false);
+            coreResult.setEnumerable(null);
+            return page;
         }
         if (orientation != TFetchOrientation.FETCH_NEXT && orientation != TFetchOrientation.FETCH_FIRST) {
             throw new UnsupportedOperationException("Only FETCH_NEXT and FETCH_FIRST are supported locally");
@@ -33,76 +56,53 @@ public class SqlOperation {
             throw new IllegalArgumentException("maxRows must be positive");
         }
         if (resultRows == null) {
-            Enumerable<Object[]> enumerable = coreResult.getEnumerable();
-            resultRows = enumerable == null ? List.of() : enumerable.toList();
+            Enumerable<Object[]> rows = coreResult.getEnumerable();
+            resultRows = rows == null ? List.of() : rows.toList();
         }
-        if (orientation == TFetchOrientation.FETCH_FIRST) {
-            fetchOffset = 0;
-        }
-        int start = fetchOffset;
-        // Bound the addition before converting to int to avoid overflow for large JDBC fetch sizes.
-        fetchOffset += (int) Math.min(maxRows, resultRows.size() - fetchOffset);
-        return new ResultPage(Linq4j.asEnumerable(resultRows.subList(start, fetchOffset)),
-                start, fetchOffset < resultRows.size());
+        int start = orientation == TFetchOrientation.FETCH_FIRST ? 0 : fetchOffset;
+        int end = start + (int) Math.min(maxRows, resultRows.size() - start);
+        ResultPage page = resultPage(Linq4j.asEnumerable(resultRows.subList(start, end)), start,
+                end < resultRows.size());
+        fetchOffset = end;
+        return page;
     }
 
-    public SqlOperation(SqlProcessResult coreResult, THandleIdentifier handleIdentifier, String queryId) {
-        this(coreResult, handleIdentifier, queryId, false);
-    }
-
-    private SqlOperation(SqlProcessResult coreResult, THandleIdentifier handleIdentifier, String queryId,
-                         boolean metadataOperation) {
-        this.coreResult = coreResult;
-        this.handleIdentifier = handleIdentifier;
-        this.queryId = queryId;
-        this.metadataOperation = metadataOperation;
-    }
-
-    public static SqlOperation metadata(SqlProcessResult result, THandleIdentifier handle, String queryId) {
-        return new SqlOperation(result, handle, queryId, true);
-    }
-
-    public boolean isMetadataOperation() {
-        return metadataOperation;
-    }
-
-    public Enumerable<Object[]> getEnumerable() {
-        return coreResult.getEnumerable();
-    }
-
-    public void setEnumerable(Enumerable<Object[]> enumerable) {
-        coreResult.setEnumerable(enumerable);
+    private ResultPage resultPage(Enumerable<Object[]> values, long offset, boolean hasMoreRows) {
+        TRowSet rows = ThriftUtils.convertObjectArrayToTRowSet(values, getFields());
+        rows.setStartRowOffset(offset);
+        return new ResultPage(rows, hasMoreRows);
     }
 
     public List<RelDataTypeField> getFields() {
-        return coreResult.getFields();
+        return coreResult.getFields() == null ? DataTypeUtils.getStringTypeField("sys_warn") : coreResult.getFields();
     }
 
-    public boolean isCompleted() {
-        return coreResult.isCompleted();
-    }
-
-    public THandleIdentifier getHandleIdentifier() {
-        return handleIdentifier;
+    public synchronized TOperationState getState() {
+        if (exception != null) {
+            return TOperationState.ERROR_STATE;
+        }
+        try {
+            return coreResult.isCompleted() ? TOperationState.FINISHED_STATE : TOperationState.RUNNING_STATE;
+        } catch (Exception e) {
+            fail(e);
+            return TOperationState.ERROR_STATE;
+        }
     }
 
     public String getQueryId() {
         return queryId;
     }
 
-    public String getMsg() {
+    public synchronized String getMsg() {
         return msg;
     }
 
-    public void setMsg(String msg) {
-        this.msg = msg;
-    }
-
-    public Exception getException() {
+    public synchronized Exception getException() {
         return exception;
     }
 
-    public void setException(Exception exception) {
-        this.exception = exception;
+    public synchronized void fail(Exception failure) {
+        exception = failure;
+        msg = "exec error: " + ExceptionUtils.getStackTrace(failure);
     }
 }

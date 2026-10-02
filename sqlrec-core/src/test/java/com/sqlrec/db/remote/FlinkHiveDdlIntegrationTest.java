@@ -23,16 +23,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class FlinkHiveDdlIntegrationTest {
     @Test
     void createsAltersRenamesAndDropsTablesThroughRealHms() throws Exception {
-        withCatalog((reader, database) -> {
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE " + database, "default");
-            FlinkHiveDdlContract.tableLifecycle(reader, database);
+        withCatalog((adapter, reader, database) -> {
+            adapter.executeDdl("CREATE DATABASE " + database, "default");
+            FlinkHiveDdlContract.tableLifecycle(adapter, reader, database);
         });
     }
 
     @Test
     void createsAltersAndDropsDatabasesAndFunctionsThroughRealHms(@TempDir Path directory) throws Exception {
-        withCatalog((reader, database) ->
-                FlinkHiveDdlContract.databaseAndFunctionLifecycle(reader, database, directory));
+        withCatalog((adapter, reader, database) ->
+                FlinkHiveDdlContract.databaseAndFunctionLifecycle(adapter, reader, database, directory));
     }
 
     @Test
@@ -44,13 +44,13 @@ class FlinkHiveDdlIntegrationTest {
                 Consts.HIVE_CLIENT_VERSION);
         TableEnvironmentInternal independentEnvironment = (TableEnvironmentInternal) TableEnvironment.create(
                 EnvironmentSettings.newInstance().inStreamingMode().build());
-        try {
+        try (FlinkHiveDdlAdapter adapter = new FlinkHiveDdlAdapter()) {
             independentEnvironment.registerCatalog(Consts.HIVE_CATALOG_NAME, independent);
             independentEnvironment.useCatalog(Consts.HIVE_CATALOG_NAME);
             try {
-                FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE " + database, "default");
+                adapter.executeDdl("CREATE DATABASE " + database, "default");
                 String table = database + ".items";
-                FlinkHiveDdlAdapter.executeDdl("CREATE TABLE " + table + " (id BIGINT, category STRING, "
+                adapter.executeDdl("CREATE TABLE " + table + " (id BIGINT, category STRING, "
                         + "ts TIMESTAMP(3), "
                         + "PRIMARY KEY (id) NOT ENFORCED) "
                         + "COMMENT 'review' PARTITIONED BY (category) "
@@ -61,7 +61,7 @@ class FlinkHiveDdlIntegrationTest {
                 assertEquals("filesystem", definition.getOptions().get("connector"));
                 assertFalse(definition.getOptions().keySet().stream().anyMatch(key -> key.startsWith("schema.")));
                 assertEquals(3, HiveTableUtils.getMetadataFields(HmsClient.getTableObj(database, "items")).size());
-                FlinkHiveDdlAdapter.executeDdl("ALTER TABLE " + table + " SET ('path'='file:///tmp/sqlrec-review-v2')", "default");
+                adapter.executeDdl("ALTER TABLE " + table + " SET ('path'='file:///tmp/sqlrec-review-v2')", "default");
                 assertEquals("file:///tmp/sqlrec-review-v2", independent.getTable(path).getOptions().get("path"));
                 assertEquals(3, independent.getTable(path).getUnresolvedSchema().getColumns().size());
                 // Reverse direction: an independent Flink client persists a copy, SQLRec reads and alters it.
@@ -69,40 +69,36 @@ class FlinkHiveDdlIntegrationTest {
                 independent.createTable(copy, independentEnvironment.getCatalogManager()
                         .resolveCatalogBaseTable(independent.getTable(path)), false);
                 assertEquals(3, HiveTableUtils.getMetadataFields(HmsClient.getTableObj(database, "items_copy")).size());
-                FlinkHiveDdlAdapter.executeDdl("ALTER TABLE " + database + ".items_copy RENAME TO items_renamed", "default");
+                adapter.executeDdl("ALTER TABLE " + database + ".items_copy RENAME TO items_renamed", "default");
                 assertTrue(independent.tableExists(new ObjectPath(database, "items_renamed")));
                 assertFalse(independent.tableExists(copy));
 
-                FlinkHiveDdlAdapter.executeDdl("CREATE FUNCTION " + database
+                adapter.executeDdl("CREATE FUNCTION " + database
                         + ".review_python AS 'review_python' LANGUAGE PYTHON", "default");
                 var function = independent.getFunction(new ObjectPath(database, "review_python"));
                 assertEquals(org.apache.flink.table.catalog.FunctionLanguage.PYTHON, function.getFunctionLanguage());
                 assertTrue(function.getFunctionResources().isEmpty());
-                FlinkHiveDdlAdapter.executeDdl("DROP FUNCTION " + database + ".review_python", "default");
+                adapter.executeDdl("DROP FUNCTION " + database + ".review_python", "default");
                 assertFalse(independent.functionExists(new ObjectPath(database, "review_python")));
-                FlinkHiveDdlAdapter.executeDdl("DROP TABLE " + table, "default");
+                adapter.executeDdl("DROP TABLE " + table, "default");
                 assertFalse(independent.tableExists(path));
-                FlinkHiveDdlAdapter.executeDdl("DROP TABLE " + database + ".items_renamed", "default");
+                adapter.executeDdl("DROP TABLE " + database + ".items_renamed", "default");
                 assertFalse(independent.tableExists(new ObjectPath(database, "items_renamed")));
             } finally {
-                FlinkHiveDdlAdapter.executeDdl("DROP DATABASE IF EXISTS " + database + " CASCADE", "default");
+                adapter.executeDdl("DROP DATABASE IF EXISTS " + database + " CASCADE", "default");
             }
         } finally {
             try {
                 independentEnvironment.getCatalogManager().close();
             } finally {
-                try {
-                    independent.close();
-                } finally {
-                    FlinkHiveDdlContract.closeAdapter();
-                }
+                independent.close();
             }
         }
     }
 
     @FunctionalInterface
     private interface Scenario {
-        void run(HiveCatalog reader, String database) throws Exception;
+        void run(FlinkHiveDdlAdapter adapter, HiveCatalog reader, String database) throws Exception;
     }
 
     private static void withCatalog(Scenario scenario) throws Exception {
@@ -110,19 +106,15 @@ class FlinkHiveDdlIntegrationTest {
         HiveConf conf = new HiveConf();
         conf.set(HiveConf.ConfVars.METASTOREURIS.varname, SqlRecConfigs.HIVE_METASTORE_URI.getValue());
         HiveCatalog reader = new HiveCatalog(Consts.HIVE_CATALOG_NAME, "default", conf, Consts.HIVE_CLIENT_VERSION);
-        try {
+        try (FlinkHiveDdlAdapter adapter = new FlinkHiveDdlAdapter()) {
             reader.open();
             try {
-                scenario.run(reader, database);
+                scenario.run(adapter, reader, database);
             } finally {
-                FlinkHiveDdlAdapter.executeDdl("DROP DATABASE IF EXISTS " + database + " CASCADE", "default");
+                adapter.executeDdl("DROP DATABASE IF EXISTS " + database + " CASCADE", "default");
             }
         } finally {
-            try {
-                FlinkHiveDdlContract.closeAdapter();
-            } finally {
-                reader.close();
-            }
+            reader.close();
         }
     }
 }

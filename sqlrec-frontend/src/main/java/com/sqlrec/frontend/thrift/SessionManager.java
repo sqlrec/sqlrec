@@ -1,42 +1,69 @@
 package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.frontend.utils.ThriftUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.flink.sql.parser.ddl.SqlReset;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SessionManager {
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
-    private final Map<THandleIdentifier, ClientProxy> clientMap = new ConcurrentHashMap<>();
-    private final Map<THandleIdentifier, THandleIdentifier> operationToSessionMap = new ConcurrentHashMap<>();
-    private final Map<THandleIdentifier, SqlExecutor> sqlExecutorMap = new ConcurrentHashMap<>();
-    private final Map<THandleIdentifier, SqlOperation> operationMap = new ConcurrentHashMap<>();
+    private final Map<THandleIdentifier, Session> sessions = new ConcurrentHashMap<>();
+    private final Map<THandleIdentifier, OperationEntry> operations = new ConcurrentHashMap<>();
+    private final SessionTimeoutChecker timeoutChecker = new SessionTimeoutChecker(this::expireSessions);
 
-    private final SessionTimeoutChecker timeoutChecker;
+    /** The monitor protects execution/registration against session close. */
+    private static final class Session {
+        private final THandleIdentifier id;
+        private final SqlExecutor executor;
+        private final GatewayClient gateway;
+        private volatile long lastAccessTime = System.currentTimeMillis();
+
+        private Session(THandleIdentifier id, SqlExecutor executor, GatewayClient gateway) {
+            this.id = id;
+            this.executor = executor;
+            this.gateway = gateway;
+        }
+
+        private void touch() {
+            lastAccessTime = System.currentTimeMillis();
+        }
+
+        private void updateGatewayState() {
+            gateway.setSessionState(executor.getDefaultSchema(), executor.getSessionSettings());
+        }
+    }
+
+    /** A registered entry is always present; only remote entries have no local result. */
+    private record OperationEntry(Session session, SqlOperation local) {
+        private static OperationEntry local(Session session, SqlOperation result) {
+            return new OperationEntry(session, result);
+        }
+
+        private static OperationEntry remote(Session session) {
+            return new OperationEntry(session, null);
+        }
+
+        private boolean isLocal() {
+            return local != null;
+        }
+    }
 
     public SessionManager() {
-        this.timeoutChecker = new SessionTimeoutChecker(clientMap, this::cleanupSession);
-
-        MetricsUtils.getCompositeMeterRegistry()
-                .gauge(Consts.METRICS_SESSION_ACTIVE_COUNT, clientMap, Map::size);
-        MetricsUtils.getCompositeMeterRegistry()
-                .gauge(Consts.METRICS_OPERATION_ACTIVE_COUNT, operationToSessionMap, Map::size);
+        MetricsUtils.getCompositeMeterRegistry().gauge(Consts.METRICS_SESSION_ACTIVE_COUNT, sessions, Map::size);
+        MetricsUtils.getCompositeMeterRegistry().gauge(Consts.METRICS_OPERATION_ACTIVE_COUNT, operations, Map::size);
     }
 
     public void startTimeoutChecker() {
@@ -47,427 +74,299 @@ public class SessionManager {
         timeoutChecker.stop();
     }
 
-    private void cleanupSession(THandleIdentifier sessionId) {
-        try {
-            TCloseSessionReq tCloseSessionReq = new TCloseSessionReq();
-            tCloseSessionReq.setSessionHandle(new TSessionHandle(sessionId));
-            closeSession(tCloseSessionReq);
-            logger.info("Session cleaned up, sessionGuid: {}", ThriftUtils.safeHandleId(sessionId));
-        } catch (TException e) {
-            logger.error("Failed to close session: {}", e.getMessage(), e);
-        }
-    }
-
-    public TOpenSessionResp openSession(TOpenSessionReq tOpenSessionReq) throws TException {
-        logger.info("Opening session, user: {}, current map sizes - client: {}, sqlExecutor: {}, operation: {}",
-                tOpenSessionReq.getUsername(), clientMap.size(), sqlExecutorMap.size(), operationMap.size());
-
-        // Build the executor before publishing a session; a metadata initialization failure must not leak it.
-        SqlExecutor executor = new SqlExecutor();
-        ClientProxy proxy = new ClientProxy();
-        TOpenSessionResp resp = proxy.OpenSession(tOpenSessionReq);
-        THandleIdentifier sessionId = proxy.getSessionId();
-        clientMap.put(sessionId, proxy);
-        sqlExecutorMap.put(sessionId, executor);
-
-        logger.info("Session opened successfully, sessionGuid: {}", ThriftUtils.safeHandleId(sessionId));
-        return resp;
-    }
-
-    public TCloseSessionResp closeSession(TCloseSessionReq tCloseSessionReq) throws TException {
-        SqlExecutor executor = sqlExecutorMap.get(tCloseSessionReq.getSessionHandle().getSessionId());
-        if (executor == null) {
-            return new TCloseSessionResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
-        }
-        synchronized (executor) {
-            return closeSessionLocked(tCloseSessionReq);
-        }
-    }
-
-    private TCloseSessionResp closeSessionLocked(TCloseSessionReq tCloseSessionReq) throws TException {
-        THandleIdentifier sessionId = tCloseSessionReq.getSessionHandle().getSessionId();
-        logger.info("Closing session, sessionGuid: {}, current map sizes - client: {}, sqlExecutor: {}, operation: {}",
-                ThriftUtils.safeHandleId(sessionId), clientMap.size(), sqlExecutorMap.size(), operationMap.size());
-
-        ClientProxy proxy = clientMap.remove(sessionId);
-        if (proxy == null) {
-            logger.warn("Session not found, sessionGuid: {}", ThriftUtils.safeHandleId(sessionId));
-            TCloseSessionResp resp = new TCloseSessionResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
-            resp.getStatus().setErrorMessage("Session not found");
-            return resp;
-        }
-
-        sqlExecutorMap.remove(sessionId);
-
-        List<THandleIdentifier> operationsToRemove = new ArrayList<>();
-        for (Map.Entry<THandleIdentifier, THandleIdentifier> entry : operationToSessionMap.entrySet()) {
-            if (entry.getValue().equals(sessionId)) {
-                operationsToRemove.add(entry.getKey());
+    private void expireSessions(long timeout) {
+        for (Session session : sessions.values()) {
+            synchronized (session) {
+                // Recheck after acquiring the lock: an in-flight request may have just finished.
+                if (sessions.get(session.id) == session && System.currentTimeMillis() - session.lastAccessTime > timeout) {
+                    try {
+                        closeSessionLocked(session);
+                    } catch (TException e) {
+                        logger.warn("Failed to close expired session, sessionGuid: {}", ThriftUtils.safeHandleId(session.id), e);
+                    }
+                }
             }
         }
-        for (THandleIdentifier operationId : operationsToRemove) {
-            operationToSessionMap.remove(operationId);
-            operationMap.remove(operationId);
+    }
+
+    public TOpenSessionResp openSession(TOpenSessionReq request) throws TException {
+        // Initialize metadata before publishing the session.
+        SqlExecutor executor = new SqlExecutor();
+        THandleIdentifier id = ThriftUtils.getHandleIdentifier();
+        Session session = new Session(id, executor, new GatewayClient(request));
+        sessions.put(id, session);
+        MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_SESSION_OPEN_COUNT).increment();
+        logger.info("Local session opened, sessionGuid: {}", ThriftUtils.safeHandleId(id));
+
+        TOpenSessionResp response = new TOpenSessionResp(successStatus(), TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10);
+        response.setSessionHandle(new TSessionHandle(id.deepCopy()));
+        response.setConfiguration(Map.of());
+        return response;
+    }
+
+    public TCloseSessionResp closeSession(TCloseSessionReq request) throws TException {
+        Session session = findSession(request.getSessionHandle().getSessionId());
+        if (session == null) {
+            return new TCloseSessionResp(invalidHandleStatus());
         }
-        int removedOperations = operationsToRemove.size();
-
-        TCloseSessionResp resp = proxy.CloseSession(tCloseSessionReq);
-        logger.info("Session closed successfully, sessionGuid: {}, removed operations: {}", ThriftUtils.safeHandleId(sessionId), removedOperations);
-        return resp;
-    }
-
-    public TCLIService.Iface getClient(THandleIdentifier sessionId) {
-        ClientProxy client = clientMap.get(sessionId);
-        if (client != null) {
-            client.updateAccessTime();
+        synchronized (session) {
+            return closeSessionLocked(session);
         }
-        return client;
     }
 
-    public TCLIService.Iface getClientByOperationId(THandleIdentifier operationId) {
-        THandleIdentifier sessionId = operationToSessionMap.get(operationId);
-        return sessionId == null ? null : getClient(sessionId);
-    }
-
-    private void touchOperation(THandleIdentifier operationId) {
-        // Local metadata polling and paging must keep its owning session alive too.
-        getClientByOperationId(operationId);
-    }
-
-    private TCLIService.Iface getRequiredClientByOperationId(THandleIdentifier operationId)
-            throws TException {
-        TCLIService.Iface client = getClientByOperationId(operationId);
-        if (client == null) {
-            throw new TException("No client found for operation, operationGuid: "
-                    + ThriftUtils.safeHandleId(operationId));
+    private TCloseSessionResp closeSessionLocked(Session session) throws TException {
+        if (!sessions.remove(session.id, session)) {
+            return new TCloseSessionResp(invalidHandleStatus());
         }
-        return client;
+        operations.entrySet().removeIf(entry -> entry.getValue().session() == session);
+        try {
+            return session.gateway.closeSession();
+        } finally {
+            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_SESSION_CLOSE_COUNT).increment();
+            logger.info("Session closed, sessionGuid: {}", ThriftUtils.safeHandleId(session.id));
+        }
     }
 
-    private SqlExecutor getSqlExecutor(THandleIdentifier sessionId) throws TException {
-        SqlExecutor sqlExecutor = sqlExecutorMap.get(sessionId);
-        if (sqlExecutor == null) {
-            throw new TException("session not found");
+    private Session findSession(THandleIdentifier id) {
+        Session session = id == null ? null : sessions.get(id);
+        if (session != null) {
+            session.touch();
         }
-        ClientProxy proxy = clientMap.get(sessionId);
-        if (proxy != null) {
-            proxy.updateAccessTime();
-        }
-        return sqlExecutor;
+        return session;
     }
 
-    private void requireActiveSession(THandleIdentifier sessionId, SqlExecutor executor) throws TException {
-        if (sqlExecutorMap.get(sessionId) != executor) {
+    public boolean hasSession(TSessionHandle handle) {
+        return handle != null && findSession(handle.getSessionId()) != null;
+    }
+
+    public GatewayClient getGateway(THandleIdentifier id) {
+        Session session = findSession(id);
+        return session == null ? null : session.gateway;
+    }
+
+    private Session requireSession(TSessionHandle handle) throws TException {
+        Session session = handle == null ? null : findSession(handle.getSessionId());
+        if (session == null) {
+            throw new TException("Session not found");
+        }
+        return session;
+    }
+
+    private void requireActiveSession(Session session) throws TException {
+        if (sessions.get(session.id) != session) {
             throw new TException("Session was closed");
         }
     }
 
-    public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
-        SqlExecutor executor = getSqlExecutor(tExecuteStatementReq.getSessionHandle().getSessionId());
-        synchronized (executor) {
+    private OperationEntry findOperation(THandleIdentifier id) {
+        OperationEntry entry = id == null ? null : operations.get(id);
+        if (entry == null || sessions.get(entry.session().id) != entry.session()) {
+            return null;
+        }
+        entry.session().touch();
+        return entry;
+    }
+
+    private OperationEntry requireOperation(THandleIdentifier id) throws TException {
+        OperationEntry entry = findOperation(id);
+        if (entry == null) {
+            throw new TException("Operation not found: " + ThriftUtils.safeHandleId(id));
+        }
+        return entry;
+    }
+
+    private TOperationHandle registerLocalOperation(Session session, TOperationType type, SqlOperation result) {
+        TOperationHandle handle = new TOperationHandle(ThriftUtils.getHandleIdentifier(), type, true);
+        registerOperation(handle, OperationEntry.local(session, result));
+        return handle;
+    }
+
+    private void registerOperation(TOperationHandle handle, OperationEntry entry) {
+        operations.put(handle.getOperationId().deepCopy(), entry);
+        MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_OPEN_COUNT).increment();
+    }
+
+    private void removeOperation(THandleIdentifier id, OperationEntry entry) {
+        if (operations.remove(id, entry)) {
+            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_CLOSE_COUNT).increment();
+        }
+    }
+
+    public TExecuteStatementResp executeStatement(TExecuteStatementReq request) throws TException {
+        Session session = requireSession(request.getSessionHandle());
+        synchronized (session) {
             try {
-                requireActiveSession(tExecuteStatementReq.getSessionHandle().getSessionId(), executor);
-                return executeStatement(tExecuteStatementReq);
+                requireActiveSession(session);
+                SqlOperation local = executeLocally(session.executor, request.getStatement());
+                if (local != null) {
+                    if (local.getException() == null) {
+                        session.updateGatewayState();
+                    }
+                    return localExecuteResponse(session, local);
+                }
+                return executeRemotely(session, request);
             } catch (TException e) {
-                TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
-                status.setErrorMessage(e.getMessage());
-                status.setSqlState(e.getMessage() != null && e.getMessage().startsWith("FLINK_GATEWAY_UNAVAILABLE")
-                        ? "08001" : "HY000");
-                return new TExecuteStatementResp(status);
+                return new TExecuteStatementResp(ThriftUtils.errorStatus(e));
+            } finally {
+                session.touch();
             }
         }
     }
 
-    private TExecuteStatementResp executeStatement(TExecuteStatementReq tExecuteStatementReq) throws TException {
-        THandleIdentifier sessionId = tExecuteStatementReq.getSessionHandle().getSessionId();
-        logger.info("Executing statement, sessionGuid: {}, sql: {}", ThriftUtils.safeHandleId(sessionId), tExecuteStatementReq.getStatement());
-
-        THandleIdentifier operationId = ThriftUtils.getHandleIdentifier();
-        String queryId = ThriftUtils.getQueryId();
-        SqlExecutor sqlExecutor = getSqlExecutor(sessionId);
-        SqlOperation operation = executeLocally(
-                sqlExecutor,
-                tExecuteStatementReq.getStatement(),
-                operationId,
-                queryId
-        );
-
-        TExecuteStatementResp resp;
-        if (operation != null) {
-            ClientProxy proxy = clientMap.get(sessionId);
-            if (proxy != null && operation.getException() == null) {
-                proxy.setSessionState(sqlExecutor.getDefaultSchema(), sqlExecutor.getSessionSettings());
-            }
-            operationMap.put(operationId, operation);
-            resp = createLocalExecuteResponse(operationId);
-        } else {
-            resp = executeRemotely(tExecuteStatementReq, sessionId);
-        }
-
-        if (!ThriftUtils.isSuccess(resp.getStatus())) {
-            return resp;
-        }
-
-        TOperationHandle operationHandle = resp.getOperationHandle();
-        if (operationHandle == null) {
-            // Defensive guard: should not happen for the local-execution path, but avoid NPE if it does.
-            throw new TException("ExecuteStatement returned no operation handle, sessionGuid: "
-                    + ThriftUtils.safeHandleId(sessionId));
-        }
-        operationId = operationHandle.getOperationId();
-        operationToSessionMap.put(operationId, sessionId);
-
-        MetricsUtils.getCompositeMeterRegistry()
-                .counter(Consts.METRICS_OPERATION_OPEN_COUNT)
-                .increment();
-
-        logger.info("Statement executed, sessionGuid: {}, operationGuid: {}, operationToSessionMap size: {}",
-                ThriftUtils.safeHandleId(sessionId), ThriftUtils.safeHandleId(operationId), operationToSessionMap.size());
-        return resp;
-    }
-
-    private SqlOperation executeLocally(
-            SqlExecutor sqlExecutor,
-            String sql,
-            THandleIdentifier operationId,
-            String queryId
-    ) {
+    private SqlOperation executeLocally(SqlExecutor executor, String sql) {
         try {
-            SqlProcessResult coreResult = sqlExecutor.executeSqlAsync(sql);
-            if (coreResult != null) {
-                logger.info("Statement executed by local SqlExecutor, operationGuid: {}",
-                        ThriftUtils.safeHandleId(operationId));
-                return new SqlOperation(coreResult, operationId, queryId);
-            }
+            SqlProcessResult result = executor.executeSqlAsync(sql);
+            return result == null ? null : new SqlOperation(result, ThriftUtils.getQueryId());
         } catch (Exception e) {
-            logger.error("Failed to execute statement via SqlExecutor: {}", e.getMessage(), e);
-            SqlOperation operation = new SqlOperation(new SqlProcessResult(), operationId, queryId);
-            operation.setException(e);
-            operation.setMsg("exec error: " + ExceptionUtils.getStackTrace(e));
+            logger.error("Failed to execute local SQL", e);
+            SqlOperation operation = new SqlOperation(new SqlProcessResult(), ThriftUtils.getQueryId());
+            operation.fail(e);
             return operation;
         }
-        return null;
     }
 
-    private TExecuteStatementResp createLocalExecuteResponse(THandleIdentifier operationId) {
-        TOperationHandle operationHandle = new TOperationHandle(
-                operationId, TOperationType.EXECUTE_STATEMENT, true
-        );
-        TExecuteStatementResp response = new TExecuteStatementResp(
-                new TStatus(TStatusCode.SUCCESS_STATUS)
-        );
-        response.setOperationHandle(operationHandle);
+    private TExecuteStatementResp localExecuteResponse(Session session, SqlOperation local) {
+        TExecuteStatementResp response = new TExecuteStatementResp(successStatus());
+        response.setOperationHandle(registerLocalOperation(session, TOperationType.EXECUTE_STATEMENT, local));
         return response;
     }
 
-    private TExecuteStatementResp executeRemotely(
-            TExecuteStatementReq request,
-            THandleIdentifier sessionId
-    ) throws TException {
-        TCLIService.Iface client = getClient(sessionId);
-        if (client == null) {
-            throw new TException("No client found for session, sessionGuid: "
-                    + ThriftUtils.safeHandleId(sessionId));
-        }
+    private TExecuteStatementResp executeRemotely(Session session, TExecuteStatementReq request) throws TException {
         try {
             if (CompileManager.parseSql(request.getStatement()) instanceof SqlReset reset) {
-                ClientProxy proxy = clientMap.get(sessionId);
-                proxy.executeSessionCommand(request.getStatement());
-                SqlExecutor executor = getSqlExecutor(sessionId);
-                executor.resetSessionSettings(reset.getKeyString());
-                proxy.setSessionState(executor.getDefaultSchema(), executor.getSessionSettings());
-                THandleIdentifier id = ThriftUtils.getHandleIdentifier();
-                operationMap.put(id, new SqlOperation(SqlProcessResult.msg("Flink settings reset", "msg"),
-                        id, ThriftUtils.getQueryId()));
-                return createLocalExecuteResponse(id);
+                // RESET bypasses pending SET overrides and commits local state only after remote success.
+                session.gateway.executeSessionCommand(request.getStatement());
+                session.executor.resetSessionSettings(reset.getKeyString());
+                session.updateGatewayState();
+                return localExecuteResponse(session, new SqlOperation(
+                        SqlProcessResult.msg("Flink settings reset", "msg"), ThriftUtils.getQueryId()));
             }
         } catch (TException e) {
             throw e;
         } catch (Exception e) {
             throw new TException(e);
         }
-        TExecuteStatementResp response = client.ExecuteStatement(request);
-        if (response.getOperationHandle() != null) {
-            logger.info("Statement executed by remote client, operationGuid: {}",
-                    ThriftUtils.safeHandleId(response.getOperationHandle().getOperationId()));
+        TExecuteStatementResp response = session.gateway.executeStatement(request);
+        if (ThriftUtils.isSuccess(response.getStatus())) {
+            if (response.getOperationHandle() == null) {
+                throw new TException("Gateway ExecuteStatement returned no operation handle");
+            }
+            registerOperation(response.getOperationHandle(), OperationEntry.remote(session));
         }
         return response;
     }
 
-    public TOperationHandle openMetadataOperation(TSessionHandle session, TOperationType type,
-            java.util.concurrent.Callable<SqlProcessResult> query) throws Exception {
-        SqlExecutor executor = getSqlExecutor(session.getSessionId());
-        synchronized (executor) {
-            requireActiveSession(session.getSessionId(), executor);
-            SqlProcessResult result = query.call();
-            THandleIdentifier id = ThriftUtils.getHandleIdentifier();
-            operationMap.put(id, SqlOperation.metadata(result, id, ThriftUtils.getQueryId()));
-            operationToSessionMap.put(id, session.getSessionId());
-            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_OPEN_COUNT).increment();
-            return new TOperationHandle(id, type, true);
+    public TOperationHandle openMetadataOperation(TSessionHandle handle, TOperationType type,
+            Callable<SqlProcessResult> query) throws Exception {
+        Session session = requireSession(handle);
+        synchronized (session) {
+            try {
+                requireActiveSession(session);
+                SqlOperation result = SqlOperation.metadata(query.call(), ThriftUtils.getQueryId());
+                return registerLocalOperation(session, type, result);
+            } finally {
+                session.touch();
+            }
         }
     }
 
-    public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq request) throws TException {
-        THandleIdentifier sessionId = request.getSessionHandle().getSessionId();
-        SqlExecutor executor = getSqlExecutor(sessionId);
-        synchronized (executor) {
-            requireActiveSession(sessionId, executor);
-            TGetCrossReferenceResp response = clientMap.get(sessionId).GetCrossReference(request);
-            if (ThriftUtils.isSuccess(response.getStatus()) && response.getOperationHandle() != null) {
-                operationToSessionMap.put(response.getOperationHandle().getOperationId(), sessionId);
-                MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_OPEN_COUNT).increment();
+    public TGetCrossReferenceResp getCrossReference(TGetCrossReferenceReq request) throws TException {
+        Session session = requireSession(request.getSessionHandle());
+        synchronized (session) {
+            try {
+                requireActiveSession(session);
+                TGetCrossReferenceResp response = session.gateway.getCrossReference(request);
+                if (ThriftUtils.isSuccess(response.getStatus()) && response.getOperationHandle() != null) {
+                    registerOperation(response.getOperationHandle(), OperationEntry.remote(session));
+                }
+                return response;
+            } finally {
+                session.touch();
             }
+        }
+    }
+
+    public TGetOperationStatusResp getOperationStatus(TGetOperationStatusReq request) throws TException {
+        OperationEntry entry = requireOperation(request.getOperationHandle().getOperationId());
+        if (!entry.isLocal()) {
+            return entry.session().gateway.getOperationStatus(request);
+        }
+        TGetOperationStatusResp response = new TGetOperationStatusResp(successStatus());
+        response.setOperationState(entry.local().getState());
+        response.setHasResultSet(true);
+        response.setErrorMessage(entry.local().getMsg());
+        return response;
+    }
+
+    public TGetResultSetMetadataResp getResultSetMetadata(TGetResultSetMetadataReq request) throws TException {
+        OperationEntry entry = requireOperation(request.getOperationHandle().getOperationId());
+        if (!entry.isLocal()) {
+            return entry.session().gateway.getResultSetMetadata(request);
+        }
+        TGetResultSetMetadataResp response = new TGetResultSetMetadataResp(successStatus());
+        response.setSchema(ThriftUtils.convertFieldsToTTableSchema(entry.local().getFields()));
+        return response;
+    }
+
+    public TFetchResultsResp fetchResults(TFetchResultsReq request) throws TException {
+        OperationEntry entry = requireOperation(request.getOperationHandle().getOperationId());
+        if (!entry.isLocal()) {
+            return entry.session().gateway.fetchResults(request);
+        }
+        TFetchResultsResp response = new TFetchResultsResp(successStatus());
+        if (request.getFetchType() != 0) {
+            response.setResults(ThriftUtils.convertObjectArrayToTRowSet(null, DataTypeUtils.getStringTypeField("log")));
+            response.setHasMoreRows(false);
             return response;
         }
-    }
-
-    public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq tGetOperationStatusReq) throws TException {
-        THandleIdentifier handleIdentifier = tGetOperationStatusReq.getOperationHandle().getOperationId();
-        touchOperation(handleIdentifier);
-        SqlOperation operation = operationMap.get(handleIdentifier);
-        if (operation != null) {
-            TOperationState operationState = getOperationState(operation);
-            TGetOperationStatusResp resp = new TGetOperationStatusResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-            resp.setOperationState(operationState);
-            resp.setHasResultSet(true);
-            resp.setErrorMessage(operation.getMsg());
-            return resp;
-        }
-
-        return getRequiredClientByOperationId(handleIdentifier)
-                .GetOperationStatus(tGetOperationStatusReq);
-    }
-
-    private TOperationState getOperationState(SqlOperation operation) {
-        if (operation.getException() != null) {
-            return TOperationState.ERROR_STATE;
-        }
         try {
-            return operation.isCompleted()
-                    ? TOperationState.FINISHED_STATE
-                    : TOperationState.RUNNING_STATE;
+            SqlOperation.ResultPage page = entry.local().fetch(request.getOrientation(), request.getMaxRows());
+            response.setResults(page.rows());
+            response.setHasMoreRows(page.hasMoreRows());
         } catch (Exception e) {
-            logger.error("Failed to get operation status: {}", e.getMessage(), e);
-            operation.setException(e);
-            operation.setMsg(e.getMessage() + " stack trace: " + ExceptionUtils.getStackTrace(e));
-            return TOperationState.ERROR_STATE;
-        }
-    }
-
-    public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq tGetResultSetMetadataReq) throws TException {
-        THandleIdentifier handleIdentifier = tGetResultSetMetadataReq.getOperationHandle().getOperationId();
-        touchOperation(handleIdentifier);
-        SqlOperation operation = operationMap.get(handleIdentifier);
-        if (operation != null) {
-            TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-            if (operation.getFields() != null) {
-                resp.setSchema(ThriftUtils.convertFieldsToTTableSchema(operation.getFields()));
-            } else {
-                resp.setSchema(ThriftUtils.convertFieldsToTTableSchema(DataTypeUtils.getStringTypeField("sys_warn")));
-            }
-            return resp;
-        }
-
-        return getRequiredClientByOperationId(handleIdentifier)
-                .GetResultSetMetadata(tGetResultSetMetadataReq);
-    }
-
-    public TFetchResultsResp FetchResults(TFetchResultsReq tFetchResultsReq) throws TException {
-        THandleIdentifier handleIdentifier = tFetchResultsReq.getOperationHandle().getOperationId();
-        touchOperation(handleIdentifier);
-        SqlOperation operation = operationMap.get(handleIdentifier);
-        if (operation != null) {
-            TFetchResultsResp resp = new TFetchResultsResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-            if (tFetchResultsReq.getFetchType() != 0) {
-                resp.setResults(ThriftUtils.convertObjectArrayToTRowSet(null, DataTypeUtils.getStringTypeField("log")));
-                resp.setHasMoreRows(false);
-                return resp;
-            }
-            if (!operation.isMetadataOperation()) {
-                if (operation.getFields() != null) {
-                    resp.setResults(ThriftUtils.convertObjectArrayToTRowSet(operation.getEnumerable(), operation.getFields()));
-                    operation.setEnumerable(null);
-                } else {
-                    resp.setResults(ThriftUtils.convertObjectArrayToTRowSet(
-                            DataTransformUtils.getMsgEnumerable("no output"),
-                            DataTypeUtils.getStringTypeField("sys_warn")));
-                }
-                resp.setHasMoreRows(false);
-                return resp;
-            }
-            try {
-                SqlOperation.ResultPage page = operation.fetch(tFetchResultsReq.getOrientation(), tFetchResultsReq.getMaxRows());
-                TRowSet rows = ThriftUtils.convertObjectArrayToTRowSet(page.rows(),
-                        operation.getFields() == null ? DataTypeUtils.getStringTypeField("sys_warn") : operation.getFields());
-                rows.setStartRowOffset(page.offset());
-                resp.setResults(rows);
-                resp.setHasMoreRows(page.hasMoreRows());
-            } catch (Exception e) {
-                TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
-                status.setErrorMessage(e.getMessage());
-                status.setSqlState(e instanceof UnsupportedOperationException ? "0A000" : "HY000");
-                resp.setStatus(status);
-            }
-            return resp;
-        }
-
-        return getRequiredClientByOperationId(handleIdentifier).FetchResults(tFetchResultsReq);
-    }
-
-    public TCancelOperationResp CancelOperation(TCancelOperationReq tCancelOperationReq) throws TException {
-        THandleIdentifier operationId = tCancelOperationReq.getOperationHandle().getOperationId();
-        THandleIdentifier sessionId = operationToSessionMap.get(operationId);
-        logger.info("Canceling operation, operationGuid: {}, sessionGuid: {}", ThriftUtils.safeHandleId(operationId), ThriftUtils.safeHandleId(sessionId));
-
-        if (operationMap.remove(operationId) != null) {
-            operationToSessionMap.remove(operationId);
-            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_CLOSE_COUNT).increment();
-            logger.info("Operation canceled (local), operationGuid: {}", ThriftUtils.safeHandleId(operationId));
-            return new TCancelOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-        }
-
-        TCLIService.Iface client = getClient(sessionId);
-        if (client != null) {
-            logger.info("Operation canceled (remote), operationGuid: {}", ThriftUtils.safeHandleId(operationId));
-            return client.CancelOperation(tCancelOperationReq);
-        }
-        return new TCancelOperationResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
-    }
-
-    public TCloseOperationResp CloseOperation(TCloseOperationReq request) throws TException {
-        THandleIdentifier id = request.getOperationHandle().getOperationId();
-        touchOperation(id);
-        THandleIdentifier session = operationToSessionMap.get(id);
-        if (operationMap.remove(id) != null) {
-            operationToSessionMap.remove(id);
-            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_CLOSE_COUNT).increment();
-            return new TCloseOperationResp(new TStatus(TStatusCode.SUCCESS_STATUS));
-        }
-        TCLIService.Iface client = session == null ? null : getClient(session);
-        if (client == null) {
-            return new TCloseOperationResp(new TStatus(TStatusCode.INVALID_HANDLE_STATUS));
-        }
-        TCloseOperationResp response = client.CloseOperation(request);
-        if (ThriftUtils.isSuccess(response.getStatus())) {
-            operationToSessionMap.remove(id);
-            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_CLOSE_COUNT).increment();
+            response.setStatus(ThriftUtils.errorStatus(e));
         }
         return response;
     }
 
-    public TGetQueryIdResp GetQueryId(TGetQueryIdReq tGetQueryIdReq) throws TException {
-        THandleIdentifier operationId = tGetQueryIdReq.getOperationHandle().getOperationId();
-        touchOperation(operationId);
-        SqlOperation operation = operationMap.get(operationId);
-        if (operation != null) {
-            return new TGetQueryIdResp(operation.getQueryId());
+    public TCancelOperationResp cancelOperation(TCancelOperationReq request) throws TException {
+        THandleIdentifier id = request.getOperationHandle().getOperationId();
+        OperationEntry entry = findOperation(id);
+        if (entry == null) {
+            return new TCancelOperationResp(invalidHandleStatus());
         }
+        if (!entry.isLocal()) {
+            return entry.session().gateway.cancelOperation(request);
+        }
+        removeOperation(id, entry);
+        return new TCancelOperationResp(successStatus());
+    }
 
-        TCLIService.Iface client = getClientByOperationId(operationId);
-        if (client != null) {
-            return client.GetQueryId(tGetQueryIdReq);
+    public TCloseOperationResp closeOperation(TCloseOperationReq request) throws TException {
+        THandleIdentifier id = request.getOperationHandle().getOperationId();
+        OperationEntry entry = findOperation(id);
+        if (entry == null) {
+            return new TCloseOperationResp(invalidHandleStatus());
         }
-        return null;
+        TCloseOperationResp response = entry.isLocal() ? new TCloseOperationResp(successStatus())
+                : entry.session().gateway.closeOperation(request);
+        if (ThriftUtils.isSuccess(response.getStatus())) {
+            removeOperation(id, entry);
+        }
+        return response;
+    }
+
+    public TGetQueryIdResp getQueryId(TGetQueryIdReq request) throws TException {
+        OperationEntry entry = requireOperation(request.getOperationHandle().getOperationId());
+        return entry.isLocal() ? new TGetQueryIdResp(entry.local().getQueryId())
+                : entry.session().gateway.getQueryId(request);
+    }
+
+    private static TStatus successStatus() {
+        return new TStatus(TStatusCode.SUCCESS_STATUS);
+    }
+
+    private static TStatus invalidHandleStatus() {
+        return new TStatus(TStatusCode.INVALID_HANDLE_STATUS);
     }
 }

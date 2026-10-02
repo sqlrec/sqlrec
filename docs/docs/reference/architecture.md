@@ -53,15 +53,18 @@ SQLRec 用 SQL 编排推荐流程：读取特征与候选集、调用函数和�
 ```text
 客户端
   ├─ Thrift / REST SQL / CLI ─→ SQL 解析与分发
-  │                              ├─ 本地可执行 ─→ Calcite 编译 ─→ 执行 ─→ 返回结果
-  │                              │                              └─ Connector / SQL 函数
-  │                              └─ 其他语句 ─→ Flink SQL Gateway（远程模式的 Thrift 会话）
+  │                              ├─ 本地查询/写入 ─→ Calcite 编译 ─→ 执行 ─→ 返回结果
+  │                              │                                  └─ Connector / SQL 函数
+  │                              ├─ 表/库/UDF 元数据 DDL ─→ HiveCatalog ─→ HMS
+  │                              └─ 需要 Flink 执行的语句 ─→ Gateway（远程模式的 Thrift 会话）
   └─ REST API ─→ 查找 API 对应的 SQL 函数 ─→ 执行函数 ─→ 返回 JSON
 ```
 
 SQLRec 使用两个解析器：标准 Flink SQL 优先由 Flink 解析器处理，SQLRec 的 `CACHE TABLE`、`CALL`、模型管理等扩展语句由独立的 SQLRec 解析器处理。解析后，执行器按语句类型决定由本地 Calcite 执行、操作元数据，还是交给 Flink。
 
-本地路径负责面向在线请求的 SQL 查询、数据写入、SQL 函数和控制语句。Calcite 将查询编译成可执行代码，执行时通过 Connector 读取或写入数据。`SHOW`、模型与服务等资源命令由 SQLRec 自己处理。远程元数据模式下，持久表、库和 UDF 的纯元数据 DDL 由本地适配器通过官方 HiveCatalog 写入 HMS，无需创建 TableEnvironment 或连接 Gateway。计算列和 WATERMARK 不在本地表 DDL 支持范围内。Thrift 会话把其他未由本地处理的语句转发到 Flink SQL Gateway；`USE` 和 `SET` 同时作用于本地与远程会话。REST `/sql/v1` 和 CLI 没有这条透明转发路径，本地文件元数据模式也不依赖 Flink Gateway。
+本地路径负责面向在线请求的 SQL 查询、数据写入、SQL 函数和控制语句。Calcite 将查询编译成可执行代码，执行时通过 Connector 读取或写入数据。`SHOW`、模型与服务等资源命令由 SQLRec 自己处理。远程元数据模式下，持久表、库和 UDF 的纯元数据 DDL 由本地适配器通过官方 HiveCatalog 写入 HMS，无需创建 TableEnvironment 或连接 Gateway。DDL 支持范围见[SQL 参考](./sql.md#元数据-ddl)。Thrift 会话把其他未由本地处理的语句转发到 Flink SQL Gateway。REST `/sql/v1` 和 CLI 没有这条透明转发路径，本地文件元数据模式也不依赖 Flink Gateway。
+
+Thrift 入口由 `TCLIServiceImpl` 适配协议，`SessionManager` 管理会话及本地/远程操作的归属，`GatewayClient` 只负责远程连接、会话状态同步和 Gateway 调用，`JdbcMetadataExecutor` 提供本地 JDBC 元数据结果。
 
 一个 Thrift 会话持有自己的 SQL 执行器；REST `/sql/v1` 每个请求新建一个执行器，同一请求中的多条 SQL 依次运行。`POST /api/v1/<name>` 则查找已发布的 API 和对应的 SQL 函数，为每次调用建立执行数据和输入表。API 的发布与请求格式见[发布和调用 API](../guides/api.md)。
 
@@ -73,6 +76,22 @@ SQLRec 使用两个解析器：标准 Flink SQL 优先由 Flink 解析器处理�
 | REST `/sql/v1` | 一个请求内的多条 SQL 共用执行器，请求结束后释放 | 不支持自动转发 |
 | CLI | 当前 CLI 执行过程使用本地执行器 | 不支持自动转发 |
 | REST `/api/v1/<name>` | 每次调用建立函数输入表和执行上下文 | 不转发 |
+
+### Gateway 转发边界
+
+Thrift 会话在本地创建，不要求 Gateway 可用。本地执行失败不会回退到 Gateway；只有需要远程能力的请求才建立远程连接。
+
+| 请求 | 是否需要 Gateway |
+| --- | --- |
+| 本地可执行的 SQL、持久表/库/UDF 的纯元数据 DDL | 不需要 |
+| 顶层 `USE database`、`SET 'key' = 'value'` | 不需要；本地保存状态，在下一次远程 SQL 执行前同步 |
+| JDBC 类型、Catalog、库、表、列、函数和主键查询 | 不需要 |
+| 客户端会话信息、本地操作的状态查询和结果读取 | 不需要 |
+| 无赋值的 `SET`、`RESET` | 需要；具体行为见 [SET/RESET](./sql.md#set) |
+| 其他需要 Flink 执行的 SQL、`GetCrossReference` 和 Delegation Token RPC | 需要；按需连接 |
+| 远程操作的状态查询、结果读取、取消和关闭 | 需要原远程会话及其有效操作句柄 |
+
+连接配置见[服务部署](../operations/deployment.md#gateway-转发配置)，断线和错误处理见[异常恢复](../guides/exception-recovery.md#gateway-连接与执行失败)。
 
 ## 执行模型
 

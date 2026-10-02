@@ -24,9 +24,9 @@ class FlinkHiveDdlAdapterRuntimeTest {
     void persistsAndReadsFlinkTableDefinitionsWithoutGateway() throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE review", "default");
-            FlinkHiveDdlContract.tableLifecycle(metastore.reader, "review");
-            FlinkHiveDdlAdapter.executeDdl("DROP DATABASE review", "default");
+            metastore.adapter.executeDdl("CREATE DATABASE review", "default");
+            FlinkHiveDdlContract.tableLifecycle(metastore.adapter, metastore.reader, "review");
+            metastore.adapter.executeDdl("DROP DATABASE review", "default");
             assertFalse(metastore.reader.databaseExists("review"));
         }
     }
@@ -36,23 +36,23 @@ class FlinkHiveDdlAdapterRuntimeTest {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
             String sessionDatabase = "missing_session";
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE review", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("CREATE TABLE hive.review.items (id BIGINT) "
+            metastore.adapter.executeDdl("CREATE DATABASE review", sessionDatabase);
+            metastore.adapter.executeDdl("CREATE TABLE hive.review.items (id BIGINT) "
                     + "WITH ('connector'='filesystem', 'path'='file:///tmp/review', 'format'='json')", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("ALTER TABLE review.items ADD note STRING", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("CREATE TABLE review.copy LIKE hive.review.items", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("ALTER TABLE review.copy RENAME TO renamed", sessionDatabase);
+            metastore.adapter.executeDdl("ALTER TABLE review.items ADD note STRING", sessionDatabase);
+            metastore.adapter.executeDdl("CREATE TABLE review.copy LIKE hive.review.items", sessionDatabase);
+            metastore.adapter.executeDdl("ALTER TABLE review.copy RENAME TO renamed", sessionDatabase);
             assertTrue(metastore.tables.containsKey("review.renamed"));
-            FlinkHiveDdlAdapter.executeDdl("DROP TABLE review.renamed", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("CREATE FUNCTION review.udf AS 'example.Udf'", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("ALTER FUNCTION review.udf AS 'example.UpdatedUdf'", sessionDatabase);
-            FlinkHiveDdlAdapter.executeDdl("DROP FUNCTION review.udf", sessionDatabase);
+            metastore.adapter.executeDdl("DROP TABLE review.renamed", sessionDatabase);
+            metastore.adapter.executeDdl("CREATE FUNCTION review.udf AS 'example.Udf'", sessionDatabase);
+            metastore.adapter.executeDdl("ALTER FUNCTION review.udf AS 'example.UpdatedUdf'", sessionDatabase);
+            metastore.adapter.executeDdl("DROP FUNCTION review.udf", sessionDatabase);
             verify(metastore.client, never()).getDatabase(sessionDatabase);
 
             for (String sql : new String[]{"CREATE TABLE local_table (id INT)",
                     "CREATE TABLE review.copy LIKE items", "ALTER TABLE items ADD note STRING"}) {
                 assertThrows(IllegalArgumentException.class,
-                        () -> FlinkHiveDdlAdapter.executeDdl(sql, sessionDatabase), sql);
+                        () -> metastore.adapter.executeDdl(sql, sessionDatabase), sql);
             }
             assertFalse(metastore.tables.containsKey("review.copy"));
             assertFalse(metastore.tables.containsKey("missing_session.local_table"));
@@ -63,7 +63,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
     void persistsAltersAndDropsDatabasesAndFunctions(@TempDir Path directory) throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
-            FlinkHiveDdlContract.databaseAndFunctionLifecycle(metastore.reader, "review", directory);
+            FlinkHiveDdlContract.databaseAndFunctionLifecycle(metastore.adapter, metastore.reader, "review", directory);
         }
     }
 
@@ -71,7 +71,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
     void producesTheSameTableMetadataAsAnIndependentFlinkPlanner() throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE review", "default");
+            metastore.adapter.executeDdl("CREATE DATABASE review", "default");
             var official = (org.apache.flink.table.api.internal.TableEnvironmentInternal)
                     org.apache.flink.table.api.TableEnvironment.create(
                             org.apache.flink.table.api.EnvironmentSettings.inStreamingMode());
@@ -103,32 +103,49 @@ class FlinkHiveDdlAdapterRuntimeTest {
                         "ALTER TABLE %s RENAME implicit_meta TO implicit_meta_renamed"
                 };
                 for (String statement : statements) {
-                    FlinkHiveDdlAdapter.executeDdl(statement.formatted("review.candidate"), "review");
+                    metastore.adapter.executeDdl(statement.formatted("review.candidate"), "review");
                     official.executeSql(statement.formatted("review.official"));
                     assertEquals(metastore.tables.get("review.official").getParameters(),
                             metastore.tables.get("review.candidate").getParameters(), statement);
                     assertEquals(metastore.tables.get("review.official").getSd(),
                             metastore.tables.get("review.candidate").getSd(), statement);
                 }
-                FlinkHiveDdlAdapter.executeDdl("CREATE TABLE review.candidate_copy LIKE review.candidate", "review");
+                metastore.adapter.executeDdl("CREATE TABLE review.candidate_copy LIKE review.candidate", "review");
                 official.executeSql("CREATE TABLE review.official_copy LIKE review.official");
                 assertEquals(metastore.tables.get("review.official_copy").getParameters(),
                         metastore.tables.get("review.candidate_copy").getParameters());
+                String[] copies = {
+                        "CREATE TABLE %s WITH ('connector'='filesystem', 'path'='file:///tmp/excluded', 'format'='json') "
+                                + "LIKE %s (EXCLUDING ALL)",
+                        "CREATE TABLE %s LIKE %s (EXCLUDING ALL INCLUDING OPTIONS INCLUDING METADATA INCLUDING CONSTRAINTS INCLUDING PARTITIONS)",
+                        "CREATE TABLE %s WITH ('path'='file:///tmp/copy') LIKE %s (OVERWRITING OPTIONS)",
+                        "CREATE TABLE %s (source STRING METADATA FROM 'changed' VIRTUAL) LIKE %s (OVERWRITING METADATA)",
+                        "CREATE TABLE %s PARTITIONED BY (identity_id) LIKE %s (EXCLUDING PARTITIONS)",
+                        "CREATE TABLE %s WITH ('copy-option'='value') LIKE %s (INCLUDING OPTIONS)"
+                };
+                for (int i = 0; i < copies.length; i++) {
+                    String candidate = "review.candidate_copy_" + i;
+                    String reference = "review.official_copy_" + i;
+                    metastore.adapter.executeDdl(copies[i].formatted(candidate, "review.candidate"), "review");
+                    official.executeSql(copies[i].formatted(reference, "review.official"));
+                    assertEquals(metastore.tables.get(reference).getParameters(), metastore.tables.get(candidate).getParameters(), copies[i]);
+                    assertEquals(metastore.tables.get(reference).getSd(), metastore.tables.get(candidate).getSd(), copies[i]);
+                }
                 for (String definition : new String[]{
                         "(id INT, extra AS id + 1)",
                         "(ts TIMESTAMP(3), WATERMARK FOR ts AS ts - INTERVAL '5' SECOND)"}) {
                     official.executeSql("CREATE TABLE review.unsupported " + definition
                             + " WITH ('connector'='filesystem', 'path'='file:///tmp/review', 'format'='json')");
                     Table before = metastore.tables.get("review.unsupported").deepCopy();
-                    assertThrows(UnsupportedOperationException.class, () -> FlinkHiveDdlAdapter.executeDdl(
+                    assertThrows(UnsupportedOperationException.class, () -> metastore.adapter.executeDdl(
                             "ALTER TABLE review.unsupported SET ('path'='file:///tmp/changed')", "review"));
-                    assertThrows(UnsupportedOperationException.class, () -> FlinkHiveDdlAdapter.executeQuery(
+                    assertThrows(UnsupportedOperationException.class, () -> metastore.adapter.executeQuery(
                             "SHOW CREATE TABLE review.unsupported", "review"));
                     assertEquals(before, metastore.tables.get("review.unsupported"));
                     official.executeSql("DROP TABLE review.unsupported");
                 }
                 // A definition created by the independent official client can be read and altered locally.
-                FlinkHiveDdlAdapter.executeDdl("ALTER TABLE review.official SET ('path'='file:///tmp/local-change')", "review");
+                metastore.adapter.executeDdl("ALTER TABLE review.official SET ('path'='file:///tmp/local-change')", "review");
                 assertEquals("file:///tmp/local-change", metastore.reader.getTable(
                         new org.apache.flink.table.catalog.ObjectPath("review", "official")).getOptions().get("path"));
             } finally {
@@ -141,8 +158,8 @@ class FlinkHiveDdlAdapterRuntimeTest {
     void rejectsUnsupportedAndInvalidChangesWithoutModifyingHms() throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE review", "default");
-            FlinkHiveDdlAdapter.executeDdl("CREATE TABLE review.items (id BIGINT, category STRING, "
+            metastore.adapter.executeDdl("CREATE DATABASE review", "default");
+            metastore.adapter.executeDdl("CREATE TABLE review.items (id BIGINT, category STRING, "
                     + "PRIMARY KEY (id) NOT ENFORCED) PARTITIONED BY (category) "
                     + "WITH ('connector'='filesystem', 'path'='file:///tmp/review', 'format'='json')", "review");
             Table before = metastore.tables.get("review.items").deepCopy();
@@ -151,7 +168,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
                     "ALTER TABLE review.items DROP id", "ALTER TABLE review.items DROP category",
                     "ALTER TABLE review.items ADD category STRING", "ALTER TABLE review.items RESET ('connector')",
                     "ALTER TABLE review.items MODIFY missing STRING", "ALTER TABLE review.items RENAME id TO category"}) {
-                assertThrows(RuntimeException.class, () -> FlinkHiveDdlAdapter.executeDdl(sql, "review"), sql);
+                assertThrows(RuntimeException.class, () -> metastore.adapter.executeDdl(sql, "review"), sql);
                 assertEquals(before, metastore.tables.get("review.items"), sql);
             }
             verify(metastore.client, never()).alter_table(anyString(), anyString(), any(Table.class));
@@ -162,19 +179,19 @@ class FlinkHiveDdlAdapterRuntimeTest {
     void showsFunctionsWithFlinkLikeFilteringAndPreservesFunctionLanguages() throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);
              Metastore metastore = new Metastore(factory)) {
-            FlinkHiveDdlAdapter.executeDdl("CREATE DATABASE review", "default");
-            FlinkHiveDdlAdapter.executeDdl("CREATE FUNCTION review.python_udf AS 'module.udf' LANGUAGE PYTHON", "review");
+            metastore.adapter.executeDdl("CREATE DATABASE review", "default");
+            metastore.adapter.executeDdl("CREATE FUNCTION review.python_udf AS 'module.udf' LANGUAGE PYTHON", "review");
             var function = metastore.reader.getFunction(new org.apache.flink.table.catalog.ObjectPath("review", "python_udf"));
             assertEquals(org.apache.flink.table.catalog.FunctionLanguage.PYTHON, function.getFunctionLanguage());
             assertEquals("module.udf", function.getClassName());
             assertTrue(function.getFunctionResources().isEmpty());
-            var rows = FlinkHiveDdlAdapter.executeQuery("SHOW USER FUNCTIONS IN review ILIKE 'PYTHON%'", "default")
+            var rows = metastore.adapter.executeQuery("SHOW USER FUNCTIONS IN review ILIKE 'PYTHON%'", "default")
                     .getEnumerable().toList();
             assertEquals(1, rows.size());
             assertEquals("python_udf", rows.get(0)[0]);
-            assertTrue(FlinkHiveDdlAdapter.executeQuery("SHOW USER FUNCTIONS IN review NOT LIKE 'python%'", "default")
+            assertTrue(metastore.adapter.executeQuery("SHOW USER FUNCTIONS IN review NOT LIKE 'python%'", "default")
                     .getEnumerable().toList().isEmpty());
-            assertTrue(FlinkHiveDdlAdapter.executeQuery("SHOW FUNCTIONS IN review ILIKE 'abs'", "default")
+            assertTrue(metastore.adapter.executeQuery("SHOW FUNCTIONS IN review ILIKE 'abs'", "default")
                     .getEnumerable().toList().stream().anyMatch(row -> row[0].toString().equalsIgnoreCase("abs")));
         }
     }
@@ -185,6 +202,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
         private final Map<String, Table> tables = new HashMap<>();
         private final Map<String, Function> functions = new HashMap<>();
         private final HiveCatalog reader;
+        private final FlinkHiveDdlAdapter adapter = new FlinkHiveDdlAdapter();
 
         private Metastore(MockedStatic<HiveMetastoreClientFactory> factory) throws Exception {
             databases.put("default", new Database("default", "", "file:///tmp", Map.of()));
@@ -282,7 +300,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
         @Override
         public void close() throws Exception {
             try {
-                FlinkHiveDdlContract.closeAdapter();
+                adapter.close();
             } finally {
                 reader.close();
             }
