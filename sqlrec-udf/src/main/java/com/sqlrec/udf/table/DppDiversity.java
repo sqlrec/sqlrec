@@ -2,7 +2,7 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.VectorMathUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.ejml.data.DMatrixRMaj;
@@ -131,7 +131,7 @@ public final class DppDiversity {
         for (int i = 0; i < rows.size(); i++) {
             // Normalization is in-place, so always work on an owned copy. In particular,
             // toDoubleArray returns the original reference when the input is a double[].
-            double[] vector = DataTransformUtils.toDoubleArray(rows.get(i)[embeddingIndex]).clone();
+            double[] vector = VectorMathUtils.toDoubleArray(rows.get(i)[embeddingIndex]).clone();
             if (expectedDimension < 0) {
                 expectedDimension = vector.length;
             } else if (vector.length != expectedDimension) {
@@ -144,7 +144,7 @@ public final class DppDiversity {
                     throw new IllegalArgumentException("embedding must be finite at row " + i);
                 }
             }
-            DataTransformUtils.l2Normalize(vector);
+            VectorMathUtils.l2Normalize(vector);
             embeddings[i] = vector;
         }
         return embeddings;

@@ -3,7 +3,7 @@ package com.sqlrec.connectors.redis.handler;
 import com.google.protobuf.Field;
 import com.google.protobuf.StringValue;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.connectors.redis.client.AbstractRedisWrapper;
+import com.sqlrec.connectors.redis.client.BaseRedisWrapper;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.KeyValue;
@@ -31,14 +31,14 @@ import static org.mockito.Mockito.*;
 
 /**
  * Mock unit tests for RedisHandler.
- * Injects a mock AbstractRedisWrapper via setRedisClientForTest to verify
+ * Injects a mock BaseRedisWrapper via setRedisClientForTest to verify
  * that handler scan / delete / close logic delegates correctly to the underlying wrapper.
  */
 @ExtendWith(MockitoExtension.class)
 class RedisHandlerUnitTest {
 
     @Mock
-    AbstractRedisWrapper mockRedisClient;
+    BaseRedisWrapper<?, ?> mockRedisClient;
 
     /** RedisFuture mock used by scan */
     @Mock

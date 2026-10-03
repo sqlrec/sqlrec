@@ -1,11 +1,8 @@
 package com.sqlrec.udf.inference;
 
+import com.sqlrec.common.http.JsonHttpTransport;
 import com.sqlrec.common.utils.JsonUtils;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 import java.io.IOException;
 import java.util.Map;
@@ -19,7 +16,6 @@ public final class PredictionClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build());
-    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     private final OkHttpClient httpClient;
 
@@ -37,17 +33,9 @@ public final class PredictionClient {
 
     public Map<String, Object> predict(
             String serviceUrl, String jsonData, Map<String, String> serviceParams) {
-        Request request = new Request.Builder()
-                .url(serviceUrl)
-                .post(RequestBody.create(jsonData, JSON))
-                .addHeader("Accept", "application/json")
-                .build();
         OkHttpClient client = clientWithServiceTimeouts(serviceParams);
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new RuntimeException("HTTP request failed with response code: " + response.code());
-            }
-            String responseBody = response.body() != null ? response.body().string() : "";
+        try {
+            String responseBody = JsonHttpTransport.post(client, serviceUrl, jsonData);
             return JsonUtils.parseJsonToMap(responseBody);
         } catch (IOException e) {
             throw new RuntimeException("Failed to call prediction service: " + e.getMessage(), e);

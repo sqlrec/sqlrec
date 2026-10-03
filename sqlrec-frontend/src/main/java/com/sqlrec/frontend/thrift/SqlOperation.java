@@ -1,6 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.frontend.utils.ThriftUtils;
@@ -47,7 +47,7 @@ public class SqlOperation {
 
     private ResultPage fetchSqlResult() {
         Enumerable<Object[]> rows = coreResult.getFields() == null
-                ? DataTransformUtils.getMsgEnumerable("no output") : coreResult.getEnumerable();
+                ? RowTransformUtils.getMsgEnumerable("no output") : coreResult.getEnumerable();
         ResultPage page = resultPage(rows, 0, false);
         coreResult.setEnumerable(null);
         return page;

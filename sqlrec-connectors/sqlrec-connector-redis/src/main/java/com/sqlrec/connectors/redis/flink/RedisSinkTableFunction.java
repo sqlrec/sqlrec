@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.redis.flink;
 
+import com.sqlrec.common.connector.ChangelogBatchBuffer;
+import com.sqlrec.common.connector.ChangelogBatchBuffer.Operation;
 import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.handler.RedisHandler;
@@ -13,7 +15,6 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.types.RowKind;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements CheckpointedFunction {
@@ -25,11 +26,7 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
     private RedisConfig redisConfig;
     private List<DataType> dataTypes;
     private transient RedisHandler redisHandler;
-    private transient List<Object[]> insertBuffer;
-    private transient List<Object[]> deleteBuffer;
-    private transient int batchSize;
-    private transient long flushIntervalMs;
-    private transient long lastFlushTime;
+    private transient ChangelogBatchBuffer<Object[]> buffer;
 
     public RedisSinkTableFunction(RedisConfig redisConfig, ResolvedSchema tableSchema) {
         this.redisConfig = redisConfig;
@@ -48,13 +45,12 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
             redisHandler = new RedisHandler(redisConfig);
             redisHandler.open();
         }
-        insertBuffer = new ArrayList<>();
-        deleteBuffer = new ArrayList<>();
-        batchSize = (redisConfig.batchSize != null && redisConfig.batchSize > 0)
+        int batchSize = (redisConfig.batchSize != null && redisConfig.batchSize > 0)
                 ? redisConfig.batchSize : DEFAULT_BATCH_SIZE;
-        flushIntervalMs = (redisConfig.flushInterval != null && redisConfig.flushInterval > 0)
+        long flushIntervalMs = (redisConfig.flushInterval != null && redisConfig.flushInterval > 0)
                 ? redisConfig.flushInterval * 1000L : DEFAULT_FLUSH_INTERVAL_MS;
-        lastFlushTime = System.currentTimeMillis();
+        buffer = new ChangelogBatchBuffer<>(batchSize, flushIntervalMs,
+                this::writeInserts, this::writeDeletes);
     }
 
     @Override
@@ -68,40 +64,14 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
 
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            // Preserve changelog order across operation types. Keeping separate buffers
-            // without this flush would reorder DELETE -> INSERT into INSERT -> DELETE.
-            flushDeleteBuffer();
-            insertBuffer.add(objects);
-            if (insertBuffer.size() >= batchSize) {
-                flushInsertBuffer();
-            }
+            buffer.add(Operation.WRITE, objects);
         } else if (kind == RowKind.DELETE) {
-            flushInsertBuffer();
-            deleteBuffer.add(objects);
-            if (deleteBuffer.size() >= batchSize) {
-                flushDeleteBuffer();
-            }
+            buffer.add(Operation.DELETE, objects);
         }
-
-        if (System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
-            flush();
-        }
+        buffer.flushIfDue();
     }
 
-    private void flush() throws Exception {
-        flushInsertBuffer();
-        flushDeleteBuffer();
-        lastFlushTime = System.currentTimeMillis();
-    }
-
-    private void flushInsertBuffer() throws Exception {
-        if (insertBuffer.isEmpty()) {
-            return;
-        }
-        // swap in a snapshot so the batch handed to the handler is not mutated
-        // afterwards (the buffer is reset immediately)
-        List<Object[]> batch = insertBuffer;
-        insertBuffer = new ArrayList<>();
+    private void writeInserts(List<Object[]> batch) throws Exception {
         try {
             redisHandler.batchInsert(batch);
         } catch (Exception e) {
@@ -109,12 +79,7 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
         }
     }
 
-    private void flushDeleteBuffer() throws Exception {
-        if (deleteBuffer.isEmpty()) {
-            return;
-        }
-        List<Object[]> batch = deleteBuffer;
-        deleteBuffer = new ArrayList<>();
+    private void writeDeletes(List<Object[]> batch) throws Exception {
         try {
             redisHandler.batchDelete(batch);
         } catch (Exception e) {
@@ -126,7 +91,7 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
     public void snapshotState(FunctionSnapshotContext context) throws Exception {
         // Flush on checkpoint so buffered records are written before the barrier
         // completes, keeping the sink at-least-once.
-        flush();
+        buffer.flush();
     }
 
     @Override
@@ -137,7 +102,7 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
     @Override
     public void close() throws Exception {
         try {
-            flush();
+            buffer.flush();
         } finally {
             if (redisHandler != null) {
                 redisHandler.close();

@@ -1,165 +1,36 @@
 package com.sqlrec.connectors.redis.client;
 
-import io.lettuce.core.KeyValue;
-import io.lettuce.core.RedisFuture;
-import io.lettuce.core.SetArgs;
 import io.lettuce.core.cluster.RedisClusterClient;
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection;
-import io.lettuce.core.cluster.api.async.RedisAdvancedClusterAsyncCommands;
+import io.lettuce.core.cluster.api.async.RedisClusterAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-public class RedisClusterWrapper implements AbstractRedisWrapper {
-    private static final Logger LOG = LoggerFactory.getLogger(RedisClusterWrapper.class);
-    private static final Map<String, RedisClusterClient> redisClientMap = new ConcurrentHashMap<>();
-    private static final Map<String, StatefulRedisClusterConnection<byte[], byte[]>> connectionMap = new ConcurrentHashMap<>();
+public class RedisClusterWrapper
+        extends BaseRedisWrapper<RedisClusterClient, StatefulRedisClusterConnection<byte[], byte[]>> {
+    private static final RedisConnectionRegistry<RedisClusterClient, StatefulRedisClusterConnection<byte[], byte[]>> CONNECTIONS =
+            new RedisConnectionRegistry<>("RedisClusterWrapper", RedisClusterClient::create,
+                    client -> client.connect(new ByteArrayCodec()));
 
     static {
-        // Close all shared clients/connections on JVM shutdown (the previous no-op close()
-        // relied on this but never registered a hook).
-        Runtime.getRuntime().addShutdownHook(new Thread(RedisClusterWrapper::invalidateAll, "RedisClusterWrapper-shutdown"));
+        CONNECTIONS.registerShutdownHook();
     }
 
-    private String url;
-
-    @Override
-    public void open(String url) {
-        this.url = url;
-    }
-
-    private static synchronized void openRedisClusterClient(String url) {
-        if (connectionMap.containsKey(url)) {
-            return;
-        }
-
-        RedisClusterClient redisClient = RedisClusterClient.create(url);
-        try {
-            StatefulRedisClusterConnection<byte[], byte[]> connection = redisClient.connect(new ByteArrayCodec());
-            redisClientMap.put(url, redisClient);
-            connectionMap.put(url, connection);
-        } catch (RuntimeException e) {
-            // connect() failed: shut down the half-created client to avoid leaking its
-            // NioEventLoopGroup / file descriptors. The entry is not cached, so the next
-            // attempt will create a fresh client.
-            try {
-                redisClient.shutdown();
-            } catch (Exception shutdownEx) {
-                LOG.warn("Failed to shut down RedisClusterClient after connect failure: {}", shutdownEx.getMessage());
-            }
-            throw e;
-        }
-    }
-
-    private StatefulRedisClusterConnection<byte[], byte[]> getConnection() {
-        if (!connectionMap.containsKey(url)) {
-            openRedisClusterClient(url);
-        }
-        return connectionMap.get(url);
-    }
-
-    private RedisAdvancedClusterAsyncCommands<byte[], byte[]> getCommands() {
-        return getConnection().async();
+    public RedisClusterWrapper() {
+        super(CONNECTIONS);
     }
 
     @Override
-    public void close() {
-        // Connection pool is shared across all instances with the same URL.
-        // Do not close the connection here as other instances may still be using it.
-        // Use invalidate() to force-close a broken connection, or rely on the JVM shutdown hook.
-    }
-
-    @Override
-    public void invalidate() {
-        invalidate(url);
-    }
-
-    /**
-     * Close and remove the shared cluster client/connection cached for {@code url}. Idempotent.
-     */
-    public static synchronized void invalidate(String url) {
-        StatefulRedisClusterConnection<byte[], byte[]> connection = connectionMap.remove(url);
-        closeConnection(connection);
-        RedisClusterClient redisClient = redisClientMap.remove(url);
-        if (redisClient != null) {
-            try {
-                redisClient.shutdown();
-            } catch (Exception e) {
-                LOG.warn("Failed to shut down RedisClusterClient: {}", e.getMessage());
-            }
-        }
-    }
-
-    private static void closeConnection(
+    protected RedisClusterAsyncCommands<byte[], byte[]> commands(
             StatefulRedisClusterConnection<byte[], byte[]> connection) {
-        if (connection == null) {
-            return;
-        }
-        try {
-            connection.close();
-        } catch (Exception e) {
-            LOG.warn("Failed to close Redis cluster connection: {}", e.getMessage());
-        }
+        return connection.async();
     }
 
-    /**
-     * Close and remove all cached clients/connections.
-     */
-    public static synchronized void invalidateAll() {
-        for (String url : redisClientMap.keySet()) {
-            invalidate(url);
-        }
+    /** Closes the shared resources for this URL; subsequent commands reconnect. */
+    public static void invalidate(String url) {
+        CONNECTIONS.invalidate(url);
     }
 
-    public RedisFuture<List<byte[]>> lrange(byte[] key, long start, long end) {
-        return getCommands().lrange(key, start, end);
-    }
-
-    public RedisFuture<byte[]> get(byte[] key) {
-        return getCommands().get(key);
-    }
-
-    public RedisFuture<List<KeyValue<byte[], byte[]>>> mget(byte[]... keys) {
-        return getCommands().mget(keys);
-    }
-
-    public RedisFuture<String> set(byte[] key, byte[] value) {
-        return getCommands().set(key, value);
-    }
-
-    @Override
-    public RedisFuture<String> setex(byte[] key, byte[] value, long ttlSeconds) {
-        // Cluster mode routes each SET (with its EX argument) to the key's slot,
-        // so unlike MSET this works for keys spanning multiple slots.
-        return getCommands().set(key, value, SetArgs.Builder.ex(ttlSeconds));
-    }
-
-    public RedisFuture<Long> del(byte[] key) {
-        return getCommands().del(key);
-    }
-
-    public RedisFuture<Long> lpush(byte[] key, byte[]... values) {
-        return getCommands().lpush(key, values);
-    }
-
-    public RedisFuture<Long> lrem(byte[] key, byte[] value) {
-        return lrem(key, 0, value);
-    }
-
-    @Override
-    public RedisFuture<Long> lrem(byte[] key, long count, byte[] value) {
-        return getCommands().lrem(key, count, value);
-    }
-
-    public RedisFuture<String> ltrim(byte[] key, long start, long stop) {
-        return getCommands().ltrim(key, start, stop);
-    }
-
-    public RedisFuture<Boolean> expire(byte[] key, long seconds) {
-        return getCommands().expire(key, seconds);
+    public static void invalidateAll() {
+        CONNECTIONS.invalidateAll();
     }
 }

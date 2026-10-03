@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.filesystem.handler;
 
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +51,7 @@ public class FileSystemHandler {
 
     private void normalizeRowTypes(Object[] row) {
         for (int i = 0; i < row.length; i++) {
-            row[i] = DataTypeUtils.convertType(
+            row[i] = ScalarConversions.convert(
                     row[i],
                     DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName()
             );

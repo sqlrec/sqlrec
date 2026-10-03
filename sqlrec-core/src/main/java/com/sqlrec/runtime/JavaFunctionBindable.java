@@ -1,10 +1,10 @@
 package com.sqlrec.runtime;
 
-import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.UnionLikeTableFunction;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -216,7 +216,7 @@ public class JavaFunctionBindable extends BindableInterface {
         if (outputTable instanceof CacheTable) {
             CacheTable cacheTable = (CacheTable) outputTable;
             List<Object[]> rows = cacheTable.scan(null).toList();
-            rows = DataTypeUtils.adaptRowsToSchema(rows, returnDataFields, cacheTable.getDataFields());
+            rows = RowTransformUtils.adaptRowsToSchema(rows, returnDataFields, cacheTable.getDataFields());
             return Linq4j.asEnumerable(rows);
         } else {
             throw new RuntimeException("output table is not a CacheTable: " + outputTable.getClass().getName());

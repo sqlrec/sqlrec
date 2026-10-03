@@ -2,13 +2,15 @@ package com.sqlrec.common.utils;
 
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
-import com.sqlrec.common.schema.FieldSchema;
-import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
 import java.util.Map;
 
-public class JsonUtils {
+/** General JSON serialization; schema-aware row formats live in JsonRows and RowJsonEncoder. */
+public final class JsonUtils {
+    private JsonUtils() {
+    }
+
     private static final Gson gson = new GsonBuilder()
             .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
             .create();
@@ -21,39 +23,8 @@ public class JsonUtils {
         return gson.toJson(object);
     }
 
-    public static String toJson(Object[] objects, List<FieldSchema> fieldSchemas) {
-        JsonObject jsonObject = new JsonObject();
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = fieldSchemas.get(i);
-            jsonObject.add(fieldSchema.getName(), gson.toJsonTree(objects[i]));
-        }
-        return gson.toJson(jsonObject);
-    }
-
-    public static String toJsonByFields(Object[] objects, List<RelDataTypeField> fields) {
-        JsonObject jsonObject = new JsonObject();
-        for (int i = 0; i < fields.size(); i++) {
-            Object value = objects[i];
-            if (value != null) {
-                jsonObject.add(fields.get(i).getName(), gson.toJsonTree(value));
-            } else {
-                jsonObject.add(fields.get(i).getName(), JsonNull.INSTANCE);
-            }
-        }
-        return gson.toJson(jsonObject);
-    }
-
     public static <T> T fromJson(String json, Class<T> classOfT) throws JsonSyntaxException {
         return gson.fromJson(json, classOfT);
-    }
-
-    public static Object[] fromJson(String json, List<FieldSchema> fieldSchemas) {
-        Map<String, Object> dataMap = gson.fromJson(json, Map.class);
-        Object[] objects = new Object[fieldSchemas.size()];
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            objects[i] = dataMap.get(fieldSchemas.get(i).getName());
-        }
-        return objects;
     }
 
     public static List<String> parseStringList(String json) {
@@ -61,20 +32,7 @@ public class JsonUtils {
         }.getType());
     }
 
-    /** Compatibility entry point for row projection JSON encoding. */
-    public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
-        return RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
-    }
-
     public static Map<String, Object> parseJsonToMap(String json) {
         return gson.fromJson(json, Map.class);
-    }
-
-    /** Compatibility entry point for grouped-column JSON encoding. */
-    public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData,
-                                        List<FieldSchema> queryFields, List<FieldSchema> valueFields,
-                                        List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
-        return RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields,
-                queryDataFields, valueDataFields);
     }
 }

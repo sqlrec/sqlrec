@@ -1,7 +1,7 @@
 package com.sqlrec.executor;
 
 import com.sqlrec.common.model.CheckpointInfo;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.ModelManager;
 import org.apache.calcite.linq4j.Enumerable;
@@ -29,7 +29,7 @@ public class ModelSqlProcessResult extends CachedCompletionSqlProcessResult {
 
     public static ModelSqlProcessResult msg(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
         return new ModelSqlProcessResult(
-                DataTransformUtils.getMsgEnumerable(msg),
+                RowTransformUtils.getMsgEnumerable(msg),
                 DataTypeUtils.getStringTypeField(fieldName),
                 checkpointInfos
         );

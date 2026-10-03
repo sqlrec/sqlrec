@@ -1,6 +1,6 @@
 package com.sqlrec.executor;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.ServiceManager;
 import org.apache.calcite.linq4j.Enumerable;
@@ -26,7 +26,7 @@ public class ServiceSqlProcessResult extends CachedCompletionSqlProcessResult {
 
     public static ServiceSqlProcessResult msg(String msg, String fieldName, String serviceName) {
         return new ServiceSqlProcessResult(
-                DataTransformUtils.getMsgEnumerable(msg),
+                RowTransformUtils.getMsgEnumerable(msg),
                 DataTypeUtils.getStringTypeField(fieldName),
                 serviceName
         );

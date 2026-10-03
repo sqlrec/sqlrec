@@ -1,6 +1,6 @@
 package com.sqlrec.connectors.redis.handler;
 
-import com.sqlrec.connectors.redis.client.AbstractRedisWrapper;
+import com.sqlrec.connectors.redis.client.BaseRedisWrapper;
 import com.sqlrec.connectors.redis.client.RedisClusterWrapper;
 import com.sqlrec.connectors.redis.client.RedisWrapper;
 import com.sqlrec.connectors.redis.codec.AbstractCodec;
@@ -26,7 +26,7 @@ public class RedisHandler {
     private static final Logger LOG = LoggerFactory.getLogger(RedisHandler.class);
     private static final int TIMEOUT_SECONDS = 30;
 
-    AbstractRedisWrapper redisClient;
+    BaseRedisWrapper<?, ?> redisClient;
     private RedisConfig redisConfig;
     private AbstractCodec codec;
     private String keyPrefix;
@@ -36,7 +36,7 @@ public class RedisHandler {
     }
 
     /** Test-only: inject a mock redis client. */
-    void setRedisClientForTest(AbstractRedisWrapper mockClient) {
+    void setRedisClientForTest(BaseRedisWrapper<?, ?> mockClient) {
         this.redisClient = mockClient;
     }
 

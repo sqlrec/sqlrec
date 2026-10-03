@@ -4,7 +4,7 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
@@ -83,7 +83,7 @@ public class RestFunctionExecutor {
             result.setParams(context.getVariables());
             if (rows != null) {
                 List<Object[]> values = rows.toList();
-                result.setData(DataTransformUtils.convertToMapList(values, bindable.getReturnDataFields()));
+                result.setData(RowTransformUtils.convertToMapList(values, bindable.getReturnDataFields()));
             } else {
                 result.setMsg("API '" + apiName + "' returned no result");
             }
@@ -111,7 +111,7 @@ public class RestFunctionExecutor {
                 throw new IllegalArgumentException("input table '" + tableName + "' is missing from data");
             }
 
-            Enumerable<Object[]> enumerable = DataTransformUtils.convertDataToEnumerable(params.get(tableName), dataFields);
+            Enumerable<Object[]> enumerable = RowTransformUtils.convertDataToEnumerable(params.get(tableName), dataFields);
             CacheTable cacheTable = new CacheTable(tableName, enumerable, dataFields);
             schema.add(tableName, cacheTable);
         }

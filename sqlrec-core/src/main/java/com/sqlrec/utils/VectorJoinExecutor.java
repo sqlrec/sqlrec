@@ -5,7 +5,7 @@ import com.sqlrec.common.runtime.SqlRecDataContext;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.VectorMathUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rex.RexNode;
@@ -82,7 +82,7 @@ public final class VectorJoinExecutor {
 
         VectorSearchRequest request = new VectorSearchRequest(
                 leftRow,
-                DataTransformUtils.convertToFloatVec(rawEmbedding),
+                VectorMathUtils.convertToFloatVec(rawEmbedding),
                 rightEmbeddingField,
                 pushedFilter,
                 topK);

@@ -1,7 +1,7 @@
 package com.sqlrec.demo;
 
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.TableTextFormatter;
 import com.sqlrec.executor.SqlExecutor;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +40,7 @@ public class TestQuickStart {
         CacheTable result = sqlExecutor.executeSql("call demo_rec(quick_start_user)");
         List<Object[]> rows = result.scan(null).toList();
 
-        List<String> lines = DataTransformUtils.formatAsTable(result.scan(null), result.getDataFields());
+        List<String> lines = TableTextFormatter.formatAsTable(result.scan(null), result.getDataFields());
         lines.forEach(System.out::println);
 
         assertEquals(2, rows.size());

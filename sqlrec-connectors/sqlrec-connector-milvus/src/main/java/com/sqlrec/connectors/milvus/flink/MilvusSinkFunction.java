@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.milvus.flink;
 
+import com.sqlrec.common.connector.ChangelogBatchBuffer;
+import com.sqlrec.common.connector.ChangelogBatchBuffer.Operation;
 import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
@@ -15,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
 public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements CheckpointedFunction, Serializable {
@@ -24,13 +25,7 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
     private MilvusConfig milvusConfig;
     private List<org.apache.flink.table.types.DataType> dataTypes;
     private transient MilvusHandler milvusHandler;
-    // INSERT and UPDATE_AFTER rows both go through upsert (addBatch) so rows with an
-    // existing primary key are replaced, matching the original sink semantics.
-    private transient List<Object[]> upsertBuffer;
-    private transient List<Object[]> deleteBuffer;
-    private transient int batchSize;
-    private transient long flushIntervalMs;
-    private transient long lastFlushTime;
+    private transient ChangelogBatchBuffer<Object[]> buffer;
 
     public MilvusSinkFunction(MilvusConfig milvusConfig, ResolvedSchema tableSchema) {
         this.milvusConfig = milvusConfig;
@@ -48,13 +43,12 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
         if (this.milvusHandler == null) {
             this.milvusHandler = new MilvusHandler(milvusConfig);
         }
-        this.upsertBuffer = new ArrayList<>();
-        this.deleteBuffer = new ArrayList<>();
-        this.batchSize = milvusConfig.batchSize != null && milvusConfig.batchSize > 0
+        int batchSize = milvusConfig.batchSize != null && milvusConfig.batchSize > 0
                 ? milvusConfig.batchSize : 4096;
-        this.flushIntervalMs = (milvusConfig.flushInterval != null && milvusConfig.flushInterval > 0
+        long flushIntervalMs = (milvusConfig.flushInterval != null && milvusConfig.flushInterval > 0
                 ? milvusConfig.flushInterval : 1L) * 1000L;
-        this.lastFlushTime = System.currentTimeMillis();
+        buffer = new ChangelogBatchBuffer<>(batchSize, flushIntervalMs,
+                this::writeUpserts, this::writeDeletes);
         logger.info("MilvusSinkFunction initialized with batch size: {}, flush interval: {}ms",
                 batchSize, flushIntervalMs);
     }
@@ -68,48 +62,20 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
         Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
 
         if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            // Flush the opposite operation before switching buffers so changelog order
-            // is preserved for rows sharing a primary key.
-            flushDeleteBuffer();
-            upsertBuffer.add(objects);
-            if (upsertBuffer.size() >= batchSize) {
-                flushUpsertBuffer();
-            }
+            // INSERT and UPDATE_AFTER both replace rows with an existing primary key.
+            buffer.add(Operation.WRITE, objects);
         } else if (kind == RowKind.DELETE) {
-            flushUpsertBuffer();
-            deleteBuffer.add(objects);
-            if (deleteBuffer.size() >= batchSize) {
-                flushDeleteBuffer();
-            }
+            buffer.add(Operation.DELETE, objects);
         }
-
-        if (System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
-            flush();
-        }
+        buffer.flushIfDue();
     }
 
-    private void flush() {
-        flushUpsertBuffer();
-        flushDeleteBuffer();
-        lastFlushTime = System.currentTimeMillis();
-    }
-
-    private void flushUpsertBuffer() {
-        if (upsertBuffer.isEmpty()) {
-            return;
-        }
-        List<Object[]> batch = upsertBuffer;
-        upsertBuffer = new ArrayList<>();
+    private void writeUpserts(List<Object[]> batch) {
         milvusHandler.addBatch(batch);
         logger.debug("Flushed {} upsert records to Milvus", batch.size());
     }
 
-    private void flushDeleteBuffer() {
-        if (deleteBuffer.isEmpty()) {
-            return;
-        }
-        List<Object[]> batch = deleteBuffer;
-        deleteBuffer = new ArrayList<>();
+    private void writeDeletes(List<Object[]> batch) {
         milvusHandler.removeBatch(batch);
         logger.debug("Flushed {} delete records to Milvus", batch.size());
     }
@@ -118,7 +84,7 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
     public void snapshotState(FunctionSnapshotContext context) throws Exception {
         // Flush on checkpoint so buffered records are written before the barrier
         // completes, keeping the sink at-least-once.
-        flush();
+        buffer.flush();
     }
 
     @Override
@@ -129,7 +95,7 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
     @Override
     public void close() throws Exception {
         try {
-            flush();
+            buffer.flush();
         } catch (Exception e) {
             logger.error("Error flushing remaining records in close()", e);
             throw e;

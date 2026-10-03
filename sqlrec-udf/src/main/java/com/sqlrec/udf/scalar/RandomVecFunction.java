@@ -1,6 +1,6 @@
 package com.sqlrec.udf.scalar;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.VectorMathUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -88,6 +88,6 @@ public class RandomVecFunction extends GenericUDF {
         for (int i = 0; i < dimension; i++) {
             vector.add(random.nextDouble());
         }
-        return DataTransformUtils.l2NormalizeList(vector);
+        return VectorMathUtils.l2NormalizeList(vector);
     }
 }

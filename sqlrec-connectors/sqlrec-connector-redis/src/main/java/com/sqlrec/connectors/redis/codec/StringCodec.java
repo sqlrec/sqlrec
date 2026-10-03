@@ -1,7 +1,7 @@
 package com.sqlrec.connectors.redis.codec;
 
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.ScalarConversions;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -27,8 +27,8 @@ public class StringCodec implements AbstractCodec {
         String value = new String(bytes, StandardCharsets.UTF_8);
         int valueIndex = 1 - primaryKeyIndex;
         Object[] result = new Object[2];
-        result[primaryKeyIndex] = DataTypeUtils.parseStringAsType(primaryKey, fieldSchemas.get(primaryKeyIndex).getType());
-        result[valueIndex] = DataTypeUtils.parseStringAsType(value, fieldSchemas.get(valueIndex).getType());
+        result[primaryKeyIndex] = ScalarConversions.convert(primaryKey, fieldSchemas.get(primaryKeyIndex).getType());
+        result[valueIndex] = ScalarConversions.convert(value, fieldSchemas.get(valueIndex).getType());
         return result;
     }
 

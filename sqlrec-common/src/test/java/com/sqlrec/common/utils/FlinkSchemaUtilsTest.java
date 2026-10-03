@@ -11,6 +11,8 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.IntType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -134,5 +136,15 @@ class FlinkSchemaUtilsTest {
         assertEquals(Arrays.asList("second", "first"), new ArrayList<>(children.keySet()));
         assertEquals(Arrays.asList("extra", "name"), new ArrayList<>(child.keySet()));
         assertEquals("child", child.get("name"));
+    }
+    @Test
+    public void testFlinkArrayConversionPreservesNullElements() {
+        GenericRowData rowData = new GenericRowData(1);
+        rowData.setField(0, new GenericArrayData(new Integer[]{1, null, 3}));
+
+        Object result = FlinkSchemaUtils.typeConversion(
+                new ArrayType(new IntType()), rowData, 0);
+
+        assertEquals(Arrays.asList(1, null, 3), result);
     }
 }

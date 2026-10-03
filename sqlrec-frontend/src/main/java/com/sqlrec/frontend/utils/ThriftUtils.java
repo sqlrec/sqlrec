@@ -1,6 +1,6 @@
 package com.sqlrec.frontend.utils;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.hive.service.rpc.thrift.*;
@@ -55,7 +55,7 @@ public class ThriftUtils {
                     (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
             case BOOLEAN -> valueColumn(rows, index, Boolean.class,
                     (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
-            default -> valueColumn(DataTransformUtils.getJsonValueEnumerable(rows, index), 0, String.class,
+            default -> valueColumn(RowTransformUtils.getJsonValueEnumerable(rows, index), 0, String.class,
                     (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
         };
     }

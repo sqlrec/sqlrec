@@ -1,12 +1,8 @@
 package com.sqlrec.connectors.filesystem.handler;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.JsonRows;
+import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,7 +100,7 @@ final class FileSystemDataLoader {
                 row[i] = null;
             } else {
                 try {
-                    row[i] = DataTypeUtils.parseStringAsType(value, fileSystemConfig.fieldSchemas.get(i).getType());
+                    row[i] = ScalarConversions.convert(value, fileSystemConfig.fieldSchemas.get(i).getType());
                 } catch (Exception e) {
                     row[i] = null;
                 }
@@ -147,55 +143,14 @@ final class FileSystemDataLoader {
     }
 
     private List<Object[]> loadJson(Path filePath) throws IOException {
-        List<Object[]> rows = new ArrayList<>();
         String content = Files.readString(filePath, StandardCharsets.UTF_8);
-        Gson gson = JsonUtils.getGson();
-        JsonArray jsonArray;
-
+        List<JsonObject> objects;
         try {
-            JsonElement root = gson.fromJson(content, JsonElement.class);
-            if (root.isJsonArray()) {
-                jsonArray = root.getAsJsonArray();
-            } else if (root.isJsonObject()) {
-                jsonArray = new JsonArray();
-                jsonArray.add(root.getAsJsonObject());
-            } else {
-                logger.warn("JSON content is not an array or object, initializing as empty table");
-                return new ArrayList<>();
-            }
-        } catch (Exception e) {
-            logger.warn("Invalid JSON format: {}", e.getMessage());
+            objects = JsonRows.readObjects(content);
+        } catch (RuntimeException failure) {
+            logger.warn("Invalid JSON input: {}, initializing as empty table", failure.getMessage());
             return new ArrayList<>();
         }
-
-        for (JsonElement item : jsonArray) {
-            if (!item.isJsonObject()) {
-                continue;
-            }
-            JsonObject obj = item.getAsJsonObject();
-            Object[] row = new Object[fileSystemConfig.fieldSchemas.size()];
-            for (int i = 0; i < fileSystemConfig.fieldSchemas.size(); i++) {
-                FieldSchema fieldSchema = fileSystemConfig.fieldSchemas.get(i);
-                JsonElement fieldElement = obj.get(fieldSchema.getName());
-                if (fieldElement == null || fieldElement.isJsonNull()) {
-                    row[i] = null;
-                } else {
-                    row[i] = convertJsonElement(fieldElement, fieldSchema.getType());
-                }
-            }
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private Object convertJsonElement(JsonElement element, String type) {
-        try {
-            if (element.isJsonPrimitive()) {
-                return DataTypeUtils.parseStringAsType(element.getAsString(), type);
-            }
-            return element.toString();
-        } catch (Exception e) {
-            return null;
-        }
+        return JsonRows.decodeRows(objects, fileSystemConfig.fieldSchemas, JsonRows.Decoding.COERCE_SCALARS);
     }
 }

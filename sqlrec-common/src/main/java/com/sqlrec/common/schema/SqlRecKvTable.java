@@ -3,9 +3,10 @@ package com.sqlrec.common.schema;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
+import com.sqlrec.common.utils.ScalarConversions;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
@@ -63,7 +64,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                     FilterUtils.extractPrimaryKeyValue(candidateFilters, getPrimaryKeyIndex());
             if (primaryKeyValue != null) {
                 SqlTypeName primaryKeyType = getPrimaryKeyType();
-                primaryKeyValue = DataTypeUtils.convertType(primaryKeyValue, primaryKeyType);
+                primaryKeyValue = ScalarConversions.convert(primaryKeyValue, primaryKeyType);
                 Map<Object, List<Object[]>> keyResult = getByPrimaryKey(Collections.singleton(primaryKeyValue));
                 List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
                 result = Linq4j.asEnumerable(rows);
@@ -71,7 +72,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 result = scanImpl(candidateFilters);
                 if (result != null) {
                     List<Object[]> rows = result.toList();
-                    DataTypeUtils.convertRowTypes(rows, getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList());
+                    RowTransformUtils.convertRowTypes(rows, getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList());
                     result = Linq4j.asEnumerable(rows);
                 }
             }
@@ -143,14 +144,14 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
         try {
             SqlTypeName primaryKeyType = getPrimaryKeyType();
-            Set<Object> convertedKeySet = DataTypeUtils.convertKeySet(keySet, primaryKeyType);
+            Set<Object> convertedKeySet = RowTransformUtils.convertKeySet(keySet, primaryKeyType);
 
             if (cache == null) {
-                Map<Object, List<Object[]>> result = DataTypeUtils.convertMapKeys(
+                Map<Object, List<Object[]>> result = RowTransformUtils.convertMapKeys(
                         getByPrimaryKeyImpl(convertedKeySet), primaryKeyType);
                 List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
                 for (List<Object[]> rows : result.values()) {
-                    DataTypeUtils.convertRowTypes(rows, fields);
+                    RowTransformUtils.convertRowTypes(rows, fields);
                 }
                 return result;
             }
@@ -168,11 +169,11 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 }
             }
             if (!missKeys.isEmpty()) {
-                Map<Object, List<Object[]>> missKeyResult = DataTypeUtils.convertMapKeys(
+                Map<Object, List<Object[]>> missKeyResult = RowTransformUtils.convertMapKeys(
                         getByPrimaryKeyImpl(missKeys), primaryKeyType);
                 List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
                 for (Map.Entry<Object, List<Object[]>> entry : missKeyResult.entrySet()) {
-                    DataTypeUtils.convertRowTypes(entry.getValue(), fields);
+                    RowTransformUtils.convertRowTypes(entry.getValue(), fields);
                     result.put(entry.getKey(), entry.getValue());
                     cache.put(entry.getKey(), entry.getValue());
                 }
@@ -210,7 +211,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         int pkIndex = getPrimaryKeyIndex();
         if (pkIndex < row.length) {
             SqlTypeName primaryKeyType = getPrimaryKeyType();
-            Object primaryKeyValue = DataTypeUtils.convertType(row[pkIndex], primaryKeyType);
+            Object primaryKeyValue = ScalarConversions.convert(row[pkIndex], primaryKeyType);
             cache.invalidate(primaryKeyValue);
         }
     }

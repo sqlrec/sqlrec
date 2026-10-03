@@ -1,8 +1,8 @@
 package com.sqlrec.common.schema;
 
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
@@ -35,7 +35,7 @@ public interface VectorSearchable {
                 List<Object[]> rows = result.stream()
                         .map(VectorSearchResult::getRow)
                         .collect(java.util.stream.Collectors.toList());
-                DataTypeUtils.convertRowTypes(
+                RowTransformUtils.convertRowTypes(
                         rows,
                         table.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList()
                 );

@@ -2,7 +2,7 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -32,7 +32,7 @@ public class TagToVecFunction {
             throw new IllegalArgumentException("output column name already exists: " + outputColName);
         }
 
-        List<Object[]> rows = DataTransformUtils.materializeRows(input);
+        List<Object[]> rows = RowTransformUtils.materializeRows(input);
         if (rows.isEmpty()) {
             return new CacheTable("output", Linq4j.asEnumerable(Collections.emptyList()), newDataFields);
         }

@@ -4,7 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.TableTextFormatter;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
@@ -230,7 +230,7 @@ public class ProxyAllBindable extends ForwardingBindable {
                                  Enumerable<Object[]> data, List<RelDataTypeField> fields) {
         String logId = context.getLogId();
         log.info("[{}] node [{}] output:", logId, nodeName);
-        List<String> tableLines = DataTransformUtils.formatAsTable(data, fields);
+        List<String> tableLines = TableTextFormatter.formatAsTable(data, fields);
         for (String line : tableLines) {
             log.info("[{}] {}", logId, line);
         }

@@ -3,8 +3,8 @@ package com.sqlrec.connectors.kafka.calcite;
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ProtobufRowCodec;
+import com.sqlrec.common.utils.RowJsonEncoder;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
@@ -152,7 +152,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         protected boolean addImpl(Object[] objects) {
             byte[] msg = table.protobufRowCodec != null
                     ? table.protobufRowCodec.encode(objects, kafkaConfig.fieldSchemas)
-                    : JsonUtils.toJson(objects, kafkaConfig.fieldSchemas)
+                    : RowJsonEncoder.toJson(objects, kafkaConfig.fieldSchemas)
                             .getBytes(StandardCharsets.UTF_8);
             KafkaProducer<String, byte[]> producer = getKafkaProducer(kafkaConfig);
             // Kafka writes are intentionally fire-and-forget. The callback reports asynchronous

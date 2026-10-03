@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * IpFunction and L2NormFunction use PrimitiveObjectInspector.getPrimitiveJavaObject()
  * to convert Writable elements (e.g. DoubleWritable) to Java types (Double)
- * before passing to DataTransformUtils.
+ * before passing to VectorMathUtils.
  *
  * Uses Flink MiniCluster via {@link MiniClusterExtension} to run real Flink
  * jobs with SQL queries that exercise the UDFs.

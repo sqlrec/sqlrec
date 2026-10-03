@@ -2,7 +2,6 @@ package com.sqlrec.udf.inference;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.JsonUtils;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +25,6 @@ class PredictionRequestEncoderTest {
         List<Object[]> rows = Arrays.asList(new Object[]{null, "item", "unused"}, new Object[]{0.5});
 
         assertEquals("[{\"id\":\"item\"},{\"score\":0.5}]",
-                PredictionRequestEncoder.encodeRows(rows, modelFields, dataFields));
-        assertEquals(JsonUtils.toJsonArray(rows, modelFields, dataFields),
                 PredictionRequestEncoder.encodeRows(rows, modelFields, dataFields));
 
         Map<String, Object> batchRow = new LinkedHashMap<>();

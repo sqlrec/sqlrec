@@ -1,6 +1,6 @@
 package com.sqlrec.executor;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -22,7 +22,7 @@ public class SqlProcessResult {
     }
 
     public static SqlProcessResult msg(String msg, String fieldName) {
-        return new SqlProcessResult(DataTransformUtils.getMsgEnumerable(msg), DataTypeUtils.getStringTypeField(fieldName));
+        return new SqlProcessResult(RowTransformUtils.getMsgEnumerable(msg), DataTypeUtils.getStringTypeField(fieldName));
     }
 
     public static SqlProcessResult of(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
@@ -30,14 +30,14 @@ public class SqlProcessResult {
     }
 
     public static SqlProcessResult stringList(List<String> list, String fieldName) {
-        return new SqlProcessResult(DataTransformUtils.convertListToEnumerable(list), DataTypeUtils.getStringTypeField(fieldName));
+        return new SqlProcessResult(RowTransformUtils.convertListToEnumerable(list), DataTypeUtils.getStringTypeField(fieldName));
     }
 
     public static SqlProcessResult tableTypeDesc(List<RelDataTypeField> dataFields) {
         List<List<String>> fieldNameAndType = dataFields.stream().map(
                 f -> Arrays.asList(f.getName(), f.getType().toString())
         ).collect(Collectors.toList());
-        Enumerable<Object[]> enumerable = DataTransformUtils.convertListToArrayToEnumerable(fieldNameAndType);
+        Enumerable<Object[]> enumerable = RowTransformUtils.convertListToArrayToEnumerable(fieldNameAndType);
         List<RelDataTypeField> resultFields = DataTypeUtils.getStringTypeFieldList(
                 Arrays.asList("name", "type")
         );

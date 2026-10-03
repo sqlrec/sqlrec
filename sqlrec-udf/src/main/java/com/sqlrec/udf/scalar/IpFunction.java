@@ -1,6 +1,6 @@
 package com.sqlrec.udf.scalar;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.VectorMathUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -29,7 +29,7 @@ public class IpFunction extends GenericUDF {
             throw new IllegalArgumentException("emb1 and emb2 must be list");
         }
 
-        return DataTransformUtils.innerProduct((List<?>) emb1, (List<?>) emb2);
+        return VectorMathUtils.innerProduct((List<?>) emb1, (List<?>) emb2);
     }
 
     @Override
@@ -91,7 +91,7 @@ public class IpFunction extends GenericUDF {
      * Converts a Hive list to a Java list, converting each element via
      * PrimitiveObjectInspector.getPrimitiveJavaObject() when available.
      * This handles Writable types (e.g. DoubleWritable -> Double) that
-     * DataTransformUtils doesn't recognize.
+     * VectorMathUtils doesn't recognize.
      */
     private List<Object> toJavaList(List<?> list, PrimitiveObjectInspector elementOI) {
         if (list == null) {

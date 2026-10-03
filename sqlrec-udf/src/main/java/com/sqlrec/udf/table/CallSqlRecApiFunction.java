@@ -4,9 +4,9 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.SqlRecApiClient;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTransformUtils;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
+import com.sqlrec.common.utils.SchemaInference;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -52,8 +52,8 @@ public class CallSqlRecApiFunction {
             if (inputs.containsKey(tableName)) {
                 throw new IllegalArgumentException("duplicate input table name: " + tableName);
             }
-            List<Object[]> rows = DataTransformUtils.materializeRows(table);
-            inputs.put(tableName, DataTransformUtils.convertToMapList(rows, table.getDataFields()));
+            List<Object[]> rows = RowTransformUtils.materializeRows(table);
+            inputs.put(tableName, RowTransformUtils.convertToMapList(rows, table.getDataFields()));
         }
 
         ExecuteData response = client.call(
@@ -67,22 +67,19 @@ public class CallSqlRecApiFunction {
         }
 
         // infer output fields from response rows
-        List<RelDataTypeField> dataFields = DataTypeUtils.inferFields(dataRows);
+        List<RelDataTypeField> dataFields = SchemaInference.inferFields(dataRows);
 
         // build output rows (ARRAY values kept as List object; Map/complex values serialized to JSON string)
         List<Object[]> outRows = new ArrayList<>(dataRows.size());
         for (Map<String, Object> rowMap : dataRows) {
-            Object[] row = new Object[dataFields.size()];
-            for (int i = 0; i < dataFields.size(); i++) {
-                RelDataTypeField field = dataFields.get(i);
-                Object val = rowMap.get(field.getName());
+            outRows.add(RowTransformUtils.projectRow(dataFields, field -> {
+                Object value = rowMap.get(field.getName());
                 if (field.getType().getSqlTypeName() != SqlTypeName.ARRAY
-                        && (val instanceof List || val instanceof Map)) {
-                    val = JsonUtils.toJson(val);
+                        && (value instanceof List || value instanceof Map)) {
+                    return JsonUtils.toJson(value);
                 }
-                row[i] = val;
-            }
-            outRows.add(row);
+                return value;
+            }));
         }
 
         return new CacheTable("output", Linq4j.asEnumerable(outRows), dataFields);

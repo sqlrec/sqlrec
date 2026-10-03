@@ -197,7 +197,7 @@ class SqlOutputFormatterTest {
 
         List<String> lines = SqlOutputFormatter.format(rows, f, "table");
 
-        // DataTransformUtils.formatAsTable draws a header + separator + data row
+        // TableTextFormatter.formatAsTable draws a header + separator + data row
         assertFalse(lines.isEmpty());
         // Header line should contain the column name
         assertTrue(lines.stream().anyMatch(l -> l.contains("id") && l.contains("name")));

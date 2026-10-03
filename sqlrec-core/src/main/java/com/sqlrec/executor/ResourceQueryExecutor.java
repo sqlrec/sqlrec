@@ -1,7 +1,7 @@
 package com.sqlrec.executor;
 
 import com.sqlrec.common.schema.SqlRecTable;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.db.MetadataAccess;
@@ -197,7 +197,7 @@ final class ResourceQueryExecutor {
     }
 
     private static SqlProcessResult formatted(List<List<String>> rows) {
-        Enumerable<Object[]> values = DataTransformUtils.convertListToArrayToEnumerable(rows);
+        Enumerable<Object[]> values = RowTransformUtils.convertListToArrayToEnumerable(rows);
         List<RelDataTypeField> fields = DataTypeUtils.getStringTypeFieldList(
                 Arrays.asList("col_name", "data_type"));
         return SqlProcessResult.of(values, fields);

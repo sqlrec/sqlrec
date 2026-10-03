@@ -8,7 +8,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
  * Only {@link #getName()} and {@link #getIndex()} return meaningful values;
  * {@link #getType()} returns {@code null} and {@link #isDynamicStar()} returns
  * {@code false}, which is sufficient for the {@link SqlOutputFormatter} /
- * {@code DataTransformUtils} code paths exercised by the unit tests.
+ * {@code TableTextFormatter} code paths exercised by the unit tests.
  */
 final class FakeRelDataTypeField implements RelDataTypeField {
 

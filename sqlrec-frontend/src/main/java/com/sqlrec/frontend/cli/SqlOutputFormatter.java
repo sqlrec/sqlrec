@@ -1,7 +1,7 @@
 package com.sqlrec.frontend.cli;
 
-import com.sqlrec.common.utils.DataTransformUtils;
-import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.RowJsonEncoder;
+import com.sqlrec.common.utils.TableTextFormatter;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -15,7 +15,7 @@ import java.util.StringJoiner;
  * <p>
  * Supported formats (matched case-insensitively, default {@code table}):
  * <ul>
- *     <li>{@code table} — ASCII box table via {@link DataTransformUtils#formatAsTable}</li>
+ *     <li>{@code table} — ASCII box table via {@link TableTextFormatter#formatAsTable}</li>
  *     <li>{@code csv}  — comma-separated, RFC-4180 style quoting</li>
  *     <li>{@code tsv}  — tab-separated, same quoting rules</li>
  *     <li>{@code json} — one JSON object per row wrapped in a JSON array</li>
@@ -54,7 +54,7 @@ public final class SqlOutputFormatter {
             case TABLE:
             default:
                 Enumerable<Object[]> enumerable = Linq4j.asEnumerable(rows);
-                return DataTransformUtils.formatAsTable(enumerable, fields);
+                return TableTextFormatter.formatAsTable(enumerable, fields);
         }
     }
 
@@ -81,7 +81,7 @@ public final class SqlOutputFormatter {
         List<String> lines = new ArrayList<>();
         lines.add("[");
         for (int r = 0; r < rows.size(); r++) {
-            String rowJson = JsonUtils.toJsonByFields(rows.get(r), fields);
+            String rowJson = RowJsonEncoder.toJsonByFields(rows.get(r), fields);
             lines.add("  " + rowJson + (r < rows.size() - 1 ? "," : ""));
         }
         lines.add("]");

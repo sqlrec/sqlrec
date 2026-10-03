@@ -1,7 +1,8 @@
 package com.sqlrec.common.rest;
 
+import com.sqlrec.common.http.JsonHttpTransport;
 import com.sqlrec.common.utils.JsonUtils;
-import okhttp3.*;
+import okhttp3.OkHttpClient;
 
 import java.io.IOException;
 import java.util.List;
@@ -31,9 +32,6 @@ public final class SqlRecApiClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
-
-    private static final MediaType JSON_MEDIA_TYPE =
-            MediaType.parse("application/json; charset=utf-8");
 
     private SqlRecApiClient() {
     }
@@ -150,17 +148,8 @@ public final class SqlRecApiClient {
     }
 
     private static String doPost(String url, String bodyJson) {
-        RequestBody body = RequestBody.create(bodyJson, JSON_MEDIA_TYPE);
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .addHeader("Accept", "application/json")
-                .build();
-        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new RuntimeException("HTTP request failed with response code: " + response.code());
-            }
-            return response.body() != null ? response.body().string() : "";
+        try {
+            return JsonHttpTransport.post(HTTP_CLIENT, url, bodyJson);
         } catch (IOException e) {
             throw new RuntimeException("Failed to call remote sqlrec api: " + e.getMessage(), e);
         }

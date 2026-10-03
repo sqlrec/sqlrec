@@ -1,6 +1,6 @@
 package com.sqlrec.udf.scalar;
 
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.VectorMathUtils;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -28,7 +28,7 @@ public class L2NormFunction extends GenericUDF {
             throw new RuntimeException("L2NormFunction only support number list");
         }
 
-        return DataTransformUtils.l2NormalizeList((List<?>) vector);
+        return VectorMathUtils.l2NormalizeList((List<?>) vector);
     }
 
     @Override

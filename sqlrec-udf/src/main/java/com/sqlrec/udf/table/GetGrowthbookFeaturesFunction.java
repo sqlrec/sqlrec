@@ -3,7 +3,7 @@ package com.sqlrec.udf.table;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.RowJsonEncoder;
 import growthbook.sdk.java.model.ExperimentResult;
 import growthbook.sdk.java.model.FeatureResult;
 import growthbook.sdk.java.multiusermode.GrowthBookClient;
@@ -55,7 +55,7 @@ public class GetGrowthbookFeaturesFunction {
         }
 
         Object[] row = userEnumerable.get(0);
-        String attributesJson = JsonUtils.toJsonByFields(row, userFields);
+        String attributesJson = RowJsonEncoder.toJsonByFields(row, userFields);
         UserContext userContext = UserContext.builder()
                 .attributesJson(attributesJson)
                 .build();

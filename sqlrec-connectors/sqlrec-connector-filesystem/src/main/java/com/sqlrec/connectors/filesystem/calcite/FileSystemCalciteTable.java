@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.FilterUtils;
+import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import com.sqlrec.connectors.filesystem.handler.FileSystemHandler;
 import org.apache.calcite.linq4j.Enumerable;
@@ -40,7 +41,7 @@ public class FileSystemCalciteTable extends SqlRecKvTable {
             if (filterValue == null) {
                 continue;
             }
-            Object normalizedValue = DataTypeUtils.convertType(
+            Object normalizedValue = ScalarConversions.convert(
                     filterValue,
                     DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(fieldIndex).getType()).getSqlTypeName()
             );

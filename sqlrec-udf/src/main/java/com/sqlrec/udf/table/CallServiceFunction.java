@@ -5,7 +5,7 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.DataTransformUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.udf.inference.PredictionClient;
 import com.sqlrec.udf.inference.PredictionRequestEncoder;
@@ -36,7 +36,7 @@ public class CallServiceFunction {
         List<FieldSchema> modelOutputFields = service.outputFields;
         List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(input.getDataFields(), modelOutputFields);
 
-        List<Object[]> inputData = DataTransformUtils.materializeRows(input);
+        List<Object[]> inputData = RowTransformUtils.materializeRows(input);
         if (inputData.isEmpty()) {
             return resultTable(inputData, newDataFields);
         }
@@ -57,12 +57,12 @@ public class CallServiceFunction {
         ServiceConf serviceConfig = service.config;
         List<FieldSchema> modelOutputFields = service.outputFields;
 
-        List<Object[]> userData = DataTransformUtils.materializeRows(user);
+        List<Object[]> userData = RowTransformUtils.materializeRows(user);
         if (userData.size() != 1) {
             throw new RuntimeException("User table must have exactly one row");
         }
 
-        List<Object[]> itemData = DataTransformUtils.materializeRows(item);
+        List<Object[]> itemData = RowTransformUtils.materializeRows(item);
         if (itemData.isEmpty()) {
             List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
                     item.getDataFields(),

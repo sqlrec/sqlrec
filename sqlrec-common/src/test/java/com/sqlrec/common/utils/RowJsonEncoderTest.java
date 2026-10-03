@@ -15,7 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class JsonUtilsTest {
+public class RowJsonEncoderTest {
     private static final Gson gson = JsonUtils.getGson();
 
     @Test
@@ -33,7 +33,7 @@ public class JsonUtilsTest {
 
         List<RelDataTypeField> dataFields = createTestDataFields();
 
-        String json = JsonUtils.toJsonArray(data, inputFields, dataFields);
+        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
@@ -67,7 +67,7 @@ public class JsonUtilsTest {
 
         List<RelDataTypeField> dataFields = createTestDataFields();
 
-        String json = JsonUtils.toJsonArray(data, inputFields, dataFields);
+        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
@@ -104,7 +104,7 @@ public class JsonUtilsTest {
         List<RelDataTypeField> queryDataFields = createQueryDataFields();
         List<RelDataTypeField> valueDataFields = createValueDataFields();
 
-        String json = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields, 
+        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
                                                 queryDataFields, valueDataFields);
         assertNotNull(json);
 
@@ -159,7 +159,7 @@ public class JsonUtilsTest {
         List<RelDataTypeField> queryDataFields = createQueryDataFields();
         List<RelDataTypeField> valueDataFields = createValueDataFields();
 
-        String json = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields, 
+        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
                                                 queryDataFields, valueDataFields);
         assertNotNull(json);
 
@@ -213,7 +213,7 @@ public class JsonUtilsTest {
 
         List<RelDataTypeField> dataFields = createTestDataFieldsWithArray();
 
-        String json = JsonUtils.toJsonArray(data, inputFields, dataFields);
+        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
@@ -254,7 +254,7 @@ public class JsonUtilsTest {
         List<RelDataTypeField> queryDataFields = createQueryDataFieldsWithArray();
         List<RelDataTypeField> valueDataFields = createValueDataFieldsWithArray();
 
-        String json = JsonUtils.toColumnarJson(queryData, valueData, queryFields, valueFields, 
+        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
                                                 queryDataFields, valueDataFields);
         assertNotNull(json);
 

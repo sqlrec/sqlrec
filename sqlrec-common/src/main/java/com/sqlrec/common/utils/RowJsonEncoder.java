@@ -9,12 +9,29 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /** JSON serialization of named rows, field projections and grouped columns. */
 public final class RowJsonEncoder {
     private static final Gson gson = JsonUtils.getGson();
 
     private RowJsonEncoder() {
+    }
+
+    public static String toJson(Object[] row, List<FieldSchema> fields) {
+        return encodeRow(row, fields, FieldSchema::getName);
+    }
+
+    public static String toJsonByFields(Object[] row, List<RelDataTypeField> fields) {
+        return encodeRow(row, fields, RelDataTypeField::getName);
+    }
+
+    private static <F> String encodeRow(Object[] row, List<F> fields, Function<F, String> nameReader) {
+        JsonObject object = new JsonObject();
+        for (int i = 0; i < fields.size(); i++) {
+            object.add(nameReader.apply(fields.get(i)), gson.toJsonTree(row[i]));
+        }
+        return gson.toJson(object);
     }
 
     public static String toJsonArray(List<Map<String, Object>> rows) {
