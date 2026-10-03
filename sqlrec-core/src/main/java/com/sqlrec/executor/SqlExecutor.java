@@ -108,34 +108,13 @@ public class SqlExecutor {
             throw new UnsupportedOperationException("Creating temporary tables is not supported");
         }
         if (isMetadataDdl(node)) {
-            MetadataAccess metadata = MetadataAccessFactory.getInstance();
-            try {
-                metadata.executeMetadataDdl(node, defaultSchema);
-            } finally {
-                // A failed DDL may have changed metadata partially or lost its response after committing.
-                CacheManager.invalidateAll();
-            }
-            return message("metadata DDL completed");
+            return executeMetadataDdl(node);
         }
         if (node instanceof SqlUseDatabase command) {
-            java.util.List<String> names = command.getDatabaseName().names;
-            if (names.size() > 2 || names.size() == 2 &&
-                    !Consts.HIVE_CATALOG_NAME.equals(names.get(0))) {
-                throw new IllegalArgumentException("database catalog is not configured: " + command.getDatabaseName());
-            }
-            defaultSchema = names.get(names.size() - 1);
-            return message("database changed to " + defaultSchema);
+            return useDatabase(command);
         }
         if (node instanceof SqlSet set) {
-            if (set.getKey() == null || set.getValue() == null) {
-                // Listing Flink's full configuration remains a Gateway operation.
-                return null;
-            }
-            String key = SchemaUtils.getValueOfStringLiteral(set.getKey());
-            String value = SchemaUtils.getValueOfStringLiteral(set.getValue());
-            context.setVariable(key, value);
-            sessionSettings.put(key, value);
-            return message("setting saved in SQLRec session; Flink settings apply before the next remote operation");
+            return setSessionVariable(set);
         }
         if (node instanceof SqlReset) {
             return null;
@@ -181,6 +160,39 @@ public class SqlExecutor {
             throw new UnsupportedOperationException("SQLRec statement cannot execute locally and cannot be forwarded to Flink");
         }
         return result;
+    }
+
+    private SqlProcessResult executeMetadataDdl(SqlNode node) throws Exception {
+        MetadataAccess metadata = MetadataAccessFactory.getInstance();
+        try {
+            metadata.executeMetadataDdl(node, defaultSchema);
+        } finally {
+            // A failed DDL may have changed metadata partially or lost its response after committing.
+            CacheManager.invalidateAll();
+        }
+        return message("metadata DDL completed");
+    }
+
+    private SqlProcessResult useDatabase(SqlUseDatabase command) {
+        java.util.List<String> names = command.getDatabaseName().names;
+        if (names.size() > 2 || names.size() == 2 &&
+                !Consts.HIVE_CATALOG_NAME.equals(names.get(0))) {
+            throw new IllegalArgumentException("database catalog is not configured: " + command.getDatabaseName());
+        }
+        defaultSchema = names.get(names.size() - 1);
+        return message("database changed to " + defaultSchema);
+    }
+
+    private SqlProcessResult setSessionVariable(SqlSet set) {
+        if (set.getKey() == null || set.getValue() == null) {
+            // Listing Flink's full configuration remains a Gateway operation.
+            return null;
+        }
+        String key = SchemaUtils.getValueOfStringLiteral(set.getKey());
+        String value = SchemaUtils.getValueOfStringLiteral(set.getValue());
+        context.setVariable(key, value);
+        sessionSettings.put(key, value);
+        return message("setting saved in SQLRec session; Flink settings apply before the next remote operation");
     }
 
     public CacheTable executeSql(String sql) throws Exception {

@@ -116,6 +116,17 @@ class SqlOutputFormatterTest {
     }
 
     @Test
+    void formatDelimitedPreservesColumnCountForIncompleteRows() {
+        List<Object[]> rows = Arrays.asList(null, new Object[]{1}, new Object[]{2, "x", "extra"});
+        assertEquals(List.of("id,name", "NULL,NULL", "1,NULL", "2,x"),
+                SqlOutputFormatter.format(rows, fields("id", "name"), "csv"));
+        assertEquals(List.of("id\tname", "NULL\tNULL", "1\tNULL", "2\tx"),
+                SqlOutputFormatter.format(rows, fields("id", "name"), "tsv"));
+        assertEquals(List.of("", "", "", ""),
+                SqlOutputFormatter.format(rows, Collections.emptyList(), "csv"));
+    }
+
+    @Test
     void formatCsvIsCaseInsensitive() {
         List<RelDataTypeField> f = fields("a");
         List<Object[]> rows = Collections.singletonList(new Object[]{1});

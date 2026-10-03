@@ -105,19 +105,16 @@ public class ThriftUtils {
             allDataList.add(tryCast(object, clazz));
         }
 
-        List<T> retList = new ArrayList<>();
         byte[] nulls = new byte[(allDataList.size() + 7) / 8];
         for (int i = 0; i < allDataList.size(); i++) {
             if (allDataList.get(i) == null) {
                 int byteIndex = i / 8;
                 int bitIndex = i % 8;
                 nulls[byteIndex] |= (1 << bitIndex);
-                retList.add(getDefaultValue(clazz));
-            } else {
-                retList.add(allDataList.get(i));
+                allDataList.set(i, getDefaultValue(clazz));
             }
         }
-        return Map.entry(nulls, retList);
+        return Map.entry(nulls, allDataList);
     }
 
     public static <T> T tryCast(Object object, Class<T> clazz) {

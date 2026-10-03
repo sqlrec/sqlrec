@@ -12,6 +12,20 @@ import java.util.Map;
 public class PipelineConfigUtils {
 
     public static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        StringBuilder config = generateTrainConfigPrefix(model, trainConf);
+        config.append(generateModelConfig(model));
+
+        return config.toString();
+    }
+
+    public static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
+        StringBuilder config = generateExportConfigPrefix(model, exportConf);
+        config.append(generateModelConfig(model));
+
+        return config.toString();
+    }
+
+    private static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
@@ -24,12 +38,10 @@ public class PipelineConfigUtils {
 
         config.append(generateFeatureConfigs(model));
 
-        config.append(generateModelConfig(model));
-
-        return config.toString();
+        return config;
     }
 
-    public static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
+    private static StringBuilder generateExportConfigPrefix(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, exportConf.getTrainDataPaths());
@@ -40,9 +52,7 @@ public class PipelineConfigUtils {
 
         config.append(generateFeatureConfigs(model));
 
-        config.append(generateModelConfig(model));
-
-        return config.toString();
+        return config;
     }
 
     private static void addInputPaths(StringBuilder config, List<String> trainDataPaths) {
@@ -112,49 +122,42 @@ public class PipelineConfigUtils {
     public static String generateFeatureConfigs(ModelConf model) {
         StringBuilder config = new StringBuilder();
 
-        if (model.getInputFields() != null) {
-            for (FieldSchema fieldSchema : model.getInputFields()) {
-                String featureName = fieldSchema.getName();
-                String fieldType = fieldSchema.getType();
-
-                if (FieldTypeUtils.isFloat(fieldType)) {
-                    // skip numeric feature
-//                    config.append("feature_configs {\n");
-//                    config.append("    raw_feature {\n");
-//                    config.append("        feature_name: \"").append(featureName).append("\"\n");
-//                    config.append("        expression: \"item:").append(featureName).append("\"\n");
-//                    config.append("    }\n");
-//                    config.append("}\n");
-                } else {
-                    int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
-                    int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.getParams());
-
-                    int numBuckets = defaultNumBuckets;
-                    String bucketSizeKey = "column." + featureName + ".bucket_size";
-                    if (model.getParams() != null && model.getParams().containsKey(bucketSizeKey)) {
-                        numBuckets = Integer.parseInt(model.getParams().get(bucketSizeKey));
-                    }
-
-                    int embeddingDim = defaultEmbeddingDim;
-                    String embeddingDimKey = "column." + featureName + ".embedding_dim";
-                    if (model.getParams() != null && model.getParams().containsKey(embeddingDimKey)) {
-                        embeddingDim = Integer.parseInt(model.getParams().get(embeddingDimKey));
-                    }
-
-                    config.append("feature_configs {\n");
-                    config.append("    id_feature {\n");
-                    config.append("        feature_name: \"").append(featureName).append("\"\n");
-                    config.append("        expression: \"item:").append(featureName).append("\"\n");
-                    if (isIntFeature(fieldType)) {
-                        config.append("        num_buckets: ").append(numBuckets).append("\n");
-                    } else {
-                        config.append("        hash_bucket_size: ").append(numBuckets).append("\n");
-                    }
-                    config.append("        embedding_dim: ").append(embeddingDim).append("\n");
-                    config.append("    }\n");
-                    config.append("}\n");
-                }
+        if (model.getInputFields() == null) {
+            return config.toString();
+        }
+        for (FieldSchema fieldSchema : model.getInputFields()) {
+            String featureName = fieldSchema.getName();
+            String fieldType = fieldSchema.getType();
+            if (FieldTypeUtils.isFloat(fieldType)) {
+                continue;
             }
+            int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
+            int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.getParams());
+
+            int numBuckets = defaultNumBuckets;
+            String bucketSizeKey = "column." + featureName + ".bucket_size";
+            if (model.getParams() != null && model.getParams().containsKey(bucketSizeKey)) {
+                numBuckets = Integer.parseInt(model.getParams().get(bucketSizeKey));
+            }
+
+            int embeddingDim = defaultEmbeddingDim;
+            String embeddingDimKey = "column." + featureName + ".embedding_dim";
+            if (model.getParams() != null && model.getParams().containsKey(embeddingDimKey)) {
+                embeddingDim = Integer.parseInt(model.getParams().get(embeddingDimKey));
+            }
+
+            config.append("feature_configs {\n");
+            config.append("    id_feature {\n");
+            config.append("        feature_name: \"").append(featureName).append("\"\n");
+            config.append("        expression: \"item:").append(featureName).append("\"\n");
+            if (isIntFeature(fieldType)) {
+                config.append("        num_buckets: ").append(numBuckets).append("\n");
+            } else {
+                config.append("        hash_bucket_size: ").append(numBuckets).append("\n");
+            }
+            config.append("        embedding_dim: ").append(embeddingDim).append("\n");
+            config.append("    }\n");
+            config.append("}\n");
         }
 
         return config.toString();
@@ -221,34 +224,14 @@ public class PipelineConfigUtils {
     }
 
     public static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        StringBuilder config = new StringBuilder();
-
-        addInputPaths(config, trainConf.getTrainDataPaths());
-
-        addModelDir(config, trainConf.getModelDir());
-
-        config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
-
-        config.append(generateDataConfig(model, trainConf.getParams()));
-
-        config.append(generateFeatureConfigs(model));
-
+        StringBuilder config = generateTrainConfigPrefix(model, trainConf);
         config.append(generateDSSMModelConfig(model));
 
         return config.toString();
     }
 
     public static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
-        StringBuilder config = new StringBuilder();
-
-        addInputPaths(config, exportConf.getTrainDataPaths());
-
-        addModelDir(config, exportConf.getBaseModelDir());
-
-        config.append(generateDataConfig(model, exportConf.getParams()));
-
-        config.append(generateFeatureConfigs(model));
-
+        StringBuilder config = generateExportConfigPrefix(model, exportConf);
         config.append(generateDSSMModelConfig(model));
 
         return config.toString();
@@ -276,9 +259,7 @@ public class PipelineConfigUtils {
         if (!userFeatureList.isEmpty()) {
             config.append("    feature_groups {\n");
             config.append("        group_name: \"user\"\n");
-            for (String featureName : userFeatureList) {
-                config.append("        feature_names: \"").append(featureName).append("\"\n");
-            }
+            addFeatureNames(config, userFeatureList);
             config.append("        group_type: DEEP\n");
             config.append("    }\n");
         }
@@ -286,9 +267,7 @@ public class PipelineConfigUtils {
         if (!itemFeatureList.isEmpty()) {
             config.append("    feature_groups {\n");
             config.append("        group_name: \"item\"\n");
-            for (String featureName : itemFeatureList) {
-                config.append("        feature_names: \"").append(featureName).append("\"\n");
-            }
+            addFeatureNames(config, itemFeatureList);
             config.append("        group_type: DEEP\n");
             config.append("    }\n");
         }

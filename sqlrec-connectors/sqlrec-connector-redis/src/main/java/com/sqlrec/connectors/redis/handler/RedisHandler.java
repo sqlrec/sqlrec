@@ -155,10 +155,7 @@ public class RedisHandler {
                 // each round trip (lpush -> ltrim -> expire).
                 List<RedisFuture<?>> futures = new ArrayList<>(3);
                 futures.add(redisClient.lpush(key, value));
-                if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                    futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
-                }
-                futures.add(redisClient.expire(key, redisConfig.ttl));
+                addListMaintenanceCommands(key, futures);
                 awaitAll(futures);
             } else {
                 // SET key value EX ttl: one command instead of SET + EXPIRE.
@@ -248,12 +245,16 @@ public class RedisHandler {
             byte[] key = entry.getKey().getBytes(StandardCharsets.UTF_8);
             // LPUSH with multiple values has the same order as repeated LPUSH calls.
             futures.add(redisClient.lpush(key, entry.getValue().toArray(new byte[0][])));
-            if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
-                futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
-            }
-            futures.add(redisClient.expire(key, redisConfig.ttl));
+            addListMaintenanceCommands(key, futures);
         }
         awaitAll(futures);
+    }
+
+    private void addListMaintenanceCommands(byte[] key, List<RedisFuture<?>> futures) {
+        if (redisConfig.maxListSize != null && redisConfig.maxListSize > 0) {
+            futures.add(redisClient.ltrim(key, 0, redisConfig.maxListSize - 1));
+        }
+        futures.add(redisClient.expire(key, redisConfig.ttl));
     }
 
     public void batchDelete(Collection<? extends Object[]> dataList) {

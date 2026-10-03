@@ -5,7 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 public class RemoteHdfsAccess implements HdfsAccess {
@@ -17,12 +17,7 @@ public class RemoteHdfsAccess implements HdfsAccess {
         validatePath(hdfsPath);
 
         try {
-            ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-test", "-e", hdfsPath);
-            pb.redirectErrorStream(true);
-            // Avoid a PIPE reader blocking before the timed wait can run.
-            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-            clearJavaToolOptions(pb.environment());
-            Process process = pb.start();
+            Process process = startProcess("hadoop", "fs", "-test", "-e", hdfsPath);
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
@@ -45,12 +40,7 @@ public class RemoteHdfsAccess implements HdfsAccess {
         validatePath(hdfsPath);
 
         try {
-            ProcessBuilder pb = new ProcessBuilder("hadoop", "fs", "-rm", "-r", "-f", hdfsPath);
-            pb.redirectErrorStream(true);
-            // Avoid a PIPE reader blocking before the timed wait can run.
-            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-            clearJavaToolOptions(pb.environment());
-            Process process = pb.start();
+            Process process = startProcess("hadoop", "fs", "-rm", "-r", "-f", hdfsPath);
             boolean finished = process.waitFor(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
@@ -79,7 +69,12 @@ public class RemoteHdfsAccess implements HdfsAccess {
         }
     }
 
-    private void clearJavaToolOptions(Map<String, String> environment) {
-        environment.remove("JAVA_TOOL_OPTIONS");
+    private Process startProcess(String... command) throws IOException {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        // Avoid a PIPE reader blocking before the timed wait can run.
+        builder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        builder.environment().remove("JAVA_TOOL_OPTIONS");
+        return builder.start();
     }
 }

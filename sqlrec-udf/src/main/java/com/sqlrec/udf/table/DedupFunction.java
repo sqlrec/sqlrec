@@ -22,28 +22,14 @@ public class DedupFunction {
             throw new IllegalArgumentException("col2 cannot be null or empty");
         }
 
-        int inputColIndex = -1;
-        List<RelDataTypeField> inputFields = input.getDataFields();
-        for (int i = 0; i < inputFields.size(); i++) {
-            if (inputFields.get(i).getName().equalsIgnoreCase(col1)) {
-                inputColIndex = i;
-                break;
-            }
-        }
+        int inputColIndex = findColumnPosition(input.getDataFields(), col1);
         if (inputColIndex == -1) {
             throw new IllegalArgumentException("col1 not found in input table: " + col1);
         }
 
         Set<String> existingKeys = new HashSet<>();
         if (dedupTable != null) {
-            int dedupColIndex = -1;
-            List<RelDataTypeField> dedupFields = dedupTable.getDataFields();
-            for (int i = 0; i < dedupFields.size(); i++) {
-                if (dedupFields.get(i).getName().equalsIgnoreCase(col2)) {
-                    dedupColIndex = i;
-                    break;
-                }
-            }
+            int dedupColIndex = findColumnPosition(dedupTable.getDataFields(), col2);
             if (dedupColIndex == -1) {
                 throw new IllegalArgumentException("col2 not found in dedup table: " + col2);
             }
@@ -71,5 +57,14 @@ public class DedupFunction {
         }
 
         return new CacheTable("dedup_output", Linq4j.asEnumerable(newData), input.getDataFields());
+    }
+
+    private int findColumnPosition(List<RelDataTypeField> fields, String columnName) {
+        for (int i = 0; i < fields.size(); i++) {
+            if (fields.get(i).getName().equalsIgnoreCase(columnName)) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

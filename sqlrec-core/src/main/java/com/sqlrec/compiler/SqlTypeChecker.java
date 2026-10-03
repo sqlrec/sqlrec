@@ -36,29 +36,18 @@ public class SqlTypeChecker {
         if (flinkSqlNode instanceof SqlCallSqlFunction) {
             return true;
         }
-        if (flinkSqlNode instanceof SqlCache) {
-            if (((SqlCache) flinkSqlNode).getSelect() != null) {
-                return isSqlTableRunnable(((SqlCache) flinkSqlNode).getSelect(), schema, defaultSchema);
-            }
-            return true;
+        if (flinkSqlNode instanceof SqlCache sqlCache) {
+            return sqlCache.getSelect() == null
+                    || isSqlTableRunnable(sqlCache.getSelect(), schema, defaultSchema);
         }
         if (flinkSqlNode instanceof SqlAssert) {
             return isSqlTableRunnable(((SqlAssert) flinkSqlNode).getSelect(), schema, defaultSchema);
         }
-        if (flinkSqlNode instanceof SqlIfCache) {
-            SqlIfCache sqlIfCache = (SqlIfCache) flinkSqlNode;
-            if (!(isFlinkSqlCompilable(sqlIfCache.getCondition(), schema, defaultSchema))) {
-                return false;
-            }
-            if (!(isFlinkSqlCompilable(sqlIfCache.getThenClause(), schema, defaultSchema))) {
-                return false;
-            }
-            if (sqlIfCache.getElseClause() != null) {
-                if (!(isFlinkSqlCompilable(sqlIfCache.getElseClause(), schema, defaultSchema))) {
-                    return false;
-                }
-            }
-            return true;
+        if (flinkSqlNode instanceof SqlIfCache sqlIfCache) {
+            return isFlinkSqlCompilable(sqlIfCache.getCondition(), schema, defaultSchema)
+                    && isFlinkSqlCompilable(sqlIfCache.getThenClause(), schema, defaultSchema)
+                    && (sqlIfCache.getElseClause() == null
+                    || isFlinkSqlCompilable(sqlIfCache.getElseClause(), schema, defaultSchema));
         }
         if (flinkSqlNode instanceof SqlSet) {
             return true;
@@ -102,40 +91,18 @@ public class SqlTypeChecker {
     }
 
     private static boolean isCrudSql(SqlNode flinkSqlNode) {
-        if (flinkSqlNode instanceof SqlSelect) {
-            return true;
-        }
-        if (flinkSqlNode instanceof SqlInsert) {
-            return true;
-        }
-        if (flinkSqlNode instanceof SqlUpdate) {
-            return true;
-        }
-        if (flinkSqlNode instanceof SqlDelete) {
-            return true;
-        }
-        if (flinkSqlNode instanceof SqlOrderBy) {
-            return true;
-        }
-
-        if (isUnionSql(flinkSqlNode)) {
-            return true;
-        }
-
-        return false;
+        return flinkSqlNode instanceof SqlSelect
+                || flinkSqlNode instanceof SqlInsert
+                || flinkSqlNode instanceof SqlUpdate
+                || flinkSqlNode instanceof SqlDelete
+                || flinkSqlNode instanceof SqlOrderBy
+                || isUnionSql(flinkSqlNode);
     }
 
     public static boolean isUnionSql(SqlNode flinkSqlNode) {
-        if (flinkSqlNode instanceof SqlBasicCall) {
-            SqlBasicCall sqlBasicCall = (SqlBasicCall) flinkSqlNode;
-            if (sqlBasicCall.getOperator() instanceof SqlSetOperator) {
-                SqlSetOperator sqlSetOperator = (SqlSetOperator) sqlBasicCall.getOperator();
-                if (sqlSetOperator.getKind() == SqlKind.UNION) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return flinkSqlNode instanceof SqlBasicCall sqlBasicCall
+                && sqlBasicCall.getOperator() instanceof SqlSetOperator sqlSetOperator
+                && sqlSetOperator.getKind() == SqlKind.UNION;
     }
 
     public static boolean isSqlContainKvTable(SqlNode flinkSqlNode, CalciteSchema schema, String defaultSchema) {

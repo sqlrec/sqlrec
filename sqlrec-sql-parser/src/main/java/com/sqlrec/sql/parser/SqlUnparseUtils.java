@@ -56,13 +56,8 @@ public final class SqlUnparseUtils {
             writer.print("  ");
             writer.setNeedWhitespace(false);
             unparser.accept(i);
-            if (i < size - 1) {
-                writer.setNeedWhitespace(false);
-                writer.print(",\n");
-            } else {
-                writer.setNeedWhitespace(false);
-                writer.print("\n)");
-            }
+            writer.setNeedWhitespace(false);
+            writer.print(i < size - 1 ? ",\n" : "\n)");
         }
     }
 }

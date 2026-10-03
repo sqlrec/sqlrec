@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.Buffer;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
@@ -20,6 +21,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
@@ -209,8 +211,10 @@ public class CallServiceFunctionUnitTest {
         ModelController controller = org.mockito.Mockito.mock(ModelController.class);
         ModelConf modelConf = new ModelConf();
         modelConf.setInputFields(Arrays.asList(
+                new FieldSchema("region", "STRING"),
+                new FieldSchema("item_id", "BIGINT"),
                 new FieldSchema("user_id", "BIGINT"),
-                new FieldSchema("item_id", "BIGINT")));
+                new FieldSchema("missing", "STRING")));
 
         ServiceConf serviceConf = new ServiceConf();
         serviceConf.setUrl("http://test");
@@ -228,8 +232,10 @@ public class CallServiceFunctionUnitTest {
 
         CacheTable user = new CacheTable(
                 "user",
-                Linq4j.asEnumerable(Collections.singletonList(new Object[]{1001L})),
-                Collections.singletonList(field("user_id", SqlTypeName.BIGINT)));
+                Linq4j.asEnumerable(Collections.singletonList(new Object[]{1001L, "cn"})),
+                Arrays.asList(field("USER_ID", SqlTypeName.BIGINT),
+                        new RelDataTypeFieldImpl("REGION", 1,
+                                new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.VARCHAR))));
         CacheTable item = new CacheTable(
                 "item",
                 Linq4j.asEnumerable(Arrays.asList(new Object[]{11L}, new Object[]{12L})),
@@ -244,6 +250,12 @@ public class CallServiceFunctionUnitTest {
         assertEquals(12L, rows.get(1)[0]);
         assertEquals(0.8, rows.get(1)[1]);
         assertEquals("score", result.getDataFields().get(1).getName());
+
+        ArgumentCaptor<Request> request = ArgumentCaptor.forClass(Request.class);
+        verify(mockHttpClient).newCall(request.capture());
+        Buffer body = new Buffer();
+        request.getValue().body().writeTo(body);
+        assertEquals("{\"region\":[\"cn\"],\"user_id\":[1001],\"item_id\":[11,12]}", body.readUtf8());
     }
 
     private static RelDataTypeField field(String name, SqlTypeName typeName) {

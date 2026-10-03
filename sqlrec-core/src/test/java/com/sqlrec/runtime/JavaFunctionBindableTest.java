@@ -7,6 +7,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
+import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.utils.SqlTestCase;
 import com.sqlrec.utils.TypeSupportTest;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class JavaFunctionBindableTest {
     @AfterEach
@@ -330,6 +333,46 @@ public class JavaFunctionBindableTest {
                 null,
                 new RuntimeException()
         ).test(schema, executeContext);
+    }
+
+    @Test
+    public void missingDynamicFunctionNameFailsBeforeAsyncSubmission() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl();
+        SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
+                "call get('target')() like output async");
+        FunctionProxyBindable bindable = new FunctionProxyBindable(
+                call, call.getInputTableList(), call.getFuncNameVariable(), createStringField("result"), true);
+
+        for (String value : Arrays.asList(null, "")) {
+            context.setVariable("target", value);
+            assertFalse(bindable.isTimeoutAble(schema, context));
+            RuntimeException error = assertThrows(RuntimeException.class, () -> bindable.bind(schema, context));
+            assertEquals("cant get function name from variable: target", error.getMessage());
+            assertNull(error.getCause());
+        }
+    }
+
+    @Test
+    public void dynamicFunctionNameUsesDefaultForNullAndEmptyButHonorsOverride() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        CalciteSchemaFactory.setGlobalSchema(schema);
+        JavaFunctionUtils.registerTableFunction("default", "dynamic_default", TestOverloadFun.class);
+        JavaFunctionUtils.registerTableFunction("default", "dynamic_override", TestVarArgsFun.class);
+        ExecuteContext context = new ExecuteContextImpl();
+        SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
+                "call get_or_default('target', 'dynamic_default')() like output");
+        FunctionProxyBindable bindable = new FunctionProxyBindable(
+                call, call.getInputTableList(), call.getFuncNameVariable(), createStringField("result"), false);
+
+        for (String value : Arrays.asList(null, "")) {
+            context.setVariable("target", value);
+            assertTrue(bindable.isTimeoutAble(schema, context));
+            assertArrayEquals(new Object[]{"no_args"}, bindable.bind(schema, context).single());
+        }
+        context.setVariable("target", "dynamic_override");
+        assertTrue(bindable.isTimeoutAble(schema, context));
+        assertArrayEquals(new Object[]{"varargs: []"}, bindable.bind(schema, context).single());
     }
 
     public static class TestEmptyFun {

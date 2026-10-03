@@ -94,21 +94,18 @@ public class HiveTableUtils {
         Map<String, String> flinkTableColumns = new LinkedHashMap<>();
         Map<String, String> tableProperties = tableObj.getParameters();
 
-        if (tableProperties != null) {
-            int index = 0;
-            while (true) {
-                String nameKey = "flink.schema." + index + ".name";
-                String typeKey = "flink.schema." + index + ".data-type";
-                if (tableProperties.containsKey(nameKey) && tableProperties.containsKey(typeKey)) {
-                    String columnName = tableProperties.get(nameKey);
-                    String columnType = tableProperties.get(typeKey);
-                    columnType = convertHiveType(columnType);
-                    flinkTableColumns.put(columnName, columnType);
-                    index++;
-                } else {
-                    break;
-                }
+        if (tableProperties == null) {
+            return flinkTableColumns;
+        }
+        for (int index = 0; ; index++) {
+            String nameKey = "flink.schema." + index + ".name";
+            String typeKey = "flink.schema." + index + ".data-type";
+            if (!tableProperties.containsKey(nameKey) || !tableProperties.containsKey(typeKey)) {
+                break;
             }
+            String columnName = tableProperties.get(nameKey);
+            String columnType = convertHiveType(tableProperties.get(typeKey));
+            flinkTableColumns.put(columnName, columnType);
         }
 
         return flinkTableColumns;

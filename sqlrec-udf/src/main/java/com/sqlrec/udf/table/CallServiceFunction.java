@@ -82,14 +82,7 @@ public class CallServiceFunction {
         List<FieldSchema> userFields = new ArrayList<>();
         List<FieldSchema> itemFields = new ArrayList<>();
         for (FieldSchema field : allInputFields) {
-            boolean foundInUser = false;
-            for (RelDataTypeField dataField : user.getDataFields()) {
-                if (dataField.getName().equalsIgnoreCase(field.getName())) {
-                    foundInUser = true;
-                    break;
-                }
-            }
-            if (foundInUser) {
+            if (DataTypeUtils.findFieldIndex(user.getDataFields(), field.getName()) >= 0) {
                 userFields.add(field);
             } else {
                 itemFields.add(field);

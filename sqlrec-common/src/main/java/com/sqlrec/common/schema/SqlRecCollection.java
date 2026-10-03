@@ -64,11 +64,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName,
-                    "operation", "addAll", "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "addAll", status, startTime);
         }
     }
 
@@ -86,6 +82,14 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             modified |= removeImpl((Object[]) o);
         }
         return modified;
+    }
+
+    private void recordDuration(String metricName, String operation, String status, long startTime) {
+        Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName,
+                "operation", operation, "status", status);
+        MetricsUtils.getCompositeMeterRegistry()
+                .timer(metricName, tags)
+                .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
     }
 
     private void invalidateCacheIfNeeded(Object[] row) {
@@ -145,10 +149,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "add", "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "add", status, startTime);
         }
     }
 
@@ -176,10 +177,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "remove", "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            recordDuration(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, "remove", status, startTime);
         }
     }
 
@@ -209,10 +207,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "addAll", "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "addAll", status, startTime);
         }
     }
 
@@ -243,10 +238,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             status = "error";
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName, "operation", "removeAll", "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            recordDuration(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, "removeAll", status, startTime);
         }
     }
 

@@ -8,6 +8,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 
 /**
  * Renders SQL query result rows into printable text lines for the CLI.
@@ -59,25 +60,19 @@ public final class SqlOutputFormatter {
 
     private static List<String> delimited(List<Object[]> rows, List<RelDataTypeField> fields, String sep) {
         List<String> lines = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < fields.size(); i++) {
-            if (i > 0) {
-                sb.append(sep);
-            }
-            sb.append(quoteField(fields.get(i).getName(), sep));
+        StringJoiner header = new StringJoiner(sep);
+        for (RelDataTypeField field : fields) {
+            header.add(quoteField(field.getName(), sep));
         }
-        lines.add(sb.toString());
+        lines.add(header.toString());
 
         for (Object[] row : rows) {
-            sb.setLength(0);
+            StringJoiner values = new StringJoiner(sep);
             for (int i = 0; i < fields.size(); i++) {
-                if (i > 0) {
-                    sb.append(sep);
-                }
-                Object v = (row != null && i < row.length) ? row[i] : null;
-                sb.append(quoteField(v == null ? "NULL" : String.valueOf(v), sep));
+                Object value = (row != null && i < row.length) ? row[i] : null;
+                values.add(quoteField(value == null ? "NULL" : String.valueOf(value), sep));
             }
-            lines.add(sb.toString());
+            lines.add(values.toString());
         }
         return lines;
     }

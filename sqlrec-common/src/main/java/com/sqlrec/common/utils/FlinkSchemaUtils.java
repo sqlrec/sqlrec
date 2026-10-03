@@ -62,9 +62,9 @@ public class FlinkSchemaUtils {
         }
 
         Class<T> type = configOption.getType();
-        if (type == String.class) {
+        if (type == String.class || type == Character.class) {
             return (ConfigOption<T>) optionBuilder.stringType().noDefaultValue();
-        } else if (type == Integer.class) {
+        } else if (type == Integer.class || type == Short.class || type == Byte.class) {
             return (ConfigOption<T>) optionBuilder.intType().noDefaultValue();
         } else if (type == Long.class) {
             return (ConfigOption<T>) optionBuilder.longType().noDefaultValue();
@@ -72,12 +72,6 @@ public class FlinkSchemaUtils {
             return (ConfigOption<T>) optionBuilder.doubleType().noDefaultValue();
         } else if (type == Float.class) {
             return (ConfigOption<T>) optionBuilder.floatType().noDefaultValue();
-        } else if (type == Short.class) {
-            return (ConfigOption<T>) optionBuilder.intType().noDefaultValue();
-        } else if (type == Byte.class) {
-            return (ConfigOption<T>) optionBuilder.intType().noDefaultValue();
-        } else if (type == Character.class) {
-            return (ConfigOption<T>) optionBuilder.stringType().noDefaultValue();
         } else if (type == Boolean.class) {
             return (ConfigOption<T>) optionBuilder.booleanType().noDefaultValue();
         }
@@ -165,6 +159,8 @@ public class FlinkSchemaUtils {
             case SMALLINT:
                 return rowData.getShort(index);
             case INTEGER:
+            case DATE:
+            case TIME_WITHOUT_TIME_ZONE:
                 return rowData.getInt(index);
             case BIGINT:
                 return rowData.getLong(index);
@@ -175,10 +171,6 @@ public class FlinkSchemaUtils {
             case CHAR:
             case VARCHAR:
                 return rowData.getString(index).toString();
-            case DATE:
-                return rowData.getInt(index);
-            case TIME_WITHOUT_TIME_ZONE:
-                return rowData.getInt(index);
             case TIMESTAMP_WITHOUT_TIME_ZONE:
                 return rowData.getTimestamp(index, 3).toLocalDateTime();
             case DECIMAL:

@@ -82,27 +82,21 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
             throw new IllegalArgumentException("batchSize must remain constant for one function instance");
         }
 
-        Object[] fieldNameValuePairs = new Object[args.length - 2];
-        System.arraycopy(args, 2, fieldNameValuePairs, 0, args.length - 2);
-
-        if (fieldNameValuePairs.length == 0) {
-            return;
-        }
-
-        if (fieldNameValuePairs.length % 2 != 0) {
+        int pairCount = args.length - 2;
+        if (pairCount % 2 != 0) {
             throw new IllegalArgumentException("fieldNameValuePairs must be in pairs of (fieldName, value)");
         }
 
         Map<String, Object> row = new LinkedHashMap<>();
-        for (int i = 0; i < fieldNameValuePairs.length; i += 2) {
-            if (!(fieldNameValuePairs[i] instanceof String)) {
-                Object fieldName = fieldNameValuePairs[i];
+        for (int i = 2; i < args.length; i += 2) {
+            if (!(args[i] instanceof String)) {
+                Object fieldName = args[i];
                 String actualType = fieldName == null ? "null" : fieldName.getClass().getName();
-                throw new IllegalArgumentException("Field name at position " + i
+                throw new IllegalArgumentException("Field name at position " + (i - 2)
                         + " must be a String, but got: " + actualType);
             }
-            String fieldName = (String) fieldNameValuePairs[i];
-            Object value = fieldNameValuePairs[i + 1];
+            String fieldName = (String) args[i];
+            Object value = args[i + 1];
             row.put(fieldName, value);
         }
 
@@ -152,106 +146,112 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
 
     private void outputResults(Map<String, Object> predictions) {
         for (int i = 0; i < buffer.size(); i++) {
-            Map<String, Object> inputRow = buffer.get(i);
-            Map<String, Object> combinedMap = new LinkedHashMap<>(inputRow);
-
-            if (predictions != null) {
-                for (Map.Entry<String, Object> entry : predictions.entrySet()) {
-                    Object prediction = entry.getValue();
-                    if (prediction instanceof List) {
-                        List<?> predictionList = (List<?>) prediction;
-                        if (i < predictionList.size()) {
-                            combinedMap.put(entry.getKey(), predictionList.get(i));
-                        }
-                    } else {
-                        combinedMap.put(entry.getKey(), prediction);
-                    }
-                }
-            }
-
-            Map<String, Long> longMap = new LinkedHashMap<>();
-            Map<String, Double> doubleMap = new LinkedHashMap<>();
-            Map<String, String> stringMap = new LinkedHashMap<>();
-            Map<String, Long[]> longArrayMap = new LinkedHashMap<>();
-            Map<String, Double[]> doubleArrayMap = new LinkedHashMap<>();
-            Map<String, String[]> stringArrayMap = new LinkedHashMap<>();
-
-            for (Map.Entry<String, Object> entry : combinedMap.entrySet()) {
-                String key = entry.getKey();
-                Object value = entry.getValue();
-
-                if (value instanceof Long) {
-                    longMap.put(key, (Long) value);
-                } else if (value instanceof Integer) {
-                    longMap.put(key, ((Integer) value).longValue());
-                } else if (value instanceof Short) {
-                    longMap.put(key, ((Short) value).longValue());
-                } else if (value instanceof Byte) {
-                    longMap.put(key, ((Byte) value).longValue());
-                } else if (value instanceof Double) {
-                    doubleMap.put(key, (Double) value);
-                } else if (value instanceof Float) {
-                    doubleMap.put(key, ((Float) value).doubleValue());
-                } else if (value instanceof String) {
-                    stringMap.put(key, (String) value);
-                } else if (value instanceof List) {
-                    List<?> list = (List<?>) value;
-                    if (!list.isEmpty()) {
-                        Object first = list.get(0);
-                        if (first instanceof Long || first instanceof Integer
-                                || first instanceof Short || first instanceof Byte) {
-                            Long[] arr = list.stream()
-                                    .map(v -> {
-                                        if (v instanceof Long) return (Long) v;
-                                        if (v instanceof Integer) return ((Integer) v).longValue();
-                                        if (v instanceof Short) return ((Short) v).longValue();
-                                        if (v instanceof Byte) return ((Byte) v).longValue();
-                                        return 0L;
-                                    })
-                                    .toArray(Long[]::new);
-                            longArrayMap.put(key, arr);
-                        } else if (first instanceof Double || first instanceof Float) {
-                            Double[] arr = list.stream()
-                                    .map(v -> {
-                                        if (v instanceof Double) return (Double) v;
-                                        if (v instanceof Float) return ((Float) v).doubleValue();
-                                        return 0.0;
-                                    })
-                                    .toArray(Double[]::new);
-                            doubleArrayMap.put(key, arr);
-                        } else if (first instanceof String) {
-                            String[] arr = list.stream()
-                                    .map(Object::toString)
-                                    .toArray(String[]::new);
-                            stringArrayMap.put(key, arr);
-                        }
-                    }
-                } else if (value instanceof Long[]) {
-                    longArrayMap.put(key, (Long[]) value);
-                } else if (value instanceof Integer[]) {
-                    Integer[] intArr = (Integer[]) value;
-                    Long[] arr = new Long[intArr.length];
-                    for (int j = 0; j < intArr.length; j++) {
-                        arr[j] = intArr[j].longValue();
-                    }
-                    longArrayMap.put(key, arr);
-                } else if (value instanceof Double[]) {
-                    doubleArrayMap.put(key, (Double[]) value);
-                } else if (value instanceof Float[]) {
-                    Float[] floatArr = (Float[]) value;
-                    Double[] arr = new Double[floatArr.length];
-                    for (int j = 0; j < floatArr.length; j++) {
-                        arr[j] = floatArr[j].doubleValue();
-                    }
-                    doubleArrayMap.put(key, arr);
-                } else if (value instanceof String[]) {
-                    stringArrayMap.put(key, (String[]) value);
-                }
-            }
-
-            Row outputRow = Row.of(longMap, doubleMap, stringMap, longArrayMap, doubleArrayMap, stringArrayMap);
-            collect(outputRow);
+            Map<String, Object> values = mergePredictionRow(buffer.get(i), predictions, i);
+            collect(toOutputRow(values));
         }
+    }
+
+    private static Map<String, Object> mergePredictionRow(
+            Map<String, Object> inputRow, Map<String, Object> predictions, int rowIndex) {
+        Map<String, Object> combinedMap = new LinkedHashMap<>(inputRow);
+
+        if (predictions != null) {
+            for (Map.Entry<String, Object> entry : predictions.entrySet()) {
+                Object prediction = entry.getValue();
+                if (prediction instanceof List) {
+                    List<?> predictionList = (List<?>) prediction;
+                    if (rowIndex < predictionList.size()) {
+                        combinedMap.put(entry.getKey(), predictionList.get(rowIndex));
+                    }
+                } else {
+                    combinedMap.put(entry.getKey(), prediction);
+                }
+            }
+        }
+        return combinedMap;
+    }
+
+    private static Row toOutputRow(Map<String, Object> combinedMap) {
+        Map<String, Long> longMap = new LinkedHashMap<>();
+        Map<String, Double> doubleMap = new LinkedHashMap<>();
+        Map<String, String> stringMap = new LinkedHashMap<>();
+        Map<String, Long[]> longArrayMap = new LinkedHashMap<>();
+        Map<String, Double[]> doubleArrayMap = new LinkedHashMap<>();
+        Map<String, String[]> stringArrayMap = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Object> entry : combinedMap.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            if (value instanceof Long) {
+                longMap.put(key, (Long) value);
+            } else if (value instanceof Integer) {
+                longMap.put(key, ((Integer) value).longValue());
+            } else if (value instanceof Short) {
+                longMap.put(key, ((Short) value).longValue());
+            } else if (value instanceof Byte) {
+                longMap.put(key, ((Byte) value).longValue());
+            } else if (value instanceof Double) {
+                doubleMap.put(key, (Double) value);
+            } else if (value instanceof Float) {
+                doubleMap.put(key, ((Float) value).doubleValue());
+            } else if (value instanceof String) {
+                stringMap.put(key, (String) value);
+            } else if (value instanceof List) {
+                List<?> list = (List<?>) value;
+                if (!list.isEmpty()) {
+                    Object first = list.get(0);
+                    if (first instanceof Long || first instanceof Integer
+                            || first instanceof Short || first instanceof Byte) {
+                        Long[] arr = list.stream()
+                                .map(v -> {
+                                    if (v instanceof Long) return (Long) v;
+                                    if (v instanceof Integer) return ((Integer) v).longValue();
+                                    if (v instanceof Short) return ((Short) v).longValue();
+                                    if (v instanceof Byte) return ((Byte) v).longValue();
+                                    return 0L;
+                                })
+                                .toArray(Long[]::new);
+                        longArrayMap.put(key, arr);
+                    } else if (first instanceof Double || first instanceof Float) {
+                        Double[] arr = list.stream()
+                                .map(v -> {
+                                    if (v instanceof Double) return (Double) v;
+                                    if (v instanceof Float) return ((Float) v).doubleValue();
+                                    return 0.0;
+                                })
+                                .toArray(Double[]::new);
+                        doubleArrayMap.put(key, arr);
+                    } else if (first instanceof String) {
+                        String[] arr = list.stream()
+                                .map(Object::toString)
+                                .toArray(String[]::new);
+                        stringArrayMap.put(key, arr);
+                    }
+                }
+            } else if (value instanceof Long[]) {
+                longArrayMap.put(key, (Long[]) value);
+            } else if (value instanceof Integer[]) {
+                Integer[] intArr = (Integer[]) value;
+                Long[] arr = new Long[intArr.length];
+                for (int j = 0; j < intArr.length; j++) {
+                    arr[j] = intArr[j].longValue();
+                }
+                longArrayMap.put(key, arr);
+            } else if (value instanceof Double[]) {
+                doubleArrayMap.put(key, (Double[]) value);
+            } else if (value instanceof Float[]) {
+                Float[] floatArr = (Float[]) value;
+                Double[] arr = new Double[floatArr.length];
+                for (int j = 0; j < floatArr.length; j++) {
+                    arr[j] = floatArr[j].doubleValue();
+                }
+                doubleArrayMap.put(key, arr);
+            } else if (value instanceof String[]) {
+                stringArrayMap.put(key, (String[]) value);
+            }
+        }
+        return Row.of(longMap, doubleMap, stringMap, longArrayMap, doubleArrayMap, stringArrayMap);
     }
 
     @FunctionalInterface

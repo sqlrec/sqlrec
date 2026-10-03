@@ -127,19 +127,18 @@ public class FunctionProxyBindable extends BindableInterface {
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         BindableInterface targetBindable = resolveBindable(schema, context);
 
-        if (partitionExecutor != null) {
-            if (async) {
-                submitAsync(() -> partitionExecutor.execute(schema, context, targetBindable));
-                return null;
-            }
-            return partitionExecutor.execute(schema, context, targetBindable);
-        }
-
         if (async) {
-            submitAsync(() -> targetBindable.bind(schema, context));
+            submitAsync(() -> executeTarget(targetBindable, schema, context));
             return null;
         }
-        return targetBindable.bind(schema, context);
+        return executeTarget(targetBindable, schema, context);
+    }
+
+    private Enumerable<Object[]> executeTarget(
+            BindableInterface target, CalciteSchema schema, ExecuteContext context) {
+        return partitionExecutor == null
+                ? target.bind(schema, context)
+                : partitionExecutor.execute(schema, context, target);
     }
 
     private void submitAsync(Runnable task) {
@@ -151,15 +150,7 @@ public class FunctionProxyBindable extends BindableInterface {
             return delegate;
         }
 
-        String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
-        String functionName = context.getVariable(variableName);
-        if (StringUtils.isEmpty(functionName)) {
-            if (funcNameVariable.hasDefaultValue()) {
-                functionName = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
-            } else {
-                throw new RuntimeException("cant get function name from variable: " + variableName);
-            }
-        }
+        String functionName = resolveFunctionName(context);
         try {
             return getFunctionBindableByName(
                     functionName, schema, inputList, returnDataFields, new CompileManager()
@@ -167,6 +158,18 @@ public class FunctionProxyBindable extends BindableInterface {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private String resolveFunctionName(ExecuteContext context) {
+        String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
+        String functionName = context.getVariable(variableName);
+        if (!StringUtils.isEmpty(functionName)) {
+            return functionName;
+        }
+        if (funcNameVariable.hasDefaultValue()) {
+            return SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
+        }
+        throw new RuntimeException("cant get function name from variable: " + variableName);
     }
 
     @Override
@@ -194,15 +197,7 @@ public class FunctionProxyBindable extends BindableInterface {
             return delegate.isTimeoutAble(schema, context);
         }
         try {
-            String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
-            String functionName = context.getVariable(variableName);
-            if (StringUtils.isEmpty(functionName)) {
-                if (funcNameVariable.hasDefaultValue()) {
-                    functionName = SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
-                } else {
-                    return false;
-                }
-            }
+            String functionName = resolveFunctionName(context);
             Object javaFunctionObj = JavaFunctionUtils.getTableFunction(Consts.DEFAULT_SCHEMA_NAME, functionName);
             return javaFunctionObj != null;
         } catch (Exception e) {

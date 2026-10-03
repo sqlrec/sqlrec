@@ -144,6 +144,33 @@ public class JavaFunctionBindable extends BindableInterface {
         }
     }
 
+    private static CacheTable resolveTableInput(SqlNode input, CalciteSchema schema, int inputIndex) {
+        if (!(input instanceof SqlIdentifier identifier)) {
+            throw new RuntimeException("should use cache table as input for " + inputIndex);
+        }
+        return SchemaUtils.getCacheTable(identifier.getSimple(), schema);
+    }
+
+    private Object resolveVarArgs(
+            Class<?> componentType, int startIndex, CalciteSchema schema, ExecuteContext context) {
+        List<Object> values = new ArrayList<>();
+        for (int i = startIndex; i < inputTableList.size(); i++) {
+            SqlNode input = inputTableList.get(i);
+            if (componentType.equals(String.class)) {
+                values.add(resolveStringInput(input, context, i));
+            } else if (componentType.equals(CacheTable.class)) {
+                values.add(resolveTableInput(input, schema, i));
+            } else {
+                throw new RuntimeException("unsupported vararg type: " + componentType);
+            }
+        }
+        Object array = java.lang.reflect.Array.newInstance(componentType, values.size());
+        for (int i = 0; i < values.size(); i++) {
+            java.lang.reflect.Array.set(array, i, values.get(i));
+        }
+        return array;
+    }
+
     private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
         Class<?>[] paramTypes = evalMethod.getParameterTypes();
         List<Object> paramList = new ArrayList<>();
@@ -154,36 +181,12 @@ public class JavaFunctionBindable extends BindableInterface {
             Class<?> paramType = paramTypes[i];
 
             if (isVarArgs && i == paramTypes.length - 1) {
-                Class<?> varArgType = paramType.getComponentType();
-                List<Object> varArgs = new ArrayList<>();
-                while (inputParamIndex < inputTableList.size()) {
-                    SqlNode input = inputTableList.get(inputParamIndex);
-                    if (varArgType.equals(String.class)) {
-                        varArgs.add(resolveStringInput(input, context, inputParamIndex));
-                    } else if (varArgType.equals(CacheTable.class)) {
-                        if (!(input instanceof SqlIdentifier)) {
-                            throw new RuntimeException("should use cache table as input for " + inputParamIndex);
-                        }
-                        varArgs.add(SchemaUtils.getCacheTable(((SqlIdentifier) input).getSimple(), schema));
-                    } else {
-                        throw new RuntimeException("unsupported vararg type: " + varArgType);
-                    }
-                    inputParamIndex++;
-                }
-                Object varArgArray = java.lang.reflect.Array.newInstance(varArgType, varArgs.size());
-                for (int j = 0; j < varArgs.size(); j++) {
-                    java.lang.reflect.Array.set(varArgArray, j, varArgs.get(j));
-                }
-                paramList.add(varArgArray);
+                paramList.add(resolveVarArgs(paramType.getComponentType(), inputParamIndex, schema, context));
             } else if (paramType.equals(CacheTable.class)) {
                 if (inputParamIndex >= inputTableList.size()) {
                     throw new RuntimeException("not enough input parameters");
                 }
-                SqlNode input = inputTableList.get(inputParamIndex);
-                if (!(input instanceof SqlIdentifier)) {
-                    throw new RuntimeException("should use cache table as input for " + inputParamIndex);
-                }
-                paramList.add(SchemaUtils.getCacheTable(((SqlIdentifier) inputTableList.get(inputParamIndex)).getSimple(), schema));
+                paramList.add(resolveTableInput(inputTableList.get(inputParamIndex), schema, inputParamIndex));
                 inputParamIndex++;
             } else if (paramType.equals(String.class)) {
                 if (inputParamIndex >= inputTableList.size()) {
