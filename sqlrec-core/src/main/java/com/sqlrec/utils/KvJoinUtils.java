@@ -41,14 +41,7 @@ public class KvJoinUtils {
         if (left == null) {
             throw new IllegalArgumentException("left table is null");
         }
-        List<Object[]> leftValues = new ArrayList<>();
-        for (Object obj : left) {
-            if (obj instanceof Object[]) {
-                leftValues.add((Object[]) obj);
-            } else {
-                leftValues.add(new Object[]{obj});
-            }
-        }
+        List<Object[]> leftValues = materializeLeftRows(left);
         if (leftValues.isEmpty()) {
             return Linq4j.emptyEnumerable();
         }
@@ -60,23 +53,52 @@ public class KvJoinUtils {
         RelDataType rightRowType = rightTable.getRowType(new JavaTypeFactoryImpl());
         int rightSize = rightRowType.getFieldCount();
 
+        Set<Object> joinKeys = collectJoinKeys(leftValues, leftJoinKeyColIndex);
+
+        Map<Object, List<Object[]>> rightValuesMap = loadRightRows(
+                rightTable, rightJoinKeyColIndex, joinKeys, dataContext);
+
+        Map<String, List<Object[]>> stringKeyMap = indexByStringKey(rightValuesMap);
+        List<List<Object[]>> rowList = joinRows(
+                leftValues, stringKeyMap, leftJoinKeyColIndex, leftSize, rightSize, joinType);
+
+        List<Object[]> merged = MergeUtils.snakeMerge(rowList.toArray(new Iterable[0]));
+        return Linq4j.asEnumerable(merged);
+    }
+
+    private static List<Object[]> materializeLeftRows(Enumerable left) {
+        List<Object[]> leftValues = new ArrayList<>();
+        for (Object obj : left) {
+            if (obj instanceof Object[]) {
+                leftValues.add((Object[]) obj);
+            } else {
+                leftValues.add(new Object[]{obj});
+            }
+        }
+        return leftValues;
+    }
+
+    private static Set<Object> collectJoinKeys(List<Object[]> leftValues, int joinKeyIndex) {
         Set<Object> joinKeys = new HashSet<>();
         for (Object[] leftValue : leftValues) {
-            Object leftJoinKey = leftValue[leftJoinKeyColIndex];
+            Object leftJoinKey = leftValue[joinKeyIndex];
             if (leftJoinKey == null) {
                 continue;
             }
             joinKeys.add(leftJoinKey);
         }
 
-        Map<Object, List<Object[]>> rightValuesMap;
-        if (rightJoinKeyColIndex == rightTable.getPrimaryKeyIndex()) {
-            rightValuesMap = rightTable.getByPrimaryKey(joinKeys);
-        } else {
-            rightValuesMap = scanRightTableByJoinKey(
-                    rightTable, rightJoinKeyColIndex, joinKeys, dataContext);
-        }
+        return joinKeys;
+    }
 
+    private static Map<Object, List<Object[]>> loadRightRows(
+            SqlRecKvTable table, int joinKeyIndex, Set<Object> keys, DataContext context) {
+        return joinKeyIndex == table.getPrimaryKeyIndex()
+                ? table.getByPrimaryKey(keys)
+                : scanRightTableByJoinKey(table, joinKeyIndex, keys, context);
+    }
+
+    private static Map<String, List<Object[]>> indexByStringKey(Map<Object, List<Object[]>> rightValuesMap) {
         // Keep the historical stringified-key matching behavior for compatibility
         // with existing KV table implementations. This is intentional and does
         // not preserve strict SQL key type semantics.
@@ -85,6 +107,12 @@ public class KvJoinUtils {
             stringKeyMap.put(entry.getKey().toString(), entry.getValue());
         }
 
+        return stringKeyMap;
+    }
+
+    private static List<List<Object[]>> joinRows(
+            List<Object[]> leftValues, Map<String, List<Object[]>> stringKeyMap,
+            int leftJoinKeyColIndex, int leftSize, int rightSize, JoinRelType joinType) {
         List<List<Object[]>> rowList = new ArrayList<>();
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
@@ -110,8 +138,7 @@ public class KvJoinUtils {
             }
         }
 
-        List<Object[]> merged = MergeUtils.snakeMerge(rowList.toArray(new Iterable[0]));
-        return Linq4j.asEnumerable(merged);
+        return rowList;
     }
 
     private static Map<Object, List<Object[]>> scanRightTableByJoinKey(

@@ -13,6 +13,7 @@
 | 定义、训练和导出模型 | [CREATE MODEL](#create-model)、[TRAIN MODEL](#train-model)、[EXPORT MODEL](#export-model)、[SHOW CHECKPOINTS](#show-checkpoints) |
 | 部署和管理模型服务 | [CREATE SERVICE](#create-service)、[SHOW SERVICES](#show-services) |
 | 了解表、库和 UDF 的 DDL 支持范围 | [元数据 DDL](#元数据-ddl) |
+| 查看数据库、表结构和 UDF | [元数据查询](#元数据查询) |
 | 刷新进程内定义缓存 | [FLUSH](#flush) |
 
 ## SQL 函数管理
@@ -938,6 +939,16 @@ DESCRIBE FORMATTED SERVICE my_service;
 
 不支持 `USE CATALOG` 和创建临时表（包括临时 CTAS/RTAS）。`USE database` 不校验会话 schema 中是否存在该数据库，后续操作按实际元数据执行。临时函数、视图及持久表的 CTAS/RTAS 保留 Thrift 远程路由。保存表/UDF 定义不代表 SQLRec 本地支持其全部 Connector、列语义或函数接口。SQL 文件元数据模式不支持这些持久元数据 DDL，也不提供 Gateway 转发。
 
+## 元数据查询
+
+共享元数据和 SQL 文件模式均支持 `SHOW DATABASES`、`SHOW TABLES`、`SHOW CREATE TABLE`、`DESCRIBE`、`SHOW FUNCTIONS` 和 `SHOW USER FUNCTIONS`，均在 SQLRec 内执行，不转发到 Gateway。表名支持 `table`、`database.table` 和 `hive.database.table`；只有未限定数据库的表名优先匹配会话中的 `CACHE TABLE`。缺失对象和未配置的 catalog 会明确报错。
+
+`SHOW TABLES` 直接读取元数据中的数据库和表列表；查询当前数据库时，还会合并会话缓存表，结果去重、排序，支持 `LIKE` 和 `NOT LIKE`。因此能列出新数据库中的表，不代表已有会话的本地 SQL 编译 schema 已包含该数据库，详见[元数据管理](./architecture.md#元数据管理)。
+
+SQL 文件模式直接读取启动时加载的定义，查看表和函数不要求对应 Connector 或 UDF 类可用，也不连接 HMS/Gateway。`SHOW CREATE TABLE` 输出保存的建表声明，保留列、主键、分区、注释和选项，排版可能与原文件不同。持久表的 `DESCRIBE` 在两种模式下均返回 `name`、`type`、`null`、`key`、`extras`、`watermark`，存在列注释时追加 `comment`；会话缓存表仍返回 `name`、`type`。文件模式的 `DESCRIBE` 不解析计算列、WATERMARK、CTAS 或 LIKE 推导的结构，这些声明仍可通过 `SHOW CREATE TABLE` 查看。
+
+`SHOW USER FUNCTIONS` 返回指定数据库声明的 UDF；`SHOW FUNCTIONS` 还包含 Flink 内置函数，结果排序并去重，支持 `LIKE`、`ILIKE` 及其 `NOT` 形式。函数被列出不代表本地执行器一定支持执行。SQLRec SQL 函数仍通过 `SHOW SQL FUNCTIONS` 查询。SQL 文件元数据保持只读，修改文件后需重启；`FLUSH` 不重新加载文件。
+
 ## 元数据刷新
 
 ### FLUSH
@@ -953,6 +964,8 @@ FLUSH
 **描述：**
 
 `FLUSH` 使当前进程中的数据库和表定义、Java/SQL 函数、API、模型服务配置缓存失效，后续访问会重新加载定义。
+
+两种模式下，`FLUSH` 都不会增删已有会话的数据库子 schema。远程模式新增或删除数据库后，需要在数据库列表缓存更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的数据库列表；已有数据库内的表和函数缓存仍按各自策略刷新。
 
 它不清除会话中的 `CACHE TABLE` 结果，也不保证已有 Connector 的业务数据缓存立即更新。本地 SQL 文件的改动仍需重启进程才能生效。精确的缓存范围见[架构设计](./architecture.md#connector-表数据缓存与查询路径)。
 

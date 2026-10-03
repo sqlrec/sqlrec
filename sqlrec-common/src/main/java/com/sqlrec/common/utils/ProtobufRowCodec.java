@@ -175,60 +175,70 @@ public final class ProtobufRowCodec {
                 case STRING:
                     return value.toString();
                 case BYTE_STRING:
-                    if (value instanceof ByteString) {
-                        return value;
-                    }
-                    if (value instanceof byte[]) {
-                        return ByteString.copyFrom((byte[]) value);
-                    }
-                    if (value instanceof ByteBuffer) {
-                        return ByteString.copyFrom(((ByteBuffer) value).duplicate());
-                    }
-                    throw incompatible(field, value);
+                    return convertBytes(field, value);
                 case ENUM:
-                    Descriptors.EnumValueDescriptor enumValue;
-                    if (value instanceof Number) {
-                        BigInteger number = exactInteger(field, (Number) value);
-                        if (number.compareTo(INT32_MIN) < 0 || number.compareTo(INT32_MAX) > 0) {
-                            throw new IllegalArgumentException(
-                                    "Integer value " + number + " is out of range for Protobuf field "
-                                            + field.getFullName());
-                        }
-                        enumValue = field.getEnumType().findValueByNumber(number.intValue());
-                    } else {
-                        enumValue = field.getEnumType().findValueByName(value.toString());
-                    }
-                    if (enumValue == null) {
-                        throw new IllegalArgumentException(
-                                "Unknown enum value '" + value + "' for field " + field.getFullName());
-                    }
-                    return enumValue;
+                    return convertEnum(field, value);
                 case MESSAGE:
-                    if (value instanceof Message
-                            && ((Message) value).getDescriptorForType().equals(field.getMessageType())) {
-                        return value;
-                    }
-                    if (value instanceof Map) {
-                        DynamicMessage.Builder nested = DynamicMessage.newBuilder(field.getMessageType());
-                        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                            Descriptors.FieldDescriptor nestedField = field.getMessageType()
-                                    .findFieldByName(String.valueOf(entry.getKey()));
-                            if (nestedField == null) {
-                                throw new IllegalArgumentException(
-                                        "Unknown nested field '" + entry.getKey() + "' for "
-                                                + field.getMessageType().getFullName());
-                            }
-                            setField(nested, nestedField, entry.getValue());
-                        }
-                        return nested.build();
-                    }
-                    throw incompatible(field, value);
+                    return convertMessage(field, value);
                 default:
                     throw incompatible(field, value);
             }
         } catch (ClassCastException e) {
             throw incompatible(field, value);
         }
+    }
+
+    private static ByteString convertBytes(Descriptors.FieldDescriptor field, Object value) {
+        if (value instanceof ByteString) {
+            return (ByteString) value;
+        }
+        if (value instanceof byte[]) {
+            return ByteString.copyFrom((byte[]) value);
+        }
+        if (value instanceof ByteBuffer) {
+            return ByteString.copyFrom(((ByteBuffer) value).duplicate());
+        }
+        throw incompatible(field, value);
+    }
+
+    private static Descriptors.EnumValueDescriptor convertEnum(Descriptors.FieldDescriptor field, Object value) {
+        Descriptors.EnumValueDescriptor enumValue;
+        if (value instanceof Number) {
+            BigInteger number = exactInteger(field, (Number) value);
+            if (number.compareTo(INT32_MIN) < 0 || number.compareTo(INT32_MAX) > 0) {
+                throw new IllegalArgumentException(
+                        "Integer value " + number + " is out of range for Protobuf field " + field.getFullName());
+            }
+            enumValue = field.getEnumType().findValueByNumber(number.intValue());
+        } else {
+            enumValue = field.getEnumType().findValueByName(value.toString());
+        }
+        if (enumValue == null) {
+            throw new IllegalArgumentException(
+                    "Unknown enum value '" + value + "' for field " + field.getFullName());
+        }
+        return enumValue;
+    }
+
+    private static Message convertMessage(Descriptors.FieldDescriptor field, Object value) {
+        if (value instanceof Message
+                && ((Message) value).getDescriptorForType().equals(field.getMessageType())) {
+            return (Message) value;
+        }
+        if (!(value instanceof Map)) {
+            throw incompatible(field, value);
+        }
+        DynamicMessage.Builder nested = DynamicMessage.newBuilder(field.getMessageType());
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            Descriptors.FieldDescriptor nestedField = field.getMessageType()
+                    .findFieldByName(String.valueOf(entry.getKey()));
+            if (nestedField == null) {
+                throw new IllegalArgumentException(
+                        "Unknown nested field '" + entry.getKey() + "' for " + field.getMessageType().getFullName());
+            }
+            setField(nested, nestedField, entry.getValue());
+        }
+        return nested.build();
     }
 
     private static Object convertInteger(Descriptors.FieldDescriptor field, Object value) {

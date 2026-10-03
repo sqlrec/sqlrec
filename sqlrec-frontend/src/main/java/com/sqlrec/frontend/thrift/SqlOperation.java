@@ -42,13 +42,18 @@ public class SqlOperation {
 
     /** Ordinary SQL consumes all rows once; JDBC metadata supports bounded, rewindable pages. */
     public synchronized ResultPage fetch(TFetchOrientation orientation, long maxRows) {
-        if (!metadataOperation) {
-            Enumerable<Object[]> rows = coreResult.getFields() == null
-                    ? DataTransformUtils.getMsgEnumerable("no output") : coreResult.getEnumerable();
-            ResultPage page = resultPage(rows, 0, false);
-            coreResult.setEnumerable(null);
-            return page;
-        }
+        return metadataOperation ? fetchMetadataPage(orientation, maxRows) : fetchSqlResult();
+    }
+
+    private ResultPage fetchSqlResult() {
+        Enumerable<Object[]> rows = coreResult.getFields() == null
+                ? DataTransformUtils.getMsgEnumerable("no output") : coreResult.getEnumerable();
+        ResultPage page = resultPage(rows, 0, false);
+        coreResult.setEnumerable(null);
+        return page;
+    }
+
+    private ResultPage fetchMetadataPage(TFetchOrientation orientation, long maxRows) {
         if (orientation != TFetchOrientation.FETCH_NEXT && orientation != TFetchOrientation.FETCH_FIRST) {
             throw new UnsupportedOperationException("Only FETCH_NEXT and FETCH_FIRST are supported locally");
         }

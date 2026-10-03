@@ -206,6 +206,15 @@ public final class GatewayClient {
     }
 
     private void executeStateStatement(String sql) throws TException {
+        TOperationHandle handle = submitStateStatement(sql);
+        try {
+            awaitStateStatement(handle);
+        } finally {
+            closeStateOperation(handle);
+        }
+    }
+
+    private TOperationHandle submitStateStatement(String sql) throws TException {
         TExecuteStatementReq request = new TExecuteStatementReq(new TSessionHandle(remoteSessionId), sql);
         request.setRunAsync(false);
         TExecuteStatementResp response = invokeRemote(() -> client.ExecuteStatement(request));
@@ -214,40 +223,46 @@ public final class GatewayClient {
         if (handle == null) {
             throw new TException("Gateway state statement returned no operation handle");
         }
+        return handle;
+    }
+
+    private void awaitStateStatement(TOperationHandle handle) throws TException {
+        // runAsync=false asks the endpoint to finish the statement before responding.
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
+                SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue());
+        while (true) {
+            TGetOperationStatusResp status = invokeRemote(
+                    () -> client.GetOperationStatus(new TGetOperationStatusReq(handle)));
+            requireSuccess(status.getStatus());
+            if (status.getOperationState() == TOperationState.FINISHED_STATE) {
+                return;
+            }
+            if (status.getOperationState() != TOperationState.RUNNING_STATE
+                    && status.getOperationState() != TOperationState.PENDING_STATE
+                    && status.getOperationState() != TOperationState.INITIALIZED_STATE) {
+                throw new TException("Gateway state statement failed: " + status.getErrorMessage());
+            }
+            if (System.nanoTime() >= deadline) {
+                throw new TException("Gateway session state synchronization timed out");
+            }
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new TException("Gateway state synchronization interrupted", e);
+            }
+        }
+    }
+
+    private void closeStateOperation(TOperationHandle handle) {
+        if (!connected) {
+            return;
+        }
         try {
-            // runAsync=false asks the endpoint to finish the statement before responding.
-            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
-                    SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue());
-            while (true) {
-                TGetOperationStatusResp status = invokeRemote(() -> client.GetOperationStatus(new TGetOperationStatusReq(handle)));
-                requireSuccess(status.getStatus());
-                if (status.getOperationState() == TOperationState.FINISHED_STATE) {
-                    break;
-                }
-                if (status.getOperationState() != TOperationState.RUNNING_STATE
-                        && status.getOperationState() != TOperationState.PENDING_STATE
-                        && status.getOperationState() != TOperationState.INITIALIZED_STATE) {
-                    throw new TException("Gateway state statement failed: " + status.getErrorMessage());
-                }
-                if (System.nanoTime() >= deadline) {
-                    throw new TException("Gateway session state synchronization timed out");
-                }
-                try {
-                    Thread.sleep(25);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new TException("Gateway state synchronization interrupted", e);
-                }
-            }
-        } finally {
-            if (connected) {
-                try {
-                    requireSuccess(invokeRemote(() -> client.CloseOperation(new TCloseOperationReq(handle))).getStatus());
-                } catch (TException cleanupFailure) {
-                    // Cleanup must not hide a completed command or replace its original error.
-                    logger.warn("Failed to close Gateway session-state operation", cleanupFailure);
-                }
-            }
+            requireSuccess(invokeRemote(() -> client.CloseOperation(new TCloseOperationReq(handle))).getStatus());
+        } catch (TException cleanupFailure) {
+            // Cleanup must not hide a completed command or replace its original error.
+            logger.warn("Failed to close Gateway session-state operation", cleanupFailure);
         }
     }
 

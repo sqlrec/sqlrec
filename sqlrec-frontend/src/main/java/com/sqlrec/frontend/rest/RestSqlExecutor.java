@@ -1,12 +1,10 @@
 package com.sqlrec.frontend.rest;
 
-import com.google.gson.JsonParseException;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTransformUtils;
-import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.frontend.utils.RestUtils;
 import org.apache.calcite.linq4j.Enumerable;
@@ -20,13 +18,7 @@ public class RestSqlExecutor {
             throw new IllegalArgumentException("request body is required; expected JSON with a non-empty sqls array");
         }
 
-        RequestData params;
-        try {
-            params = JsonUtils.fromJson(requestData, RequestData.class);
-        } catch (JsonParseException e) {
-            throw new IllegalArgumentException("invalid JSON request body: "
-                    + RestUtils.errorMessage(e, "could not parse JSON"), e);
-        }
+        RequestData params = RestUtils.parseRequestData(requestData);
         if (params == null) {
             throw new IllegalArgumentException("request body must be a JSON object with a non-empty sqls array");
         }

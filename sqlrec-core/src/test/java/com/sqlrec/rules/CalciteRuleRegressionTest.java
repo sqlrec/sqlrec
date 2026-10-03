@@ -2,6 +2,7 @@ package com.sqlrec.rules;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.BindableInterface;
@@ -28,6 +29,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.calcite.schema.impl.ScalarFunctionImpl;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.tools.Frameworks;
@@ -54,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class CalciteRuleRegressionTest {
+public class CalciteRuleRegressionTest {
     private CalciteSchema rootSchema;
     private MemoryKvTable kvTable;
 
@@ -210,6 +212,47 @@ class CalciteRuleRegressionTest {
     }
 
     @Test
+    void updateMaterializesStatefulSetValuesOnceForOldAndNewRows() throws Exception {
+        kvTable.useTrackedCollection();
+        StatefulValue.calls = 0;
+        rootSchema.plus().getSubSchema(Consts.DEFAULT_SCHEMA_NAME)
+                .add("stateful_value", ScalarFunctionImpl.create(StatefulValue.class, "eval"));
+
+        List<Object[]> result = execute(compile("update kv_table set label = stateful_value(id)"));
+
+        assertArrayEquals(new Object[]{3L}, result.get(0));
+        assertEquals(3, StatefulValue.calls);
+        assertEquals(List.of("One", "Two", "Three"),
+                kvTable.replacedRows.stream().map(row -> row[1]).toList());
+        assertArrayEquals(new Object[]{1, "value-1"}, kvTable.row(1));
+        assertArrayEquals(new Object[]{2, "value-2"}, kvTable.row(2));
+        assertArrayEquals(new Object[]{3, "value-3"}, kvTable.row(3));
+    }
+
+    @Test
+    void updatePrimaryKeyPassesOriginalRowsAndPreservesAffectedCount() throws Exception {
+        kvTable.useTrackedCollection();
+
+        List<Object[]> result = execute(compile("update kv_table set id = 10, label = 'Ten' where id = 1"));
+
+        assertArrayEquals(new Object[]{1L}, result.get(0));
+        assertEquals(1, kvTable.replacedRows.size());
+        assertArrayEquals(new Object[]{1, "One"}, kvTable.replacedRows.get(0));
+        assertNull(kvTable.row(1));
+        assertArrayEquals(new Object[]{10, "Ten"}, kvTable.row(10));
+        assertArrayEquals(new Object[]{0L}, execute(compile("update kv_table set label = 'none' where id = 99")).get(0));
+    }
+
+    public static final class StatefulValue {
+        static int calls;
+
+        public static String eval(int id) {
+            calls++;
+            return "value-" + calls;
+        }
+    }
+
+    @Test
     void tableModifyRuleExecutesInsertUpdateAndDelete() throws Exception {
         BindableInterface insert = compile("insert into kv_table values (4, 'Four')");
         assertTrue(insert.getPhysicalPlan().contains("SqlrecEnumerableTableModify"));
@@ -329,7 +372,8 @@ class CalciteRuleRegressionTest {
 
     private static final class MemoryKvTable extends SqlRecKvTable {
         private final Map<Integer, Object[]> rows = new LinkedHashMap<>();
-        private final Collection<Object[]> modifiableRows = new RowCollection();
+        private Collection<Object[]> modifiableRows = new RowCollection();
+        private List<Object[]> replacedRows = List.of();
         private List<RexNode> receivedFilters = Collections.emptyList();
         private Set<Object> requestedKeys = Collections.emptySet();
 
@@ -380,6 +424,34 @@ class CalciteRuleRegressionTest {
 
         private Object[] row(int id) {
             return rows.get(id);
+        }
+
+        private void useTrackedCollection() {
+            modifiableRows = new SqlRecCollection("kv_table") {
+                @Override
+                public SqlRecTable getSqlRecTable() {
+                    return MemoryKvTable.this;
+                }
+
+                @Override
+                protected boolean addImpl(Object[] row) {
+                    rows.put((Integer) row[0], row);
+                    return true;
+                }
+
+                @Override
+                protected boolean removeImpl(Object[] row) {
+                    return rows.remove((Integer) row[0]) != null;
+                }
+
+                @Override
+                protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+                    replacedRows = new ArrayList<>(oldRows);
+                    oldRows.forEach(this::removeImpl);
+                    newRows.forEach(this::addImpl);
+                    return newRows.size();
+                }
+            };
         }
 
         private final class RowCollection extends AbstractCollection<Object[]> {

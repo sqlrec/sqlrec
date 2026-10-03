@@ -207,7 +207,7 @@ SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `ed
 
 ### Gateway Forwarding Configuration
 
-Deployment scripts install Flink SQL Gateway and configure SQLRec's connection address by default. Gateway serves requests that require Flink execution; local SQL, JDBC metadata, and persistent table/database/UDF metadata DDL do not depend on it.
+Deployment scripts install Flink SQL Gateway and configure SQLRec's connection address by default. Gateway serves requests that require Flink execution; local SQL, [metadata queries](../reference/sql.md#metadata-queries) such as `SHOW CREATE TABLE` and `DESCRIBE`, JDBC metadata, and persistent table/database/UDF metadata DDL do not depend on it.
 
 Default settings require no changes. For an external Gateway, set the address and port listed above to its HiveServer2/Thrift endpoint. An empty address followed by redeployment disables forwarding; this does not skip default Flink component deployment or remove existing components.
 

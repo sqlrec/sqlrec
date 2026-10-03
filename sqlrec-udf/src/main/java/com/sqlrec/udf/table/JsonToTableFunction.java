@@ -115,14 +115,7 @@ public class JsonToTableFunction {
                     return "VARCHAR";
                 }
                 if (element.isJsonPrimitive()) {
-                    JsonPrimitive prim = element.getAsJsonPrimitive();
-                    if (prim.isBoolean()) {
-                        return "BOOLEAN";
-                    }
-                    if (prim.isNumber()) {
-                        return "DOUBLE";
-                    }
-                    return "VARCHAR";
+                    return inferPrimitiveType(element.getAsJsonPrimitive());
                 }
             }
         }
@@ -132,15 +125,18 @@ public class JsonToTableFunction {
     private static String inferArrayElementType(JsonArray array) {
         for (JsonElement item : array) {
             if (item != null && !item.isJsonNull() && item.isJsonPrimitive()) {
-                JsonPrimitive prim = item.getAsJsonPrimitive();
-                if (prim.isNumber()) {
-                    return "DOUBLE";
-                }
-                if (prim.isBoolean()) {
-                    return "BOOLEAN";
-                }
-                return "VARCHAR";
+                return inferPrimitiveType(item.getAsJsonPrimitive());
             }
+        }
+        return "VARCHAR";
+    }
+
+    private static String inferPrimitiveType(JsonPrimitive primitive) {
+        if (primitive.isBoolean()) {
+            return "BOOLEAN";
+        }
+        if (primitive.isNumber()) {
+            return "DOUBLE";
         }
         return "VARCHAR";
     }
@@ -154,34 +150,22 @@ public class JsonToTableFunction {
                 return null;
             }
             String elementType = type.substring("ARRAY<".length(), type.length() - 1);
-            JsonArray array = element.getAsJsonArray();
-            List<Object> result = new ArrayList<>(array.size());
-            for (int i = 0; i < array.size(); i++) {
-                JsonElement item = array.get(i);
-                if (item == null || item.isJsonNull()) {
-                    result.add(null);
-                } else if ("DOUBLE".equals(elementType)) {
-                    if (item.isJsonPrimitive() && item.getAsJsonPrimitive().isNumber()) {
-                        result.add(item.getAsDouble());
-                    } else {
-                        result.add(null);
-                    }
-                } else if ("BOOLEAN".equals(elementType)) {
-                    if (item.isJsonPrimitive() && item.getAsJsonPrimitive().isBoolean()) {
-                        result.add(item.getAsBoolean());
-                    } else {
-                        result.add(null);
-                    }
-                } else {
-                    // VARCHAR
-                    if (item.isJsonPrimitive()) {
-                        result.add(item.getAsString());
-                    } else {
-                        result.add(item.toString());
-                    }
-                }
-            }
-            return result;
+            return convertArray(element.getAsJsonArray(), elementType);
+        }
+        return convertScalar(element, type);
+    }
+
+    private static List<Object> convertArray(JsonArray array, String elementType) {
+        List<Object> result = new ArrayList<>(array.size());
+        for (int i = 0; i < array.size(); i++) {
+            result.add(convertScalar(array.get(i), elementType));
+        }
+        return result;
+    }
+
+    private static Object convertScalar(JsonElement element, String type) {
+        if (element == null || element.isJsonNull()) {
+            return null;
         }
         if ("BOOLEAN".equals(type)) {
             if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()) {
@@ -195,11 +179,7 @@ public class JsonToTableFunction {
             }
             return null;
         }
-        // VARCHAR - store as string
-        if (element.isJsonPrimitive()) {
-            return element.getAsString();
-        }
-        // nested object or other - store as json string
-        return element.toString();
+        // VARCHAR: primitives use their string value; objects and arrays keep their JSON text.
+        return element.isJsonPrimitive() ? element.getAsString() : element.toString();
     }
 }

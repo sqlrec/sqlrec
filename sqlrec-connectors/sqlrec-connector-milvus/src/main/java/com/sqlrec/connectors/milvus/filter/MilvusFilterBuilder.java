@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -46,15 +47,7 @@ public final class MilvusFilterBuilder {
         if (filters == null || filters.isEmpty()) {
             return "";
         }
-        List<String> expressions = new ArrayList<>(filters.size());
-        for (RexNode filter : filters) {
-            String expression = buildScanFilter(filter, fields);
-            if (expression == null) {
-                return null;
-            }
-            expressions.add(expression);
-        }
-        return String.join(" AND ", expressions);
+        return joinExpressions(filters, " AND ", filter -> buildScanFilter(filter, fields));
     }
 
     private static String buildScanFilter(RexNode node, List<FieldSchema> fields) {
@@ -64,15 +57,8 @@ public final class MilvusFilterBuilder {
         RexCall call = (RexCall) node;
         if (call.isA(SqlKind.AND) || call.isA(SqlKind.OR)) {
             String delimiter = call.isA(SqlKind.AND) ? " AND " : " OR ";
-            List<String> expressions = new ArrayList<>();
-            for (RexNode operand : call.getOperands()) {
-                String expression = buildScanFilter(operand, fields);
-                if (expression == null) {
-                    return null;
-                }
-                expressions.add("(" + expression + ")");
-            }
-            return String.join(delimiter, expressions);
+            return joinExpressions(call.getOperands(), delimiter,
+                    operand -> parenthesize(buildScanFilter(operand, fields)));
         }
         String operator = call.getOperator().getName();
         if (isArrayOperator(operator)) {
@@ -228,15 +214,8 @@ public final class MilvusFilterBuilder {
         RexCall call = (RexCall) node;
         if (call.isA(SqlKind.AND) || call.isA(SqlKind.OR)) {
             String delimiter = call.isA(SqlKind.AND) ? " and " : " or ";
-            List<String> expressions = new ArrayList<>();
-            for (RexNode operand : call.getOperands()) {
-                String expression = buildJoinFilter(operand, leftRow, leftSize, rightFields);
-                if (expression == null) {
-                    return null;
-                }
-                expressions.add(expression);
-            }
-            return "(" + String.join(delimiter, expressions) + ")";
+            return parenthesize(joinExpressions(call.getOperands(), delimiter,
+                    operand -> buildJoinFilter(operand, leftRow, leftSize, rightFields)));
         }
         if (isArrayOperator(call.getOperator().getName())) {
             return buildJoinArray(call, leftRow, leftSize, rightFields);
@@ -281,6 +260,23 @@ public final class MilvusFilterBuilder {
                             + op + " " + rightField(rightFields, index - leftSize);
         }
         return null;
+    }
+
+    private static String joinExpressions(
+            List<RexNode> nodes, String delimiter, Function<RexNode, String> translate) {
+        List<String> expressions = new ArrayList<>(nodes.size());
+        for (RexNode node : nodes) {
+            String expression = translate.apply(node);
+            if (expression == null) {
+                return null;
+            }
+            expressions.add(expression);
+        }
+        return String.join(delimiter, expressions);
+    }
+
+    private static String parenthesize(String expression) {
+        return expression == null ? null : "(" + expression + ")";
     }
 
     private static String buildJoinArray(

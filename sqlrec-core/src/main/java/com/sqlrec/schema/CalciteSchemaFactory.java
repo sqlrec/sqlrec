@@ -35,6 +35,11 @@ public class CalciteSchemaFactory {
         globalSchema = schema;
     }
 
+    /**
+     * Database membership is deliberately fixed when a schema is created; existing schemas
+     * are not synchronized before each SQL statement. databaseListCache refreshes periodically
+     * on access (or after explicit invalidation), and newly created schemas use that cached list.
+     */
     public static CalciteSchema createCalciteSchema() {
         CalciteSchema rootSchema = ConcurrentCalciteSchema.createRootSchema();
 

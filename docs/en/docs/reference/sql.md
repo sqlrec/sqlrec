@@ -13,6 +13,7 @@ Find a statement by task:
 | Define, train, and export models | [CREATE MODEL](#create-model), [TRAIN MODEL](#train-model), [EXPORT MODEL](#export-model), [SHOW CHECKPOINTS](#show-checkpoints) |
 | Deploy and manage model services | [CREATE SERVICE](#create-service), [SHOW SERVICES](#show-services) |
 | Understand table, database, and UDF DDL support | [Metadata DDL](#metadata-ddl) |
+| Inspect databases, table schemas, and UDFs | [Metadata Queries](#metadata-queries) |
 | Refresh in-process definition caches | [FLUSH](#flush) |
 
 ## SQL Function Management
@@ -938,6 +939,16 @@ In shared metadata mode, persistent table/database/UDF metadata DDL uses the Fli
 
 `USE CATALOG` and temporary table creation, including temporary CTAS/RTAS, are unsupported. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. Temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode does not support these persistent metadata DDL statements or Gateway forwarding.
 
+## Metadata Queries
+
+Both shared metadata and SQL-file mode support `SHOW DATABASES`, `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, `SHOW FUNCTIONS`, and `SHOW USER FUNCTIONS`. All run within SQLRec without Gateway forwarding. Table names accept `table`, `database.table`, and `hive.database.table`. Only unqualified names give session `CACHE TABLE` results precedence. Missing objects and unconfigured catalogs produce explicit errors.
+
+`SHOW TABLES` reads database and table lists directly from metadata. For the current database, it also includes session cache tables. Results are deduplicated and sorted, with `LIKE` and `NOT LIKE` support. Being able to list tables in a new database does not mean an existing session's local SQL compilation schema includes that database; see [Metadata Management](./architecture.md#metadata-management).
+
+SQL-file mode reads definitions loaded at startup. Inspecting a table or function does not require its connector or UDF class to be available and does not connect to HMS or Gateway. `SHOW CREATE TABLE` returns the saved declaration, preserving columns, primary keys, partitions, comments, and options; formatting may differ from the source file. For persistent tables, `DESCRIBE` returns `name`, `type`, `null`, `key`, `extras`, and `watermark` in both modes, with an additional `comment` column when column comments are present. Session cache tables retain the `name` and `type` columns. In SQL-file mode, `DESCRIBE` does not resolve computed columns, watermarks, or schemas inferred from CTAS or LIKE; `SHOW CREATE TABLE` can still display these declarations.
+
+`SHOW USER FUNCTIONS` lists UDFs declared in the requested database. `SHOW FUNCTIONS` also includes Flink built-ins. Results are sorted and deduplicated and support `LIKE`, `ILIKE`, and their `NOT` forms. Listing a function does not guarantee local execution support. SQLRec SQL functions remain available through `SHOW SQL FUNCTIONS`. SQL-file metadata remains read-only and file changes require a restart; `FLUSH` does not reload files.
+
 ## Metadata Refresh
 
 ### FLUSH
@@ -953,6 +964,8 @@ FLUSH
 **Description:**
 
 `FLUSH` invalidates the current process's cached database and table definitions, Java/SQL functions, APIs, and model-service configuration. Later accesses reload their definitions.
+
+In both modes, `FLUSH` does not add or remove database sub-schemas in existing sessions. After a database is added or removed in remote mode, create a new executor once the database-list cache has updated (Thrift clients can reconnect) to use the updated database list for local SQL compilation. Table and function caches within existing databases still refresh under their own policies.
 
 It does not clear session `CACHE TABLE` results or guarantee immediate updates to existing connectors' business-data caches. Changes to local SQL files still require a process restart. See [Architecture](./architecture.md#connector-row-cache-and-query-paths) for exact cache coverage.
 

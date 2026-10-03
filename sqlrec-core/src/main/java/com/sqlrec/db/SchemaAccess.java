@@ -27,9 +27,9 @@ public interface SchemaAccess {
                 "Metadata DDL is not supported in local SQL file metadata mode; edit SQL_SCHEMA_DIR and restart");
     }
 
-    /** Full Catalog descriptions, including definitions the local query engine cannot execute. */
+    /** Describes stored definitions independently of whether the local query engine can execute them. */
     default SqlProcessResult executeMetadataQuery(SqlNode node, String database) throws Exception {
-        return null;
+        throw new UnsupportedOperationException("Unsupported metadata query: " + node.getClass().getSimpleName());
     }
 
     List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception;

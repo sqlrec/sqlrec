@@ -171,87 +171,114 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         return combinedMap;
     }
 
-    private static Row toOutputRow(Map<String, Object> combinedMap) {
-        Map<String, Long> longMap = new LinkedHashMap<>();
-        Map<String, Double> doubleMap = new LinkedHashMap<>();
-        Map<String, String> stringMap = new LinkedHashMap<>();
-        Map<String, Long[]> longArrayMap = new LinkedHashMap<>();
-        Map<String, Double[]> doubleArrayMap = new LinkedHashMap<>();
-        Map<String, String[]> stringArrayMap = new LinkedHashMap<>();
+    private static Row toOutputRow(Map<String, Object> values) {
+        OutputFields fields = new OutputFields();
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            fields.add(entry.getKey(), entry.getValue());
+        }
+        return fields.toRow();
+    }
 
-        for (Map.Entry<String, Object> entry : combinedMap.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
+    private static boolean isInteger(Object value) {
+        return value instanceof Long || value instanceof Integer
+                || value instanceof Short || value instanceof Byte;
+    }
 
-            if (value instanceof Long) {
-                longMap.put(key, (Long) value);
-            } else if (value instanceof Integer) {
-                longMap.put(key, ((Integer) value).longValue());
-            } else if (value instanceof Short) {
-                longMap.put(key, ((Short) value).longValue());
-            } else if (value instanceof Byte) {
-                longMap.put(key, ((Byte) value).longValue());
-            } else if (value instanceof Double) {
-                doubleMap.put(key, (Double) value);
-            } else if (value instanceof Float) {
-                doubleMap.put(key, ((Float) value).doubleValue());
+    private static boolean isFloatingPoint(Object value) {
+        return value instanceof Double || value instanceof Float;
+    }
+
+    private static Long toLong(Object value) {
+        if (value instanceof Long) {
+            return (Long) value;
+        }
+        return ((Number) value).longValue();
+    }
+
+    private static Double toDouble(Object value) {
+        if (value instanceof Double) {
+            return (Double) value;
+        }
+        return ((Number) value).doubleValue();
+    }
+
+    private static Long[] toLongArray(Integer[] intArr) {
+        Long[] arr = new Long[intArr.length];
+        for (int j = 0; j < intArr.length; j++) {
+            arr[j] = intArr[j].longValue();
+        }
+        return arr;
+    }
+
+    private static Double[] toDoubleArray(Float[] floatArr) {
+        Double[] arr = new Double[floatArr.length];
+        for (int j = 0; j < floatArr.length; j++) {
+            arr[j] = floatArr[j].doubleValue();
+        }
+        return arr;
+    }
+
+    /** Collects values in the six maps declared by the function's output schema. */
+    private static final class OutputFields {
+        private final Map<String, Long> longs = new LinkedHashMap<>();
+        private final Map<String, Double> doubles = new LinkedHashMap<>();
+        private final Map<String, String> strings = new LinkedHashMap<>();
+        private final Map<String, Long[]> longArrays = new LinkedHashMap<>();
+        private final Map<String, Double[]> doubleArrays = new LinkedHashMap<>();
+        private final Map<String, String[]> stringArrays = new LinkedHashMap<>();
+
+        private void add(String key, Object value) {
+            if (isInteger(value)) {
+                longs.put(key, toLong(value));
+            } else if (isFloatingPoint(value)) {
+                doubles.put(key, toDouble(value));
             } else if (value instanceof String) {
-                stringMap.put(key, (String) value);
+                strings.put(key, (String) value);
             } else if (value instanceof List) {
-                List<?> list = (List<?>) value;
-                if (!list.isEmpty()) {
-                    Object first = list.get(0);
-                    if (first instanceof Long || first instanceof Integer
-                            || first instanceof Short || first instanceof Byte) {
-                        Long[] arr = list.stream()
-                                .map(v -> {
-                                    if (v instanceof Long) return (Long) v;
-                                    if (v instanceof Integer) return ((Integer) v).longValue();
-                                    if (v instanceof Short) return ((Short) v).longValue();
-                                    if (v instanceof Byte) return ((Byte) v).longValue();
-                                    return 0L;
-                                })
-                                .toArray(Long[]::new);
-                        longArrayMap.put(key, arr);
-                    } else if (first instanceof Double || first instanceof Float) {
-                        Double[] arr = list.stream()
-                                .map(v -> {
-                                    if (v instanceof Double) return (Double) v;
-                                    if (v instanceof Float) return ((Float) v).doubleValue();
-                                    return 0.0;
-                                })
-                                .toArray(Double[]::new);
-                        doubleArrayMap.put(key, arr);
-                    } else if (first instanceof String) {
-                        String[] arr = list.stream()
-                                .map(Object::toString)
-                                .toArray(String[]::new);
-                        stringArrayMap.put(key, arr);
-                    }
-                }
+                addList(key, (List<?>) value);
             } else if (value instanceof Long[]) {
-                longArrayMap.put(key, (Long[]) value);
+                longArrays.put(key, (Long[]) value);
             } else if (value instanceof Integer[]) {
-                Integer[] intArr = (Integer[]) value;
-                Long[] arr = new Long[intArr.length];
-                for (int j = 0; j < intArr.length; j++) {
-                    arr[j] = intArr[j].longValue();
-                }
-                longArrayMap.put(key, arr);
+                longArrays.put(key, toLongArray((Integer[]) value));
             } else if (value instanceof Double[]) {
-                doubleArrayMap.put(key, (Double[]) value);
+                doubleArrays.put(key, (Double[]) value);
             } else if (value instanceof Float[]) {
-                Float[] floatArr = (Float[]) value;
-                Double[] arr = new Double[floatArr.length];
-                for (int j = 0; j < floatArr.length; j++) {
-                    arr[j] = floatArr[j].doubleValue();
-                }
-                doubleArrayMap.put(key, arr);
+                doubleArrays.put(key, toDoubleArray((Float[]) value));
             } else if (value instanceof String[]) {
-                stringArrayMap.put(key, (String[]) value);
+                stringArrays.put(key, (String[]) value);
             }
         }
-        return Row.of(longMap, doubleMap, stringMap, longArrayMap, doubleArrayMap, stringArrayMap);
+
+        private void addList(String key, List<?> values) {
+            if (values.isEmpty()) {
+                return;
+            }
+            // The first element determines the array type; other types keep the original fallbacks.
+            Object first = values.get(0);
+            if (isInteger(first)) {
+                longArrays.put(key, values.stream()
+                        .map(value -> {
+                            if (isInteger(value)) return toLong(value);
+                            return 0L;
+                        })
+                        .toArray(Long[]::new));
+            } else if (isFloatingPoint(first)) {
+                doubleArrays.put(key, values.stream()
+                        .map(value -> {
+                            if (isFloatingPoint(value)) return toDouble(value);
+                            return 0.0;
+                        })
+                        .toArray(Double[]::new));
+            } else if (first instanceof String) {
+                stringArrays.put(key, values.stream()
+                        .map(Object::toString)
+                        .toArray(String[]::new));
+            }
+        }
+
+        private Row toRow() {
+            return Row.of(longs, doubles, strings, longArrays, doubleArrays, stringArrays);
+        }
     }
 
     @FunctionalInterface

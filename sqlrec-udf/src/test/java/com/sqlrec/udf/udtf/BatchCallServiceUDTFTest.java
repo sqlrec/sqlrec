@@ -120,6 +120,44 @@ class BatchCallServiceUDTFTest {
         }
     }
 
+    @Test
+    void rowConversionRetainsTypedArraysAndUsesTheFirstListElement() throws Exception {
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> null);
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+        Long[] longs = {1000L};
+        Double[] doubles = {2.5d};
+        String[] strings = {"original"};
+
+        function.eval("http://service", 1,
+                "longArray", longs, "doubleArray", doubles, "stringArray", strings,
+                "longList", Arrays.asList(longs[0], 2.5d),
+                "doubleList", Arrays.asList(doubles[0], 3L),
+                "stringList", List.of("first", 2, true),
+                "nullFirst", Arrays.asList(null, 1L),
+                "unsupportedFirst", List.of(true, 1L));
+
+        Row row = output.get(0);
+        Map<?, ?> longArrays = (Map<?, ?>) row.getField(3);
+        Map<?, ?> doubleArrays = (Map<?, ?>) row.getField(4);
+        Map<?, ?> stringArrays = (Map<?, ?>) row.getField(5);
+        assertSame(longs, longArrays.get("longArray"));
+        assertSame(doubles, doubleArrays.get("doubleArray"));
+        assertSame(strings, stringArrays.get("stringArray"));
+        Long[] longList = (Long[]) longArrays.get("longList");
+        Double[] doubleList = (Double[]) doubleArrays.get("doubleList");
+        assertSame(longs[0], longList[0]);
+        assertSame(doubles[0], doubleList[0]);
+        assertArrayEquals(new Long[]{1000L, 0L}, longList);
+        assertArrayEquals(new Double[]{2.5d, 0.0d}, doubleList);
+        assertArrayEquals(new String[]{"first", "2", "true"}, (String[]) stringArrays.get("stringList"));
+        for (int i = 0; i < row.getArity(); i++) {
+            assertFalse(((Map<?, ?>) row.getField(i)).containsKey("nullFirst"));
+            assertFalse(((Map<?, ?>) row.getField(i)).containsKey("unsupportedFirst"));
+        }
+    }
+
     private static final class ListCollector implements Collector<Row> {
         private final List<Row> rows;
 

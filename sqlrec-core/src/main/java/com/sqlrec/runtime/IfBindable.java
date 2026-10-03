@@ -49,36 +49,47 @@ public class IfBindable extends BindableInterface {
 
         boolean thenReturns = thenClause.containsReturn();
         boolean elseReturns = elseClause != null && elseClause.containsReturn();
-        boolean containsReturn = thenReturns || elseReturns;
-        if (containsReturn && (!thenReturns || (elseClause != null && !elseReturns))) {
+        boolean thenIsCache = thenClause instanceof CacheTableBindable;
+        checkReturnBranches(thenReturns, elseReturns);
+        checkBranchCompatibility(thenReturns || elseReturns, thenIsCache);
+        checkTimein(thenIsCache, thenReturns);
+    }
+
+    private void checkReturnBranches(boolean thenReturns, boolean elseReturns) {
+        if ((thenReturns || elseReturns) && (!thenReturns || (elseClause != null && !elseReturns))) {
             throw new RuntimeException(
                     "IF with RETURN must either omit ELSE or return from both THEN and ELSE branches"
             );
         }
+    }
 
-        boolean thenIsCache = thenClause instanceof CacheTableBindable;
-        if (elseClause != null) {
-            if (containsReturn) {
-                checkReturnFieldsCompatible();
-            } else {
-                boolean elseIsCache = elseClause instanceof CacheTableBindable;
-                if (thenIsCache != elseIsCache) {
-                    throw new RuntimeException(
-                            "thenClause and elseClause must be both cache statements or both non-cache statements");
-                }
-                if (thenIsCache) {
-                    if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
-                        throw new RuntimeException("thenClause and elseClause must have the same table name");
-                    }
-                    DataTypeUtils.checkTableSchemaSame(
-                            ((CacheTableBindable) thenClause).getTableDataFields(),
-                            ((CacheTableBindable) elseClause).getTableDataFields()
-                    );
-                } else {
-                    checkReturnFieldsCompatible();
-                }
-            }
-        } else if (elseClause == null && timein) {
+    private void checkBranchCompatibility(boolean containsReturn, boolean thenIsCache) {
+        if (elseClause == null) {
+            return;
+        }
+        if (containsReturn) {
+            checkReturnFieldsCompatible();
+            return;
+        }
+        boolean elseIsCache = elseClause instanceof CacheTableBindable;
+        if (thenIsCache != elseIsCache) {
+            throw new RuntimeException(
+                    "thenClause and elseClause must be both cache statements or both non-cache statements");
+        }
+        if (!thenIsCache) {
+            checkReturnFieldsCompatible();
+            return;
+        }
+        if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
+            throw new RuntimeException("thenClause and elseClause must have the same table name");
+        }
+        DataTypeUtils.checkTableSchemaSame(
+                ((CacheTableBindable) thenClause).getTableDataFields(),
+                ((CacheTableBindable) elseClause).getTableDataFields());
+    }
+
+    private void checkTimein(boolean thenIsCache, boolean thenReturns) {
+        if (elseClause == null && timein) {
             throw new RuntimeException("must contain else clause when in timein mode");
         }
 

@@ -108,19 +108,24 @@ public final class JdbcMetadataExecutor {
                     if (!tableFilter.test(table.getTableName())) {
                         continue;
                     }
-                    List<FieldSchema> columns = HiveTableUtils.getMetadataFields(table);
-                    List<String> primaryKeys = loadPrimaryKeys(table).stream().map(PrimaryKey::column).toList();
-                    for (int i = 0; i < columns.size(); i++) {
-                        FieldSchema column = columns.get(i);
-                        if (!columnFilter.test(column.getName())) {
-                            continue;
-                        }
-                        result.add(columnRow(database, table, column, i, primaryKeys));
-                    }
+                    result.addAll(columnRows(database, table, columnFilter));
                 }
             }
         }
         return rows(COLUMN_RESULT_COLUMNS, COLUMN_TYPES, result);
+    }
+
+    private static List<Object[]> columnRows(String database, Table table, Predicate<String> filter) throws Exception {
+        List<FieldSchema> columns = HiveTableUtils.getMetadataFields(table);
+        List<String> primaryKeys = loadPrimaryKeys(table).stream().map(PrimaryKey::column).toList();
+        List<Object[]> result = new ArrayList<>();
+        for (int i = 0; i < columns.size(); i++) {
+            FieldSchema column = columns.get(i);
+            if (filter.test(column.getName())) {
+                result.add(columnRow(database, table, column, i, primaryKeys));
+            }
+        }
+        return result;
     }
 
     private static Object[] columnRow(String database, Table table, FieldSchema column,
@@ -153,33 +158,43 @@ public final class JdbcMetadataExecutor {
         List<Object[]> result = new ArrayList<>();
         if (acceptsCatalog(requestedCatalog)) {
             for (String database : databases(schemaPattern)) {
-                Map<String, Function> functions = new LinkedHashMap<>();
-                for (Function function : metadata.getFunctions(database)) {
-                    functions.put(function.getFunctionName(), function);
-                }
-                for (Function function : functions.values()) {
-                    if (functionFilter.test(function.getFunctionName())) {
-                        result.add(functionRow(database, function.getFunctionName(), function.getClassName(),
-                                DatabaseMetaData.functionResultUnknown));
-                    }
-                }
-                for (var entry : FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.entrySet()) {
-                    if (!functions.containsKey(entry.getKey()) && functionFilter.test(entry.getKey())) {
-                        result.add(functionRow(database, entry.getKey(), entry.getValue(),
-                                DatabaseMetaData.functionReturnsTable));
-                    }
-                }
-                // SQLRec's procedural SQL functions are not JDBC scalar functions.
-                for (var entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
-                    if (!functions.containsKey(entry.getKey()) && functionFilter.test(entry.getKey())) {
-                        result.add(functionRow(database, entry.getKey(), entry.getValue(),
-                                DatabaseMetaData.functionNoTable));
-                    }
-                }
+                result.addAll(functionRows(database, functionFilter));
             }
         }
         return rows(FUNCTION_COLUMNS,
                 Map.of("FUNCTION_TYPE", SqlTypeName.SMALLINT), result);
+    }
+
+    private List<Object[]> functionRows(String database, Predicate<String> filter) throws Exception {
+        Map<String, Function> functions = new LinkedHashMap<>();
+        for (Function function : metadata.getFunctions(database)) {
+            functions.put(function.getFunctionName(), function);
+        }
+        List<Object[]> result = new ArrayList<>();
+        for (Function function : functions.values()) {
+            if (filter.test(function.getFunctionName())) {
+                result.add(functionRow(database, function.getFunctionName(), function.getClassName(),
+                        DatabaseMetaData.functionResultUnknown));
+            }
+        }
+        result.addAll(builtinFunctionRows(database, filter, functions,
+                FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS, DatabaseMetaData.functionReturnsTable));
+        // SQLRec's procedural SQL functions are not JDBC scalar functions.
+        result.addAll(builtinFunctionRows(database, filter, functions,
+                FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS, DatabaseMetaData.functionNoTable));
+        return result;
+    }
+
+    private static List<Object[]> builtinFunctionRows(
+            String database, Predicate<String> filter, Map<String, Function> persistentFunctions,
+            Map<String, String> builtins, int type) {
+        List<Object[]> result = new ArrayList<>();
+        for (var entry : builtins.entrySet()) {
+            if (!persistentFunctions.containsKey(entry.getKey()) && filter.test(entry.getKey())) {
+                result.add(functionRow(database, entry.getKey(), entry.getValue(), type));
+            }
+        }
+        return result;
     }
 
     private static Object[] functionRow(String database, String name, String className, int type) {

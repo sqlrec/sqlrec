@@ -88,8 +88,11 @@ public class SqlExecutor {
     }
 
     public synchronized SqlProcessResult executeSqlAsync(String sql) throws Exception {
-        SqlNode node = CompileManager.parseSql(sql);
+        return executeSqlAsync(CompileManager.parseSql(sql), sql);
+    }
 
+    /** Executes a parsed statement; null means it requires the remote route. */
+    public synchronized SqlProcessResult executeSqlAsync(SqlNode node, String sql) throws Exception {
         if (SqlRecConfigs.isFileSystemMetadata() && node instanceof SqlCreateSqlFunction) {
             throw new UnsupportedOperationException(
                     "SQL function DDL is not supported in local SQL file metadata mode; "
@@ -122,22 +125,6 @@ public class SqlExecutor {
         if (node instanceof SqlFlush) {
             CacheManager.invalidateAll();
             return message("all caches flushed");
-        }
-
-        if (!SqlRecConfigs.isFileSystemMetadata()) {
-            if (node instanceof org.apache.flink.sql.parser.dql.SqlShowFunctions) {
-                return MetadataAccessFactory.getInstance().executeMetadataQuery(node, defaultSchema);
-            }
-            java.util.List<String> object = null;
-            if (node instanceof org.apache.flink.sql.parser.dql.SqlShowCreateTable show) {
-                object = show.getTableName().names;
-            } else if (node instanceof org.apache.flink.sql.parser.dql.SqlRichDescribeTable describe) {
-                object = java.util.Arrays.asList(describe.fullTableName());
-            }
-            // Request-local cache tables remain owned by SQLRec; durable definitions use the full Catalog schema.
-            if (object != null && !(object.size() == 1 && schema.getTable(object.get(0), false) != null)) {
-                return MetadataAccessFactory.getInstance().executeMetadataQuery(node, defaultSchema);
-            }
         }
 
         result = new ResourceQueryExecutor(MetadataAccessFactory.getInstance(), schema)

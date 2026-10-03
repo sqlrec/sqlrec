@@ -77,6 +77,25 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
         Expression childExp =
                 builder.append(
                         "child", result.block);
+        final ParameterExpression collectionParameter = declareCollection(builder);
+        final Expression countParameter =
+                builder.append(
+                        "count",
+                        Expressions.call(collectionParameter, "size"),
+                        false);
+        RowProjections projections = projectRows(builder, result, childExp);
+        appendModification(builder, collectionParameter, projections);
+        appendResult(builder, collectionParameter, countParameter);
+        final PhysType physType =
+                PhysTypeImpl.of(
+                        implementor.getTypeFactory(),
+                        getRowType(),
+                        pref == Prefer.ARRAY
+                                ? JavaRowFormat.ARRAY : JavaRowFormat.SCALAR);
+        return implementor.result(physType, builder.toBlock());
+    }
+
+    private ParameterExpression declareCollection(BlockBuilder builder) {
         final ParameterExpression collectionParameter =
                 Expressions.parameter(Collection.class,
                         builder.newName("collection"));
@@ -96,11 +115,10 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                                 expression,
                                 BuiltInMethod.MODIFIABLE_TABLE_GET_MODIFIABLE_COLLECTION
                                         .method)));
-        final Expression countParameter =
-                builder.append(
-                        "count",
-                        Expressions.call(collectionParameter, "size"),
-                        false);
+        return collectionParameter;
+    }
+
+    private RowProjections projectRows(BlockBuilder builder, Result result, Expression childExp) {
         Expression convertedChildExp;
         Expression originalChildExp = null;
         if (!getInput().getRowType().equals(getRowType())) {
@@ -109,36 +127,10 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
             final JavaRowFormat format = EnumerableTableScan.deduceFormat(table);
             PhysType physType =
                     PhysTypeImpl.of(typeFactory, table.getRowType(), format);
-            List<Expression> expressionList = new ArrayList<>();
-            List<Expression> originalExpressionList = new ArrayList<>();
             final PhysType childPhysType = result.physType;
             final ParameterExpression o_ =
                     Expressions.parameter(childPhysType.getJavaRowType(), "o");
-            final int fieldCount =
-                    childPhysType.getRowType().getFieldCount();
-
-            // UPDATE input contains the original table row followed by SET values.
-            if (getOperation() == Operation.UPDATE) {
-                List<String> updateColumns = getUpdateColumnList();
-                if (updateColumns == null) {
-                    throw new IllegalStateException("UPDATE columns are missing");
-                }
-                int updateValueStart = fieldCount - updateColumns.size();
-                for (int i = 0; i < updateValueStart; i++) {
-                    String fieldName = getInput().getRowType().getFieldList().get(i).getName();
-                    int updateIndex = updateColumns.indexOf(fieldName);
-                    int relIndex = updateIndex < 0 ? i : updateValueStart + updateIndex;
-                    expressionList.add(
-                            childPhysType.fieldReference(o_, relIndex, physType.getJavaFieldType(i)));
-                    originalExpressionList.add(
-                            childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
-                }
-            } else {
-                for (int i = 0; i < fieldCount; i++) {
-                    expressionList.add(
-                            childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
-                }
-            }
+            FieldProjections fields = projectFields(childPhysType, physType, o_);
 
             // Materialize UPDATE input once so the old and new projections use
             // exactly the same selected rows, even for a stateful input query.
@@ -150,7 +142,7 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                 projectionSource = Expressions.call(Linq4j.class, "asEnumerable", inputRows);
                 originalChildExp = builder.append("originalChild",
                         Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
-                                Expressions.lambda(physType.record(originalExpressionList), o_)));
+                                Expressions.lambda(physType.record(fields.original()), o_)));
             }
             convertedChildExp =
                     builder.append(
@@ -159,10 +151,48 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                                     projectionSource,
                                     BuiltInMethod.SELECT.method,
                                     Expressions.lambda(
-                                            physType.record(expressionList), o_)));
+                                            physType.record(fields.updated()), o_)));
         } else {
             convertedChildExp = childExp;
         }
+        return new RowProjections(convertedChildExp, originalChildExp);
+    }
+
+    private FieldProjections projectFields(PhysType childPhysType, PhysType physType, ParameterExpression o_) {
+        List<Expression> expressionList = new ArrayList<>();
+        List<Expression> originalExpressionList = new ArrayList<>();
+        final int fieldCount =
+                childPhysType.getRowType().getFieldCount();
+
+        // UPDATE input contains the original table row followed by SET values.
+        if (getOperation() == Operation.UPDATE) {
+            List<String> updateColumns = getUpdateColumnList();
+            if (updateColumns == null) {
+                throw new IllegalStateException("UPDATE columns are missing");
+            }
+            int updateValueStart = fieldCount - updateColumns.size();
+            for (int i = 0; i < updateValueStart; i++) {
+                String fieldName = getInput().getRowType().getFieldList().get(i).getName();
+                int updateIndex = updateColumns.indexOf(fieldName);
+                int relIndex = updateIndex < 0 ? i : updateValueStart + updateIndex;
+                expressionList.add(
+                        childPhysType.fieldReference(o_, relIndex, physType.getJavaFieldType(i)));
+                originalExpressionList.add(
+                        childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
+            }
+        } else {
+            for (int i = 0; i < fieldCount; i++) {
+                expressionList.add(
+                        childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
+            }
+        }
+        return new FieldProjections(expressionList, originalExpressionList);
+    }
+
+    private void appendModification(
+            BlockBuilder builder, ParameterExpression collectionParameter, RowProjections projections) {
+        Expression convertedChildExp = projections.updated();
+        Expression originalChildExp = projections.original();
         switch (getOperation()) {
             case UPDATE:
                 if (originalChildExp == null) {
@@ -198,6 +228,10 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
             default:
                 throw new AssertionError(getOperation());
         }
+    }
+
+    private static void appendResult(
+            BlockBuilder builder, ParameterExpression collectionParameter, Expression countParameter) {
         final Expression updatedCountParameter =
                 builder.append(
                         "updatedCount",
@@ -217,13 +251,12 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
                                                 Expressions.subtract(
                                                         countParameter, updatedCountParameter)),
                                         long.class))));
-        final PhysType physType =
-                PhysTypeImpl.of(
-                        implementor.getTypeFactory(),
-                        getRowType(),
-                        pref == Prefer.ARRAY
-                                ? JavaRowFormat.ARRAY : JavaRowFormat.SCALAR);
-        return implementor.result(physType, builder.toBlock());
+    }
+
+    private record RowProjections(Expression updated, Expression original) {
+    }
+
+    private record FieldProjections(List<Expression> updated, List<Expression> original) {
     }
 
     @Override

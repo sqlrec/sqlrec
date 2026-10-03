@@ -91,6 +91,8 @@ The image loads definitions through `SQL_SCHEMA_DIR=/app/sql`. See [Writing a Re
 
 Local file mode loads SQL definitions at startup. It does not accept DDL through the CLI or `/sql/v1`; restart the container after changing files. This example defines a hot-item table, a recommendation function, and an API.
 
+Use `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, and `SHOW FUNCTIONS` to inspect loaded definitions without connecting to HMS or Gateway. See [Metadata Queries](../reference/sql.md#metadata-queries) for supported behavior.
+
 ### Prepare the SQL Files
 
 Create the directories on the host:

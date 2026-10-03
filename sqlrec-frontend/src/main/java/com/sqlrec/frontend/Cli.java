@@ -139,7 +139,20 @@ public class Cli implements Callable<Integer> {
         }
 
         DefaultHistory history = new DefaultHistory();
-        this.reader = LineReaderBuilder.builder()
+        this.reader = createLineReader(terminal, history);
+
+        try {
+            return readStatements(sqlExecutor);
+        } finally {
+            try {
+                history.save();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private LineReader createLineReader(Terminal terminal, DefaultHistory history) {
+        return LineReaderBuilder.builder()
                 .terminal(terminal)
                 .variable(LineReader.HISTORY_FILE, HISTORY_FILE)
                 .variable(LineReader.SECONDARY_PROMPT_PATTERN, PROMPT2)
@@ -147,30 +160,25 @@ public class Cli implements Callable<Integer> {
                 .highlighter(new SqlHighlighter())
                 .history(history)
                 .build();
+    }
 
-        try {
-            while (true) {
-                String line;
-                try {
-                    line = reader.readLine(PROMPT1);
-                } catch (UserInterruptException e) {
-                    // Ctrl+C: ignore and show a fresh prompt
-                    continue;
-                } catch (EndOfFileException e) {
-                    // Ctrl+D: exit
-                    System.out.println();
-                    return 0;
-                }
-                if (line == null || line.trim().isEmpty()) {
-                    continue;
-                }
-                executeStatements(sqlExecutor, line);
-            }
-        } finally {
+    private int readStatements(SqlExecutor sqlExecutor) {
+        while (true) {
+            String line;
             try {
-                history.save();
-            } catch (Exception ignored) {
+                line = reader.readLine(PROMPT1);
+            } catch (UserInterruptException e) {
+                // Ctrl+C: ignore and show a fresh prompt
+                continue;
+            } catch (EndOfFileException e) {
+                // Ctrl+D: exit
+                System.out.println();
+                return 0;
             }
+            if (line == null || line.trim().isEmpty()) {
+                continue;
+            }
+            executeStatements(sqlExecutor, line);
         }
     }
 }

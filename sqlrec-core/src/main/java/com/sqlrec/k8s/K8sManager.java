@@ -218,40 +218,9 @@ public class K8sManager {
                     .withName(jobName)
                     .get();
 
-            if (job == null) {
-                String detail = "Job not found: " + resolvedNamespace + "/" + jobName;
-                log.error(detail);
-                return new JobStatus("failed", detail);
-            }
-
-            if (job.getStatus() != null) {
-                if (job.getStatus().getConditions() != null) {
-                    for (JobCondition condition : job.getStatus().getConditions()) {
-                        if ("Failed".equals(condition.getType()) && "True".equals(condition.getStatus())) {
-                            String detail = condition.getMessage();
-                            log.error("Job failed: {}/{}, reason: {}, message: {}",
-                                    resolvedNamespace, jobName, condition.getReason(), detail);
-                            return new JobStatus("failed", "Job failed: " + resolvedNamespace + "/" + jobName
-                                    + (detail == null || detail.isBlank() ? "" : " (" + detail + ")"));
-                        }
-                    }
-                }
-                Integer succeeded = job.getStatus().getSucceeded();
-                Integer completions = job.getSpec() != null ? job.getSpec().getCompletions() : null;
-                // Kubernetes defaults completions to one when the field is omitted.
-                if (succeeded != null && succeeded >= (completions != null ? completions : 1)) {
-                    log.info("Job completed successfully: {}/{}", resolvedNamespace, jobName);
-                    return new JobStatus("succeeded", null);
-                }
-
-                // Ready Pods have already started all their containers. Avoid listing Pods
-                // while every active Pod is ready; a new or replacement Pod makes the
-                // counts diverge, so image-pull checks resume automatically.
-                Integer active = job.getStatus().getActive();
-                Integer ready = job.getStatus().getReady();
-                if (active != null && active > 0 && active.equals(ready)) {
-                    return new JobStatus("running", null);
-                }
+            JobStatus knownStatus = knownJobStatus(job, jobName, resolvedNamespace);
+            if (knownStatus != null) {
+                return knownStatus;
             }
 
             String imagePullFailure = findImagePullFailure(job, resolvedNamespace);
@@ -265,6 +234,46 @@ public class K8sManager {
             }
             return new JobStatus("running", null);
         }
+    }
+
+    /** Returns a status determined by the Job itself, or null when its Pods need checking. */
+    private static JobStatus knownJobStatus(Job job, String jobName, String resolvedNamespace) {
+        if (job == null) {
+            String detail = "Job not found: " + resolvedNamespace + "/" + jobName;
+            log.error(detail);
+            return new JobStatus("failed", detail);
+        }
+
+        if (job.getStatus() != null) {
+            if (job.getStatus().getConditions() != null) {
+                for (JobCondition condition : job.getStatus().getConditions()) {
+                    if ("Failed".equals(condition.getType()) && "True".equals(condition.getStatus())) {
+                        String detail = condition.getMessage();
+                        log.error("Job failed: {}/{}, reason: {}, message: {}",
+                                resolvedNamespace, jobName, condition.getReason(), detail);
+                        return new JobStatus("failed", "Job failed: " + resolvedNamespace + "/" + jobName
+                                + (detail == null || detail.isBlank() ? "" : " (" + detail + ")"));
+                    }
+                }
+            }
+            Integer succeeded = job.getStatus().getSucceeded();
+            Integer completions = job.getSpec() != null ? job.getSpec().getCompletions() : null;
+            // Kubernetes defaults completions to one when the field is omitted.
+            if (succeeded != null && succeeded >= (completions != null ? completions : 1)) {
+                log.info("Job completed successfully: {}/{}", resolvedNamespace, jobName);
+                return new JobStatus("succeeded", null);
+            }
+
+            // Ready Pods have already started all their containers. Avoid listing Pods
+            // while every active Pod is ready; a new or replacement Pod makes the
+            // counts diverge, so image-pull checks resume automatically.
+            Integer active = job.getStatus().getActive();
+            Integer ready = job.getStatus().getReady();
+            if (active != null && active > 0 && active.equals(ready)) {
+                return new JobStatus("running", null);
+            }
+        }
+        return null;
     }
 
     private static String findImagePullFailure(Job job, String namespace) {
@@ -326,51 +335,7 @@ public class K8sManager {
                     .withName(deploymentName)
                     .get();
 
-            if (deployment == null) {
-                log.warn("Deployment not found: {}/{}", namespace != null ? namespace : "default", deploymentName);
-                return false;
-            }
-
-            if (deployment.getStatus() != null) {
-                Integer replicas = deployment.getSpec() != null ? deployment.getSpec().getReplicas() : 1;
-                if (replicas == null) {
-                    replicas = 1;
-                }
-
-                Integer readyReplicas = deployment.getStatus().getReadyReplicas();
-                Integer updatedReplicas = deployment.getStatus().getUpdatedReplicas();
-                Integer availableReplicas = deployment.getStatus().getAvailableReplicas();
-                Integer unavailableReplicas = deployment.getStatus().getUnavailableReplicas();
-
-                if (readyReplicas == null) {
-                    readyReplicas = 0;
-                }
-                if (updatedReplicas == null) {
-                    updatedReplicas = 0;
-                }
-                if (availableReplicas == null) {
-                    availableReplicas = 0;
-                }
-                if (unavailableReplicas == null) {
-                    unavailableReplicas = 0;
-                }
-
-                boolean allReady = readyReplicas.equals(replicas);
-                boolean allUpdated = updatedReplicas.equals(replicas);
-                boolean noneUnavailable = unavailableReplicas == 0;
-
-                if (allReady && allUpdated && noneUnavailable) {
-                    log.info("Deployment {} is fully ready: replicas={}, ready={}, updated={}, available={}, unavailable={}",
-                            deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
-                    return true;
-                } else {
-                    log.info("Deployment {} is not ready yet: replicas={}, ready={}, updated={}, available={}, unavailable={}",
-                            deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
-                    return false;
-                }
-            }
-
-            return false;
+            return isDeploymentReady(deployment, deploymentName, namespace);
         } catch (Exception e) {
             log.error("Failed to check deployment status: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
@@ -378,6 +343,41 @@ public class K8sManager {
             }
             return false;
         }
+    }
+
+    private static boolean isDeploymentReady(Deployment deployment, String deploymentName, String namespace) {
+        if (deployment == null) {
+            log.warn("Deployment not found: {}/{}", namespace != null ? namespace : "default", deploymentName);
+            return false;
+        }
+
+        if (deployment.getStatus() != null) {
+            int replicas = valueOrDefault(deployment.getSpec() != null ? deployment.getSpec().getReplicas() : 1, 1);
+            int readyReplicas = valueOrDefault(deployment.getStatus().getReadyReplicas(), 0);
+            int updatedReplicas = valueOrDefault(deployment.getStatus().getUpdatedReplicas(), 0);
+            int availableReplicas = valueOrDefault(deployment.getStatus().getAvailableReplicas(), 0);
+            int unavailableReplicas = valueOrDefault(deployment.getStatus().getUnavailableReplicas(), 0);
+
+            boolean allReady = readyReplicas == replicas;
+            boolean allUpdated = updatedReplicas == replicas;
+            boolean noneUnavailable = unavailableReplicas == 0;
+
+            if (allReady && allUpdated && noneUnavailable) {
+                log.info("Deployment {} is fully ready: replicas={}, ready={}, updated={}, available={}, unavailable={}",
+                        deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
+                return true;
+            } else {
+                log.info("Deployment {} is not ready yet: replicas={}, ready={}, updated={}, available={}, unavailable={}",
+                        deploymentName, replicas, readyReplicas, updatedReplicas, availableReplicas, unavailableReplicas);
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static int valueOrDefault(Integer value, int defaultValue) {
+        return value == null ? defaultValue : value;
     }
 
     public static String checkJobsStatusFromYaml(String k8sYaml) {

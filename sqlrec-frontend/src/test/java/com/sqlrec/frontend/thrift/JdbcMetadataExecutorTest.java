@@ -4,7 +4,9 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.remote.HmsClient;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.frontend.utils.ThriftUtils;
+import com.sqlrec.udf.config.FunctionConfigs;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -12,7 +14,9 @@ import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hive.service.rpc.thrift.TFetchOrientation;
 import org.junit.jupiter.api.Test;
 
+import java.sql.DatabaseMetaData;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -144,6 +148,72 @@ class JdbcMetadataExecutorTest {
         assertThrows(UnsupportedOperationException.class, () -> operation.fetch(TFetchOrientation.FETCH_PRIOR, 1));
         verify(metadata, times(1)).getTables("default");
         assertEquals((short) 1, executor.primaryKeys(null, "default", "items").getEnumerable().toList().get(0)[4]);
+    }
+
+    @Test
+    void columnFilterPreservesOriginalOrdinalAndComputedColumnMetadata() throws Exception {
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        when(metadata.getDatabases()).thenReturn(List.of("default"));
+        Table table = new Table();
+        table.setTableName("items");
+        table.putToParameters("flink.connector", "redis");
+        table.putToParameters("flink.schema.0.name", "id");
+        table.putToParameters("flink.schema.0.data-type", "BIGINT");
+        table.putToParameters("flink.schema.1.name", "computed");
+        table.putToParameters("flink.schema.1.data-type", "BIGINT");
+        table.putToParameters("flink.schema.1.expr", "id + 1");
+        table.putToParameters("flink.schema.1.comment", "computed value");
+        when(metadata.getTables("default")).thenReturn(List.of(table));
+
+        List<Object[]> rows = new JdbcMetadataExecutor(metadata).columns(null, "default", "items", "computed")
+                .getEnumerable().toList();
+
+        assertEquals(1, rows.size());
+        assertEquals("computed", rows.get(0)[3]);
+        assertEquals(2, rows.get(0)[16]);
+        assertEquals("computed value", rows.get(0)[11]);
+        assertEquals("YES", rows.get(0)[23]);
+        verify(metadata, times(1)).getTables("default");
+    }
+
+    @Test
+    void persistentFunctionsOverrideBuiltinsWithoutChangingTheirPosition() throws Exception {
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        when(metadata.getDatabases()).thenReturn(List.of("default"));
+        when(metadata.getFunctions("default")).thenReturn(List.of(
+                function("add_col", "FirstClass"), function("custom", "CustomClass"),
+                function("add_col", "ReplacementClass"), function("ip", "IpOverride")));
+        JdbcMetadataExecutor executor = new JdbcMetadataExecutor(metadata);
+
+        SqlProcessResult result = executor.functions(null, null, null);
+        List<Object[]> rows = result.getEnumerable().toList();
+        List<String> names = rows.stream().map(row -> (String) row[2]).toList();
+        List<String> expectedNames = new ArrayList<>(List.of("add_col", "custom", "ip"));
+        FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.keySet().stream()
+                .filter(name -> !name.equals("add_col")).forEach(expectedNames::add);
+        FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.keySet().stream()
+                .filter(name -> !name.equals("ip")).forEach(expectedNames::add);
+        assertEquals(expectedNames, names);
+        assertEquals("ReplacementClass", rows.get(0)[3]);
+        assertEquals("CustomClass", rows.get(1)[3]);
+        assertEquals("IpOverride", rows.get(2)[3]);
+        assertEquals((short) DatabaseMetaData.functionResultUnknown, rows.get(0)[4]);
+        assertEquals((short) DatabaseMetaData.functionReturnsTable, rows.get(3)[4]);
+        assertEquals((short) DatabaseMetaData.functionNoTable, rows.get(rows.size() - 1)[4]);
+        assertEquals(SqlTypeName.SMALLINT, result.getFields().get(4).getType().getSqlTypeName());
+        assertEquals("default.add_col", rows.get(0)[5]);
+        verify(metadata, times(1)).getFunctions("default");
+
+        List<Object[]> filtered = executor.functions(null, "DEF%", "ADD\\_COL").getEnumerable().toList();
+        assertEquals(1, filtered.size());
+        assertEquals("ReplacementClass", filtered.get(0)[3]);
+    }
+
+    private static Function function(String name, String className) {
+        Function function = new Function();
+        function.setFunctionName(name);
+        function.setClassName(className);
+        return function;
     }
 
     @Test

@@ -29,6 +29,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class IfBindableSchemaTest {
 
+    @Test
+    public void testReturnMismatchIsReportedBeforeCacheAndTimeinChecks() {
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> new IfBindable(falseCondition(),
+                        new ReturnBindable(returningRows("returned")),
+                        new CacheTableBindable("t", returningRows("cached")), true));
+
+        assertEquals("IF with RETURN must either omit ELSE or return from both THEN and ELSE branches",
+                error.getMessage());
+    }
+
+    @Test
+    public void testMissingElseIsReportedBeforeTimeinBranchType() {
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> new IfBindable(falseCondition(), returningRows("value"), null, true));
+
+        assertEquals("must contain else clause when in timein mode", error.getMessage());
+    }
+
     private abstract static class TestBindable extends BindableInterface {
         @Override
         public List<RelDataTypeField> getReturnDataFields() {

@@ -4,16 +4,22 @@ import com.sqlrec.common.schema.FieldSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
+import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -68,5 +74,65 @@ class FlinkSchemaUtilsTest {
                 FlinkSchemaUtils.toFlinkValue("direct", DataTypes.STRING().getLogicalType()));
         assertThrows(IllegalArgumentException.class,
                 () -> FlinkSchemaUtils.toRowData(new Object[]{"too short"}, schema.getColumnDataTypes()));
+    }
+
+    @Test
+    void readsSupportedArrayElementsWithoutDroppingNulls() {
+        DataType[] elementTypes = {
+                DataTypes.INT(), DataTypes.BIGINT(), DataTypes.FLOAT(), DataTypes.DOUBLE(),
+                DataTypes.CHAR(4), DataTypes.STRING()
+        };
+        Object[] internalValues = {
+                7, 7L, 7.5f, 7.5d, StringData.fromString("char"), StringData.fromString("text")
+        };
+        Object[] expectedValues = {7, 7L, 7.5f, 7.5d, "char", "text"};
+        for (int i = 0; i < elementTypes.length; i++) {
+            GenericRowData row = GenericRowData.of(
+                    new GenericArrayData(new Object[]{internalValues[i], null}));
+            assertEquals(Arrays.asList(expectedValues[i], null), FlinkSchemaUtils.typeConversion(
+                    DataTypes.ARRAY(elementTypes[i]).getLogicalType(), row, 0));
+        }
+    }
+
+    @Test
+    void unsupportedArrayTypesFailOnlyWhenReadingANonNullElement() {
+        LogicalType type = DataTypes.ARRAY(DataTypes.BOOLEAN()).getLogicalType();
+        assertEquals(Collections.emptyList(), FlinkSchemaUtils.typeConversion(
+                type, GenericRowData.of(new GenericArrayData(new Object[0])), 0));
+        assertEquals(Arrays.asList(null, null), FlinkSchemaUtils.typeConversion(
+                type, GenericRowData.of(new GenericArrayData(new Object[]{null, null})), 0));
+        UnsupportedOperationException error = assertThrows(UnsupportedOperationException.class,
+                () -> FlinkSchemaUtils.typeConversion(type,
+                        GenericRowData.of(new GenericArrayData(new Object[]{null, true})), 0));
+        assertEquals("Unsupported array element type: BOOLEAN", error.getMessage());
+        assertNull(FlinkSchemaUtils.toFlinkValue(null, null));
+        assertNull(FlinkSchemaUtils.typeConversion(null, new GenericRowData(1), 0));
+    }
+
+    @Test
+    void recursivelyConvertsCollectionsInMapAndSchemaOrder() {
+        DataType childType = DataTypes.ROW(
+                DataTypes.FIELD("name", DataTypes.STRING()),
+                DataTypes.FIELD("missing", DataTypes.INT()));
+        Map<String, Object> child = new LinkedHashMap<>();
+        child.put("extra", 99);
+        child.put("name", "child");
+        Map<String, Object> children = new LinkedHashMap<>();
+        children.put("second", Arrays.asList(child, null));
+        children.put("first", Collections.emptyList());
+        LogicalType type = DataTypes.MAP(DataTypes.STRING(), DataTypes.ARRAY(childType)).getLogicalType();
+
+        MapData converted = (MapData) FlinkSchemaUtils.toFlinkValue(children, type);
+
+        assertEquals(StringData.fromString("second"), converted.keyArray().getString(0));
+        assertEquals(StringData.fromString("first"), converted.keyArray().getString(1));
+        RowData row = converted.valueArray().getArray(0).getRow(0, 2);
+        assertEquals(StringData.fromString("child"), row.getString(0));
+        assertTrue(row.isNullAt(1));
+        assertTrue(converted.valueArray().getArray(0).isNullAt(1));
+        assertEquals(0, converted.valueArray().getArray(1).size());
+        assertEquals(Arrays.asList("second", "first"), new ArrayList<>(children.keySet()));
+        assertEquals(Arrays.asList("extra", "name"), new ArrayList<>(child.keySet()));
+        assertEquals("child", child.get("name"));
     }
 }

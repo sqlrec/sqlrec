@@ -6,6 +6,12 @@ import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.PodListBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatusBuilder;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.client.dsl.AppsAPIGroupDSL;
+import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.JobList;
@@ -27,11 +33,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.InputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -143,6 +151,67 @@ public class K8sManagerUnitTest {
     }
 
     @Test
+    public void testDeploymentReadinessPreservesDefaultCountsAndCriteria() {
+        var resource = deploymentResource();
+        var deployment = new DeploymentBuilder().withNewMetadata().withName("serve").endMetadata()
+                .withNewSpec().withReplicas(1).endSpec().withNewStatus()
+                .withReadyReplicas(1).withUpdatedReplicas(1).endStatus().build();
+        when(resource.get()).thenReturn(deployment);
+        String yaml = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n";
+
+        // Available replicas are diagnostic only.
+        assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getSpec().setReplicas(null);
+        // The original ternary unboxes a null replica count and falls back to not ready.
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.setSpec(null);
+        assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.setSpec(new DeploymentBuilder().withNewSpec().withReplicas(1).endSpec().build().getSpec());
+        deployment.getStatus().setUnavailableReplicas(1);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setUnavailableReplicas(null);
+        deployment.getStatus().setUpdatedReplicas(0);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setUpdatedReplicas(1);
+        deployment.getStatus().setReadyReplicas(null);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+
+        deployment.getSpec().setReplicas(0);
+        deployment.setStatus(new DeploymentStatusBuilder().build());
+        assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.setStatus(null);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        when(resource.get()).thenReturn(null);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    public void testDeploymentTransportFailureResetsClientAndReturnsNotReady() {
+        when(deploymentResource().get())
+                .thenThrow(new RuntimeException(new IOException("connection reset")));
+
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(
+                "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
+
+        verify(mockClient).close();
+        assertNull(K8sManager.kubernetesClient);
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    public void testJobTransportFailureResetsClientAndKeepsRunningFallback() {
+        when(jobResource().get())
+                .thenThrow(new RuntimeException(new IOException("connection reset")));
+
+        assertEquals("running", K8sManager.checkJobsStatusFromYaml(
+                "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n"));
+
+        verify(mockClient).close();
+        assertNull(K8sManager.kubernetesClient);
+    }
+
+    @Test
     public void testImagePullFailureIncludesContainerReasonAndMessage() {
         Pod pod = new PodBuilder().withNewStatus()
                 .addNewInitContainerStatus().withName("init")
@@ -154,6 +223,36 @@ public class K8sManagerUnitTest {
         assertEquals("container init is waiting: ImagePullBackOff (manifest not found)",
                 K8sManager.imagePullFailure(pod));
         assertNull(K8sManager.imagePullFailure(new PodBuilder().build()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private RollableScalableResource<Deployment> deploymentResource() {
+        AppsAPIGroupDSL apps = mock(AppsAPIGroupDSL.class);
+        MixedOperation<Deployment, DeploymentList, RollableScalableResource<Deployment>> deployments =
+                mock(MixedOperation.class);
+        NonNamespaceOperation<Deployment, DeploymentList, RollableScalableResource<Deployment>> namespaced =
+                mock(NonNamespaceOperation.class);
+        RollableScalableResource<Deployment> resource = mock(RollableScalableResource.class);
+        when(mockClient.apps()).thenReturn(apps);
+        when(apps.deployments()).thenReturn(deployments);
+        when(deployments.inNamespace("default")).thenReturn(namespaced);
+        when(namespaced.withName("serve")).thenReturn(resource);
+        return resource;
+    }
+
+    @SuppressWarnings("unchecked")
+    private ScalableResource<Job> jobResource() {
+        BatchAPIGroupDSL batch = mock(BatchAPIGroupDSL.class);
+        V1BatchAPIGroupDSL v1 = mock(V1BatchAPIGroupDSL.class);
+        MixedOperation<Job, JobList, ScalableResource<Job>> jobs = mock(MixedOperation.class);
+        NonNamespaceOperation<Job, JobList, ScalableResource<Job>> namespaced = mock(NonNamespaceOperation.class);
+        ScalableResource<Job> resource = mock(ScalableResource.class);
+        when(mockClient.batch()).thenReturn(batch);
+        when(batch.v1()).thenReturn(v1);
+        when(v1.jobs()).thenReturn(jobs);
+        when(jobs.inNamespace("default")).thenReturn(namespaced);
+        when(namespaced.withName("train")).thenReturn(resource);
+        return resource;
     }
 
     @Test
@@ -202,7 +301,7 @@ public class K8sManagerUnitTest {
         job.setStatus(new JobStatusBuilder().withFailed(1).build());
         assertEquals("running", K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
 
-        job.setStatus(new JobStatusBuilder().withFailed(1).addNewCondition()
+        job.setStatus(new JobStatusBuilder().withFailed(1).withSucceeded(1).addNewCondition()
                 .withType("Failed").withStatus("True").withMessage("BackoffLimitExceeded")
                 .endCondition().build());
         K8sManager.JobStatus failedJob = K8sManager.checkJobsStatusDetailFromYaml(yaml);

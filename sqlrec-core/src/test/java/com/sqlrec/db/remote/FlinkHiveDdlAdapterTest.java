@@ -25,11 +25,11 @@ class FlinkHiveDdlAdapterTest {
     @Test
     void resolvesOnlyUnqualifiedNamesAgainstTheSessionDatabase() {
         assertEquals(new ObjectPath("session_db", "t"),
-                FlinkHiveDdlAdapter.objectPath(new String[]{"t"}, "session_db"));
+                com.sqlrec.db.MetadataQueryUtils.objectPath(new String[]{"t"}, "session_db"));
         assertEquals(new ObjectPath("other", "t"),
-                FlinkHiveDdlAdapter.objectPath(new String[]{"other", "t"}, "session_db"));
+                com.sqlrec.db.MetadataQueryUtils.objectPath(new String[]{"other", "t"}, "session_db"));
         assertEquals(new ObjectPath("other", "t"),
-                FlinkHiveDdlAdapter.objectPath(new String[]{"hive", "other", "t"}, "session_db"));
+                com.sqlrec.db.MetadataQueryUtils.objectPath(new String[]{"hive", "other", "t"}, "session_db"));
     }
 
     @Test

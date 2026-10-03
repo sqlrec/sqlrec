@@ -180,38 +180,43 @@ public final class RuleDiversity {
         int[] selection = new int[limit];
 
         for (int position = 0; position < limit; position++) {
-            int bestCandidate = -1;
-            double bestScore = Double.MAX_VALUE;
             List<WindowInfo> activeWindows = windowsPerPosition.get(position);
-
-            for (int candidate = 0; candidate < itemCount; candidate++) {
-                if (assigned[candidate]) {
-                    continue;
-                }
-                if (bestCandidate == -1) {
-                    bestCandidate = candidate;
-                }
-
-                double violation = computeViolation(activeWindows, itemValues.get(candidate));
-
-                // Short-circuit: zero violation + iterating in order = best possible
-                if (violation == 0) {
-                    bestCandidate = candidate;
-                    break;
-                }
-
-                double score = violation * VIOLATION_PENALTY + (candidate + 1);
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestCandidate = candidate;
-                }
-            }
-
-            selection[position] = bestCandidate;
-            assigned[bestCandidate] = true;
-            updateWindowCounts(activeWindows, itemValues.get(bestCandidate));
+            int candidate = selectCandidate(assigned, itemValues, activeWindows);
+            selection[position] = candidate;
+            assigned[candidate] = true;
+            updateWindowCounts(activeWindows, itemValues.get(candidate));
         }
         return selection;
+    }
+
+    private static int selectCandidate(
+            boolean[] assigned,
+            List<Map<Integer, List<String>>> itemValues,
+            List<WindowInfo> activeWindows) {
+        int bestCandidate = -1;
+        double bestScore = Double.MAX_VALUE;
+        for (int candidate = 0; candidate < assigned.length; candidate++) {
+            if (assigned[candidate]) {
+                continue;
+            }
+            if (bestCandidate == -1) {
+                // Keep the first candidate even when scores are NaN or infinite.
+                bestCandidate = candidate;
+            }
+
+            double violationScore = computeViolation(activeWindows, itemValues.get(candidate));
+            // The first zero-violation candidate is the best possible choice.
+            if (violationScore == 0) {
+                return candidate;
+            }
+
+            double rankingScore = violationScore * VIOLATION_PENALTY + (candidate + 1);
+            if (rankingScore < bestScore) {
+                bestScore = rankingScore;
+                bestCandidate = candidate;
+            }
+        }
+        return bestCandidate;
     }
 
     private static double computeViolation(List<WindowInfo> activeWindows,

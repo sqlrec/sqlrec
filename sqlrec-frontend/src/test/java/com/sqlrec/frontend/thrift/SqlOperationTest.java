@@ -75,6 +75,71 @@ class SqlOperationTest {
         assertEquals(List.of(2), next.rows().getColumns().get(0).getI32Val().getValues());
     }
 
+    @Test
+    void ordinaryFetchIgnoresMetadataPaginationArguments() {
+        SqlOperation operation = new SqlOperation(SqlProcessResult.of(
+                Linq4j.asEnumerable(List.of(new Object[]{"one"}, new Object[]{"two"})),
+                DataTypeUtils.getStringTypeField("name")), "query");
+
+        SqlOperation.ResultPage page = operation.fetch(TFetchOrientation.FETCH_PRIOR, 0);
+
+        assertEquals(List.of("one", "two"), page.rows().getColumns().get(0).getStringVal().getValues());
+        assertFalse(page.hasMoreRows());
+        assertTrue(operation.fetch(null, -1).rows().getColumns().get(0).getStringVal().getValues().isEmpty());
+    }
+
+    @Test
+    void metadataValidatesOrientationBeforePageSizeWithoutReadingRows() {
+        SqlProcessResult result = mock(SqlProcessResult.class);
+        SqlOperation operation = SqlOperation.metadata(result, "query");
+
+        assertEquals("Only FETCH_NEXT and FETCH_FIRST are supported locally",
+                assertThrows(UnsupportedOperationException.class,
+                        () -> operation.fetch(null, 0)).getMessage());
+        assertThrows(UnsupportedOperationException.class,
+                () -> operation.fetch(TFetchOrientation.FETCH_PRIOR, 1));
+        for (long maxRows : new long[]{0, -1}) {
+            assertEquals("maxRows must be positive", assertThrows(IllegalArgumentException.class,
+                    () -> operation.fetch(TFetchOrientation.FETCH_NEXT, maxRows)).getMessage());
+        }
+        verifyNoInteractions(result);
+    }
+
+    @Test
+    void metadataCanFetchPastTheEndAndRewindWithAnUnboundedPageSize() {
+        SqlOperation operation = SqlOperation.metadata(SqlProcessResult.of(
+                Linq4j.asEnumerable(List.of(new Object[]{"one"}, new Object[]{"two"})),
+                DataTypeUtils.getStringTypeField("name")), "query");
+        SqlOperation.ResultPage first = operation.fetch(TFetchOrientation.FETCH_NEXT, 1);
+        assertTrue(first.hasMoreRows());
+        assertEquals(0, first.rows().getStartRowOffset());
+        SqlOperation.ResultPage second = operation.fetch(TFetchOrientation.FETCH_NEXT, Long.MAX_VALUE);
+        assertEquals(List.of("two"), second.rows().getColumns().get(0).getStringVal().getValues());
+        assertEquals(1, second.rows().getStartRowOffset());
+        assertFalse(second.hasMoreRows());
+        SqlOperation.ResultPage exhausted = operation.fetch(TFetchOrientation.FETCH_NEXT, Long.MAX_VALUE);
+        assertEquals(2, exhausted.rows().getStartRowOffset());
+        assertTrue(exhausted.rows().getColumns().get(0).getStringVal().getValues().isEmpty());
+        assertFalse(exhausted.hasMoreRows());
+        SqlOperation.ResultPage rewind = operation.fetch(TFetchOrientation.FETCH_FIRST, Long.MAX_VALUE);
+        assertEquals(0, rewind.rows().getStartRowOffset());
+        assertEquals(List.of("one", "two"), rewind.rows().getColumns().get(0).getStringVal().getValues());
+        assertFalse(rewind.hasMoreRows());
+    }
+
+    @Test
+    void metadataWithNoRowsReturnsEmptyPagesForBothOrientations() {
+        SqlOperation operation = SqlOperation.metadata(SqlProcessResult.of(
+                null, DataTypeUtils.getStringTypeField("name")), "query");
+        for (TFetchOrientation orientation : new TFetchOrientation[]{
+                TFetchOrientation.FETCH_NEXT, TFetchOrientation.FETCH_FIRST}) {
+            SqlOperation.ResultPage page = operation.fetch(orientation, 1);
+            assertEquals(0, page.rows().getStartRowOffset());
+            assertTrue(page.rows().getColumns().get(0).getStringVal().getValues().isEmpty());
+            assertFalse(page.hasMoreRows());
+        }
+    }
+
     private static void assertConversionFailurePreservesRows(boolean metadata) {
         Object[] row = {1};
         var fields = new ArrayList<>(List.of(DataTypeUtils.getRelDataTypeField("id", 1, SqlTypeName.INTEGER)));

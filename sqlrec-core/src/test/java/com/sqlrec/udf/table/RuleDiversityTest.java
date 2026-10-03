@@ -30,6 +30,25 @@ public class RuleDiversityTest {
     // ==================== Basic Tests ====================
 
     @Test
+    public void testNonFiniteScoresKeepFirstUnassignedCandidate() {
+        for (double weight : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.MAX_VALUE}) {
+            CacheTable target = createTargetTable(new Object[][]{
+                    {"item1", "A"}, {"item2", "A"}, {"item3", "A"}
+            });
+            CacheTable rules = createRuleTable(new Object[][]{
+                    {3, 1, 1, "category", "A", "=", 0, weight}
+            });
+
+            List<Object[]> result = collectRows(greedy.evaluate(target, rules, "3"));
+
+            assertEquals(3, result.size());
+            for (int i = 0; i < result.size(); i++) {
+                assertEquals("item" + (i + 1), result.get(i)[0]);
+            }
+        }
+    }
+
+    @Test
     public void testEmptyTargetTable() {
         CacheTable targetTable = createTargetTable(new Object[][]{});
         CacheTable ruleTable = createRuleTable(new Object[][]{

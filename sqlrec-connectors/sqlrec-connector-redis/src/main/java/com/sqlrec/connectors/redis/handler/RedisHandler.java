@@ -181,16 +181,14 @@ public class RedisHandler {
                 pushListRows(keyToValues);
                 return;
             }
-            List<byte[]> keys = new ArrayList<>(dataList.size());
-            List<byte[]> values = new ArrayList<>(dataList.size());
+            List<EncodedRow> rows = new ArrayList<>(dataList.size());
             for (Object[] data : dataList) {
-                keys.add(getKey(data));
-                values.add(codec.encode(data));
+                rows.add(encodeRow(data));
             }
             // Each SET with expiry is routed to its own cluster slot.
-            List<RedisFuture<?>> futures = new ArrayList<>(keys.size());
-            for (int i = 0; i < keys.size(); i++) {
-                futures.add(redisClient.setex(keys.get(i), values.get(i), redisConfig.ttl));
+            List<RedisFuture<?>> futures = new ArrayList<>(rows.size());
+            for (EncodedRow row : rows) {
+                futures.add(redisClient.setex(row.key, row.value, redisConfig.ttl));
             }
             awaitAll(futures);
         } catch (Exception e) {
@@ -206,16 +204,10 @@ public class RedisHandler {
         if (oldRows.size() != newRows.size()) {
             throw new IllegalArgumentException("UPDATE row counts do not match");
         }
-        List<byte[]> oldKeys = new ArrayList<>(oldRows.size());
-        List<byte[]> oldValues = new ArrayList<>(oldRows.size());
-        List<byte[]> newKeys = new ArrayList<>(newRows.size());
-        List<byte[]> newValues = new ArrayList<>(newRows.size());
+        List<RowReplacement> rows = new ArrayList<>(oldRows.size());
         // Encode every row before changing Redis so malformed input cannot remove old rows.
         for (int i = 0; i < oldRows.size(); i++) {
-            oldKeys.add(getKey(oldRows.get(i)));
-            oldValues.add(codec.encode(oldRows.get(i)));
-            newKeys.add(getKey(newRows.get(i)));
-            newValues.add(codec.encode(newRows.get(i)));
+            rows.add(new RowReplacement(encodeRow(oldRows.get(i)), encodeRow(newRows.get(i))));
         }
 
         Map<String, List<byte[]>> replacements = new LinkedHashMap<>();
@@ -223,12 +215,12 @@ public class RedisHandler {
         try {
             // Remove all selected old rows before pushing new values. Otherwise a new
             // value could be mistaken for the next selected old row.
-            for (int i = 0; i < oldKeys.size(); i++) {
-                Long removed = await(redisClient.lrem(oldKeys.get(i), 1, oldValues.get(i)));
+            for (RowReplacement row : rows) {
+                Long removed = await(redisClient.lrem(row.oldRow.key, 1, row.oldRow.value));
                 if (removed != null && removed > 0) {
-                    String key = new String(newKeys.get(i), StandardCharsets.UTF_8);
+                    String key = new String(row.newRow.key, StandardCharsets.UTF_8);
                     replacements.computeIfAbsent(key, ignored -> new ArrayList<>())
-                            .add(newValues.get(i));
+                            .add(row.newRow.value);
                     replaced++;
                 }
             }
@@ -260,25 +252,46 @@ public class RedisHandler {
     public void batchDelete(Collection<? extends Object[]> dataList) {
         try {
             boolean listMode = isListMode();
-            List<byte[]> keys = new ArrayList<>(dataList.size());
-            List<byte[]> values = listMode ? new ArrayList<>(dataList.size()) : null;
+            List<EncodedRow> rows = new ArrayList<>(dataList.size());
             for (Object[] data : dataList) {
-                keys.add(getKey(data));
-                if (listMode) {
-                    values.add(codec.encode(data));
-                }
+                byte[] key = getKey(data);
+                rows.add(new EncodedRow(key, listMode ? codec.encode(data) : null));
             }
-            List<RedisFuture<?>> futures = new ArrayList<>(keys.size());
-            for (int i = 0; i < keys.size(); i++) {
+            List<RedisFuture<?>> futures = new ArrayList<>(rows.size());
+            for (EncodedRow row : rows) {
                 if (listMode) {
-                    futures.add(redisClient.lrem(keys.get(i), values.get(i)));
+                    futures.add(redisClient.lrem(row.key, row.value));
                 } else {
-                    futures.add(redisClient.del(keys.get(i)));
+                    futures.add(redisClient.del(row.key));
                 }
             }
             awaitAll(futures);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch delete data from Redis", e);
+        }
+    }
+
+    private EncodedRow encodeRow(Object[] data) {
+        return new EncodedRow(getKey(data), codec.encode(data));
+    }
+
+    private static final class EncodedRow {
+        private final byte[] key;
+        private final byte[] value;
+
+        private EncodedRow(byte[] key, byte[] value) {
+            this.key = key;
+            this.value = value;
+        }
+    }
+
+    private static final class RowReplacement {
+        private final EncodedRow oldRow;
+        private final EncodedRow newRow;
+
+        private RowReplacement(EncodedRow oldRow, EncodedRow newRow) {
+            this.oldRow = oldRow;
+            this.newRow = newRow;
         }
     }
 

@@ -185,6 +185,128 @@ class GatewayClientStateTest {
         }
     }
 
+    @Test
+    void waitsThroughTransientStatesAndClosesTheSameOperationAfterCompletion() throws Exception {
+        try (Remote remote = new Remote()) {
+            TOperationHandle handle = operation();
+            TExecuteStatementResp response = new TExecuteStatementResp(success());
+            response.setOperationHandle(handle);
+            when(remote.client.ExecuteStatement(any())).thenReturn(response);
+            when(remote.client.GetOperationStatus(any())).thenReturn(
+                    operationStatus(TOperationState.INITIALIZED_STATE),
+                    operationStatus(TOperationState.PENDING_STATE),
+                    operationStatus(TOperationState.RUNNING_STATE),
+                    operationStatus(TOperationState.FINISHED_STATE));
+
+            remote.proxy.executeSessionCommand("RESET");
+
+            ArgumentCaptor<TExecuteStatementReq> submitted = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            var order = inOrder(remote.client);
+            order.verify(remote.client).ExecuteStatement(submitted.capture());
+            assertFalse(submitted.getValue().isRunAsync());
+            order.verify(remote.client, times(4)).GetOperationStatus(
+                    argThat(request -> handle.equals(request.getOperationHandle())));
+            order.verify(remote.client).CloseOperation(
+                    argThat(request -> handle.equals(request.getOperationHandle())));
+        }
+    }
+
+    @Test
+    void timeoutStillPollsOnceAndClosesTheOperation() throws Exception {
+        try (Remote remote = new Remote()) {
+            SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.setDefaultValue(0);
+            when(remote.client.GetOperationStatus(any()))
+                    .thenReturn(operationStatus(TOperationState.RUNNING_STATE));
+
+            TException failure = assertThrows(TException.class,
+                    () -> remote.proxy.executeSessionCommand("RESET"));
+
+            assertEquals("Gateway session state synchronization timed out", failure.getMessage());
+            verify(remote.client).GetOperationStatus(any());
+            verify(remote.client).CloseOperation(any());
+        }
+    }
+
+    @Test
+    void finishedStateSucceedsEvenWhenTheDeadlineHasPassed() throws Exception {
+        try (Remote remote = new Remote()) {
+            SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.setDefaultValue(0);
+
+            assertDoesNotThrow(() -> remote.proxy.executeSessionCommand("RESET"));
+
+            verify(remote.client).GetOperationStatus(any());
+            verify(remote.client).CloseOperation(any());
+        }
+    }
+
+    @Test
+    void pollingInterruptionRestoresTheInterruptFlagAndStillClosesTheOperation() throws Exception {
+        try (Remote remote = new Remote()) {
+            when(remote.client.GetOperationStatus(any())).thenAnswer(call -> {
+                Thread.currentThread().interrupt();
+                return operationStatus(TOperationState.RUNNING_STATE);
+            });
+
+            TException failure = assertThrows(TException.class,
+                    () -> remote.proxy.executeSessionCommand("RESET"));
+
+            assertEquals("Gateway state synchronization interrupted", failure.getMessage());
+            assertInstanceOf(InterruptedException.class, failure.getCause());
+            assertTrue(Thread.currentThread().isInterrupted());
+            verify(remote.client).CloseOperation(any());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void rejectedStateSubmissionDoesNotPollOrCloseItsReturnedHandle() throws Exception {
+        try (Remote remote = new Remote()) {
+            TExecuteStatementResp rejected = new TExecuteStatementResp(error("rejected"));
+            rejected.setOperationHandle(operation());
+            when(remote.client.ExecuteStatement(any())).thenReturn(rejected);
+
+            assertEquals("rejected", assertThrows(TException.class,
+                    () -> remote.proxy.executeSessionCommand("RESET")).getMessage());
+            verify(remote.client, never()).GetOperationStatus(any());
+            verify(remote.client, never()).CloseOperation(any());
+        }
+    }
+
+    @Test
+    void missingStateOperationHandleFailsWithoutPollingOrCleanup() throws Exception {
+        try (Remote remote = new Remote()) {
+            when(remote.client.ExecuteStatement(any())).thenReturn(new TExecuteStatementResp(success()));
+
+            assertEquals("Gateway state statement returned no operation handle", assertThrows(TException.class,
+                    () -> remote.proxy.executeSessionCommand("RESET")).getMessage());
+            verify(remote.client, never()).GetOperationStatus(any());
+            verify(remote.client, never()).CloseOperation(any());
+        }
+    }
+
+    @Test
+    void transportFailureWhilePollingDisconnectsWithoutClosingOrRetryingTheOperation() throws Exception {
+        try (Remote remote = new Remote()) {
+            TTransportException failure = new TTransportException("poll connection lost");
+            when(remote.client.GetOperationStatus(any())).thenThrow(failure);
+
+            assertSame(failure, assertThrows(TTransportException.class,
+                    () -> remote.proxy.executeSessionCommand("RESET")));
+            verify(remote.client).ExecuteStatement(any());
+            verify(remote.client).GetOperationStatus(any());
+            verify(remote.client, never()).CloseOperation(any());
+            verify(remote.sockets.constructed().get(0)).close();
+            assertEquals(1, remote.sockets.constructed().size());
+        }
+    }
+
+    private static TGetOperationStatusResp operationStatus(TOperationState state) {
+        TGetOperationStatusResp response = new TGetOperationStatusResp(success());
+        response.setOperationState(state);
+        return response;
+    }
+
     private static TStatus success() {
         return new TStatus(TStatusCode.SUCCESS_STATUS);
     }
@@ -202,6 +324,7 @@ class GatewayClientStateTest {
     private static final class Remote implements AutoCloseable {
         private final String oldAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
         private final String oldSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getDefaultValue();
+        private final int oldTimeout = SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getDefaultValue();
         private final MockedConstruction<TSocket> sockets;
         private final MockedConstruction<TCLIService.Client> clients;
         private final GatewayClient proxy = new GatewayClient(new TOpenSessionReq());
@@ -245,6 +368,7 @@ class GatewayClientStateTest {
             sockets.close();
             SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(oldAddress);
             SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue(oldSchemaDir);
+            SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.setDefaultValue(oldTimeout);
         }
     }
 }

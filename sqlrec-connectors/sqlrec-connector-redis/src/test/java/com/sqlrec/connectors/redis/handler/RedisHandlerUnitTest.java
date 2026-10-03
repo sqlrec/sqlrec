@@ -294,6 +294,28 @@ class RedisHandlerUnitTest {
     }
 
     @Test
+    void testBatchInsertRejectsMalformedLaterRowBeforeWriting() {
+        RuntimeException error = assertThrows(RuntimeException.class, () -> handler.batchInsert(Arrays.asList(
+                new Object[]{"key1", "v1"},
+                new Object[]{null, "v2"})));
+
+        assertEquals("Failed to batch insert data to Redis", error.getMessage());
+        assertEquals("Primary key at index 0 is null", error.getCause().getMessage());
+        verify(mockRedisClient, never()).setex(any(), any(), anyLong());
+    }
+
+    @Test
+    void testBatchDeleteRejectsMalformedLaterRowBeforeDeleting() {
+        RuntimeException error = assertThrows(RuntimeException.class, () -> handler.batchDelete(Arrays.asList(
+                new Object[]{"key1", "v1"},
+                new Object[]{null, "v2"})));
+
+        assertEquals("Failed to batch delete data from Redis", error.getMessage());
+        assertEquals("Primary key at index 0 is null", error.getCause().getMessage());
+        verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
     void testBatchInsertSubmitsAllCommandsBeforeWaiting() {
         RedisFuture<String> firstFuture = mock(RedisFuture.class);
         RedisFuture<String> secondFuture = mock(RedisFuture.class);

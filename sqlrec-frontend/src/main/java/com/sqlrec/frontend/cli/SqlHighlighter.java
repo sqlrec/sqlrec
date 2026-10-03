@@ -56,9 +56,7 @@ public class SqlHighlighter implements Highlighter {
                 while (i < n && buffer.charAt(i) != '\n') {
                     i++;
                 }
-                sb.style(AttributedStyle.DEFAULT.faint());
-                sb.append(buffer, start, i);
-                sb.style(AttributedStyle.DEFAULT);
+                appendStyled(sb, buffer, start, i, AttributedStyle.DEFAULT.faint());
                 continue;
             }
             // block comment
@@ -71,49 +69,16 @@ public class SqlHighlighter implements Highlighter {
                 if (i < n) {
                     i += 2;
                 }
-                sb.style(AttributedStyle.DEFAULT.faint());
-                sb.append(buffer, start, i);
-                sb.style(AttributedStyle.DEFAULT);
+                appendStyled(sb, buffer, start, i, AttributedStyle.DEFAULT.faint());
                 continue;
             }
-            // single-quoted string
-            if (c == '\'') {
+            // quoted string or identifier
+            if (c == '\'' || c == '"') {
                 int start = i;
-                i++;
-                while (i < n) {
-                    if (buffer.charAt(i) == '\'') {
-                        i++;
-                        if (i < n && buffer.charAt(i) == '\'') {
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                    i++;
-                }
-                sb.style(AttributedStyle.BOLD.foreground(AttributedStyle.GREEN));
-                sb.append(buffer, start, i);
-                sb.style(AttributedStyle.DEFAULT);
-                continue;
-            }
-            // double-quoted identifier
-            if (c == '"') {
-                int start = i;
-                i++;
-                while (i < n) {
-                    if (buffer.charAt(i) == '"') {
-                        i++;
-                        if (i < n && buffer.charAt(i) == '"') {
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                    i++;
-                }
-                sb.style(AttributedStyle.BOLD.foreground(AttributedStyle.CYAN));
-                sb.append(buffer, start, i);
-                sb.style(AttributedStyle.DEFAULT);
+                i = quotedEnd(buffer, start, c);
+                AttributedStyle style = AttributedStyle.BOLD.foreground(
+                        c == '\'' ? AttributedStyle.GREEN : AttributedStyle.CYAN);
+                appendStyled(sb, buffer, start, i, style);
                 continue;
             }
             // number
@@ -122,9 +87,8 @@ public class SqlHighlighter implements Highlighter {
                 while (i < n && (Character.isDigit(buffer.charAt(i)) || buffer.charAt(i) == '.')) {
                     i++;
                 }
-                sb.style(AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
-                sb.append(buffer, start, i);
-                sb.style(AttributedStyle.DEFAULT);
+                appendStyled(sb, buffer, start, i,
+                        AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
                 continue;
             }
             // word / keyword
@@ -134,13 +98,10 @@ public class SqlHighlighter implements Highlighter {
                     i++;
                 }
                 String word = buffer.substring(start, i);
-                if (KEYWORDS.contains(word.toUpperCase())) {
-                    sb.style(AttributedStyle.BOLD.foreground(AttributedStyle.BLUE));
-                } else {
-                    sb.style(AttributedStyle.DEFAULT);
-                }
-                sb.append(word);
-                sb.style(AttributedStyle.DEFAULT);
+                AttributedStyle style = KEYWORDS.contains(word.toUpperCase())
+                        ? AttributedStyle.BOLD.foreground(AttributedStyle.BLUE)
+                        : AttributedStyle.DEFAULT;
+                appendStyled(sb, buffer, start, i, style);
                 continue;
             }
             // other characters are output as-is
@@ -148,6 +109,29 @@ public class SqlHighlighter implements Highlighter {
             i++;
         }
         return sb.toAttributedString();
+    }
+
+    private static int quotedEnd(String buffer, int start, char quote) {
+        int end = start + 1;
+        while (end < buffer.length()) {
+            if (buffer.charAt(end) == quote) {
+                end++;
+                if (end < buffer.length() && buffer.charAt(end) == quote) {
+                    end++;
+                    continue;
+                }
+                break;
+            }
+            end++;
+        }
+        return end;
+    }
+
+    private static void appendStyled(
+            AttributedStringBuilder builder, String buffer, int start, int end, AttributedStyle style) {
+        builder.style(style);
+        builder.append(buffer, start, end);
+        builder.style(AttributedStyle.DEFAULT);
     }
 
     @Override

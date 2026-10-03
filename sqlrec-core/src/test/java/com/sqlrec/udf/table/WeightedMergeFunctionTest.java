@@ -12,8 +12,41 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class WeightedMergeFunctionTest {
+
+    @Test
+    public void testValidationReportsFirstFailureBeforeScanning() {
+        CacheTable table = mock(CacheTable.class);
+        when(table.getDataFields()).thenReturn(createTestDataFields());
+        WeightedMergeFunction function = new WeightedMergeFunction();
+
+        assertEquals("At least one table is required", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("missing", null, null, (CacheTable[]) null)).getMessage());
+        assertEquals("weights cannot be null or empty", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("missing", null, null, table)).getMessage());
+        assertEquals("limit cannot be null or empty", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("missing", "invalid", null, table)).getMessage());
+        assertEquals("primaryKey field not found: missing", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("missing", "invalid", "invalid", table)).getMessage());
+        assertEquals("Invalid limit: invalid", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("id", "invalid", "invalid", table)).getMessage());
+        assertEquals("limit must be positive, got: 0", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("id", "invalid", "0", table)).getMessage());
+        assertEquals("Number of weights (2) must match number of tables (1)",
+                assertThrows(IllegalArgumentException.class,
+                        () -> function.evaluate("id", "invalid,1", "10", table)).getMessage());
+        assertEquals("Invalid weight value: invalid", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("id", "invalid", "10", table)).getMessage());
+        assertEquals("Weight must be positive, got: 0", assertThrows(IllegalArgumentException.class,
+                () -> function.evaluate("id", "0", "10", table)).getMessage());
+        verify(table, never()).scan(any());
+    }
 
     @Test
     public void testBasicWeightedMerge() {

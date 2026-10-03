@@ -164,6 +164,23 @@ class ProtobufRowCodecTest {
     }
 
     @Test
+    void encodesRemainingBufferBytesWithoutChangingItsPositionOrMark() throws Exception {
+        ByteBuffer buffer = ByteBuffer.wrap(new byte[]{9, 1, 2, 3, 8});
+        buffer.position(1);
+        buffer.limit(4);
+        buffer.mark();
+        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.BytesValue");
+
+        byte[] encoded = codec.encode(new Object[]{buffer}, valueSchema("VARBINARY"));
+
+        assertArrayEquals(new byte[]{1, 2, 3}, BytesValue.parseFrom(encoded).getValue().toByteArray());
+        assertEquals(1, buffer.position());
+        assertEquals(4, buffer.limit());
+        assertDoesNotThrow(() -> buffer.reset());
+        assertEquals(1, buffer.position());
+    }
+
+    @Test
     void roundTripsRepeatedNestedAndEnumFields() throws Exception {
         ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Type");
         List<FieldSchema> schema = Arrays.asList(

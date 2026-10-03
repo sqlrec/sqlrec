@@ -1,13 +1,91 @@
 package com.sqlrec.k8s;
 
+import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.PodSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class K8sYamlUtilsTest {
+
+    @Test
+    public void testInjectionReturnsOriginalYamlOnParseFailure() {
+        String invalidYaml = "apiVersion: [unterminated";
+        assertEquals(invalidYaml, K8sYamlUtils.injectEnvVarsIntoYaml(invalidYaml, Map.of("NAME", "value")));
+        assertEquals(invalidYaml,
+                K8sYamlUtils.injectVolumeMountIntoYaml(invalidYaml, "pvc", "data", "/data", null));
+        assertEquals(invalidYaml, K8sYamlUtils.injectNamespaceIntoYaml(invalidYaml, "default"));
+        assertEquals(invalidYaml,
+                K8sYamlUtils.injectNodeSelectorIntoYaml(invalidYaml, Map.of("pool", "workers")));
+    }
+
+    @Test
+    public void testInjectEnvVarsPreservesReferencesAndExplicitOverrides() {
+        for (String kind : List.of("Job", "Deployment")) {
+            String yaml = """
+                    apiVersion: %s
+                    kind: %s
+                    metadata:
+                      name: reference-test
+                    spec:
+                      template:
+                        spec:
+                          containers:
+                          - name: main
+                            image: busybox
+                            env:
+                            - name: TOKEN
+                              valueFrom:
+                                secretKeyRef:
+                                  name: credentials
+                                  key: token
+                            - name: CONFIG
+                              valueFrom:
+                                configMapKeyRef:
+                                  name: settings
+                                  key: config
+                            - name: POD_NAME
+                              valueFrom:
+                                fieldRef:
+                                  fieldPath: metadata.name
+                            - name: CPU_LIMIT
+                              valueFrom:
+                                resourceFieldRef:
+                                  resource: limits.cpu
+                            - name: PLAIN
+                              value: original
+                    """.formatted(kind.equals("Job") ? "batch/v1" : "apps/v1", kind);
+
+            String injected = K8sYamlUtils.injectEnvVarsIntoYaml(yaml, Map.of("EXTRA", "added"));
+            List<EnvVar> env = environment(injected, kind);
+            assertEquals(List.of("TOKEN", "CONFIG", "POD_NAME", "CPU_LIMIT", "PLAIN", "EXTRA"),
+                    env.stream().map(EnvVar::getName).toList());
+            assertEquals("credentials", env.get(0).getValueFrom().getSecretKeyRef().getName());
+            assertEquals("settings", env.get(1).getValueFrom().getConfigMapKeyRef().getName());
+            assertEquals("metadata.name", env.get(2).getValueFrom().getFieldRef().getFieldPath());
+            assertEquals("limits.cpu", env.get(3).getValueFrom().getResourceFieldRef().getResource());
+            assertEquals("original", env.get(4).getValue());
+            assertEquals("added", env.get(5).getValue());
+
+            List<EnvVar> overridden = environment(
+                    K8sYamlUtils.injectEnvVarsIntoYaml(injected, Map.of("TOKEN", "override")), kind);
+            assertEquals("TOKEN", overridden.get(0).getName());
+            assertEquals("override", overridden.get(0).getValue());
+            assertNull(overridden.get(0).getValueFrom());
+            assertNotNull(overridden.get(1).getValueFrom());
+        }
+    }
+
+    private static List<EnvVar> environment(String yaml, String kind) {
+        PodSpec spec = kind.equals("Job")
+                ? K8sYamlUtils.parseK8sYamlAndGetJobs(yaml).get(0).getSpec().getTemplate().getSpec()
+                : K8sYamlUtils.parseK8sYamlAndGetDeployments(yaml).get(0).getSpec().getTemplate().getSpec();
+        return spec.getContainers().get(0).getEnv();
+    }
 
     @Test
     public void testInjectEnvVarsIntoYaml() {

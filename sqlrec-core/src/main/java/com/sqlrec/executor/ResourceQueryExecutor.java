@@ -1,12 +1,11 @@
 package com.sqlrec.executor;
 
-import com.sqlrec.common.config.Consts;
-import com.google.common.collect.ImmutableList;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.DataTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataQueryUtils;
 import com.sqlrec.entity.*;
 import com.sqlrec.utils.ModelUtils;
 import com.sqlrec.utils.SchemaUtils;
@@ -45,6 +44,9 @@ final class ResourceQueryExecutor {
         }
         if (node instanceof SqlShowTables command) {
             return showTables(command, defaultSchema);
+        }
+        if (node instanceof SqlShowFunctions) {
+            return metadata.executeMetadataQuery(node, defaultSchema);
         }
         if (node instanceof SqlRichDescribeTable command) {
             return describeTable(command, defaultSchema);
@@ -106,18 +108,18 @@ final class ResourceQueryExecutor {
         return null;
     }
 
+    private Table sessionTable(List<String> name) {
+        // Only unqualified names can refer to session cache tables.
+        if (name.size() != 1) return null;
+        var entry = schema.getTable(name.get(0), false);
+        return entry == null ? null : entry.getTable();
+    }
+
     private SqlProcessResult showTables(SqlShowTables command, String defaultSchema) throws Exception {
-        String[] name = command.fullDatabaseName();
-        if (name.length > 2 || name.length == 2
-                && !Consts.HIVE_CATALOG_NAME.equals(name[0])) {
-            throw new IllegalArgumentException("database catalog is not configured");
-        }
-        String database = name.length == 0 ? defaultSchema : name[name.length - 1];
-        CalciteSchema databaseSchema = schema.getSubSchema(database, false);
-        if (databaseSchema == null) {
-            throw new RuntimeException("database not exists: " + database);
-        }
-        database = databaseSchema.name;
+        String requestedDatabase = MetadataQueryUtils.databaseName(command.fullDatabaseName(), defaultSchema);
+        String database = metadata.getDatabases().stream()
+                .filter(candidate -> candidate.equalsIgnoreCase(requestedDatabase))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("database not exists: " + requestedDatabase));
         List<String> names = metadata.getTables(database).stream()
                 .map(org.apache.hadoop.hive.metastore.api.Table::getTableName)
                 .collect(Collectors.toList());
@@ -131,35 +133,24 @@ final class ResourceQueryExecutor {
                         .sorted().collect(Collectors.toList()), "table name");
     }
 
-    private SqlProcessResult describeTable(SqlRichDescribeTable command, String defaultSchema) {
-        String[] name = command.fullTableName();
-        String database = name.length > 1 ? name[0] : defaultSchema;
-        Table table = SchemaUtils.getTableObj(schema, database, name[name.length - 1]);
+    private SqlProcessResult describeTable(SqlRichDescribeTable command, String defaultSchema) throws Exception {
+        Table table = sessionTable(Arrays.asList(command.fullTableName()));
         if (table == null) {
-            return null;
+            return metadata.executeMetadataQuery(command, defaultSchema);
         }
-        RelDataType rowType = table.getRowType(
-                new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
+        RelDataType rowType = table.getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT));
         return SqlProcessResult.tableTypeDesc(rowType.getFieldList());
     }
 
-    private SqlProcessResult showCreateTable(SqlShowCreateTable command, String defaultSchema)
-            throws Exception {
-        ImmutableList<String> names = command.getTableName().names;
-        String database = names.size() > 1 ? names.get(0) : defaultSchema;
-        String tableName = names.get(names.size() - 1);
-        Table table = SchemaUtils.getTableObj(schema, database, tableName);
+    private SqlProcessResult showCreateTable(SqlShowCreateTable command, String defaultSchema) throws Exception {
+        Table table = sessionTable(command.getTableName().names);
         if (table == null) {
-            return null;
+            return metadata.executeMetadataQuery(command, defaultSchema);
         }
-        if (table instanceof SqlRecTable sqlRecTable
-                && StringUtils.isNotEmpty(sqlRecTable.getCreateSql())) {
+        if (table instanceof SqlRecTable sqlRecTable && StringUtils.isNotEmpty(sqlRecTable.getCreateSql())) {
             return SqlProcessResult.msg(sqlRecTable.getCreateSql(), "create sql");
         }
-        return SqlProcessResult.msg(
-                SchemaUtils.generateCreateSqlFromHmsTable(
-                        metadata.getTable(database, tableName)),
-                "create sql");
+        throw new UnsupportedOperationException("Session table has no stored SQL definition: " + command.getTableName());
     }
 
     private SqlProcessResult showCreateModel(SqlShowCreateModel command) throws Exception {

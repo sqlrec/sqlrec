@@ -42,6 +42,33 @@ class FileSystemHandlerTest {
     // ===== CSV Tests =====
 
     @Test
+    void testLoadCsvKeepsRowsWithInvalidCellsAndSkipsNullPrimaryKeys() throws IOException {
+        Path csvFile = tempDir.resolve("invalid-cells.csv");
+        Files.write(csvFile, List.of("id,name,age", "1,alice,invalid", "bad,ignored,20", "2,bob"));
+        FileSystemHandler handler = new FileSystemHandler(createConfig(csvFile.toString(), "csv"));
+
+        List<Object[]> rows = handler.scan();
+
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1, "alice", null}, rows.get(0));
+        assertArrayEquals(new Object[]{2, "bob", null}, rows.get(1));
+    }
+
+    @Test
+    void testLoadJsonSkipsNonObjectsAndKeepsInvalidCellsAsNull() throws IOException {
+        Path jsonFile = tempDir.resolve("mixed.json");
+        Files.writeString(jsonFile, "[null, 42, [], {\"id\":1,\"name\":\"alice\",\"age\":\"invalid\"},"
+                + "{\"id\":\"bad\",\"name\":\"ignored\",\"age\":20}, {\"id\":2,\"name\":\"bob\"}]");
+        FileSystemHandler handler = new FileSystemHandler(createConfig(jsonFile.toString(), "json"));
+
+        List<Object[]> rows = handler.scan();
+
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1, "alice", null}, rows.get(0));
+        assertArrayEquals(new Object[]{2, "bob", null}, rows.get(1));
+    }
+
+    @Test
     void testLoadCsv() throws IOException {
         Path csvFile = tempDir.resolve("test.csv");
         Files.write(csvFile, Arrays.asList(

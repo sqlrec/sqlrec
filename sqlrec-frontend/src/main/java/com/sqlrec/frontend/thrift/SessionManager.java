@@ -7,6 +7,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.frontend.utils.ThriftUtils;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlReset;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
@@ -197,14 +198,7 @@ public class SessionManager {
         synchronized (session) {
             try {
                 requireActiveSession(session);
-                SqlOperation local = executeLocally(session.executor, request.getStatement());
-                if (local != null) {
-                    if (local.getException() == null) {
-                        session.updateGatewayState();
-                    }
-                    return localExecuteResponse(session, local);
-                }
-                return executeRemotely(session, request);
+                return executeInSession(session, request);
             } catch (TException e) {
                 return new TExecuteStatementResp(ThriftUtils.errorStatus(e));
             } finally {
@@ -213,16 +207,22 @@ public class SessionManager {
         }
     }
 
-    private SqlOperation executeLocally(SqlExecutor executor, String sql) {
+    private TExecuteStatementResp executeInSession(Session session, TExecuteStatementReq request) throws TException {
+        SqlNode node;
+        SqlProcessResult result;
         try {
-            SqlProcessResult result = executor.executeSqlAsync(sql);
-            return result == null ? null : new SqlOperation(result, ThriftUtils.getQueryId());
+            node = CompileManager.parseSql(request.getStatement());
+            result = session.executor.executeSqlAsync(node, request.getStatement());
         } catch (Exception e) {
             logger.error("Failed to execute local SQL", e);
-            SqlOperation operation = new SqlOperation(new SqlProcessResult(), ThriftUtils.getQueryId());
-            operation.fail(e);
-            return operation;
+            SqlOperation local = new SqlOperation(new SqlProcessResult(), ThriftUtils.getQueryId());
+            local.fail(e);
+            return localExecuteResponse(session, local);
         }
+        if (result != null) {
+            return localExecuteResponse(session, new SqlOperation(result, ThriftUtils.getQueryId()));
+        }
+        return executeRemotely(session, request, node);
     }
 
     private TExecuteStatementResp localExecuteResponse(Session session, SqlOperation local) {
@@ -231,21 +231,16 @@ public class SessionManager {
         return response;
     }
 
-    private TExecuteStatementResp executeRemotely(Session session, TExecuteStatementReq request) throws TException {
-        try {
-            if (CompileManager.parseSql(request.getStatement()) instanceof SqlReset reset) {
-                // RESET bypasses pending SET overrides and commits local state only after remote success.
-                session.gateway.executeSessionCommand(request.getStatement());
-                session.executor.resetSessionSettings(reset.getKeyString());
-                session.updateGatewayState();
-                return localExecuteResponse(session, new SqlOperation(
-                        SqlProcessResult.msg("Flink settings reset", "msg"), ThriftUtils.getQueryId()));
-            }
-        } catch (TException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new TException(e);
+    private TExecuteStatementResp executeRemotely(Session session, TExecuteStatementReq request, SqlNode node) throws TException {
+        if (node instanceof SqlReset reset) {
+            // RESET bypasses pending SET overrides and commits local state only after remote success.
+            session.gateway.executeSessionCommand(request.getStatement());
+            session.executor.resetSessionSettings(reset.getKeyString());
+            session.updateGatewayState();
+            return localExecuteResponse(session, new SqlOperation(
+                    SqlProcessResult.msg("Flink settings reset", "msg"), ThriftUtils.getQueryId()));
         }
+        session.updateGatewayState();
         TExecuteStatementResp response = session.gateway.executeStatement(request);
         if (ThriftUtils.isSuccess(response.getStatus())) {
             if (response.getOperationHandle() == null) {

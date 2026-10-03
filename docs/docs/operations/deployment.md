@@ -207,7 +207,7 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 
 ### Gateway 转发配置
 
-部署脚本默认安装 Flink SQL Gateway，并配置 SQLRec 的连接地址。Gateway 仅供需要 Flink 执行的请求使用；本地 SQL、JDBC 元数据和持久表、库、UDF 的纯元数据 DDL 不依赖 Gateway。
+部署脚本默认安装 Flink SQL Gateway，并配置 SQLRec 的连接地址。Gateway 仅供需要 Flink 执行的请求使用；本地 SQL、[元数据查询](../reference/sql.md#元数据查询)（如 `SHOW CREATE TABLE`、`DESCRIBE`）、JDBC 元数据和持久表、库、UDF 的纯元数据 DDL 不依赖 Gateway。
 
 默认配置无需调整。连接外部 Gateway 时，设置上表中的地址和端口，使用该服务的 HiveServer2/Thrift 接口。将地址设为空并重新部署 SQLRec，可关闭远程转发；这不会跳过默认 Flink 组件部署或删除已有组件。
 

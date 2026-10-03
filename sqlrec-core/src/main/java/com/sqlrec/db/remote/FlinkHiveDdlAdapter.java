@@ -2,11 +2,10 @@ package com.sqlrec.db.remote;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlProcessResult;
-import org.apache.calcite.linq4j.Linq4j;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import com.sqlrec.db.FlinkTableDdl;
+import com.sqlrec.db.MetadataQueryUtils;
 import org.apache.calcite.sql.*;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.sql.parser.ddl.*;
@@ -19,8 +18,6 @@ import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.api.internal.ShowCreateUtil;
 import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.catalog.hive.HiveCatalog;
-import org.apache.flink.table.functions.SqlLikeUtils;
-import org.apache.flink.table.module.CoreModule;
 import org.apache.flink.table.resource.ResourceType;
 import org.apache.flink.table.resource.ResourceUri;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -28,6 +25,9 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.util.*;
 import java.util.function.Supplier;
+
+import static com.sqlrec.db.MetadataQueryUtils.objectPath;
+import static com.sqlrec.db.MetadataQueryUtils.databaseName;
 
 /** Flink metadata execution through the official HiveCatalog, without a planner or Gateway. */
 public final class FlinkHiveDdlAdapter implements AutoCloseable {
@@ -252,49 +252,19 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
         var definition = FlinkTableDdl.resolve(hiveCatalog(manager).getTable(path), manager.getDataTypeFactory());
         String ddl = ShowCreateUtil.buildShowCreateTableRow(definition,
                 ObjectIdentifier.of(Consts.HIVE_CATALOG_NAME, path.getDatabaseName(), path.getObjectName()), false);
-        return result(List.of("result"), List.of("STRING"), Collections.singletonList(new Object[]{ddl}));
+        return SqlProcessResult.msg(ddl, "result");
     }
 
     private SqlProcessResult describeTable(SqlRichDescribeTable describe, String database) throws Exception {
         ObjectPath path = objectPath(describe.fullTableName(), database);
         CatalogManager manager = catalogs();
         var schema = FlinkTableDdl.resolve(hiveCatalog(manager).getTable(path), manager.getDataTypeFactory()).getResolvedSchema();
-        List<String> names = new ArrayList<>(List.of("name", "type", "null", "key", "extras", "watermark"));
-        List<String> types = new ArrayList<>(List.of("STRING", "STRING", "BOOLEAN", "STRING", "STRING", "STRING"));
-        boolean comments = schema.getColumns().stream().anyMatch(column -> column.getComment().isPresent());
-        if (comments) {
-            names.add("comment");
-            types.add("STRING");
-        }
-        UniqueConstraint primaryKey = schema.getPrimaryKey().orElse(null);
-        String keyDescription = primaryKey == null ? null : "PRI(" + String.join(", ", primaryKey.getColumns()) + ")";
-        List<Object[]> rows = new ArrayList<>();
-        for (Column column : schema.getColumns()) {
-            String key = primaryKey != null && primaryKey.getColumns().contains(column.getName()) ? keyDescription : null;
-            List<Object> values = new ArrayList<>(Arrays.asList(column.getName(),
-                    column.getDataType().getLogicalType().copy(true).asSummaryString(),
-                    column.getDataType().getLogicalType().isNullable(), key, column.explainExtras().orElse(null), null));
-            if (comments) values.add(column.getComment().orElse(null));
-            rows.add(values.toArray());
-        }
-        return result(names, types, rows);
+        return MetadataQueryUtils.describeTable(schema);
     }
 
     private SqlProcessResult showFunctions(SqlShowFunctions show, String database) throws Exception {
         String name = databaseName(show.fullDatabaseName(), database);
-        Set<String> functions = new TreeSet<>(hiveCatalog(catalogs()).listFunctions(name));
-        if (!show.requireUser()) functions.addAll(CoreModule.INSTANCE.listFunctions());
-        List<Object[]> rows = functions.stream().filter(function -> matchesLike(function, show))
-                .map(function -> new Object[]{function}).toList();
-        return result(List.of("function name"), List.of("STRING"), rows);
-    }
-
-    private static boolean matchesLike(String function, SqlShowFunctions show) {
-        if (!show.isWithLike()) return true;
-        boolean matches = "ILIKE".equals(show.getLikeType())
-                ? SqlLikeUtils.ilike(function, show.getLikeSqlPattern(), "\\")
-                : SqlLikeUtils.like(function, show.getLikeSqlPattern(), "\\");
-        return show.isNotLike() ? !matches : matches;
+        return MetadataQueryUtils.showFunctions(show, hiveCatalog(catalogs()).listFunctions(name));
     }
 
     private CatalogManager catalogs() {
@@ -368,38 +338,10 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
         }
     }
 
-    static ObjectPath objectPath(String[] parts, String database) {
-        return switch (parts.length) {
-            case 1 -> new ObjectPath(database, parts[0]);
-            case 2 -> new ObjectPath(parts[0], parts[1]);
-            case 3 -> { requireCatalog(parts[0]); yield new ObjectPath(parts[1], parts[2]); }
-            default -> throw new IllegalArgumentException("Invalid object name: " + String.join(".", parts));
-        };
-    }
-
-    private static String databaseName(String[] parts, String database) {
-        if (parts.length == 0) return database;
-        if (parts.length == 1) return parts[0];
-        if (parts.length == 2) { requireCatalog(parts[0]); return parts[1]; }
-        throw new IllegalArgumentException("Invalid database name");
-    }
-
-    private static void requireCatalog(String name) {
-        if (!Consts.HIVE_CATALOG_NAME.equals(name)) {
-            throw new UnsupportedOperationException("UNSUPPORTED_METADATA_DDL: catalog is not configured: " + name);
-        }
-    }
-
     private static String literal(SqlNode node) { return ((SqlLiteral) node).getValueAs(String.class); }
 
     private static FunctionLanguage language(String value) {
         return value == null ? FunctionLanguage.JAVA : FunctionLanguage.valueOf(value.toUpperCase(Locale.ROOT));
-    }
-
-    private static SqlProcessResult result(List<String> names, List<String> types, List<Object[]> rows) {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        for (int i = 0; i < names.size(); i++) fields.add(DataTypeUtils.getRelDataTypeField(names.get(i), i, types.get(i)));
-        return SqlProcessResult.of(Linq4j.asEnumerable(rows), fields);
     }
 
     private static SqlNode parseSql(String sql) {

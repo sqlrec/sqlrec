@@ -167,17 +167,9 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
-        config.append("    feature_groups {\n");
-        config.append("        group_name: \"wide\"\n");
-        addFeatureNames(config, getFeatures(model));
-        config.append("        group_type: WIDE\n");
-        config.append("    }\n");
+        addFeatureGroup(config, "wide", getFeatures(model), "WIDE");
 
-        config.append("    feature_groups {\n");
-        config.append("        group_name: \"deep\"\n");
-        addFeatureNames(config, getFeatures(model));
-        config.append("        group_type: DEEP\n");
-        config.append("    }\n");
+        addFeatureGroup(config, "deep", getFeatures(model), "DEEP");
 
         String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.getParams());
         config.append("    deepfm {\n");
@@ -257,19 +249,11 @@ public class PipelineConfigUtils {
         }
 
         if (!userFeatureList.isEmpty()) {
-            config.append("    feature_groups {\n");
-            config.append("        group_name: \"user\"\n");
-            addFeatureNames(config, userFeatureList);
-            config.append("        group_type: DEEP\n");
-            config.append("    }\n");
+            addFeatureGroup(config, "user", userFeatureList, "DEEP");
         }
 
         if (!itemFeatureList.isEmpty()) {
-            config.append("    feature_groups {\n");
-            config.append("        group_name: \"item\"\n");
-            addFeatureNames(config, itemFeatureList);
-            config.append("        group_type: DEEP\n");
-            config.append("    }\n");
+            addFeatureGroup(config, "item", itemFeatureList, "DEEP");
         }
 
         String userHiddenUnits = Config.USER_HIDDEN_UNITS.getValue(model.getParams());
@@ -277,33 +261,15 @@ public class PipelineConfigUtils {
         int outputDim = Config.OUTPUT_DIM.getValue(model.getParams());
 
         config.append("    dssm {\n");
-        config.append("        user_tower {\n");
-        config.append("            input: 'user'\n");
-        config.append("            mlp {\n");
-        config.append("                hidden_units: [" + userHiddenUnits + "]\n");
-        config.append("            }\n");
-        config.append("        }\n");
-        config.append("        item_tower {\n");
-        config.append("            input: 'item'\n");
-        config.append("            mlp {\n");
-        config.append("                hidden_units: [" + itemHiddenUnits + "]\n");
-        config.append("            }\n");
-        config.append("        }\n");
+        addDssmTower(config, "user", userHiddenUnits);
+        addDssmTower(config, "item", itemHiddenUnits);
         config.append("        output_dim: " + outputDim + "\n");
         config.append("        in_batch_negative: true\n");
         config.append("    }\n");
 
-        config.append("    metrics {\n");
-        config.append("        recall_at_k {\n");
-        config.append("            top_k: 1\n");
-        config.append("        }\n");
-        config.append("    }\n");
+        addRecallMetric(config, 1);
 
-        config.append("    metrics {\n");
-        config.append("        recall_at_k {\n");
-        config.append("            top_k: 5\n");
-        config.append("        }\n");
-        config.append("    }\n");
+        addRecallMetric(config, 5);
 
         config.append("    losses {\n");
         config.append("        softmax_cross_entropy {}\n");
@@ -311,6 +277,32 @@ public class PipelineConfigUtils {
 
         config.append("}\n");
         return config.toString();
+    }
+
+    private static void addFeatureGroup(
+            StringBuilder config, String name, List<String> features, String type) {
+        config.append("    feature_groups {\n");
+        config.append("        group_name: \"").append(name).append("\"\n");
+        addFeatureNames(config, features);
+        config.append("        group_type: ").append(type).append("\n");
+        config.append("    }\n");
+    }
+
+    private static void addDssmTower(StringBuilder config, String name, String hiddenUnits) {
+        config.append("        ").append(name).append("_tower {\n");
+        config.append("            input: '").append(name).append("'\n");
+        config.append("            mlp {\n");
+        config.append("                hidden_units: [").append(hiddenUnits).append("]\n");
+        config.append("            }\n");
+        config.append("        }\n");
+    }
+
+    private static void addRecallMetric(StringBuilder config, int topK) {
+        config.append("    metrics {\n");
+        config.append("        recall_at_k {\n");
+        config.append("            top_k: ").append(topK).append("\n");
+        config.append("        }\n");
+        config.append("    }\n");
     }
 
     private static List<String> inferRemainingFeatures(List<String> allFeatures, List<String> specifiedFeatures) {

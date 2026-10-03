@@ -179,6 +179,38 @@ class MilvusFilterBuilderTest {
     }
 
     @Test
+    void preservesNestedScanAndJoinFormatting() {
+        RexNode id = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                input(0, SqlTypeName.INTEGER), integer(1));
+        RexNode categoryA = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                input(1, SqlTypeName.VARCHAR), rexBuilder.makeLiteral("a"));
+        RexNode categoryB = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                input(1, SqlTypeName.VARCHAR), rexBuilder.makeLiteral("b"));
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.AND, id,
+                rexBuilder.makeCall(SqlStdOperatorTable.OR, categoryA, categoryB));
+
+        assertEquals("(id == 1) AND ((category == \"a\") OR (category == \"b\"))",
+                MilvusFilterBuilder.buildScanFilter(Collections.singletonList(condition), fields));
+        assertEquals("(id == 1 and (category == \"a\" or category == \"b\"))",
+                MilvusFilterBuilder.buildJoinFilter(condition, new Object[0], Arrays.asList("id", "category")));
+    }
+
+    @Test
+    void rejectsPartialAndOrJoinFilters() {
+        RexNode supported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                input(1, SqlTypeName.INTEGER), integer(1));
+        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.NOT, supported);
+
+        for (RexNode condition : Arrays.asList(
+                rexBuilder.makeCall(SqlStdOperatorTable.AND, supported, unsupported),
+                rexBuilder.makeCall(SqlStdOperatorTable.OR, supported, unsupported))) {
+            assertNull(MilvusFilterBuilder.buildJoinFilter(condition, new Object[]{7},
+                    Collections.singletonList("id")));
+            assertFalse(MilvusFilterBuilder.supportsJoinFilter(condition, 1, 1));
+        }
+    }
+
+    @Test
     void buildsCorrelatedJoinFilterAndReversesOperator() {
         RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.LESS_THAN,
                 input(0, SqlTypeName.INTEGER), input(1, SqlTypeName.INTEGER));

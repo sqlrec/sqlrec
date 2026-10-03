@@ -91,6 +91,8 @@ call demo_rec(quick_start_user);
 
 本地文件模式在启动时加载 SQL 定义。不能通过 CLI 或 `/sql/v1` 执行 DDL；修改文件后需要重启容器。下面的示例定义一张热门商品表、一个推荐函数和一个 API。
 
+可通过 `SHOW TABLES`、`SHOW CREATE TABLE`、`DESCRIBE` 和 `SHOW FUNCTIONS` 查看已加载的定义，无需连接 HMS 或 Gateway。支持范围见[元数据查询](../reference/sql.md#元数据查询)。
+
 ### 准备 SQL 文件
 
 在宿主机创建目录：

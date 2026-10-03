@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.function.BiFunction;
 
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
@@ -31,67 +32,38 @@ public class ThriftUtils {
         TRowSet tRowSet = new TRowSet();
         List<TColumn> columns = new ArrayList<>();
         for (RelDataTypeField field : fields) {
-            TColumn column = new TColumn();
-            columns.add(column);
-            switch (field.getType().getSqlTypeName()) {
-                case VARCHAR:
-                case CHAR:
-                    TStringColumn stringColumn = new TStringColumn();
-                    Map.Entry<byte[], List<String>> charEntry = getValueList(enumerable, field.getIndex(), String.class);
-                    stringColumn.setValues(charEntry.getValue());
-                    stringColumn.setNulls(charEntry.getKey());
-                    column.setStringVal(stringColumn);
-                    break;
-                case SMALLINT:
-                case TINYINT:
-                    TI16Column i16Column = new TI16Column();
-                    Map.Entry<byte[], List<Short>> shortEntry = getValueList(enumerable, field.getIndex(), Short.class);
-                    i16Column.setValues(shortEntry.getValue());
-                    i16Column.setNulls(shortEntry.getKey());
-                    column.setI16Val(i16Column);
-                    break;
-                case INTEGER:
-                    TI32Column i32Column = new TI32Column();
-                    Map.Entry<byte[], List<Integer>> intEntry = getValueList(enumerable, field.getIndex(), Integer.class);
-                    i32Column.setValues(intEntry.getValue());
-                    i32Column.setNulls(intEntry.getKey());
-                    column.setI32Val(i32Column);
-                    break;
-                case BIGINT:
-                    TI64Column i64Column = new TI64Column();
-                    Map.Entry<byte[], List<Long>> longEntry = getValueList(enumerable, field.getIndex(), Long.class);
-                    i64Column.setValues(longEntry.getValue());
-                    i64Column.setNulls(longEntry.getKey());
-                    column.setI64Val(i64Column);
-                    break;
-                case FLOAT:
-                case DOUBLE:
-                    TDoubleColumn doubleColumn = new TDoubleColumn();
-                    Map.Entry<byte[], List<Double>> doubleEntry = getValueList(enumerable, field.getIndex(), Double.class);
-                    doubleColumn.setValues(doubleEntry.getValue());
-                    doubleColumn.setNulls(doubleEntry.getKey());
-                    column.setDoubleVal(doubleColumn);
-                    break;
-                case BOOLEAN:
-                    TBoolColumn booleanColumn = new TBoolColumn();
-                    Map.Entry<byte[], List<Boolean>> boolEntry = getValueList(enumerable, field.getIndex(), Boolean.class);
-                    booleanColumn.setValues(boolEntry.getValue());
-                    booleanColumn.setNulls(boolEntry.getKey());
-                    column.setBoolVal(booleanColumn);
-                    break;
-                default:
-                    TStringColumn defaultStringColumn = new TStringColumn();
-                    Enumerable<Object[]> jsonEnumerable = DataTransformUtils.getJsonValueEnumerable(enumerable, field.getIndex());
-                    Map.Entry<byte[], List<String>> jsonEntry = getValueList(jsonEnumerable, 0, String.class);
-                    defaultStringColumn.setValues(jsonEntry.getValue());
-                    defaultStringColumn.setNulls(jsonEntry.getKey());
-                    column.setStringVal(defaultStringColumn);
-            }
+            columns.add(toColumn(enumerable, field));
         }
         tRowSet.setRows(new ArrayList<>());
         tRowSet.setColumns(columns);
         tRowSet.setStartRowOffsetIsSet(true);
         return tRowSet;
+    }
+
+    private static TColumn toColumn(Enumerable<Object[]> rows, RelDataTypeField field) {
+        int index = field.getIndex();
+        return switch (field.getType().getSqlTypeName()) {
+            case VARCHAR, CHAR -> valueColumn(rows, index, String.class,
+                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            case SMALLINT, TINYINT -> valueColumn(rows, index, Short.class,
+                    (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
+            case INTEGER -> valueColumn(rows, index, Integer.class,
+                    (values, nulls) -> TColumn.i32Val(new TI32Column(values, nulls)));
+            case BIGINT -> valueColumn(rows, index, Long.class,
+                    (values, nulls) -> TColumn.i64Val(new TI64Column(values, nulls)));
+            case FLOAT, DOUBLE -> valueColumn(rows, index, Double.class,
+                    (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
+            case BOOLEAN -> valueColumn(rows, index, Boolean.class,
+                    (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
+            default -> valueColumn(DataTransformUtils.getJsonValueEnumerable(rows, index), 0, String.class,
+                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+        };
+    }
+
+    private static <T> TColumn valueColumn(Enumerable<Object[]> rows, int index, Class<T> type,
+            BiFunction<List<T>, ByteBuffer, TColumn> constructor) {
+        Map.Entry<byte[], List<T>> values = getValueList(rows, index, type);
+        return constructor.apply(values.getValue(), ByteBuffer.wrap(values.getKey()));
     }
 
     public static <T> Map.Entry<byte[], List<T>> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
@@ -227,15 +199,7 @@ public class ThriftUtils {
         if (guid == null) {
             return "guid=null";
         }
-        return "guid=" + bytesToHex(guid);
-    }
-
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
+        return "guid=" + HexFormat.of().formatHex(guid);
     }
 
     public static String getQueryId() {

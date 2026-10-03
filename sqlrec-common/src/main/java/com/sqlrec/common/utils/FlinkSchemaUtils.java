@@ -116,34 +116,43 @@ public class FlinkSchemaUtils {
                 return DecimalData.fromBigDecimal(
                         decimal, decimalType.getPrecision(), decimalType.getScale());
             case ARRAY:
-                ArrayType arrayType = (ArrayType) type;
-                List<?> elements = (List<?>) value;
-                Object[] converted = new Object[elements.size()];
-                for (int i = 0; i < elements.size(); i++) {
-                    converted[i] = toFlinkValue(elements.get(i), arrayType.getElementType());
-                }
-                return new GenericArrayData(converted);
+                return toFlinkArray(value, (ArrayType) type);
             case MAP:
-                MapType mapType = (MapType) type;
-                Map<Object, Object> convertedMap = new LinkedHashMap<>();
-                for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                    convertedMap.put(
-                            toFlinkValue(entry.getKey(), mapType.getKeyType()),
-                            toFlinkValue(entry.getValue(), mapType.getValueType()));
-                }
-                return new GenericMapData(convertedMap);
+                return toFlinkMap(value, (MapType) type);
             case ROW:
-                RowType rowType = (RowType) type;
-                Map<?, ?> fields = (Map<?, ?>) value;
-                GenericRowData nested = new GenericRowData(rowType.getFieldCount());
-                for (int i = 0; i < rowType.getFieldCount(); i++) {
-                    RowType.RowField field = rowType.getFields().get(i);
-                    nested.setField(i, toFlinkValue(fields.get(field.getName()), field.getType()));
-                }
-                return nested;
+                return toFlinkRow(value, (RowType) type);
             default:
                 return value;
         }
+    }
+
+    private static GenericArrayData toFlinkArray(Object value, ArrayType type) {
+        List<?> elements = (List<?>) value;
+        Object[] converted = new Object[elements.size()];
+        for (int i = 0; i < elements.size(); i++) {
+            converted[i] = toFlinkValue(elements.get(i), type.getElementType());
+        }
+        return new GenericArrayData(converted);
+    }
+
+    private static GenericMapData toFlinkMap(Object value, MapType type) {
+        Map<Object, Object> converted = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            converted.put(
+                    toFlinkValue(entry.getKey(), type.getKeyType()),
+                    toFlinkValue(entry.getValue(), type.getValueType()));
+        }
+        return new GenericMapData(converted);
+    }
+
+    private static GenericRowData toFlinkRow(Object value, RowType type) {
+        Map<?, ?> fields = (Map<?, ?>) value;
+        GenericRowData row = new GenericRowData(type.getFieldCount());
+        for (int i = 0; i < type.getFieldCount(); i++) {
+            RowType.RowField field = type.getFields().get(i);
+            row.setField(i, toFlinkValue(fields.get(field.getName()), field.getType()));
+        }
+        return row;
     }
 
     public static Object typeConversion(LogicalType fieldType, RowData rowData, int index) {
@@ -180,30 +189,39 @@ public class FlinkSchemaUtils {
             case VARBINARY:
                 return rowData.getBinary(index);
             case ARRAY:
-                ArrayData arrayData = rowData.getArray(index);
-                LogicalType elementType = ((ArrayType) fieldType).getElementType();
-                List<Object> list = new ArrayList<>((int) arrayData.size());
-
-                for (int i = 0; i < arrayData.size(); i++) {
-                    if (arrayData.isNullAt(i)) {
-                        list.add(null);
-                    } else if (elementType instanceof IntType) {
-                        list.add(arrayData.getInt(i));
-                    } else if (elementType instanceof BigIntType) {
-                        list.add(arrayData.getLong(i));
-                    } else if (elementType instanceof FloatType) {
-                        list.add(arrayData.getFloat(i));
-                    } else if (elementType instanceof DoubleType) {
-                        list.add(arrayData.getDouble(i));
-                    } else if (elementType instanceof VarCharType || elementType instanceof CharType) {
-                        list.add(arrayData.getString(i).toString());
-                    } else {
-                        throw new UnsupportedOperationException("Unsupported array element type: " + elementType);
-                    }
-                }
-                return list;
+                return toJavaArray(rowData.getArray(index), ((ArrayType) fieldType).getElementType());
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + fieldType);
         }
+    }
+
+    private static List<Object> toJavaArray(ArrayData array, LogicalType elementType) {
+        List<Object> values = new ArrayList<>(array.size());
+        for (int i = 0; i < array.size(); i++) {
+            values.add(readArrayElement(array, elementType, i));
+        }
+        return values;
+    }
+
+    private static Object readArrayElement(ArrayData array, LogicalType type, int index) {
+        if (array.isNullAt(index)) {
+            return null;
+        }
+        if (type instanceof IntType) {
+            return array.getInt(index);
+        }
+        if (type instanceof BigIntType) {
+            return array.getLong(index);
+        }
+        if (type instanceof FloatType) {
+            return array.getFloat(index);
+        }
+        if (type instanceof DoubleType) {
+            return array.getDouble(index);
+        }
+        if (type instanceof VarCharType || type instanceof CharType) {
+            return array.getString(index).toString();
+        }
+        throw new UnsupportedOperationException("Unsupported array element type: " + type);
     }
 }

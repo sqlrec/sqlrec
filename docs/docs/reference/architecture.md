@@ -84,6 +84,7 @@ Thrift 会话在本地创建，不要求 Gateway 可用。本地执行失败不�
 | 请求 | 是否需要 Gateway |
 | --- | --- |
 | 本地可执行的 SQL、持久表/库/UDF 的纯元数据 DDL | 不需要 |
+| `SHOW DATABASES/TABLES/FUNCTIONS`、`SHOW USER FUNCTIONS`、`SHOW CREATE TABLE`、`DESCRIBE` | 不需要；共享元数据和 SQL 文件模式均支持 |
 | 顶层 `USE database`、`SET 'key' = 'value'` | 不需要；本地保存状态，在下一次远程 SQL 执行前同步 |
 | JDBC 类型、Catalog、库、表、列、函数和主键查询 | 不需要 |
 | 客户端会话信息、本地操作的状态查询和结果读取 | 不需要 |
@@ -191,7 +192,11 @@ KV Join 在右表关联列是主键时批量点查；非主键关联逐键扫描
 
 本地 SQL 文件模式**不允许执行 DDL**。定义只能通过 SQL 文件加载；查询、数据写入、`CACHE TABLE` 和调用已定义的函数仍可执行。线上 serving 可把完整 SQL 目录与应用版本一起发布，让每个实例启动时加载同一版本；修改定义后需重新部署或重启所有实例。
 
-两种模式都会把表定义转换为 Calcite 表，并缓存数据库列表、表结构和函数/API/服务定义。远程模式按 `SCHEMA_CACHE_EXPIRE` 在后续访问时刷新相关缓存，也可用 `FLUSH` 使其立即失效；HMS 表刷新会依据 `transient_lastDdlTime` 决定是否复用已有表对象，外部改表但未更新该时间时可能继续使用旧对象。本地模式的元数据只在启动初始化时从文件读取；`FLUSH` 只使进程内缓存失效，后续访问会重建缓存，文件改动仍需重启才能生效。部署所需配置见[服务部署](../operations/deployment.md)，本地文件示例见[Docker 快速开始](../getting-started/docker.md)。
+两种模式均支持[元数据查询](./sql.md#元数据查询)。`ResourceQueryExecutor` 统一处理查询入口和会话缓存表，表定义与 UDF 查询交由元数据访问层处理。SQL 文件模式直接读取启动时保存的建表声明和函数定义，查看它们不需要加载对应的 Connector 或 UDF 类；执行数据查询时才需要相应能力。
+
+SQLRec 缓存数据库列表、表结构和函数/API/服务定义。数据库列表主要依靠 `databaseListCache`：达到 `SCHEMA_CACHE_EXPIRE` 后，后续访问触发异步刷新，刷新完成前可能仍返回旧列表；DDL 或 `FLUSH` 也可使相关缓存失效。创建 Calcite schema 时使用缓存中的数据库列表，刻意不在每条 SQL 执行前同步已有 schema 的数据库成员。新增或删除数据库后，需在列表更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的列表；`SHOW DATABASES`、`SHOW TABLES` 直接查询元数据，不受该会话列表限制。
+
+已有数据库内的表和函数缓存仍可独立刷新。HMS 表刷新会依据 `transient_lastDdlTime` 决定是否复用已有表对象，外部改表但未更新该时间时可能继续使用旧对象。本地模式的元数据只在启动初始化时从文件读取；`FLUSH` 只使进程内缓存失效，既不重新解析文件，也不增删已有会话的数据库子 schema。文件改动仍需重启才能生效。部署所需配置见[服务部署](../operations/deployment.md)，本地文件示例见[Docker 快速开始](../getting-started/docker.md)。
 
 ## 模型与在线服务
 

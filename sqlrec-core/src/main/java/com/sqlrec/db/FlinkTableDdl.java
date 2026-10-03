@@ -1,4 +1,4 @@
-package com.sqlrec.db.remote;
+package com.sqlrec.db;
 
 import org.apache.calcite.sql.*;
 import org.apache.flink.sql.parser.ddl.*;
@@ -8,18 +8,30 @@ import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeParser;
+import org.apache.flink.table.types.utils.TypeConversions;
 
 import java.util.*;
+import java.util.function.Function;
 
 import static org.apache.flink.sql.parser.ddl.SqlTableLike.FeatureOption;
 import static org.apache.flink.sql.parser.ddl.SqlTableLike.MergingStrategy;
 
 /** Converts in-memory metadata definitions. HiveCatalog owns HMS I/O and serialization.
  * Computed columns and watermarks require a planner and are deliberately unsupported. */
-final class FlinkTableDdl {
+public final class FlinkTableDdl {
     private FlinkTableDdl() {}
 
-    static ResolvedCatalogTable create(SqlCreateTable sql, DataTypeFactory types) throws Exception {
+    /** File definitions use built-in types without constructing a Catalog or connecting to HMS. */
+    public static ResolvedCatalogTable create(SqlCreateTable sql) throws Exception {
+        return create(sql, type -> TypeConversions.fromLogicalToDataType(LogicalTypeParser.parse(type)));
+    }
+
+    public static ResolvedCatalogTable create(SqlCreateTable sql, DataTypeFactory types) throws Exception {
+        return create(sql, types::createDataType);
+    }
+
+    private static ResolvedCatalogTable create(SqlCreateTable sql, Function<String, DataType> types) throws Exception {
         if (sql instanceof SqlCreateTableLike) throw new IllegalArgumentException("CREATE TABLE LIKE requires a source table");
         requireSimpleSchema(sql.getColumnList(), sql.getWatermark().isPresent());
         sql.validate();
@@ -28,7 +40,7 @@ final class FlinkTableDdl {
         return definition.toCatalogTable();
     }
 
-    static ResolvedCatalogTable createLike(SqlCreateTableLike sql, ResolvedCatalogTable source,
+    public static ResolvedCatalogTable createLike(SqlCreateTableLike sql, ResolvedCatalogTable source,
                                            DataTypeFactory types) throws Exception {
         Objects.requireNonNull(source, "LIKE source table");
         requireSimpleSchema(sql.getColumnList(), sql.getWatermark().isPresent());
@@ -36,7 +48,7 @@ final class FlinkTableDdl {
         Map<FeatureOption, MergingStrategy> strategies = likeStrategies(sql.getTableLike());
         TableDefinition definition = new TableDefinition();
         inheritSource(definition, source, strategies);
-        mergeDeclaredDefinition(definition, sql, strategies, types);
+        mergeDeclaredDefinition(definition, sql, strategies, types::createDataType);
         return definition.toCatalogTable();
     }
 
@@ -75,7 +87,7 @@ final class FlinkTableDdl {
     }
 
     private static void mergeDeclaredDefinition(TableDefinition definition, SqlCreateTable sql,
-                                                Map<FeatureOption, MergingStrategy> strategies, DataTypeFactory types) {
+                                                Map<FeatureOption, MergingStrategy> strategies, Function<String, DataType> types) {
         for (SqlNode node : sql.getColumnList()) {
             Column column = column((SqlTableColumn) node, types);
             int previous = indexOf(definition.columns, column.getName());
@@ -109,7 +121,7 @@ final class FlinkTableDdl {
         definition.comment = sql.getComment().map(FlinkTableDdl::literal).orElse(null);
     }
 
-    static ResolvedCatalogTable resolve(CatalogBaseTable definition, DataTypeFactory types) {
+    public static ResolvedCatalogTable resolve(CatalogBaseTable definition, DataTypeFactory types) {
         if (!(definition instanceof CatalogTable table)) throw invalid("The object is not a table");
         Schema schema = table.getUnresolvedSchema();
         if (!schema.getWatermarkSpecs().isEmpty()) throw unsupported();
@@ -133,7 +145,7 @@ final class FlinkTableDdl {
         return resolved.toCatalogTable();
     }
 
-    static ResolvedCatalogTable alter(SqlAlterTable sql, CatalogBaseTable previous, DataTypeFactory types) throws Exception {
+    public static ResolvedCatalogTable alter(SqlAlterTable sql, CatalogBaseTable previous, DataTypeFactory types) throws Exception {
         ResolvedCatalogTable old = resolve(previous, types);
         if (sql instanceof SqlAlterTableOptions set) {
             Map<String, String> options = new HashMap<>(old.getOptions());
@@ -186,7 +198,7 @@ final class FlinkTableDdl {
         boolean add = change instanceof SqlAlterTableAdd;
         for (SqlNode node : change.getColumnPositions()) {
             var position = (SqlTableColumnPosition) node;
-            Column column = column(position.getColumn(), types);
+            Column column = column(position.getColumn(), types::createDataType);
             int existing = indexOf(columns, column.getName());
             if (add && existing >= 0) throw invalid("Column already exists: " + column.getName());
             if (!add && existing < 0) throw invalid("Column does not exist: " + column.getName());
@@ -217,7 +229,7 @@ final class FlinkTableDdl {
         }
     }
 
-    private static Column column(SqlTableColumn sql, DataTypeFactory types) {
+    private static Column column(SqlTableColumn sql, Function<String, DataType> types) {
         Column column;
         if (sql instanceof SqlTableColumn.SqlRegularColumn physical) {
             column = Column.physical(sql.getName().getSimple(), dataType(physical.getType(), types));
@@ -228,9 +240,9 @@ final class FlinkTableDdl {
         return column.withComment(sql.getComment().map(FlinkTableDdl::literal).orElse(null));
     }
 
-    private static DataType dataType(SqlDataTypeSpec sql, DataTypeFactory types) {
+    private static DataType dataType(SqlDataTypeSpec sql, Function<String, DataType> types) {
         // The SQL parser carries top-level nullability separately from the type's SQL text.
-        DataType type = types.createDataType(sql.toString());
+        DataType type = types.apply(sql.toString());
         return Boolean.FALSE.equals(sql.getNullable()) ? type.notNull() : type.nullable();
     }
 
@@ -295,12 +307,12 @@ final class FlinkTableDdl {
         }
     }
 
-    static void requireSimpleSchema(Iterable<? extends SqlNode> columns, boolean watermark) {
+    public static void requireSimpleSchema(Iterable<? extends SqlNode> columns, boolean watermark) {
         if (watermark) throw unsupported();
         for (SqlNode column : columns) if (column instanceof SqlTableColumn.SqlComputedColumn) throw unsupported();
     }
 
-    static Map<String, String> properties(SqlNodeList nodes) {
+    public static Map<String, String> properties(SqlNodeList nodes) {
         Map<String, String> properties = new HashMap<>();
         if (nodes == null) return properties; // ADD PARTITION may omit WITH properties.
         for (SqlNode node : nodes) {

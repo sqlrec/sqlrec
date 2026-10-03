@@ -1,6 +1,7 @@
 package com.sqlrec.db.remote;
 
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.db.FlinkTableDdl;
 import org.apache.flink.sql.parser.ddl.SqlAlterTable;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlCreateTableLike;
@@ -35,6 +36,19 @@ class FlinkTableDdlTest {
     @AfterEach
     void tearDown() {
         if (manager != null) manager.close();
+    }
+
+    @Test
+    void fileAndCatalogConversionsProduceTheSameSchema() throws Exception {
+        String sql = "CREATE TABLE items (id BIGINT, nested ROW<label STRING, values_array ARRAY<INT>>, "
+                + "attributes MAP<STRING, DECIMAL(12, 3)>, payload BYTES, event_time TIMESTAMP_LTZ(3) "
+                + "METADATA FROM 'timestamp' VIRTUAL, PRIMARY KEY (id) NOT ENFORCED) "
+                + "COMMENT 'same definition' WITH ('connector'='not_installed')";
+        var catalog = create(sql);
+        var file = FlinkTableDdl.create((SqlCreateTable) CompileManager.parseSql(sql));
+        assertEquals(catalog.getResolvedSchema(), file.getResolvedSchema());
+        assertEquals(catalog.getOptions(), file.getOptions());
+        assertEquals(catalog.getComment(), file.getComment());
     }
 
     @Test

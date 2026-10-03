@@ -84,6 +84,7 @@ Thrift sessions are created locally and do not require an available Gateway. Loc
 | Request | Gateway dependency |
 | --- | --- |
 | Locally supported SQL and persistent table/database/UDF metadata DDL | None |
+| `SHOW DATABASES/TABLES/FUNCTIONS`, `SHOW USER FUNCTIONS`, `SHOW CREATE TABLE`, `DESCRIBE` | None; supported in both shared metadata and SQL-file mode |
 | Top-level `USE database`, `SET 'key' = 'value'` | None; state is saved locally and synchronized before the next remote SQL statement |
 | JDBC type, catalog, schema, table, column, function, and primary-key queries | None |
 | Client session information, local operation status, and local result fetching | None |
@@ -191,7 +192,11 @@ Metadata describes databases, tables, Java UDFs, SQL functions, APIs, models, an
 
 Local SQL-file mode **does not allow DDL execution**. Definitions are loaded from SQL files. Queries, data writes, `CACHE TABLE`, and calls to predefined functions remain available. For online serving, deploy the complete SQL directory with the application version so each instance loads the same definitions at startup; redeploy or restart all instances after a change.
 
-In either mode, table definitions become Calcite tables, and SQLRec caches database lists, table schemas, and function/API/Service definitions. In remote mode, relevant caches refresh on later access after `SCHEMA_CACHE_EXPIRE`; `FLUSH` invalidates them immediately. HMS table refresh uses `transient_lastDdlTime` to decide whether to reuse a table object, so an external schema change without an updated timestamp can leave an old object in use. Local metadata is read from files only during startup initialization: `FLUSH` invalidates in-process caches, which rebuild on later access, but file changes still require a restart. See [Service Deployment](../operations/deployment.md) for configuration and the [Docker Quick Start](../getting-started/docker.md) for a local-file example.
+Both modes support [metadata queries](./sql.md#metadata-queries). `ResourceQueryExecutor` handles query dispatch and session cache tables, delegating table-definition and UDF queries to the metadata access layer. SQL-file mode reads table declarations and function definitions saved at startup. Inspecting them does not require loading their connector or UDF classes; executing data queries requires the corresponding capabilities.
+
+SQLRec caches database lists, table schemas, and function/API/Service definitions. The database list primarily relies on `databaseListCache`: access after `SCHEMA_CACHE_EXPIRE` triggers an asynchronous refresh, which may return the old list until the refresh completes. DDL or `FLUSH` can also invalidate relevant caches. Creating a Calcite schema uses the cached database list; existing schemas deliberately do not synchronize database membership before each SQL statement. After a database is added or removed, create a new executor once the list has updated (Thrift clients can reconnect) to use the updated list for local SQL compilation. `SHOW DATABASES` and `SHOW TABLES` query metadata directly and are not limited by that session list.
+
+Table and function caches within existing databases can still refresh independently. HMS table refresh uses `transient_lastDdlTime` to decide whether to reuse a table object, so an external schema change without an updated timestamp can leave an old object in use. Local metadata is read from files only during startup initialization: `FLUSH` invalidates in-process caches but neither reparses files nor adds or removes database sub-schemas in existing sessions. File changes still require a restart. See [Service Deployment](../operations/deployment.md) for configuration and the [Docker Quick Start](../getting-started/docker.md) for a local-file example.
 
 ## Models and Online Services
 

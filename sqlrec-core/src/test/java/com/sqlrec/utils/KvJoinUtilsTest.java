@@ -24,6 +24,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,6 +53,41 @@ public class KvJoinUtilsTest {
     @AfterEach
     public void tearDown() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(originalIgnoreJoinQueryException);
+    }
+
+    @Test
+    public void testScalarRowsKeepStringKeyMatchingAndSnakeOrder() {
+        SqlRecKvTable rightTable = mock(SqlRecKvTable.class);
+        when(rightTable.getRowType(any())).thenReturn(rightRowType);
+        when(rightTable.getPrimaryKeyIndex()).thenReturn(0);
+        Object[] first = {1, "first"};
+        when(rightTable.getByPrimaryKey(Set.of(1, 2, 9))).thenReturn(Map.of(
+                "1", List.of(first, new Object[]{1, "second"}),
+                "2", Collections.singletonList(new Object[]{2, "other"})));
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0),
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 1));
+
+        List<Object[]> rows = KvJoinUtils.kvJoin(Linq4j.asEnumerable(Arrays.asList(1, 2, null, 9)),
+                rightTable, condition, JoinRelType.LEFT).toList();
+
+        assertEquals(5, rows.size());
+        assertArrayEquals(new Object[]{1, 1, "first"}, rows.get(0));
+        assertArrayEquals(new Object[]{2, 2, "other"}, rows.get(1));
+        assertArrayEquals(new Object[]{null, null, null}, rows.get(2));
+        assertArrayEquals(new Object[]{9, null, null}, rows.get(3));
+        assertArrayEquals(new Object[]{1, 1, "second"}, rows.get(4));
+        rows.get(0)[2] = "changed";
+        assertEquals("first", first[1]);
+        verify(rightTable).getByPrimaryKey(Set.of(1, 2, 9));
+        verify(rightTable, never()).scan(any(), any());
+    }
+
+    @Test
+    public void testEmptyLeftRowsSkipConditionAndRightTable() {
+        SqlRecKvTable rightTable = mock(SqlRecKvTable.class);
+        assertEquals(0, KvJoinUtils.kvJoin(Linq4j.emptyEnumerable(), rightTable, null, JoinRelType.INNER).count());
+        verifyNoInteractions(rightTable);
     }
 
     @Test

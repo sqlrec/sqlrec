@@ -13,6 +13,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.Consumer;
 
 public class K8sYamlUtils {
     private static final Logger log = LoggerFactory.getLogger(K8sYamlUtils.class);
@@ -91,21 +92,8 @@ public class K8sYamlUtils {
             return yamlContent;
         }
 
-        try {
-            List<HasMetadata> resources = parseK8sYaml(yamlContent);
-
-            for (HasMetadata resource : resources) {
-                PodSpec podSpec = getPodSpec(resource);
-                if (podSpec != null) {
-                    injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
-                }
-            }
-
-            return mergeYamlResources(resources);
-        } catch (Exception e) {
-            log.error("Failed to inject env vars into YAML: {}", e.getMessage(), e);
-            return yamlContent;
-        }
+        return updatePodSpecs(yamlContent, "env vars",
+                podSpec -> injectEnvVarsIntoContainers(podSpec.getContainers(), envVars));
     }
 
     private static String mergeYamlResources(List<HasMetadata> resources) {
@@ -150,21 +138,21 @@ public class K8sYamlUtils {
                     existingEnvVars = new ArrayList<>();
                 }
 
-                Map<String, String> envMap = new LinkedHashMap<>();
+                Map<String, EnvVar> envByName = new LinkedHashMap<>();
                 for (EnvVar envVar : existingEnvVars) {
-                    envMap.put(envVar.getName(), envVar.getValue());
+                    // Keep references such as secretKeyRef and fieldRef intact.
+                    envByName.put(envVar.getName(), envVar);
                 }
-                envMap.putAll(envVars);
 
-                List<EnvVar> newEnvVars = new ArrayList<>();
-                for (Map.Entry<String, String> entry : envMap.entrySet()) {
+                for (Map.Entry<String, String> entry : envVars.entrySet()) {
                     EnvVar envVar = new EnvVar();
                     envVar.setName(entry.getKey());
                     envVar.setValue(entry.getValue());
-                    newEnvVars.add(envVar);
+                    // An explicit value replaces any previous valueFrom for this name.
+                    envByName.put(entry.getKey(), envVar);
                 }
 
-                container.setEnv(newEnvVars);
+                container.setEnv(new ArrayList<>(envByName.values()));
             } catch (Exception e) {
                 log.error("Failed to inject env vars into container: {}", e.getMessage(), e);
             }
@@ -177,21 +165,8 @@ public class K8sYamlUtils {
             return yamlContent;
         }
 
-        try {
-            List<HasMetadata> resources = parseK8sYaml(yamlContent);
-
-            for (HasMetadata resource : resources) {
-                PodSpec podSpec = getPodSpec(resource);
-                if (podSpec != null) {
-                    injectVolumeMount(podSpec, pvcName, volumeName, mountPath, subPath);
-                }
-            }
-
-            return mergeYamlResources(resources);
-        } catch (Exception e) {
-            log.error("Failed to inject volume mount into YAML: {}", e.getMessage(), e);
-            return yamlContent;
-        }
+        return updatePodSpecs(yamlContent, "volume mount",
+                podSpec -> injectVolumeMount(podSpec, pvcName, volumeName, mountPath, subPath));
     }
 
     public static String injectNamespaceIntoYaml(String yamlContent, String namespace) {
@@ -199,23 +174,14 @@ public class K8sYamlUtils {
             return yamlContent;
         }
 
-        try {
-            List<HasMetadata> resources = parseK8sYaml(yamlContent);
-
-            for (HasMetadata resource : resources) {
-                if (resource.getMetadata() != null) {
-                    String existingNamespace = resource.getMetadata().getNamespace();
-                    if (existingNamespace == null || existingNamespace.isEmpty()) {
-                        resource.getMetadata().setNamespace(namespace);
-                    }
+        return updateYaml(yamlContent, "namespace", resource -> {
+            if (resource.getMetadata() != null) {
+                String existingNamespace = resource.getMetadata().getNamespace();
+                if (existingNamespace == null || existingNamespace.isEmpty()) {
+                    resource.getMetadata().setNamespace(namespace);
                 }
             }
-
-            return mergeYamlResources(resources);
-        } catch (Exception e) {
-            log.error("Failed to inject namespace into YAML: {}", e.getMessage(), e);
-            return yamlContent;
-        }
+        });
     }
 
     public static String injectNodeSelectorIntoYaml(String yamlContent, Map<String, String> nodeSelectors) {
@@ -223,19 +189,28 @@ public class K8sYamlUtils {
             return yamlContent;
         }
 
+        return updatePodSpecs(yamlContent, "node selector",
+                podSpec -> injectNodeSelector(podSpec, nodeSelectors));
+    }
+
+    private static String updatePodSpecs(String yamlContent, String injection, Consumer<PodSpec> update) {
+        return updateYaml(yamlContent, injection, resource -> {
+            PodSpec podSpec = getPodSpec(resource);
+            if (podSpec != null) {
+                update.accept(podSpec);
+            }
+        });
+    }
+
+    private static String updateYaml(String yamlContent, String injection, Consumer<HasMetadata> update) {
         try {
             List<HasMetadata> resources = parseK8sYaml(yamlContent);
-
             for (HasMetadata resource : resources) {
-                PodSpec podSpec = getPodSpec(resource);
-                if (podSpec != null) {
-                    injectNodeSelector(podSpec, nodeSelectors);
-                }
+                update.accept(resource);
             }
-
             return mergeYamlResources(resources);
         } catch (Exception e) {
-            log.error("Failed to inject node selector into YAML: {}", e.getMessage(), e);
+            log.error("Failed to inject " + injection + " into YAML: {}", e.getMessage(), e);
             return yamlContent;
         }
     }

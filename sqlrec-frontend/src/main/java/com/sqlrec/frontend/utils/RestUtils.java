@@ -1,5 +1,7 @@
 package com.sqlrec.frontend.utils;
 
+import com.google.gson.JsonParseException;
+import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.utils.JsonUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
@@ -32,6 +34,15 @@ public class RestUtils {
 
     public static FullHttpResponse error(HttpResponseStatus status, byte[] content, String contentType) {
         return build(status, content, contentType, null);
+    }
+
+    public static RequestData parseRequestData(String requestBody) {
+        try {
+            return JsonUtils.fromJson(requestBody, RequestData.class);
+        } catch (JsonParseException e) {
+            throw new IllegalArgumentException("invalid JSON request body: "
+                    + errorMessage(e, "could not parse JSON"), e);
+        }
     }
 
     public static String errorMessage(Exception exception, String fallback) {

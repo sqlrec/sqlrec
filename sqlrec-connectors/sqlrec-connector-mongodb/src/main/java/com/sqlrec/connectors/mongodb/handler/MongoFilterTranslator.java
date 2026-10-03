@@ -82,26 +82,7 @@ final class MongoFilterTranslator {
             return Boolean.TRUE.equals(value) ? new Document() : Filters.expr(false);
         }
         if (filter.isA(SqlKind.AND) || filter.isA(SqlKind.OR)) {
-            RexCall call = (RexCall) filter;
-            boolean isOr = filter.isA(SqlKind.OR);
-            List<Bson> operands = new ArrayList<>();
-            for (RexNode operand : call.getOperands()) {
-                Bson bsonOperand = buildBsonFilter(operand);
-                if (bsonOperand == null) {
-                    // Dropping an unsupported AND operand only broadens the MongoDB result set,
-                    // so Calcite can still apply the complete residual filter safely. Dropping an
-                    // OR operand narrows the result set and would permanently lose matching rows.
-                    if (isOr) {
-                        return null;
-                    }
-                    continue;
-                }
-                operands.add(bsonOperand);
-            }
-            if (operands.isEmpty()) {
-                return null;
-            }
-            return isOr ? Filters.or(operands) : Filters.and(operands);
+            return buildLogicalFilter((RexCall) filter);
         }
         if (filter.isA(SqlKind.NOT)) {
             return buildNotFilter((RexCall) filter);
@@ -114,12 +95,7 @@ final class MongoFilterTranslator {
         }
         if (filter.isA(SqlKind.IS_NULL) || filter.isA(SqlKind.IS_NOT_NULL)
                 || filter.isA(SqlKind.IS_UNKNOWN)) {
-            RexCall call = (RexCall) filter;
-            String fieldName = getFieldName(call.getOperands().get(0));
-            if (fieldName == null) {
-                return null;
-            }
-            return filter.isA(SqlKind.IS_NOT_NULL) ? Filters.ne(fieldName, null) : Filters.eq(fieldName, null);
+            return buildNullFilter((RexCall) filter);
         }
         if (filter.isA(SqlKind.IS_TRUE) || filter.isA(SqlKind.IS_FALSE)
                 || filter.isA(SqlKind.IS_NOT_TRUE) || filter.isA(SqlKind.IS_NOT_FALSE)) {
@@ -136,6 +112,36 @@ final class MongoFilterTranslator {
         }
         logger.warn("Unsupported filter kind: {}, filter will be handled by Calcite", filter.getKind());
         return null;
+    }
+
+    private Bson buildLogicalFilter(RexCall call) {
+        boolean isOr = call.isA(SqlKind.OR);
+        List<Bson> operands = new ArrayList<>();
+        for (RexNode operand : call.getOperands()) {
+            Bson bsonOperand = buildBsonFilter(operand);
+            if (bsonOperand == null) {
+                // Dropping an unsupported AND operand only broadens the MongoDB result set,
+                // so Calcite can still apply the complete residual filter safely. Dropping an
+                // OR operand narrows the result set and would permanently lose matching rows.
+                if (isOr) {
+                    return null;
+                }
+                continue;
+            }
+            operands.add(bsonOperand);
+        }
+        if (operands.isEmpty()) {
+            return null;
+        }
+        return isOr ? Filters.or(operands) : Filters.and(operands);
+    }
+
+    private Bson buildNullFilter(RexCall call) {
+        String fieldName = getFieldName(call.getOperands().get(0));
+        if (fieldName == null) {
+            return null;
+        }
+        return call.isA(SqlKind.IS_NOT_NULL) ? Filters.ne(fieldName, null) : Filters.eq(fieldName, null);
     }
 
     private Bson buildNotFilter(RexCall call) {

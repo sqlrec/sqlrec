@@ -2,9 +2,11 @@ package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
@@ -35,7 +37,7 @@ class SessionManagerRoutingTest {
     @Test
     void localDdlFailureReturnsAnErrorOperationWithoutForwarding() throws Exception {
         try (Session session = new Session()) {
-            when(session.executor.executeSqlAsync("DROP TABLE missing"))
+            when(session.executor.executeSqlAsync(any(SqlNode.class), eq("DROP TABLE missing")))
                     .thenThrow(new IllegalArgumentException("table does not exist"));
             TExecuteStatementResp response = session.manager.executeStatement(
                     new TExecuteStatementReq(session.handle, "DROP TABLE missing"));
@@ -45,7 +47,50 @@ class SessionManagerRoutingTest {
             assertEquals(TOperationState.ERROR_STATE, session.manager.getOperationStatus(
                     new TGetOperationStatusReq(response.getOperationHandle())).getOperationState());
             verifyNoInteractions(session.proxy); // Local polling never enters the Gateway client.
-            verify(session.executor).executeSqlAsync("DROP TABLE missing");
+            verify(session.executor).executeSqlAsync(any(SqlNode.class), eq("DROP TABLE missing"));
+        }
+    }
+
+    @Test
+    void parseFailureReturnsALocalErrorWithoutForwarding() throws Exception {
+        try (Session session = new Session()) {
+            TExecuteStatementResp response = session.manager.executeStatement(
+                    new TExecuteStatementReq(session.handle, "SELECT FROM"));
+            assertEquals(TStatusCode.SUCCESS_STATUS, response.getStatus().getStatusCode());
+            assertEquals(TOperationState.ERROR_STATE, session.manager.getOperationStatus(
+                    new TGetOperationStatusReq(response.getOperationHandle())).getOperationState());
+            verifyNoInteractions(session.executor, session.proxy);
+        }
+    }
+
+    @Test
+    void localStatementsLeaveGatewayUntouchedAndRemoteSqlUsesTheLatestState() throws Exception {
+        try (Session session = new Session()) {
+            when(session.executor.executeSqlAsync(any(SqlNode.class), eq("USE review")))
+                    .thenReturn(SqlProcessResult.msg("database changed", "msg"));
+            when(session.executor.executeSqlAsync(any(SqlNode.class), eq("SET 'parallelism.default' = '2'")))
+                    .thenReturn(SqlProcessResult.msg("setting saved", "msg"));
+            session.manager.executeStatement(new TExecuteStatementReq(session.handle, "USE review"));
+            session.manager.executeStatement(new TExecuteStatementReq(session.handle, "SET 'parallelism.default' = '2'"));
+            verifyNoInteractions(session.proxy);
+
+            when(session.executor.getDefaultSchema()).thenReturn("review");
+            when(session.executor.getSessionSettings()).thenReturn(Map.of("parallelism.default", "2"));
+            TExecuteStatementResp remote = new TExecuteStatementResp(success());
+            remote.setOperationHandle(new TOperationHandle(
+                    ThriftUtils.getHandleIdentifier(), TOperationType.EXECUTE_STATEMENT, true));
+            when(session.proxy.executeStatement(any())).thenReturn(remote);
+            String sql = "SELECT * FROM remote_table";
+            SqlNode node = CompileManager.parseSql(sql);
+            try (var parser = mockStatic(CompileManager.class)) {
+                parser.when(() -> CompileManager.parseSql(sql)).thenReturn(node);
+                assertSame(remote, session.manager.executeStatement(new TExecuteStatementReq(session.handle, sql)));
+                parser.verify(() -> CompileManager.parseSql(sql), times(1));
+                verify(session.executor).executeSqlAsync(same(node), eq(sql));
+            }
+            var order = inOrder(session.proxy);
+            order.verify(session.proxy).setSessionState("review", Map.of("parallelism.default", "2"));
+            order.verify(session.proxy).executeStatement(any());
         }
     }
 
@@ -159,7 +204,7 @@ class SessionManagerRoutingTest {
             CountDownLatch executing = new CountDownLatch(1);
             CountDownLatch release = new CountDownLatch(1);
             CountDownLatch closing = new CountDownLatch(1);
-            when(session.executor.executeSqlAsync("SELECT 1")).thenAnswer(call -> {
+            when(session.executor.executeSqlAsync(any(SqlNode.class), eq("SELECT 1"))).thenAnswer(call -> {
                 executing.countDown();
                 assertTrue(release.await(5, TimeUnit.SECONDS));
                 return SqlProcessResult.msg("done", "msg");
@@ -186,6 +231,36 @@ class SessionManagerRoutingTest {
                 release.countDown();
                 workers.shutdownNow();
             }
+        }
+    }
+
+    @Test
+    void gatewayExceptionReturnsAnErrorResponseWithoutALocalOperation() throws Exception {
+        try (Session session = new Session()) {
+            TException failure = new TException("FLINK_GATEWAY_UNAVAILABLE: offline");
+            when(session.proxy.executeStatement(any())).thenThrow(failure);
+
+            TExecuteStatementResp response = session.manager.executeStatement(
+                    new TExecuteStatementReq(session.handle, "SELECT * FROM remote_table"));
+
+            assertEquals(TStatusCode.ERROR_STATUS, response.getStatus().getStatusCode());
+            assertEquals(failure.getMessage(), response.getStatus().getErrorMessage());
+            assertEquals("08001", response.getStatus().getSqlState());
+            assertFalse(response.isSetOperationHandle());
+            assertTrue(session.manager.hasSession(session.handle));
+        }
+    }
+
+    @Test
+    void uncheckedGatewayFailurePropagatesWithoutBecomingALocalErrorOperation() throws Exception {
+        try (Session session = new Session()) {
+            IllegalStateException failure = new IllegalStateException("unexpected Gateway failure");
+            when(session.proxy.executeStatement(any())).thenThrow(failure);
+
+            assertSame(failure, assertThrows(IllegalStateException.class,
+                    () -> session.manager.executeStatement(
+                            new TExecuteStatementReq(session.handle, "SELECT * FROM remote_table"))));
+            assertTrue(session.manager.hasSession(session.handle));
         }
     }
 
