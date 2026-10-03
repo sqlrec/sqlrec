@@ -22,14 +22,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class ProxyAllBindable extends BindableInterface {
+public class ProxyAllBindable extends ForwardingBindable {
     private static final Logger log = LoggerFactory.getLogger(ProxyAllBindable.class);
 
     private final BindableInterface delegate;
@@ -43,6 +42,11 @@ public class ProxyAllBindable extends BindableInterface {
             return bindable;
         }
         return new ProxyAllBindable(bindable);
+    }
+
+    @Override
+    protected BindableInterface metadataDelegate() {
+        return delegate;
     }
 
     @Override
@@ -277,21 +281,6 @@ public class ProxyAllBindable extends BindableInterface {
     }
 
     @Override
-    public boolean isParallelizable() {
-        return delegate.isParallelizable();
-    }
-
-    @Override
-    public Set<String> getReadTables() {
-        return delegate.getReadTables();
-    }
-
-    @Override
-    public Set<String> getWriteTables() {
-        return delegate.getWriteTables();
-    }
-
-    @Override
     public long getCreateTime() {
         return delegate.getCreateTime();
     }
@@ -299,16 +288,6 @@ public class ProxyAllBindable extends BindableInterface {
     @Override
     public Set<String> getAccessTables() {
         return delegate.getAccessTables();
-    }
-
-    @Override
-    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
-        return delegate.isTimeoutAble(schema, context);
-    }
-
-    @Override
-    public boolean isUnionSql() {
-        return delegate.isUnionSql();
     }
 
     @Override
@@ -324,21 +303,6 @@ public class ProxyAllBindable extends BindableInterface {
     @Override
     public boolean isIgnoreException() {
         return delegate.isIgnoreException();
-    }
-
-    @Override
-    public Set<String> getDependencyJavaFuncName() {
-        return delegate.getDependencyJavaFuncName();
-    }
-
-    @Override
-    public Set<String> getDependencySqlFuncName() {
-        return delegate.getDependencySqlFuncName();
-    }
-
-    @Override
-    public Map<String, String> getAllDependSqlFunctionMap() {
-        return delegate.getAllDependSqlFunctionMap();
     }
 
     @Override
@@ -373,20 +337,5 @@ public class ProxyAllBindable extends BindableInterface {
     @Override
     public void setSql(String sql) {
         delegate.setSql(sql);
-    }
-
-    @Override
-    public String getLogicalPlan() {
-        return delegate.getLogicalPlan();
-    }
-
-    @Override
-    public String getPhysicalPlan() {
-        return delegate.getPhysicalPlan();
-    }
-
-    @Override
-    public String getJavaExpression() {
-        return delegate.getJavaExpression();
     }
 }

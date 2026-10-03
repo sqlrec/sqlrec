@@ -1,7 +1,7 @@
 package com.sqlrec.connectors.redis.flink;
 
 import com.sqlrec.common.utils.FlinkSchemaUtils;
-import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.common.schema.ConnectorTableMetadata;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -40,14 +40,14 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         RedisConfig redisConfig = RedisOptions.getRedisConfig(options);
-        redisConfig.database = context.getObjectIdentifier().getDatabaseName();
-        redisConfig.tableName = context.getObjectIdentifier().getObjectName();
-        redisConfig.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(tableSchema);
-        redisConfig.primaryKey = FlinkSchemaUtils.getPrimaryKey(tableSchema);
-        redisConfig.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
-                redisConfig.fieldSchemas,
-                redisConfig.primaryKey
-        );
+        ConnectorTableMetadata metadata = FlinkSchemaUtils.getConnectorTableMetadata(
+                context.getObjectIdentifier().getDatabaseName(),
+                context.getObjectIdentifier().getObjectName(), options, tableSchema);
+        redisConfig.database = metadata.getDatabase();
+        redisConfig.tableName = metadata.getTableName();
+        redisConfig.fieldSchemas = metadata.getFieldSchemas();
+        redisConfig.primaryKey = metadata.getPrimaryKey();
+        redisConfig.primaryKeyIndex = metadata.getPrimaryKeyIndex();
         return redisConfig;
     }
 

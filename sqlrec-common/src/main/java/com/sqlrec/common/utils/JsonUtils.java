@@ -61,68 +61,20 @@ public class JsonUtils {
         }.getType());
     }
 
+    /** Compatibility entry point for row projection JSON encoding. */
     public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
-        JsonArray jsonArray = new JsonArray();
-
-        for (Object[] row : data) {
-            JsonObject jsonObject = new JsonObject();
-            for (int i = 0; i < inputFields.size(); i++) {
-                FieldSchema field = inputFields.get(i);
-                int fieldIndex = DataTypeUtils.findFieldIndex(dataFields, field.getName());
-                if (fieldIndex >= 0 && fieldIndex < row.length) {
-                    Object value = row[fieldIndex];
-                    if (value != null) {
-                        jsonObject.add(field.getName(), gson.toJsonTree(value));
-                    }
-                }
-            }
-            jsonArray.add(jsonObject);
-        }
-
-        return gson.toJson(jsonArray);
+        return RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
     }
 
     public static Map<String, Object> parseJsonToMap(String json) {
         return gson.fromJson(json, Map.class);
     }
 
+    /** Compatibility entry point for grouped-column JSON encoding. */
     public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData,
                                         List<FieldSchema> queryFields, List<FieldSchema> valueFields,
                                         List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
-        JsonObject jsonObject = new JsonObject();
-
-        for (int i = 0; i < queryFields.size(); i++) {
-            FieldSchema field = queryFields.get(i);
-            int fieldIndex = DataTypeUtils.findFieldIndex(queryDataFields, field.getName());
-            if (fieldIndex >= 0 && queryData.size() > 0) {
-                Object value = queryData.get(0)[fieldIndex];
-                JsonArray jsonArray = new JsonArray();
-                if (value != null) {
-                    jsonArray.add(gson.toJsonTree(value));
-                } else {
-                    jsonArray.add(JsonNull.INSTANCE);
-                }
-                jsonObject.add(field.getName(), jsonArray);
-            }
-        }
-
-        for (int i = 0; i < valueFields.size(); i++) {
-            FieldSchema field = valueFields.get(i);
-            int fieldIndex = DataTypeUtils.findFieldIndex(valueDataFields, field.getName());
-            if (fieldIndex >= 0) {
-                JsonArray jsonArray = new JsonArray();
-                for (Object[] row : valueData) {
-                    Object value = row[fieldIndex];
-                    if (value != null) {
-                        jsonArray.add(gson.toJsonTree(value));
-                    } else {
-                        jsonArray.add(JsonNull.INSTANCE);
-                    }
-                }
-                jsonObject.add(field.getName(), jsonArray);
-            }
-        }
-
-        return gson.toJson(jsonObject);
+        return RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields,
+                queryDataFields, valueDataFields);
     }
 }

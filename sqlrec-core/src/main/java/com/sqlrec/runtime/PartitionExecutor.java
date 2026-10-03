@@ -12,7 +12,6 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.slf4j.Logger;
@@ -126,12 +125,9 @@ final class PartitionExecutor {
             return literal.intValue(false);
         }
         SqlGetVariable variable = (SqlGetVariable) sizeNode;
-        String variableName = SchemaUtils.getValueOfStringLiteral(variable.getVariableName());
-        String value = context.getVariable(variableName);
-        if (value == null && variable.hasDefaultValue()) {
-            value = SchemaUtils.getValueOfStringLiteral(
-                    (SqlCharStringLiteral) variable.getDefaultValue());
-        }
+        String variableName = RuntimeValueResolver.variableName(variable);
+        String value = RuntimeValueResolver.resolveVariable(variable, context,
+                RuntimeValueResolver.MissingValuePolicy.NULL_ONLY);
         if (value == null) {
             throw new RuntimeException("cant get partition size from variable: " + variableName);
         }

@@ -8,18 +8,15 @@ import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.NodeUtils;
-import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.commons.lang3.StringUtils;
 import java.util.*;
 
-public class FunctionProxyBindable extends BindableInterface {
+public class FunctionProxyBindable extends ForwardingBindable {
     private final List<SqlNode> inputList;
     private final SqlGetVariable funcNameVariable;
     private final BindableInterface delegate;
@@ -124,6 +121,11 @@ public class FunctionProxyBindable extends BindableInterface {
     }
 
     @Override
+    protected BindableInterface metadataDelegate() {
+        return delegate;
+    }
+
+    @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         BindableInterface targetBindable = resolveBindable(schema, context);
 
@@ -161,15 +163,14 @@ public class FunctionProxyBindable extends BindableInterface {
     }
 
     private String resolveFunctionName(ExecuteContext context) {
-        String variableName = SchemaUtils.getValueOfStringLiteral(funcNameVariable.getVariableName());
-        String functionName = context.getVariable(variableName);
-        if (!StringUtils.isEmpty(functionName)) {
+        String functionName = RuntimeValueResolver.resolveVariable(funcNameVariable, context,
+                RuntimeValueResolver.MissingValuePolicy.NULL_OR_EMPTY);
+        // A declared default is returned even when it is empty, matching dynamic call semantics.
+        if ((functionName != null && !functionName.isEmpty()) || funcNameVariable.hasDefaultValue()) {
             return functionName;
         }
-        if (funcNameVariable.hasDefaultValue()) {
-            return SchemaUtils.getValueOfStringLiteral((SqlCharStringLiteral) funcNameVariable.getDefaultValue());
-        }
-        throw new RuntimeException("cant get function name from variable: " + variableName);
+        throw new RuntimeException("cant get function name from variable: "
+                + RuntimeValueResolver.variableName(funcNameVariable));
     }
 
     @Override
@@ -230,30 +231,6 @@ public class FunctionProxyBindable extends BindableInterface {
     }
 
     @Override
-    public Set<String> getDependencyJavaFuncName() {
-        if (delegate != null) {
-            return delegate.getDependencyJavaFuncName();
-        }
-        return new HashSet<>();
-    }
-
-    @Override
-    public Set<String> getDependencySqlFuncName() {
-        if (delegate != null) {
-            return delegate.getDependencySqlFuncName();
-        }
-        return new HashSet<>();
-    }
-
-    @Override
-    public Map<String, String> getAllDependSqlFunctionMap() {
-        if (delegate != null) {
-            return delegate.getAllDependSqlFunctionMap();
-        }
-        return super.getAllDependSqlFunctionMap();
-    }
-
-    @Override
     public String getCacheTableName() {
         if (delegate != null) {
             return delegate.getCacheTableName();
@@ -265,38 +242,6 @@ public class FunctionProxyBindable extends BindableInterface {
     public List<RelDataTypeField> getCacheTableDataFields() {
         if (delegate != null) {
             return delegate.getCacheTableDataFields();
-        }
-        return null;
-    }
-
-    @Override
-    public boolean isUnionSql() {
-        if (delegate != null) {
-            return delegate.isUnionSql();
-        }
-        return false;
-    }
-
-    @Override
-    public String getLogicalPlan() {
-        if (delegate != null) {
-            return delegate.getLogicalPlan();
-        }
-        return null;
-    }
-
-    @Override
-    public String getPhysicalPlan() {
-        if (delegate != null) {
-            return delegate.getPhysicalPlan();
-        }
-        return null;
-    }
-
-    @Override
-    public String getJavaExpression() {
-        if (delegate != null) {
-            return delegate.getJavaExpression();
         }
         return null;
     }

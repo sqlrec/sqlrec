@@ -1,7 +1,7 @@
 package com.sqlrec.connectors.milvus.flink;
 
 import com.sqlrec.common.utils.FlinkSchemaUtils;
-import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.common.schema.ConnectorTableMetadata;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.config.MilvusOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -28,12 +28,12 @@ public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         MilvusConfig milvusConfig = MilvusOptions.getMilvusConfig(options);
-        milvusConfig.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(tableSchema);
-        milvusConfig.primaryKey = FlinkSchemaUtils.getPrimaryKey(tableSchema);
-        milvusConfig.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
-                milvusConfig.fieldSchemas,
-                milvusConfig.primaryKey
-        );
+        ConnectorTableMetadata metadata = FlinkSchemaUtils.getConnectorTableMetadata(
+                context.getObjectIdentifier().getDatabaseName(),
+                context.getObjectIdentifier().getObjectName(), options, tableSchema);
+        milvusConfig.fieldSchemas = metadata.getFieldSchemas();
+        milvusConfig.primaryKey = metadata.getPrimaryKey();
+        milvusConfig.primaryKeyIndex = metadata.getPrimaryKeyIndex();
         return milvusConfig;
     }
 

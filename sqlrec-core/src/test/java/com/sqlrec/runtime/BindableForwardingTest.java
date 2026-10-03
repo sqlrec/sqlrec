@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -26,6 +28,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * refresh and circular dependency detection silently.
  */
 public class BindableForwardingTest {
+
+    @Test
+    void cacheWrapperKeepsItsIdentityOutputAndReturnSemantics() {
+        StubBindable inner = new StubBindable(Set.of("FUN_A"), Set.of("JF_X"), Map.of(), "plan");
+        inner.setName("inner");
+        inner.setSql("inner SQL");
+        CacheTableBindable cache = new CacheTableBindable("cached", new ReturnBindable(inner));
+        ProxyAllBindable proxy = new ProxyAllBindable(cache);
+        proxy.setName("cache node");
+        proxy.setSql("cache SQL");
+        proxy.setIgnoreException(true);
+
+        assertEquals("inner", inner.getName());
+        assertEquals("inner SQL", inner.getSql());
+        assertEquals("cache node", cache.getName());
+        assertEquals("cache SQL", cache.getSql());
+        assertTrue(cache.isIgnoreException());
+        assertFalse(inner.isIgnoreException());
+        assertFalse(proxy.containsReturn());
+        assertEquals(Arrays.asList("table_name", "count"), proxy.getReturnDataFields().stream()
+                .map(RelDataTypeField::getName).toList());
+        assertEquals(Set.of("cached"), proxy.getWriteTables());
+        assertEquals("cached", proxy.getCacheTableName());
+        assertEquals(Set.of("FUN_A"), proxy.getDependencySqlFuncName());
+        assertEquals("plan", proxy.getLogicalPlan());
+    }
+
+    @Test
+    void tableReturnHasIndependentDefaultDependencyMetadata() {
+        ReturnBindable tableReturn = new ReturnBindable("input", Collections.emptyList());
+        tableReturn.getDependencySqlFuncName().add("temporary");
+        tableReturn.getAllDependSqlFunctionMap().put("temporary", "DDL");
+        assertTrue(tableReturn.getDependencySqlFuncName().isEmpty());
+        assertTrue(tableReturn.getAllDependSqlFunctionMap().isEmpty());
+        assertNull(tableReturn.getLogicalPlan());
+        assertFalse(tableReturn.isUnionSql());
+        assertTrue(tableReturn.containsReturn());
+        assertTrue(tableReturn.isParallelizable());
+        assertFalse(tableReturn.isTimeoutAble(null, new ExecuteContextImpl()));
+        assertEquals(Set.of("input"), tableReturn.getReadTables());
+    }
 
     private static class StubBindable extends BindableInterface {
         private final Set<String> dependencySqlFuncName;

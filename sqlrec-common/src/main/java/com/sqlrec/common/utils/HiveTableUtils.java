@@ -1,6 +1,7 @@
 package com.sqlrec.common.utils;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.ConnectorTableMetadata;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,16 @@ import java.util.*;
 
 public class HiveTableUtils {
     private static final Logger log = LoggerFactory.getLogger(HiveTableUtils.class);
+
+    /** Reads execution metadata for connectors that require a single-column primary key. */
+    public static ConnectorTableMetadata getConnectorTableMetadata(
+            org.apache.hadoop.hive.metastore.api.Table table) {
+        Map<String, String> options = getFlinkTableOptions(table);
+        List<FieldSchema> fields = parse(table);
+        String primaryKey = getTablePrimaryKey(table);
+        return new ConnectorTableMetadata(table.getDbName(), table.getTableName(), options,
+                fields, primaryKey, getTablePrimaryKeyIndex(fields, primaryKey));
+    }
 
     public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> tableProperties = tableObj.getParameters();

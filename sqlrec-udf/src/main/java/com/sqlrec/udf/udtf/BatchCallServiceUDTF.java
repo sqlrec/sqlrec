@@ -1,8 +1,8 @@
 package com.sqlrec.udf.udtf;
 
-import com.google.gson.*;
-import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.udf.table.CallServiceFunction;
+import com.sqlrec.udf.inference.PredictionClient;
+import com.sqlrec.udf.inference.PredictionRequestEncoder;
+import com.sqlrec.udf.inference.PredictionResult;
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
 import org.apache.flink.table.annotation.InputGroup;
@@ -24,8 +24,6 @@ import java.util.Map;
         "string_array_map MAP<STRING, ARRAY<STRING>>" +
         ">"))
 public class BatchCallServiceUDTF extends TableFunction<Row> {
-    private static final Gson gson = JsonUtils.getGson();
-
     private List<Map<String, Object>> buffer;
     private int batchSize;
     private String serviceUrl;
@@ -44,7 +42,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         batchSize = 0;
         serviceUrl = null;
         if (predictionClient == null) {
-            predictionClient = CallServiceFunction::callPredictionService;
+            predictionClient = PredictionClient.getDefault()::predict;
         }
     }
 
@@ -118,7 +116,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         }
 
         try {
-            String jsonData = buildJsonArray(buffer);
+            String jsonData = PredictionRequestEncoder.encodeRows(buffer);
             Map<String, Object> predictions = predictionClient.call(serviceUrl, jsonData);
             outputResults(predictions);
         } catch (Exception e) {
@@ -128,47 +126,13 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         }
     }
 
-    private String buildJsonArray(List<Map<String, Object>> rows) {
-        JsonArray jsonArray = new JsonArray();
-        for (Map<String, Object> row : rows) {
-            JsonObject jsonObject = new JsonObject();
-            for (Map.Entry<String, Object> entry : row.entrySet()) {
-                String fieldName = entry.getKey();
-                Object value = entry.getValue();
-                if (value != null) {
-                    jsonObject.add(fieldName, gson.toJsonTree(value));
-                }
-            }
-            jsonArray.add(jsonObject);
-        }
-        return gson.toJson(jsonArray);
-    }
-
     private void outputResults(Map<String, Object> predictions) {
+        PredictionResult result = new PredictionResult(predictions);
         for (int i = 0; i < buffer.size(); i++) {
-            Map<String, Object> values = mergePredictionRow(buffer.get(i), predictions, i);
+            Map<String, Object> values = new LinkedHashMap<>(buffer.get(i));
+            result.forEachValue(i, values::put);
             collect(toOutputRow(values));
         }
-    }
-
-    private static Map<String, Object> mergePredictionRow(
-            Map<String, Object> inputRow, Map<String, Object> predictions, int rowIndex) {
-        Map<String, Object> combinedMap = new LinkedHashMap<>(inputRow);
-
-        if (predictions != null) {
-            for (Map.Entry<String, Object> entry : predictions.entrySet()) {
-                Object prediction = entry.getValue();
-                if (prediction instanceof List) {
-                    List<?> predictionList = (List<?>) prediction;
-                    if (rowIndex < predictionList.size()) {
-                        combinedMap.put(entry.getKey(), predictionList.get(rowIndex));
-                    }
-                } else {
-                    combinedMap.put(entry.getKey(), prediction);
-                }
-            }
-        }
-        return combinedMap;
     }
 
     private static Row toOutputRow(Map<String, Object> values) {

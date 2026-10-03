@@ -11,7 +11,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.*;
 
-public class CacheTableBindable extends BindableInterface {
+public class CacheTableBindable extends ForwardingBindable {
     private final String tableName;
     private final BindableInterface bindable;
 
@@ -23,6 +23,11 @@ public class CacheTableBindable extends BindableInterface {
         if (bindableFields == null || bindableFields.isEmpty()) {
             throw new RuntimeException("bindable return data fields is null or empty");
         }
+    }
+
+    @Override
+    protected BindableInterface metadataDelegate() {
+        return bindable;
     }
 
     @Override
@@ -56,21 +61,6 @@ public class CacheTableBindable extends BindableInterface {
     }
 
     @Override
-    public boolean isParallelizable() {
-        return bindable.isParallelizable();
-    }
-
-    @Override
-    public boolean isTimeoutAble(CalciteSchema schema, ExecuteContext context) {
-        return bindable.isTimeoutAble(schema, context);
-    }
-
-    @Override
-    public Set<String> getReadTables() {
-        return bindable.getReadTables();
-    }
-
-    @Override
     public Set<String> getWriteTables() {
         Set<String> writeTables = new HashSet<>(bindable.getWriteTables());
         writeTables.add(tableName);
@@ -89,46 +79,12 @@ public class CacheTableBindable extends BindableInterface {
         return bindable;
     }
 
-    public boolean isUnionSql() {
-        return bindable.isUnionSql();
-    }
-
     @Override
     public String getCacheTableName() {
         return tableName;
     }
 
-    @Override
-    public Set<String> getDependencySqlFuncName() {
-        return bindable.getDependencySqlFuncName();
-    }
-
-    @Override
-    public Set<String> getDependencyJavaFuncName() {
-        return bindable.getDependencyJavaFuncName();
-    }
-
-    @Override
-    public Map<String, String> getAllDependSqlFunctionMap() {
-        return bindable.getAllDependSqlFunctionMap();
-    }
-
     public List<RelDataTypeField> getCacheTableDataFields() {
         return bindable.getReturnDataFields();
-    }
-
-    @Override
-    public String getLogicalPlan() {
-        return bindable.getLogicalPlan();
-    }
-
-    @Override
-    public String getPhysicalPlan() {
-        return bindable.getPhysicalPlan();
-    }
-
-    @Override
-    public String getJavaExpression() {
-        return bindable.getJavaExpression();
     }
 }
