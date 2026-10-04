@@ -1,475 +1,166 @@
+#include <cstring>
+#include <dlfcn.h>
+#include <filesystem>
 #include <iostream>
 #include <memory>
-#include <string>
-#include <unordered_map>
 #include <vector>
-#include <sstream>
-#include <cstdint>
-#include <cstdlib>
-#include <functional>
-#include <fstream>
 
-#include "farmhash.h"
-#include "httplib.h"
-#include "json.hpp"
+#include <ATen/Parallel.h>
+#include <c10/core/InferenceMode.h>
+#include <torch/script.h>
+#include <torch/csrc/jit/runtime/operator.h>
+
+#include "feature_parser.h"
 #include "utils.h"
 
-#include <torch/script.h>
-#include <torch/torch.h>
-
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
-torch::jit::script::Module g_module;
-bool g_model_initialized = false;
-torch::Device g_device = torch::kCPU;
+namespace {
+torch::jit::Module module;
+std::unique_ptr<tzrec::FeatureParser> parser;
 
-// ---------------------------------------------------------------------------
-// Feature hashing - must match the training-side pyfg FarmHash bucketizer.
-//
-// SQLRec trains with USE_FARM_HASH_TO_BUCKETIZE=true (see Config.java), so
-// pyfg maps each feature value to an embedding index as
-//     index = FarmHash(str(value)) % hash_bucket_size
-// where str(value) matches pyfg's value_type="string" stringification (ints
-// are decimal-stringified). The exported TorchScript model expects these
-// indices already bucketized, so the C++ server must reproduce them.
-//
-// pyfg's source is unavailable, so we cannot read which farmhash function it
-// calls. FarmHash exposes both Fingerprint64 (portable, stable) and Hash64
-// (may vary by platform/build). select_hash_func() auto-picks by reproducing
-// the bucket ids pinned in TorchEasyRec's id_feature_test, and refuses to
-// start if neither matches - rather than silently serving garbage embeddings.
-// ---------------------------------------------------------------------------
-
-enum class HashFunc { Fingerprint64, Hash64 };
-HashFunc g_hash_func = HashFunc::Fingerprint64;
-
-uint64_t compute_hash(const char* s, size_t len) {
-    switch (g_hash_func) {
-        case HashFunc::Fingerprint64:
-            return util::Fingerprint64(s, len);
-        case HashFunc::Hash64:
-            return util::Hash64(s, len);
+void load_operators() {
+    const fs::path directory = FBGEMM_LIBRARY_DIR;
+    // Older wheels bundle registration in fbgemm_gpu_py; newer wheels split TBE ops.
+    std::vector<std::string> libraries;
+    if (fs::exists(directory / "fbgemm_gpu_tbe_training_forward.so")) {
+        libraries = {"fbgemm_gpu_tbe_training_forward.so", "fbgemm_gpu_tbe_inference.so"};
     }
-    return 0;
-}
-
-uint64_t compute_hash(const std::string& s) {
-    return compute_hash(s.data(), s.size());
-}
-
-// Per-feature bucketizer config loaded from fg.json (exported next to
-// scripted_model.pt by tzrec.export). bucket_size = hash_bucket_size or
-// num_buckets; default_value, when non-empty, replaces missing/null values
-// (matching pyfg).
-struct FeatureHashConfig {
-    uint64_t bucket_size = 0;  // 0 => vocab/raw feature, not hash-bucketized.
-    std::string default_value;
-};
-std::unordered_map<std::string, FeatureHashConfig> g_hash_configs;
-
-uint64_t hash_feature(const std::string& value) {
-    return compute_hash(value);
-}
-
-uint64_t hash_feature(int64_t value) {
-    return hash_feature(std::to_string(value));
-}
-
-// Reduce a raw hash into [0, bucket_size) with UNSIGNED modulo so the result is
-// always non-negative (signed modulo on a high-bit-set hash would yield a
-// negative, out-of-range embedding index).
-inline int64_t bucketize(uint64_t hash, uint64_t bucket_size) {
-    return static_cast<int64_t>(hash % bucket_size);
-}
-
-void select_hash_func() {
-    // Pinned in TorchEasyRec/tzrec/features/id_feature_test.py with
-    // hash_bucket_size=100 and USE_FARM_HASH_TO_BUCKETIZE=true:
-    //   "1" -> 49, "2" -> 59, "3" -> 21
-    struct Probe { const char* s; uint64_t expected; };
-    const Probe probes[3] = {{"1", 49}, {"2", 59}, {"3", 21}};
-
-    auto matches = [&](HashFunc candidate) -> bool {
-        g_hash_func = candidate;
-        for (const auto& p : probes) {
-            std::string s(p.s);
-            if (compute_hash(s.data(), s.size()) % 100 != p.expected) {
-                return false;
-            }
-        }
-        return true;
-    };
-
-    if (matches(HashFunc::Fingerprint64)) {
-        g_hash_func = HashFunc::Fingerprint64;
-    } else if (matches(HashFunc::Hash64)) {
-        g_hash_func = HashFunc::Hash64;
-        std::cout << "Note: pyfg hash matched FarmHash Hash64, not Fingerprint64."
-                  << std::endl;
-    } else {
-        throw std::runtime_error(
-            "FarmHash self-check failed: neither Fingerprint64 nor Hash64 "
-            "reproduces pyfg's expected bucket ids (\"1\",\"2\",\"3\" -> "
-            "49,59,21 mod 100). The C++ server cannot safely bucketize "
-            "features. Verify the vendored farmhash matches the one pyfg was "
-            "built with.");
-    }
-    std::cout << "FarmHash self-check passed (using "
-              << (g_hash_func == HashFunc::Fingerprint64 ? "Fingerprint64"
-                                                         : "Hash64")
-              << ")." << std::endl;
-}
-
-std::string parent_dir(const std::string& path) {
-    size_t pos = path.find_last_of('/');
-    if (pos == std::string::npos) return ".";
-    if (pos == 0) return "/";
-    return path.substr(0, pos);
-}
-
-void load_one_feature_config(const json& feat) {
-    // Sequence containers look like {"sequence_name":..., "features":[...]}.
-    if (feat.contains("features") && feat["features"].is_array()) {
-        for (const auto& sub : feat["features"]) {
-            load_one_feature_config(sub);
-        }
-        return;
-    }
-    if (!feat.contains("feature_name") || !feat["feature_name"].is_string()) {
-        return;
-    }
-    std::string name = feat["feature_name"].get<std::string>();
-    FeatureHashConfig cfg;
-    if (feat.contains("hash_bucket_size")) {
-        cfg.bucket_size = feat["hash_bucket_size"].get<uint64_t>();
-    } else if (feat.contains("num_buckets")) {
-        cfg.bucket_size = feat["num_buckets"].get<uint64_t>();
-    }
-    // bucket_size == 0 => vocab_list/vocab_dict/vocab_file or raw feature: not
-    // hash-bucketized; parse_input rejects requests that include it rather
-    // than feeding wrong indices.
-    if (feat.contains("default_value") && feat["default_value"].is_string()) {
-        cfg.default_value = feat["default_value"].get<std::string>();
-    }
-    g_hash_configs[name] = cfg;
-}
-
-void load_hash_configs(const std::string& fg_json_path) {
-    g_hash_configs.clear();
-    std::ifstream in(fg_json_path);
-    if (!in) {
-        throw std::runtime_error(
-            "Failed to open fg.json: " + fg_json_path +
-            ". The C++ server needs the fg.json exported alongside "
-            "scripted_model.pt (written by tzrec.export) to bucketize "
-            "features the same way pyfg does.");
-    }
-    json fg;
-    in >> fg;
-    if (!fg.is_object() || !fg.contains("features") ||
-        !fg["features"].is_array()) {
-        throw std::runtime_error(
-            "fg.json must be an object with a 'features' array");
-    }
-    for (const auto& feat : fg["features"]) {
-        load_one_feature_config(feat);
-    }
-    if (g_hash_configs.empty()) {
-        throw std::runtime_error(
-            "fg.json contained no features with a feature_name");
-    }
-}
-
-torch::Device get_device() {
-    int rank = 0;
-    const char* local_rank = std::getenv("LOCAL_RANK");
-    if (local_rank != nullptr) {
-        rank = std::atoi(local_rank);
-    }
-    if (torch::cuda::is_available()) {
-        return torch::Device(torch::kCUDA, rank);
-    } else {
-        return torch::Device(torch::kCPU);
-    }
-}
-
-bool init_model(const std::string& model_path) {
-    std::cout << "Loading model from " << model_path << std::endl;
-    g_device = get_device();
-    std::cout << "Using device: " << g_device << std::endl;
-    try {
-        // need fix error: Unknown builtin op: fbgemm::bounds_check_indices
-        g_module = torch::jit::load(model_path);
-        g_module.eval();
-    } catch (const c10::Error& e) {
-        std::cerr << "Error loading model: " << e.what() << std::endl;
-        return false;
-    }
-
-    // Verify the farmhash function matches pyfg before bucketizing anything.
-    try {
-        select_hash_func();
-    } catch (const std::exception& e) {
-        std::cerr << "Hash self-check failed: " << e.what() << std::endl;
-        return false;
-    }
-
-    // Load per-feature hash_bucket_size / num_buckets from fg.json (written
-    // next to scripted_model.pt by tzrec.export) so we can reproduce pyfg's
-    // hash % bucket_size bucketization.
-    std::string fg_json_path = parent_dir(model_path) + "/fg.json";
-    try {
-        load_hash_configs(fg_json_path);
-    } catch (const std::exception& e) {
-        std::cerr << "Error loading fg.json: " << e.what() << std::endl;
-        return false;
-    }
-
-    g_model_initialized = true;
-    std::cout << "Model loaded successfully (" << g_hash_configs.size()
-              << " feature configs)" << std::endl;
-    return true;
-}
-
-json build_nested_json(const std::vector<float>& data, const std::vector<int64_t>& shape, int dim, int64_t& index) {
-    json arr = json::array();
-    int64_t current_dim_size = shape[dim];
-
-    if (dim == static_cast<int>(shape.size()) - 1) {
-        for (int64_t i = 0; i < current_dim_size; ++i) {
-            arr.push_back(data[index++]);
-        }
-    } else {
-        for (int64_t i = 0; i < current_dim_size; ++i) {
-            arr.push_back(build_nested_json(data, shape, dim + 1, index));
+    libraries.push_back("fbgemm_gpu_py.so");
+    for (const auto& library : libraries) {
+        auto path = (directory / library).string();
+        // Keep operator registration alive for the lifetime of the process.
+        if (!dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL)) {
+            throw std::runtime_error("Failed to load " + path + ": " + dlerror());
         }
     }
-    return arr;
+    for (const char* name : {"fbgemm::asynchronous_complete_cumsum", "fbgemm::jagged_to_padded_dense",
+                             "fbgemm::bounds_check_indices", "fbgemm::int_nbit_split_embedding_codegen_lookup_function",
+                             "fbgemm::keyed_jagged_index_select_dim1", "fbgemm::permute_1D_sparse_data",
+                             "fbgemm::permute_2D_sparse_data", "fbgemm::segment_sum_csr"}) {
+        if (torch::jit::getAllOperatorsFor(c10::Symbol::fromQualString(name)).empty()) {
+            throw std::runtime_error(std::string("FBGEMM operator not registered: ") + name);
+        }
+    }
 }
 
-json tensor_to_json(const at::Tensor& tensor) {
-    at::Tensor cpu_tensor = tensor.to(torch::kCPU).contiguous();
-    auto sizes = cpu_tensor.sizes();
-    std::vector<int64_t> shape(sizes.begin(), sizes.end());
-
-    std::vector<float> data(cpu_tensor.numel());
-    std::copy(cpu_tensor.data_ptr<float>(), cpu_tensor.data_ptr<float>() + cpu_tensor.numel(), data.begin());
-
-    int64_t index = 0;
-    return build_nested_json(data, shape, 0, index);
-}
-
-enum class FieldType {
-    Int64,
-    String,
-    Int64List,
-    StringList,
-    Unknown
-};
-
-FieldType detect_field_type(const json& value) {
-    if (value.is_number_integer()) {
-        return FieldType::Int64;
-    } else if (value.is_string()) {
-        return FieldType::String;
-    } else if (value.is_array()) {
-        if (value.empty()) {
-            return FieldType::Unknown;
-        }
-        const auto& first = value[0];
-        if (first.is_number_integer()) {
-            return FieldType::Int64List;
-        } else if (first.is_string()) {
-            return FieldType::StringList;
-        }
-    }
-    return FieldType::Unknown;
-}
-
-c10::Dict<std::string, at::Tensor> parse_input(const json& request_data) {
-    size_t batch_size = request_data.size();
-    if (batch_size == 0) {
-        return c10::Dict<std::string, at::Tensor>();
-    }
-
-    std::set<std::string> all_fields;
-    for (const auto& record : request_data) {
-        for (auto it = record.begin(); it != record.end(); ++it) {
-            all_fields.insert(it.key());
-        }
-    }
-
-    std::map<std::string, FieldType> field_types;
-    for (const auto& field_name : all_fields) {
-        for (const auto& record : request_data) {
-            if (record.contains(field_name)) {
-                FieldType type = detect_field_type(record[field_name]);
-                if (type != FieldType::Unknown) {
-                    field_types[field_name] = type;
-                    break;
-                }
-            }
-        }
-    }
-
+c10::Dict<std::string, at::Tensor> tensors(const json& rows) {
     c10::Dict<std::string, at::Tensor> result;
-
-    for (const auto& field_entry : field_types) {
-        const std::string& field_name = field_entry.first;
-        FieldType field_type = field_entry.second;
-
-        auto cfg_it = g_hash_configs.find(field_name);
-        if (cfg_it == g_hash_configs.end()) {
-            // Not a configured id feature (e.g. a label/metadata column). The
-            // Python DataParser likewise only processes configured features,
-            // so skip it instead of feeding garbage to the model.
-            continue;
+    for (const auto& feature : parser->parse(rows)) {
+        auto values = at::empty({static_cast<int64_t>(feature.values.size())}, at::kLong);
+        auto lengths = at::empty({static_cast<int64_t>(feature.lengths.size())}, at::kInt);
+        if (!feature.values.empty()) {
+            std::memcpy(values.data_ptr<int64_t>(), feature.values.data(), feature.values.size() * sizeof(int64_t));
         }
-        const FeatureHashConfig& cfg = cfg_it->second;
-        if (cfg.bucket_size == 0) {
-            // vocab/raw feature - the hashing path cannot produce a valid index.
-            throw std::runtime_error(
-                "Feature '" + field_name + "' has no hash_bucket_size/"
-                "num_buckets in fg.json; vocab/raw bucketization is not "
-                "supported by the C++ server.");
-        }
-
-        std::vector<int64_t> values;
-        std::vector<int32_t> lengths;
-
-        for (size_t i = 0; i < batch_size; ++i) {
-            const auto& record = request_data[i];
-
-            if (!record.contains(field_name) || record[field_name].is_null()) {
-                if (!cfg.default_value.empty()) {
-                    values.push_back(bucketize(hash_feature(cfg.default_value),
-                                               cfg.bucket_size));
-                    lengths.push_back(1);
-                } else {
-                    lengths.push_back(0);
-                }
-                continue;
-            }
-
-            const auto& value = record[field_name];
-
-            switch (field_type) {
-                case FieldType::Int64: {
-                    int64_t v = value.get<int64_t>();
-                    values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
-                    lengths.push_back(1);
-                    break;
-                }
-                case FieldType::String: {
-                    std::string v = value.get<std::string>();
-                    values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
-                    lengths.push_back(1);
-                    break;
-                }
-                case FieldType::Int64List: {
-                    int32_t len = static_cast<int32_t>(value.size());
-                    lengths.push_back(len);
-                    for (const auto& item : value) {
-                        int64_t v = item.get<int64_t>();
-                        values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
-                    }
-                    break;
-                }
-                case FieldType::StringList: {
-                    int32_t len = static_cast<int32_t>(value.size());
-                    lengths.push_back(len);
-                    for (const auto& item : value) {
-                        std::string v = item.get<std::string>();
-                        values.push_back(bucketize(hash_feature(v), cfg.bucket_size));
-                    }
-                    break;
-                }
-                default:
-                    lengths.push_back(0);
-                    break;
-            }
-        }
-
-        std::string values_key = field_name + ".values";
-        std::string lengths_key = field_name + ".lengths";
-
-        at::Tensor values_tensor = torch::from_blob(
-            values.data(),
-            {static_cast<int64_t>(values.size())},
-            torch::kInt64).clone().to(g_device);
-        at::Tensor lengths_tensor = torch::from_blob(
-            lengths.data(),
-            {static_cast<int64_t>(batch_size)},
-            torch::kInt32).clone().to(g_device);
-
-        result.insert(values_key, values_tensor);
-        result.insert(lengths_key, lengths_tensor);
+        std::memcpy(lengths.data_ptr<int32_t>(), feature.lengths.data(), feature.lengths.size() * sizeof(int32_t));
+        result.insert(feature.name + ".values", values);
+        result.insert(feature.name + ".lengths", lengths);
     }
-
     return result;
 }
 
-json predict(const json& request_data) {
-    try {
-        if (!g_model_initialized) {
-            return json{{"error", "Model not initialized"}};
-        }
-
-        if (!request_data.is_array() || request_data.empty()) {
-            return json{{"error", "Input data must be a non-empty JSON array"}};
-        }
-
-        auto dict = parse_input(request_data);
-
-        std::vector<c10::IValue> input;
-        input.push_back(c10::IValue(dict));
-
-        auto output_dict = g_module.forward(input).toGenericDict();
-
-        json result = json::object();
-        for (const auto& item : output_dict) {
-            const std::string& key = item.key().toStringRef();
-            at::Tensor tensor = item.value().toTensor();
-            result[key] = tensor_to_json(tensor);
-        }
-
-        return result;
-
-    } catch (const std::exception& e) {
-        return json{{"error", std::string(e.what())}};
+template <typename T>
+json nested_tensor(const at::Tensor& tensor, size_t dimension, int64_t& offset) {
+    if (dimension == static_cast<size_t>(tensor.dim())) return tensor.data_ptr<T>()[offset++];
+    json result = json::array();
+    for (int64_t i = 0; i < tensor.size(dimension); ++i) {
+        result.push_back(nested_tensor<T>(tensor, dimension + 1, offset));
     }
+    return result;
 }
 
+json predict(const json& rows) {
+    c10::InferenceMode guard;
+    auto output = module.forward({tensors(rows), c10::IValue(c10::Device(c10::kCPU))}).toGenericDict();
+    json result = json::object();
+    for (const auto& item : output) {
+        auto tensor = item.value().toTensor().to(at::kCPU);
+        int64_t offset = 0;
+        if (tensor.is_floating_point()) {
+            result[item.key().toStringRef()] = nested_tensor<double>(tensor.to(at::kDouble).contiguous(), 0, offset);
+        } else if (tensor.scalar_type() == at::kBool) {
+            result[item.key().toStringRef()] = nested_tensor<bool>(tensor.contiguous(), 0, offset);
+        } else if (!tensor.is_complex()) {
+            result[item.key().toStringRef()] = nested_tensor<int64_t>(tensor.to(at::kLong).contiguous(), 0, offset);
+        } else {
+            throw std::runtime_error("Complex model outputs are not supported");
+        }
+    }
+    return result;
+}
+
+json normalize_request(const json& data) {
+    if (data.is_array()) return data;
+    if (!data.is_object()) throw std::invalid_argument("Input must be an array of objects or a column map");
+    size_t batch = 0;
+    for (auto it = data.begin(); it != data.end(); ++it) {
+        if (!it.value().is_array()) throw std::invalid_argument("Column map values must be lists");
+        batch = std::max(batch, it.value().size());
+    }
+    for (auto it = data.begin(); it != data.end(); ++it) {
+        size_t length = it.value().size();
+        if (length != batch && length != 1) throw std::invalid_argument("Column lengths must match or be 1");
+    }
+    json rows = json::array();
+    for (size_t i = 0; i < batch; ++i) {
+        json row = json::object();
+        for (auto it = data.begin(); it != data.end(); ++it) {
+            row[it.key()] = it.value()[it.value().size() == 1 ? 0 : i];
+        }
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+}  // namespace
+
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <model_path> <port>" << std::endl;
-        return -1;
+    if (argc != 4) {
+        std::cerr << "Usage: " << argv[0] << " <local_model_dir> <host> <port>" << std::endl;
+        return 1;
     }
-
-    std::string model_path = argv[1];
-
-    int port;
     try {
-        port = std::stoi(argv[2]);
-    } catch (const std::exception& e) {
-        std::cerr << "Invalid port: " << argv[2] << std::endl;
-        return -1;
+        size_t end = 0;
+        int port = std::stoi(argv[3], &end);
+        if (end != std::strlen(argv[3]) || port < 1 || port > 65535) {
+            throw std::invalid_argument("Port must be in [1, 65535]");
+        }
+        at::set_num_threads(1);
+        at::set_num_interop_threads(1);
+        fs::path directory(argv[1]);
+        parser = std::make_unique<tzrec::FeatureParser>(json::parse(read_file((directory / "fg.json").string())));
+        load_operators();
+        module = torch::jit::load((directory / "scripted_model.pt").string(), c10::Device(c10::kCPU));
+        module.eval();
+        predict(json::array({parser->warmup_row()}));
+
+        httplib::Server server;
+        // Quantized embedding graphs may mutate shared bounds-check buffers.
+        server.new_task_queue = [] { return new httplib::ThreadPool(1); };
+        setup_graceful_shutdown(server);
+        register_health_endpoint(server);
+        server.Post("/predict", [](const httplib::Request& request, httplib::Response& response) {
+            json result;
+            try {
+                result = predict(normalize_request(json::parse(request.body)));
+            } catch (const json::exception& error) {
+                response.status = 400;
+                result = {{"error", error.what()}};
+            } catch (const std::invalid_argument& error) {
+                response.status = 400;
+                result = {{"error", error.what()}};
+            } catch (const std::exception& error) {
+                response.status = 500;
+                std::cerr << "Prediction failed: " << error.what() << std::endl;
+                result = {{"error", "Model prediction failed"}};
+            }
+            response.set_content(result.dump(), "application/json");
+        });
+        std::cout << "CPU model ready; listening on " << argv[2] << ":" << port << std::endl;
+        if (!server.listen(argv[2], port)) throw std::runtime_error("Failed to listen on requested address");
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "Failed to start TZRec server: " << error.what() << std::endl;
+        return 1;
     }
-
-    if (!init_model(model_path)) {
-        std::cerr << "Failed to initialize model" << std::endl;
-        return -1;
-    }
-
-    std::cout << "Starting HTTP server on port " << port << std::endl;
-
-    httplib::Server svr;
-    setup_graceful_shutdown(svr);
-    register_predict_endpoint(svr, predict);
-    register_health_endpoint(svr);
-
-    std::cout << "Server listening on http://0.0.0.0:" << port << std::endl;
-    svr.listen("0.0.0.0", port);
-
-    return 0;
 }

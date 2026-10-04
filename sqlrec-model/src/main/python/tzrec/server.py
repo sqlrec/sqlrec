@@ -10,7 +10,6 @@ from request_data import json_to_array_map, parse_request_data
 from tzrec.datasets.data_parser import DataParser
 from tzrec.features.feature import create_features
 from tzrec.utils import config_util
-from tzrec.utils.filesystem_util import url_to_fs, apply_monkeypatch
 from tzrec.constant import Mode
 from tzrec.utils.logging_util import logger
 
@@ -18,6 +17,7 @@ from tzrec.utils.logging_util import logger
 _model: torch.jit.ScriptModule | None = None
 _data_parser: DataParser | None = None
 _device: torch.device | None = None
+_id_inputs: set[str] = set()
 
 
 def get_device() -> torch.device:
@@ -32,18 +32,11 @@ def get_device() -> torch.device:
 
 def _init_model(scripted_model_path: str) -> None:
     """Initialize model and data parser."""
-    global _model, _data_parser, _device
+    global _model, _data_parser, _device, _id_inputs
     _device = get_device()
     logger.info(f"Loading model from {scripted_model_path}")
-    apply_monkeypatch()
-    fs, local_path = url_to_fs(scripted_model_path)
-    if fs is not None:
-        # scripted model use io in cpp, so that we can not path to fsspec
-        local_path = os.environ.get("LOCAL_CACHE_DIR", local_path)
-        if int(os.environ.get("LOCAL_RANK", 0)) == 0:
-            logger.info(f"downloading {scripted_model_path} to {local_path}.")
-            fs.download(scripted_model_path, local_path, recursive=True)
-        scripted_model_path = local_path
+    if "://" in scripted_model_path:
+        raise ValueError("server.py requires a local model directory; use server.sh for remote exports")
     _model = torch.jit.load(
         os.path.join(scripted_model_path, "scripted_model.pt"), map_location=_device
     )
@@ -52,6 +45,11 @@ def _init_model(scripted_model_path: str) -> None:
         os.path.join(scripted_model_path, "pipeline.config"), allow_unknown_field=True
     )
     features = create_features(list(pipeline_config.feature_configs), pipeline_config.data_config.fg_mode)
+    _id_inputs = {
+        config.id_feature.expression.split(":", 1)[1]
+        for config in pipeline_config.feature_configs
+        if config.HasField("id_feature")
+    }
     _data_parser = DataParser(
         features,
         labels=[],
@@ -78,6 +76,14 @@ import flask
 app = flask.Flask(__name__)
 
 
+@app.route("/health", methods=["GET"])
+def health():
+    """Match the native readiness endpoint used by Kubernetes probes."""
+    if _model is None or _data_parser is None:
+        return flask.jsonify({"error": "Model not initialized"}), 503
+    return flask.jsonify({"status": "ok"}), 200
+
+
 @app.route("/predict", methods=["POST"])
 def predict():
     """HTTP predict endpoint."""
@@ -90,7 +96,7 @@ def predict():
         if len(request_data) == 0:
             return flask.jsonify({"error": "Input data is empty"}), 400
 
-        input_data = json_to_array_map(request_data)
+        input_data = json_to_array_map(request_data, _id_inputs)
         result = _forward(input_data)
         return flask.jsonify(result)
     except ValueError as e:

@@ -1,6 +1,6 @@
 """Convert prediction requests into row and Arrow column formats."""
 
-from typing import Any
+from typing import Any, Collection
 
 import pyarrow as pa
 from pyarrow import Array
@@ -31,9 +31,23 @@ def parse_request_data(request_data: Any) -> list[dict[str, Any]]:
     raise ValueError("Input data must be a list of JSON objects or a map with string keys and list values")
 
 
-def json_to_array_map(data: list[dict[str, Any]]) -> dict[str, Array]:
+def json_to_array_map(
+    data: list[dict[str, Any]], id_inputs: Collection[str] = ()
+) -> dict[str, Array]:
     columns = {key: [] for row in data for key in row}
     for row in data:
         for key, values in columns.items():
             values.append(row.get(key))
-    return {key: pa.array(values) for key, values in columns.items()}
+    missing = set(id_inputs) - columns.keys()
+    if missing:
+        raise ValueError(f"Missing input columns: {', '.join(sorted(missing))}")
+    result = {}
+    for key, values in columns.items():
+        array = pa.array(values)
+        if key in id_inputs:
+            if pa.types.is_null(array.type):
+                array = pa.array(values, type=pa.string())
+            elif pa.types.is_list(array.type) and pa.types.is_null(array.type.value_type):
+                array = pa.array(values, type=pa.list_(pa.string()))
+        result[key] = array
+    return result

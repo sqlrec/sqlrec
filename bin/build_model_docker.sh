@@ -130,6 +130,11 @@ prepare_tzrec_context() {
   cp "$repo_root"/sqlrec-model/src/main/python/tzrec/*.py \
     "$repo_root"/sqlrec-model/src/main/python/tzrec/*.sh \
     "$context/sqlrec-model/src/main/python/tzrec/"
+  cp -R "$repo_root/sqlrec-model/src/main/python/common" "$context/sqlrec-model/src/main/python/"
+  mkdir -p "$context/sqlrec-model/src/main/cpp" "$context/sqlrec-model/src/test/cpp"
+  cp -R "$repo_root/sqlrec-model/src/main/cpp/tzrec" "$repo_root/sqlrec-model/src/main/cpp/common" \
+    "$context/sqlrec-model/src/main/cpp/"
+  cp -R "$repo_root/sqlrec-model/src/test/cpp/tzrec" "$context/sqlrec-model/src/test/cpp/"
 }
 
 prepare_gbdt_context() {

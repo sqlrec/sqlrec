@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir --no-deps \
         /tmp/graphlearn-*.whl \
     && rm -f /tmp/*.whl
 
-FROM tzrec-${TARGETARCH} AS runtime
+FROM tzrec-${TARGETARCH} AS dependencies
 
 COPY juicefs-*.whl /tmp/
 COPY tzrec-*.whl /tmp/
@@ -60,4 +60,19 @@ RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
 
 WORKDIR /app
 
-COPY ./sqlrec-model/src/main/python/tzrec/* /app/
+FROM dependencies AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake make g++ \
+    && rm -rf /var/lib/apt/lists/*
+COPY ./sqlrec-model/src/main/cpp/tzrec/ /build/main/cpp/tzrec/
+COPY ./sqlrec-model/src/main/cpp/common/ /build/main/cpp/common/
+COPY ./sqlrec-model/src/test/cpp/tzrec/ /build/test/cpp/tzrec/
+RUN cmake -S /build/main/cpp/tzrec -B /build/native -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build/native -j2 \
+    && ctest --test-dir /build/native --output-on-failure
+
+FROM dependencies AS runtime
+COPY --from=builder /build/native/tzrec_server /app/tzrec_server
+COPY ./sqlrec-model/src/main/python/common/ /app/common/
+COPY ./sqlrec-model/src/main/python/tzrec/ /app/

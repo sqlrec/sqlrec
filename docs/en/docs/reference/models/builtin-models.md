@@ -20,6 +20,48 @@ These resource settings apply to self-hosted tzrec, GBDT, and Hugging Face jobs 
 
 Default images are `sqlrec/tzrec` for tzrec and `sqlrec/gbdt` for GBDT, with version `${SQLREC_VERSION}-cpu`. Hugging Face uses `sqlrec/transformers:${SQLREC_VERSION}`. Override them with `image` and `version`.
 
+### TZRec Online Serving
+
+TZRec services default to native C++ CPU inference. Set the environment variable
+`TZREC_SERVING_BACKEND=python` to select Python serving; `cpp` or an unset variable
+selects C++. Changes take effect on process restart, and invalid values fail
+startup. Both backends share the `--scripted_model_dir`, `--host`, and `--port`
+arguments and remote export cache. Kubernetes startup/readiness probes use
+`/health`, which becomes available after initialization. C++ also warms up before
+listening. DSSM services load the respective user or item export directory.
+
+Switch an existing Kubernetes deployment through its environment:
+
+```sh
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=python
+# Switch back to the default C++ backend.
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
+```
+
+Exports must contain `scripted_model.pt`, `fg.json`, and `pipeline.config`.
+Preprocessing follows the exported `fg.json`: `num_buckets` preserves integer
+IDs within the configured range, while `hash_bucket_size` uses FarmHash
+Fingerprint64. Supported inputs are ordinary unweighted ID features with integer
+or string scalars, string arrays, or strings split by the configured `separator`.
+Sequence, raw, weighted, vocabulary, and DAG configurations fail at startup.
+
+`POST /predict` accepts rows or a column map with length-one broadcasting. An
+entirely missing input column returns 400; missing row values, nulls, empty
+strings, and empty arrays use feature defaults. Empty defaults produce empty
+features. Extra columns are ignored. Input errors return 400 and model execution
+errors return 500.
+
+`server.sh` downloads remote exports with `hadoop fs -get`, using
+`$HADOOP_HOME/bin/hadoop` when set or `hadoop` on PATH otherwise. Configure the
+container's Hadoop client for the selected filesystem (for example HDFS or
+JuiceFS), including connection and authentication settings. Local directories
+are used directly. `LOCAL_CACHE_DIR` selects the parent cache directory,
+defaulting to `/tmp/tzrec_model_cache`. Each startup downloads into a private
+subdirectory. Failed downloads or missing required files cause cleanup and exit;
+after validation, the shell uses `exec` to start the selected serving backend.
+The Python backend uses Torch and the Python FG parser. The C++ feature
+configuration restrictions above apply only to the C++ backend.
+
 ## Built-in Model Types
 
 SQLRec has the following built-in model types:

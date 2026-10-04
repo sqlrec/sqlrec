@@ -594,6 +594,10 @@ jobs:
             'import flask, graphlearn, juicefs, pyarrow, pyfg, server, torch, torchrec, tzrec.main'
           docker run --rm --entrypoint python "$image" -c \
             'import ctypes, pathlib, juicefs; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name("libjfs.so")))'
+          docker run --rm --entrypoint sh "$image" -c \
+            'set -eu; test -x /app/tzrec_server; bash -n /app/server.sh; links="$(ldd /app/tzrec_server 2>&1)"; printf "%s\n" "$links"; ! printf "%s\n" "$links" | grep -q "not found"'
+          docker run --rm -v "$GITHUB_WORKSPACE/sqlrec-model/src/test/python:/tests:ro" \
+            --entrypoint python "$image" /tests/tzrec_native_smoke.py
           docker run --rm -i -e USE_FARM_HASH_TO_BUCKETIZE=true \
             --entrypoint python "$image" - <<'PY'
           import pyarrow as pa

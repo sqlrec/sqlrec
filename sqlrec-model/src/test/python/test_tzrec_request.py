@@ -2,6 +2,7 @@
 
 import runpy
 import unittest
+import pyarrow as pa
 from pathlib import Path
 
 
@@ -55,6 +56,19 @@ class TzrecRequestTest(unittest.TestCase):
     def test_fields_can_first_appear_after_an_empty_row(self):
         arrays = json_to_array_map([{}, {"item": "a"}])
         self.assertEqual(arrays["item"].to_pylist(), [None, "a"])
+
+    def test_id_columns_have_types_when_the_entire_batch_is_empty(self):
+        arrays = json_to_array_map(
+            [{"id": None, "genres": []}, {"id": None, "genres": None}],
+            {"id", "genres"},
+        )
+        self.assertEqual(arrays["id"].type, pa.string())
+        self.assertEqual(arrays["genres"].type, pa.list_(pa.string()))
+        self.assertEqual(arrays["genres"].to_pylist(), [[], None])
+
+    def test_missing_required_id_column_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Missing input columns: id"):
+            json_to_array_map([{"other": 1}], {"id"})
 
 
 if __name__ == "__main__":

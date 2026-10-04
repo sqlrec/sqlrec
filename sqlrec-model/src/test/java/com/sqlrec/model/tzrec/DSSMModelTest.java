@@ -982,6 +982,12 @@ spec:
         ports:
         - containerPort: 80
           name: "http"
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
         resources:
           limits:
             cpu: "8"
@@ -989,6 +995,13 @@ spec:
           requests:
             cpu: "4"
             memory: "16Gi"
+        startupProbe:
+          failureThreshold: 120
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -1051,10 +1064,23 @@ spec:
         ports:
         - containerPort: 80
           name: "http"
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
         resources:
           requests:
             cpu: "1"
             memory: "2Gi"
+        startupProbe:
+          failureThreshold: 120
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
 ---
 apiVersion: "v1"
 kind: "Service"

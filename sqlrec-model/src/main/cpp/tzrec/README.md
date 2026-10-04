@@ -1,0 +1,63 @@
+# Native TZRec CPU serving
+
+Build against the Torch and FBGEMM wheels used to train and export the model:
+
+```sh
+cmake -S sqlrec-model/src/main/cpp/tzrec -B build/tzrec -DCMAKE_BUILD_TYPE=Release
+cmake --build build/tzrec -j2
+ctest --test-dir build/tzrec --output-on-failure
+build/tzrec/tzrec_server /local/export 0.0.0.0 8080
+```
+
+CMake discovers wheel locations using Python3 and applies the Torch ABI flags.
+The executable retains a runtime search path to those wheel libraries; the
+runtime image must preserve their installation paths. Native FBGEMM operator
+libraries are explicitly loaded before TorchScript deserialization, including
+operators referenced by serialized TorchRec methods outside the top-level graph.
+
+The parser supports the ordinary unweighted `item:` ID feature subset generated
+by SQLRec. It validates `fg.json` on startup and does not infer feature semantics
+from incoming JSON types. Integer `num_buckets` preserves IDs; hash features use
+unsigned Fingerprint64 modulo. Defaults and separators apply before bucketization.
+Missing columns are errors; missing rows and empty values use feature defaults.
+Both values and lengths are emitted even when an entire column is empty, as int64
+and int32 tensors respectively. Unsupported configuration keys fail at startup.
+
+CPU load and forward devices are explicit. Warm-up completes before the HTTP
+listener starts. One HTTP worker and one Torch intra/inter-op thread avoid shared
+quantized embedding buffer races and nested CPU oversubscription. Scale using
+service replicas; concurrent graph execution requires separate validation.
+
+The image entrypoint `server.sh` downloads remote exports with `hadoop fs -get`
+and then execs the selected backend. It uses `$HADOOP_HOME/bin/hadoop` when set,
+otherwise `hadoop` on PATH. The client must be configured for the export URI
+(for example HDFS or JuiceFS). Local directories are used directly. Each download
+uses a private directory under `LOCAL_CACHE_DIR` (default `/tmp/tzrec_model_cache`);
+failed or incomplete downloads are removed before any server starts.
+`TZREC_SERVING_BACKEND=cpp` is the default; set `TZREC_SERVING_BACKEND=python`
+to run `server.py` with Torch and the Python FG parser. Both backends use the same
+download cache, CLI arguments, `/predict`, and `/health` probes. Invalid backend
+values fail before downloading. Backend changes take effect on process restart.
+
+For example, switch an existing deployment to Python and back to C++:
+
+```sh
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=python
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
+```
+
+Regression checks beyond CTest:
+
+```sh
+TZREC_SERVER=build/tzrec/tzrec_server python sqlrec-model/src/test/python/tzrec_native_smoke.py
+USE_FARM_HASH_TO_BUCKETIZE=true python sqlrec-model/src/test/python/tzrec_native_integration.py \
+  --server build/tzrec/tzrec_server --feature-parser build/tzrec/features_test \
+  --python-source sqlrec-model/src/main/python/tzrec \
+  --models /local/rank/export /local/recall/export/user /local/recall/export/item
+```
+
+The integration test compares each feature tensor and every model output with
+the installed FG implementation, and verifies row, column, null/empty/default,
+multivalue, and invalid request handling. Run the smoke test in both native
+architecture CI lanes; it loads and executes a serialized FBGEMM operator in an
+independent C++ process and checks scalar, FP16/BF16, integer and bool outputs.

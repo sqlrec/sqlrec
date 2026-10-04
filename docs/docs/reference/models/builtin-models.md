@@ -20,6 +20,24 @@ Model、训练、导出和 Service 的 `WITH` 选项使用字符串键和值，�
 
 镜像默认值：tzrec 使用 `sqlrec/tzrec`，GBDT 使用 `sqlrec/gbdt`，版本为 `${SQLREC_VERSION}-cpu`；Hugging Face 使用 `sqlrec/transformers:${SQLREC_VERSION}`。可用 `image`、`version` 覆盖。
 
+### TZRec 在线推理
+
+TZRec 服务默认使用 C++ CPU 推理；设置环境变量 `TZREC_SERVING_BACKEND=python` 可切换为 Python serving，设置为 `cpp` 或不设置则使用 C++。切换在进程重启后生效，非法值会导致启动失败。两种后端共用 `--scripted_model_dir`、`--host`、`--port` 参数以及远程模型下载缓存。初始化完成后 `/health` 返回成功，Kubernetes startup/readiness probe 才会允许接收请求；C++ 后端还会在监听前执行预热。DSSM 用户塔和物品塔分别使用各自导出子目录。
+
+已有 Kubernetes 服务可通过环境变量切换，例如：
+
+```sh
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=python
+# 切回默认 C++ 实现
+kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
+```
+
+导出目录必须包含 `scripted_model.pt`、`fg.json` 和 `pipeline.config`。预处理以导出的 `fg.json` 为准：`num_buckets` 保留原始整数 ID，要求 ID 在桶范围内；`hash_bucket_size` 使用 FarmHash Fingerprint64。当前支持普通无权重 ID 特征、整数或字符串标量、字符串数组以及按 `separator` 分隔的多值字符串；sequence、raw、weighted、vocab 和 DAG 配置会在启动时明确报错。
+
+`POST /predict` 接收行数组或列式 JSON，列式数据允许长度为 1 的列广播。整列缺失返回 400；单行缺字段、null、空字符串和空数组按特征默认值处理，默认值为空时编码为空特征。额外的非特征列不参与推理。输入错误返回 400，模型执行错误返回 500。
+
+`server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。校验通过后，shell 使用 `exec` 启动所选 serving。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；以上 C++ 特征配置支持范围仅适用于 C++ 后端。
+
 ## 内置模型类型
 
 SQLRec 内置了以下模型类型：
