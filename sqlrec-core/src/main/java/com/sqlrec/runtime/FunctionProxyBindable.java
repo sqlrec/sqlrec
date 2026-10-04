@@ -2,11 +2,11 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -130,7 +130,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
         BindableInterface targetBindable = resolveBindable(schema, context);
 
         if (async) {
-            submitAsync(() -> executeTarget(targetBindable, schema, context));
+            ExecutorServiceUtils.submit(() -> executeTarget(targetBindable, schema, context));
             return null;
         }
         return executeTarget(targetBindable, schema, context);
@@ -141,10 +141,6 @@ public class FunctionProxyBindable extends ForwardingBindable {
         return partitionExecutor == null
                 ? target.bind(schema, context)
                 : partitionExecutor.execute(schema, context, target);
-    }
-
-    private void submitAsync(Runnable task) {
-        ExecutorServiceUtils.getExecutorService().submit(task);
     }
 
     private BindableInterface resolveBindable(CalciteSchema schema, ExecuteContext context) {

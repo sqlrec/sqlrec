@@ -169,18 +169,23 @@ class IfReturnBindableTest {
     }
 
     @Test
-    void nonPositiveTimeinExecutesReturnDirectly() {
-        IfBindable bindable = new IfBindable(
-                condition(0L),
-                returning(INT_FIELDS, 1),
-                returning(INT_FIELDS, 2),
-                true
-        );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+    void nonPositiveTimeinCommitsOnlyElseReturn() {
+        for (long timeout : new long[]{0, -1}) {
+            AtomicBoolean thenExecuted = new AtomicBoolean(false);
+            IfBindable bindable = new IfBindable(
+                    condition(timeout),
+                    returning(INT_FIELDS, thenExecuted, 1),
+                    returning(INT_FIELDS, 2),
+                    true
+            );
+            ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
 
-        bindable.bind(CalciteSchema.createRootSchema(false), function);
+            Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), function);
 
-        assertEquals(1, function.getFunctionReturnResult().single()[0]);
+            assertFalse(thenExecuted.get());
+            assertEquals(2, function.getFunctionReturnResult().single()[0]);
+            assertSame(result, function.getFunctionReturnResult());
+        }
     }
 
     @Test

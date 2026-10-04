@@ -186,14 +186,16 @@ class SqlFunctionReturnTest {
 
     @Test
     void compiledTimeinReturnCommitsTheSelectedBranch() throws Exception {
-        SqlFunctionBindable function = compile(
-                "return_timein",
-                "IF TIMEIN (SELECT 1000) THEN (RETURN SELECT 1 AS id) "
-                        + "ELSE (RETURN SELECT 2 AS id)",
-                "RETURN"
-        );
+        for (long timeout : new long[]{1000, 0, -1}) {
+            SqlFunctionBindable function = compile(
+                    timeout < 0 ? "return_timein_negative" : "return_timein_" + timeout,
+                    "IF TIMEIN (SELECT " + timeout + ") THEN (RETURN SELECT 1 AS id) "
+                            + "ELSE (RETURN SELECT 2 AS id)",
+                    "RETURN"
+            );
 
-        assertEquals(1, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(timeout > 0 ? 1 : 2, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+        }
     }
 
     @Test

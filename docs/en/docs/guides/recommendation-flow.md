@@ -237,7 +237,7 @@ IF TIMEIN (SELECT 100) THEN (
 The `TIMEIN` query returns milliseconds:
 
 - greater than zero: set a timeout for THEN and run ELSE after a timeout or ordinary exception;
-- zero or less: do not set a timeout, but still run ELSE after an ordinary exception.
+- zero or less: skip THEN and execute ELSE directly. Set the configured budget to `0` to disable the primary path and select the fallback.
 
 `IF TIMEIN` requires ELSE. Both branches must use `CACHE TABLE` or both must use `RETURN`. See [Timeouts, Fallbacks, and Error Recovery](./exception-recovery.md) for other recovery options.
 

@@ -2,10 +2,10 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -21,8 +21,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class IfBindable extends BindableInterface {
@@ -187,75 +185,54 @@ public class IfBindable extends BindableInterface {
             throw new RuntimeException("condition must return a numeric value for timein mode");
         }
 
+        if (context.isCancelled()) {
+            throw new RuntimeException("if node " + getName() + " cancelled");
+        }
         long timeout = ((Number) value).longValue();
         if (timeout <= 0) {
-            // A non-positive timeout means "wait indefinitely", not "disable
-            // recovery". Execute synchronously in the same isolated/cloned
-            // context used by the timed path so ordinary THEN failures can
-            // still fall back to ELSE and RETURN state is not leaked.
-            return executeWithoutTimeout(schema, context);
-        }
-
-        return executeWithTimeout(schema, context, timeout);
-    }
-
-    private Enumerable<Object[]> executeWithoutTimeout(CalciteSchema schema, ExecuteContext context) {
-        ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
-        boolean containsReturn = containsReturn();
-        ExecuteContextImpl thenContext = containsReturn
-                ? functionContext.createIsolatedReturnContext()
-                : functionContext.clone();
-        try {
-            Enumerable<Object[]> result = thenClause.bind(schema, thenContext);
-            if (containsReturn) {
-                functionContext.commitFunctionReturnFrom(thenContext);
-            }
-            return result;
-        } catch (Exception e) {
-            thenContext.cancel();
-            if (context.isCancelled()) {
-                throw new RuntimeException("if node " + getName() + " cancelled", e);
-            }
-            log.error("Error executing thenClause, falling back to elseClause", e);
-            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
+            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_DIRECT_FALLBACK);
             return elseClause.bind(schema, context);
         }
+        return executeThen(schema, context, timeout);
     }
 
-    private Enumerable<Object[]> executeWithTimeout(CalciteSchema schema, ExecuteContext context, long timeout) {
+    private Enumerable<Object[]> executeThen(CalciteSchema schema, ExecuteContext context, long timeout) {
         ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
         boolean containsReturn = containsReturn();
         ExecuteContextImpl thenContext = containsReturn
                 ? functionContext.createIsolatedReturnContext()
                 : functionContext.clone();
-        CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> thenClause.bind(schema, thenContext),
-                ExecutorServiceUtils.getExecutorService()
-        );
-
         Enumerable<Object[]> result;
         try {
-            result = future.get(timeout, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
+            result = ExecutorServiceUtils.execute(() -> thenClause.bind(schema, thenContext), thenContext, timeout);
+        } catch (Exception failure) {
             thenContext.cancel();
-            future.cancel(true);
-            if (context.isCancelled()) {
-                // an ancestor has cancelled the whole subtree (including the else scope), do not fall back
-                throw new RuntimeException("if node " + getName() + " cancelled while waiting for thenClause");
+            boolean waitingTimedOut = failure instanceof TimeoutException;
+            Throwable cause = ExecutorServiceUtils.unwrap(failure);
+            if (cause instanceof Error error) {
+                throw error;
             }
-            log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
-            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_TIMEOUT);
+            if (cause instanceof InterruptedException) {
+                // ExecutorServiceUtils restores interruption of the waiting thread only.
+                throw new RuntimeException("if node " + getName() + " interrupted", cause);
+            }
+            if (context.isCancelled()) {
+                if (waitingTimedOut) {
+                    throw new RuntimeException("if node " + getName() + " cancelled while waiting for thenClause");
+                }
+                throw new RuntimeException("if node " + getName() + " cancelled", cause);
+            }
+            if (waitingTimedOut) {
+                log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
+                incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_TIMEOUT);
+            } else {
+                log.error("Error executing thenClause, falling back to elseClause", cause);
+                incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
+            }
             return elseClause.bind(schema, context);
-        } catch (Exception e) {
+        } catch (Error failure) {
             thenContext.cancel();
-            future.cancel(true);
-            if (context.isCancelled()) {
-                // an ancestor has cancelled the whole subtree, do not fall back, just abort
-                throw new RuntimeException("if node " + getName() + " cancelled", e);
-            }
-            log.error("Error executing thenClause, falling back to elseClause", e);
-            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
-            return elseClause.bind(schema, context);
+            throw failure;
         }
 
         if (containsReturn) {

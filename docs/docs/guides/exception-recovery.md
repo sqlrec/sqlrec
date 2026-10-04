@@ -41,7 +41,7 @@ IF TIMEIN (
 );
 ```
 
-当超时时间小于等于 0 时，不设置超时，THEN 可以一直执行；如果 THEN 抛出普通异常，仍会执行 ELSE：
+`TIMEIN` 表示 THEN 分支可用的时间预算。当预算小于等于 0 时，跳过 THEN，直接执行 ELSE；可以将预算配置为 `0` 来主动降级：
 
 ```sql
 IF TIMEIN (SELECT 0) THEN (
@@ -51,7 +51,11 @@ IF TIMEIN (SELECT 0) THEN (
 );
 ```
 
-上例不会因为 `0` 触发超时，但 `rank_service` 抛出异常时仍会回退到 ELSE；只有 THEN 成功完成后才提交结果。
+上例不会调用 `rank_service`，直接使用 ELSE 中的 `items` 作为结果。负数预算也采用相同规则，因此动态计算的剩余时间耗尽后会直接降级。
+
+迁移已有配置时，需要将原来表示“不限时”的 `0` 或负数改为业务可接受的较大正数预算。较大预算仍有时间限制，并受外层节点超时和请求取消约束。`NODE_EXEC_TIMEOUT <= 0` 的“不设置节点超时”含义保持不变。
+
+直接降级记录 `sqlrec_if_cache_direct_fallback_total`，实际等待超时记录 `sqlrec_if_cache_timeout_total`，THEN 普通异常回退记录 `sqlrec_if_cache_exception_fallback_total`。这些计数记录分支选择次数；ELSE 自身失败仍向上传播。请求已取消时，不选择 ELSE，也不增加降级计数。
 
 如果两个分支都返回结果，schema 必须兼容：
 

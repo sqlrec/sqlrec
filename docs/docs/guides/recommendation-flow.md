@@ -239,7 +239,7 @@ IF TIMEIN (SELECT 100) THEN (
 `TIMEIN` 的条件返回毫秒数：
 
 - 大于 0：为 THEN 分支设置超时；THEN 超时或抛出异常时执行 ELSE。
-- 小于等于 0：不设置超时，但 THEN 抛出普通异常时仍会执行 ELSE。
+- 小于等于 0：跳过 THEN，直接执行 ELSE。可以将配置中的预算设为 `0` 来关闭主路径、启用降级路径。
 
 `IF TIMEIN` 必须有 ELSE。两个分支必须都是 `CACHE TABLE` 或都是 `RETURN`。更多降级方式见[超时、降级与异常恢复](./exception-recovery.md)。
 

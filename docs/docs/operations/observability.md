@@ -149,7 +149,9 @@ Prometheus 暴露的指标名使用下划线；计数器带 `_total`，计时器
 | HTTP 平均耗时 | `sqlrec_http_request_duration_seconds_sum`、`sqlrec_http_request_duration_seconds_count` |
 | 节点平均耗时与状态 | `sqlrec_node_exec_duration_seconds_sum`、`sqlrec_node_exec_duration_seconds_count` |
 | 表扫描耗时 | `sqlrec_table_scan_duration_seconds_sum`、`sqlrec_table_scan_duration_seconds_count` |
-| 缓存分支超时 | `sqlrec_if_cache_timeout_total` |
+| TIMEIN 非正数预算直接降级 | `sqlrec_if_cache_direct_fallback_total` |
+| TIMEIN 等待 THEN 超时 | `sqlrec_if_cache_timeout_total` |
+| TIMEIN 普通异常回退 | `sqlrec_if_cache_exception_fallback_total` |
 
 平均耗时用对应的 `_sum` 除以 `_count`，单位为秒。主键查询和向量搜索还分别有 `sqlrec_table_get_by_primary_key_duration_seconds_*`、`sqlrec_table_vector_search_duration_seconds_*` 指标。例如，比较各节点最近五分钟的平均耗时：
 

@@ -94,16 +94,7 @@ public class SqlFunctionBindable extends BindableInterface {
             bindFutures.put(bindableIndex, bindFuture);
         }
 
-        CompletableFuture<Void> allBindFutures = CompletableFuture.allOf(
-                bindFutures.values().toArray(new CompletableFuture[0])
-        );
-        try {
-            allBindFutures.join();
-        } catch (Exception e) {
-            context.cancel();
-            bindFutures.values().forEach(f -> f.cancel(true));
-            throw e;
-        }
+        ExecutorServiceUtils.awaitAll(context, bindFutures.values());
     }
 
     private CompletableFuture<Object> schedule(
@@ -113,20 +104,10 @@ public class SqlFunctionBindable extends BindableInterface {
             CalciteSchema schema,
             ExecuteContext context
     ) {
-        if (dependencyIndices == null || dependencyIndices.isEmpty()) {
-            return CompletableFuture.supplyAsync(
-                    () -> bindUnlessReturned(bindable, schema, context),
-                    ExecutorServiceUtils.getExecutorService()
-            );
-        }
-
-        CompletableFuture<?>[] dependencies = dependencyIndices.stream()
-                .map(bindFutures::get)
-                .toArray(CompletableFuture[]::new);
-        return CompletableFuture.allOf(dependencies).thenApplyAsync(
-                ignored -> bindUnlessReturned(bindable, schema, context),
-                ExecutorServiceUtils.getExecutorService()
-        );
+        List<CompletableFuture<Object>> dependencies = dependencyIndices == null
+                ? List.of()
+                : dependencyIndices.stream().map(bindFutures::get).toList();
+        return ExecutorServiceUtils.submitAfter(dependencies, () -> bindUnlessReturned(bindable, schema, context));
     }
 
     private Enumerable<Object[]> bindUnlessReturned(

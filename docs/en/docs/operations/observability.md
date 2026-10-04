@@ -149,7 +149,9 @@ Prometheus metric names use underscores. Counters have the `_total` suffix; time
 | Mean HTTP duration | `sqlrec_http_request_duration_seconds_sum`, `sqlrec_http_request_duration_seconds_count` |
 | Mean node duration and status | `sqlrec_node_exec_duration_seconds_sum`, `sqlrec_node_exec_duration_seconds_count` |
 | Table scan duration | `sqlrec_table_scan_duration_seconds_sum`, `sqlrec_table_scan_duration_seconds_count` |
-| Cache branch timeouts | `sqlrec_if_cache_timeout_total` |
+| Direct TIMEIN fallback for a non-positive budget | `sqlrec_if_cache_direct_fallback_total` |
+| TIMEIN timeout while waiting for THEN | `sqlrec_if_cache_timeout_total` |
+| TIMEIN fallback after an ordinary THEN failure | `sqlrec_if_cache_exception_fallback_total` |
 
 Divide a timer's `_sum` by its `_count` to get the mean duration in seconds. Primary-key lookups and vector searches also expose `sqlrec_table_get_by_primary_key_duration_seconds_*` and `sqlrec_table_vector_search_duration_seconds_*`. For example, compare each node's mean duration over the last five minutes:
 

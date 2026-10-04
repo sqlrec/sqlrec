@@ -144,15 +144,11 @@ public class IfBindableTest {
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(
                         "IF TIMEIN (SELECT 0) THEN (cache table t1 as SELECT * FROM myTable) ELSE (cache table t1 as SELECT 1 as id, 'x' as name)",
-                        Arrays.<Object[]>asList(new Object[]{"t1", 3L})
+                        Arrays.<Object[]>asList(new Object[]{"t1", 1L})
                 ),
                 new SqlTestCase(
                         "select * from t1",
-                        Arrays.asList(
-                                new Object[]{1, "Alice"},
-                                new Object[]{2, "Bob"},
-                                new Object[]{3, "Charlie"}
-                        )
+                        Arrays.<Object[]>asList(new Object[]{1, "x"})
                 )
         );
         for (SqlTestCase sqlTestCase : sqlList) {
@@ -165,15 +161,11 @@ public class IfBindableTest {
         List<SqlTestCase> sqlList = Arrays.asList(
                 new SqlTestCase(
                         "IF TIMEIN (SELECT -1) THEN (cache table t1 as SELECT * FROM myTable) ELSE (cache table t1 as SELECT 1 as id, 'x' as name)",
-                        Arrays.<Object[]>asList(new Object[]{"t1", 3L})
+                        Arrays.<Object[]>asList(new Object[]{"t1", 1L})
                 ),
                 new SqlTestCase(
                         "select * from t1",
-                        Arrays.asList(
-                                new Object[]{1, "Alice"},
-                                new Object[]{2, "Bob"},
-                                new Object[]{3, "Charlie"}
-                        )
+                        Arrays.<Object[]>asList(new Object[]{1, "x"})
                 )
         );
         for (SqlTestCase sqlTestCase : sqlList) {

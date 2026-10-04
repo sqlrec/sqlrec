@@ -18,6 +18,7 @@ public class Consts {
     public static final String METRICS_NODE_CANCELLED = "sqlrec.node.cancelled";
     public static final String METRICS_CACHE_TABLE_IGNORE_EXCEPTION = "sqlrec.cache.table.ignore.exception";
     public static final String METRICS_IF_CACHE_BRANCH = "sqlrec.if.cache.branch";
+    public static final String METRICS_IF_CACHE_DIRECT_FALLBACK = "sqlrec.if.cache.direct.fallback";
     public static final String METRICS_IF_CACHE_TIMEOUT = "sqlrec.if.cache.timeout";
     public static final String METRICS_IF_CACHE_EXCEPTION_FALLBACK = "sqlrec.if.cache.exception.fallback";
     public static final String METRICS_TABLE_SCAN_DURATION = "sqlrec.table.scan.duration";

@@ -2,10 +2,10 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.SqlGetVariable;
-import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 /** Executes one bindable once per partition and merges the successful results. */
 final class PartitionExecutor {
@@ -48,9 +47,8 @@ final class PartitionExecutor {
         ExecuteContextImpl partitionContext = ((ExecuteContextImpl) context).clone();
         List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();
         for (List<Object[]> partition : split(rows, resolveSize(context))) {
-            futures.add(CompletableFuture.supplyAsync(
-                    () -> bindable.bind(createSchema(schema, partition, fields), partitionContext),
-                    ExecutorServiceUtils.getExecutorService()));
+            futures.add(ExecutorServiceUtils.submit(
+                    () -> bindable.bind(createSchema(schema, partition, fields), partitionContext)));
         }
         return merge(context, partitionContext, futures);
     }
@@ -76,10 +74,10 @@ final class PartitionExecutor {
                 merged.addAll(partitionResult);
                 successes++;
             } catch (Exception exception) {
-                Throwable failure = unwrap(exception);
+                Throwable failure = ExecutorServiceUtils.unwrap(exception);
                 if (!ignoreFailures || context.isCancelled() || partitionContext.isCancelled()
                         || failure instanceof InterruptedException || failure instanceof Error) {
-                    cancel(partitionContext, futures);
+                    ExecutorServiceUtils.cancel(partitionContext, futures);
                     throw new RuntimeException("Partition execution failed", failure);
                 }
                 failures.add(failure);
@@ -89,7 +87,7 @@ final class PartitionExecutor {
         }
 
         if (successes == 0 && !failures.isEmpty()) {
-            cancel(partitionContext, futures);
+            ExecutorServiceUtils.cancel(partitionContext, futures);
             RuntimeException allFailed = new RuntimeException(
                     "All " + failures.size() + " partition executions failed", failures.get(0));
             failures.stream().skip(1).forEach(allFailed::addSuppressed);
@@ -149,20 +147,5 @@ final class PartitionExecutor {
             partitions.add(rows.subList(i, Math.min(i + size, rows.size())));
         }
         return partitions;
-    }
-
-    private static Throwable unwrap(Throwable failure) {
-        while (failure instanceof CompletionException && failure.getCause() != null) {
-            failure = failure.getCause();
-        }
-        return failure;
-    }
-
-    private static void cancel(
-            ExecuteContextImpl context,
-            List<CompletableFuture<Enumerable<Object[]>>> futures
-    ) {
-        context.cancel();
-        futures.forEach(future -> future.cancel(true));
     }
 }

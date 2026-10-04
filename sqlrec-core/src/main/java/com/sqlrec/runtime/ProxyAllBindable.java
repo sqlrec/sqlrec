@@ -3,10 +3,10 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.TableTextFormatter;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.utils.ExecutorServiceUtils;
 import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TraceUtils;
 import io.micrometer.core.instrument.Tags;
@@ -23,8 +23,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -121,7 +119,7 @@ public class ProxyAllBindable extends ForwardingBindable {
         try {
             return executeDelegate(schema, nodeContext);
         } catch (Throwable failure) {
-            Throwable cause = unwrapExecutionFailure(failure);
+            Throwable cause = ExecutorServiceUtils.unwrap(failure);
             if (!(cause instanceof InterruptedException) && !(cause instanceof Error)) {
                 Enumerable<Object[]> recovered = recoverIgnoredCacheFailure(schema, context, cause);
                 if (recovered != null) {
@@ -140,34 +138,7 @@ public class ProxyAllBindable extends ForwardingBindable {
             return delegate.bind(schema, nodeContext);
         }
 
-        CompletableFuture<Enumerable<Object[]>> future = CompletableFuture.supplyAsync(
-                () -> delegate.bind(schema, nodeContext),
-                ExecutorServiceUtils.getExecutorService()
-        );
-        try {
-            return future.get(timeout, TimeUnit.MILLISECONDS);
-        } catch (Throwable failure) {
-            nodeContext.cancel();
-            future.cancel(true);
-            if (failure instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            if (failure instanceof TimeoutException) {
-                TimeoutException timeoutException = new TimeoutException(
-                        "Task execution timeout after " + timeout + "ms"
-                );
-                timeoutException.initCause(failure);
-                throw timeoutException;
-            }
-            throw failure;
-        }
-    }
-
-    private Throwable unwrapExecutionFailure(Throwable failure) {
-        if (failure instanceof ExecutionException && failure.getCause() != null) {
-            return failure.getCause();
-        }
-        return failure;
+        return ExecutorServiceUtils.execute(() -> delegate.bind(schema, nodeContext), nodeContext, timeout);
     }
 
     private RuntimeException propagate(Throwable failure) {

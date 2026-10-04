@@ -20,9 +20,12 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -107,6 +110,100 @@ public class IfBindableCancelTest {
     }
 
     // ==================== timein mode: timeout/failure cancels the then subtree ====================
+
+    @Test
+    public void testTimeinErrorPropagatesWithoutElse() {
+        AssertionError failure = new AssertionError("fatal THEN failure");
+        AtomicBoolean elseExecuted = new AtomicBoolean(false);
+        TestBindable thenInner = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                throw failure;
+            }
+        };
+        TestBindable elseInner = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                elseExecuted.set(true);
+                return Linq4j.emptyEnumerable();
+            }
+        };
+        IfBindable bindable = new IfBindable(condition(5000L),
+                cacheClause("t", thenInner), cacheClause("t", elseInner), true);
+        ExecuteContextImpl context = new ExecuteContextImpl();
+
+        assertSame(failure, assertThrows(AssertionError.class,
+                () -> bindable.bind(CalciteSchema.createRootSchema(false), context)));
+        assertFalse(elseExecuted.get());
+        assertFalse(context.isCancelled());
+    }
+
+    @Test
+    public void testInterruptedTimeinWaitDoesNotRunElseOrCommitReturn() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicBoolean elseExecuted = new AtomicBoolean(false);
+        AtomicBoolean thenCancelled = new AtomicBoolean(false);
+        TestBindable thenValue = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                try {
+                    started.countDown();
+                    release.await();
+                    thenCancelled.set(context.isCancelled());
+                    return Linq4j.emptyEnumerable();
+                } catch (InterruptedException failure) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(failure);
+                } finally {
+                    finished.countDown();
+                }
+            }
+        };
+        TestBindable elseValue = new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                elseExecuted.set(true);
+                return Linq4j.emptyEnumerable();
+            }
+        };
+        IfBindable bindable = new IfBindable(condition(5000L),
+                new ReturnBindable(thenValue), new ReturnBindable(elseValue), true);
+        ExecuteContextImpl context = new ExecuteContextImpl().createFunctionContext();
+        AtomicReference<Throwable> thrown = new AtomicReference<>();
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        Thread caller = new Thread(() -> {
+            try {
+                bindable.bind(CalciteSchema.createRootSchema(false), context);
+            } catch (Throwable failure) {
+                thrown.set(failure);
+            } finally {
+                interrupted.set(Thread.currentThread().isInterrupted());
+            }
+        });
+        caller.start();
+        try {
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            caller.interrupt();
+            caller.join(5000);
+            assertFalse(caller.isAlive());
+            RuntimeException failure = assertInstanceOf(RuntimeException.class, thrown.get());
+
+            assertInstanceOf(InterruptedException.class, failure.getCause());
+            assertTrue(interrupted.get());
+            assertFalse(elseExecuted.get());
+            assertFalse(context.hasReturnedFromFunction());
+            assertFalse(context.isCancelled());
+        } finally {
+            caller.interrupt();
+            release.countDown();
+            caller.join(5000);
+        }
+        assertTrue(finished.await(5, TimeUnit.SECONDS));
+        assertTrue(thenCancelled.get());
+        assertFalse(context.hasReturnedFromFunction());
+    }
 
     @Test
     @SilenceLoggers(IfBindable.class)
@@ -195,7 +292,7 @@ public class IfBindableCancelTest {
 
     @Test
     @SilenceLoggers(IfBindable.class)
-    public void testTimeinNonPositiveThenExceptionFallsBackToElse() {
+    public void testTimeinZeroSkipsFailingThen() {
         AtomicBoolean thenExecuted = new AtomicBoolean(false);
         AtomicBoolean elseExecuted = new AtomicBoolean(false);
 
@@ -225,8 +322,8 @@ public class IfBindableCancelTest {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
 
-        assertTrue(thenExecuted.get());
-        assertTrue(elseExecuted.get(), "else clause should execute after then failure without timeout");
+        assertFalse(thenExecuted.get());
+        assertTrue(elseExecuted.get(), "zero TIMEIN should execute ELSE directly");
         List<Object[]> rows = new ArrayList<>();
         result.forEach(rows::add);
         assertEquals("t", rows.get(0)[0]);
@@ -320,7 +417,7 @@ public class IfBindableCancelTest {
     }
 
     @Test
-    public void testTimeinZeroTimeoutExecutesThenDirectly() {
+    public void testTimeinZeroTimeoutExecutesElseDirectly() {
         AtomicBoolean thenExecuted = new AtomicBoolean(false);
         AtomicBoolean elseExecuted = new AtomicBoolean(false);
         TestBindable thenInner = new TestBindable() {
@@ -349,8 +446,8 @@ public class IfBindableCancelTest {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         ifBindable.bind(schema, context);
 
-        assertTrue(thenExecuted.get());
-        assertFalse(elseExecuted.get());
+        assertFalse(thenExecuted.get());
+        assertTrue(elseExecuted.get());
     }
 
     // ==================== condition mode (regression) ====================

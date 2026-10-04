@@ -278,9 +278,9 @@ IF [TIMEIN] (condition) THEN (statement) [ELSE (statement)]
 The IF statement supports two execution modes:
 
 1. **Normal Mode**: Evaluates the condition expression. If it returns true, executes the THEN clause; otherwise executes the ELSE clause (if present)
-2. **Timeout Mode** (TIMEIN): The condition expression must return a numeric timeout value in milliseconds
+2. **Timeout Mode** (TIMEIN): The condition expression must return a numeric THEN execution time budget in milliseconds
    - If timeout > 0, executes the THEN clause with the specified timeout; falls back to the ELSE clause if timeout occurs
-   - If timeout <= 0, executes the THEN clause immediately
+   - If the budget <= 0, skips THEN and executes ELSE directly, without submitting a THEN task or creating its child context
    - When timeout > 0, if THEN times out or throws, its temporary `RETURN` state is discarded before ELSE runs, so a failed branch cannot publish a function result
 
 **Notes:**
@@ -292,6 +292,8 @@ The IF statement supports two execution modes:
 - When both branches return, their result schemas must be compatible. The IF must be followed immediately by one empty `RETURN;` that ends the definition, with no intervening statement. The function result schema comes from the two branches and is unaffected by this empty terminator
 - When THEN returns and ELSE is omitted, a false condition continues with the statements following the IF
 - TIMEIN requires ELSE; both branches must be CACHE statements or both must be RETURN statements
+- Request cancellation or interruption of the waiting thread terminates execution without falling back to ELSE
+- A non-positive TIMEIN budget selects ELSE directly; `NODE_EXEC_TIMEOUT <= 0` still disables the node timeout
 - Directly nesting another IF in THEN or ELSE is currently unsupported
 - With no ELSE clause and a false condition: if the THEN clause is a CACHE statement, the corresponding cache table is registered as an empty table (if it does not already exist), so subsequent statements can reference it normally
 

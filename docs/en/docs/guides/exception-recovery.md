@@ -41,7 +41,7 @@ IF TIMEIN (
 );
 ```
 
-A non-positive timeout means that no timeout is configured and THEN may run indefinitely. Ordinary exceptions from THEN still fall back to ELSE:
+`TIMEIN` is the time budget available to THEN. A non-positive budget skips THEN and executes ELSE directly. Set the budget to `0` to select the fallback explicitly:
 
 ```sql
 IF TIMEIN (SELECT 0) THEN (
@@ -51,7 +51,11 @@ IF TIMEIN (SELECT 0) THEN (
 );
 ```
 
-The example does not impose a timeout because the value is `0`, but an exception from `rank_service` still selects ELSE. The THEN result is committed only after successful completion.
+The example does not call `rank_service`; it uses the `items` result from ELSE immediately. Negative budgets follow the same rule, so a computed remaining budget that has expired also selects ELSE.
+
+When migrating configurations, replace any `0` or negative TIMEIN values that previously meant “no timeout” with a sufficiently large positive budget for the application. This remains a finite budget and is subject to outer node timeouts and request cancellation. `NODE_EXEC_TIMEOUT <= 0` continues to disable the node timeout.
+
+Direct fallback records `sqlrec_if_cache_direct_fallback_total`, an actual waiting timeout records `sqlrec_if_cache_timeout_total`, and ordinary THEN failures record `sqlrec_if_cache_exception_fallback_total`. These counters record branch selections; failures in ELSE still propagate. An already cancelled request does not select ELSE or increment a fallback counter.
 
 When both branches return data, their schemas must be compatible:
 
