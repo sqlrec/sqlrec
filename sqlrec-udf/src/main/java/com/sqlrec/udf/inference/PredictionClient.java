@@ -1,6 +1,7 @@
 package com.sqlrec.udf.inference;
 
 import com.sqlrec.common.http.JsonHttpTransport;
+import com.sqlrec.common.http.JdkJsonHttpTransport;
 import com.sqlrec.common.utils.JsonUtils;
 import okhttp3.OkHttpClient;
 
@@ -11,14 +12,18 @@ import java.util.concurrent.TimeUnit;
 
 /** HTTP prediction protocol shared by online and Flink batch functions. */
 public final class PredictionClient {
-    private static final PredictionClient DEFAULT = new PredictionClient(new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build());
+    // Flink's Hadoop uber-jar embeds Okio 1.x. The default prediction path
+    // must not initialize OkHttp 4, regardless of the shared jar load order.
+    private static final PredictionClient DEFAULT = new PredictionClient();
+    private static final int DEFAULT_TIMEOUT_MS = 30000;
 
     private final OkHttpClient httpClient;
 
+    private PredictionClient() {
+        this.httpClient = null;
+    }
+
+    /** Retains support for callers that explicitly supply an OkHttp client. */
     public PredictionClient(OkHttpClient httpClient) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     }
@@ -33,13 +38,31 @@ public final class PredictionClient {
 
     public Map<String, Object> predict(
             String serviceUrl, String jsonData, Map<String, String> serviceParams) {
-        OkHttpClient client = clientWithServiceTimeouts(serviceParams);
         try {
-            String responseBody = JsonHttpTransport.post(client, serviceUrl, jsonData);
+            String responseBody;
+            if (httpClient == null) {
+                responseBody = JdkJsonHttpTransport.post(serviceUrl, jsonData,
+                        timeout(serviceParams, "connect_timeout_ms"),
+                        timeout(serviceParams, "read_timeout_ms"),
+                        timeout(serviceParams, "write_timeout_ms"));
+            } else {
+                responseBody = JsonHttpTransport.post(clientWithServiceTimeouts(serviceParams), serviceUrl, jsonData);
+            }
             return JsonUtils.parseJsonToMap(responseBody);
         } catch (IOException e) {
             throw new RuntimeException("Failed to call prediction service: " + e.getMessage(), e);
         }
+    }
+
+    private static int timeout(Map<String, String> params, String key) {
+        if (params == null || !params.containsKey(key)) {
+            return DEFAULT_TIMEOUT_MS;
+        }
+        long value = parsePositiveTimeout(params, key);
+        if (value > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(key + " is too large");
+        }
+        return (int) value;
     }
 
     private OkHttpClient clientWithServiceTimeouts(Map<String, String> params) {

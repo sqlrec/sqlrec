@@ -67,4 +67,18 @@ class PredictionClientTest {
         }
         assertEquals(0, requests.get());
     }
+
+    @Test
+    void defaultClientValidatesEveryTimeoutBeforeOpeningAConnection() {
+        PredictionClient client = PredictionClient.getDefault();
+        for (String key : new String[]{"connect_timeout_ms", "read_timeout_ms", "write_timeout_ms"}) {
+            for (String value : new String[]{"0", "-1", "invalid"}) {
+                assertEquals(key + " must be a positive integer", assertThrows(IllegalArgumentException.class,
+                        () -> client.predict("http://127.0.0.1:1", "[]", Map.of(key, value))).getMessage());
+            }
+            assertEquals(key + " is too large", assertThrows(IllegalArgumentException.class,
+                    () -> client.predict("http://127.0.0.1:1", "[]",
+                            Map.of(key, "2147483648"))).getMessage());
+        }
+    }
 }

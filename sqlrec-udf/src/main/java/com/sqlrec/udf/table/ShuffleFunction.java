@@ -1,7 +1,7 @@
 package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
-import org.apache.calcite.linq4j.Enumerable;
+import com.sqlrec.common.utils.RowTransformUtils;
 import org.apache.calcite.linq4j.Linq4j;
 
 import java.util.ArrayList;
@@ -10,13 +10,7 @@ import java.util.List;
 
 public class ShuffleFunction {
     public CacheTable evaluate(CacheTable input) {
-        Enumerable<Object[]> enumerable = input.scan(null);
-        List<Object[]> newData = new ArrayList<>();
-        if (enumerable != null) {
-            for (Object[] data : enumerable) {
-                newData.add(data);
-            }
-        }
+        List<Object[]> newData = new ArrayList<>(RowTransformUtils.materializeRows(input));
         Collections.shuffle(newData);
 
         return new CacheTable("output", Linq4j.asEnumerable(newData), input.getDataFields());

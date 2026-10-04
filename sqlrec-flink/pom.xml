@@ -306,6 +306,16 @@
 
     <build>
         <plugins>
+            <!-- This module has no main sources. Recreate its thin jar before
+                 shade so a second build cannot retain old dependency classes
+                 from the previous fat jar. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <forceCreation>true</forceCreation>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -354,6 +364,27 @@
                                 </filter>
                             </filters>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Exercise the actual shaded artifact after package; ordinary
+                 surefire tests use target/classes and cannot catch this conflict. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <argLine>${argLine}</argLine>
+                    <systemPropertyVariables>
+                        <sqlrec.shadedJar>${project.build.directory}/${project.build.finalName}.jar</sqlrec.shadedJar>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

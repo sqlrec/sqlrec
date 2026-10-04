@@ -2,9 +2,11 @@ package com.sqlrec.udf.table;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -52,12 +54,25 @@ public final class RuleDiversity {
     // constraint satisfaction is prioritized over original order preservation.
     private static final double VIOLATION_PENALTY = 1_000_000.0;
 
+    static List<RelDataTypeField> ruleTableFields() {
+        List<RelDataTypeField> fields = new ArrayList<>();
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_WINDOW_SIZE, 0, SqlTypeName.INTEGER));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_WINDOW_START, 1, SqlTypeName.INTEGER));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_WINDOW_NUM, 2, SqlTypeName.INTEGER));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_DIVERSITY_COLUMN, 3, SqlTypeName.VARCHAR));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_DIVERSITY_VALUE, 4, SqlTypeName.VARCHAR));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_OP, 5, SqlTypeName.VARCHAR));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_DIVERSITY_NUM, 6, SqlTypeName.INTEGER));
+        fields.add(DataTypeUtils.getRelDataTypeField(COL_WEIGHT, 7, SqlTypeName.DOUBLE));
+        return fields;
+    }
+
     public CacheTable evaluate(
             CacheTable targetTable,
             CacheTable ruleTable,
             String maxReturn
     ) {
-        List<Object[]> targetRows = readRows(targetTable);
+        List<Object[]> targetRows = RowTransformUtils.materializeRows(targetTable);
         int limit = Math.min(Integer.parseInt(maxReturn), targetRows.size());
         if (limit <= 0) {
             return resultTable(targetTable, Collections.emptyList());
@@ -81,17 +96,6 @@ public final class RuleDiversity {
                 source.getTableName() + "_rule_diversify_greedy",
                 Linq4j.asEnumerable(rows),
                 source.getDataFields());
-    }
-
-    private static List<Object[]> readRows(CacheTable table) {
-        List<Object[]> rows = new ArrayList<>();
-        Enumerable<Object[]> enumerable = table.scan(null);
-        if (enumerable != null) {
-            for (Object[] row : enumerable) {
-                rows.add(row);
-            }
-        }
-        return rows;
     }
 
     private static List<Rule> parseRules(CacheTable ruleTable, List<RelDataTypeField> targetFields) {
