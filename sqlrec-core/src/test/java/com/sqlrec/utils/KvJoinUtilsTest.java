@@ -318,4 +318,74 @@ public class KvJoinUtilsTest {
         assertEquals(1, leftValue[0]);
         assertEquals(100, rightValue[0]);
     }
+    @Test
+    void primaryKeyBulkFailureUsesCacheWithoutRetryingBackend() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        SqlRecKvTable table = mock(SqlRecKvTable.class, CALLS_REAL_METHODS);
+        when(table.getTableName()).thenReturn("cached-right");
+        when(table.getRowType(any())).thenReturn(rightRowType);
+        when(table.getPrimaryKeyIndex()).thenReturn(0);
+        table.initCache(100, 60);
+        when(table.getByPrimaryKeyImpl(Set.of(2))).thenReturn(Map.of(2,
+                Collections.singletonList(new Object[]{2, "match"})));
+        table.getByPrimaryKey(Set.of(2));
+        when(table.getByPrimaryKeyImpl(Set.of(1))).thenThrow(new RuntimeException("backend failed"));
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0),
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 2));
+        List<Object[]> result = KvJoinUtils.kvJoin(Linq4j.asEnumerable(Arrays.asList(
+                new Object[]{1, "Alice"}, new Object[]{2, "Bob"})), table, condition, JoinRelType.LEFT).toList();
+        assertEquals(2, result.size());
+        assertTrue(result.stream().anyMatch(row -> Arrays.equals(row, new Object[]{1, "Alice", null, null})));
+        assertTrue(result.stream().anyMatch(row -> Arrays.equals(row, new Object[]{2, "Bob", 2, "match"})));
+        verify(table).getByPrimaryKey(Set.of(1, 2));
+        verify(table).getCachedByPrimaryKey(Set.of(1, 2));
+        verify(table).getByPrimaryKeyImpl(Set.of(1));
+        verify(table).getByPrimaryKeyImpl(Set.of(2));
+        verify(table, times(2)).getByPrimaryKeyImpl(any());
+    }
+
+    @Test
+    void primaryKeyFailureWithoutCacheKeepsLeftRowsAndReturnsNoInnerMatches() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        SqlRecKvTable table = mock(SqlRecKvTable.class, CALLS_REAL_METHODS);
+        when(table.getTableName()).thenReturn("uncached-right");
+        when(table.getRowType(any())).thenReturn(rightRowType);
+        when(table.getPrimaryKeyIndex()).thenReturn(0);
+        when(table.getByPrimaryKeyImpl(any())).thenThrow(new RuntimeException("backend failed"));
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0),
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 1));
+
+        List<Object[]> result = KvJoinUtils.kvJoin(Linq4j.asEnumerable(List.of(1)),
+                table, condition, JoinRelType.LEFT).toList();
+        assertEquals(1, result.size());
+        assertArrayEquals(new Object[]{1, null, null}, result.get(0));
+        assertEquals(0, KvJoinUtils.kvJoin(Linq4j.asEnumerable(List.of(1)),
+                table, condition, JoinRelType.INNER).count());
+        verify(table, times(2)).getByPrimaryKeyImpl(Set.of(1));
+    }
+
+    @Test
+    void primaryKeyFailurePropagatesWhenDisabledAndCancellationIsNeverIgnored() {
+        SqlRecKvTable table = mock(SqlRecKvTable.class);
+        when(table.getRowType(any())).thenReturn(rightRowType);
+        when(table.getPrimaryKeyIndex()).thenReturn(0);
+        RuntimeException failure = new RuntimeException("backend failed");
+        when(table.getByPrimaryKey(any())).thenThrow(failure);
+        RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0),
+                rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 1));
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(false);
+        assertSame(failure, assertThrows(RuntimeException.class, () ->
+                KvJoinUtils.kvJoin(Linq4j.asEnumerable(List.of(1)), table, condition, JoinRelType.LEFT)));
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        java.util.concurrent.CancellationException cancelled = new java.util.concurrent.CancellationException();
+        doThrow(cancelled).when(table).getByPrimaryKey(any());
+        assertSame(cancelled, assertThrows(java.util.concurrent.CancellationException.class, () ->
+                KvJoinUtils.kvJoin(Linq4j.asEnumerable(List.of(1)), table, condition, JoinRelType.LEFT)));
+        verify(table, times(2)).getByPrimaryKey(any());
+        verify(table, never()).getCachedByPrimaryKey(any());
+    }
+
 }

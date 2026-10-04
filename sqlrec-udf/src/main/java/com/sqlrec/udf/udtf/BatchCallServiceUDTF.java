@@ -15,6 +15,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Batches model requests across eval calls and returns buffered inputs with predictions.
+ * Use with bounded, append-only input and INNER LATERAL TABLE, selecting row fields
+ * only from the returned maps. Flink associates all rows emitted by a batch with
+ * the current outer row, not their original outer rows: do not project outer row
+ * fields, filter results using outer row fields, or use LEFT LATERAL JOIN.
+ * Filter source rows before this function. The final partial batch is emitted by
+ * finish(); an unbounded idle stream does not flush a partial batch automatically.
+ */
 @FunctionHint(output = @DataTypeHint("ROW<" +
         "long_map MAP<STRING, BIGINT>, " +
         "double_map MAP<STRING, DOUBLE>, " +
@@ -98,6 +107,8 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
             row.put(fieldName, value);
         }
 
+        // Delayed outputs retain their original fields in these maps, but not
+        // their original Flink lateral association. See the class usage restrictions.
         buffer.add(row);
 
         if (buffer.size() >= this.batchSize) {

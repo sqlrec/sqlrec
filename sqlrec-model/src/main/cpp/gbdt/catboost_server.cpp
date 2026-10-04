@@ -47,6 +47,10 @@ void init_model(const std::string& model_dir) {
         throw std::runtime_error("Failed to load CatBoost model: " + msg);
     }
 
+    if (GetPredictionDimensionsCount(g_model) != 1) {
+        throw std::runtime_error("Multiclass models are not supported by the scalar GBDT serving schema");
+    }
+
     std::cout << "CatBoost model loaded. n_features=" << g_schema.feature_columns.size()
               << ", n_categorical=" << g_schema.cat_feature_indices.size() << std::endl;
 }

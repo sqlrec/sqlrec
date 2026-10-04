@@ -116,7 +116,7 @@ Milvus 连接器用于连接 Milvus 向量数据库，支持向量相似度检�
 | `pool.max-total` | Integer | 100 | 连接池最大连接总数 |
 | `pool.max-block-wait-duration` | Long | 5 | 从连接池获取连接的最大阻塞等待时间（秒） |
 | `pool.min-evictable-idle-duration` | Long | 10 | 连接池中连接的最小可驱逐空闲时长（秒） |
-| `flush-interval` | Long | 1 | 批量写入的刷新间隔（秒），缓冲区满或到达间隔时触发刷新 |
+| `flush-interval` | Long | 1 | Flink sink 收到新记录时检查的刷新间隔（秒）；满批、checkpoint 或关闭时也会刷新，空闲时不自动刷新 |
 | `rpc-deadline-ms` | Long | 30000 | Milvus gRPC 调用的超时时间（毫秒），0 表示不限制 |
 
 **使用示例**：
@@ -242,6 +242,8 @@ CREATE TABLE user_profile (
 
 **注意事项**：
 - JDBC 连接器支持复杂过滤条件，不仅限于主键相等过滤
+- PostgreSQL、MySQL、H2 的保留字及特殊字符标识符会自动加引号；声明名称必须与数据库实际名称一致，尤其是带引号名称的大小写
+- H2 Upsert 按声明列名写入，支持声明列与物理列顺序不同、只声明部分列
 - 使用 HikariCP 连接池管理数据库连接，相同 URL 和用户名共享连接池
 - 支持 Upsert 操作，根据主键自动判断插入或更新
 - 可通过 `jdbc.properties.*` 前缀传递自定义 JDBC 属性
@@ -363,8 +365,8 @@ CREATE TABLE user_interest (
 ```
 
 **注意事项**：
-- CSV 文件第一行为表头，会被自动跳过
-- CSV 文件支持双引号包裹的字段、字段中的逗号及双引号转义；暂不支持字段内换行
+- CSV 文件的第一个非空白记录为表头，会被自动跳过；数据按列位置匹配声明的字段，不按表头名称重排
+- CSV 文件使用 Apache Commons CSV 解析，支持双引号字段、字段内逗号、双引号转义及引号内换行；跳过空行和仅含空白的单字段记录
 - JSON 文件支持数组格式 `[{...}, {...}]` 和单对象格式 `{...}`
 - 数据写入操作仅修改内存中的数据，不会写回到文件系统
 - 如果路径不存在或格式无效，表会被初始化为空表，不会抛出异常

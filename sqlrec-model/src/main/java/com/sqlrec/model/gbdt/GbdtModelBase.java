@@ -52,8 +52,13 @@ public abstract class GbdtModelBase implements ModelController {
             return "input_fields is required for GBDT model";
         }
 
-        // label_columns may be comma-separated (e.g. "label1,label2").
         String labelCol = params.get(Config.LABEL_COLUMNS.getKey());
+        if (labelCol.trim().isEmpty() || labelCol.contains(",") || !labelCol.equals(labelCol.trim())) {
+            return "GBDT label_columns must be a single column name without surrounding whitespace";
+        }
+        if (!isSupportedObjective(Config.OBJECTIVE.getValue(params))) {
+            return "GBDT serving supports only binary or regression objectives";
+        }
         java.util.Set<String> labelNames = Arrays.stream(labelCol.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -126,6 +131,7 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
+        requireSupportedObjective(PipelineConfigUtils.mergeParams(model.getParams(), trainConf.getParams()));
         String pipelineConfig = PipelineConfigUtils.generateTrainConfig(modelType, model, trainConf);
         String shell = ShellUtils.genTrainModelShell(modelType);
         Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
@@ -163,6 +169,17 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
+        requireSupportedObjective(PipelineConfigUtils.mergeParams(model.getParams(), serviceConf.getParams()));
         return GbdtK8sYamlUtils.getServiceK8sYaml(modelType, serviceConf);
     }
+    private static boolean isSupportedObjective(String objective) {
+        return "binary".equals(objective) || "regression".equals(objective);
+    }
+
+    private static void requireSupportedObjective(Map<String, String> params) {
+        if (!isSupportedObjective(Config.OBJECTIVE.getValue(params))) {
+            throw new IllegalArgumentException("GBDT serving supports only binary or regression objectives");
+        }
+    }
+
 }

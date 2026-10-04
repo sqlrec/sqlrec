@@ -20,6 +20,9 @@ struct Schema {
         categorical_features.clear();
         cat_feature_indices.clear();
         objective = data.value("objective", "binary");
+        if (objective != "binary" && objective != "regression") {
+            throw std::runtime_error("GBDT scalar serving supports only binary or regression objectives");
+        }
 
         for (const auto& f : data["feature_columns"]) {
             feature_columns.push_back(f.get<std::string>());

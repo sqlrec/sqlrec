@@ -68,9 +68,9 @@ Exactly one `label_columns` entry is required. The label may be declared in the 
 | SQL type | Feature handling |
 |----------|------------------|
 | INT / BIGINT | Original ID in `[0, bucket_size)` |
-| VARCHAR / STRING / ARRAY<STRING> | FarmHash ID; lists or separator-delimited strings |
+| `VARCHAR` / `STRING` / `ARRAY<STRING>` | FarmHash ID; lists or separator-delimited strings |
 | FLOAT / DOUBLE | Continuous RawFeature converted to float32 |
-| ARRAY<FLOAT> / ARRAY<DOUBLE> | Fixed-size raw vector requiring `column.{name}.value_dim` |
+| `ARRAY<FLOAT>` / `ARRAY<DOUBLE>` | Fixed-size raw vector requiring `column.{name}.value_dim` |
 
 Convert multivalue integer IDs to `ARRAY<STRING>`; `ARRAY<INT>` and `ARRAY<BIGINT>` are rejected. Booleans, nonfinite/out-of-float32 values, and vector dimension errors return 400. Request limits are 16 MiB, 4096 rows, and 65536 feature values.
 
@@ -367,19 +367,19 @@ The LightGBM model is based on the GBDT (Gradient Boosting Decision Tree) framew
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `probs` | FLOAT | Predicted probability |
+| `probs` | FLOAT | Positive-class probability for binary classification; predicted value for regression |
 
 **Required parameters**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label_columns` | String | Label column name |
+| `label_columns` | String | One label column, without commas or surrounding whitespace |
 
 **Training parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `objective` | String | "binary" | Learning objective (binary, regression) |
 | `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
 | `num_iterations` | Integer | 300 | Number of boosting iterations |
 | `learning_rate` | Double | 0.1 | Learning rate |
@@ -427,19 +427,19 @@ The XGBoost model is based on the GBDT (Gradient Boosting Decision Tree) framewo
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `probs` | FLOAT | Predicted probability |
+| `probs` | FLOAT | Positive-class probability for binary classification; predicted value for regression |
 
 **Required parameters**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label_columns` | String | Label column name |
+| `label_columns` | String | One label column, without commas or surrounding whitespace |
 
 **Training parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `objective` | String | "binary" | Learning objective (binary, regression) |
 | `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
 | `num_iterations` | Integer | 300 | Number of boosting iterations |
 | `learning_rate` | Double | 0.1 | Learning rate |
@@ -485,19 +485,19 @@ The CatBoost model is based on the GBDT framework with native categorical featur
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `probs` | FLOAT | Predicted probability |
+| `probs` | FLOAT | Positive-class probability for binary classification; predicted value for regression |
 
 **Required parameters**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `label_columns` | String | Label column name |
+| `label_columns` | String | One label column, without commas or surrounding whitespace |
 
 **Training parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `objective` | String | "binary" | Learning objective (binary, multiclass, regression) |
+| `objective` | String | "binary" | Learning objective (binary, regression) |
 | `metric` | String | "auc" | Evaluation metric (auc, logloss, rmse) |
 | `cb_iterations` | Integer | 1000 | CatBoost iterations |
 | `cb_depth` | Integer | 6 | CatBoost tree depth |

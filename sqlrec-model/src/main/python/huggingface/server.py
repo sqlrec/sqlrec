@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 
 from huggingface.tasks import TASK_ADAPTERS
 
@@ -53,7 +53,7 @@ def ready() -> dict[str, str]:
 
 
 @app.post("/predict")
-def predict(request_data: Any) -> dict[str, list[Any]]:
+def predict(request_data: Any = Body(...)) -> dict[str, list[Any]]:
     if _adapter is None:
         raise HTTPException(status_code=503, detail="model is not loaded")
     if not isinstance(request_data, list) or not request_data:

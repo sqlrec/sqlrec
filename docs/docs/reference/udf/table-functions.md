@@ -171,6 +171,14 @@ HTTP 请求超时默认为连接、读写各 30 秒。详细协议和示例参�
 
 请通过 `LATERAL TABLE` 调用。函数每收集 `batchSize` 行就批量 POST 一个 JSON 数组，最后不足一批的记录也会发送。服务必须返回 JSON 对象，其数组值按输入行顺序映射。
 
+::: warning 批处理与外层行的关联限制
+函数跨多次调用累积输入。Flink 会把一个批次输出的所有结果关联到触发该批次的当前外层行，而不是各自原始的外层行。因此，仅用于有界、追加输入的 INNER `LATERAL TABLE`，行字段必须全部从 `r.*` 返回的 Map 读取；需要保留的原始字段应作为参数传入函数。不要在输出或调用后的过滤条件中引用外层行字段，也不要使用 LEFT LATERAL JOIN。
+
+输入条件应先在子查询中筛选，再调用函数，例如 `(SELECT * FROM ml_movies WHERE dt = '2024-01-01')`。不要依赖优化器将调用后的 `WHERE dt = ...` 下推。该实现保留批处理效率，并未修复通用 LATERAL 行关联问题。
+
+不足一批的数据在 `finish()` 时发送；无界流停止收到新数据时不会自动发送尾批，也不应依赖 checkpoint 刷新尾批。
+:::
+
 **参数**：
 
 | 参数 | 类型 | 说明 |
@@ -203,14 +211,15 @@ SELECT
     r.string_map['title'] AS title,
     r.string_array_map['genres'] AS genres,
     r.double_array_map['item_tower_emb'] AS embedding
-FROM ml_movies, LATERAL TABLE(batch_call_service(
+FROM (SELECT * FROM ml_movies WHERE dt = '2024-01-01') AS m,
+LATERAL TABLE(batch_call_service(
     'http://test-recall-service-item.sqlrec.svc.cluster.local:80/predict', 
     128, 
     'movie_id', movie_id, 
     'title', title, 
-    'genres', genres
-)) AS r
-WHERE dt = '2024-01-01';
+    'genres', genres,
+    'genre_count', CAST(CARDINALITY(genres) AS FLOAT)
+)) AS r;
 ```
 
 **请求格式**：

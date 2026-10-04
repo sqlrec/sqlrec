@@ -85,11 +85,39 @@ class SqlRecKvTableScanTest {
                 rexBuilder.makeCall(SqlStdOperatorTable.AND, idEquals, nameEquals)));
     }
 
+    @Test
+    void cachedLookupNormalizesKeysAndNeverQueriesBackend() {
+        CandidateTable table = new CandidateTable(true);
+        table.initCache(100, 60);
+        assertTrue(table.getCachedByPrimaryKey(Set.of(1)).isEmpty());
+        assertEquals(0, table.lookupCount);
+
+        table.getByPrimaryKey(Set.of(1));
+        Map<Object, List<Object[]>> cached = table.getCachedByPrimaryKey(Set.of("1", BigDecimal.valueOf(2)));
+        assertEquals(Set.of(1), cached.keySet());
+        assertEquals("Alice", cached.get(1).get(0)[1]);
+        assertEquals(1, table.lookupCount);
+
+        table.invalidateCache(new Object[]{1, "Alice"});
+        assertTrue(table.getCachedByPrimaryKey(Set.of(1)).isEmpty());
+        assertEquals(1, table.lookupCount);
+    }
+
+    @Test
+    void cachedLookupWithoutCacheOrKeysIsEmpty() {
+        CandidateTable table = new CandidateTable(true);
+        assertTrue(table.getCachedByPrimaryKey(Set.of(1)).isEmpty());
+        table.initCache(100, 60);
+        assertTrue(table.getCachedByPrimaryKey(Collections.emptySet()).isEmpty());
+        assertEquals(0, table.lookupCount);
+    }
+
     private static final class CandidateTable extends SqlRecKvTable {
         private final boolean primaryKeyOnly;
         private boolean scanImplCalled;
         private List<RexNode> receivedFilters;
         private Set<Object> requestedKeys = Collections.emptySet();
+        private int lookupCount;
 
         private CandidateTable(boolean primaryKeyOnly) {
             this.primaryKeyOnly = primaryKeyOnly;
@@ -109,6 +137,7 @@ class SqlRecKvTableScanTest {
 
         @Override
         public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
+            lookupCount++;
             requestedKeys = keySet;
             return Collections.singletonMap(1,
                     Collections.singletonList(new Object[]{1, "Alice"}));

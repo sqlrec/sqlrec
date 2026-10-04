@@ -45,9 +45,9 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 | SQL 类型 | 处理方式 |
 |----------|----------|
 | INT / BIGINT | 保留原始 ID，必须在 `[0, bucket_size)` 范围内 |
-| VARCHAR / STRING / ARRAY<STRING> | FarmHash ID，可使用字符串数组或按 separator 分隔的字符串 |
+| `VARCHAR` / `STRING` / `ARRAY<STRING>` | FarmHash ID，可使用字符串数组或按 separator 分隔的字符串 |
 | FLOAT / DOUBLE | 连续 RawFeature，推理使用 float32 |
-| ARRAY<FLOAT> / ARRAY<DOUBLE> | 固定维度连续向量，必须指定 `column.{name}.value_dim` |
+| `ARRAY<FLOAT>` / `ARRAY<DOUBLE>` | 固定维度连续向量，必须指定 `column.{name}.value_dim` |
 
 `ARRAY<INT>` / `ARRAY<BIGINT>` 不支持多值 ID，请转换为 `ARRAY<STRING>`。布尔值、NaN/Infinity、超出 float32 范围的连续值和向量维度错误都会返回 400。每个 HTTP 请求最多 16 MiB、4096 行和 65536 个特征值；大批次请拆分。
 
@@ -374,19 +374,19 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| `probs` | FLOAT | 预测概率值 |
+| `probs` | FLOAT | 二分类正类概率；回归预测值 |
 
 **必需参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `label_columns` | String | 标签列名 |
+| `label_columns` | String | 单个标签列名，不能包含逗号或首尾空白 |
 
 **训练配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `objective` | String | "binary" | 学习目标（binary, multiclass, regression） |
+| `objective` | String | "binary" | 学习目标（binary, regression） |
 | `metric` | String | "auc" | 评估指标（auc, logloss, rmse） |
 | `num_iterations` | Integer | 300 | boosting 迭代次数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
@@ -434,19 +434,19 @@ XGBoost 模型是基于 GBDT（梯度提升决策树）框架实现的模型，�
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| `probs` | FLOAT | 预测概率值 |
+| `probs` | FLOAT | 二分类正类概率；回归预测值 |
 
 **必需参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `label_columns` | String | 标签列名 |
+| `label_columns` | String | 单个标签列名，不能包含逗号或首尾空白 |
 
 **训练配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `objective` | String | "binary" | 学习目标（binary, multiclass, regression） |
+| `objective` | String | "binary" | 学习目标（binary, regression） |
 | `metric` | String | "auc" | 评估指标（auc, logloss, rmse） |
 | `num_iterations` | Integer | 300 | boosting 迭代次数 |
 | `learning_rate` | Double | 0.1 | 学习率 |
@@ -492,19 +492,19 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| `probs` | FLOAT | 预测概率值 |
+| `probs` | FLOAT | 二分类正类概率；回归预测值 |
 
 **必需参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `label_columns` | String | 标签列名 |
+| `label_columns` | String | 单个标签列名，不能包含逗号或首尾空白 |
 
 **训练配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `objective` | String | "binary" | 学习目标（binary, multiclass, regression） |
+| `objective` | String | "binary" | 学习目标（binary, regression） |
 | `metric` | String | "auc" | 评估指标（auc, logloss, rmse） |
 | `cb_iterations` | Integer | 1000 | CatBoost 迭代次数 |
 | `cb_depth` | Integer | 6 | CatBoost 树深度 |

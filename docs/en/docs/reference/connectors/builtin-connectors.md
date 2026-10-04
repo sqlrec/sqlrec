@@ -116,7 +116,7 @@ The Milvus connector is used to connect to Milvus vector databases, supporting v
 | `pool.max-total` | Integer | 100 | Maximum total connections in the connection pool |
 | `pool.max-block-wait-duration` | Long | 5 | Maximum blocking wait time (seconds) when acquiring a connection from the pool |
 | `pool.min-evictable-idle-duration` | Long | 10 | Minimum evictable idle duration (seconds) for connections in the pool |
-| `flush-interval` | Long | 1 | Flush interval (seconds) for bulk writes, flushed when the buffer is full or the interval is reached |
+| `flush-interval` | Long | 1 | Interval (seconds) checked when a Flink sink receives a new record; full batches, checkpoints and close also flush. Idle input does not trigger flushing |
 | `rpc-deadline-ms` | Long | 30000 | Timeout (milliseconds) for Milvus gRPC calls, 0 means no limit |
 
 **Usage Example**:
@@ -242,6 +242,8 @@ CREATE TABLE user_profile (
 
 **Notes**:
 - JDBC connector supports complex filter conditions, not limited to primary key equality filtering
+- PostgreSQL, MySQL and H2 reserved words and identifiers containing special characters are quoted automatically; declared names must match the database identifiers, including case for quoted names
+- H2 upserts use declared column names, allowing a different physical column order or a subset of columns
 - Uses HikariCP connection pool for database connection management, sharing the pool for the same URL and username
 - Supports upsert operations, automatically determining insert or update based on primary key
 - Custom JDBC properties can be passed via the `jdbc.properties.*` prefix
@@ -363,8 +365,8 @@ CREATE TABLE user_interest (
 ```
 
 **Notes**:
-- The first line of a CSV file is treated as a header and is automatically skipped
-- CSV files support quoted fields, commas inside fields, and escaped double quotes; newlines inside fields are not supported
+- The first nonblank CSV record is treated as a header and skipped. Values map to declared fields by position, without reordering by header name
+- Apache Commons CSV parses quoted fields, embedded commas, escaped double quotes and quoted newlines. Empty lines and single-field records containing only whitespace are skipped
 - JSON files support array format `[{...}, {...}]` and single object format `{...}`
 - Write operations only modify in-memory data and do not write back to the file system
 - If the path does not exist or the format is invalid, the table is initialized as an empty table without throwing an exception

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -342,4 +343,69 @@ class JdbcHandlerTest {
         List<Object[]> rows = handlerWithPool.scan(Collections.emptyList());
         assertEquals(3, rows.size());
     }
+    @Test
+    void h2UpsertMapsDeclaredColumnsAndPreservesUnmappedColumns() throws SQLException {
+        jdbcConfig.fieldSchemas = Arrays.asList(new FieldSchema("id", "INTEGER"),
+                new FieldSchema("age", "INTEGER"), new FieldSchema("name", "VARCHAR"));
+        new JdbcHandler(jdbcConfig).upsert(new Object[]{1, 41, "updated"});
+        try (Connection connection = DriverManager.getConnection(JDBC_URL);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("select name, age from " + TABLE_NAME + " where id=1")) {
+            assertTrue(result.next());
+            assertEquals("updated", result.getString(1));
+            assertEquals(41, result.getInt(2));
+        }
+        jdbcConfig.fieldSchemas = Arrays.asList(new FieldSchema("id", "INTEGER"), new FieldSchema("age", "INTEGER"));
+        new JdbcHandler(jdbcConfig).upsert(new Object[]{1, 42});
+        try (Connection connection = DriverManager.getConnection(JDBC_URL);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("select name, age from " + TABLE_NAME + " where id=1")) {
+            assertTrue(result.next());
+            assertEquals("updated", result.getString(1));
+            assertEquals(42, result.getInt(2));
+        }
+    }
+
+    @Test
+    void nonReservedKeywordColumnsPreserveDatabaseCaseFolding() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(JDBC_URL);
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE keyword_columns (id INT PRIMARY KEY, "
+                    + "date VARCHAR, time VARCHAR, timestamp VARCHAR, integer VARCHAR, abs VARCHAR)");
+            try {
+                jdbcConfig.tableName = "keyword_columns";
+                jdbcConfig.fieldSchemas = Arrays.asList(new FieldSchema("id", "INTEGER"),
+                        new FieldSchema("date", "VARCHAR"), new FieldSchema("time", "VARCHAR"),
+                        new FieldSchema("timestamp", "VARCHAR"), new FieldSchema("integer", "VARCHAR"),
+                        new FieldSchema("abs", "VARCHAR"));
+                JdbcHandler handler = new JdbcHandler(jdbcConfig);
+                Object[] row = {1, "day", "clock", "instant", "number", "function"};
+                handler.upsert(row);
+                assertArrayEquals(row, handler.getByPrimaryKey(Collections.singleton(1)).get(1).get(0));
+                assertArrayEquals(row, handler.scan(Collections.emptyList()).get(0));
+                handler.delete(row);
+                assertTrue(handler.scan(Collections.emptyList()).isEmpty());
+            } finally {
+                statement.execute("DROP TABLE keyword_columns");
+            }
+        }
+    }
+
+    @Test
+    void reservedColumnCanBeWrittenReadAndDeleted() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(JDBC_URL); Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE reserved_columns (\"select\" INT PRIMARY KEY, \"order\" INT, \"key\" INT)");
+            try {
+                jdbcConfig.tableName = "reserved_columns";
+                jdbcConfig.primaryKey = "select";
+                jdbcConfig.fieldSchemas = Arrays.asList(new FieldSchema("select", "INTEGER"), new FieldSchema("order", "INTEGER"), new FieldSchema("key", "INTEGER"));
+                JdbcHandler handler = new JdbcHandler(jdbcConfig);
+                handler.upsert(new Object[]{1, 8, 9});
+                assertArrayEquals(new Object[]{1, 8, 9}, handler.scan(Collections.emptyList()).get(0));
+                handler.delete(new Object[]{1, 8, 9});
+                assertTrue(handler.scan(Collections.emptyList()).isEmpty());
+            } finally { statement.execute("DROP TABLE reserved_columns"); }
+        }
+    }
+
 }

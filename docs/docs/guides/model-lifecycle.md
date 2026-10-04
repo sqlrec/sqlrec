@@ -95,7 +95,7 @@ Checkpoint 有两种类型：
 - `origin`：训练或下载产生的原始结果。
 - `export`：由 `EXPORT MODEL` 生成、可供 tzrec 或 GBDT 在线服务加载的结果。
 
-Checkpoint 名称是用户自定义的版本标识。建议使用可追溯的值，例如日期或发布版本，不要在不同数据和配置上重复使用同一名称。
+Checkpoint 名称是用户自定义的版本标识。TRAIN/EXPORT 使用已有目标名称时，会在配置校验通过后清理旧 checkpoint 并重新创建，包括已成功的版本；正在执行的任务会复用，被服务引用的 checkpoint 仍不能删除覆盖。增量训练的源 checkpoint 必须与目标不同；EXPORT 的源 checkpoint 必须已成功且为 origin 类型。建议使用日期或发布版本等可追溯的名称。
 
 ## 训练型模型的完整流程
 

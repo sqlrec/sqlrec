@@ -47,27 +47,29 @@ class ModelManagerExportTest {
     }
 
     @Test
-    void deletesOldExportsAndPersistsAllNewCheckpointsBeforeApplyingYaml() throws Exception {
-        try (ExportFixture fixture = new ExportFixture()) {
-            Checkpoint old = fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED);
-            old.setModelDdl("model-ddl");
-            fixture.converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old))
-                    .thenReturn("/models/rank/export_a");
+    void validatesBeforeReplacingExportsAndPersistsBeforeApplyingYaml() throws Exception {
+        for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
+            try (ExportFixture fixture = new ExportFixture()) {
+                Checkpoint old = fixture.checkpoint("export_a", status);
+                old.setModelDdl("model-ddl");
+                fixture.converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old))
+                        .thenReturn("/models/rank/export_a");
 
-            List<CheckpointInfo> result = fixture.export();
+                List<CheckpointInfo> result = fixture.export();
 
-            assertEquals(List.of("export_a", "export_b"),
-                    result.stream().map(CheckpointInfo::getCheckpointName).toList());
-            assertEquals(List.of(
-                    "remove:/models/rank/export_a", "delete:export_a",
-                    "remove:/models/rank/export", "generate",
-                    "insert:export_a", "insert:export_b", "apply"), fixture.events);
-            assertEquals(2, fixture.inserted.size());
-            for (Checkpoint checkpoint : fixture.inserted) {
-                assertEquals("rank", checkpoint.getModelName());
-                assertEquals("injected-yaml", checkpoint.getYaml());
-                assertEquals(Consts.CHECKPOINT_TYPE_EXPORT, checkpoint.getCheckpointType());
-                assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
+                assertEquals(List.of("export_a", "export_b"),
+                        result.stream().map(CheckpointInfo::getCheckpointName).toList());
+                assertEquals(List.of(
+                        "generate", "remove:/models/rank/export_a", "delete:export_a",
+                        "remove:/models/rank/export",
+                        "insert:export_a", "insert:export_b", "apply"), fixture.events);
+                assertEquals(2, fixture.inserted.size());
+                for (Checkpoint checkpoint : fixture.inserted) {
+                    assertEquals("rank", checkpoint.getModelName());
+                    assertEquals("injected-yaml", checkpoint.getYaml());
+                    assertEquals(Consts.CHECKPOINT_TYPE_EXPORT, checkpoint.getCheckpointType());
+                    assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
+                }
             }
         }
     }
@@ -79,7 +81,7 @@ class ModelManagerExportTest {
             doThrow(failure).when(fixture.db).hdfsDeletePath("/models/rank/export");
 
             assertSame(failure, assertThrows(RuntimeException.class, fixture::export));
-            verify(fixture.controller, never()).genModelExportK8sYaml(any(), any());
+            verify(fixture.controller).genModelExportK8sYaml(any(), any());
             verify(fixture.db, never()).insertCheckpoint(any());
             fixture.k8s.verify(() -> K8sManager.applyYaml(any()), never());
         }
@@ -164,4 +166,30 @@ class ModelManagerExportTest {
             metadata.close();
         }
     }
+    @Test
+    void failedOrRunningSourceIsRejectedBeforeCleanupOrSubmission() throws Exception {
+        for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_CREATED)) {
+            try (ExportFixture fixture = new ExportFixture()) {
+                fixture.checkpoint("source", status);
+                assertThrows(IllegalArgumentException.class, fixture::export);
+                assertTrue(fixture.events.isEmpty());
+                verify(fixture.db, never()).hdfsDeletePath(any());
+            }
+        }
+    }
+
+    @Test
+    void configurationGenerationFailurePreservesExistingExports() throws Exception {
+        for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
+            try (ExportFixture fixture = new ExportFixture()) {
+                fixture.checkpoint("export_a", status);
+                when(fixture.controller.genModelExportK8sYaml(any(), any())).thenThrow(new IllegalArgumentException("bad config"));
+                assertThrows(IllegalArgumentException.class, fixture::export);
+                verify(fixture.db, never()).deleteCheckpoint(any(), any());
+                verify(fixture.db, never()).hdfsDeletePath(any());
+                fixture.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+            }
+        }
+    }
+
 }

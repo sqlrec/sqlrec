@@ -11,6 +11,15 @@ find_package(Threads REQUIRED)
 # sibling common/ directory so they can be reused by other model servers.
 set(COMMON_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
 
+include(CTest)
+set(SCHEMA_TEST_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/cpp/gbdt/schema_test.cpp")
+# Production Docker builds copy only main/cpp, without the test source tree.
+if(BUILD_TESTING AND EXISTS "${SCHEMA_TEST_SOURCE}")
+    add_executable(gbdt_schema_test "${SCHEMA_TEST_SOURCE}")
+    target_include_directories(gbdt_schema_test PRIVATE ${COMMON_INCLUDE_DIR})
+    add_test(NAME gbdt_schema_contract COMMAND gbdt_schema_test)
+endif()
+
 # ---------------------------------------------------------------------------
 # ONNX server — ONNX Runtime based (float features only)
 # Used by both LightGBM and XGBoost (and any future ONNX-based GBDT backend).

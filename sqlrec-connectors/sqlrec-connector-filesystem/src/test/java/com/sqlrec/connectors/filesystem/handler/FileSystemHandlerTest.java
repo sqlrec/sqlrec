@@ -580,4 +580,26 @@ class FileSystemHandlerTest {
         List<Object[]> rows2 = handler.scan();
         assertEquals(1, rows2.size());
     }
+    @Test
+    void csvKeepsQuotedNewlinesEscapedQuotesAndWhitespace() throws IOException {
+        Path file = tempDir.resolve("multiline.csv");
+        Files.writeString(file, "id,name,age\r\n1,\"hello\r\nworld \"\"quoted\"\"\",20\r\n2,\"  bob  \",25");
+        List<Object[]> rows = new FileSystemHandler(createConfig(file.toString(), "csv")).scan();
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1, "hello\r\nworld \"quoted\"", 20}, rows.get(0));
+        assertArrayEquals(new Object[]{2, "  bob  ", 25}, rows.get(1));
+    }
+
+    @Test
+    void csvSkipsWhitespaceOnlyLinesBeforeHeaderAndBetweenRows() throws IOException {
+        Path file = tempDir.resolve("whitespace-lines.csv");
+        Files.writeString(file, "\n \t \r\nid,name\r\n1,alice\r\n \t \r\n2,bob");
+        FileSystemConfig config = createConfig(file.toString(), "csv");
+        config.fieldSchemas = List.of(new FieldSchema("id", "VARCHAR"), new FieldSchema("name", "VARCHAR"));
+        List<Object[]> rows = new FileSystemDataLoader(config).load();
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{"1", "alice"}, rows.get(0));
+        assertArrayEquals(new Object[]{"2", "bob"}, rows.get(1));
+    }
+
 }

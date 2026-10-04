@@ -204,6 +204,20 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         }
     }
 
+    /** Returns unexpired cached rows for the requested primary keys without querying the backend. */
+    public Map<Object, List<Object[]>> getCachedByPrimaryKey(Set<Object> keySet) {
+        if (cache == null || keySet.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Object> convertedKeys = RowTransformUtils.convertKeySet(keySet, getPrimaryKeyType());
+        Map<Object, List<Object[]>> result = new HashMap<>();
+        for (Object key : convertedKeys) {
+            List<Object[]> rows = cache.getIfPresent(key);
+            if (rows != null) result.put(key, rows);
+        }
+        return result;
+    }
+
     public void invalidateCache(Object[] row) {
         if (cache == null) {
             return;

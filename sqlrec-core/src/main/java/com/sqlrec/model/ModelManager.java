@@ -18,6 +18,7 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.PathUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -112,9 +113,6 @@ public class ModelManager {
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
             }
-            log.info("Model {} re train checkpoint {}, deleting old first",
-                    modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
-            deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
         }
 
         if (modelController.requiresTrainingData()
@@ -123,9 +121,16 @@ public class ModelManager {
                     + ModelConfigs.MODEL.getValue(modelConfig.getParams()));
         }
 
+        if (StringUtils.isNotEmpty(modelTrainConf.getBaseModelDir())
+                && new Path(modelTrainConf.getBaseModelDir()).equals(new Path(modelTrainConf.getModelDir()))) {
+            throw new IllegalArgumentException("Training source checkpoint must differ from target checkpoint");
+        }
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
+        if (existingCheckpoint != null) {
+            deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
+        }
         Checkpoint checkpoint = createCheckpoint(
                 modelTrainConf.getModelName(),
                 modelTrainConf.getCheckpointName(),
@@ -157,6 +162,13 @@ public class ModelManager {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
 
+        if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(sourceCheckpoint.getStatus())) {
+            throw new IllegalArgumentException("Export source checkpoint must be succeeded: "
+                    + sourceCheckpoint.getCheckpointName());
+        }
+        if (Consts.CHECKPOINT_TYPE_EXPORT.equals(sourceCheckpoint.getCheckpointType())) {
+            throw new IllegalArgumentException("Export source must be an origin checkpoint");
+        }
         ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
@@ -170,11 +182,13 @@ public class ModelManager {
             return checkpoints.inProgress();
         }
 
-        deleteExportCheckpoints(modelExportConf.getModelName(), checkpoints.existing());
-        cleanExportPath(db, modelController, modelConfig, modelExportConf);
-
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
+
+        String cleanPath = modelController.getExportCleanPath(modelExportConf);
+        if (StringUtils.isNotEmpty(cleanPath)) PathUtils.validateModelPath(cleanPath, modelConfig.getPath());
+        deleteExportCheckpoints(modelExportConf.getModelName(), checkpoints.existing());
+        if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
@@ -220,15 +234,6 @@ public class ModelManager {
             log.info("Model {} re export checkpoint {}, deleting old first",
                     modelName, checkpoint.getCheckpointName());
             deleteCheckpoint(modelName, checkpoint.getCheckpointName());
-        }
-    }
-
-    private static void cleanExportPath(
-            MetadataAccess db, ModelController controller, ModelConf model, ModelExportConf exportConf) {
-        String path = controller.getExportCleanPath(exportConf);
-        if (StringUtils.isNotEmpty(path)) {
-            PathUtils.validateModelPath(path, model.getPath());
-            db.hdfsDeletePath(path);
         }
     }
 

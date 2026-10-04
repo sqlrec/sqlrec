@@ -107,7 +107,7 @@ class JdbcSqlBuilderTest {
     @Test
     void testUpsertH2() {
         JdbcStatement statement = JdbcSqlBuilder.upsert(H2_URL, "users", fieldSchemas, "id");
-        assertEquals("MERGE INTO users KEY (id) VALUES (?, ?, ?)", statement.getSql());
+        assertEquals("MERGE INTO users (id, name, age) KEY (id) VALUES (?, ?, ?)", statement.getSql());
     }
 
     @Test
@@ -228,6 +228,20 @@ class JdbcSqlBuilderTest {
         assertEquals("users", JdbcSqlBuilder.quoteIdentifier("users", PG_URL));
         assertEquals("id", JdbcSqlBuilder.quoteIdentifier("id", PG_URL));
         assertEquals("_user_1", JdbcSqlBuilder.quoteIdentifier("_user_1", PG_URL));
+    }
+
+    @Test
+    void testKeywordQuotingUsesDatabaseDialectAndPreservesCaseFolding() {
+        for (String url : Arrays.asList(PG_URL, MYSQL_URL, H2_URL)) {
+            for (String column : Arrays.asList("DATE", "TIME", "TIMESTAMP", "date")) {
+                assertEquals(column, JdbcSqlBuilder.quoteIdentifier(column, url));
+            }
+        }
+        assertEquals("key", JdbcSqlBuilder.quoteIdentifier("key", PG_URL));
+        assertEquals("\"key\"", JdbcSqlBuilder.quoteIdentifier("key", H2_URL));
+        assertEquals("`key`", JdbcSqlBuilder.quoteIdentifier("key", MYSQL_URL));
+        assertEquals("value", JdbcSqlBuilder.quoteIdentifier("value", PG_URL));
+        assertEquals("\"value\"", JdbcSqlBuilder.quoteIdentifier("value", H2_URL));
     }
 
     @Test

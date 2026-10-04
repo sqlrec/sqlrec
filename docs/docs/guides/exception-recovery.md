@@ -122,7 +122,8 @@ LEFT JOIN item_features i
 
 行为是：
 
-- KV Join：失败的 key 被跳过；LEFT JOIN 保留左行并补右侧 NULL；
+- KV 主键 Join：批量查询失败后仅使用本次请求键的未过期缓存，不逐键重试后端；未命中或未启用缓存的键按无匹配处理，LEFT JOIN 保留左行并补右侧 NULL；
+- KV 非主键 Join：跳过查询失败的 key，继续处理其他 key；
 - Vector Join：失败的左侧行没有匹配结果，其他左侧行继续执行。
 
 需要严格失败时：
@@ -131,7 +132,7 @@ LEFT JOIN item_features i
 SET 'IGNORE_JOIN_QUERY_EXCEPTION' = 'false';
 ```
 
-该开关只处理单次外部查询失败，不会把整个 SQL 查询、输入表或 schema 错误转换成空结果。
+该开关只处理外部查询失败，不会把整个 SQL 查询、输入表或 schema 错误转换成空结果。KV Join 的取消、中断和执行超时异常仍向上抛出；缓存回退仅适用于主键 Join。
 
 ## 分区调用保留成功结果：`IGNORE_PARTITION_EXCEPTION`
 

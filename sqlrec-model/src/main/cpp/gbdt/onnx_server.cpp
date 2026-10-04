@@ -162,7 +162,10 @@ json predict(const json& request_data) {
             return json{{"error", "Output count " + std::to_string(total) +
                         " inconsistent with batch size " + std::to_string(batch)}};
         }
-        if (n_classes >= 2) {
+        if (n_classes > 2) {
+            return json{{"error", "Multiclass models are not supported by the scalar GBDT serving schema"}};
+        }
+        if (n_classes == 2) {
             // Classifier: return P(positive class) = last column.
             for (size_t i = 0; i < batch; ++i) {
                 probs.push_back(data[i * n_classes + (n_classes - 1)]);

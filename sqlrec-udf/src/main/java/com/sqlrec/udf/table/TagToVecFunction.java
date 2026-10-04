@@ -56,15 +56,15 @@ public class TagToVecFunction {
             Object[] newRow = new Object[row.length + 1];
             System.arraycopy(row, 0, newRow, 0, row.length);
 
-            Float[] vec = new Float[vecSize];
-            Arrays.fill(vec, 0.0f);
+            Double[] vec = new Double[vecSize];
+            Arrays.fill(vec, 0.0d);
             for (String tagStr : extractTags(row[tagColIndex])) {
                 Integer idx = tagIndexMap.get(tagStr);
                 if (idx != null) {
-                    vec[idx] = 1.0f;
+                    vec[idx] = 1.0d;
                 }
             }
-            newRow[row.length] = vec;
+            newRow[row.length] = Arrays.asList(vec);
             newData.add(newRow);
         }
 
@@ -77,6 +77,7 @@ public class TagToVecFunction {
         }
         if (tagValue instanceof List) {
             return ((List<?>) tagValue).stream()
+                    .filter(Objects::nonNull)
                     .map(Object::toString)
                     .collect(Collectors.toList());
         }

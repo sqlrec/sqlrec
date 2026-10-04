@@ -138,6 +138,11 @@ public class K8sManager {
                         log.info("Successfully deleted {}: {}/{}", kind, namespace != null ? namespace : "default", name);
                     } catch (Exception e) {
                         log.error("Failed to delete {}: {}/{}, error: {}", kind, namespace != null ? namespace : "default", name, e.getMessage());
+                        if (!(e instanceof KubernetesClientException)
+                                || ((KubernetesClientException) e).getCode() != 404) {
+                            throw new RuntimeException("Failed to delete " + kind + ": "
+                                    + (namespace != null ? namespace : "default") + "/" + name, e);
+                        }
                     }
                 } else {
                     log.info("Skipping non-existent {}: {}/{}", kind, namespace != null ? namespace : "default", name);

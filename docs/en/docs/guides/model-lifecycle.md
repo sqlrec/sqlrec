@@ -95,7 +95,7 @@ Checkpoint types are:
 - `origin`: the original training or download result;
 - `export`: an artifact produced by `EXPORT MODEL` for a tzrec or GBDT service.
 
-Checkpoint names are user-defined version identifiers. Use a traceable value such as a date or release ID, and do not reuse a name for different data or settings.
+Checkpoint names are user-defined version identifiers. TRAIN/EXPORT with an existing target name cleans up and recreates the old checkpoint after configuration validation, including succeeded versions. Running tasks are reused, and checkpoints referenced by services still cannot be deleted or overwritten. Incremental training must use a different source checkpoint, and EXPORT requires a succeeded origin checkpoint. Use a traceable name such as a date or release ID.
 
 ## Lifecycle for a Trained Model
 

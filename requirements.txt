@@ -7,3 +7,5 @@ requests
 redis
 pymilvus==2.6.3
 kagglehub
+fastapi
+uvicorn

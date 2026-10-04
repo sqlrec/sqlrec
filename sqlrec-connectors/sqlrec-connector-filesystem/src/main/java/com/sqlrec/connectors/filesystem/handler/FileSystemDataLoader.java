@@ -4,11 +4,14 @@ import com.google.gson.JsonObject;
 import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -73,29 +76,26 @@ final class FileSystemDataLoader {
 
     private List<Object[]> loadCsv(Path filePath) throws IOException {
         List<Object[]> rows = new ArrayList<>();
-        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
-            String line;
-            boolean firstLine = true;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) {
+        try (Reader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8);
+             CSVParser parser = CSVFormat.DEFAULT.parse(reader)) {
+            boolean header = true;
+            for (CSVRecord record : parser) {
+                if (record.size() == 1 && record.get(0).trim().isEmpty()) continue;
+                // The first record is a header; values map to the schema by position.
+                if (header) {
+                    header = false;
                     continue;
                 }
-                if (firstLine) {
-                    firstLine = false;
-                    continue;
-                }
-                rows.add(parseCsvLine(line));
+                rows.add(parseCsvRecord(record));
             }
         }
         return rows;
     }
 
-    private Object[] parseCsvLine(String line) {
-        List<String> fields = splitCsvLine(line);
+    private Object[] parseCsvRecord(CSVRecord record) {
         Object[] row = new Object[fileSystemConfig.fieldSchemas.size()];
-        for (int i = 0; i < fileSystemConfig.fieldSchemas.size() && i < fields.size(); i++) {
-            String value = fields.get(i);
+        for (int i = 0; i < fileSystemConfig.fieldSchemas.size() && i < record.size(); i++) {
+            String value = record.get(i);
             if (value.isEmpty()) {
                 row[i] = null;
             } else {
@@ -107,39 +107,6 @@ final class FileSystemDataLoader {
             }
         }
         return row;
-    }
-
-    private List<String> splitCsvLine(String line) {
-        List<String> fields = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean inQuotes = false;
-
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (inQuotes) {
-                if (c == '"') {
-                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                        current.append('"');
-                        i++;
-                    } else {
-                        inQuotes = false;
-                    }
-                } else {
-                    current.append(c);
-                }
-            } else {
-                if (c == '"') {
-                    inQuotes = true;
-                } else if (c == ',') {
-                    fields.add(current.toString());
-                    current = new StringBuilder();
-                } else {
-                    current.append(c);
-                }
-            }
-        }
-        fields.add(current.toString());
-        return fields;
     }
 
     private List<Object[]> loadJson(Path filePath) throws IOException {

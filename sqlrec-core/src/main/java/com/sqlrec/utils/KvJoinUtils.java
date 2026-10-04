@@ -93,9 +93,17 @@ public class KvJoinUtils {
 
     private static Map<Object, List<Object[]>> loadRightRows(
             SqlRecKvTable table, int joinKeyIndex, Set<Object> keys, DataContext context) {
-        return joinKeyIndex == table.getPrimaryKeyIndex()
-                ? table.getByPrimaryKey(keys)
-                : scanRightTableByJoinKey(table, joinKeyIndex, keys, context);
+        if (joinKeyIndex != table.getPrimaryKeyIndex()) {
+            return scanRightTableByJoinKey(table, joinKeyIndex, keys, context);
+        }
+        if (keys.isEmpty()) return Collections.emptyMap();
+        try {
+            return table.getByPrimaryKey(keys);
+        } catch (RuntimeException failure) {
+            if (!canIgnoreJoinFailure(context, failure)) throw failure;
+            log.warn("Failed to query right table; falling back to cached primary keys", failure);
+            return table.getCachedByPrimaryKey(keys);
+        }
     }
 
     private static Map<String, List<Object[]>> indexByStringKey(Map<Object, List<Object[]>> rightValuesMap) {
@@ -171,7 +179,7 @@ public class KvJoinUtils {
                     rightValuesMap.put(key, rows);
                 }
             } catch (Exception e) {
-                if (ignoreJoinQueryException(dataContext)) {
+                if (canIgnoreJoinFailure(dataContext, e)) {
                     log.warn("Failed to scan right table for join key: {}", key, e);
                     continue;
                 }
@@ -179,6 +187,16 @@ public class KvJoinUtils {
             }
         }
         return rightValuesMap;
+    }
+
+    private static boolean canIgnoreJoinFailure(DataContext context, Exception failure) {
+        if (Thread.currentThread().isInterrupted()) return false;
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.util.concurrent.CancellationException
+                    || cause instanceof InterruptedException
+                    || cause instanceof java.util.concurrent.TimeoutException) return false;
+        }
+        return ignoreJoinQueryException(context);
     }
 
     private static boolean ignoreJoinQueryException(DataContext dataContext) {

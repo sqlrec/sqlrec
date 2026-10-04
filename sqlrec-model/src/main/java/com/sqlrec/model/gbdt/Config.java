@@ -19,7 +19,7 @@ public class Config extends ModelConfigBase {
     // Common GBDT training parameters
     public static final ConfigOption<String> OBJECTIVE = new ConfigOption<>(
             "objective",
-            "binary", "Learning objective (binary, multiclass, regression)", null, String.class);
+            "binary", "Learning objective (binary, regression)", null, String.class);
     public static final ConfigOption<String> METRIC = new ConfigOption<>(
             "metric",
             "auc", "Evaluation metric (auc, logloss, rmse)", null, String.class);

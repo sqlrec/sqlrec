@@ -171,6 +171,14 @@ This function can only be used in Flink SQL and does not support SQLRec's CACHE 
 
 Invoke this function through `LATERAL TABLE`. It sends a JSON array whenever it collects `batchSize` rows and also sends the final partial batch. The service must return a JSON object whose array values map to input rows by position.
 
+::: warning Batching and outer-row association
+The function buffers inputs across calls. Flink associates every output in a batch with the current outer row that triggers emission, rather than each original outer row. Use only with bounded, append-only input and INNER `LATERAL TABLE`. Read all row fields from the maps returned by `r.*`, and pass any original fields to preserve as function arguments. Do not reference outer-row fields in the output or in filters applied after the function, and do not use LEFT LATERAL JOIN.
+
+Filter the source in a subquery before invoking the function, for example `(SELECT * FROM ml_movies WHERE dt = '2024-01-01')`. Do not rely on the optimizer pushing a subsequent `WHERE dt = ...` below the function. This implementation retains batching efficiency; it does not fix general lateral row association.
+
+The final partial batch is sent in `finish()`. An unbounded stream does not flush a partial batch when input becomes idle; checkpoints should not be relied on to flush it either.
+:::
+
 **Parameters**:
 
 | Parameter | Type | Description |
@@ -203,14 +211,15 @@ SELECT
     r.string_map['title'] AS title,
     r.string_array_map['genres'] AS genres,
     r.double_array_map['item_tower_emb'] AS embedding
-FROM ml_movies, LATERAL TABLE(batch_call_service(
+FROM (SELECT * FROM ml_movies WHERE dt = '2024-01-01') AS m,
+LATERAL TABLE(batch_call_service(
     'http://test-recall-service-item.sqlrec.svc.cluster.local:80/predict', 
     128, 
     'movie_id', movie_id, 
     'title', title, 
-    'genres', genres
-)) AS r
-WHERE dt = '2024-01-01';
+    'genres', genres,
+    'genre_count', CAST(CARDINALITY(genres) AS FLOAT)
+)) AS r;
 ```
 
 **Request Format**:

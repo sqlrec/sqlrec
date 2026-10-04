@@ -110,7 +110,7 @@ LEFT JOIN item_features i
   ON u.item_id = i.item_id;
 ```
 
-KV Join skips the failed key; a LEFT JOIN keeps the left row and pads the right side with NULL. Vector Join produces no match for the failed left row and continues with other rows.
+For a primary-key KV Join, a failed bulk lookup falls back to unexpired cached rows for the requested keys, without retrying individual backend lookups. Missing keys, or a disabled cache, produce no match; LEFT JOIN retains the left row with NULLs on the right. A non-primary-key KV Join skips failed keys and continues other lookups. Vector Join produces no match for the failed left row and continues with other rows.
 
 For strict behavior:
 
@@ -118,7 +118,7 @@ For strict behavior:
 SET 'IGNORE_JOIN_QUERY_EXCEPTION' = 'false';
 ```
 
-This only handles an individual external lookup failure. Missing tables, invalid schemas, and query-planning errors still fail the query.
+This handles external lookup failures. Missing tables, invalid schemas, and query-planning errors still fail the query. KV Join cancellation, interruption and execution timeout exceptions propagate; cache fallback applies only to primary-key joins.
 
 ## Keep successful partitions: `IGNORE_PARTITION_EXCEPTION`
 
