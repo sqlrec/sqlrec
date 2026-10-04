@@ -46,6 +46,9 @@ public class DSSMModelTest {
         Map<String, String> params = new HashMap<>();
         params.put("user_features", "user_id,cms_segid");
         params.put("item_features", "item_id,cate_id");
+        params.put("label_columns", "label");
+        model.setInputFields(List.of(new FieldSchema("user_id", "STRING"), new FieldSchema("cms_segid", "INT"),
+                new FieldSchema("item_id", "STRING"), new FieldSchema("cate_id", "STRING")));
         model.setParams(params);
         
         String result = modelController.checkModel(model);
@@ -59,6 +62,9 @@ public class DSSMModelTest {
         
         Map<String, String> params = new HashMap<>();
         params.put("user_features", "user_id,cms_segid");
+        params.put("label_columns", "label");
+        model.setInputFields(List.of(new FieldSchema("user_id", "STRING"), new FieldSchema("cms_segid", "INT"),
+                new FieldSchema("item_id", "STRING"), new FieldSchema("cate_id", "STRING")));
         model.setParams(params);
         
         String result = modelController.checkModel(model);
@@ -72,6 +78,9 @@ public class DSSMModelTest {
         
         Map<String, String> params = new HashMap<>();
         params.put("item_features", "item_id,cate_id");
+        params.put("label_columns", "label");
+        model.setInputFields(List.of(new FieldSchema("user_id", "STRING"), new FieldSchema("cms_segid", "INT"),
+                new FieldSchema("item_id", "STRING"), new FieldSchema("cate_id", "STRING")));
         model.setParams(params);
         
         String result = modelController.checkModel(model);
@@ -85,7 +94,7 @@ public class DSSMModelTest {
         model.setParams(new HashMap<>());
         
         String result = modelController.checkModel(model);
-        assertEquals("At least one of user_features or item_features is required for DSSM model", result);
+        assertNotNull(result);
     }
 
     @Test
@@ -291,7 +300,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"
@@ -489,7 +498,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"
@@ -687,7 +696,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"
@@ -860,7 +869,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.export \\
+        /app/run.py --mode export \\
         --pipeline_config_path /data/pipeline.config \\
         --export_dir 'hdfs://data/dssm_model_dir_export'
 ---

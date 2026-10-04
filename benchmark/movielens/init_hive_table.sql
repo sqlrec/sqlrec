@@ -66,7 +66,9 @@ CREATE TABLE IF NOT EXISTS `ml_sample` (
  `gender` STRING,
  `age` INT,
  `occupation` INT,
- `zip_code` STRING
+ `zip_code` STRING,
+ `age_years` FLOAT,
+ `genre_count` FLOAT
 ) PARTITIONED BY (`dt` STRING)
     STORED AS PARQUET;
 
@@ -79,7 +81,9 @@ CREATE TABLE IF NOT EXISTS `ml_recall_sample` (
  `gender` STRING,
  `age` INT,
  `occupation` INT,
- `zip_code` STRING
+ `zip_code` STRING,
+ `age_years` FLOAT,
+ `genre_count` FLOAT
 ) PARTITIONED BY (`dt` STRING)
     STORED AS PARQUET;
 

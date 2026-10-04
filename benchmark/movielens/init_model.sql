@@ -1,3 +1,4 @@
+-- rating is supplied by the training table and is never an input feature.
 create model if not exists `rank_model`
 (
  `user_id` BIGINT,
@@ -6,11 +7,15 @@ create model if not exists `rank_model`
  `gender` STRING,
  `age` INT,
  `occupation` INT,
- `zip_code` STRING
+ `zip_code` STRING,
+ `age_years` FLOAT,
+ `genre_count` FLOAT
 )
 with (
 'model'='tzrec.wide_and_deep',
-'label_columns'='rating'
+'label_columns'='rating',
+'column.age_years.normalizer'='method=minmax,min=0,max=100',
+'column.genre_count.normalizer'='method=minmax,min=0,max=18'
 );
 
 train model rank_model checkpoint='v1' on ml_sample
@@ -48,7 +53,9 @@ SELECT
     'M' AS gender,
     25 AS age,
     10 AS occupation,
-    '10001' AS zip_code;
+    '10001' AS zip_code,
+    CAST(25 AS FLOAT) AS age_years,
+    CAST(3 AS FLOAT) AS genre_count;
 
 call call_service('rank_service', t1);
 
@@ -60,12 +67,16 @@ create model if not exists `recall_model`
  `gender` STRING,
  `age` INT,
  `occupation` INT,
- `zip_code` STRING
+ `zip_code` STRING,
+ `age_years` FLOAT,
+ `genre_count` FLOAT
 )
 with (
 'model'='tzrec.dssm',
 'label_columns'='rating',
-'item_features'='movie_id,genres'
+'item_features'='movie_id,genres,genre_count',
+'column.age_years.normalizer'='method=minmax,min=0,max=100',
+'column.genre_count.normalizer'='method=minmax,min=0,max=18'
 );
 
 train model recall_model checkpoint='v1' on ml_recall_sample
@@ -100,14 +111,16 @@ SELECT
     'M' AS gender,
     25 AS age,
     10 AS occupation,
-    '10001' AS zip_code;
+    '10001' AS zip_code,
+    CAST(25 AS FLOAT) AS age_years;
 
 call call_service('recall_service_user', tmp_user);
 
 CACHE TABLE tmp_item AS
 SELECT
     100 AS movie_id,
-    ARRAY['Action', 'Adventure', 'Sci-Fi'] AS genres;
+    ARRAY['Action', 'Adventure', 'Sci-Fi'] AS genres,
+    CAST(3 AS FLOAT) AS genre_count;
 
 call call_service('recall_service_item', tmp_item);
 
@@ -119,7 +132,9 @@ create model if not exists `rank_model_proxy`
  `gender` STRING,
  `age` INT,
  `occupation` INT,
- `zip_code` STRING
+ `zip_code` STRING,
+ `age_years` FLOAT,
+ `genre_count` FLOAT
 )
 with (
 'model'='external',

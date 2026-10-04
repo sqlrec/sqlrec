@@ -585,51 +585,7 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
           image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
-          actual_arch="$(docker run --rm --entrypoint uname "$image" -m)"
-          case "$EXPECTED_ARCH:$actual_arch" in
-            amd64:x86_64|arm64:aarch64) ;;
-            *) echo "unexpected image architecture: $actual_arch" >&2; exit 1 ;;
-          esac
-          docker run --rm --entrypoint python "$image" -c \
-            'import flask, graphlearn, juicefs, pyarrow, pyfg, server, torch, torchrec, tzrec.main'
-          docker run --rm --entrypoint python "$image" -c \
-            'import ctypes, pathlib, juicefs; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name("libjfs.so")))'
-          docker run --rm --entrypoint sh "$image" -c \
-            'set -eu; test -x /app/tzrec_server; bash -n /app/server.sh; links="$(ldd /app/tzrec_server 2>&1)"; printf "%s\n" "$links"; ! printf "%s\n" "$links" | grep -q "not found"'
-          docker run --rm -v "$GITHUB_WORKSPACE/sqlrec-model/src/test/python:/tests:ro" \
-            --entrypoint python "$image" /tests/tzrec_native_smoke.py
-          docker run --rm -i -e USE_FARM_HASH_TO_BUCKETIZE=true \
-            --entrypoint python "$image" - <<'PY'
-          import pyarrow as pa
-          import pyfg
-          from tzrec.datasets.data_parser import DataParser
-          from tzrec.features.id_feature import IdFeature
-          from tzrec.protos import feature_pb2
-
-          pyfg.set_env("USE_FARM_HASH_TO_BUCKETIZE", "true")
-          specs = (
-              ("age", "num_buckets", [1, None, 3], [1, 3]),
-              ("city", "hash_bucket_size", ["abc", None, "hij"], [85, 95]),
-          )
-          features = []
-          data = {"label": pa.array([1, 0, 1])}
-          for name, bucket, values, _ in specs:
-              config = feature_pb2.FeatureConfig(
-                  id_feature=feature_pb2.IdFeature(
-                      feature_name=name,
-                      expression=f"item:{name}",
-                      embedding_dim=16,
-                      **{bucket: 100},
-                  )
-              )
-              features.append(IdFeature(config, fg_mode=2))
-              data[name] = pa.array(values)
-          parsed = DataParser(features, labels=["label"]).parse(data)
-          for name, _, _, expected in specs:
-              assert parsed[f"{name}.values"].tolist() == expected
-              assert parsed[f"{name}.lengths"].tolist() == [1, 0, 1]
-          assert parsed["label"].tolist() == [1, 0, 1]
-          PY
+          bash bin/verify_tzrec_image.sh "$image" "$EXPECTED_ARCH"
 
       - name: Push TZRec image (${{ matrix.arch }})
         if: inputs.publish_images

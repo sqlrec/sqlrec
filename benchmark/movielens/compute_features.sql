@@ -99,6 +99,7 @@ FROM (
 ) t
 WHERE rn <= 100;
 
+-- Metadata-only float features: rating remains the label.
 INSERT OVERWRITE TABLE ml_sample PARTITION(dt='2024-01-01')
 SELECT
     r.user_id,
@@ -109,7 +110,9 @@ SELECT
     u.gender,
     u.age,
     u.occupation,
-    u.zip_code
+    u.zip_code,
+    CAST(u.age AS FLOAT) AS age_years,
+    CAST(SIZE(m.genres) AS FLOAT) AS genre_count
 FROM ml_ratings r
 JOIN ml_movies m ON r.movie_id = m.movie_id AND m.dt = '2024-01-01'
 JOIN ml_users u ON r.user_id = u.user_id AND u.dt = '2024-01-01'
@@ -125,6 +128,8 @@ SELECT
     gender,
     age,
     occupation,
-    zip_code
+    zip_code,
+    age_years,
+    genre_count
 FROM ml_sample
 WHERE rating > 0.5 AND dt = '2024-01-01';

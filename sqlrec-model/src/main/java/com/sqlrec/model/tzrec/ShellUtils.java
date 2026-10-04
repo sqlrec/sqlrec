@@ -17,20 +17,20 @@ public class ShellUtils {
                 "\n" +
                 "torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\\n" +
                 "    --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\\n" +
-                "    -m " + module + " \\\n" +
+                "    /app/run.py --mode " + module + " \\\n" +
                 "    --pipeline_config_path " + Config.SHELL_DIR + "/" + Config.PIPELINE_CONFIG_NAME +
                 extraArgs;
     }
 
     public static String genTrainModelShell(ModelConf model, ModelTrainConf trainConf) {
-        return torchrunShell("tzrec.train_eval", "");
+        return torchrunShell("train", "");
     }
 
     public static String genExportModelShell(ModelConf model, ModelExportConf exportConf, String exportDir) {
         // Single-quote and escape the directory so shell metacharacters in exportDir (which derives
         // from user-configured base_model_dir) cannot break out of the argument and inject commands.
         return torchrunShell(
-                "tzrec.export",
+                "export",
                 " \\\n    --export_dir " + ShellScriptUtils.quote(exportDir)
         );
     }

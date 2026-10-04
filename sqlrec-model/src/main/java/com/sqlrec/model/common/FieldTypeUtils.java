@@ -27,13 +27,13 @@ public final class FieldTypeUtils {
         return lower.equals("float") || lower.equals("double");
     }
 
-    /** Returns true for scalar {@code int} / {@code bigint} (case-insensitive). */
+    /** Returns true for scalar {@code int} / {@code integer} / {@code bigint} (case-insensitive). */
     public static boolean isInteger(String fieldType) {
         if (fieldType == null) {
             return false;
         }
         String lower = fieldType.toLowerCase();
-        return lower.equals("int") || lower.equals("bigint");
+        return lower.equals("int") || lower.equals("integer") || lower.equals("bigint");
     }
 
     /** Returns true for {@code array<...>} types (case-insensitive prefix match). */

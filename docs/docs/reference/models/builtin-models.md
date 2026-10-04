@@ -32,11 +32,64 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=python
 kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 ```
 
-导出目录必须包含 `scripted_model.pt`、`fg.json` 和 `pipeline.config`。预处理以导出的 `fg.json` 为准：`num_buckets` 保留原始整数 ID，要求 ID 在桶范围内；`hash_bucket_size` 使用 FarmHash Fingerprint64。当前支持普通无权重 ID 特征、整数或字符串标量、字符串数组以及按 `separator` 分隔的多值字符串；sequence、raw、weighted、vocab 和 DAG 配置会在启动时明确报错。
+导出目录必须包含 `scripted_model.pt`、`fg.json` 和 `pipeline.config`。预处理以导出的 `fg.json` 为准：`num_buckets` 保留原始整数 ID，要求 ID 在桶范围内；`hash_bucket_size` 使用 FarmHash Fingerprint64。当前支持普通无权重 ID 特征、整数或字符串标量、字符串数组以及按 `separator` 分隔的多值字符串；还支持连续 raw 标量、固定维度浮点向量及分桶 raw 特征；sequence、weighted、vocab 和 DAG 配置会在启动时明确报错。
 
-`POST /predict` 接收行数组或列式 JSON，列式数据允许长度为 1 的列广播。整列缺失返回 400；单行缺字段、null、空字符串和空数组按特征默认值处理，默认值为空时编码为空特征。额外的非特征列不参与推理。输入错误返回 400，模型执行错误返回 500。
+`POST /predict` 接收行数组或列式 JSON，列式数据允许长度为 1 的列广播。整列缺失返回 400；单行缺字段、null、空字符串和空数组按特征默认值处理，稀疏特征默认值为空时编码为空特征，稠密特征必须配置固定维度的数值默认值。额外的非特征列不参与推理。输入错误返回 400，模型执行错误返回 500。
 
-`server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。校验通过后，shell 使用 `exec` 启动所选 serving。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；以上 C++ 特征配置支持范围仅适用于 C++ 后端。
+`server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。校验通过后，shell 使用 `exec` 启动所选 serving。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；ARM Python FG 兼容包支持与 SQLRec 生成配置一致的 ID/raw 特征范围。两种后端均在预热成功后就绪，串行执行推理；通过服务副本扩容。
+
+### TZRec 特征与模型兼容性
+
+`label_columns` 必须是单个标签列。标签可以声明在 Model 字段中，也可以只存在于训练表中；生成特征、Wide/Deep/FM 分组和 DSSM 推断塔时都会排除标签。训练表仍需包含标签，在线请求无需提供标签。手工指定的 DSSM 塔不能包含标签或未知列；只指定一塔时，另一塔使用剩余的非标签特征，两塔均须非空。
+
+| SQL 类型 | 处理方式 |
+|----------|----------|
+| INT / BIGINT | 保留原始 ID，必须在 `[0, bucket_size)` 范围内 |
+| VARCHAR / STRING / ARRAY<STRING> | FarmHash ID，可使用字符串数组或按 separator 分隔的字符串 |
+| FLOAT / DOUBLE | 连续 RawFeature，推理使用 float32 |
+| ARRAY<FLOAT> / ARRAY<DOUBLE> | 固定维度连续向量，必须指定 `column.{name}.value_dim` |
+
+`ARRAY<INT>` / `ARRAY<BIGINT>` 不支持多值 ID，请转换为 `ARRAY<STRING>`。布尔值、NaN/Infinity、超出 float32 范围的连续值和向量维度错误都会返回 400。每个 HTTP 请求最多 16 MiB、4096 行和 65536 个特征值；大批次请拆分。
+
+| 列级参数 | 适用范围与说明 |
+|----------|----------------|
+| `column.{name}.bucket_size` | ID 桶数量，正整数；字符串列表示哈希桶数量 |
+| `column.{name}.embedding_dim` | ID/分桶特征的嵌入维度须为正数且为 4 的倍数；MLP/AutoDis 须为正数 |
+| `column.{name}.default_value` | ID 默认空；连续特征默认 0，向量默认各维为 0；多值默认用 separator 分隔 |
+| `column.{name}.separator` | 默认 `\035`（ASCII 29）；用于分隔多值字符串与向量默认值 |
+| `column.{name}.value_dim` | 连续向量维度；连续标量必须为 1 |
+| `column.{name}.normalizer` | 连续特征支持 zscore、minmax、log10，见下例 |
+| `column.{name}.boundaries` | 连续特征的逗号分隔、严格递增有限边界；相等值进入右侧桶 |
+| `column.{name}.embedding` | 连续特征 `none`（直接使用）、`mlp`（可学习线性投影）或 `autodis`（仅标量）；不可与 boundaries 同时使用 |
+| `column.{name}.autodis.num_channels` | AutoDis 通道数，默认 3 |
+
+Normalizer 示例：`method=zscore,mean=10,standard_deviation=2`、`method=minmax,min=0,max=100`、`method=log10,threshold=0.0001,default=-4`。统计量需从训练数据预先计算；默认值位于**归一化后的空间**，缺失值不会再次执行归一化。DOUBLE 会转换为 float32，不适合要求精确小数或完整 double 精度的特征。
+
+```sql
+CREATE MODEL float_rec (
+    user_id BIGINT,
+    item_id BIGINT,
+    price DOUBLE,
+    embedding ARRAY<FLOAT>,
+    score DOUBLE,
+    label INT
+) WITH (
+    'model' = 'tzrec.wide_and_deep',
+    'label_columns' = 'label',
+    'column.price.normalizer' = 'method=zscore,mean=10,standard_deviation=2',
+    'column.embedding.value_dim' = '3',
+    'column.score.embedding' = 'autodis',
+    'column.score.embedding_dim' = '16'
+);
+```
+
+普通连续特征、MLP/AutoDis 特征进入 Deep 分组，ID 和 boundaries 分桶特征同时进入 Wide 与 Deep；DeepFM 的 FM 分组只接收稀疏特征且嵌入维度须一致。当前排序模型至少需要一个 ID 或 boundaries 分桶特征，DSSM 可使用纯连续特征。
+
+新建 `tzrec.wide_and_deep` 正确使用 WideAndDeep；旧版本同名模型实际生成的 DeepFM 权重，在导出和继续训练时按 checkpoint 内保存的 `pipeline.config` 保留结构及特征。新建 DeepFM 请使用 `tzrec.deepfm`。历史训练时被忽略的浮点列，需要重新训练才能生效；包含标签特征的 checkpoint 必须排除标签后重训。继续训练可以覆盖学习率、轮数、批次等运行设置；修改学习率时不会恢复旧 optimizer 状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
+
+Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动校验清单；旧版没有清单的完整导出目录仍可加载。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
+
+本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM，再对照 Python/C++ 特征张量及 HTTP 预测。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
 ## 内置模型类型
 
@@ -156,6 +209,10 @@ CREATE MODEL rec_model (
     'column.item_id.embedding_dim' = '64'
 );
 ```
+
+### 2.1 DeepFM 模型
+
+**模型名称**：`tzrec.deepfm`。与 Wide & Deep 使用相同的训练/特征参数，额外包含 FM 二阶交互；全部稀疏特征的 embedding_dim 必须一致。输出为 `probs`。
 
 ### 3. DSSM 模型
 

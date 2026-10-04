@@ -7,7 +7,6 @@ import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 /**
  * DSSM two-tower model based on TZRec.
@@ -33,14 +32,7 @@ public class DSSMModel extends TzrecModelBase {
 
     @Override
     public String checkModel(ModelConf model) {
-        Map<String, String> params = model.getParams();
-        String userFeatures = params != null ? params.get(Config.USER_FEATURES.getKey()) : null;
-        String itemFeatures = params != null ? params.get(Config.ITEM_FEATURES.getKey()) : null;
-
-        if ((userFeatures == null || userFeatures.isEmpty()) && (itemFeatures == null || itemFeatures.isEmpty())) {
-            return "At least one of user_features or item_features is required for DSSM model";
-        }
-        return null;
+        return FeatureOptions.validate(model, true, false);
     }
 
     @Override

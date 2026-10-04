@@ -48,6 +48,12 @@ void load_operators() {
 c10::Dict<std::string, at::Tensor> tensors(const json& rows) {
     c10::Dict<std::string, at::Tensor> result;
     for (const auto& feature : parser->parse(rows)) {
+        if (feature.value_dim) {
+            auto values = at::empty({static_cast<int64_t>(rows.size()), static_cast<int64_t>(feature.value_dim)}, at::kFloat);
+            std::memcpy(values.data_ptr<float>(), feature.dense_values.data(), feature.dense_values.size() * sizeof(float));
+            result.insert(feature.name + ".values", values);
+            continue;
+        }
         auto values = at::empty({static_cast<int64_t>(feature.values.size())}, at::kLong);
         auto lengths = at::empty({static_cast<int64_t>(feature.lengths.size())}, at::kInt);
         if (!feature.values.empty()) {
@@ -78,6 +84,7 @@ json predict(const json& rows) {
         auto tensor = item.value().toTensor().to(at::kCPU);
         int64_t offset = 0;
         if (tensor.is_floating_point()) {
+            if (!at::isfinite(tensor).all().item<bool>()) throw std::runtime_error("Model produced nonfinite output");
             result[item.key().toStringRef()] = nested_tensor<double>(tensor.to(at::kDouble).contiguous(), 0, offset);
         } else if (tensor.scalar_type() == at::kBool) {
             result[item.key().toStringRef()] = nested_tensor<bool>(tensor.contiguous(), 0, offset);
@@ -98,6 +105,7 @@ json normalize_request(const json& data) {
         if (!it.value().is_array()) throw std::invalid_argument("Column map values must be lists");
         batch = std::max(batch, it.value().size());
     }
+    if (batch > 4096) throw std::invalid_argument("Batch size exceeds 4096");
     for (auto it = data.begin(); it != data.end(); ++it) {
         size_t length = it.value().size();
         if (length != batch && length != 1) throw std::invalid_argument("Column lengths must match or be 1");
@@ -136,13 +144,22 @@ int main(int argc, char** argv) {
 
         httplib::Server server;
         // Quantized embedding graphs may mutate shared bounds-check buffers.
-        server.new_task_queue = [] { return new httplib::ThreadPool(1); };
+        server.new_task_queue = [] { return new httplib::ThreadPool(1, 1, 64); };
+        server.set_payload_max_length(16 * 1024 * 1024);
         setup_graceful_shutdown(server);
         register_health_endpoint(server);
         server.Post("/predict", [](const httplib::Request& request, httplib::Response& response) {
             json result;
             try {
-                result = predict(normalize_request(json::parse(request.body)));
+                const auto content_type = request.get_header_value("Content-Type");
+                auto mime = httplib::detail::trim_copy(content_type.substr(0, content_type.find(';')));
+                std::transform(mime.begin(), mime.end(), mime.begin(), [](unsigned char c) { return std::tolower(c); });
+                if (mime != "application/json") {
+                    throw std::invalid_argument("Content-Type must be application/json");
+                }
+                auto rows = normalize_request(json::parse(request.body));
+                if (rows.size() > 4096) throw std::invalid_argument("Batch size exceeds 4096");
+                result = predict(rows);
             } catch (const json::exception& error) {
                 response.status = 400;
                 result = {{"error", error.what()}};
@@ -155,6 +172,11 @@ int main(int argc, char** argv) {
                 result = {{"error", "Model prediction failed"}};
             }
             response.set_content(result.dump(), "application/json");
+        });
+        server.set_error_handler([](const httplib::Request&, httplib::Response& response) {
+            if (response.get_header_value("Content-Type").find("application/json") != 0) {
+                response.set_content(json({{"error", httplib::status_message(response.status)}}).dump(), "application/json");
+            }
         });
         std::cout << "CPU model ready; listening on " << argv[2] << ":" << port << std::endl;
         if (!server.listen(argv[2], port)) throw std::runtime_error("Failed to listen on requested address");

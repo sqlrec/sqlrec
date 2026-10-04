@@ -67,7 +67,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
         envVars.add(new EnvVarBuilder().withName("MASTER_PORT").withValue(String.valueOf(masterPort)).build());
         envVars.add(new EnvVarBuilder().withName("NNODES").withValue(String.valueOf(nnodes)).build());
         envVars.add(new EnvVarBuilder().withName("NPROC_PER_NODE").withValue(String.valueOf(nprocPerNode)).build());
-        envVars.addAll(buildRuntimeEnvVars());
+        envVars.addAll(buildRuntimeEnvVars(params));
 
         Job job = new JobBuilder()
                 .withNewMetadata()
@@ -123,7 +123,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
                 "tzrec-service",
                 image,
                 List.of("bash", Config.SERVICE_SHELL_PATH, "--scripted_model_dir", modelCheckpointDir),
-                buildRuntimeEnvVars(),
+                buildRuntimeEnvVars(params),
                 params
         );
         Deployment deployment = Serialization.unmarshal(yaml, Deployment.class);
@@ -140,11 +140,11 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
     /**
      * TZRec runtime env vars shared by both the training Job and the serving Deployment.
      */
-    private static List<EnvVar> buildRuntimeEnvVars() {
+    private static List<EnvVar> buildRuntimeEnvVars(Map<String, String> params) {
         return List.of(
-                new EnvVarBuilder().withName("USE_FSSPEC").withValue(Config.USE_FSSPEC.getDefaultValue()).build(),
-                new EnvVarBuilder().withName("USE_SPAWN_MULTI_PROCESS").withValue(Config.USE_SPAWN_MULTI_PROCESS.getDefaultValue()).build(),
-                new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getDefaultValue()).build()
+                new EnvVarBuilder().withName("USE_FSSPEC").withValue(Config.USE_FSSPEC.getValue(params)).build(),
+                new EnvVarBuilder().withName("USE_SPAWN_MULTI_PROCESS").withValue(Config.USE_SPAWN_MULTI_PROCESS.getValue(params)).build(),
+                new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getValue(params)).build()
         );
     }
 
@@ -168,8 +168,12 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
     }
 
     public static String getServiceK8sYaml(ServiceConf serviceConf) {
+        return getServiceK8sYaml(serviceConf, serviceConf.getParams());
+    }
+
+    public static String getServiceK8sYaml(ServiceConf serviceConf, Map<String, String> params) {
         String deploymentYaml = createDeploymentYaml(
-                serviceConf.getId(), serviceConf.getModelCheckpointDir(), serviceConf.getParams()
+                serviceConf.getId(), serviceConf.getModelCheckpointDir(), params
         );
         return createServingResourcesYaml(serviceConf.getId(), deploymentYaml);
     }

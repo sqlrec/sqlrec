@@ -5,13 +5,33 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
+import com.sqlrec.model.common.ModelConfigUtils;
 
 import java.util.List;
 import java.util.Map;
 
 public class PipelineConfigUtils {
 
+    public static ModelConf effectiveModel(ModelConf model, Map<String, String> overrides) {
+        ModelConf effective = new ModelConf();
+        effective.setModelName(model.getModelName());
+        effective.setInputFields(model.getInputFields());
+        effective.setParams(ModelConfigUtils.mergeParams(model.getParams(), overrides));
+        return effective;
+    }
+
+    public static String quoted(String value) {
+        StringBuilder out = new StringBuilder("\"");
+        for (char c : value.toCharArray()) {
+            if (c == '\\' || c == '"') out.append('\\').append(c);
+            else if (c < 32) out.append(String.format("\\%03o", (int) c));
+            else out.append(c);
+        }
+        return out.append('"').toString();
+    }
+
     public static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        model = effectiveModel(model, trainConf.getParams());
         StringBuilder config = generateTrainConfigPrefix(model, trainConf);
         config.append(generateModelConfig(model));
 
@@ -19,6 +39,7 @@ public class PipelineConfigUtils {
     }
 
     public static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
+        model = effectiveModel(model, exportConf.getParams());
         StringBuilder config = generateExportConfigPrefix(model, exportConf);
         config.append(generateModelConfig(model));
 
@@ -32,9 +53,9 @@ public class PipelineConfigUtils {
 
         addModelDir(config, trainConf.getModelDir());
 
-        config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
+        config.append(generateTrainConfig(model, model.getParams(), trainConf.getBaseModelDir()));
 
-        config.append(generateDataConfig(model, trainConf.getParams()));
+        config.append(generateDataConfig(model, model.getParams()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -48,7 +69,7 @@ public class PipelineConfigUtils {
 
         addModelDir(config, exportConf.getBaseModelDir());
 
-        config.append(generateDataConfig(model, exportConf.getParams()));
+        config.append(generateDataConfig(model, model.getParams()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -58,17 +79,18 @@ public class PipelineConfigUtils {
     private static void addInputPaths(StringBuilder config, List<String> trainDataPaths) {
         if (trainDataPaths != null && !trainDataPaths.isEmpty()) {
             String trainInputPath = String.join(",", trainDataPaths);
-            config.append("train_input_path: \"").append(trainInputPath).append("\"\n");
+            config.append("train_input_path: ").append(quoted(trainInputPath)).append("\n");
         }
     }
 
     private static void addModelDir(StringBuilder config, String modelDir) {
         if (modelDir != null) {
-            config.append("model_dir: \"").append(modelDir).append("\"\n");
+            config.append("model_dir: ").append(quoted(modelDir)).append("\n");
         }
     }
 
     public static String generateTrainConfig(ModelConf model, Map<String, String> params, String baseModelDir) {
+        params = ModelConfigUtils.mergeParams(model.getParams(), params);
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(params);
         double denseLr = Config.DENSE_LR.getValue(params);
@@ -97,23 +119,26 @@ public class PipelineConfigUtils {
             config.append("    mixed_precision: \"" + mixedPrecision.trim().toUpperCase() + "\"\n");
         }
         if (baseModelDir != null && !baseModelDir.isEmpty()) {
-            config.append("    fine_tune_checkpoint: \"").append(baseModelDir).append("\"\n");
+            config.append("    fine_tune_checkpoint: ").append(quoted(baseModelDir)).append("\n");
         }
         config.append("}\n");
         return config.toString();
     }
 
     public static String generateDataConfig(ModelConf model, Map<String, String> params) {
+        params = ModelConfigUtils.mergeParams(model.getParams(), params);
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
         int numWorkers = Config.NUM_WORKERS.getValue(params);
-        String labelFields = Config.LABEL_COLUMNS.getValue(model.getParams());
+        String labelFields = Config.LABEL_COLUMNS.getValue(params);
 
         config.append("data_config {\n");
         config.append("    batch_size: " + batchSize + "\n");
         config.append("    dataset_type: ParquetDataset\n");
         config.append("    fg_mode: FG_NORMAL\n");
-        config.append("    label_fields: \"" + labelFields + "\"\n");
+        for (String label : FieldTypeUtils.parseCsvList(labelFields)) {
+            config.append("    label_fields: ").append(quoted(label)).append("\n");
+        }
         config.append("    num_workers: " + numWorkers + "\n");
         config.append("}\n");
         return config.toString();
@@ -125,10 +150,35 @@ public class PipelineConfigUtils {
         if (model.getInputFields() == null) {
             return config.toString();
         }
-        for (FieldSchema fieldSchema : model.getInputFields()) {
+        for (FieldSchema fieldSchema : FeatureOptions.features(model)) {
             String featureName = fieldSchema.getName();
             String fieldType = fieldSchema.getType();
-            if (FieldTypeUtils.isFloat(fieldType)) {
+            if (FeatureOptions.isRaw(fieldType)) {
+                String prefix = "column." + featureName + ".";
+                Map<String, String> params = model.getParams();
+                config.append("feature_configs {\n    raw_feature {\n");
+                config.append("        feature_name: ").append(quoted(featureName)).append("\n");
+                config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
+                int valueDim = FeatureOptions.valueDim(fieldSchema, params);
+                config.append("        value_dim: ").append(valueDim).append("\n");
+                if (params.containsKey(prefix + "separator")) config.append("        separator: ").append(quoted(params.get(prefix + "separator"))).append("\n");
+                config.append("        default_value: ").append(quoted(FeatureOptions.defaultValue(fieldSchema, params))).append("\n");
+                if (params.containsKey(prefix + "normalizer")) {
+                    config.append("        normalizer: ").append(quoted(params.get(prefix + "normalizer"))).append("\n");
+                }
+                List<Float> boundaries = FeatureOptions.boundaries(featureName, params);
+                String embedding = params.getOrDefault(prefix + "embedding", "none");
+                if (!boundaries.isEmpty()) {
+                    config.append("        boundaries: ").append(boundaries).append("\n");
+                }
+                if (!boundaries.isEmpty() || !embedding.equals("none")) {
+                    config.append("        embedding_dim: ").append(FeatureOptions.embeddingDim(featureName, params)).append("\n");
+                }
+                if (embedding.equals("mlp")) config.append("        mlp {}\n");
+                if (embedding.equals("autodis")) {
+                    config.append("        autodis { num_channels: ").append(Integer.parseInt(params.getOrDefault(prefix + "autodis.num_channels", "3"))).append(" }\n");
+                }
+                config.append("    }\n}\n");
                 continue;
             }
             int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
@@ -148,8 +198,12 @@ public class PipelineConfigUtils {
 
             config.append("feature_configs {\n");
             config.append("    id_feature {\n");
-            config.append("        feature_name: \"").append(featureName).append("\"\n");
-            config.append("        expression: \"item:").append(featureName).append("\"\n");
+            config.append("        feature_name: ").append(quoted(featureName)).append("\n");
+            config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
+            String idDefault = model.getParams().get("column." + featureName + ".default_value");
+            if (idDefault != null) config.append("        default_value: ").append(quoted(idDefault)).append("\n");
+            String separator = model.getParams().get("column." + featureName + ".separator");
+            if (separator != null) config.append("        separator: ").append(quoted(separator)).append("\n");
             if (isIntFeature(fieldType)) {
                 config.append("        num_buckets: ").append(numBuckets).append("\n");
             } else {
@@ -167,12 +221,15 @@ public class PipelineConfigUtils {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
-        addFeatureGroup(config, "wide", getFeatures(model), "WIDE");
+        List<String> sparse = FeatureOptions.sparseFeatures(model);
+        addFeatureGroup(config, "wide", sparse, "WIDE");
 
         addFeatureGroup(config, "deep", getFeatures(model), "DEEP");
 
         String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.getParams());
-        config.append("    deepfm {\n");
+        boolean deepfm = model.getParams() != null && "tzrec.deepfm".equals(model.getParams().get("model"));
+        if (deepfm) addFeatureGroup(config, "fm", sparse, "DEEP");
+        config.append(deepfm ? "    deepfm {\n" : "    wide_and_deep {\n");
         config.append("        deep {\n");
         config.append("            hidden_units: [" + hiddenUnits + "]\n");
         config.append("        }\n");
@@ -197,25 +254,20 @@ public class PipelineConfigUtils {
 
     private static List<String> getFeatures(ModelConf model) {
         List<String> categoricalFeatures = new java.util.ArrayList<>();
-        if (model.getInputFields() != null) {
-            for (FieldSchema fieldSchema : model.getInputFields()) {
-                if (FieldTypeUtils.isFloat(fieldSchema.getType())) {
-                    // skip numeric feature
-                    continue;
-                }
-                categoricalFeatures.add(fieldSchema.getName());
-            }
+        for (FieldSchema fieldSchema : FeatureOptions.features(model)) {
+            categoricalFeatures.add(fieldSchema.getName());
         }
         return categoricalFeatures;
     }
 
     private static void addFeatureNames(StringBuilder config, List<String> featureNames) {
         for (String featureName : featureNames) {
-            config.append("        feature_names: \"").append(featureName).append("\"\n");
+            config.append("        feature_names: ").append(quoted(featureName)).append("\n");
         }
     }
 
     public static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        model = effectiveModel(model, trainConf.getParams());
         StringBuilder config = generateTrainConfigPrefix(model, trainConf);
         config.append(generateDSSMModelConfig(model));
 
@@ -223,6 +275,7 @@ public class PipelineConfigUtils {
     }
 
     public static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
+        model = effectiveModel(model, exportConf.getParams());
         StringBuilder config = generateExportConfigPrefix(model, exportConf);
         config.append(generateDSSMModelConfig(model));
 

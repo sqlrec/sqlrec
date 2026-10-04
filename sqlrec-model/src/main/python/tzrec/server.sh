@@ -80,6 +80,8 @@ for file in scripted_model.pt fg.json pipeline.config; do
 done
 
 app_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export USE_FARM_HASH_TO_BUCKETIZE="${USE_FARM_HASH_TO_BUCKETIZE:-true}"
+python "$app_dir/validate_export.py" "$local_model_dir" --check-pipeline
 echo "Starting TZRec $backend serving with model $local_model_dir"
 if [[ "$backend" == "python" ]]; then
   exec python "$app_dir/server.py" --scripted_model_dir "$local_model_dir" --host "$host" --port "$port"

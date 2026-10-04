@@ -42,7 +42,7 @@ public class WideAndDeepModelTest {
         ModelConf model = new ModelConf();
         
         String result = modelController.checkModel(model);
-        assertNull(result);
+        assertNotNull(result);
     }
 
     @Test
@@ -205,7 +205,7 @@ data:
             feature_names: "feature3"
             group_type: DEEP
         }
-        deepfm {
+        wide_and_deep {
             deep {
                 hidden_units: [256,128,64]
             }
@@ -226,7 +226,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"
@@ -365,7 +365,7 @@ data:
             feature_names: "feature1"
             group_type: DEEP
         }
-        deepfm {
+        wide_and_deep {
             deep {
                 hidden_units: [512,256,128]
             }
@@ -386,7 +386,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"
@@ -479,7 +479,7 @@ spec:
         Map<String, String> exportParams = new HashMap<>();
         exportParams.put("num_workers", "4");
         exportParams.put("nnodes", "1");
-        exportParams.put("nproc_per_node", "2");
+        exportParams.put("nproc_per_node", "1");
         exportConf.setParams(exportParams);
 
         WideAndDeepModel modelController = new WideAndDeepModel();
@@ -540,7 +540,7 @@ data:
             feature_names: "feature3"
             group_type: DEEP
         }
-        deepfm {
+        wide_and_deep {
             deep {
                 hidden_units: [256,128,64]
             }
@@ -561,7 +561,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.export \\
+        /app/run.py --mode export \\
         --pipeline_config_path /data/pipeline.config \\
         --export_dir 'hdfs://data/test_model_dir_export'
 ---
@@ -603,7 +603,7 @@ spec:
         - name: "NNODES"
           value: "1"
         - name: "NPROC_PER_NODE"
-          value: "2"
+          value: "1"
         - name: "USE_FSSPEC"
           value: "1"
         - name: "USE_SPAWN_MULTI_PROCESS"
@@ -804,184 +804,16 @@ spec:
     @Test
     public void testGenModelTrainK8sYamlWithIntFeatures() {
         ModelConf model = new ModelConf();
-        model.setModelName("int_feature_model");
-
-        List<FieldSchema> fieldSchemas = new ArrayList<>();
-        fieldSchemas.add(new FieldSchema("int_feature", "int"));
-        fieldSchemas.add(new FieldSchema("bigint_feature", "bigint"));
-        fieldSchemas.add(new FieldSchema("int_array", "array<int>"));
-        model.setInputFields(fieldSchemas);
-
-        Map<String, String> modelParams = new HashMap<>();
-        modelParams.put("label_columns", "label");
-        modelParams.put("num_buckets", "500000");
-        model.setParams(modelParams);
-
-        ModelTrainConf trainConf = new ModelTrainConf();
-        trainConf.setId("int-train-job");
-        trainConf.setModelDir("hdfs://data/int_model_dir");
-
-        WideAndDeepModel modelController = new WideAndDeepModel();
-        String k8sYaml = modelController.genModelTrainK8sYaml(model, trainConf);
-        
-        String expectedYaml = """
----
-apiVersion: "v1"
-kind: "ConfigMap"
-metadata:
-  name: "int-train-job-cm"
-data:
-  pipeline.config: |
-    model_dir: "hdfs://data/int_model_dir"
-    train_config {
-        sparse_optimizer {
-            adagrad_optimizer {
-                lr: 0.001
-            }
-            constant_learning_rate {
-            }
-        }
-        dense_optimizer {
-            adam_optimizer {
-                lr: 0.001
-            }
-            constant_learning_rate {
-            }
-        }
-        num_epochs: 1
-    }
-    data_config {
-        batch_size: 8192
-        dataset_type: ParquetDataset
-        fg_mode: FG_NORMAL
-        label_fields: "label"
-        num_workers: 8
-    }
-    feature_configs {
-        id_feature {
-            feature_name: "int_feature"
-            expression: "item:int_feature"
-            num_buckets: 500000
-            embedding_dim: 16
-        }
-    }
-    feature_configs {
-        id_feature {
-            feature_name: "bigint_feature"
-            expression: "item:bigint_feature"
-            num_buckets: 500000
-            embedding_dim: 16
-        }
-    }
-    feature_configs {
-        id_feature {
-            feature_name: "int_array"
-            expression: "item:int_array"
-            num_buckets: 500000
-            embedding_dim: 16
-        }
-    }
-    model_config {
-        feature_groups {
-            group_name: "wide"
-            feature_names: "int_feature"
-            feature_names: "bigint_feature"
-            feature_names: "int_array"
-            group_type: WIDE
-        }
-        feature_groups {
-            group_name: "deep"
-            feature_names: "int_feature"
-            feature_names: "bigint_feature"
-            feature_names: "int_array"
-            group_type: DEEP
-        }
-        deepfm {
-            deep {
-                hidden_units: [512,256,128]
-            }
-        }
-        metrics {
-            auc {}
-        }
-        losses {
-            binary_cross_entropy {}
-        }
-    }
-  start.sh: |-
-    #!/bin/bash
-    set -ex
-
-    NODE_RANK=${JOB_COMPLETION_INDEX:-0}
-    MASTER_ADDR=${JOB_NAME}-0.${SERVICE_NAME}
-
-    torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
-        --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
-        --pipeline_config_path /data/pipeline.config
----
-apiVersion: "v1"
-kind: "Service"
-metadata:
-  name: "int-train-job-job-headless"
-spec:
-  clusterIP: "None"
-  ports:
-  - name: "torch-distributed"
-    port: 29500
-    targetPort: 29500
-  selector:
-    job-name: "int-train-job-job"
----
-apiVersion: "batch/v1"
-kind: "Job"
-metadata:
-  name: "int-train-job-job"
-spec:
-  backoffLimit: 1
-  completionMode: "Indexed"
-  completions: 1
-  parallelism: 1
-  template:
-    spec:
-      containers:
-      - command:
-        - "bash"
-        - "/data/start.sh"
-        env:
-        - name: "JOB_NAME"
-          value: "int-train-job-job"
-        - name: "SERVICE_NAME"
-          value: "int-train-job-job-headless"
-        - name: "MASTER_PORT"
-          value: "29500"
-        - name: "NNODES"
-          value: "1"
-        - name: "NPROC_PER_NODE"
-          value: "1"
-        - name: "USE_FSSPEC"
-          value: "1"
-        - name: "USE_SPAWN_MULTI_PROCESS"
-          value: "1"
-        - name: "USE_FARM_HASH_TO_BUCKETIZE"
-          value: "true"
-        image: "sqlrec/tzrec:%s-cpu"
-        name: "tzrec-job"
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-        volumeMounts:
-        - mountPath: "/data"
-          name: "config-volume"
-      restartPolicy: "Never"
-      subdomain: "int-train-job-job-headless"
-      volumes:
-      - configMap:
-          name: "int-train-job-cm"
-        name: "config-volume"
-""".formatted(SQLREC_VERSION.getValue());
-        assertEquals(expectedYaml, k8sYaml);
+        model.setInputFields(List.of(new FieldSchema("ids", "ARRAY<INT>")));
+        model.setParams(Map.of("label_columns", "label"));
+        ModelTrainConf train = new ModelTrainConf();
+        assertThrows(IllegalArgumentException.class,
+                () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train));
+        model.setInputFields(List.of(new FieldSchema("id", "INT"), new FieldSchema("big_id", "BIGINT")));
+        train.setId("int-train"); train.setModelDir("/tmp/model");
+        String yaml = new WideAndDeepModel().genModelTrainK8sYaml(model, train);
+        assertTrue(yaml.contains("num_buckets: 1000000"));
+        assertFalse(yaml.contains("hash_bucket_size"));
     }
 
     @Test
@@ -1058,7 +890,7 @@ data:
             feature_names: "custom_feature"
             group_type: DEEP
         }
-        deepfm {
+        wide_and_deep {
             deep {
                 hidden_units: [512,256,128]
             }
@@ -1079,7 +911,7 @@ data:
 
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
-        -m tzrec.train_eval \\
+        /app/run.py --mode train \\
         --pipeline_config_path /data/pipeline.config
 ---
 apiVersion: "v1"

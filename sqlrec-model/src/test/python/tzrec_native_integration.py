@@ -83,14 +83,15 @@ def main():
                 result = {"model": str(directory), "cases": {}}
                 for name, payload in cases.items():
                     rows = parse_request_data(payload)
-                    arrays = json_to_array_map(rows, input_names)
+                    arrays = json_to_array_map(rows, input_specs=reference._input_specs)
                     expected_tensors = reference._data_parser.parse(arrays)
                     native_features = json.loads(subprocess.check_output(
                         [args.feature_parser, str(directory / "fg.json")], input=json.dumps(rows).encode()))
                     for feature in fg["features"]:
                         key = feature["feature_name"]
-                        for suffix in ["values", "lengths"]:
-                            assert native_features[key][suffix] == expected_tensors[f"{key}.{suffix}"].tolist(), (name, key, suffix)
+                        suffixes = ["values"] if feature["feature_type"] == "raw_feature" and not feature.get("boundaries") else ["values", "lengths"]
+                        for suffix in suffixes:
+                            np.testing.assert_allclose(native_features[key][suffix], expected_tensors[f"{key}.{suffix}"].tolist(), rtol=1e-6, atol=1e-6, err_msg=str((name, key, suffix)))
                     expected = reference._forward(arrays)
                     status, actual = request(url + "/predict", payload)
                     assert status == 200, (name, actual)

@@ -74,5 +74,6 @@ RUN cmake -S /build/main/cpp/tzrec -B /build/native -DCMAKE_BUILD_TYPE=Release \
 
 FROM dependencies AS runtime
 COPY --from=builder /build/native/tzrec_server /app/tzrec_server
+COPY --from=builder /build/native/features_test /app/features_test
 COPY ./sqlrec-model/src/main/python/common/ /app/common/
 COPY ./sqlrec-model/src/main/python/tzrec/ /app/

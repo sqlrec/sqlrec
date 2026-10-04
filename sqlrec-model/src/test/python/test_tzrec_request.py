@@ -70,6 +70,34 @@ class TzrecRequestTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing input columns: id"):
             json_to_array_map([{"other": 1}], {"id"})
 
+    def test_model_schema_filters_extra_columns_and_normalizes_float_inputs(self):
+        specs = {"id": {"feature_type": "id_feature"}, "price": {"feature_type": "raw_feature"}}
+        arrays = json_to_array_map([{"id": 1, "price": 1.25, "metadata": {}},
+                                   {"id": "2", "price": None, "metadata": "text"}], input_specs=specs)
+        self.assertEqual(set(arrays), {"id", "price"})
+        self.assertEqual(arrays["id"].to_pylist(), ["1", "2"])
+        self.assertEqual(arrays["price"].type, pa.float32())
+        self.assertEqual(arrays["price"].to_pylist(), [1.25, None])
+
+    def test_raw_vectors_and_all_null_columns_keep_declared_types(self):
+        specs = {"vector": {"feature_type": "raw_feature", "value_dim": 2}}
+        for rows, expected in [([{"vector": [1.25, 2.5]}, {"vector": None}], [[1.25, 2.5], None]),
+                               ([{"vector": None}], [None])]:
+            arrays = json_to_array_map(rows, input_specs=specs)
+            self.assertEqual(arrays["vector"].type, pa.list_(pa.float32()))
+            self.assertEqual(arrays["vector"].to_pylist(), expected)
+
+    def test_raw_invalid_values_and_dimensions_are_rejected(self):
+        specs = {"price": {"feature_type": "raw_feature"}}
+        for value in [True, "bad", "12oops", float("nan"), float("inf"), 1e39, 10**400, [1, 2], {}, "0x1"]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                json_to_array_map([{"price": value}], input_specs=specs)
+
+    def test_mixed_scalar_and_multivalue_ids_have_one_arrow_type(self):
+        specs = {"tags": {"feature_type": "id_feature"}}
+        arrays = json_to_array_map([{"tags": ["a", "b"]}, {"tags": "c\x1dd"}, {"tags": None}], input_specs=specs)
+        self.assertEqual(arrays["tags"].to_pylist(), [["a", "b"], ["c", "d"], None])
+
 
 if __name__ == "__main__":
     unittest.main()

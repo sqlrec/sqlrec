@@ -39,6 +39,10 @@ The recommendation flow is defined in `benchmark/movielens/init_sqlrec_sql.sql`.
 
 `request.lua` explicitly sets `use_recall_service=false` and `rank_fun=rank_fun_simple` to keep the timed workload stable. To exercise online inference, set request `params` to `{"use_recall_service":"true","rank_fun":"rank_fun"}`. That path calls the DSSM user tower and Wide & Deep ranking Services. Random user vectors in the default benchmark are for performance measurement, not recommendation-quality evaluation.
 
+The models include two `FLOAT` features: `age_years = CAST(age AS FLOAT)` and `genre_count = CAST(number of genres AS FLOAT)`. MovieLens `age` is an age-group code; `age_years` is its numeric representation, not an exact age. Their minmax parameters are `[0,100]` and `[0,18]`, respectively, with missing values defaulting to 0. Both enter the ranking model's deep branch. DSSM uses `age_years` in the user tower and `genre_count` in the item tower. Offline samples, online requests, and item-embedding loading use the same calculations. `rating` remains a label and never becomes an input feature.
+
+`init.sh` generates samples in `ml_sample` and `ml_recall_sample`, trains and exports `rank_model` and `recall_model`, deploys `rank_service`, `recall_service_user`, and `recall_service_item`, and generates the Milvus item vectors.
+
 ## Prerequisites
 
 Start the complete environment by following [Service Deployment](./deployment.md). `init.sh` also uses or installs `wrk`, starts Kyuubi, and downloads MovieLens data and Python dependencies.

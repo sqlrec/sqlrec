@@ -39,6 +39,10 @@
 
 `request.lua` 显式设置 `use_recall_service=false` 和 `rank_fun=rank_fun_simple`，固定压测口径。需要测试在线模型时，将请求 `params` 设为 `{"use_recall_service":"true","rank_fun":"rank_fun"}`，此时会调用 DSSM 用户塔和 Wide & Deep 排序服务。默认流程中的随机用户向量用于性能测试，不用于评估推荐质量。
 
+模型包含两个 `FLOAT` 特征：`age_years = CAST(age AS FLOAT)` 和 `genre_count = CAST(电影类型数量 AS FLOAT)`。MovieLens 的 `age` 表示年龄段编码，`age_years` 是该编码的数值形式，并非精确年龄。两者分别使用 minmax 的 `[0,100]` 和 `[0,18]` 参数归一化；缺失值默认 0。排序模型将它们输入 deep 分支，DSSM 将 `age_years` 输入用户塔、`genre_count` 输入物品塔。离线样本、在线请求和物品向量加载使用相同的计算方式。`rating` 只作为标签，不参与特征输入。
+
+`init.sh` 生成 `ml_sample`、`ml_recall_sample` 样本，训练并导出 `rank_model`、`recall_model`，部署 `rank_service`、`recall_service_user`、`recall_service_item`，并生成 Milvus 物品向量。
+
 ## 环境前提
 
 先按[服务部署](./deployment.md)启动完整测试环境。`init.sh` 还会使用或安装 `wrk`、启动 Kyuubi，并从网络下载 MovieLens 数据和 Python 依赖。

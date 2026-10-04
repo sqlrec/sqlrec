@@ -45,6 +45,7 @@ FROM ml_movies, LATERAL TABLE(batch_call_service(
     128,
     'movie_id', movie_id,
     'title', title,
-    'genres', genres
+    'genres', genres,
+    'genre_count', CAST(CARDINALITY(genres) AS FLOAT)
 )) AS r
 WHERE dt = '2024-01-01';

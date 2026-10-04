@@ -9,9 +9,12 @@ define input table user_info(
   zip_code string
 );
 
+cache table user_features as
+select *, cast(age as float) as age_years from user_info;
+
 IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
   (cache table user_embedding as
-    call call_service('recall_service_user', user_info)
+    call call_service('recall_service_user', user_features)
   )
 ELSE
   (cache table user_embedding as
@@ -169,7 +172,9 @@ select
     user_info.gender,
     user_info.age,
     user_info.occupation,
-    user_info.zip_code
+    user_info.zip_code,
+    cast(user_info.age as float) as age_years,
+    cast(cardinality(recall_item_with_info.genres) as float) as genre_count
 from
     recall_item_with_info join user_info on 1=1;
 

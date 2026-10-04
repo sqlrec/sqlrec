@@ -82,6 +82,9 @@ def train(config: dict) -> None:
     if missing:
         raise ValueError(f"Feature columns missing in data: {missing}")
 
+    if label_col in feature_cols:
+        raise ValueError("Label column must not be included in feature_columns")
+
     X = df[feature_cols]
     y = df[label_col]
 

@@ -53,14 +53,23 @@ require_one_wheel() {
 }
 
 update_sources() {
-  local path
+  local path sources_to_update=()
   for path in "$@"; do
     if [[ -e "$path/.git" ]] && [[ -n "$(git -C "$path" status --porcelain)" ]]; then
+      # compat wheels use the Docker build context directly. Explicitly disabling
+      # updates permits validation of its working tree without checking it out.
+      if [[ "$path" == submodules/compat-src && "${MODEL_SOURCE_UPDATE:-1}" == 0 ]]; then
+        echo "Building local changes in $path (MODEL_SOURCE_UPDATE=0)"
+        continue
+      fi
       echo "Submodule $path has local changes; commit or stash them before building." >&2
       return 1
     fi
+    sources_to_update+=("$path")
   done
-  git submodule update --init --depth 1 -- "$@"
+  if [[ "${#sources_to_update[@]}" -gt 0 ]]; then
+    git submodule update --init --depth 1 -- "${sources_to_update[@]}"
+  fi
   if [[ "${MODEL_SOURCE_UPDATE:-1}" == 1 ]]; then
     local branch
     for path in "$@"; do
@@ -162,6 +171,9 @@ build_and_verify_image() {
   actual_arch="$(normalize_arch "$(docker image inspect --format '{{.Architecture}}' "$image")")"
   [[ "$actual_arch" == "$arch" ]] || { echo "Unexpected image architecture: $actual_arch" >&2; return 1; }
   echo "Built $image ($actual_arch)"
+  if [[ "$dockerfile" == *sqlrec-model-tzrec.Dockerfile ]]; then
+    bash "$repo_root/bin/verify_tzrec_image.sh" "$image" "$arch"
+  fi
 }
 
 prepare_sources() {
