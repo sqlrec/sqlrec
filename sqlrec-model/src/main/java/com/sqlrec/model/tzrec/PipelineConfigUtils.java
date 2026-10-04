@@ -46,10 +46,15 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    private static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
+    static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
+
+        String evalPath = Config.EVAL_INPUT_PATH.getValueOrNull(model.getParams());
+        if (evalPath != null && !evalPath.isBlank()) {
+            config.append("eval_input_path: ").append(quoted(evalPath)).append("\neval_config {}\n");
+        }
 
         addModelDir(config, trainConf.getModelDir());
 
@@ -62,7 +67,7 @@ public class PipelineConfigUtils {
         return config;
     }
 
-    private static StringBuilder generateExportConfigPrefix(ModelConf model, ModelExportConf exportConf) {
+    static StringBuilder generateExportConfigPrefix(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, exportConf.getTrainDataPaths());
@@ -332,7 +337,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    private static void addFeatureGroup(
+    static void addFeatureGroup(
             StringBuilder config, String name, List<String> features, String type) {
         config.append("    feature_groups {\n");
         config.append("        group_name: \"").append(name).append("\"\n");

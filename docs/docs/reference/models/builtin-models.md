@@ -214,6 +214,56 @@ CREATE MODEL rec_model (
 
 **模型名称**：`tzrec.deepfm`。与 Wide & Deep 使用相同的训练/特征参数，额外包含 FM 二阶交互；全部稀疏特征的 embedding_dim 必须一致。输出为 `probs`。
 
+### 2.2 MMoE 多目标排序模型
+
+**模型名称**：`tzrec.mmoe`。共享专家网络、每个目标独立任务塔，一次推理返回全部目标。支持二分类和标量回归，也支持纯连续特征。
+
+```sql
+CREATE MODEL multi_rank (
+    user_id BIGINT,
+    item_id BIGINT,
+    price DOUBLE,
+    click INT,
+    `like` INT,
+    watch_time DOUBLE
+) WITH (
+    'model' = 'tzrec.mmoe',
+    'label_columns' = 'click,like,watch_time',
+    'task.like.weight' = '2.0',
+    'task.watch_time.type' = 'regression',
+    'task.watch_time.weight' = '0.1'
+);
+```
+
+`label_columns` 按顺序定义至少两个目标；标签必须是字段列表中不重复的数值标量列，任务名直接使用标签名，限定为字母或下划线开头的字母、数字、下划线组合。所有目标使用同一组非标签特征。线上输入只需真实特征，不必填标签。
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `num_expert` | `3` | 共享专家数量，正整数 |
+| `expert_hidden_units` | `256,128` | 专家 MLP，各层维度为正整数 |
+| `task_hidden_units` | `64,32` | 默认任务塔 MLP |
+| `task.<label>.hidden_units` | 继承任务塔默认值 | 单个任务塔 MLP |
+| `task.<label>.type` | `binary` | `binary` 使用 BCE，`regression` 使用 L2/MSE |
+| `task.<label>.weight` | `1.0` | 有限且大于零的 float32 训练损失权重 |
+| `task.<label>.metrics` | binary：`auc`；regression：`mean_squared_error` | binary 支持 `auc,accuracy`，regression 支持 `mean_squared_error,mean_absolute_error` |
+| `eval_input_path` | 不设置 | 独立 Parquet 验证集路径，可在 TRAIN 的 WITH 中覆盖 |
+
+资源、batch、epoch、学习率和 `column.*` 特征参数沿用 TZRec 通用配置。MMoE 使用独立的专家/任务塔参数，不能使用单目标 `hidden_units` 或 DSSM 塔参数。未知目标和未知 `task.*` 参数会在创建模型时报错。
+
+训练和验证数据须包含每个目标的有效标签：二分类为 0/1，回归须声明为 FLOAT/DOUBLE，且 Parquet 列也须为浮点类型，数值转换为 float32 后须有限。不允许空值或缺失列。整数回归标签请在生成训练数据前转为 FLOAT/DOUBLE，避免 TZRec 的 L2 反向传播发生 dtype 错误。启动训练时按批次扫描标签列；分布式训练仅 rank 0 扫描并共享结果。未指定验证集时只进行训练，不自动在训练集计算验证指标。
+
+输出为 `probs_<label> FLOAT`（二分类）或 `y_<label> FLOAT`（回归）。例如上述模型返回 `probs_click`、`probs_like`、`y_watch_time`；通过 `call_service` 追加到输入表。最终排序可在 SQL 中融合：
+
+```sql
+CACHE TABLE scored AS CALL call_service('multi_rank_service', rank_feature);
+SELECT item_id, 0.6 * probs_click + 0.4 * probs_like AS rank_score
+FROM scored ORDER BY rank_score DESC;
+```
+
+训练权重与线上融合系数分别配置；回归值需按业务尺度处理后再融合。所有目标共用一个 `<checkpoint>_export` 和一个服务。目标集合、类型、训练权重、网络和特征配置在 TRAIN/EXPORT/服务部署时不能改变；改变这些配置须新建模型。继续训练仍可覆盖 epoch、batch、学习率和验证集路径。
+
+当前不支持任务别名、多分类、缺失目标标签 mask 或任务样本空间配置。各目标须在同一训练样本空间上定义；仅点击样本定义的 CVR 需要另行设计损失与指标口径。
+
 ### 3. DSSM 模型
 
 DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的双塔召回模型，支持完整的训练、导出和服务部署流程。

@@ -26,10 +26,12 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
   if [[ "$links" == *"not found"* ]]; then printf "%s\n" "$links"; exit 1; fi
   python -c "import ctypes, pathlib, flask, graphlearn, juicefs, pyarrow, pyfg, server, torch, torchrec, tzrec.main; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name(\"libjfs.so\")))"
   python /tests/tzrec_pipeline_config_tests.py
+  python /tests/test_tzrec_multi_task.py
   python /tests/tzrec_native_smoke.py
   python /tests/tzrec_pipeline_smoke.py
 ')"
 docker cp "$repo_root/sqlrec-model/src/test/python/." "$container:/tests"
+docker cp "$repo_root/sqlrec-model/src/test/resources/tzrec" "$container:/tests/configs"
 docker start --attach "$container"
 exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container")"
 [[ "$exit_code" == 0 ]] || exit "$exit_code"

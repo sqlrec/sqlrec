@@ -219,6 +219,44 @@ CREATE MODEL rec_model (
 
 **Model Name**: `tzrec.deepfm`. It shares Wide & Deep training and feature options, adds FM pairwise interactions, and requires equal sparse embedding dimensions. Its output is `probs`.
 
+### 2.2 MMoE Multi-target Ranking
+
+**Model Name**: `tzrec.mmoe`. Shared experts and separate task towers return every target in one prediction request. Binary classification, scalar regression, mixed tasks, and continuous-only features are supported.
+
+```sql
+CREATE MODEL multi_rank (
+    user_id BIGINT, item_id BIGINT, price DOUBLE,
+    click INT, `like` INT, watch_time DOUBLE
+) WITH (
+    'model' = 'tzrec.mmoe',
+    'label_columns' = 'click,like,watch_time',
+    'task.like.weight' = '2.0',
+    'task.watch_time.type' = 'regression',
+    'task.watch_time.weight' = '0.1'
+);
+```
+
+`label_columns` defines at least two ordered tasks. Each label must be a declared numeric scalar field with a unique name matching `[A-Za-z_][A-Za-z0-9_]*`. Task names equal label names. All tasks share the non-label features; online inputs do not need labels.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `num_expert` | `3` | Positive expert count |
+| `expert_hidden_units` | `256,128` | Expert MLP dimensions |
+| `task_hidden_units` | `64,32` | Default task tower dimensions |
+| `task.<label>.hidden_units` | Task tower default | Per-task dimensions |
+| `task.<label>.type` | `binary` | `binary` (BCE) or `regression` (L2/MSE) |
+| `task.<label>.weight` | `1.0` | Finite positive float32 training loss weight |
+| `task.<label>.metrics` | Binary: `auc`; regression: `mean_squared_error` | Binary accepts `auc,accuracy`; regression accepts `mean_squared_error,mean_absolute_error` |
+| `eval_input_path` | Unset | Separate Parquet evaluation path; overridable in TRAIN WITH |
+
+Reuse TZRec's resource, optimizer, batch, epoch and `column.*` options. MMoE uses expert/task dimensions instead of single-target `hidden_units` or DSSM tower options. Unknown task names/options fail at model creation.
+
+Training and evaluation labels must be present and non-null: binary labels are 0/1. Regression labels must be declared FLOAT/DOUBLE and stored as floating Parquet columns, with values finite after conversion to float32. Cast integer regression labels before producing training data to avoid a dtype error in TZRec's L2 backward pass. Training starts with a streaming scan of label columns; rank 0 scans and shares the result in distributed jobs. Without an evaluation path, no evaluation dataset is created.
+
+Binary outputs are `probs_<label> FLOAT`; regression outputs are `y_<label> FLOAT`. `call_service` appends these columns to the input table. Combine predictions in SQL, for example `0.6 * probs_click + 0.4 * probs_like`; training loss weights and serving fusion weights are separate. Normalize regression predictions to the appropriate business scale before fusion.
+
+One `<checkpoint>_export` and one service contain all tasks. TRAIN/EXPORT/service overrides cannot change targets, task types, loss weights, network or features; create a new model for these changes. Epochs, batch size, learning rates and evaluation paths remain overridable during training. Task aliases, multiclass targets, missing-label masks and conditional task sample spaces are not supported; every target must have valid labels over the same sample space.
+
 ### 3. DSSM Model
 
 DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemented based on the tzrec framework, supporting complete training, export, and service deployment workflow.

@@ -55,6 +55,15 @@ public class Config extends ModelConfigBase {
             "hidden_units",
             "512,256,128", "Hidden units for deep network", null, String.class);
 
+    public static final ConfigOption<Integer> NUM_EXPERT = new ConfigOption<>(
+            "num_expert", 3, "Number of MMoE experts", null, Integer.class);
+    public static final ConfigOption<String> EXPERT_HIDDEN_UNITS = new ConfigOption<>(
+            "expert_hidden_units", "256,128", "MMoE expert hidden units", null, String.class);
+    public static final ConfigOption<String> TASK_HIDDEN_UNITS = new ConfigOption<>(
+            "task_hidden_units", "64,32", "Default task tower hidden units", null, String.class);
+    public static final ConfigOption<String> EVAL_INPUT_PATH = new ConfigOption<>(
+            "eval_input_path", null, "Parquet evaluation data path", null, String.class);
+
     // Distributed training configuration
     public static final ConfigOption<Integer> NNODES = new ConfigOption<>(
             "nnodes",

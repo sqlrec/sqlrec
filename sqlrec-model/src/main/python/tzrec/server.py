@@ -17,6 +17,7 @@ from tzrec.utils import config_util
 from tzrec.constant import Mode
 from tzrec.utils.logging_util import logger
 from validate_export import validate_export
+from multi_task import task_contract, validate_predictions
 
 
 _model: torch.jit.ScriptModule | None = None
@@ -47,7 +48,8 @@ def _init_model(scripted_model_path: str) -> None:
     pipeline_config = config_util.load_pipeline_config(
         os.path.join(scripted_model_path, "pipeline.config"), allow_unknown_field=True
     )
-    validate_export(scripted_model_path, list(pipeline_config.data_config.label_fields))
+    contract = task_contract(pipeline_config)
+    validate_export(scripted_model_path, list(pipeline_config.data_config.label_fields), contract)
     model = torch.jit.load(
         os.path.join(scripted_model_path, "scripted_model.pt"), map_location=device
     )
@@ -71,7 +73,9 @@ def _init_model(scripted_model_path: str) -> None:
     warmup = {key: None if spec["feature_type"] == "raw_feature" else "0" for key, spec in input_specs.items()}
     parsed = data_parser.parse(json_to_array_map([warmup], input_specs=input_specs))
     with torch.inference_mode():
-        model({key: value.to(device) for key, value in parsed.items()}, device)
+        warmup_outputs = model({key: value.to(device) for key, value in parsed.items()}, device)
+        if contract is not None:
+            validate_predictions(warmup_outputs, contract, 1)
     with _inference_lock:
         _model, _data_parser, _device, _input_specs, _id_inputs = model, data_parser, device, input_specs, id_inputs
     logger.info("Model initialized successfully")

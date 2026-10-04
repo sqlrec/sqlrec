@@ -14,6 +14,28 @@ spec.loader.exec_module(module)
 
 
 class ExportManifestTest(unittest.TestCase):
+    def test_mmoe_requires_manifest_and_matching_ordered_task_contract(self):
+        contract = {"tasks": [{"name": "click", "label": "click", "type": "binary"},
+                              {"name": "watch", "label": "watch", "type": "regression"}],
+                    "output_fields": [{"name": "probs_click", "type": "FLOAT"}, {"name": "y_watch", "type": "FLOAT"}]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in module.REQUIRED_FILES:
+                (root / name).write_text("fixture")
+            (root / "fg.json").write_text(json.dumps({"features": [{"feature_name": "id", "expression": "item:id"}]}))
+            with self.assertRaisesRegex(ValueError, "task manifest"):
+                module.validate_export(temporary, ["click", "watch"], contract)
+            metadata = {"format_version": 1, "architecture": "mmoe", "labels": ["click", "watch"],
+                        "sha256": {name: module.digest(root / name) for name in module.REQUIRED_FILES}, **contract}
+            (root / "_SUCCESS").touch()
+            (root / "model_meta.json").write_text(json.dumps(metadata))
+            module.validate_export(temporary, ["click", "watch"], contract)
+            for key in ("tasks", "output_fields", "architecture"):
+                broken = {**metadata, key: []}
+                (root / "model_meta.json").write_text(json.dumps(broken))
+                with self.assertRaisesRegex(ValueError, "task contract"):
+                    module.validate_export(temporary, ["click", "watch"], contract)
+
     def test_legacy_exports_check_labels_from_the_pipeline(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

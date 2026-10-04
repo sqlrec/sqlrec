@@ -262,4 +262,47 @@ public class CallServiceFunctionUnitTest {
         return new RelDataTypeFieldImpl(
                 name, 0, new BasicSqlType(RelDataTypeSystem.DEFAULT, typeName));
     }
+
+    @Test
+    public void testMultiTargetSchemaWithMissingOnlineLabelsInBothRequestLayouts() throws IOException {
+        ReadonlyContext context = org.mockito.Mockito.mock(ReadonlyContext.class);
+        ModelConf model = new ModelConf();
+        model.setInputFields(Arrays.asList(new FieldSchema("user_id", "BIGINT"), new FieldSchema("item_id", "BIGINT"),
+                new FieldSchema("click", "INT"), new FieldSchema("watch", "DOUBLE")));
+        model.setParams(Map.of("model", "tzrec.mmoe", "label_columns", "click,watch", "task.watch.type", "regression"));
+        ServiceConf service = new ServiceConf();
+        service.setUrl("http://test"); service.setModelConfig(model);
+        when(context.getServiceConfig("multi_rank")).thenReturn(service);
+        when(context.getModelController(model)).thenReturn(new com.sqlrec.model.tzrec.MMoEModel());
+        when(mockHttpClient.newCall(any(Request.class))).thenReturn(mockCall);
+        when(mockCall.execute()).thenReturn(mockResponse);
+        when(mockResponse.isSuccessful()).thenReturn(true);
+        when(mockResponse.body()).thenReturn(mockBody);
+        when(mockBody.string()).thenReturn("{\"y_watch\":[4.0,2.0],\"probs_click\":[0.8,0.3]}");
+        CacheTable rows = new CacheTable("features", Linq4j.asEnumerable(Arrays.asList(new Object[]{7L, 11L}, new Object[]{7L, 12L})),
+                Arrays.asList(field("user_id", SqlTypeName.BIGINT), new RelDataTypeFieldImpl("item_id", 1,
+                        new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.BIGINT))));
+        CacheTable user = new CacheTable("user", Linq4j.asEnumerable(Collections.singletonList(new Object[]{7L})),
+                Collections.singletonList(field("user_id", SqlTypeName.BIGINT)));
+        CacheTable items = new CacheTable("items", Linq4j.asEnumerable(Arrays.asList(new Object[]{11L}, new Object[]{12L})),
+                Collections.singletonList(field("item_id", SqlTypeName.BIGINT)));
+        CallServiceFunction function = new CallServiceFunction(mockHttpClient);
+        for (CacheTable result : Arrays.asList(function.evaluate(context, "multi_rank", rows), function.evaluate(context, "multi_rank", user, items))) {
+            List<Object[]> output = result.scan(null).toList();
+            int offset = output.get(0).length - 2;
+            assertEquals(2, output.size());
+            assertEquals("probs_click", result.getDataFields().get(offset).getName());
+            assertEquals("y_watch", result.getDataFields().get(offset + 1).getName());
+            assertEquals(0.8, output.get(0)[offset]); assertEquals(4.0, output.get(0)[offset + 1]);
+            assertEquals(0.3, output.get(1)[offset]); assertEquals(2.0, output.get(1)[offset + 1]);
+        }
+        ArgumentCaptor<Request> requests = ArgumentCaptor.forClass(Request.class);
+        verify(mockHttpClient, org.mockito.Mockito.times(2)).newCall(requests.capture());
+        List<String> bodies = new java.util.ArrayList<>();
+        for (Request request : requests.getAllValues()) {
+            Buffer body = new Buffer(); request.body().writeTo(body); bodies.add(body.readUtf8());
+        }
+        assertEquals("[{\"user_id\":7,\"item_id\":11},{\"user_id\":7,\"item_id\":12}]", bodies.get(0));
+        assertEquals("{\"user_id\":[7],\"item_id\":[11,12]}", bodies.get(1));
+    }
 }

@@ -2,9 +2,11 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
+import signal
 import sys
 import tempfile
 import time
@@ -30,14 +32,40 @@ def request(url, payload=None, content_type="application/json", body=None):
         return error.code, json.load(error)
 
 
-def execute(command, log, env):
+def execute(command, log, env, expected_error=None, timeout=180):
     with log.open("w") as output:
-        result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT, env=env)
-    if result.returncode:
+        process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            raise AssertionError(f"Training/export timed out: {command}\n{log.read_text()[-12000:]}")
+    if expected_error is not None:
+        output = log.read_text()
+        assert process.returncode != 0 and expected_error in output, output[-12000:]
+        return output
+    if process.returncode:
         raise AssertionError(f"{command} failed:\n{log.read_text()[-12000:]}")
 
 
 def config(root, architecture):
+    if architecture.startswith("mmoe"):
+        fixture = "mmoe_mixed" if architecture == "mmoe_regression" else architecture
+        result = config_util.load_pipeline_config(f"/tests/configs/{fixture}.config")
+        if architecture == "mmoe_regression":
+            result.data_config.label_fields[0] = "watch_aux"
+            tower = result.model_config.mmoe.task_towers[0]
+            tower.label_name = tower.tower_name = "watch_aux"
+            tower.losses[0].l2_loss.SetInParent()
+            tower.metrics[0].mean_squared_error.SetInParent()
+        result.train_input_path = str(root / "data.parquet")
+        result.eval_input_path = str(root / "eval.parquet")
+        result.eval_config.SetInParent()
+        result.model_dir = str(root / architecture)
+        result.train_config.save_checkpoints_steps = 2
+        result.train_config.log_step_count_steps = 1
+        return result
     model = """
       wide_and_deep { deep { hidden_units: [16, 8] } }
       losses { binary_cross_entropy {} }
@@ -78,6 +106,20 @@ def config(root, architecture):
     result.train_input_path = str(root / "data.parquet")
     result.model_dir = str(root / architecture)
     return result
+
+
+def verify_task_metrics(pipeline):
+    from tzrec.constant import TRAIN_EVAL_RESULT_FILENAME
+    results = [json.loads(line) for line in
+               (Path(pipeline.model_dir) / TRAIN_EVAL_RESULT_FILENAME).read_text().splitlines()]
+    assert results, "MMoE evaluation must run on the separate evaluation dataset"
+    expected = {metric.WhichOneof("metric") + "_" + tower.tower_name
+                for tower in pipeline.model_config.mmoe.task_towers for metric in tower.metrics}
+    expected.update(loss.WhichOneof("loss") + "_" + tower.tower_name
+                    for tower in pipeline.model_config.mmoe.task_towers for loss in tower.losses)
+    for result in results:
+        assert expected <= result.keys(), (expected, result)
+        assert all(math.isfinite(result[name]) for name in expected), result
 
 
 def verify_backends(directory, root, env, index):
@@ -158,8 +200,9 @@ def verify_backends(directory, root, env, index):
                 for token in ("NaN", "Infinity", "-Infinity"):
                     body = ('[' + json.dumps({**row, "metadata": "placeholder"}).replace('"placeholder"', token) + ']').encode()
                     assert request(url + "/predict", body=body)[0] == 400
-                list_input = next(name for name, spec in specs.items() if spec["feature_type"] == "id_feature")
-                assert request(url + "/predict", [{**row, list_input: ["1"] * 65537}])[0] == 400
+                list_input = next((name for name, spec in specs.items() if spec["feature_type"] == "id_feature"), None)
+                if list_input is not None:
+                    assert request(url + "/predict", [{**row, list_input: ["1"] * 65537}])[0] == 400
                 assert request(url + "/predict", [row] * 4097)[0] == 400
                 assert request(url + "/predict", {key: [value] * 4097 for key, value in row.items()})[0] == 400
                 assert request(url + "/predict", body=b" " * (16 * 1024 * 1024 + 1))[0] == 413
@@ -173,7 +216,7 @@ def verify_backends(directory, root, env, index):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-dir")
-    parser.add_argument("--architectures", nargs="+", default=["wide_and_deep", "deepfm", "dssm"])
+    parser.add_argument("--architectures", nargs="+", default=["wide_and_deep", "deepfm", "dssm", "mmoe", "mmoe_mixed", "mmoe_dense", "mmoe_regression"])
     args = parser.parse_args()
     sys.path.insert(0, "/app")
     env = {**os.environ, "USE_FARM_HASH_TO_BUCKETIZE": "true", "USE_SPAWN_MULTI_PROCESS": "1", "TORCH_MANUAL_SEED": "123", "NUMPY_MANUAL_SEED": "123"}
@@ -183,8 +226,10 @@ def main():
     rows = [{"category": i % 8, "tags": ["Action", "Comedy" if i % 2 else "Drama"],
              "price": float(i)/8, "bucket_price": float(i)/32, "vector": [float(i)/32, float(i%4)/4],
              "mlp_price": float(i)/8, "mlp_vector": [float(i)/8, float(i%4)/4],
-             "autodis_price": float(i)/8, "label": i%2} for i in range(32)]
+             "autodis_price": float(i)/8, "label": i%2, "label_like": (i//2)%2,
+             "watch_time": float(i)/4, "watch_aux": float(i)/8} for i in range(32)]
     pq.write_table(pa.Table.from_pylist(rows), root / "data.parquet")
+    pq.write_table(pa.Table.from_pylist([{**row, "price": row["price"] + .25} for row in rows[16:]]), root / "eval.parquet")
     summary = []
     for architecture in args.architectures:
         pipeline = config(root, architecture)
@@ -192,12 +237,63 @@ def main():
         config_util.save_message(pipeline, str(pipeline_path))
         launcher = ["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=1", "/app/run.py"]
         execute(launcher + ["--mode", "train", "--pipeline_config_path", str(pipeline_path)], root / f"{architecture}-train.log", env)
+        if architecture.startswith("mmoe"):
+            verify_task_metrics(pipeline)
         exported = root / f"{architecture}_export"
         execute(launcher + ["--mode", "export", "--pipeline_config_path", str(pipeline_path), "--export_dir", str(exported)], root / f"{architecture}-export.log", env)
         directories = [exported] if architecture != "dssm" else [exported / "user", exported / "item"]
         for directory in directories:
             assert (directory / "_SUCCESS").is_file()
+            if architecture.startswith("mmoe"):
+                from multi_task import task_contract
+                metadata = json.loads((directory / "model_meta.json").read_text())
+                for key, value in task_contract(pipeline).items():
+                    assert metadata[key] == value
             summary.append(verify_backends(directory, root, env, len(summary)))
+        if architecture == "mmoe":
+            distributed = config(root, "mmoe")
+            distributed.model_dir = str(root / "mmoe_distributed")
+            distributed_path = root / "mmoe_distributed.config"
+            config_util.save_message(distributed, str(distributed_path))
+            execute(["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", "/app/run.py",
+                     "--mode", "train", "--pipeline_config_path", str(distributed_path)], root / "mmoe-distributed-train.log", env)
+            verify_task_metrics(distributed)
+            distributed_export = root / "mmoe_distributed_export"
+            execute(launcher + ["--mode", "export", "--pipeline_config_path", str(distributed_path), "--export_dir", str(distributed_export)], root / "mmoe-distributed-export.log", env)
+            summary.append(verify_backends(distributed_export, root, env, len(summary)))
+            bad_data = root / "bad_labels.parquet"
+            pq.write_table(pa.Table.from_pylist([{**row, "label": 2} for row in rows]), bad_data)
+            distributed.train_input_path = str(bad_data)
+            distributed.model_dir = str(root / "mmoe_invalid_labels")
+            config_util.save_message(distributed, str(distributed_path))
+            execute(["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", "/app/run.py",
+                     "--mode", "train", "--pipeline_config_path", str(distributed_path)],
+                    root / "mmoe-distributed-invalid.log", env,
+                    expected_error="MMoE label validation failed", timeout=60)
+            assert not Path(distributed.model_dir).exists(), "Invalid labels must fail before training creates a checkpoint"
+        if architecture == "mmoe_mixed":
+            requested = config(root, architecture)
+            requested.model_dir = str(root / "mmoe_finetune")
+            requested.train_config.fine_tune_checkpoint = pipeline.model_dir
+            requested.train_config.num_epochs = 2
+            requested.data_config.batch_size = 16
+            requested.train_config.dense_optimizer.adam_optimizer.lr = .02
+            finetune_path = root / "mmoe_finetune.config"
+            config_util.save_message(requested, str(finetune_path))
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "mmoe-finetune-train.log", env)
+            saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
+            assert saved.model_config == pipeline.model_config
+            assert saved.feature_configs == pipeline.feature_configs
+            assert saved.data_config.batch_size == 16
+            assert abs(saved.train_config.dense_optimizer.adam_optimizer.lr - .02) < 1e-6
+            verify_task_metrics(saved)
+            finetune_export = root / "mmoe_finetune_export"
+            execute(launcher + ["--mode", "export", "--pipeline_config_path", str(finetune_path), "--export_dir", str(finetune_export)], root / "mmoe-finetune-export.log", env)
+            from multi_task import task_contract
+            metadata = json.loads((finetune_export / "model_meta.json").read_text())
+            for key, value in task_contract(pipeline).items():
+                assert metadata[key] == value
+            summary.append(verify_backends(finetune_export, root, env, len(summary)))
         if architecture == "deepfm":
             # A new generator must not change the structure of a saved checkpoint.
             requested = config(root, "wide_and_deep")

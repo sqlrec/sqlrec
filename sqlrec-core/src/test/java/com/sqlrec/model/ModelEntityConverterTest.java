@@ -18,6 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ModelEntityConverterTest {
 
     @Test
+    void multiTargetModelUsesExistingSqlSyntaxAndRegistersOrderedOutputs() throws Exception {
+        ModelConf model = ModelManager.getAndCheckModel((SqlCreateModel) CompileManager.parseSql(
+                "create model multi_rank (uid bigint, price double, click int, `like` int, watch_time double) "
+                + "with ('model'='tzrec.mmoe', 'label_columns'='click,like,watch_time', "
+                + "'task.like.weight'='2', 'task.watch_time.type'='regression', 'task.watch_time.weight'='0.1')"));
+        assertEquals(List.of("probs_click", "probs_like", "y_watch_time"), ModelControllerFactory.getRequiredModelController(model)
+                .getOutputFields(model).stream().map(field -> field.getName()).collect(java.util.stream.Collectors.toList()));
+        String features = PipelineConfigUtils.generateFeatureConfigs(model);
+        assertTrue(features.contains("feature_name: \"price\""));
+        org.junit.jupiter.api.Assertions.assertFalse(features.contains("feature_name: \"click\""));
+    }
+
+    @Test
     void tzrecAcceptsIntegerAndArrayTypesRenderedByTheSqlParser() throws Exception {
         for (String architecture : List.of("tzrec.wide_and_deep", "tzrec.deepfm", "tzrec.dssm")) {
             ModelConf model = ModelManager.getAndCheckModel((SqlCreateModel) CompileManager.parseSql(

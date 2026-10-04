@@ -17,39 +17,20 @@ import common
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
 from validate_export import REQUIRED_FILES
-
-
-def prepare_config(requested, saved=None):
-    config = pipeline_pb2.EasyRecConfig()
-    config.CopyFrom(requested)
-    if saved is not None:
-        if list(config.data_config.label_fields) != list(saved.data_config.label_fields):
-            raise ValueError("Checkpoint label_fields cannot be changed during export or fine-tuning")
-        config.model_config.CopyFrom(saved.model_config)
-        del config.feature_configs[:]
-        config.feature_configs.extend(saved.feature_configs)
-        batch_size, workers = config.data_config.batch_size, config.data_config.num_workers
-        config.data_config.CopyFrom(saved.data_config)
-        config.data_config.batch_size, config.data_config.num_workers = batch_size, workers
-    labels = set(config.data_config.label_fields)
-    if len(labels) != 1:
-        raise ValueError("TZRec requires exactly one label")
-    for feature in config.feature_configs:
-        name = feature.WhichOneof("feature")
-        spec = getattr(feature, name)
-        if spec.feature_name in labels or spec.expression.split(":", 1)[-1] in labels:
-            raise ValueError("Checkpoint contains label features; retrain with labels excluded")
-        if name not in ("id_feature", "raw_feature"):
-            raise ValueError(f"Unsupported SQLRec serving feature: {name}")
-        if name == "id_feature" and spec.HasField("hash_bucket_size") and os.getenv("USE_FARM_HASH_TO_BUCKETIZE", "true").lower() != "true":
-            raise ValueError("Hash features require USE_FARM_HASH_TO_BUCKETIZE=true")
-    return config
+from multi_task import task_contract, validate_training_labels, validate_scripted_export
+from pipeline_config import prepare_config
 
 
 def publish_export(staging: str, target: str, config) -> None:
     filesystem, stage_path = fsspec.core.url_to_fs(staging)
     _, target_path = fsspec.core.url_to_fs(target)
     directories = [staging] if filesystem.exists(stage_path + "/scripted_model.pt") else [staging + "/user", staging + "/item"]
+    contract = task_contract(config)
+    if contract is not None:
+        # TorchScript needs a local directory; metadata is published only after this succeeds.
+        with tempfile.TemporaryDirectory(prefix="sqlrec-mmoe-export-") as temporary:
+            common.download_dir(staging, temporary)
+            validate_scripted_export(temporary, contract)
     for directory in directories:
         hashes = {}
         for name in REQUIRED_FILES:
@@ -62,6 +43,8 @@ def publish_export(staging: str, target: str, config) -> None:
         metadata = {"format_version": 1, "sha256": hashes, "labels": list(config.data_config.label_fields),
                     "architecture": config.model_config.WhichOneof("model"),
                     "torch": torch.__version__, "tzrec": importlib.metadata.version("tzrec")}
+        if contract is not None:
+            metadata.update(contract)
         common.write_text(directory + "/model_meta.json", json.dumps(metadata, indent=2))
         common.write_text(directory + "/_SUCCESS", "")
     if filesystem.exists(target_path):
@@ -84,16 +67,20 @@ def main():
     if source:
         saved = text_format.Parse(common.read_text(source.rstrip("/") + "/pipeline.config"), pipeline_pb2.EasyRecConfig())
     config = prepare_config(requested, saved)
+    contract = task_contract(config)
     with tempfile.TemporaryDirectory(prefix="sqlrec-tzrec-") as temporary:
         path = os.path.join(temporary, "pipeline.config")
         config_util.save_message(config, path)
         if args.mode == "train":
+            # Keep the rendezvous server alive for TZRec's process group.
+            validation_store = validate_training_labels(config, contract) if contract is not None else None
             from tzrec.main import train_and_evaluate
             changed_optimizer = saved is not None and (
                 config.train_config.sparse_optimizer != saved.train_config.sparse_optimizer
                 or config.train_config.dense_optimizer != saved.train_config.dense_optimizer
             )
             train_and_evaluate(path, ignore_restore_optimizer=changed_optimizer)
+            del validation_store
         else:
             if not args.export_dir:
                 raise ValueError("--export_dir is required")

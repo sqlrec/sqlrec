@@ -19,7 +19,7 @@ def digest(path: Path) -> str:
     return result.hexdigest()
 
 
-def validate_export(directory: str, pipeline_labels=None) -> None:
+def validate_export(directory: str, pipeline_labels=None, pipeline_contract=None) -> None:
     root = Path(directory)
     for name in REQUIRED_FILES:
         if not (root / name).is_file():
@@ -33,6 +33,8 @@ def validate_export(directory: str, pipeline_labels=None) -> None:
         raise ValueError("Hash features require USE_FARM_HASH_TO_BUCKETIZE=true")
     manifest = root / "model_meta.json"
     if not manifest.exists():
+        if pipeline_contract is not None:
+            raise ValueError("MMoE export requires a task manifest")
         return
     if not (root / "_SUCCESS").is_file():
         raise ValueError("Model export is incomplete: missing _SUCCESS")
@@ -41,6 +43,9 @@ def validate_export(directory: str, pipeline_labels=None) -> None:
         raise ValueError("Invalid model export manifest")
     if pipeline_labels is not None and list(pipeline_labels) != metadata.get("labels"):
         raise ValueError("Model export label_fields do not match pipeline.config")
+    if pipeline_contract is not None:
+        if any(metadata.get(key) != value for key, value in pipeline_contract.items()) or metadata.get("architecture") != "mmoe":
+            raise ValueError("MMoE export task contract does not match pipeline.config")
     for name, expected in metadata["sha256"].items():
         if digest(root / name) != expected:
             raise ValueError(f"Model export checksum mismatch: {name}")
@@ -56,10 +61,13 @@ if __name__ == "__main__":
         parser.add_argument("--check-pipeline", action="store_true")
         args = parser.parse_args()
         labels = None
+        contract = None
         if args.check_pipeline:
             from tzrec.utils import config_util
             pipeline = config_util.load_pipeline_config(str(Path(args.directory) / "pipeline.config"), allow_unknown_field=True)
             labels = list(pipeline.data_config.label_fields)
-        validate_export(args.directory, labels)
+            from multi_task import task_contract
+            contract = task_contract(pipeline)
+        validate_export(args.directory, labels, contract)
     except Exception as error:
         sys.exit(f"TZRec export validation failed: {error}")

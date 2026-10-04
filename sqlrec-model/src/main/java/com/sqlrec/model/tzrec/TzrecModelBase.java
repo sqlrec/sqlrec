@@ -30,9 +30,13 @@ public abstract class TzrecModelBase implements ModelController {
     /** Generates the model-specific pipeline.config content for export. */
     protected abstract String generateExportConfig(ModelConf model, ModelExportConf exportConf);
 
+    /** Validate operation overrides before merging them into the model declaration. */
+    protected void checkOverrides(ModelConf model, java.util.Map<String, String> overrides) {}
+
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
         requireSameModel(trainConf.getParams());
+        checkOverrides(model, trainConf.getParams());
         model = PipelineConfigUtils.effectiveModel(model, trainConf.getParams());
         requireValid(model);
         String pipelineConfig = generateTrainConfig(model, trainConf);
@@ -43,6 +47,7 @@ public abstract class TzrecModelBase implements ModelController {
     @Override
     public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
         requireSameModel(exportConf.getParams());
+        checkOverrides(model, exportConf.getParams());
         if (Config.NNODES.getValue(exportConf.getParams()) != 1 || Config.NPROC_PER_NODE.getValue(exportConf.getParams()) != 1) {
             throw new IllegalArgumentException("TZRec export requires a single process");
         }
@@ -62,6 +67,7 @@ public abstract class TzrecModelBase implements ModelController {
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
+        checkOverrides(model, serviceConf.getParams());
         return TzrecK8sYamlUtils.getServiceK8sYaml(serviceConf,
                 ModelConfigUtils.mergeParams(model.getParams(), serviceConf.getParams()));
     }
