@@ -17,7 +17,7 @@ from tzrec.utils import config_util
 from tzrec.constant import Mode
 from tzrec.utils.logging_util import logger
 from validate_export import validate_export
-from multi_task import task_contract, validate_predictions
+from prediction_contract import export_contract, validate_predictions
 
 
 _model: torch.jit.ScriptModule | None = None
@@ -48,7 +48,7 @@ def _init_model(scripted_model_path: str) -> None:
     pipeline_config = config_util.load_pipeline_config(
         os.path.join(scripted_model_path, "pipeline.config"), allow_unknown_field=True
     )
-    contract = task_contract(pipeline_config)
+    contract = export_contract(pipeline_config)
     validate_export(scripted_model_path, list(pipeline_config.data_config.label_fields), contract)
     model = torch.jit.load(
         os.path.join(scripted_model_path, "scripted_model.pt"), map_location=device

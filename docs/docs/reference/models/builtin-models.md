@@ -53,6 +53,7 @@ TZRec 训练时，通过 `ON` 指定 Hive 表，通过 `WHERE` 选择分区；�
 | `tzrec.wide_and_deep` | `user_id BIGINT, item_id BIGINT, label FLOAT` | 训练标签在 `[0,1]`，可使用软标签；AUC 验证集使用 0/1。硬标签也可存为 INT/BIGINT |
 | `tzrec.deepfm` | `user_id BIGINT, item_id BIGINT, label FLOAT` | 同 WideAndDeep：训练支持 `[0,1]` 软标签，AUC 验证集使用 0/1 |
 | `tzrec.dssm` | `user_id BIGINT, item_id BIGINT, label INT` | 每行须是正样本用户/物品对，标签建议统一为 1；训练和验证均只保留正样本 |
+| `tzrec.rocket_launching` | `user_id BIGINT, item_id BIGINT, click INT` | 真实曝光配对的数值 0/1 标签；训练和验证均保留正负样本，由用户提前准备 |
 | `tzrec.mmoe` | `user_id BIGINT, item_id BIGINT, click INT, watch_time FLOAT` | binary 目标使用 0/1 数值标量；regression 目标声明为 FLOAT/DOUBLE，实际 Parquet 列也须为浮点类型 |
 
 以下 SQL 展示如何从已有样本表生成所需列；输出仍需写成上述 Parquet 格式，特征列按具体模型补充：
@@ -125,13 +126,13 @@ CREATE MODEL float_rec (
 );
 ```
 
-普通连续特征、MLP/AutoDis 特征进入 Deep 分组，ID 和 boundaries 分桶特征同时进入 Wide 与 Deep；DeepFM 的 FM 分组只接收稀疏特征且嵌入维度须一致。当前排序模型至少需要一个 ID 或 boundaries 分桶特征，DSSM 可使用纯连续特征。
+普通连续特征、MLP/AutoDis 特征进入 Deep 分组，ID 和 boundaries 分桶特征同时进入 Wide 与 Deep；DeepFM 的 FM 分组只接收稀疏特征且嵌入维度须一致。WideAndDeep/DeepFM 至少需要一个 ID 或 boundaries 分桶特征；DSSM、MMoE、RocketLaunching 可使用纯连续特征，RocketLaunching 只生成一个 Deep 分组。
 
 新建 `tzrec.wide_and_deep` 正确使用 WideAndDeep；旧版本同名模型实际生成的 DeepFM 权重，在导出和继续训练时按 checkpoint 内保存的 `pipeline.config` 保留结构及特征。新建 DeepFM 请使用 `tzrec.deepfm`。历史训练时被忽略的浮点列，需要重新训练才能生效；包含标签特征的 checkpoint 必须排除标签后重训。继续训练可以覆盖学习率、轮数、批次等运行设置；修改学习率时不会恢复旧 optimizer 状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
 
 Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动校验清单；旧版没有清单的完整导出目录仍可加载。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
 
-本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE，再对照 Python/C++ 特征张量及 HTTP 预测。DSSM 覆盖 softmax 召回训练、续训及双塔导出；MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
+本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE、RocketLaunching，再对照 Python/C++ 特征张量及 HTTP 预测。DSSM 覆盖 softmax 召回训练、续训及双塔导出；MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练；RocketLaunching 覆盖梯度、仅 light 推理、共享层、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
 ## 内置模型类型
 
@@ -305,6 +306,38 @@ FROM scored ORDER BY rank_score DESC;
 训练权重与线上融合系数分别配置；回归值需按业务尺度处理后再融合。所有目标共用一个 `<checkpoint>_export` 和一个服务。目标集合、类型、训练权重、网络和特征配置在 TRAIN/EXPORT/服务部署时不能改变；改变这些配置须新建模型。继续训练仍可覆盖 epoch、batch、学习率和验证集路径。
 
 当前不支持任务别名、多分类、缺失目标标签 mask 或任务样本空间配置。各目标须在同一训练样本空间上定义；仅点击样本定义的 CVR 需要另行设计损失与指标口径。
+
+### 2.3 RocketLaunching 粗排模型 {#rocket-launching}
+
+**模型名称**：`tzrec.rocket_launching`。用户/物品特征联合输入，训练时 booster 和 light 同时学习曝光点击标签，light 同时接受 logit 及中间层蒸馏；线上只执行 light 路径。booster 是内部联合训练网络，不能直接加载已有精排 checkpoint 作为 teacher。沿用原生实现，不修改第三方源码。
+
+```sql
+CREATE MODEL prerank_model (
+    user_id BIGINT, item_id BIGINT, category STRING, price DOUBLE, click INT
+) WITH (
+    'model' = 'tzrec.rocket_launching',
+    'label_columns' = 'click',
+    'embedding_dim' = '8',
+    'booster_hidden_units' = '256,128,64',
+    'light_hidden_units' = '64,32'
+);
+```
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `booster_hidden_units` | `256,128,64` | 内部 booster 的非空正整数层宽列表 |
+| `light_hidden_units` | `64,32` | 线上 light 的非空正整数层宽列表 |
+| `share_hidden_units` | 不设置 | 可选共享 MLP，设置时必须为非空正整数列表，会增加线上计算 |
+
+booster/light 至少有一个同宽层。特征蒸馏固定开启并使用 COSINE；显式配置 false 或其他度量会报错。当前不支持关闭蒸馏、选择 loss、外部 teacher、旧 `hidden_units`、DSSM 塔参数或 MMoE 任务参数。资源、batch、epoch、学习率及 `column.*` 沿用 TZRec 通用参数。
+
+单个数值标签须声明在模型字段中，训练/验证文件中的值由用户保证为 0/1；不自动扫描、过滤或生成负例。已曝光未点击记录可作为负样本，未曝光候选不能直接标为 0。固定 BCE 和 num_class=1；标签不进入特征，线上无需提供标签。原生 light 输入被 detach，共享 embedding/share_mlp 由 booster 的监督梯度更新，light 的监督与蒸馏梯度不更新共享输入部分。
+
+验证使用 `auc_light`、`binary_cross_entropy_light`。原生日志可能包含未更新的 booster 评估指标（包括 NaN），不要将它们当作有效验证结果。粗排效果还须在固定候选池评估 Top K 的正样本/精排 Top M 保留率、最终指标及端到端成本，不能仅根据 AUC 决定上线。
+
+训练、导出及服务部署沿用[模型生命周期](../../guides/model-lifecycle.md)。只生成 `<checkpoint>_export`，公共输出为 **`probs_light FLOAT`**；原生 `logits_light` 作为额外输出保留。导出前验证 light 输出形状、范围与有限性，产物要求匹配的 output manifest。TRAIN/EXPORT/SERVICE 不能改变网络、特征、标签或蒸馏配置；续训可调整学习率、batch、epoch 和验证集路径。
+
+当前服务调用整批发送候选，请同时满足 4096 行、16 MiB 及特征值数量限制。双表调用减少用户特征传输重复，但不保证用户网络只计算一次。
 
 ### 3. DSSM 模型
 

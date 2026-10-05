@@ -1,6 +1,7 @@
 com.sqlrec.model.tzrec.WideAndDeepModel
 com.sqlrec.model.tzrec.DeepFMModel
 com.sqlrec.model.tzrec.MMoEModel
+com.sqlrec.model.tzrec.RocketLaunchingModel
 com.sqlrec.model.tzrec.DSSMModel
 com.sqlrec.model.gbdt.LightGBMModel
 com.sqlrec.model.gbdt.XGBoostModel

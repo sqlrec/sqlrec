@@ -27,6 +27,7 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
   python -c "import ctypes, pathlib, flask, graphlearn, juicefs, pyarrow, pyfg, server, torch, torchrec, tzrec.main; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name(\"libjfs.so\")))"
   python /tests/tzrec_pipeline_config_tests.py
   python /tests/tzrec_dssm_tests.py
+  python /tests/tzrec_rocket_launching_tests.py
   python /tests/tzrec_native_smoke.py
   python /tests/tzrec_pipeline_smoke.py
 ')"

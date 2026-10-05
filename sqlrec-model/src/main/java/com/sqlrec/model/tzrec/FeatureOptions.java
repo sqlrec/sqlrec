@@ -113,6 +113,14 @@ final class FeatureOptions {
     }
 
     static String validate(ModelConf model, boolean dssm, boolean deepfm, boolean multiTask) {
+        return validate(model, dssm, deepfm, multiTask, false);
+    }
+
+    static String validateDeepOnly(ModelConf model) {
+        return validate(model, false, false, false, true);
+    }
+
+    private static String validate(ModelConf model, boolean dssm, boolean deepfm, boolean multiTask, boolean deepOnly) {
         try {
             Map<String, String> params = model.getParams() == null ? Map.of() : model.getParams();
             List<String> labels = FieldTypeUtils.parseCsvList(params.get("label_columns"));
@@ -202,7 +210,7 @@ final class FeatureOptions {
                     fmDims.add(embeddingDim(field.getName(), params));
                 }
             }
-            if (!dssm && !multiTask && sparseFeatures(model).isEmpty()) return "Ranking models require at least one sparse feature for the wide group";
+            if (!dssm && !multiTask && !deepOnly && sparseFeatures(model).isEmpty()) return "Ranking models require at least one sparse feature for the wide group";
             if (deepfm && fmDims.size() != 1) return "DeepFM sparse feature embedding dimensions must match";
             if (dssm) {
                 Set<String> available = new HashSet<>();
@@ -221,7 +229,7 @@ final class FeatureOptions {
                 positive(Config.OUTPUT_DIM.getValue(params), "output_dim");
                 hiddenUnits(Config.USER_HIDDEN_UNITS.getValue(params));
                 hiddenUnits(Config.ITEM_HIDDEN_UNITS.getValue(params));
-            } else if (!multiTask) hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
+            } else if (!multiTask && !deepOnly) hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
             positive(Config.BATCH_SIZE.getValue(params), "batch_size");
             if (Config.NUM_WORKERS.getValue(params) < 0) return "num_workers must be nonnegative";
             positive(Config.NUM_EPOCHS.getValue(params), "num_epochs");

@@ -14,6 +14,25 @@ spec.loader.exec_module(module)
 
 
 class ExportManifestTest(unittest.TestCase):
+    def test_rocket_requires_light_contract_and_matching_architecture(self):
+        contract = {"architecture": "rocket_launching", "output_fields": [{"name": "probs_light", "type": "FLOAT"}]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in module.REQUIRED_FILES:
+                (root / name).write_text("fixture")
+            (root / "fg.json").write_text(json.dumps({"features": [{"feature_name": "id", "expression": "item:id"}]}))
+            with self.assertRaisesRegex(ValueError, "manifest"):
+                module.validate_export(temporary, ["click"], contract)
+            metadata = {"format_version": 1, "labels": ["click"], **contract,
+                        "sha256": {name: module.digest(root / name) for name in module.REQUIRED_FILES}}
+            (root / "_SUCCESS").touch()
+            (root / "model_meta.json").write_text(json.dumps(metadata))
+            module.validate_export(temporary, ["click"], contract)
+            for field, value in (("architecture", "mmoe"), ("output_fields", [{"name": "probs", "type": "FLOAT"}])):
+                (root / "model_meta.json").write_text(json.dumps({**metadata, field: value}))
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "contract"):
+                    module.validate_export(temporary, ["click"], contract)
+
     def test_mmoe_requires_manifest_and_matching_ordered_task_contract(self):
         contract = {"tasks": [{"name": "click", "label": "click", "type": "binary"},
                               {"name": "watch", "label": "watch", "type": "regression"}],

@@ -77,7 +77,7 @@ For the User-Item call below, the request is column-oriented. User fields are si
 
 | Model type | Data source | TRAIN MODEL | EXPORT MODEL | Service checkpoint |
 | --- | --- | --- | --- | --- |
-| tzrec WideAndDeep / DeepFM / DSSM / MMoE | SQL table | Train | Required | export |
+| tzrec WideAndDeep / DeepFM / DSSM / MMoE / RocketLaunching | SQL table | Train | Required | export |
 | LightGBM / XGBoost / CatBoost | SQL table | Train | Required | export |
 | Hugging Face Transformers | Hub snapshot | Download, without an ON table | Unsupported | origin |
 | external | Existing HTTP service | Unsupported | Unsupported | None |
@@ -151,6 +151,8 @@ ON training_sample;
 ```
 
 The backend determines the export work. A normal single model produces an export checkpoint named `<origin_checkpoint>_export`. DSSM produces separate user- and item-tower artifacts; use `SHOW CHECKPOINTS` to get their exact names.
+
+RocketLaunching produces one export checkpoint that serves only the light network and declares `probs_light FLOAT`. Prepare exposure pairs with both positive and negative rows before training. Network, feature, label, and distillation settings cannot change during fine-tuning, export, or service creation; see [RocketLaunching](../reference/models/builtin-models.md#rocket-launching).
 
 ### 4. Create an Online Service
 

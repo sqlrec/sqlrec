@@ -6,6 +6,7 @@ import re
 import struct
 
 from multi_task import task_contract
+from rocket_launching_contract import rocket_contract
 
 
 def _float32(value):
@@ -158,15 +159,23 @@ def _check_structure_options(saved, options, masks):
 def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None):
     """Retain checkpoint structure and validate the effective label contract."""
     _check_dssm_loss(requested)
+    rocket_contract(requested)
     config = type(requested)()
     config.CopyFrom(requested)
     if saved is not None:
         _check_dssm_loss(saved)
+        rocket_contract(saved)
         if list(config.data_config.label_fields) != list(saved.data_config.label_fields):
             raise ValueError("Checkpoint label_fields cannot be changed during export or fine-tuning")
         multi_task = (requested.model_config.WhichOneof("model") == "mmoe"
                       or saved.model_config.WhichOneof("model") == "mmoe")
-        if multi_task:
+        rocket = (requested.model_config.WhichOneof("model") == "rocket_launching"
+                  or saved.model_config.WhichOneof("model") == "rocket_launching")
+        if rocket:
+            if (requested.model_config != saved.model_config
+                    or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
+                raise ValueError("Checkpoint RocketLaunching model and features cannot change; create a new model")
+        elif multi_task:
             if (task_contract(requested) != task_contract(saved)
                     or requested.model_config != saved.model_config
                     or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):

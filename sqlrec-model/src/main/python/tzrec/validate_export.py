@@ -34,7 +34,7 @@ def validate_export(directory: str, pipeline_labels=None, pipeline_contract=None
     manifest = root / "model_meta.json"
     if not manifest.exists():
         if pipeline_contract is not None:
-            raise ValueError("MMoE export requires a task manifest")
+            raise ValueError("Model export requires an output/task manifest")
         return
     if not (root / "_SUCCESS").is_file():
         raise ValueError("Model export is incomplete: missing _SUCCESS")
@@ -44,8 +44,9 @@ def validate_export(directory: str, pipeline_labels=None, pipeline_contract=None
     if pipeline_labels is not None and list(pipeline_labels) != metadata.get("labels"):
         raise ValueError("Model export label_fields do not match pipeline.config")
     if pipeline_contract is not None:
-        if any(metadata.get(key) != value for key, value in pipeline_contract.items()) or metadata.get("architecture") != "mmoe":
-            raise ValueError("MMoE export task contract does not match pipeline.config")
+        architecture = pipeline_contract.get("architecture", "mmoe")
+        if any(metadata.get(key) != value for key, value in pipeline_contract.items()) or metadata.get("architecture") != architecture:
+            raise ValueError("Model export output/task contract does not match pipeline.config")
     for name, expected in metadata["sha256"].items():
         if digest(root / name) != expected:
             raise ValueError(f"Model export checksum mismatch: {name}")
@@ -66,8 +67,8 @@ if __name__ == "__main__":
             from tzrec.utils import config_util
             pipeline = config_util.load_pipeline_config(str(Path(args.directory) / "pipeline.config"), allow_unknown_field=True)
             labels = list(pipeline.data_config.label_fields)
-            from multi_task import task_contract
-            contract = task_contract(pipeline)
+            from prediction_contract import export_contract
+            contract = export_contract(pipeline)
         validate_export(args.directory, labels, contract)
     except Exception as error:
         sys.exit(f"TZRec export validation failed: {error}")

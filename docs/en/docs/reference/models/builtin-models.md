@@ -77,6 +77,7 @@ Each row is one sample containing the model's feature columns and the labels spe
 | `tzrec.deepfm` | `user_id BIGINT, item_id BIGINT, label FLOAT` | Same as WideAndDeep: `[0,1]` soft training labels and 0/1 AUC evaluation labels |
 | `tzrec.dssm` | `user_id BIGINT, item_id BIGINT, label INT` | Positive user/item pairs only for both training and evaluation; use a constant numeric label of 1 |
 | `tzrec.mmoe` | `user_id BIGINT, item_id BIGINT, click INT, watch_time FLOAT` | Binary targets use numeric 0/1 scalars; regression targets must be declared FLOAT/DOUBLE and stored as floating Parquet columns |
+| `tzrec.rocket_launching` | `user_id BIGINT, item_id BIGINT, click INT` | Exposure pairs with both positive and negative rows and one numeric 0/1 label; no negative sampler |
 
 These SQL examples select the required columns from an existing sample table. Write their output as Parquet in the format above and add the features used by your model:
 
@@ -130,13 +131,13 @@ Convert multivalue integer IDs to `ARRAY<STRING>`; `ARRAY<INT>` and `ARRAY<BIGIN
 
 Normalizer examples: `method=zscore,mean=10,standard_deviation=2`, `method=minmax,min=0,max=100`, or `method=log10,threshold=0.0001,default=-4`. Compute statistics from training data beforehand. Defaults are in the **normalized space** and bypass normalization. DOUBLE inputs use float32 precision.
 
-Plain raw, MLP, and AutoDis features enter the Deep group. ID and bucketized raw features enter both Wide and Deep; DeepFM's FM group contains sparse features with equal embedding dimensions. Ranking models require at least one sparse feature; DSSM can use only continuous features.
+Plain raw, MLP, and AutoDis features enter the Deep group. ID and bucketized raw features enter both Wide and Deep; DeepFM's FM group contains sparse features with equal embedding dimensions. WideAndDeep/DeepFM require a sparse feature; DSSM, MMoE, and RocketLaunching support continuous-only features. RocketLaunching generates a single Deep group.
 
 New `tzrec.wide_and_deep` models use the actual WideAndDeep architecture. Legacy checkpoints generated as DeepFM retain their saved architecture and features during export or fine-tuning. Use `tzrec.deepfm` for new DeepFM models. Retrain to add floats ignored by earlier versions or to remove leaked label features. Fine-tuning preserves checkpoint structure, accepts runtime overrides, and skips optimizer restoration when learning rates change. Create a new model for feature or architecture changes; TRAIN/EXPORT cannot switch model types.
 
 TRAIN, EXPORT, and SERVICE inherit Model WITH options; operation overrides take precedence. Exports use a private staging directory, SHA256 manifest `model_meta.json`, and `_SUCCESS` before publishing. Existing targets are never overwritten. Startup checks manifests and still accepts complete legacy exports without manifests. HDFS/JuiceFS publication relies on directory rename semantics.
 
-Local builds and image publication run `bin/verify_tzrec_image.sh`, including native operator/output checks and real train/export/HTTP Python-C++ comparisons for WideAndDeep, DeepFM, DSSM, and MMoE. DSSM coverage includes softmax retrieval training, fine-tuning, and both tower exports; MMoE coverage includes mixed tasks, regression-only tasks, continuous features, fine-tuning, and two-process training. ARM FG also has unit tests and a native x86 differential gate against the original pyfg wheel.
+Local builds and image publication run `bin/verify_tzrec_image.sh`, including native operator/output checks and real train/export/HTTP Python-C++ comparisons for WideAndDeep, DeepFM, DSSM, MMoE, and RocketLaunching. DSSM coverage includes softmax retrieval training, fine-tuning, and both tower exports; MMoE coverage includes mixed tasks, regression-only tasks, continuous features, fine-tuning, and two-process training. RocketLaunching coverage includes gradients, light-only inference, shared layers, continuous features, fine-tuning, and two-process training. ARM FG also has unit tests and a native x86 differential gate against the original pyfg wheel.
 
 ## Built-in Model Types
 
@@ -298,6 +299,38 @@ Training and evaluation labels must be present and non-null: binary labels are 0
 Binary outputs are `probs_<label> FLOAT`; regression outputs are `y_<label> FLOAT`. `call_service` appends these columns to the input table. Combine predictions in SQL, for example `0.6 * probs_click + 0.4 * probs_like`; training loss weights and serving fusion weights are separate. Normalize regression predictions to the appropriate business scale before fusion.
 
 One `<checkpoint>_export` and one service contain all tasks. TRAIN/EXPORT/service overrides cannot change targets, task types, loss weights, network or features; create a new model for these changes. Epochs, batch size, learning rates and evaluation paths remain overridable during training. Task aliases, multiclass targets, missing-label masks and conditional task sample spaces are not supported; every target must have valid labels over the same sample space.
+
+### 2.3 RocketLaunching Pre-ranking {#rocket-launching}
+
+**Model name**: `tzrec.rocket_launching`. User/item features are modeled jointly. Booster and light learn exposure click labels together, while light also receives logit and hidden-feature distillation. Serving runs only the light path. The internal booster cannot load an existing ranking checkpoint as an external teacher. The native TZRec implementation is used without source changes.
+
+```sql
+CREATE MODEL prerank_model (
+    user_id BIGINT, item_id BIGINT, category STRING, price DOUBLE, click INT
+) WITH (
+    'model' = 'tzrec.rocket_launching',
+    'label_columns' = 'click',
+    'embedding_dim' = '8',
+    'booster_hidden_units' = '256,128,64',
+    'light_hidden_units' = '64,32'
+);
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `booster_hidden_units` | `256,128,64` | Nonempty positive integer widths for the internal booster |
+| `light_hidden_units` | `64,32` | Nonempty positive integer widths for the serving light network |
+| `share_hidden_units` | Unset | Optional shared MLP; increases serving computation |
+
+Booster/light must share at least one hidden width. Feature distillation is fixed to enabled COSINE; explicitly disabling it or selecting another distance is rejected. Loss selection, external teachers, single-target `hidden_units`, DSSM tower options, and MMoE task options are unsupported. Reuse common TZRec resource, optimizer, batch, epoch, and `column.*` options.
+
+Declare one numeric label in the model schema and prepare both training and evaluation exposure pairs with numeric 0/1 labels. Users ensure the values; SQLRec does not scan, filter or generate negatives. Unclicked exposures can be negative examples; unexposed candidates cannot automatically be labeled zero. BCE and num_class=1 are fixed. Labels are excluded from features and are not needed online. Native light inputs are detached; shared embedding/share_mlp parameters receive booster supervision, rather than light supervision/distillation gradients.
+
+Evaluate `auc_light` and `binary_cross_entropy_light`. Native logs may retain unused booster metrics, including NaN; these are not valid evaluation results. Also evaluate candidate Top K retention, retention of full-ranking Top M, final quality, and total serving cost; AUC alone is insufficient.
+
+Use the normal [model lifecycle](../../guides/model-lifecycle.md). One `<checkpoint>_export` returns public **`probs_light FLOAT`**, with native `logits_light` retained as an extra output. Publication validates finite scalar light outputs and probability ranges; startup requires a matching output manifest. TRAIN/EXPORT/SERVICE cannot change network, features, labels, or distillation settings. Fine-tuning may change learning rates, batch, epochs, and evaluation paths.
+
+Candidate requests must satisfy the 4096-row, 16 MiB, and feature-value limits. The two-table call reduces repeated user data transmission, but does not guarantee a single user-network computation per request.
 
 ### 3. DSSM Model
 

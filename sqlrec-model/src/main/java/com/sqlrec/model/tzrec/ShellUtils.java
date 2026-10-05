@@ -14,7 +14,8 @@ public class ShellUtils {
 
     private static final Set<String> STRUCTURAL_OPTIONS = Set.of("embedding_dim", "num_buckets", "hidden_units",
             "user_features", "item_features", "user_hidden_units", "item_hidden_units", "output_dim",
-            "num_expert", "expert_hidden_units", "task_hidden_units");
+            "num_expert", "expert_hidden_units", "task_hidden_units", "booster_hidden_units", "light_hidden_units",
+            "share_hidden_units", "feature_based_distillation", "feature_distillation_function");
 
     /** Train and export share the torchrun prologue; only the module and extra args differ. */
     private static String torchrunShell(String module, String extraArgs) {

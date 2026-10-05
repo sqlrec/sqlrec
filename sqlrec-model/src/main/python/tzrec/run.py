@@ -17,7 +17,7 @@ import common
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
 from validate_export import REQUIRED_FILES
-from multi_task import task_contract, validate_scripted_export
+from prediction_contract import export_contract, validate_scripted_export
 from pipeline_config import prepare_config
 
 
@@ -25,10 +25,10 @@ def publish_export(staging: str, target: str, config) -> None:
     filesystem, stage_path = fsspec.core.url_to_fs(staging)
     _, target_path = fsspec.core.url_to_fs(target)
     directories = [staging] if filesystem.exists(stage_path + "/scripted_model.pt") else [staging + "/user", staging + "/item"]
-    contract = task_contract(config)
+    contract = export_contract(config)
     if contract is not None:
         # TorchScript needs a local directory; metadata is published only after this succeeds.
-        with tempfile.TemporaryDirectory(prefix="sqlrec-mmoe-export-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="sqlrec-output-export-") as temporary:
             common.download_dir(staging, temporary)
             validate_scripted_export(temporary, contract)
     for directory in directories:

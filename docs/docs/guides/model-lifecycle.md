@@ -77,7 +77,7 @@ LIKE external_rank_output;
 
 | 模型类型 | 数据来源 | TRAIN MODEL | EXPORT MODEL | 服务使用的 Checkpoint |
 | --- | --- | --- | --- | --- |
-| tzrec WideAndDeep / DeepFM / DSSM / MMoE | SQL 表 | 训练 | 需要 | export |
+| tzrec WideAndDeep / DeepFM / DSSM / MMoE / RocketLaunching | SQL 表 | 训练 | 需要 | export |
 | LightGBM / XGBoost / CatBoost | SQL 表 | 训练 | 需要 | export |
 | Hugging Face Transformers | Hub 快照 | 下载，不需要 ON 表 | 不支持 | origin |
 | external | 已有 HTTP 服务 | 不支持 | 不支持 | 不需要 |
@@ -151,6 +151,8 @@ ON training_sample;
 ```
 
 导出的具体处理由模型后端决定。导出完成后会生成 export checkpoint，常规单模型的名称为 `<origin_checkpoint>_export`。DSSM 会分别生成 user 和 item 塔产物，具体名称以 `SHOW CHECKPOINTS` 的结果为准。
+
+RocketLaunching 导出单个 light 推理产物，输出 `probs_light`；训练时的 booster 不参与推理。网络、特征、标签和蒸馏配置在续训、导出及服务部署时保持一致，样本要求见[内置模型](../reference/models/builtin-models.md#rocket-launching)。
 
 ### 4. 创建在线服务
 

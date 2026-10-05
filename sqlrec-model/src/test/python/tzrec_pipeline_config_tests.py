@@ -14,6 +14,7 @@ from tzrec.protos import pipeline_pb2
 from run import prepare_config, main
 from tzrec.utils import config_util
 from multi_task import task_contract, validate_predictions
+from prediction_contract import export_contract
 import torch
 
 
@@ -78,9 +79,11 @@ class CheckpointConfigTest(unittest.TestCase):
     def test_training_entry_delegates_sample_loading_to_native_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for architecture in ("wide_and_deep", "deepfm", "dssm", "mmoe"):
+            for architecture in ("wide_and_deep", "deepfm", "dssm", "mmoe", "rocket_launching"):
                 if architecture == "mmoe":
                     config = self.mmoe()
+                elif architecture == "rocket_launching":
+                    config = config_util.load_pipeline_config("/tests/configs/rocket_launching.config")
                 elif architecture == "dssm":
                     config = text_format.Parse(
                         'data_config { label_fields: "label" } model_config { dssm {} losses { softmax_cross_entropy {} } }',
@@ -321,12 +324,16 @@ class CheckpointConfigTest(unittest.TestCase):
                 main()
             load.assert_not_called()
 
-    def test_mmoe_prediction_validation_failure_does_not_publish_and_can_retry(self):
+    def test_prediction_validation_failure_does_not_publish_and_can_retry(self):
+        for config in (self.mmoe(), config_util.load_pipeline_config("/tests/configs/rocket_launching.config")):
+            with self.subTest(architecture=config.model_config.WhichOneof("model")):
+                self.check_prediction_publication_failure(config)
+
+    def check_prediction_publication_failure(self, config):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "checkpoint"
             source.mkdir()
-            config = self.mmoe()
             config.model_dir = str(source)
             config_util.save_message(config, str(source / "pipeline.config"))
             path = root / "requested.config"
@@ -345,8 +352,8 @@ class CheckpointConfigTest(unittest.TestCase):
             argv = ["run.py", "--mode", "export", "--pipeline_config_path", str(path), "--export_dir", str(target)]
             with (patch.object(sys, "argv", argv), patch.dict(os.environ, {"WORLD_SIZE": "1", "RANK": "0"}),
                   patch("tzrec.main.export", side_effect=fake_export),
-                  patch("run.validate_scripted_export", side_effect=[ValueError("Invalid MMoE output y_watch_time"), None]) as validate):
-                with self.assertRaisesRegex(ValueError, "Invalid MMoE output"):
+                  patch("run.validate_scripted_export", side_effect=[ValueError("Invalid prediction output"), None]) as validate):
+                with self.assertRaisesRegex(ValueError, "Invalid prediction output"):
                     main()
                 self.assertFalse(target.exists())
                 self.assertFalse(any(root.glob("export.staging-*")))
@@ -356,7 +363,7 @@ class CheckpointConfigTest(unittest.TestCase):
             self.assertFalse(any(root.glob("export.staging-*")))
             self.assertTrue((target / "_SUCCESS").is_file())
             metadata = json.loads((target / "model_meta.json").read_text())
-            for key, value in task_contract(config).items():
+            for key, value in export_contract(config).items():
                 self.assertEqual(metadata[key], value)
 
     def config(self, architecture):

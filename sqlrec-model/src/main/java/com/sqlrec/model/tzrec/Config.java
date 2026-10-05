@@ -51,6 +51,13 @@ public class Config extends ModelConfigBase {
             1000000, "Number of buckets for int features", null, Integer.class);
 
     // Model configuration
+    public static final ConfigOption<String> BOOSTER_HIDDEN_UNITS = new ConfigOption<>(
+            "booster_hidden_units", "256,128,64", "RocketLaunching booster hidden units", null, String.class);
+    public static final ConfigOption<String> LIGHT_HIDDEN_UNITS = new ConfigOption<>(
+            "light_hidden_units", "64,32", "RocketLaunching light hidden units", null, String.class);
+    public static final ConfigOption<String> SHARE_HIDDEN_UNITS = new ConfigOption<>(
+            "share_hidden_units", null, "Optional RocketLaunching shared hidden units", null, String.class);
+
     public static final ConfigOption<String> HIDDEN_UNITS = new ConfigOption<>(
             "hidden_units",
             "512,256,128", "Hidden units for deep network", null, String.class);

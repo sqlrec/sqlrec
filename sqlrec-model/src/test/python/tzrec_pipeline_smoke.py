@@ -50,6 +50,15 @@ def execute(command, log, env, expected_error=None, timeout=180):
 
 
 def config(root, architecture):
+    if architecture.startswith("rocket_launching"):
+        result = config_util.load_pipeline_config(f"/tests/configs/{architecture}.config")
+        result.train_input_path = str(root / "data.parquet")
+        result.eval_input_path = str(root / "eval.parquet")
+        result.eval_config.SetInParent()
+        result.model_dir = str(root / architecture)
+        result.train_config.save_checkpoints_steps = 2
+        result.train_config.log_step_count_steps = 1
+        return result
     if architecture.startswith("mmoe"):
         fixture = "mmoe_mixed" if architecture == "mmoe_regression" else architecture
         result = config_util.load_pipeline_config(f"/tests/configs/{fixture}.config")
@@ -120,6 +129,15 @@ def verify_task_metrics(pipeline):
     for result in results:
         assert expected <= result.keys(), (expected, result)
         assert all(math.isfinite(result[name]) for name in expected), result
+
+
+def verify_rocket_metrics(pipeline):
+    from tzrec.constant import TRAIN_EVAL_RESULT_FILENAME
+    results = [json.loads(line) for line in
+               (Path(pipeline.model_dir) / TRAIN_EVAL_RESULT_FILENAME).read_text().splitlines()]
+    assert results, "RocketLaunching must evaluate light on exposure pairs"
+    for result in results:
+        assert all(math.isfinite(result[name]) for name in ("auc_light", "binary_cross_entropy_light")), result
 
 
 def verify_backends(directory, root, env, index):
@@ -216,7 +234,7 @@ def verify_backends(directory, root, env, index):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-dir")
-    parser.add_argument("--architectures", nargs="+", default=["wide_and_deep", "deepfm", "dssm", "mmoe", "mmoe_mixed", "mmoe_dense", "mmoe_regression"])
+    parser.add_argument("--architectures", nargs="+", default=["wide_and_deep", "deepfm", "dssm", "mmoe", "mmoe_mixed", "mmoe_dense", "mmoe_regression", "rocket_launching", "rocket_launching_shared", "rocket_launching_dense"])
     args = parser.parse_args()
     sys.path.insert(0, "/app")
     env = {**os.environ, "USE_FARM_HASH_TO_BUCKETIZE": "true", "USE_SPAWN_MULTI_PROCESS": "1", "TORCH_MANUAL_SEED": "123", "NUMPY_MANUAL_SEED": "123"}
@@ -246,6 +264,8 @@ def main():
         execute(launcher + ["--mode", "train", "--pipeline_config_path", str(pipeline_path)], root / f"{architecture}-train.log", env)
         if architecture.startswith("mmoe"):
             verify_task_metrics(pipeline)
+        if architecture.startswith("rocket_launching"):
+            verify_rocket_metrics(pipeline)
         exported = root / f"{architecture}_export"
         execute(launcher + ["--mode", "export", "--pipeline_config_path", str(pipeline_path), "--export_dir", str(exported)], root / f"{architecture}-export.log", env)
         directories = [exported] if architecture != "dssm" else [exported / "user", exported / "item"]
@@ -257,6 +277,37 @@ def main():
                 for key, value in task_contract(pipeline).items():
                     assert metadata[key] == value
             summary.append(verify_backends(directory, root, env, len(summary)))
+        if architecture.startswith("rocket_launching"):
+            from prediction_contract import export_contract
+            metadata = json.loads((exported / "model_meta.json").read_text())
+            for key, value in export_contract(pipeline).items():
+                assert metadata[key] == value
+        if architecture == "rocket_launching":
+            requested = config(root, architecture)
+            requested.model_dir = str(root / "rocket_finetune")
+            requested.train_config.fine_tune_checkpoint = pipeline.model_dir
+            requested.data_config.batch_size = 16
+            requested.train_config.dense_optimizer.adam_optimizer.lr = .02
+            finetune_path = root / "rocket_finetune.config"
+            config_util.save_message(requested, str(finetune_path))
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "rocket-finetune.log", env)
+            saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
+            assert saved.model_config == pipeline.model_config and saved.feature_configs == pipeline.feature_configs
+            assert saved.data_config.batch_size == 16
+            verify_rocket_metrics(saved)
+            finetune_export = root / "rocket_finetune_export"
+            execute(launcher + ["--mode", "export", "--pipeline_config_path", str(finetune_path), "--export_dir", str(finetune_export)], root / "rocket-finetune-export.log", env)
+            summary.append(verify_backends(finetune_export, root, env, len(summary)))
+            distributed = config(root, architecture)
+            distributed.model_dir = str(root / "rocket_distributed")
+            distributed_path = root / "rocket_distributed.config"
+            config_util.save_message(distributed, str(distributed_path))
+            execute(["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", "/app/run.py",
+                     "--mode", "train", "--pipeline_config_path", str(distributed_path)], root / "rocket-distributed.log", env)
+            verify_rocket_metrics(distributed)
+            distributed_export = root / "rocket_distributed_export"
+            execute(launcher + ["--mode", "export", "--pipeline_config_path", str(distributed_path), "--export_dir", str(distributed_export)], root / "rocket-distributed-export.log", env)
+            summary.append(verify_backends(distributed_export, root, env, len(summary)))
         if architecture == "dssm":
             requested = config(root, architecture)
             requested.train_input_path = pipeline.train_input_path

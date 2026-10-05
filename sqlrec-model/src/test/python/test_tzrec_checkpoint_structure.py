@@ -72,6 +72,7 @@ class CheckpointStructureTest(unittest.TestCase):
         tasks = ModuleType("multi_task")
         tasks.task_contract = lambda config: None
         path = Path(__file__).resolve().parents[2] / "main/python/tzrec/pipeline_config.py"
+        sys.path.insert(0, str(path.parent))
         spec = importlib.util.spec_from_file_location("checkpoint_config_test", path)
         self.module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {"multi_task": tasks}):
