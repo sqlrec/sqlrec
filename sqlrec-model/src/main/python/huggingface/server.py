@@ -27,8 +27,16 @@ def load_runtime(model_dir: str, service_config_path: str) -> None:
         raise RuntimeError("checkpoint is incomplete: _SUCCESS is missing")
     manifest = json.loads((model_path / "sqlrec_manifest.json").read_text(encoding="utf-8"))
     service_config = json.loads(Path(service_config_path).read_text(encoding="utf-8"))
+    if service_config.get("task", manifest["task"]) != manifest["task"]:
+        raise RuntimeError("checkpoint task does not match the declared service task; create a new model instead")
     config = dict(manifest.get("model_params", {}))
     config.update(service_config)
+    # Legacy snapshots can still contain case-insensitive SQL column options.
+    fields = {field["name"].casefold(): field["name"] for field in manifest.get("input_fields", [])}
+    for key in ("text_column", "text_pair_column", "prompt_column", "image_column"):
+        column = config.get(key)
+        if isinstance(column, str) and column.casefold() in fields:
+            config[key] = fields[column.casefold()]
     config["task"] = manifest["task"]
     config["trust_remote_code"] = manifest.get("trust_remote_code", False)
     adapter_type = TASK_ADAPTERS.get(manifest["task"])

@@ -53,6 +53,8 @@ LIKE external_rank_output;
 ]
 ```
 
+输入表中已有字段的 SQL NULL 值会作为显式 JSON `null` 发送，不会省略该键；输入表中不存在的字段不生成对应键。服务提供方应按模型约定处理空值，TZRec、GBDT 和 Hugging Face 的输入要求见[内置模型](../reference/models/builtin-models.md)。
+
 服务返回按输出字段组织的 JSON 数组；每个数组长度必须与输入行数一致，顺序与输入对应：
 
 ```json
@@ -75,7 +77,7 @@ LIKE external_rank_output;
 
 | 模型类型 | 数据来源 | TRAIN MODEL | EXPORT MODEL | 服务使用的 Checkpoint |
 | --- | --- | --- | --- | --- |
-| tzrec Wide & Deep / DSSM | SQL 表 | 训练 | 需要 | export |
+| tzrec WideAndDeep / DeepFM / DSSM / MMoE | SQL 表 | 训练 | 需要 | export |
 | LightGBM / XGBoost / CatBoost | SQL 表 | 训练 | 需要 | export |
 | Hugging Face Transformers | Hub 快照 | 下载，不需要 ON 表 | 不支持 | origin |
 | external | 已有 HTTP 服务 | 不支持 | 不支持 | 不需要 |
@@ -101,6 +103,8 @@ Checkpoint 名称是用户自定义的版本标识。TRAIN/EXPORT 使用已有�
 
 以下训练、导出和自托管服务部署需要[完整服务环境](../operations/deployment.md)，包括 Kubernetes 和模型存储。Docker Demo 不提供这些组件。执行前还需准备可访问的 `training_sample` 训练表，字段与模型定义兼容。
 
+TZRec 样本按[样本数据格式](../reference/models/builtin-models.md#tzrec-样本数据格式)准备。训练入口不额外扫描训练集或验证集标签，标签类型、取值和正负样本要求须在生成数据时保证。
+
 ### 1. 创建模型
 
 ```sql
@@ -116,7 +120,7 @@ CREATE MODEL rank_model (
 );
 ```
 
-字段列表是模型的输入协议。在训练和推理时，应保证数据表中相应列的名称和类型匹配。
+训练数据须包含 `label_columns` 指定的标签列及模型使用的特征列，名称和类型与模型配置匹配。TZRec 和 GBDT 在线推理只需非标签特征，不需要提供标签列。
 
 ### 2. 训练并生成 origin checkpoint
 

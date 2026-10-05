@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .base import TaskAdapter, bool_value, float_value, int_value
+from .base import TaskAdapter, bool_value, float_value, int_value, text_values
 
 
 class TextGenerationAdapter(TaskAdapter):
@@ -23,7 +23,7 @@ class TextGenerationAdapter(TaskAdapter):
         ).to(self.device).eval()
 
     def predict(self, rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
-        prompts = [str(row[self.prompt_column]) for row in rows]
+        prompts = text_values(rows, self.prompt_column)
         inputs = self.tokenizer(
             prompts, padding=True, truncation=True, max_length=self.max_length,
             return_tensors="pt",

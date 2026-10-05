@@ -1,15 +1,8 @@
-"""MMoE task contracts and streaming label validation for SQLRec exports."""
+"""TZRec task contracts and export prediction validation."""
 
-from datetime import timedelta
 import json
 import math
-import os
 import re
-
-import fsspec
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
 
 
 def task_contract(config):
@@ -53,79 +46,6 @@ def task_contract(config):
                       "type": "binary" if binary else "regression"})
         fields.append({"name": ("probs_" if binary else "y_") + tower.tower_name, "type": "FLOAT"})
     return {"tasks": tasks, "output_fields": fields}
-
-
-def validate_label_paths(paths, tasks, batch_size=65536):
-    """Scan only label columns, rejecting absent, null and invalid scalar labels."""
-    if not paths:
-        raise ValueError("MMoE requires Parquet training data")
-    labels = [task["label"] for task in tasks]
-    total_rows = 0
-    for pattern in paths.split(","):
-        filesystem, path = fsspec.core.url_to_fs(pattern.strip())
-        files = sorted(filesystem.glob(path))
-        if not files:
-            raise ValueError(f"No Parquet files found: {pattern}")
-        for filename in files:
-            if not filesystem.isfile(filename):
-                raise ValueError(f"Expected a Parquet file or file glob: {filename}")
-            with filesystem.open(filename, "rb") as stream:
-                parquet = pq.ParquetFile(stream)
-                for task in tasks:
-                    label = task["label"]
-                    if label not in parquet.schema_arrow.names:
-                        raise ValueError(f"{filename}: missing label {label}")
-                    dtype = parquet.schema_arrow.field(label).type
-                    if not (pa.types.is_integer(dtype) or pa.types.is_floating(dtype)):
-                        raise ValueError(f"{filename}: label {label} must be a numeric scalar")
-                    # TZRec preserves integer label tensors; native L2 backward requires floats.
-                    if task["type"] == "regression" and not pa.types.is_floating(dtype):
-                        raise ValueError(f"{filename}: regression label {label} must use a floating Parquet type")
-                for batch in parquet.iter_batches(batch_size=batch_size, columns=labels):
-                    total_rows += batch.num_rows
-                    for task in tasks:
-                        label = task["label"]
-                        values = batch.column(batch.schema.get_field_index(label))
-                        if values.null_count:
-                            raise ValueError(f"{filename}: label {label} contains nulls")
-                        numbers = values.cast(pa.float32(), safe=False)
-                        if not pc.all(pc.is_finite(numbers)).as_py():
-                            raise ValueError(f"{filename}: label {label} must be finite float32")
-                        if task["type"] == "binary" and not pc.all(pc.or_(pc.equal(values, 0), pc.equal(values, 1))).as_py():
-                            raise ValueError(f"{filename}: binary label {label} must be 0 or 1")
-    if total_rows == 0:
-        raise ValueError("MMoE label data is empty")
-
-
-def validate_training_labels(config, contract):
-    """Validate on rank zero and share the outcome through torchrun's rendezvous store.
-
-    Keep the returned store alive until training completes: non-agent rendezvous
-    servers are shared with TZRec's later process-group initialization.
-    """
-    def scan():
-        validate_label_paths(config.train_input_path, contract["tasks"])
-        if config.eval_input_path:
-            validate_label_paths(config.eval_input_path, contract["tasks"])
-
-    if int(os.getenv("WORLD_SIZE", "1")) == 1:
-        scan()
-        return None
-    import torch.distributed as dist
-    timeout = timedelta(seconds=int(os.getenv("PROCESS_GROUP_TIMEOUT_SECONDS", "1800")))
-    store, rank, _ = next(dist.rendezvous("env://", timeout=timeout))
-    store = dist.PrefixStore("sqlrec-label-validation-" + os.getenv("TORCHELASTIC_RESTART_COUNT", "0"), store)
-    if rank == 0:
-        error = None
-        try:
-            scan()
-        except Exception as exception:
-            error = str(exception)
-        store.set("result", json.dumps(error))
-    error = json.loads(store.get("result"))
-    if error is not None:
-        raise ValueError(f"MMoE label validation failed: {error}")
-    return store
 
 
 def validate_predictions(predictions, contract, batch_size):

@@ -3,6 +3,9 @@ package com.sqlrec.model.gbdt;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
+import io.fabric8.kubernetes.api.model.ProbeBuilder;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -50,7 +53,7 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
         // launches the C++ server binary (catboost_server / lightgbm_server).
         String serveShell = ShellUtils.genServeModelShell(modelType, modelCheckpointDir);
 
-        return createDeploymentYaml(
+        String yaml = createDeploymentYaml(
                 deployName,
                 "gbdt-service",
                 image,
@@ -58,6 +61,15 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
                 null,
                 params
         );
+        Deployment deployment = Serialization.unmarshal(yaml, Deployment.class);
+        var container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
+        container.setStartupProbe(new ProbeBuilder()
+                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
+                .withPeriodSeconds(5).withTimeoutSeconds(5).withFailureThreshold(120).build());
+        container.setReadinessProbe(new ProbeBuilder()
+                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
+                .withPeriodSeconds(5).withTimeoutSeconds(5).build());
+        return Serialization.asYaml(deployment);
     }
 
     public static String genJobYaml(String pipelineConfig, String shell, String id, Map<String, String> params) {
@@ -72,8 +84,12 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
     }
 
     public static String getServiceK8sYaml(ModelType modelType, ServiceConf serviceConf) {
+        return getServiceK8sYaml(modelType, serviceConf, serviceConf.getParams());
+    }
+
+    public static String getServiceK8sYaml(ModelType modelType, ServiceConf serviceConf, Map<String, String> params) {
         String deploymentYaml = createDeploymentYaml(
-                serviceConf.getId(), serviceConf.getModelCheckpointDir(), modelType, serviceConf.getParams()
+                serviceConf.getId(), serviceConf.getModelCheckpointDir(), modelType, params
         );
         return createServingResourcesYaml(serviceConf.getId(), deploymentYaml);
     }

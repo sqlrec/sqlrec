@@ -83,6 +83,13 @@ def train(config: dict) -> None:
 
     logger.info("Loading training data from %s", train_input_path)
     table = common.read_parquet_table(train_input_path)
+    # Capture Arrow values before the destructive pandas conversion. Nullable
+    # integers otherwise become floats, losing both their category spelling and
+    # precision for large IDs; pandas 3 also infers a separate string dtype.
+    category_values = {
+        c: table[c].to_pylist()
+        for c in categorical_features if c in table.column_names
+    }
     df: pd.DataFrame = common.to_pandas(table)
     logger.info("Loaded %d rows, columns=%s", len(df), list(df.columns))
 
@@ -116,11 +123,16 @@ def train(config: dict) -> None:
         i for i, c in enumerate(feature_cols) if c in categorical_features
     ]
 
-    # CatBoost cannot handle None in string categorical columns; replace with "".
-    # int64 categorical columns have no None (types guaranteed externally).
+    # Match serving: integers become decimal strings, null becomes "".
     for i in cat_feature_idx:
-        if X.iloc[:, i].dtype == object:
-            X.iloc[:, i] = X.iloc[:, i].fillna("")
+        column = feature_cols[i]
+        values = category_values.pop(column)
+        if any(value is not None and (isinstance(value, bool) or not isinstance(value, (str, int)))
+               for value in values):
+            raise ValueError(f"Categorical column '{column}' must contain integers, strings or null")
+        X[column] = ["" if value is None else str(value) for value in values]
+        del values
+    del category_values
 
     params = _build_cb_params(params_block)
     train_pool = cb.Pool(X, label=y, cat_features=cat_feature_idx)

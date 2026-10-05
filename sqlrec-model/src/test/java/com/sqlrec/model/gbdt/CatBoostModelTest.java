@@ -16,6 +16,18 @@ import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class CatBoostModelTest {
+    @Test
+    void acceptsSqlParserIntegerAliasAsCategoricalFeature() {
+        ModelConf model = new ModelConf();
+        model.setInputFields(List.of(new FieldSchema("age", "INTEGER"), new FieldSchema("label", "INTEGER")));
+        model.setParams(Map.of("label_columns", "label"));
+        assertNull(new CatBoostModel().checkModel(model));
+        ModelTrainConf train = new ModelTrainConf();
+        train.setModelDir("/model");
+        train.setTrainDataPaths(List.of("/data"));
+        String config = PipelineConfigUtils.generateTrainConfig(PipelineConfigUtils.ModelType.CATBOOST, model, train);
+        assertTrue(config.contains("\"categorical_features\": [\n    \"age\"\n  ]"), config);
+    }
 
     @Test
     public void testGetModelName() {

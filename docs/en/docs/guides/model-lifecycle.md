@@ -53,6 +53,8 @@ The service accepts POST requests. A single-table call sends an array of JSON ob
 ]
 ```
 
+SQL NULL values in existing input columns are sent as explicit JSON `null`, with the key retained. Columns absent from the input table do not produce keys. Services should handle nulls according to the model contract; see [built-in models](../reference/models/builtin-models.md) for TZRec, GBDT, and Hugging Face input requirements.
+
 The response maps each output field to an array with the same row count and order as the input:
 
 ```json
@@ -75,7 +77,7 @@ For the User-Item call below, the request is column-oriented. User fields are si
 
 | Model type | Data source | TRAIN MODEL | EXPORT MODEL | Service checkpoint |
 | --- | --- | --- | --- | --- |
-| tzrec Wide & Deep / DSSM | SQL table | Train | Required | export |
+| tzrec WideAndDeep / DeepFM / DSSM / MMoE | SQL table | Train | Required | export |
 | LightGBM / XGBoost / CatBoost | SQL table | Train | Required | export |
 | Hugging Face Transformers | Hub snapshot | Download, without an ON table | Unsupported | origin |
 | external | Existing HTTP service | Unsupported | Unsupported | None |
@@ -101,6 +103,8 @@ Checkpoint names are user-defined version identifiers. TRAIN/EXPORT with an exis
 
 Training, export, and self-hosted serving require the [full service environment](../operations/deployment.md), including Kubernetes and model storage. The Docker demo does not provide these components. Prepare an accessible `training_sample` table with fields compatible with the model before running the statements.
 
+Prepare TZRec datasets according to the [sample data formats](../reference/models/builtin-models.md#tzrec-sample-data-formats). The training entry does not pre-scan training or evaluation labels; ensure label types, values, and positive/negative sample requirements when generating data.
+
 ### 1. Create the Model
 
 ```sql
@@ -116,7 +120,7 @@ CREATE MODEL rank_model (
 );
 ```
 
-The field list is the model's input contract. Matching columns in training and inference data must have compatible names and types.
+Training data must contain the labels specified by `label_columns` and the model's feature columns, with names and types matching the model configuration. TZRec and GBDT online inference require only non-label features; label columns are not required.
 
 ### 2. Train an Origin Checkpoint
 

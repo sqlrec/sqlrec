@@ -12,6 +12,7 @@ import json
 import logging
 
 import lightgbm as lgb
+import numpy as np
 import pandas as pd
 
 from common import filesystem as common
@@ -87,6 +88,12 @@ def train(config: dict) -> None:
             f"have non-float dtypes: {', '.join(f'{c}={X[c].dtype}' for c in non_float_cols)}. "
             f"Consider using CatBoost for categorical/integer features."
         )
+
+    # ONNX and the serving engine consume float32; train on the same values.
+    with np.errstate(over="ignore", invalid="ignore"):
+        X = X.astype("float32")
+    if np.isinf(X.to_numpy()).any():
+        raise ValueError("LightGBM features must fit finite float32 values (NaN missing values are allowed)")
 
     # Load base model for incremental training (FROM 'checkpoint' syntax).
     init_model = None

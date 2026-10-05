@@ -70,7 +70,7 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
             throw new IllegalArgumentException("model checkpoint is required for huggingface.transformers service");
         }
         String name = serviceConf.getId();
-        Map<String, String> params = PipelineConfigUtils.mergeParams(model.getParams(), serviceConf.getParams());
+        Map<String, String> params = PipelineConfigUtils.operationParams(model, serviceConf.getParams());
         String serviceConfig = PipelineConfigUtils.generateServiceConfig(model, serviceConf.getParams());
         String shell = ShellUtils.genServeShell(serviceConf.getModelCheckpointDir());
 

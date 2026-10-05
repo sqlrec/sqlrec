@@ -7,8 +7,10 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
 import com.sqlrec.model.common.ModelConfigUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PipelineConfigUtils {
 
@@ -53,7 +55,7 @@ public class PipelineConfigUtils {
 
         String evalPath = Config.EVAL_INPUT_PATH.getValueOrNull(model.getParams());
         if (evalPath != null && !evalPath.isBlank()) {
-            config.append("eval_input_path: ").append(quoted(evalPath)).append("\neval_config {}\n");
+            config.append("eval_input_path: ").append(quoted(parquetInputPaths(evalPath))).append("\neval_config {}\n");
         }
 
         addModelDir(config, trainConf.getModelDir());
@@ -83,9 +85,15 @@ public class PipelineConfigUtils {
 
     private static void addInputPaths(StringBuilder config, List<String> trainDataPaths) {
         if (trainDataPaths != null && !trainDataPaths.isEmpty()) {
-            String trainInputPath = String.join(",", trainDataPaths);
+            String trainInputPath = parquetInputPaths(String.join(",", trainDataPaths));
             config.append("train_input_path: ").append(quoted(trainInputPath)).append("\n");
         }
+    }
+
+    private static String parquetInputPaths(String paths) {
+        return Arrays.stream(paths.split(",", -1))
+                .map(path -> path.endsWith("/*") ? path + ".parquet" : path)
+                .collect(Collectors.joining(","));
     }
 
     private static void addModelDir(StringBuilder config, String modelDir) {
@@ -253,8 +261,7 @@ public class PipelineConfigUtils {
     }
 
     private static boolean isIntFeature(String fieldType) {
-        return "int".equalsIgnoreCase(fieldType) || "array<int>".equalsIgnoreCase(fieldType) ||
-                "bigint".equalsIgnoreCase(fieldType) || "array<bigint>".equalsIgnoreCase(fieldType);
+        return FieldTypeUtils.isInteger(fieldType);
     }
 
     private static List<String> getFeatures(ModelConf model) {

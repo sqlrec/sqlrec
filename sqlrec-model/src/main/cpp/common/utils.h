@@ -1,8 +1,11 @@
 #pragma once
 
 #include <csignal>
+#include <cmath>
 #include <fstream>
 #include <functional>
+#include <limits>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -25,31 +28,47 @@ inline std::string read_file(const std::string& path) {
 
 // --- JSON value extraction ---
 
-// Extract a float from a JSON field. Returns default_val if the field is
-// missing, null, or unparseable. Handles number→float and string→stof.
+// Preserve missing numeric features as NaN, matching the training frameworks.
+// Invalid values must not silently become zero or a numeric prefix.
 inline float get_float_value(const nlohmann::json& row, const std::string& col,
-                             float default_val = 0.0f) {
+                             float default_val = std::numeric_limits<float>::quiet_NaN()) {
     if (!row.contains(col) || row[col].is_null()) return default_val;
     const auto& v = row[col];
-    if (v.is_number()) return v.get<float>();
+    double number;
     try {
-        return std::stof(v.is_string() ? v.get<std::string>() : v.dump());
-    } catch (...) {
-        return default_val;
+        if (v.is_number()) {
+            number = v.get<double>();
+        } else if (v.is_string()) {
+            static const std::regex decimal(
+                R"(\s*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\s*)");
+            const auto& text = v.get_ref<const std::string&>();
+            if (!std::regex_match(text, decimal)) throw std::invalid_argument("Invalid decimal");
+            number = std::stod(text);
+        } else {
+            throw std::invalid_argument("Expected a number");
+        }
+    } catch (const std::invalid_argument&) {
+        throw std::invalid_argument("Feature '" + col + "' must be a finite float32 number or null");
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument("Feature '" + col + "' is outside the finite float32 range");
     }
+    if (!std::isfinite(number) || std::abs(number) > std::numeric_limits<float>::max()) {
+        throw std::invalid_argument("Feature '" + col + "' is outside the finite float32 range");
+    }
+    return static_cast<float>(number);
 }
 
 // Extract a string from a JSON field. Returns default_val if the field is
 // missing or null. For integers, converts via std::to_string (matching
-// CatBoost's internal int→string conversion). For other non-string types,
-// uses dump() as fallback.
+// CatBoost's training int→string conversion). Other types are rejected.
 inline std::string get_string_value(const nlohmann::json& row, const std::string& col,
                                     const std::string& default_val = "") {
     if (!row.contains(col) || row[col].is_null()) return default_val;
     const auto& v = row[col];
     if (v.is_string()) return v.get<std::string>();
+    if (v.is_number_unsigned()) return std::to_string(v.get<uint64_t>());
     if (v.is_number_integer()) return std::to_string(v.get<int64_t>());
-    return v.dump();
+    throw std::invalid_argument("Categorical feature '" + col + "' must be an integer, string or null");
 }
 
 // Normalize request data to row-wise format.
@@ -57,16 +76,21 @@ inline std::string get_string_value(const nlohmann::json& row, const std::string
 // Columnar input is converted to row-wise; row-wise input is passed through.
 // Lists of length 1 (in columnar format) are broadcast to all rows.
 inline nlohmann::json parse_request_data(const nlohmann::json& data) {
-    if (data.is_array()) return data;
+    if (data.is_array()) {
+        for (const auto& row : data) {
+            if (!row.is_object()) throw std::invalid_argument("Each array element must be a JSON object");
+        }
+        return data;
+    }
     if (!data.is_object()) {
-        throw std::runtime_error("Input data must be a JSON array or a map with string keys and list values");
+        throw std::invalid_argument("Input data must be a JSON array or a map with string keys and list values");
     }
     if (data.empty()) return nlohmann::json::array();
 
     // Validate: all values must be arrays.
     for (auto it = data.begin(); it != data.end(); ++it) {
         if (!it.value().is_array()) {
-            throw std::runtime_error("Map values must be lists (key: " + it.key() + ")");
+            throw std::invalid_argument("Map values must be lists (key: " + it.key() + ")");
         }
     }
 
@@ -84,7 +108,7 @@ inline nlohmann::json parse_request_data(const nlohmann::json& data) {
         n = *unique_lengths.begin();
     } else {
         if (unique_lengths.count(1) == 0) {
-            throw std::runtime_error(
+            throw std::invalid_argument(
                 "All lists in columnar format must have the same length or some can have length 1");
         }
         // Exactly one non-1 length is allowed (the row count); all others must be 1.
@@ -97,7 +121,7 @@ inline nlohmann::json parse_request_data(const nlohmann::json& data) {
             }
         }
         if (non_1_count != 1) {
-            throw std::runtime_error(
+            throw std::invalid_argument(
                 "All non-length-1 lists in columnar format must have the same length");
         }
         n = non_1_len;
@@ -133,22 +157,29 @@ inline void register_health_endpoint(httplib::Server& svr) {
 
 // Register POST /predict with standard error handling.
 // predict_fn takes a parsed JSON value and returns a JSON result.
-// If the result contains "error", responds with 400; exceptions → 500.
+// Error results, malformed JSON and invalid arguments return 400; runtime failures return 500.
 inline void register_predict_endpoint(httplib::Server& svr,
                                       std::function<nlohmann::json(const nlohmann::json&)> predict_fn) {
     svr.Post("/predict", [predict_fn](const httplib::Request& req, httplib::Response& res) {
+        nlohmann::json body;
         try {
-            auto body = nlohmann::json::parse(req.body);
+            body = nlohmann::json::parse(req.body);
+        } catch (const nlohmann::json::exception& e) {
+            res.status = 400;
+            res.set_content(nlohmann::json{{"error", std::string("JSON parse error: ") + e.what()}}.dump(),
+                            "application/json");
+            return;
+        }
+        try {
             auto parsed = parse_request_data(body);
             auto result = predict_fn(parsed);
             if (result.contains("error")) {
                 res.status = 400;
             }
             res.set_content(result.dump(), "application/json");
-        } catch (const nlohmann::json::parse_error& e) {
+        } catch (const std::invalid_argument& e) {
             res.status = 400;
-            res.set_content(nlohmann::json{{"error", std::string("JSON parse error: ") + e.what()}}.dump(),
-                            "application/json");
+            res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 500;
             res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");

@@ -14,6 +14,7 @@ import java.util.function.Function;
 /** JSON serialization of named rows, field projections and grouped columns. */
 public final class RowJsonEncoder {
     private static final Gson gson = JsonUtils.getGson();
+    private static final Gson requestGson = gson.newBuilder().serializeNulls().create();
 
     private RowJsonEncoder() {
     }
@@ -39,13 +40,11 @@ public final class RowJsonEncoder {
         for (Map<String, Object> row : rows) {
             JsonObject jsonObject = new JsonObject();
             for (Map.Entry<String, Object> entry : row.entrySet()) {
-                if (entry.getValue() != null) {
-                    jsonObject.add(entry.getKey(), gson.toJsonTree(entry.getValue()));
-                }
+                jsonObject.add(entry.getKey(), requestGson.toJsonTree(entry.getValue()));
             }
             jsonArray.add(jsonObject);
         }
-        return gson.toJson(jsonArray);
+        return requestGson.toJson(jsonArray);
     }
 
     public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
@@ -58,15 +57,13 @@ public final class RowJsonEncoder {
                 int fieldIndex = DataTypeUtils.findFieldIndex(dataFields, field.getName());
                 if (fieldIndex >= 0 && fieldIndex < row.length) {
                     Object value = row[fieldIndex];
-                    if (value != null) {
-                        jsonObject.add(field.getName(), gson.toJsonTree(value));
-                    }
+                    jsonObject.add(field.getName(), requestGson.toJsonTree(value));
                 }
             }
             jsonArray.add(jsonObject);
         }
 
-        return gson.toJson(jsonArray);
+        return requestGson.toJson(jsonArray);
     }
 
     public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData,

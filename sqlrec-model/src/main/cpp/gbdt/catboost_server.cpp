@@ -104,7 +104,7 @@ json predict(const json& request_data) {
     // Build per-document pointer arrays required by CalcModelPrediction.
     std::vector<const float*> float_ptrs(batch);
     for (size_t i = 0; i < batch; ++i) {
-        float_ptrs[i] = &flat_floats[i * n_float];
+        float_ptrs[i] = n_float == 0 ? nullptr : &flat_floats[i * n_float];
     }
     std::vector<const char**> cat_ptrs;
     const char*** cat_ptrs_data = nullptr;

@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as functional
 from transformers import AutoModel, AutoTokenizer
 
-from .base import TaskAdapter, bool_value, int_value
+from .base import TaskAdapter, bool_value, int_value, text_values
 
 
 class TextEmbeddingAdapter(TaskAdapter):
@@ -21,7 +21,7 @@ class TextEmbeddingAdapter(TaskAdapter):
         self.model = AutoModel.from_pretrained(model_dir, **self._model_kwargs()).to(self.device).eval()
 
     def predict(self, rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
-        texts = [str(row[self.text_column]) for row in rows]
+        texts = text_values(rows, self.text_column)
         inputs = self.tokenizer(
             texts, padding=True, truncation=True, max_length=self.max_length,
             return_tensors="pt",

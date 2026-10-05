@@ -3,6 +3,7 @@ package com.sqlrec.model.gbdt;
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
+import com.sqlrec.model.common.FieldTypeUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -119,7 +120,7 @@ public abstract class GbdtModelBase implements ModelController {
             }
         } else {
             // CatBoost: int, bigint, string, float, double are valid.
-            if (!lower.equals("int") && !lower.equals("bigint")
+            if (!FieldTypeUtils.isInteger(type)
                     && !lower.equals("string") && !lower.equals("float")
                     && !lower.equals("double")) {
                 return "CatBoost only supports int/bigint/string/float/double features, but '"
@@ -169,8 +170,9 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        requireSupportedObjective(PipelineConfigUtils.mergeParams(model.getParams(), serviceConf.getParams()));
-        return GbdtK8sYamlUtils.getServiceK8sYaml(modelType, serviceConf);
+        Map<String, String> params = PipelineConfigUtils.mergeParams(model.getParams(), serviceConf.getParams());
+        requireSupportedObjective(params);
+        return GbdtK8sYamlUtils.getServiceK8sYaml(modelType, serviceConf, params);
     }
     private static boolean isSupportedObjective(String objective) {
         return "binary".equals(objective) || "regression".equals(objective);

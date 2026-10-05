@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from .base import TaskAdapter, int_value
+from .base import TaskAdapter, int_value, text_values
 
 
 class TextClassificationAdapter(TaskAdapter):
@@ -19,22 +19,24 @@ class TextClassificationAdapter(TaskAdapter):
         self.model = AutoModelForSequenceClassification.from_pretrained(
             model_dir, **self._model_kwargs()
         ).to(self.device).eval()
+        problem_type = self.model.config.problem_type
+        if problem_type == "regression":
+            raise ValueError("text-classification requires a classification checkpoint; regression outputs cannot be served as label/score")
 
     def predict(self, rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
-        texts = [str(row[self.text_column]) for row in rows]
-        pairs = [str(row[self.text_pair_column]) for row in rows] if self.text_pair_column else None
+        texts = text_values(rows, self.text_column)
+        pairs = text_values(rows, self.text_pair_column) if self.text_pair_column else None
         inputs = self.tokenizer(
             texts, pairs, padding=True, truncation=True, max_length=self.max_length,
             return_tensors="pt",
         ).to(self.device)
         with torch.inference_mode():
             logits = self.model(**inputs).logits.float()
-        if logits.shape[-1] == 1:
-            scores = torch.sigmoid(logits[:, 0])
-            indices = torch.zeros_like(scores, dtype=torch.long)
-        else:
-            probabilities = torch.softmax(logits, dim=-1)
-            scores, indices = probabilities.max(dim=-1)
+        probabilities = (torch.sigmoid(logits)
+                         if (self.model.config.problem_type == "multi_label_classification"
+                             or self.model.config.num_labels == 1)
+                         else torch.softmax(logits, dim=-1))
+        scores, indices = probabilities.max(dim=-1)
         id2label = self.model.config.id2label or {}
         labels = [id2label.get(int(index), f"LABEL_{int(index)}") for index in indices.cpu()]
         return {"label": labels, "score": scores.cpu().tolist()}

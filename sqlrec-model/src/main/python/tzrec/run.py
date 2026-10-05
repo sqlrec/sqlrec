@@ -17,7 +17,7 @@ import common
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
 from validate_export import REQUIRED_FILES
-from multi_task import task_contract, validate_training_labels, validate_scripted_export
+from multi_task import task_contract, validate_scripted_export
 from pipeline_config import prepare_config
 
 
@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--mode", choices=("train", "export"), required=True)
     parser.add_argument("--pipeline_config_path", required=True)
     parser.add_argument("--export_dir")
+    parser.add_argument("--check_checkpoint_structure", action="store_true")
+    parser.add_argument("--checkpoint_structure_options", default="{}")
     args = parser.parse_args()
     os.environ.setdefault("USE_FARM_HASH_TO_BUCKETIZE", "true")
     if args.mode == "export" and (int(os.getenv("WORLD_SIZE", "1")) != 1 or int(os.getenv("RANK", "0")) != 0):
@@ -66,21 +68,19 @@ def main():
     saved = None
     if source:
         saved = text_format.Parse(common.read_text(source.rstrip("/") + "/pipeline.config"), pipeline_pb2.EasyRecConfig())
-    config = prepare_config(requested, saved)
-    contract = task_contract(config)
+    structure = json.loads(args.checkpoint_structure_options)
+    config = prepare_config(requested, saved, check_checkpoint_structure=args.check_checkpoint_structure,
+                            structure_options=structure.get("options"), structure_masks=structure.get("masked_features"))
     with tempfile.TemporaryDirectory(prefix="sqlrec-tzrec-") as temporary:
         path = os.path.join(temporary, "pipeline.config")
         config_util.save_message(config, path)
         if args.mode == "train":
-            # Keep the rendezvous server alive for TZRec's process group.
-            validation_store = validate_training_labels(config, contract) if contract is not None else None
             from tzrec.main import train_and_evaluate
             changed_optimizer = saved is not None and (
                 config.train_config.sparse_optimizer != saved.train_config.sparse_optimizer
                 or config.train_config.dense_optimizer != saved.train_config.dense_optimizer
             )
             train_and_evaluate(path, ignore_restore_optimizer=changed_optimizer)
-            del validation_store
         else:
             if not args.export_dir:
                 raise ValueError("--export_dir is required")

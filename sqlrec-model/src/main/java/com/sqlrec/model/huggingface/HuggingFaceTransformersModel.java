@@ -93,7 +93,7 @@ public class HuggingFaceTransformersModel implements ModelController {
 
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
-        Map<String, String> params = PipelineConfigUtils.mergeParams(model.getParams(), trainConf.getParams());
+        Map<String, String> params = PipelineConfigUtils.operationParams(model, trainConf.getParams());
         String pipelineConfig = PipelineConfigUtils.generateTrainConfig(model, trainConf);
         String shell = ShellUtils.genTrainShell(model.getPath(), trainConf.getModelDir(), trainConf.getId());
         return HuggingFaceK8sYamlUtils.genTrainJobYaml(pipelineConfig, shell, trainConf.getId(), params);

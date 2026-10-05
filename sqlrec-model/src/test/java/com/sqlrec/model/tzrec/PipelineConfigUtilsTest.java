@@ -10,6 +10,70 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
     @Test
+    void integerAliasUsesDirectBucketsRatherThanHashing() {
+        for (String type : List.of("INT", "INTEGER", "BIGINT")) {
+            ModelConf model = model("INTEGER");
+            model.setInputFields(List.of(new FieldSchema("uid", type), new FieldSchema("label", "INTEGER")));
+            model.getParams().put("num_buckets", "100");
+            assertNull(new WideAndDeepModel().checkModel(model));
+            String config = PipelineConfigUtils.generateFeatureConfigs(model);
+            assertTrue(config.contains("num_buckets: 100"), config);
+            assertFalse(config.contains("hash_bucket_size"), config);
+        }
+    }
+
+    @Test
+    void explicitOperationStructureOverridesEnableCheckpointValidation() {
+        ModelConf model = model("INT");
+        ModelTrainConf train = new ModelTrainConf();
+        ModelExportConf export = new ModelExportConf();
+        for (String key : List.of("hidden_units", "num_buckets", "column.uid.embedding_dim", "user_features", "task.label.weight")) {
+            train.setParams(Map.of(key, "value"));
+            export.setParams(Map.of(key, "value"));
+            assertTrue(ShellUtils.genTrainModelShell(model, train).contains("--checkpoint_structure_options"));
+            assertTrue(ShellUtils.genExportModelShell(model, export, "/export").contains("--checkpoint_structure_options"));
+        }
+        train.setParams(Map.of("learning_rate", "0.01"));
+        assertFalse(ShellUtils.genTrainModelShell(model, train).contains("--checkpoint_structure_options"));
+    }
+
+    @Test
+    void globalDefaultsDoNotOverridePerColumnSettingsInCheckpointChecks() {
+        ModelConf model = model("INT");
+        model.getParams().put("column.uid.embedding_dim", "8");
+        model.getParams().put("column.iid.bucket_size", "100");
+        ModelTrainConf train = new ModelTrainConf();
+        train.setParams(Map.of("embedding_dim", "16", "num_buckets", "1000"));
+        String shell = ShellUtils.genTrainModelShell(model, train);
+        assertTrue(shell.contains("\"options\":{\"embedding_dim\":\"16\",\"num_buckets\":\"1000\"}"), shell);
+        assertTrue(shell.contains("\"embedding_dim\":[\"uid\"]"), shell);
+        assertTrue(shell.contains("\"num_buckets\":[\"iid\"]"), shell);
+        assertFalse(shell.contains("--check_checkpoint_structure"));
+    }
+
+    @Test
+    void directoryGlobsSelectParquetForTrainingEvaluationAndExport() {
+        ModelConf model = model("INT");
+        List<String> paths = List.of("hdfs://namenode:9000/train/dt=2026-10-05/*", "/fixture/train/*",
+                "/fixture/train/part-00000", "/fixture/train/*.parquet", "/fixture/part-*.parquet");
+        String expectedInput = "train_input_path: \"hdfs://namenode:9000/train/dt=2026-10-05/*.parquet,"
+                + "/fixture/train/*.parquet,/fixture/train/part-00000,/fixture/train/*.parquet,/fixture/part-*.parquet\"\n";
+        ModelTrainConf train = new ModelTrainConf();
+        train.setModelDir("/fixture/model"); train.setTrainDataPaths(paths);
+        train.setParams(Map.of("eval_input_path", "hdfs://namenode:9000/eval/*,/fixture/eval/*.parquet,/fixture/eval/part-00000"));
+        String trainConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
+        assertTrue(trainConfig.startsWith(expectedInput));
+        assertTrue(trainConfig.contains("eval_input_path: \"hdfs://namenode:9000/eval/*.parquet,"
+                + "/fixture/eval/*.parquet,/fixture/eval/part-00000\"\n"));
+
+        ModelExportConf export = new ModelExportConf();
+        export.setBaseModelDir("/fixture/model"); export.setTrainDataPaths(paths); export.setParams(Map.of());
+        assertTrue(PipelineConfigUtils.generateWideAndDeepExportConfig(model, export).startsWith(expectedInput));
+        assertEquals(paths, train.getTrainDataPaths());
+        assertEquals(paths, export.getTrainDataPaths());
+    }
+
+    @Test
     void floatDefaultsAndNormalizerNumbersUseTheServingDecimalContract() {
         for (String value : List.of("1f", "0x1.0p0", "3.4028235e38")) {
             ModelConf model = model("INT");

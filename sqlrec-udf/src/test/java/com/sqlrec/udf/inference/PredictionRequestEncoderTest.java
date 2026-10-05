@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PredictionRequestEncoderTest {
     @Test
-    void rowRequestsProjectModelFieldsAndOmitMissingAndNullValues() {
+    void rowRequestsProjectModelFieldsPreserveNullAndOmitMissingValues() {
         List<RelDataTypeField> dataFields = Arrays.asList(
                 field("score", 0), field("ID", 1), field("ignored", 2));
         List<FieldSchema> modelFields = Arrays.asList(
@@ -24,13 +24,13 @@ class PredictionRequestEncoderTest {
                 new FieldSchema("missing", "STRING"));
         List<Object[]> rows = Arrays.asList(new Object[]{null, "item", "unused"}, new Object[]{0.5});
 
-        assertEquals("[{\"id\":\"item\"},{\"score\":0.5}]",
+        assertEquals("[{\"id\":\"item\",\"score\":null},{\"score\":0.5}]",
                 PredictionRequestEncoder.encodeRows(rows, modelFields, dataFields));
 
         Map<String, Object> batchRow = new LinkedHashMap<>();
         batchRow.put("id", "item");
         batchRow.put("score", null);
-        assertEquals("[{\"id\":\"item\"}]",
+        assertEquals("[{\"id\":\"item\",\"score\":null}]",
                 PredictionRequestEncoder.encodeRows(Collections.singletonList(batchRow)));
     }
 

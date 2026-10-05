@@ -1,7 +1,9 @@
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import types
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -41,3 +43,63 @@ class HuggingFaceHttpTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.server._adapter = None
         self.assertEqual(self.client.post("/predict", json=[{"text": "a"}]).status_code, 503)
+
+    def test_sql_null_text_returns_400_before_tokenization(self):
+        from test_huggingface_classification import ClassificationTest
+        adapter = ClassificationTest().adapter(None, [[2., 3.]])
+        self.server._adapter = adapter
+        response = self.client.post("/predict", json=[{"body": None}])
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("non-null STRING", response.json()["detail"])
+        adapter.tokenizer.assert_not_called()
+
+    def test_checkpoint_task_must_match_declared_service_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "_SUCCESS").touch()
+            (root / "sqlrec_manifest.json").write_text(json.dumps({
+                "task": "embedding", "model_params": {"text_column": "text"},
+            }))
+            config = root / "service.config"
+            config.write_text(json.dumps({"task": "text-classification"}))
+            with self.assertRaisesRegex(RuntimeError, "checkpoint task does not match"):
+                self.server.load_runtime(directory, str(config))
+
+    def test_matching_checkpoint_task_loads_adapter(self):
+        calls = []
+
+        def adapter(directory, config):
+            calls.append(config)
+            return types.SimpleNamespace()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "_SUCCESS").touch()
+            (root / "sqlrec_manifest.json").write_text(json.dumps({
+                "task": "embedding", "model_params": {"text_column": "text"},
+            }))
+            config = root / "service.config"
+            config.write_text(json.dumps({"task": "embedding", "inference_batch_size": 3}))
+            with patch.dict(self.server.TASK_ADAPTERS, {"embedding": adapter}):
+                self.server.load_runtime(directory, str(config))
+        self.assertEqual(calls[0]["task"], "embedding")
+        self.assertEqual(calls[0]["text_column"], "text")
+        self.assertEqual(self.server._batch_size, 3)
+
+    def test_legacy_checkpoint_column_options_use_declared_schema_spelling(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "_SUCCESS").touch()
+            (root / "sqlrec_manifest.json").write_text(json.dumps({
+                "task": "text-classification",
+                "input_fields": [{"name": "Body", "type": "STRING"}, {"name": "Title", "type": "STRING"}],
+                "model_params": {"text_column": "BODY", "text_pair_column": "TITLE"},
+            }))
+            config = root / "service.config"
+            config.write_text(json.dumps({"text_column": "body"}))
+            with patch.dict(self.server.TASK_ADAPTERS, {
+                    "text-classification": lambda directory, config: calls.append(config)}):
+                self.server.load_runtime(directory, str(config))
+        self.assertEqual(calls[0]["text_column"], "Body")
+        self.assertEqual(calls[0]["text_pair_column"], "Title")

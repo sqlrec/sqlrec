@@ -18,6 +18,10 @@ if(BUILD_TESTING AND EXISTS "${SCHEMA_TEST_SOURCE}")
     add_executable(gbdt_schema_test "${SCHEMA_TEST_SOURCE}")
     target_include_directories(gbdt_schema_test PRIVATE ${COMMON_INCLUDE_DIR})
     add_test(NAME gbdt_schema_contract COMMAND gbdt_schema_test)
+    add_executable(gbdt_request_test "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/cpp/gbdt/request_test.cpp")
+    target_include_directories(gbdt_request_test PRIVATE ${COMMON_INCLUDE_DIR})
+    target_link_libraries(gbdt_request_test PRIVATE Threads::Threads)
+    add_test(NAME gbdt_request_contract COMMAND gbdt_request_test)
 endif()
 
 # ---------------------------------------------------------------------------

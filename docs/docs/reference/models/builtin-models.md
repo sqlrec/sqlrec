@@ -38,13 +38,55 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 
 `server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。校验通过后，shell 使用 `exec` 启动所选 serving。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；ARM Python FG 兼容包支持与 SQLRec 生成配置一致的 ID/raw 特征范围。两种后端均在预热成功后就绪，串行执行推理；通过服务副本扩容。
 
+### TZRec 样本数据格式
+
+TZRec 训练时，通过 `ON` 指定 Hive 表，通过 `WHERE` 选择分区；导出时指定的 `ON` 数据源也按此方式处理。SQLRec 将所选表或分区解析为存储目录，再用 `*.parquet` 筛选目录中的数据文件，避开 `_SUCCESS` 等标记文件。因此这些数据文件需采用 Parquet 格式并以 `.parquet` 结尾。文件筛选由 SQLRec 自动完成，用户按原有方式指定表和分区即可。
+
+评估数据通过 `eval_input_path` 配置，该参数接收文件路径或通配符，支持逗号分隔的多个路径。末尾的 `/*` 会自动转换为 `/*.parquet`；直接指定文件或使用已有的 `*.parquet` 模式时，按指定路径读取。
+
+每行是一条样本，包含模型使用的特征列及 `label_columns` 指定的标签列；列名和实际 Parquet 类型须与声明一致。标签使用数值标量，不使用字符串、布尔值或数组。所有目标标签须非空，且转换为 float32 后仍为有限数值，不能包含 NaN、Infinity 或溢出值。MMoE 每行须同时包含所有目标，不支持缺失目标标签 mask。特征类型和编码要求见下文。
+
+**训练入口不额外扫描训练集或验证集的标签，也不进行分布式标签校验同步。** 下列格式要求由样本生成流程保证；数据会直接交给 TZRec 原生训练流程读取，不符合要求的样本可能导致训练报错或影响损失和指标。
+
+| 模型 | 样本列示例（SQL 类型） | 训练和验证标签要求 |
+|------|----------------------|--------------------|
+| `tzrec.wide_and_deep` | `user_id BIGINT, item_id BIGINT, label FLOAT` | 训练标签在 `[0,1]`，可使用软标签；AUC 验证集使用 0/1。硬标签也可存为 INT/BIGINT |
+| `tzrec.deepfm` | `user_id BIGINT, item_id BIGINT, label FLOAT` | 同 WideAndDeep：训练支持 `[0,1]` 软标签，AUC 验证集使用 0/1 |
+| `tzrec.dssm` | `user_id BIGINT, item_id BIGINT, label INT` | 每行须是正样本用户/物品对，标签建议统一为 1；训练和验证均只保留正样本 |
+| `tzrec.mmoe` | `user_id BIGINT, item_id BIGINT, click INT, watch_time FLOAT` | binary 目标使用 0/1 数值标量；regression 目标声明为 FLOAT/DOUBLE，实际 Parquet 列也须为浮点类型 |
+
+以下 SQL 展示如何从已有样本表生成所需列；输出仍需写成上述 Parquet 格式，特征列按具体模型补充：
+
+```sql
+-- WideAndDeep / DeepFM：保留正负样本；AUC 验证集也使用 0/1。
+SELECT user_id, item_id, CAST(clicked AS INT) AS label
+FROM source_sample;
+
+-- DSSM：先筛选正样本，再生成数值标签列；批内其他物品提供负例。
+SELECT user_id, item_id, CAST(1 AS INT) AS label
+FROM source_sample WHERE clicked = 1;
+
+-- MMoE：同一行提供所有目标，回归标签在写入 Parquet 前转换为浮点。
+SELECT user_id, item_id, CAST(clicked AS INT) AS click,
+       CAST(watch_time AS FLOAT) AS watch_time
+FROM source_sample;
+```
+
+DSSM 原生损失把每行用户和物品的配对视为正例，标签值不用于筛选正负样本，也不作为样本权重。含 0 或负标签的行不会被训练入口拒绝或过滤，仍会被当作正样本对；应在生成训练集和验证集时完成筛选。
+
 ### TZRec 特征与模型兼容性
 
-`label_columns` 必须是单个标签列。标签可以声明在 Model 字段中，也可以只存在于训练表中；生成特征、Wide/Deep/FM 分组和 DSSM 推断塔时都会排除标签。训练表仍需包含标签，在线请求无需提供标签。手工指定的 DSSM 塔不能包含标签或未知列；只指定一塔时，另一塔使用剩余的非标签特征，两塔均须非空。
+SQL 推理请求会保留已有字段的显式 null，全批次为空的特征仍可使用默认值。
+
+续训和导出时，WITH 显式覆盖的网络或特征结构参数会逐项与 checkpoint 比较，不一致时在执行前报错。连续特征默认值和 normalizer 按解析后的数值含义比较，等价数字写法或 normalizer 参数顺序变化不会被误判为结构改变；ID 默认值和分隔符仍严格比较。未覆盖的结构参数保留 checkpoint 的值，不参与默认值比较；列级参数仍优先于全局 `embedding_dim`、`num_buckets`。改变结构需新建模型并重新训练。
+
+连续特征的标量/向量默认值和 normalizer 数值参数按 float32 精度比较，向量元素顺序和维度必须一致。normalizer 参数顺序不影响比较；`log10` 未指定的 `threshold`、`default` 分别按 `1e-10`、`-10` 比较。等价配置通过后仍沿用 checkpoint 中保存的原始配置。此规则同样适用于 MMoE 的特征比较；任务及网络结构仍须一致。
+
+WideAndDeep、DeepFM 和 DSSM 的 `label_columns` 必须是单个标签列。标签可以声明在 Model 字段中，也可以只存在于训练表中；生成特征、Wide/Deep/FM 分组和 DSSM 推断塔时都会排除标签。训练表仍需包含标签，在线请求无需提供标签。手工指定的 DSSM 塔不能包含标签或未知列；只指定一塔时，另一塔使用剩余的非标签特征，两塔均须非空。
 
 | SQL 类型 | 处理方式 |
 |----------|----------|
-| INT / BIGINT | 保留原始 ID，必须在 `[0, bucket_size)` 范围内 |
+| INT / INTEGER / BIGINT | 保留原始 ID，必须在 `[0, bucket_size)` 范围内；INT 与 INTEGER 是同一整数类型 |
 | `VARCHAR` / `STRING` / `ARRAY<STRING>` | FarmHash ID，可使用字符串数组或按 separator 分隔的字符串 |
 | FLOAT / DOUBLE | 连续 RawFeature，推理使用 float32 |
 | `ARRAY<FLOAT>` / `ARRAY<DOUBLE>` | 固定维度连续向量，必须指定 `column.{name}.value_dim` |
@@ -89,7 +131,7 @@ CREATE MODEL float_rec (
 
 Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动校验清单；旧版没有清单的完整导出目录仍可加载。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
 
-本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM，再对照 Python/C++ 特征张量及 HTTP 预测。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
+本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE，再对照 Python/C++ 特征张量及 HTTP 预测。MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
 ## 内置模型类型
 
@@ -250,7 +292,7 @@ CREATE MODEL multi_rank (
 
 资源、batch、epoch、学习率和 `column.*` 特征参数沿用 TZRec 通用配置。MMoE 使用独立的专家/任务塔参数，不能使用单目标 `hidden_units` 或 DSSM 塔参数。未知目标和未知 `task.*` 参数会在创建模型时报错。
 
-训练和验证数据须包含每个目标的有效标签：二分类为 0/1，回归须声明为 FLOAT/DOUBLE，且 Parquet 列也须为浮点类型，数值转换为 float32 后须有限。不允许空值或缺失列。整数回归标签请在生成训练数据前转为 FLOAT/DOUBLE，避免 TZRec 的 L2 反向传播发生 dtype 错误。启动训练时按批次扫描标签列；分布式训练仅 rank 0 扫描并共享结果。未指定验证集时只进行训练，不自动在训练集计算验证指标。
+训练和验证数据须包含每个目标的有效标签：二分类为 0/1，回归须声明为 FLOAT/DOUBLE，且 Parquet 列也须为浮点类型，数值转换为 float32 后须有限。不允许空值或缺失列。整数回归标签请在生成训练数据前转为 FLOAT/DOUBLE，避免 TZRec 的 L2 反向传播发生 dtype 错误。样本生成流程须保证这些要求，训练入口不额外扫描标签。未指定验证集时只进行训练，不自动在训练集计算验证指标。
 
 输出为 `probs_<label> FLOAT`（二分类）或 `y_<label> FLOAT`（回归）。例如上述模型返回 `probs_click`、`probs_like`、`y_watch_time`；通过 `call_service` 追加到输入表。最终排序可在 SQL 中融合：
 
@@ -267,6 +309,8 @@ FROM scored ORDER BY rank_score DESC;
 ### 3. DSSM 模型
 
 DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的双塔召回模型，支持完整的训练、导出和服务部署流程。
+
+DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，数值标签建议统一为 1。标签值不参与正负样本筛选或样本加权；训练入口不拒绝或过滤零、负标签行，请在生成样本时先筛选正样本。具体格式见上文「TZRec 样本数据格式」。
 
 **模型名称**：`tzrec.dssm`
 
@@ -339,10 +383,12 @@ CREATE MODEL dssm_model (
     label INT
 ) WITH (
     'model' = 'tzrec.dssm',
+    'label_columns' = 'label',
     'user_features' = 'user_id,user_age',
     'item_features' = 'item_id,item_category',
     'embedding_dim' = '64',
-    'hidden_units' = '256,128,64'
+    'user_hidden_units' = '256,128,64',
+    'item_hidden_units' = '256,128,64'
 );
 
 -- 按模型指南完成训练和导出后，DSSM 生成两个 tower checkpoint：
@@ -360,7 +406,13 @@ CREATE SERVICE dssm_user_service
 
 LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，支持完整的训练、导出和服务部署流程。训练数据和模型文件使用配置的存储，导出时转换为 ONNX 格式用于在线推理。
 
+LightGBM 训练特征先转换为 float32，与 ONNX 和在线服务使用同样的精度；保留 NaN 缺失值，拒绝 Infinity 或 float32 溢出。旧版使用 double 训练的模型需要重新训练，才能保证这项精度一致性。
+
 **模型名称**：`gbdt.lightgbm`
+
+GBDT 在线推理的缺失数值字段和 `null` 在服务内部转换为 float32 `NaN`，供模型按缺失值处理，与训练时一致；`0` 是有效数值。客户端传 `null` 或省略字段即可，JSON 中不要发送 `NaN`。数值字符串须是完整的有限 float32 十进制数，非法值返回 HTTP 400。服务继承模型声明中的镜像、版本和资源配置，服务参数可覆盖这些配置；模型下载、加载完成且 `/health` 探针成功后才接收流量。此行为也适用于 XGBoost 和 CatBoost。
+
+`POST /predict` 接收非空的对象行数组或列式 JSON；列式值必须为数组，长度须一致，长度为 1 的列可广播。JSON 解析失败、行元素不是对象、列值不是数组、列长度不兼容及空批次均返回 HTTP 400；模型执行抛出的运行时异常返回 HTTP 500。错误响应使用 JSON 格式，包含 `error` 字段。
 
 **特性**：
 - 基于 LightGBM 框架的梯度提升树模型
@@ -480,9 +532,11 @@ CatBoost 模型是基于 GBDT 框架实现的模型，原生支持类别特征�
 
 **模型名称**：`gbdt.catboost`
 
+训练和在线推理统一将整数类别值转换为十进制字符串，将空类别值转换为 `""`，保留大整数 ID 的精度。在线类别值须为整数、字符串或 `null`；浮点数、布尔值和数组返回 HTTP 400。
+
 **特性**：
 - 基于 CatBoost 框架的梯度提升树模型
-- 原生支持类别特征处理（无需手动编码）；int/bigint/string 类型的列自动作为类别特征，float/double 类型的列作为数值特征
+- 原生支持类别特征处理（无需手动编码）；INT/INTEGER/BIGINT/STRING 类型的列自动作为类别特征，FLOAT/DOUBLE 类型的列作为数值特征；INT 与 INTEGER 是同一整数类型
 - 支持 Parquet 格式训练数据（存储在分布式存储）
 - 模型文件持久化到分布式存储
 - 导出原生 .cbm 格式用于 serving（通过 CatBoost C API 直接加载，支持类别特征）
@@ -538,7 +592,11 @@ CREATE MODEL cb_model (
 
 首期任务包括 `text-classification`、`text-generation`、`embedding` 和 `image-embedding`。文本生成仅接受普通 prompt；图片 embedding 仅接受 HTTP/HTTPS URL。
 
+文本分类根据 checkpoint 的 `problem_type` 计算分数：单标签多输出分类使用 softmax，多标签分类和单输出模型使用 sigmoid，均返回得分最高的一个 label/score。明确声明 `problem_type=regression` 的 checkpoint 在服务加载时被拒绝；未声明类型的单输出模型保留 sigmoid 兼容行为。输入列参数不区分大小写，运行配置使用 SQL 声明的字段名。分类、文本 embedding 和生成任务的文本及配置的配对文本字段必须为非空值的 STRING，null、缺字段或非字符串返回 HTTP 400；空字符串仍是有效输入。
+
 #### Hugging Face 任务配置
+
+`task` 决定 SQL 输出字段，训练和服务参数不能改变它；如需切换任务，请新建模型。服务启动时也会检查 checkpoint 中的任务是否与服务声明一致。
 
 `task` 和 `repo_id` 必填。输入列必须在 Model 字段列表中声明为 `STRING`，并按任务选择列名配置：
 
@@ -579,6 +637,8 @@ CREATE SERVICE text_embedding_service
 私有仓库可在 TRAIN 参数中通过 `hf_token_secret` 和 `hf_token_secret_key` 引用 Kubernetes Secret。服务仅从 checkpoint 加载模型，不访问 Hub。
 
 #### Hugging Face 服务配置
+
+普通推理参数按 `CREATE SERVICE ... WITH` 显式参数、Model 中显式声明的参数、checkpoint 保存的训练参数、内置默认值的顺序取值，前者优先。例如 Model 声明 `pooling=mean`、TRAIN 覆盖为 `cls` 时，未覆盖该参数的服务仍使用 `mean`；如需使用 `cls`，在 SERVICE 的 WITH 中显式设置。仅在 TRAIN 中设置且 Model、SERVICE 均未声明的参数会从 checkpoint 继承。`task` 必须与模型声明和 checkpoint 一致；`trust_remote_code` 使用 checkpoint 记录的值。
 
 在 `CREATE SERVICE ... WITH (...)` 中按需设置：
 

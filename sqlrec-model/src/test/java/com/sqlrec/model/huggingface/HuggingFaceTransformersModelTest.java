@@ -6,6 +6,7 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -16,6 +17,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class HuggingFaceTransformersModelTest {
     private final HuggingFaceTransformersModel controller = new HuggingFaceTransformersModel();
+
+    @Test
+    void inputOptionsUseDeclaredFieldSpellingInTrainingAndServing() {
+        for (String task : List.of("text-classification", "text-generation", "image-embedding")) {
+            String key = task.equals("text-generation") ? "prompt_column"
+                    : task.equals("image-embedding") ? "image_column" : "text_column";
+            ModelConf model = model(task, "Body", "STRING");
+            model.getParams().put(key, "BODY");
+            if (task.equals("text-classification")) model.getParams().put("text_pair_column", "body");
+            assertNull(controller.checkModel(model));
+            var train = JsonParser.parseString(PipelineConfigUtils.generateTrainConfig(model, new ModelTrainConf()))
+                    .getAsJsonObject().getAsJsonObject("model_params");
+            var service = JsonParser.parseString(PipelineConfigUtils.generateServiceConfig(model, Map.of(key, "body")))
+                    .getAsJsonObject();
+            assertEquals("Body", train.get(key).getAsString());
+            assertEquals("Body", service.get(key).getAsString());
+            if (task.equals("text-classification")) assertEquals("Body", service.get("text_pair_column").getAsString());
+            assertEquals("BODY", model.getParams().get(key));
+        }
+    }
 
     @Test
     void validatesTextGenerationAndDeclaresOutput() {
@@ -101,6 +122,42 @@ class HuggingFaceTransformersModelTest {
                 UnsupportedOperationException.class,
                 () -> controller.getExportCheckpoints(new ModelExportConf()));
         assertTrue(error.getMessage().contains("does not support model export"));
+    }
+
+    @Test
+    void rejectsTaskChangesDuringTrainingAndServing() {
+        ModelConf model = model("text-classification", "text", "STRING");
+        model.getParams().put("text_column", "text");
+        ModelTrainConf train = new ModelTrainConf();
+        train.setParams(Map.of("task", "embedding"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> controller.genModelTrainK8sYaml(model, train)).getMessage().contains("cannot change the task"));
+        assertThrows(IllegalArgumentException.class, () -> PipelineConfigUtils.generateTrainConfig(model, train));
+
+        ServiceConf service = new ServiceConf();
+        service.setId("hf-test");
+        service.setModelCheckpointDir("hdfs://namenode/models/v1");
+        service.setParams(Map.of("task", "embedding"));
+        assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
+        assertThrows(IllegalArgumentException.class,
+                () -> PipelineConfigUtils.generateServiceConfig(model, service.getParams()));
+        assertEquals(List.of("label", "score"), controller.getOutputFields(model).stream().map(FieldSchema::getName).toList());
+    }
+
+    @Test
+    void preservesEffectiveTrainingParametersAndValidatesInputOverrides() {
+        ModelConf model = model("embedding", "text", "STRING");
+        model.getParams().put("text_column", "text");
+        ModelTrainConf train = new ModelTrainConf();
+        train.setParams(Map.of("task", "embedding", "revision", "abc123", "max_length", "256"));
+        var config = JsonParser.parseString(PipelineConfigUtils.generateTrainConfig(model, train)).getAsJsonObject();
+        assertEquals("embedding", config.get("task").getAsString());
+        assertEquals("embedding", config.getAsJsonObject("model_params").get("task").getAsString());
+        assertEquals("abc123", config.getAsJsonObject("model_params").get("revision").getAsString());
+        assertEquals("256", config.getAsJsonObject("model_params").get("max_length").getAsString());
+        assertFalse(model.getParams().containsKey("max_length"));
+        train.setParams(Map.of("text_column", "missing"));
+        assertThrows(IllegalArgumentException.class, () -> PipelineConfigUtils.generateTrainConfig(model, train));
     }
 
     private static ModelConf model(String task, String fieldName, String fieldType) {

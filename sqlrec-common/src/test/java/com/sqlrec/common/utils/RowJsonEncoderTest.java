@@ -76,9 +76,29 @@ public class RowJsonEncoderTest {
         assertEquals(1, result.size());
         Map<String, Object> row = result.get(0);
         assertEquals(1L, row.get("id"));
-        assertFalse(row.containsKey("name"));
+        assertTrue(row.containsKey("name"));
+        assertNull(row.get("name"));
         assertEquals(20L, row.get("age"));
-        assertFalse(row.containsKey("active"));
+        assertTrue(row.containsKey("active"));
+        assertNull(row.get("active"));
+    }
+
+    @Test
+    void preservesAnEntireNullFeatureInMapBatches() {
+        Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("id", 1);
+        row.put("feature", null);
+        assertEquals("[{\"id\":1,\"feature\":null},{\"id\":1,\"feature\":null}]",
+                RowJsonEncoder.toJsonArray(List.of(row, row)));
+    }
+
+    @Test
+    void nonPredictionRowFormatsKeepOmittingNullAttributes() {
+        assertEquals("{\"id\":1}", RowJsonEncoder.toJson(new Object[]{1, null},
+                List.of(new FieldSchema("id", "INT"), new FieldSchema("country", "STRING"))));
+        assertEquals("{\"id\":1}", RowJsonEncoder.toJsonByFields(new Object[]{1, null},
+                List.of(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER),
+                        DataTypeUtils.getRelDataTypeField("country", 1, SqlTypeName.VARCHAR))));
     }
 
     @Test

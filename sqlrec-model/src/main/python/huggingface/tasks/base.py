@@ -5,6 +5,17 @@ from typing import Any
 import torch
 
 
+def text_values(rows: list[dict[str, Any]], column: str) -> list[str]:
+    """Require non-null SQL STRING inputs before tokenization."""
+    values = []
+    for index, row in enumerate(rows):
+        value = row.get(column)
+        if not isinstance(value, str):
+            raise ValueError(f"row {index}: input field '{column}' must be a non-null STRING")
+        values.append(value)
+    return values
+
+
 def bool_value(config: dict[str, Any], key: str, default: bool) -> bool:
     value = config.get(key, default)
     if isinstance(value, bool):

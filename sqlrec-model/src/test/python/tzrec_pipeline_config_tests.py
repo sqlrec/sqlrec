@@ -18,9 +18,115 @@ import torch
 
 
 class CheckpointConfigTest(unittest.TestCase):
+    def test_training_entry_delegates_sample_loading_to_native_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for architecture in ("wide_and_deep", "deepfm", "dssm", "mmoe"):
+                if architecture == "mmoe":
+                    config = self.mmoe()
+                elif architecture == "dssm":
+                    config = text_format.Parse(
+                        'data_config { label_fields: "label" } model_config { dssm {} }',
+                        pipeline_pb2.EasyRecConfig())
+                else:
+                    config = self.config(architecture)
+                # These paths do not exist: only the native trainer should read samples.
+                config.train_input_path = str(root / "train.parquet")
+                config.eval_input_path = str(root / "eval.parquet")
+                config.model_dir = str(root / "model")
+                path = root / "pipeline.config"
+                config_util.save_message(config, str(path))
+                for world_size, rank in ((1, 0), (2, 0), (2, 1)):
+                    snapshots = []
+                    with (self.subTest(architecture=architecture, world_size=world_size, rank=rank),
+                          patch.dict(os.environ, {"WORLD_SIZE": str(world_size), "RANK": str(rank)}),
+                          patch.object(sys, "argv", ["run.py", "--mode", "train", "--pipeline_config_path", str(path)]),
+                          patch("torch.distributed.rendezvous", side_effect=AssertionError("unexpected pre-training rendezvous")),
+                          patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
+                                snapshots.append(config_util.load_pipeline_config(path))) as train):
+                        main()
+                        train.assert_called_once()
+                        self.assertEqual(snapshots[0].train_input_path, config.train_input_path)
+                        self.assertEqual(snapshots[0].eval_input_path, config.eval_input_path)
+
+    def test_explicit_single_task_structure_changes_cannot_be_silently_ignored(self):
+        saved = self.config("wide_and_deep")
+        requested = self.config("wide_and_deep")
+        requested.data_config.batch_size = 16
+        self.assertEqual(prepare_config(requested, saved, True).data_config.batch_size, 16)
+        requested.feature_configs[0].id_feature.embedding_dim = 32
+        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
+            prepare_config(requested, saved, True)
+        requested = self.config("deepfm")
+        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
+            prepare_config(requested, saved, True)
+
+    def test_selective_overrides_preserve_checkpoint_defaults_with_real_protobufs(self):
+        saved = self.config("deepfm")
+        saved.feature_configs[0].id_feature.embedding_dim = 8
+        requested = self.config("wide_and_deep")
+        effective = prepare_config(requested, saved, structure_options={"hidden_units": "8,4"})
+        self.assertEqual(effective.feature_configs, saved.feature_configs)
+        self.assertEqual(effective.model_config, saved.model_config)
+        with self.assertRaisesRegex(ValueError, "hidden_units"):
+            prepare_config(requested, saved, structure_options={"hidden_units": "16,8"})
+        with self.assertRaisesRegex(ValueError, "embedding_dim"):
+            prepare_config(requested, saved, structure_options={"column.id.embedding_dim": "16"})
+
+    def test_cli_applies_selective_checkpoint_validation_before_native_training(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            saved = self.config("deepfm")
+            saved.feature_configs[0].id_feature.embedding_dim = 8
+            config_util.save_message(saved, str(source / "pipeline.config"))
+            requested = self.config("wide_and_deep")
+            requested.train_config.fine_tune_checkpoint = str(source)
+            path = root / "requested.config"
+            config_util.save_message(requested, str(path))
+            argv = ["run.py", "--mode", "train", "--pipeline_config_path", str(path),
+                    "--checkpoint_structure_options", json.dumps({"options": {"hidden_units": "8,4"}})]
+            snapshots = []
+            with (patch.object(sys, "argv", argv),
+                  patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
+                        snapshots.append(config_util.load_pipeline_config(path)))):
+                main()
+            self.assertEqual(snapshots[0].model_config, saved.model_config)
+            self.assertEqual(snapshots[0].feature_configs, saved.feature_configs)
+
     def mmoe(self, mixed=True):
         name = "mmoe_mixed" if mixed else "mmoe"
         return config_util.load_pipeline_config(f"/tests/configs/{name}.config")
+
+    def test_checkpoint_accepts_equivalent_raw_defaults_and_normalizers(self):
+        for architecture in ("wide_and_deep", "mmoe"):
+            saved = self.mmoe() if architecture == "mmoe" else self.config(architecture)
+            if architecture == "mmoe":
+                raw = saved.feature_configs[1].raw_feature
+            else:
+                raw = saved.feature_configs.add().raw_feature
+                raw.feature_name, raw.expression = "price", "item:price"
+                saved.model_config.feature_groups[1].feature_names.append("price")
+            raw.default_value = "0"
+            raw.normalizer = "method=zscore,mean=0,standard_deviation=1"
+            requested = pipeline_pb2.EasyRecConfig()
+            requested.CopyFrom(saved)
+            index = 1
+            requested.feature_configs[index].raw_feature.default_value = "0.0"
+            requested.feature_configs[index].raw_feature.normalizer = "standard_deviation=1.0,mean=0e0,method=zscore"
+            options = {"column.price.default_value": "0.0",
+                       "column.price.normalizer": requested.feature_configs[index].raw_feature.normalizer}
+            with self.subTest(architecture=architecture):
+                effective = prepare_config(requested, saved, structure_options=options)
+                self.assertEqual(effective.feature_configs, saved.feature_configs)
+                effective = prepare_config(requested, saved, check_checkpoint_structure=True)
+                self.assertEqual(effective.feature_configs, saved.feature_configs)
+                requested.feature_configs[index].raw_feature.default_value = "1"
+                with self.assertRaises(ValueError):
+                    prepare_config(requested, saved, structure_options={"column.price.default_value": "1"})
+                with self.assertRaises(ValueError):
+                    prepare_config(requested, saved, check_checkpoint_structure=True)
 
     def test_java_generated_mmoe_configs_parse_and_have_the_declared_outputs(self):
         for name in ("mmoe", "mmoe_mixed", "mmoe_dense"):
@@ -79,25 +185,6 @@ class CheckpointConfigTest(unittest.TestCase):
                 tower.task_space_indicator_label = "label"
             with self.subTest(change=change), self.assertRaises(ValueError):
                 prepare_config(requested)
-
-    def test_mmoe_bad_labels_prevent_training(self):
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-        with tempfile.TemporaryDirectory() as temporary:
-            config = self.mmoe()
-            root = Path(temporary)
-            data = root / "data.parquet"
-            pq.write_table(pa.table({"category": [1], "price": [1.0], "label": [2], "watch_time": [1.0]}), data)
-            config.train_input_path = str(data)
-            config.model_dir = str(root / "model")
-            path = root / "pipeline.config"
-            config_util.save_message(config, str(path))
-            with (patch.dict(os.environ, {"WORLD_SIZE": "1"}),
-                  patch.object(sys, "argv", ["run.py", "--mode", "train", "--pipeline_config_path", str(path)]),
-                  patch("tzrec.main.train_and_evaluate") as train):
-                with self.assertRaisesRegex(ValueError, "binary label label"):
-                    main()
-                train.assert_not_called()
 
     def test_export_predictions_require_all_tasks_and_the_batch_shape(self):
         contract = task_contract(self.mmoe())
