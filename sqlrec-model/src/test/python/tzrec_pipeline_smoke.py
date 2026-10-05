@@ -257,6 +257,25 @@ def main():
                 for key, value in task_contract(pipeline).items():
                     assert metadata[key] == value
             summary.append(verify_backends(directory, root, env, len(summary)))
+        if architecture == "dssm":
+            requested = config(root, architecture)
+            requested.train_input_path = pipeline.train_input_path
+            requested.eval_input_path = pipeline.eval_input_path
+            requested.model_dir = str(root / "dssm_finetune")
+            requested.train_config.fine_tune_checkpoint = pipeline.model_dir
+            requested.data_config.batch_size = 16
+            requested.train_config.dense_optimizer.adam_optimizer.lr = .02
+            finetune_path = root / "dssm_finetune.config"
+            config_util.save_message(requested, str(finetune_path))
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "dssm-finetune.log", env)
+            saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
+            assert saved.model_config == pipeline.model_config
+            assert saved.feature_configs == pipeline.feature_configs
+            assert saved.data_config.batch_size == 16
+            finetune_export = root / "dssm_finetune_export"
+            execute(launcher + ["--mode", "export", "--pipeline_config_path", str(finetune_path), "--export_dir", str(finetune_export)], root / "dssm-finetune-export.log", env)
+            for tower in ("user", "item"):
+                summary.append(verify_backends(finetune_export / tower, root, env, len(summary)))
         if architecture == "mmoe":
             distributed = config(root, "mmoe")
             distributed.model_dir = str(root / "mmoe_distributed")

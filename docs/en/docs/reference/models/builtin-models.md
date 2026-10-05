@@ -136,7 +136,7 @@ New `tzrec.wide_and_deep` models use the actual WideAndDeep architecture. Legacy
 
 TRAIN, EXPORT, and SERVICE inherit Model WITH options; operation overrides take precedence. Exports use a private staging directory, SHA256 manifest `model_meta.json`, and `_SUCCESS` before publishing. Existing targets are never overwritten. Startup checks manifests and still accepts complete legacy exports without manifests. HDFS/JuiceFS publication relies on directory rename semantics.
 
-Local builds and image publication run `bin/verify_tzrec_image.sh`, including native operator/output checks and real train/export/HTTP Python-C++ comparisons for WideAndDeep, DeepFM, DSSM, and MMoE. MMoE coverage includes mixed tasks, regression-only tasks, continuous features, fine-tuning, and two-process training. ARM FG also has unit tests and a native x86 differential gate against the original pyfg wheel.
+Local builds and image publication run `bin/verify_tzrec_image.sh`, including native operator/output checks and real train/export/HTTP Python-C++ comparisons for WideAndDeep, DeepFM, DSSM, and MMoE. DSSM coverage includes softmax retrieval training, fine-tuning, and both tower exports; MMoE coverage includes mixed tasks, regression-only tasks, continuous features, fine-tuning, and two-process training. ARM FG also has unit tests and a native x86 differential gate against the original pyfg wheel.
 
 ## Built-in Model Types
 
@@ -305,6 +305,8 @@ DSSM uses in-batch negative sampling and requires positive-only pairs for both t
 
 DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemented based on the tzrec framework, supporting complete training, export, and service deployment workflow.
 
+SQLRec DSSM uses a fixed `softmax_cross_entropy` objective with Recall@1 and Recall@5 evaluation metrics. It does not offer a choice of objectives. Explicitly configuring another loss, or restoring or exporting a checkpoint saved with another objective, is rejected. Users prepare both training and evaluation samples beforehand; SQLRec does not filter them automatically.
+
 **Model Name**: `tzrec.dssm`
 
 **Features**:
@@ -394,6 +396,8 @@ CREATE SERVICE dssm_user_service
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/user';
 ```
+
+User and item vectors for retrieval must come from the same checkpoint. Item vectors can be computed offline to build an ANN index. When updating a model, update the user tower service, item vectors, and index together to avoid mixing versions.
 
 ### 4. LightGBM Model
 

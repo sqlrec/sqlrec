@@ -152,6 +152,55 @@ class PipelineConfigUtilsTest {
     }
 
     @Test
+    void dssmKeepsRecallConfigurationAndAcceptsExplicitSoftmax() {
+        ModelConf model = model("INT");
+        model.getParams().put("item_features", "iid");
+        String recall = PipelineConfigUtils.generateDSSMModelConfig(model);
+        assertTrue(recall.contains("in_batch_negative: true"));
+        assertTrue(recall.contains("softmax_cross_entropy {}"));
+        assertTrue(recall.contains("recall_at_k"));
+        assertFalse(recall.contains("feature_name: \"label\""));
+        model.getParams().put("loss", "softmax_cross_entropy");
+        assertNull(new DSSMModel().checkModel(model));
+        assertEquals(recall, PipelineConfigUtils.generateDSSMModelConfig(model));
+    }
+
+    @Test
+    void dssmRejectsUnsupportedLossInDeclarationsAndOperations() {
+        ModelConf model = model("INT");
+        model.getParams().putAll(Map.of("model", "tzrec.dssm", "item_features", "iid"));
+        DSSMModel controller = new DSSMModel();
+        ModelTrainConf train = new ModelTrainConf();
+        train.setId("train"); train.setModelDir("/tmp/train"); train.setParams(Map.of());
+        ModelExportConf export = new ModelExportConf();
+        export.setId("export"); export.setCheckpointName("v1"); export.setBaseModelDir("/tmp/train");
+        ServiceConf service = new ServiceConf();
+        for (String invalid : List.of("binary_cross_entropy", "l2_loss", "")) {
+            model.getParams().put("loss", invalid);
+            assertTrue(controller.checkModel(model).contains("only supports softmax_cross_entropy"));
+            train.setParams(Map.of("loss", "softmax_cross_entropy"));
+            export.setParams(Map.of("loss", "softmax_cross_entropy"));
+            service.setParams(Map.of("loss", "softmax_cross_entropy"));
+            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train));
+            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
+            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
+            model.getParams().remove("loss");
+            train.setParams(Map.of("loss", invalid));
+            export.setParams(Map.of("loss", invalid));
+            service.setParams(Map.of("loss", invalid));
+            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train));
+            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
+            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
+        }
+        train.setParams(Map.of("loss", "softmax_cross_entropy"));
+        export.setParams(Map.of("loss", "softmax_cross_entropy"));
+        assertTrue(controller.genModelTrainK8sYaml(model, train).contains("softmax_cross_entropy {}"));
+        assertNotNull(controller.genModelExportK8sYaml(model, export));
+        assertFalse(ShellUtils.genTrainModelShell(model, train).contains("checkpoint_structure_options"));
+        assertFalse(ShellUtils.genExportModelShell(model, export, "/export").contains("checkpoint_structure_options"));
+    }
+
+    @Test
     void explicitDeepfmKeepsAnEqualDimensionSparseFmGroup() {
         ModelConf model = model("INT");
         model.getParams().put("model", "tzrec.deepfm");

@@ -27,15 +27,20 @@ def config_type():
                 field.oneof_index = 0
         return result
     message("Data", [("label_fields", 9, True), ("batch_size", 5, False), ("num_workers", 5, False)])
+    message("Empty", [])
+    message("Loss", [("softmax_cross_entropy", ".Empty", False),
+                     ("binary_cross_entropy", ".Empty", False), ("l2_loss", ".Empty", False)], "loss")
     message("Mlp", [("hidden_units", 5, True)])
     message("Network", [("deep", ".Mlp", False)])
     message("Tower", [("input", 9, False), ("mlp", ".Mlp", False)])
-    message("Dssm", [("user_tower", ".Tower", False), ("item_tower", ".Tower", False), ("output_dim", 5, False)])
+    message("Dssm", [("user_tower", ".Tower", False), ("item_tower", ".Tower", False),
+                     ("output_dim", 5, False)])
     message("Group", [("group_name", 9, False), ("feature_names", 9, True)])
     model = message("Model", [("wide_and_deep", ".Network", False), ("deepfm", ".Network", False),
                               ("dssm", ".Dssm", False)], "model")
     model.field.add(name="feature_groups", number=4, label=3, type=11, type_name=".Group")
     model.field.add(name="mmoe", number=5, label=1, type=11, type_name=".Network", oneof_index=0)
+    model.field.add(name="losses", number=6, label=3, type=11, type_name=".Loss")
     message("Id", [("feature_name", 9, False), ("expression", 9, False),
                    ("embedding_dim", 5, False), ("num_buckets", 5, False), ("hash_bucket_size", 5, False),
                    ("default_value", 9, False), ("separator", 9, False)])
@@ -76,7 +81,12 @@ class CheckpointStructureTest(unittest.TestCase):
         config = self.Config()
         config.data_config.label_fields.append("label")
         config.data_config.batch_size = 8
-        getattr(config.model_config, architecture).deep.hidden_units.extend([8, 4])
+        if architecture == "dssm":
+            config.model_config.dssm.user_tower.input = "user"
+            config.model_config.dssm.item_tower.input = "item"
+            config.model_config.losses.add().softmax_cross_entropy.SetInParent()
+        else:
+            getattr(config.model_config, architecture).deep.hidden_units.extend([8, 4])
         feature = config.feature_configs.add().id_feature
         feature.feature_name, feature.expression = "id", "item:id"
         feature.embedding_dim, feature.num_buckets = 16, 100
@@ -198,6 +208,7 @@ class CheckpointStructureTest(unittest.TestCase):
         saved, requested = self.config(), self.config()
         saved.model_config.Clear()
         dssm = saved.model_config.dssm
+        saved.model_config.losses.add().softmax_cross_entropy.SetInParent()
         dssm.user_tower.input, dssm.item_tower.input = "user", "item"
         dssm.user_tower.mlp.hidden_units.extend([8, 4])
         dssm.item_tower.mlp.hidden_units.extend([16, 8])
@@ -215,6 +226,39 @@ class CheckpointStructureTest(unittest.TestCase):
         for key in options:
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, key):
                 self.module.prepare_config(requested, saved, structure_options={key: "32"})
+
+    def test_dssm_recall_checkpoint_and_runtime_overrides_are_preserved(self):
+        saved, requested = self.config("dssm"), self.config("dssm")
+        saved.model_config.dssm.output_dim = 8
+        requested.data_config.batch_size = 16
+        effective = self.module.prepare_config(requested, saved)
+        self.assertEqual(effective.model_config, saved.model_config)
+        self.assertEqual(effective.data_config.batch_size, 16)
+        self.assertEqual(requested.model_config.dssm.output_dim, 0)
+
+    def test_dssm_unsupported_request_and_saved_objectives_cannot_be_hidden_by_merge(self):
+        for objective in ("binary_cross_entropy", "l2_loss"):
+            unsupported = self.config("dssm")
+            getattr(unsupported.model_config.losses[0], objective).SetInParent()
+            for requested, saved in ((unsupported, None),
+                                     (unsupported, self.config("dssm")),
+                                     (self.config("dssm"), unsupported),
+                                     (self.config(), unsupported),
+                                     (unsupported, self.config())):
+                with self.subTest(objective=objective, saved=saved), self.assertRaisesRegex(
+                        ValueError, "DSSM requires exactly one softmax_cross_entropy"):
+                    self.module.prepare_config(requested, saved)
+
+    def test_dssm_requires_one_supported_loss(self):
+        config = self.config("dssm")
+        for count in (0, 1, 2):
+            del config.model_config.losses[:]
+            for _ in range(count):
+                loss = config.model_config.losses.add()
+                if count == 2:
+                    loss.softmax_cross_entropy.SetInParent()
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "DSSM requires exactly one"):
+                self.module.prepare_config(config)
 
     def test_raw_defaults_compare_numeric_values_and_keep_checkpoint_text(self):
         saved, requested = self.config(), self.config()

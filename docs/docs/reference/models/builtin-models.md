@@ -131,7 +131,7 @@ CREATE MODEL float_rec (
 
 Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动校验清单；旧版没有清单的完整导出目录仍可加载。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
 
-本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE，再对照 Python/C++ 特征张量及 HTTP 预测。MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
+本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE，再对照 Python/C++ 特征张量及 HTTP 预测。DSSM 覆盖 softmax 召回训练、续训及双塔导出；MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
 ## 内置模型类型
 
@@ -312,6 +312,8 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 
 DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，数值标签建议统一为 1。标签值不参与正负样本筛选或样本加权；训练入口不拒绝或过滤零、负标签行，请在生成样本时先筛选正样本。具体格式见上文「TZRec 样本数据格式」。
 
+当前 SQLRec DSSM 固定使用 `softmax_cross_entropy`，生成 Recall@1、Recall@5 验证指标；不提供训练目标选择。显式配置其他 loss，或恢复、导出保存了其他目标的 checkpoint 时会报错。训练和验证样本由用户提前准备，SQLRec 不自动过滤。
+
 **模型名称**：`tzrec.dssm`
 
 **特性**：
@@ -401,6 +403,8 @@ CREATE SERVICE dssm_user_service
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/user';
 ```
+
+召回时，用户塔与物品塔向量应来自同一 checkpoint。物品向量可离线计算并建立 ANN 索引；更新模型后应同步更新用户塔服务、物品向量及索引，避免混用不同版本。
 
 ### 4. LightGBM 模型
 

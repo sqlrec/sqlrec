@@ -74,6 +74,16 @@ def _same_feature_configs(requested, saved):
     return True
 
 
+def _check_dssm_loss(config):
+    """Reject unsupported DSSM objectives before checkpoint configuration is merged."""
+    if config.model_config.WhichOneof("model") != "dssm":
+        return
+    losses = config.model_config.losses
+    if len(losses) != 1 or losses[0].WhichOneof("loss") != "softmax_cross_entropy":
+        raise ValueError("SQLRec DSSM requires exactly one softmax_cross_entropy loss for recall; "
+                         "other objectives and their checkpoints are unsupported")
+
+
 def _check_structure_options(saved, options, masks):
     """Compare explicit SQL overrides with checkpoint values, ignoring other defaults."""
     architecture = saved.model_config.WhichOneof("model")
@@ -147,9 +157,11 @@ def _check_structure_options(saved, options, masks):
 
 def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None):
     """Retain checkpoint structure and validate the effective label contract."""
+    _check_dssm_loss(requested)
     config = type(requested)()
     config.CopyFrom(requested)
     if saved is not None:
+        _check_dssm_loss(saved)
         if list(config.data_config.label_fields) != list(saved.data_config.label_fields):
             raise ValueError("Checkpoint label_fields cannot be changed during export or fine-tuning")
         multi_task = (requested.model_config.WhichOneof("model") == "mmoe"

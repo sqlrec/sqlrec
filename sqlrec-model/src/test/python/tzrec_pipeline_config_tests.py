@@ -18,6 +18,63 @@ import torch
 
 
 class CheckpointConfigTest(unittest.TestCase):
+    def test_dssm_unsupported_objectives_are_rejected_before_checkpoint_merge(self):
+        def recall():
+            return text_format.Parse(
+                'data_config { label_fields: "label" } '
+                'model_config { dssm {} losses { softmax_cross_entropy {} } }',
+                pipeline_pb2.EasyRecConfig())
+
+        for objective in ("binary_cross_entropy", "l2_loss"):
+            unsupported = recall()
+            getattr(unsupported.model_config.losses[0], objective).SetInParent()
+            for requested, saved in ((unsupported, None), (unsupported, recall()), (recall(), unsupported)):
+                with self.subTest(objective=objective, saved=saved), self.assertRaisesRegex(
+                        ValueError, "DSSM requires exactly one softmax_cross_entropy"):
+                    prepare_config(requested, saved)
+        saved, requested = recall(), recall()
+        requested.data_config.batch_size = 16
+        self.assertEqual(prepare_config(requested, saved).data_config.batch_size, 16)
+        for count in (0, 1, 2):
+            malformed = recall()
+            del malformed.model_config.losses[:]
+            for _ in range(count):
+                loss = malformed.model_config.losses.add()
+                if count == 2:
+                    loss.softmax_cross_entropy.SetInParent()
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "DSSM requires exactly one"):
+                prepare_config(malformed)
+
+    def test_cli_rejects_unsupported_dssm_checkpoint_before_training_or_export(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "checkpoint"
+            source.mkdir()
+            requested = text_format.Parse(
+                'data_config { label_fields: "label" } '
+                'model_config { dssm {} losses { softmax_cross_entropy {} } }',
+                pipeline_pb2.EasyRecConfig())
+            saved = pipeline_pb2.EasyRecConfig()
+            saved.CopyFrom(requested)
+            saved.model_config.losses[0].binary_cross_entropy.SetInParent()
+            config_util.save_message(saved, str(source / "pipeline.config"))
+            requested.model_dir = str(source)
+            requested.train_config.fine_tune_checkpoint = str(source)
+            path = root / "requested.config"
+            config_util.save_message(requested, str(path))
+            for mode in ("train", "export"):
+                argv = ["run.py", "--mode", mode, "--pipeline_config_path", str(path),
+                        "--export_dir", str(root / "export")]
+                with (self.subTest(mode=mode), patch.object(sys, "argv", argv),
+                      patch("tzrec.main.train_and_evaluate") as train,
+                      patch("tzrec.main.export") as export):
+                    with self.assertRaisesRegex(ValueError, "DSSM requires exactly one softmax_cross_entropy"):
+                        main()
+                    train.assert_not_called()
+                    export.assert_not_called()
+                self.assertFalse((root / "export").exists())
+                self.assertFalse(list(root.glob("export.staging-*")))
+
     def test_training_entry_delegates_sample_loading_to_native_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -26,7 +83,7 @@ class CheckpointConfigTest(unittest.TestCase):
                     config = self.mmoe()
                 elif architecture == "dssm":
                     config = text_format.Parse(
-                        'data_config { label_fields: "label" } model_config { dssm {} }',
+                        'data_config { label_fields: "label" } model_config { dssm {} losses { softmax_cross_entropy {} } }',
                         pipeline_pb2.EasyRecConfig())
                 else:
                     config = self.config(architecture)
