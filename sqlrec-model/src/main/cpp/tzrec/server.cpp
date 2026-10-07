@@ -145,6 +145,9 @@ int main(int argc, char** argv) {
         httplib::Server server;
         // Quantized embedding graphs may mutate shared bounds-check buffers.
         server.new_task_queue = [] { return new httplib::ThreadPool(1, 1, 64); };
+        // Idle keep-alive sockets must not occupy the sole inference worker and
+        // starve /health probes. Close each response while preserving serial inference.
+        server.set_keep_alive_max_count(1);
         server.set_payload_max_length(16 * 1024 * 1024);
         setup_graceful_shutdown(server);
         register_health_endpoint(server);

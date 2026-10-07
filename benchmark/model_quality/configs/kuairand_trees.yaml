@@ -1,0 +1,23 @@
+# Machine settings come from deploy/env.sh; defaults are frozen at build.
+dataset:
+  config: datasets/kuairand.yaml
+  view: trees
+models:
+  - family: gbdt.catboost
+    params:
+      objective: binary
+      num_iterations: 100
+      max_depth: 6
+      learning_rate: 0.05
+  - family: gbdt.lightgbm
+    params:
+      objective: binary
+      num_iterations: 100
+      num_leaves: 31
+      learning_rate: 0.05
+  - family: gbdt.xgboost
+    params:
+      objective: binary
+      num_iterations: 100
+      max_depth: 6
+      learning_rate: 0.05

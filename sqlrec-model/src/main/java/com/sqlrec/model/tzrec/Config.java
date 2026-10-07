@@ -20,6 +20,8 @@ public class Config extends ModelConfigBase {
             "sqlrec/tzrec", "Docker image", null, String.class);
 
     // Training configuration
+    public static final ConfigOption<Integer> RANDOM_SEED = new ConfigOption<>(
+            "random_seed", null, "Nonnegative Torch and NumPy training seed", null, Integer.class);
     public static final ConfigOption<Double> SPARSE_LR = new ConfigOption<>(
             "sparse_lr",
             0.001, "Learning rate for sparse features", null, Double.class);

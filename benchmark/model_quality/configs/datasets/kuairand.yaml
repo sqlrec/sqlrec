@@ -1,0 +1,99 @@
+schema_version: 1
+id: kuairand
+name: KuaiRand-Pure
+source:
+  version: zenodo-10439422
+  url: https://zenodo.org/records/10439422/files/KuaiRand-Pure.tar.gz
+  md5: 0820331067a3784d9691136f772b35a7
+  homepage: https://kuairand.com/
+  files:
+    early_standard: log_standard_4_08_to_4_21_pure.csv
+    late_standard: log_standard_4_22_to_5_08_pure.csv
+    random: log_random_4_22_to_5_08_pure.csv
+    items: video_features_basic_pure.csv
+preparation:
+  adapter: benchmark.model_quality.prepare_kuairand
+  seed: 123
+  primary_task: click
+  row_key: row_id
+  time_key: time_ms
+  date_key: date
+  query_group: [user_id, tab]
+  query_features: [user_id, tab, user_show_count, user_positive_count, user_seen]
+  item_features: [author_id, tag, duration_s]
+  defaults: {author_id: "__MISSING__", tag: [], duration_s: 0}
+  array_keys: {tag_key: tag}
+  statistics:
+    - {key: user_id, count: user_show_count, positive: user_positive_count, seen: user_seen}
+    - {key: video_id, count: item_show_count, positive: item_positive_count, seen: item_seen}
+  parameters:
+    log_sources: {early_standard: standard, late_standard: standard, random: random}
+    train_dates: [20220408, 20220421]
+    valid_dates: [20220422, 20220428]
+    test_dates: [20220429, 20220508]
+    candidate_cutoff: 20220422
+dataset:
+  adapter: prepared
+  user_key: user_id
+  item_key: video_id
+  query_key: query_id
+  hash_bucket_multiplier: 20
+  hash_bucket_max: 4194304
+protocol:
+  candidate_scope: full_catalog
+  exclude_seen: false
+evaluation:
+  split: valid
+  gauc_group: user_id
+  slice_by: [source, tab]
+columns:
+  user_id: {type: STRING, role: user}
+  video_id: {type: STRING, role: item}
+  tag: {type: "ARRAY<STRING>", role: item}
+  author_id: {type: STRING, role: item}
+  tab: {type: STRING, role: context}
+  user_show_count: {type: FLOAT, role: user}
+  user_positive_count: {type: FLOAT, role: user}
+  item_show_count: {type: FLOAT, role: item}
+  item_positive_count: {type: FLOAT, role: item}
+  duration_s: {type: FLOAT, role: item}
+  label: {type: INT}
+  row_id: {type: STRING}
+  query_id: {type: STRING}
+  time_ms: {type: BIGINT}
+  source: {type: STRING}
+  tag_key: {type: STRING}
+  user_seen: {type: BOOLEAN}
+  item_seen: {type: BOOLEAN}
+  eligible: {type: BOOLEAN}
+  eligibility_reason: {type: STRING}
+  long_view: {type: INT}
+  date: {type: BIGINT}
+tasks:
+  click:
+    column: label
+    type: binary
+    description: "observed is_click"
+  long_view:
+    column: long_view
+    type: binary
+    description: "observed binary long_view"
+views:
+  recall:
+    features: [user_id, video_id, tag, author_id, user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [click]
+    models: [tzrec.dssm]
+    evaluation:
+      ks: [20, 50, 100]
+  ranking:
+    features: [user_id, video_id, tag, author_id, tab, user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [click]
+    models: [tzrec.wide_and_deep, tzrec.deepfm, tzrec.rocket_launching]
+  trees:
+    features: [user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [click]
+    models: [gbdt.catboost, gbdt.lightgbm, gbdt.xgboost]
+  multitask:
+    features: [user_id, video_id, tag, author_id, tab, user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [click, long_view]
+    models: [tzrec.mmoe]

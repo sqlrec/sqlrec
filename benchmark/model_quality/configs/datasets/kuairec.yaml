@@ -1,0 +1,83 @@
+schema_version: 1
+id: kuairec
+name: KuaiRec-small_matrix
+source:
+  version: zenodo-18164998
+  url: https://zenodo.org/records/18164998/files/KuaiRec.zip
+  md5: 261550d472c48eff4990fb13c0e5bcf7
+  homepage: https://kuairec.com/
+  files:
+    matrix: small_matrix.csv
+    categories: item_categories.csv
+preparation:
+  adapter: benchmark.model_quality.prepare_kuairec
+  seed: 123
+  primary_task: watch_positive
+  row_key: row_id
+  time_key: time_ms
+  query_group: [user_id, tab]
+  query_features: [user_id, tab, user_show_count, user_positive_count, user_seen]
+  item_features: [author_id, tag, duration_s]
+  defaults: {author_id: "__MISSING__", tag: [], duration_s: 0}
+  array_keys: {tag_key: tag}
+  statistics:
+    - {key: user_id, count: user_show_count, positive: user_positive_count, seen: user_seen}
+    - {key: video_id, count: item_show_count, positive: item_positive_count, seen: item_seen}
+  parameters:
+    positive_threshold: 2.0
+    split_percent: [80, 10, 10]
+dataset:
+  adapter: prepared
+  user_key: user_id
+  item_key: video_id
+  query_key: query_id
+  hash_bucket_multiplier: 20
+  hash_bucket_max: 4194304
+protocol:
+  candidate_scope: observed_only
+  exclude_seen: true
+evaluation:
+  split: valid
+  gauc_group: user_id
+columns:
+  user_id: {type: STRING, role: user}
+  video_id: {type: STRING, role: item}
+  tag: {type: "ARRAY<STRING>", role: item}
+  author_id: {type: STRING, role: item}
+  tab: {type: STRING, role: context}
+  user_show_count: {type: FLOAT, role: user}
+  user_positive_count: {type: FLOAT, role: user}
+  item_show_count: {type: FLOAT, role: item}
+  item_positive_count: {type: FLOAT, role: item}
+  duration_s: {type: FLOAT, role: item}
+  label: {type: INT}
+  row_id: {type: STRING}
+  query_id: {type: STRING}
+  time_ms: {type: BIGINT}
+  source: {type: STRING}
+  tag_key: {type: STRING}
+  user_seen: {type: BOOLEAN}
+  item_seen: {type: BOOLEAN}
+  eligible: {type: BOOLEAN}
+  eligibility_reason: {type: STRING}
+  timestamp_missing: {type: BOOLEAN}
+tasks:
+  watch_positive:
+    column: label
+    type: binary
+    description: "watch_ratio > {positive_threshold}; observed preference, not CTR"
+views:
+  recall:
+    features: [user_id, video_id, tag, author_id, user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [watch_positive]
+    models: [tzrec.dssm]
+    evaluation:
+      ks: [20, 50, 100]
+  ranking:
+    features: [user_id, video_id, tag, author_id, tab, user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [watch_positive]
+    models: [tzrec.wide_and_deep, tzrec.deepfm, tzrec.rocket_launching]
+  trees:
+    features: [user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    tasks: [watch_positive]
+    models: [gbdt.catboost, gbdt.lightgbm, gbdt.xgboost]

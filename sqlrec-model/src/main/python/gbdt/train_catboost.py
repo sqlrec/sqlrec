@@ -51,6 +51,7 @@ def _build_cb_params(p: dict) -> dict:
         "l2_leaf_reg": float(p.get("l2_leaf_reg", 3.0)),
         "verbose": False,
         "allow_writing_files": False,
+        "random_seed": int(p.get("random_seed", 0)),
     }
 
 

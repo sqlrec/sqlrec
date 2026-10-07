@@ -141,11 +141,18 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
      * TZRec runtime env vars shared by both the training Job and the serving Deployment.
      */
     private static List<EnvVar> buildRuntimeEnvVars(Map<String, String> params) {
-        return List.of(
+        List<EnvVar> variables = new ArrayList<>(List.of(
                 new EnvVarBuilder().withName("USE_FSSPEC").withValue(Config.USE_FSSPEC.getValue(params)).build(),
                 new EnvVarBuilder().withName("USE_SPAWN_MULTI_PROCESS").withValue(Config.USE_SPAWN_MULTI_PROCESS.getValue(params)).build(),
                 new EnvVarBuilder().withName("USE_FARM_HASH_TO_BUCKETIZE").withValue(Config.USE_FARM_HASH_TO_BUCKETIZE.getValue(params)).build()
-        );
+        ));
+        Integer seed = Config.RANDOM_SEED.getValueOrNull(params);
+        if (seed != null) {
+            if (seed < 0) throw new IllegalArgumentException("random_seed must be nonnegative");
+            variables.add(new EnvVarBuilder().withName("TORCH_MANUAL_SEED").withValue(seed.toString()).build());
+            variables.add(new EnvVarBuilder().withName("NUMPY_MANUAL_SEED").withValue(seed.toString()).build());
+        }
+        return variables;
     }
 
     public static String genJobYaml(String pipelineConfig, String shell, String id, Map<String, String> params) {

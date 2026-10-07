@@ -17,6 +17,7 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexNode;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +92,26 @@ public class MilvusCalciteTable extends SqlRecKvTable implements VectorSearchabl
         @Override
         protected boolean addImpl(Object[] objects) {
             return milvusHandler.add(objects);
+        }
+
+        @Override
+        protected boolean addAllImpl(Collection<? extends Object[]> rows) {
+            // SQL INSERT must use the same bulk upsert path as the Flink sink.
+            int batchSize = table.milvusConfig.batchSize != null && table.milvusConfig.batchSize > 0
+                    ? table.milvusConfig.batchSize : 4096;
+            List<Object[]> batch = new ArrayList<>(Math.min(batchSize, rows.size()));
+            boolean modified = false;
+            for (Object[] row : rows) {
+                batch.add(row);
+                if (batch.size() == batchSize) {
+                    modified |= milvusHandler.addBatch(batch);
+                    batch = new ArrayList<>(Math.min(batchSize, rows.size()));
+                }
+            }
+            if (!batch.isEmpty()) {
+                modified |= milvusHandler.addBatch(batch);
+            }
+            return modified;
         }
 
         @Override

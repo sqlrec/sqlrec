@@ -46,6 +46,7 @@ def _build_lgb_params(p: dict) -> dict:
         "min_data_in_leaf": int(p.get("min_data_in_leaf", 20)),
         "lambda_l2": float(p.get("l2_regularization", 1.0)),
         "verbose": -1,
+        "seed": int(p.get("random_seed", 0)),
     }
     return params
 

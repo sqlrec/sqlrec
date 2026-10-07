@@ -1,5 +1,6 @@
 """Exercise independent native operator loading, HTTP contracts, and serialization."""
 
+import http.client
 import json
 import os
 from pathlib import Path
@@ -76,6 +77,19 @@ def main():
                 assert status == 200
                 assert output == {"cumsum": [0, 1, 3], "half": [1.0, 2.0], "bf16": [1.0, 2.0],
                                   "scalar": 0.25, "integer": 9223372036854775806, "boolean": True}, output
+                # JDK prediction clients keep successful connections alive.
+                # An idle client must not prevent a separate Kubernetes probe.
+                persistent = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                try:
+                    persistent.request("POST", "/predict", json.dumps([{"input": 1}]),
+                                       {"Content-Type": "application/json", "Connection": "keep-alive"})
+                    response = persistent.getresponse()
+                    assert response.status == 200
+                    response.read()
+                    with urllib.request.urlopen(url + "/health", timeout=1) as health:
+                        assert health.status == 200
+                finally:
+                    persistent.close()
                 assert predict([{"input": 99}])[0] == 500
                 assert predict([{"input": 98}])[0] == 500
                 assert predict([{"input": 1}])[0] == 200

@@ -1,0 +1,14 @@
+# Machine settings come from deploy/env.sh; defaults are frozen at build.
+dataset:
+  config: datasets/kuairand.yaml
+  view: multitask
+models:
+  - family: tzrec.mmoe
+    params:
+      embedding_dim: 8
+      batch_size: 64
+      num_workers: 1
+      num_epochs: 1
+      num_expert: 4
+      expert_hidden_units: "64,32"
+      task_hidden_units: "16"

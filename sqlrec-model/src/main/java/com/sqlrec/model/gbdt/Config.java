@@ -17,6 +17,8 @@ public class Config extends ModelConfigBase {
             "sqlrec/gbdt", "Docker image", null, String.class);
 
     // Common GBDT training parameters
+    public static final ConfigOption<Integer> RANDOM_SEED = new ConfigOption<>(
+            "random_seed", 0, "Nonnegative seed for reproducible training", null, Integer.class);
     public static final ConfigOption<String> OBJECTIVE = new ConfigOption<>(
             "objective",
             "binary", "Learning objective (binary, regression)", null, String.class);

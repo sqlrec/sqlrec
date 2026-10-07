@@ -58,6 +58,7 @@ def _build_xgb_params(p: dict) -> dict:
         "min_child_weight": int(p.get("min_child_weight", 1)),
         "reg_lambda": float(p.get("l2_regularization", 1.0)),
         "verbosity": 0,
+        "seed": int(p.get("random_seed", 0)),
     }
 
 

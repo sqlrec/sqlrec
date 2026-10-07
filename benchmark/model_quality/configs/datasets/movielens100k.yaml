@@ -1,0 +1,86 @@
+schema_version: 1
+id: movielens100k
+name: MovieLens-100K
+source:
+  version: ml-100k-official
+  url: https://files.grouplens.org/datasets/movielens/ml-100k.zip
+  sha256: 50d2a982c66986937beb9ffb3aa76efe955bf3d5c6b761f4e3a7cd717c6a3229
+  homepage: https://grouplens.org/datasets/movielens/100k/
+  files:
+    ratings: u.data
+    items: u.item
+preparation:
+  adapter: benchmark.model_quality.prepare_movielens
+  seed: 123
+  primary_task: rating_positive
+  row_key: row_id
+  time_key: time_ms
+  query_group: [user_id, tab]
+  query_features: [user_id, tab, user_show_count, user_positive_count, user_seen]
+  item_features: [tag]
+  defaults: {tag: []}
+  array_keys: {tag_key: tag}
+  statistics:
+    - {key: user_id, count: user_show_count, positive: user_positive_count, seen: user_seen}
+    - {key: video_id, count: item_show_count, positive: item_positive_count, seen: item_seen}
+  parameters:
+    protocol: pair
+    positive_threshold: 4
+    split_percent: [80, 10, 10]
+    expected_rows: 100000
+    expected_users: 943
+    expected_items: 1682
+    genres: [unknown, Action, Adventure, Animation, "Children's", Comedy, Crime, Documentary, Drama, Fantasy, Film-Noir, Horror, Musical, Mystery, Romance, Sci-Fi, Thriller, War, Western]
+dataset:
+  adapter: prepared
+  user_key: user_id
+  item_key: video_id
+  query_key: query_id
+  hash_bucket_multiplier: 20
+  hash_bucket_max: 4194304
+protocol:
+  candidate_scope: full_catalog
+  exclude_seen: true
+evaluation:
+  split: valid
+  gauc_group: user_id
+columns:
+  user_id: {type: STRING, role: user}
+  video_id: {type: STRING, role: item}
+  tag: {type: "ARRAY<STRING>", role: item}
+  tab: {type: STRING, role: context}
+  user_show_count: {type: FLOAT, role: user}
+  user_positive_count: {type: FLOAT, role: user}
+  item_show_count: {type: FLOAT, role: item}
+  item_positive_count: {type: FLOAT, role: item}
+  label: {type: INT}
+  row_id: {type: STRING}
+  query_id: {type: STRING}
+  time_ms: {type: BIGINT}
+  source: {type: STRING}
+  tag_key: {type: STRING}
+  user_seen: {type: BOOLEAN}
+  item_seen: {type: BOOLEAN}
+  eligible: {type: BOOLEAN}
+  eligibility_reason: {type: STRING}
+  rating: {type: INT}
+tasks:
+  rating_positive:
+    column: label
+    type: binary
+    description: "{label_semantics}"
+views:
+  recall:
+    features: [user_id, video_id, tag, user_show_count, user_positive_count, item_show_count, item_positive_count]
+    tasks: [rating_positive]
+    models: [tzrec.dssm]
+    evaluation:
+      ks: [20, 50, 100]
+  ranking:
+    features: [user_id, video_id, tag, tab, user_show_count, user_positive_count, item_show_count, item_positive_count]
+    tasks: [rating_positive]
+    models: [tzrec.wide_and_deep, tzrec.deepfm, tzrec.rocket_launching]
+  trees:
+    features: [user_show_count, user_positive_count, item_show_count, item_positive_count]
+    tasks: [rating_positive]
+    models: [gbdt.catboost, gbdt.lightgbm, gbdt.xgboost]

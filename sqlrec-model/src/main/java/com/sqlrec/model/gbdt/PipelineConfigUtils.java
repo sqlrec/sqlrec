@@ -73,6 +73,11 @@ public class PipelineConfigUtils {
         JsonObject json = new JsonObject();
         json.addProperty("objective", Config.OBJECTIVE.getValue(params));
         json.addProperty("metric", Config.METRIC.getValue(params));
+        if (Config.RANDOM_SEED.isSet(params)) {
+            int seed = Config.RANDOM_SEED.getValue(params);
+            if (seed < 0) throw new IllegalArgumentException("random_seed must be nonnegative");
+            json.addProperty("random_seed", seed);
+        }
 
         if (modelType == ModelType.CATBOOST) {
             // CatBoost uses its own param names; CB_* overrides generic GBDT params.

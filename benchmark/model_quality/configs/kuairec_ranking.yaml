@@ -1,0 +1,27 @@
+# Machine settings come from deploy/env.sh; defaults are frozen at build.
+dataset:
+  config: datasets/kuairec.yaml
+  view: ranking
+models:
+  - family: tzrec.wide_and_deep
+    params:
+      embedding_dim: 8
+      batch_size: 64
+      num_workers: 1
+      num_epochs: 1
+      hidden_units: "64,32"
+  - family: tzrec.deepfm
+    params:
+      embedding_dim: 8
+      batch_size: 64
+      num_workers: 1
+      num_epochs: 1
+      hidden_units: "64,32"
+  - family: tzrec.rocket_launching
+    params:
+      embedding_dim: 8
+      batch_size: 64
+      num_workers: 1
+      num_epochs: 1
+      booster_hidden_units: "64,32"
+      light_hidden_units: "32,16"

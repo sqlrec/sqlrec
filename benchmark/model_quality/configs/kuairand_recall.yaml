@@ -1,0 +1,14 @@
+# Machine settings come from deploy/env.sh; defaults are frozen at build.
+dataset:
+  config: datasets/kuairand.yaml
+  view: recall
+models:
+  - family: tzrec.dssm
+    params:
+      embedding_dim: 8
+      batch_size: 64
+      num_workers: 1
+      num_epochs: 1
+      user_hidden_units: "32,16"
+      item_hidden_units: "32,16"
+      output_dim: 16

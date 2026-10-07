@@ -3,3 +3,6 @@ deploy/
 submodules/
 **/__pycache__/
 **/*.py[cod]
+benchmark/model_quality/data/
+benchmark/model_quality/runs/
+benchmark/model_quality/reports/
