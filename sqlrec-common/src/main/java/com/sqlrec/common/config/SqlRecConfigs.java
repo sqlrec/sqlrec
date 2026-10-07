@@ -5,7 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 public class SqlRecConfigs {
     public static final ConfigOption<String> SQLREC_VERSION = new ConfigOption<>(
             "SQLREC_VERSION",
-            "0.1.15",
+            "0.1.16",
             "sqlrec version",
             null,
             String.class
