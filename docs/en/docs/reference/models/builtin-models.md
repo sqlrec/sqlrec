@@ -104,7 +104,7 @@ SQL prediction requests preserve explicit nulls, allowing feature defaults even 
 
 During fine-tuning or export, explicit network or feature structure overrides are compared individually with the checkpoint and mismatches fail before execution. Continuous feature defaults and normalizers are compared by their parsed numeric meaning, so equivalent number formats or normalizer parameter order do not count as structure changes. ID defaults and separators still require exact matches. Structure options not overridden retain their checkpoint values without comparing generation defaults. Per-column options still take precedence over global `embedding_dim` and `num_buckets`. Create and train a new model to change its structure.
 
-Continuous scalar/vector defaults and numeric normalizer parameters are compared at float32 precision; vector element order and dimensions must match. Normalizer parameter order does not affect comparison. Omitted `log10` parameters use `threshold=1e-10` and `default=-10`. Accepted equivalent configurations retain the original saved checkpoint configuration. These rules also apply to MMoE feature comparisons; tasks and network structure must still match.
+Continuous scalar/vector defaults and numeric normalizer parameters are compared at float32 precision; vector element order and dimensions must match. Normalizer parameter order does not affect comparison. Omitted `log10` parameters use `threshold=1` and `default=0`, matching the original feature generator. Accepted equivalent configurations retain the original saved checkpoint configuration. These rules also apply to MMoE feature comparisons; tasks and network structure must still match.
 
 WideAndDeep, DeepFM and DSSM require exactly one `label_columns` entry. The label may be declared in the Model schema or exist only in the training table. It is excluded from features, feature groups, and inferred DSSM towers; online requests do not need it. Explicit DSSM towers must contain declared non-label features and cover all features; specifying one tower infers the other from remaining features. Both towers must be nonempty.
 
@@ -122,7 +122,7 @@ Convert multivalue integer IDs to `ARRAY<STRING>`; `ARRAY<INT>` and `ARRAY<BIGIN
 | `column.{name}.bucket_size` | Positive ID/hash bucket count |
 | `column.{name}.embedding_dim` | Sparse embedding dimension: positive multiple of 4; MLP/AutoDis: positive |
 | `column.{name}.default_value` | ID default empty; raw default zero per dimension; separator-delimited vector defaults |
-| `column.{name}.separator` | Default ASCII 29 (`\035`); multivalue strings and vector defaults |
+| `column.{name}.separator` | Single ASCII character; default ASCII 29 (`\035`); multivalue strings and vector defaults |
 | `column.{name}.value_dim` | Required for float arrays; scalar floats must use 1 |
 | `column.{name}.normalizer` | Raw zscore, minmax, or log10 normalization |
 | `column.{name}.boundaries` | Comma-separated, finite, strictly increasing raw bucket boundaries; equality selects the right bucket |

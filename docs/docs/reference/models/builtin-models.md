@@ -81,7 +81,7 @@ SQL 推理请求会保留已有字段的显式 null，全批次为空的特征�
 
 续训和导出时，WITH 显式覆盖的网络或特征结构参数会逐项与 checkpoint 比较，不一致时在执行前报错。连续特征默认值和 normalizer 按解析后的数值含义比较，等价数字写法或 normalizer 参数顺序变化不会被误判为结构改变；ID 默认值和分隔符仍严格比较。未覆盖的结构参数保留 checkpoint 的值，不参与默认值比较；列级参数仍优先于全局 `embedding_dim`、`num_buckets`。改变结构需新建模型并重新训练。
 
-连续特征的标量/向量默认值和 normalizer 数值参数按 float32 精度比较，向量元素顺序和维度必须一致。normalizer 参数顺序不影响比较；`log10` 未指定的 `threshold`、`default` 分别按 `1e-10`、`-10` 比较。等价配置通过后仍沿用 checkpoint 中保存的原始配置。此规则同样适用于 MMoE 的特征比较；任务及网络结构仍须一致。
+连续特征的标量/向量默认值和 normalizer 数值参数按 float32 精度比较，向量元素顺序和维度必须一致。normalizer 参数顺序不影响比较；`log10` 未指定的 `threshold`、`default` 分别按 `1`、`0` 比较，与原版特征生成器一致。等价配置通过后仍沿用 checkpoint 中保存的原始配置。此规则同样适用于 MMoE 的特征比较；任务及网络结构仍须一致。
 
 WideAndDeep、DeepFM 和 DSSM 的 `label_columns` 必须是单个标签列。标签可以声明在 Model 字段中，也可以只存在于训练表中；生成特征、Wide/Deep/FM 分组和 DSSM 推断塔时都会排除标签。训练表仍需包含标签，在线请求无需提供标签。手工指定的 DSSM 塔不能包含标签或未知列；只指定一塔时，另一塔使用剩余的非标签特征，两塔均须非空。
 
@@ -99,7 +99,7 @@ WideAndDeep、DeepFM 和 DSSM 的 `label_columns` 必须是单个标签列。标
 | `column.{name}.bucket_size` | ID 桶数量，正整数；字符串列表示哈希桶数量 |
 | `column.{name}.embedding_dim` | ID/分桶特征的嵌入维度须为正数且为 4 的倍数；MLP/AutoDis 须为正数 |
 | `column.{name}.default_value` | ID 默认空；连续特征默认 0，向量默认各维为 0；多值默认用 separator 分隔 |
-| `column.{name}.separator` | 默认 `\035`（ASCII 29）；用于分隔多值字符串与向量默认值 |
+| `column.{name}.separator` | 单个 ASCII 字符，默认 `\035`（ASCII 29）；用于分隔多值字符串与向量默认值 |
 | `column.{name}.value_dim` | 连续向量维度；连续标量必须为 1 |
 | `column.{name}.normalizer` | 连续特征支持 zscore、minmax、log10，见下例 |
 | `column.{name}.boundaries` | 连续特征的逗号分隔、严格递增有限边界；相等值进入右侧桶 |

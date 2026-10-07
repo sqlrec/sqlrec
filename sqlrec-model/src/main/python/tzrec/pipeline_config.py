@@ -38,8 +38,8 @@ def _normalizer_values(text):
     required = {"zscore": {"mean", "standard_deviation"}, "minmax": {"min", "max"},
                 "log10": {"threshold", "default"}}.get(method)
     if method == "log10":
-        parts.setdefault("threshold", "1e-10")
-        parts.setdefault("default", "-10")
+        parts.setdefault("threshold", "1")
+        parts.setdefault("default", "0")
     if required is None or set(parts) != required:
         raise ValueError("Invalid normalizer parameters")
     values = {key: _float32(value) for key, value in parts.items()}

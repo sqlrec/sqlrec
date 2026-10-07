@@ -289,8 +289,12 @@ class CheckpointStructureTest(unittest.TestCase):
             ("method=minmax,min=0.1,max=1",
              "max=1e0,min=0.10000000149,method=minmax",
              "method=minmax,min=0.2,max=1"),
-            ("method=log10", "default=-1e1,method=log10,threshold=1e-10",
+            ("method=log10", "default=0e0,method=log10,threshold=1.0",
              "method=log10,default=-4"),
+            ("method=log10,threshold=0.05", "default=0,threshold=5e-2,method=log10",
+             "method=log10,threshold=0.05,default=-10"),
+            ("method=log10,default=-5", "threshold=1,default=-5.0,method=log10",
+             "method=log10,default=-5,threshold=1e-10"),
         ):
             raw.normalizer = original
             with self.subTest(original=original):
@@ -300,6 +304,14 @@ class CheckpointStructureTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "normalizer"):
                     self.module.prepare_config(requested, saved,
                         structure_options={"column.price.normalizer": changed})
+        raw.normalizer = "method=log10"
+        requested.CopyFrom(saved)
+        requested.feature_configs[1].raw_feature.normalizer = "method=log10,threshold=1,default=0"
+        effective = self.module.prepare_config(requested, saved, check_checkpoint_structure=True)
+        self.assertEqual(effective.feature_configs, saved.feature_configs)
+        requested.feature_configs[1].raw_feature.normalizer = "method=log10,threshold=1e-10,default=-10"
+        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
+            self.module.prepare_config(requested, saved, check_checkpoint_structure=True)
         raw.normalizer = "method=zscore,mean=0,standard_deviation=1"
         for invalid in ("method=zscore,mean=0,mean=0,standard_deviation=1",
                         "method=zscore,mean=0,standard_deviation=NaN",
