@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
 ARG TARGETARCH
-
 FROM --platform=linux/amd64 mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easyrec/tzrec-devel:1.3-cpu AS tzrec-amd64
 
 FROM --platform=linux/arm64 python:3.11-slim-bookworm AS tzrec-arm64
@@ -32,9 +31,9 @@ RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
         'feature_store_py @ https://feature-store-py.oss-cn-beijing.aliyuncs.com/package/feature_store_py-2.2.7-py3-none-any.whl' \
         fsspec \
         'grpcio-tools<1.63.0' \
-        'numpy>=1.24,<3' packaging pandas psutil \
+        'numpy==1.26.4' packaging pandas psutil \
         'pyodps==0.12.5.1' \
-        'pyarrow>=14,<26' safetensors scikit-learn tensorboard faiss-cpu
+        'pyarrow==17.0.0' safetensors scikit-learn tensorboard faiss-cpu
 
 # These wheels are built from the same sqlrec-arm-compat revision tested in CI.
 # pyfarmhash contains the native ARM extension used by pyfg ID hashing.
@@ -50,11 +49,12 @@ FROM tzrec-${TARGETARCH} AS dependencies
 COPY juicefs-*.whl /tmp/
 COPY tzrec-*.whl /tmp/
 
-# tzrec's runtime dependencies are installed in the architecture-specific base.
+# Apply the deployment pins on both architectures together with the final pip
+# dependencies. Keep these versions aligned with compat's test requirements.
 RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
-    pip install /tmp/juicefs-*.whl \
+    python -c 'import sys; assert sys.version_info[:2] == (3, 11)' \
+    && pip install 'numpy==1.26.4' 'pyarrow==17.0.0' /tmp/juicefs-*.whl flask \
     && pip install --no-deps /tmp/tzrec-*.whl \
-    && pip install flask \
     && rm -f /tmp/*.whl \
     && mkdir -p /app
 

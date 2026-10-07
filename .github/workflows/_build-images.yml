@@ -90,117 +90,6 @@ jobs:
           fi
           cat "$GITHUB_OUTPUT"
 
-  compat-x86-test:
-    needs: resolve-model-sources
-    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout the resolved compatibility revision
-        uses: actions/checkout@v4
-        with:
-          repository: sqlrec/sqlrec-arm-compat
-          ref: ${{ needs.resolve-model-sources.outputs.arm_compat_commit }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Compare supported APIs with original x86 wheels
-        run: |
-          python -m venv "$RUNNER_TEMP/compat-python"
-          python -m venv "$RUNNER_TEMP/original-python"
-          "$RUNNER_TEMP/compat-python/bin/python" -m pip install \
-            'numpy==1.26.4' 'pyarrow==17.0.0' 'pyfarmhash==0.4.0' 'pytest>=8,<10'
-          "$RUNNER_TEMP/compat-python/bin/python" -m pip install --no-deps \
-            -e ./packages/pyfg -e ./packages/graphlearn
-          "$RUNNER_TEMP/original-python/bin/python" -m pip install \
-            'numpy==1.26.4' 'pyarrow==17.0.0' \
-            'https://tzrec.oss-accelerate.aliyuncs.com/third_party/pyfg-1.0.5-cp311-cp311-linux_x86_64.whl' \
-            'https://tzrec.oss-accelerate.aliyuncs.com/third_party/graphlearn/graphlearn-1.3.8-cp311-cp311-linux_x86_64.whl'
-          SQLREC_ORIGINAL_PYTHON="$RUNNER_TEMP/original-python/bin/python" \
-            "$RUNNER_TEMP/compat-python/bin/python" tests/export_oracle.py \
-            "$RUNNER_TEMP/compat-oracle/x86-oracle.json"
-          SQLREC_ORIGINAL_PYTHON="$RUNNER_TEMP/original-python/bin/python" \
-          SQLREC_COMPAT_ORACLE="$RUNNER_TEMP/compat-oracle/x86-oracle.json" \
-            "$RUNNER_TEMP/compat-python/bin/python" -m pytest -q
-
-      - name: Share original x86 oracle with native architecture tests
-        uses: actions/upload-artifact@v4
-        with:
-          name: compat-x86-oracle
-          path: ${{ runner.temp }}/compat-oracle/x86-oracle.json
-          if-no-files-found: error
-          retention-days: 3
-
-  compat-native-test:
-    name: Compat / ${{ matrix.platform.arch }} / ${{ matrix.runtime.name }}
-    needs: [resolve-model-sources, compat-x86-test]
-    runs-on: ${{ matrix.platform.runner }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - arch: amd64
-            runner: ubuntu-24.04
-            machine: x86_64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            machine: aarch64
-        runtime:
-          - name: minimum-py311
-            python: '3.11'
-            numpy: 'numpy==1.24.4'
-            arrow: 'pyarrow==14.0.2'
-          - name: reference-py311
-            python: '3.11'
-            numpy: 'numpy==1.26.4'
-            arrow: 'pyarrow==17.0.0'
-          - name: numpy2-py311
-            python: '3.11'
-            numpy: 'numpy>=2,<3'
-            arrow: 'pyarrow>=14,<26'
-          - name: numpy2-py312
-            python: '3.12'
-            numpy: 'numpy>=2,<3'
-            arrow: 'pyarrow>=14,<26'
-    steps:
-      - name: Checkout the resolved compatibility revision
-        uses: actions/checkout@v4
-        with:
-          repository: sqlrec/sqlrec-arm-compat
-          ref: ${{ needs.resolve-model-sources.outputs.arm_compat_commit }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Download original x86 oracle
-        uses: actions/download-artifact@v4
-        with:
-          name: compat-x86-oracle
-          path: ${{ runner.temp }}/compat-oracle
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Replay original oracle and run the full compatibility suite
-        run: |
-          docker buildx build --platform linux/${{ matrix.platform.arch }} \
-            --target test --load --tag sqlrec-arm-compat:test \
-            --build-arg 'PYTHON_VERSION=${{ matrix.runtime.python }}' \
-            --build-arg 'NUMPY_SPEC=${{ matrix.runtime.numpy }}' \
-            --build-arg 'PYARROW_SPEC=${{ matrix.runtime.arrow }}' .
-          docker run --rm \
-            --mount "type=bind,source=$RUNNER_TEMP/compat-oracle,target=/oracle,readonly" \
-            --env SQLREC_COMPAT_ORACLE=/oracle/x86-oracle.json \
-            --env SQLREC_EXPECTED_MACHINE=${{ matrix.platform.machine }} \
-            sqlrec-arm-compat:test
-
   docker-sqlrec:
     if: ${{ inputs.build_target == 'sqlrec' || inputs.build_target == 'all' }}
     runs-on: ubuntu-latest
@@ -530,8 +419,8 @@ jobs:
   # See the docker-sqlrec job for the `needs`/`if` dependency explanation.
   docker-tzrec:
     name: Build TZRec / JuiceFS (${{ matrix.arch }})
-    needs: [resolve-model-sources, compat-native-test]
-    if: ${{ needs.compat-native-test.result == 'success' && (inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all') }}
+    needs: resolve-model-sources
+    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
     strategy:
       fail-fast: false
       matrix:
@@ -655,6 +544,23 @@ jobs:
         run: |
           image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
           bash bin/verify_tzrec_image.sh "$image" "$EXPECTED_ARCH"
+
+      - name: Run the complete compatibility suite in the final ARM TZRec image
+        if: matrix.arch == 'arm64'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          bash submodules/compat-src/scripts/test_image.sh "$image" \
+            "$RUNNER_TEMP/tzrec-compat-test-reports"
+
+      - name: Save final ARM TZRec compatibility reports
+        if: always() && matrix.arch == 'arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tzrec-arm64-compat-test-reports
+          path: ${{ runner.temp }}/tzrec-compat-test-reports
+          if-no-files-found: ignore
 
       - name: Push TZRec image (${{ matrix.arch }})
         if: inputs.publish_images
