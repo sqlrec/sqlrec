@@ -151,6 +151,7 @@ public class K8sManagerUnitTest {
     }
 
     @Test
+    @SilenceLoggers(K8sManager.class)
     public void testDeploymentReadinessPreservesDefaultCountsAndCriteria() {
         var resource = deploymentResource();
         var deployment = new DeploymentBuilder().withNewMetadata().withName("serve").endMetadata()
@@ -162,8 +163,11 @@ public class K8sManagerUnitTest {
         // Available replicas are diagnostic only.
         assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
         deployment.getSpec().setReplicas(null);
-        // The original ternary unboxes a null replica count and falls back to not ready.
+        // An omitted replica count defaults to one without unboxing null.
+        assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setReadyReplicas(0);
         assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setReadyReplicas(1);
         deployment.setSpec(null);
         assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
         deployment.setSpec(new DeploymentBuilder().withNewSpec().withReplicas(1).endSpec().build().getSpec());
@@ -256,6 +260,7 @@ public class K8sManagerUnitTest {
     }
 
     @Test
+    @SilenceLoggers(K8sManager.class)
     @SuppressWarnings("unchecked")
     public void testPendingJobWithErrImagePullIsFailed() {
         KubernetesClient client = mock(KubernetesClient.class);
@@ -327,6 +332,7 @@ public class K8sManagerUnitTest {
         assertTrue(missingJob.detail().contains("Job not found"));
     }
     @Test
+    @SilenceLoggers(K8sManager.class)
     @SuppressWarnings("unchecked")
     void businessDeletionFailureIsReportedButAlreadyDeletedResourcesAreAccepted() {
         io.fabric8.kubernetes.client.dsl.MixedOperation operations = mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);

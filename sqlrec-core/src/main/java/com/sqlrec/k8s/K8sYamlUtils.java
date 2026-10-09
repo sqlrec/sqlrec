@@ -2,6 +2,7 @@ package com.sqlrec.k8s;
 
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.ModelConf;
+import com.sqlrec.common.utils.ResourceNames;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -12,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -26,7 +29,7 @@ public class K8sYamlUtils {
             return name;
         }
 
-        String validName = name.toLowerCase();
+        String validName = name.toLowerCase(Locale.ROOT);
         validName = validName.replace('_', '-');
         validName = validName.replaceAll("[^a-z0-9.-]", "-");
         validName = validName.trim().replaceAll("^[.-]+|[.-]+$", "");
@@ -38,6 +41,25 @@ public class K8sYamlUtils {
         }
 
         return validName;
+    }
+
+    /** Keep a readable prefix; hash the complete identity before any lossy conversion. */
+    public static String serviceResourceId(String serviceName) {
+        String identity = ResourceNames.normalize(serviceName);
+        if (identity == null || identity.isEmpty()) {
+            throw new IllegalArgumentException("Service name cannot be blank");
+        }
+        String prefix = convertToValidK8sName(identity);
+        if (prefix.isEmpty()) prefix = "service";
+        if (prefix.length() > 42) prefix = prefix.substring(0, 42);
+        prefix = prefix.replaceAll("-+$", "");
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(("service:" + identity).getBytes(StandardCharsets.UTF_8));
+            return prefix + "-" + HexFormat.of().formatHex(digest, 0, 10);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     @SuppressWarnings("deprecation")

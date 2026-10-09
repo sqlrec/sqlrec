@@ -1,5 +1,7 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.utils.SilenceLoggers;
+import com.sqlrec.utils.CacheUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.Ticker;
@@ -142,6 +144,7 @@ class SqlFunctionCacheTest {
     }
 
     @Test
+    @SilenceLoggers(CacheUtils.class)
     void failedRefreshKeepsOldValueAndRecordsFailure() throws Exception {
         putFunction("deleted", 1);
         ManualTicker ticker = new ManualTicker();

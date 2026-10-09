@@ -19,7 +19,7 @@ import java.util.function.Function;
 
 public class JdbcHandler {
     private static final Logger logger = LoggerFactory.getLogger(JdbcHandler.class);
-    private static final Map<String, HikariDataSource> dataSources = new ConcurrentHashMap<>();
+    private static final Map<List<Object>, HikariDataSource> dataSources = new ConcurrentHashMap<>();
 
     static {
         // Ensure every pooled HikariDataSource is closed on JVM exit so that
@@ -175,7 +175,7 @@ public class JdbcHandler {
     }
 
     private HikariDataSource getOrCreateDataSource() {
-        String key = dataSourceKey();
+        List<Object> key = dataSourceKey();
         HikariDataSource ds = dataSources.get(key);
         if (ds != null) {
             return ds;
@@ -194,11 +194,11 @@ public class JdbcHandler {
      * Cache key for a pooled DataSource. Handlers with different connection or pool
      * settings must not accidentally share a pool.
      */
-    private String dataSourceKey() {
+    List<Object> dataSourceKey() {
         Map<String, String> properties = jdbcConfig.jdbcProperties == null
                 ? Collections.emptyMap()
-                : new TreeMap<>(jdbcConfig.jdbcProperties);
-        return Arrays.asList(
+                : Collections.unmodifiableMap(new HashMap<>(jdbcConfig.jdbcProperties));
+        return Collections.unmodifiableList(Arrays.asList(
                 jdbcConfig.url,
                 jdbcConfig.username,
                 jdbcConfig.password,
@@ -213,7 +213,7 @@ public class JdbcHandler {
                 jdbcConfig.connectionPoolKeepaliveTime,
                 jdbcConfig.connectionPoolName,
                 properties
-        ).toString();
+        ));
     }
 
     /**
@@ -221,7 +221,7 @@ public class JdbcHandler {
      * shutdown hook so pooled DB connections are released on process exit.
      */
     public static synchronized void closeAllDataSources() {
-        for (Map.Entry<String, HikariDataSource> entry : dataSources.entrySet()) {
+        for (Map.Entry<List<Object>, HikariDataSource> entry : dataSources.entrySet()) {
             try {
                 entry.getValue().close();
             } catch (Exception e) {

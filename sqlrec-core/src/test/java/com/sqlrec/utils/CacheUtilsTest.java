@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.Ticker;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ class CacheUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(CacheUtils.class)
     void failedRefreshWaitsUntilNextInterval() {
         ManualTicker ticker = new ManualTicker();
         QueuedExecutor executor = new QueuedExecutor();

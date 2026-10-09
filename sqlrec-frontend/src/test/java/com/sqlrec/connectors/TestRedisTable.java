@@ -1,5 +1,7 @@
 package com.sqlrec.connectors;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
@@ -28,6 +30,7 @@ import java.util.*;
 @Tag("integration")
 public class TestRedisTable {
     @Test
+    @SilenceLoggers(SqlRecKvTable.class)
     public void testRedisTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
         tableMap.put("t1", getRedisTable());

@@ -1,11 +1,13 @@
 package com.sqlrec.k8s;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,6 +15,24 @@ import static org.junit.jupiter.api.Assertions.*;
 public class K8sYamlUtilsTest {
 
     @Test
+    void serviceIdsDistinguishLossyNamesAndLongPrefixes() {
+        assertNotEquals(K8sYamlUtils.serviceResourceId("rank_a"), K8sYamlUtils.serviceResourceId("rank__a"));
+        assertNotEquals(K8sYamlUtils.serviceResourceId("a".repeat(70) + "x"),
+                K8sYamlUtils.serviceResourceId("a".repeat(70) + "y"));
+        String longId = K8sYamlUtils.serviceResourceId("a".repeat(100));
+        assertTrue(longId.length() <= 63);
+        assertTrue(longId.matches("[a-z0-9]([-a-z0-9]*[a-z0-9])?"));
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            assertEquals(K8sYamlUtils.serviceResourceId("item"), K8sYamlUtils.serviceResourceId("ITEM"));
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    @SilenceLoggers(K8sYamlUtils.class)
     public void testInjectionReturnsOriginalYamlOnParseFailure() {
         String invalidYaml = "apiVersion: [unterminated";
         assertEquals(invalidYaml, K8sYamlUtils.injectEnvVarsIntoYaml(invalidYaml, Map.of("NAME", "value")));

@@ -1,5 +1,6 @@
 package com.sqlrec.executor;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
@@ -149,6 +150,7 @@ class SqlExecutorLocalMetadataTest {
     }
 
     @Test
+    @SilenceLoggers(SqlExecutor.class)
     void functionCompilerRetainsOwnershipOfItsBody() throws Exception {
         MetadataAccess metadata = mock(MetadataAccess.class);
         try (var factory = mockStatic(MetadataAccessFactory.class);

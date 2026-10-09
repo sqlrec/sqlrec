@@ -1,6 +1,10 @@
 package com.sqlrec.model;
 
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.db.MetadataAccess;
+import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.entity.Model;
+import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.model.tzrec.PipelineConfigUtils;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.sql.parser.SqlCreateModel;
@@ -10,12 +14,35 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 /**
  * Model/service names are normalized (lower case, back-quotes stripped) when
  * extracted from DDL, so the stored name never keeps quoting or casing.
  */
 class ModelEntityConverterTest {
+
+    @Test
+    void trainingSqlRejectsTraversalButSupportsNestedCheckpointNames() throws Exception {
+        MetadataAccess db = mock(MetadataAccess.class);
+        Model model = new Model();
+        model.setDdl("CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')");
+        when(db.getModel("rank")).thenReturn(model);
+        try (var metadata = mockStatic(MetadataAccessFactory.class)) {
+            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
+            for (String name : List.of("../other/v1", ".", "v1/..")) {
+                SqlTrainModel sql = (SqlTrainModel) CompileManager.parseSql(
+                        "TRAIN MODEL `rank` CHECKPOINT='" + name + "'");
+                assertThrows(IllegalArgumentException.class,
+                        () -> ModelEntityConverter.convertToModelTrainConf(sql, "default"));
+            }
+            assertEquals("/models/rank/v1_export/item",
+                    ModelEntityConverter.getModelCheckpointPath("rank", "v1_export/item"));
+        }
+    }
 
     @Test
     void multiTargetModelUsesExistingSqlSyntaxAndRegistersOrderedOutputs() throws Exception {

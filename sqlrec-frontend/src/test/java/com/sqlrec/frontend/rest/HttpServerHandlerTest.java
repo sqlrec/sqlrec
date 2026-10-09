@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.rest;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -123,6 +124,7 @@ class HttpServerHandlerTest {
     }
 
     @Test
+    @SilenceLoggers(HttpServerHandler.class)
     void returnsExceptionMessageForUnexpectedUiFailure() throws Exception {
         UiHandler uiHandler = mock(UiHandler.class);
         when(uiHandler.handleRequest(eq("/ui/api/functions"), anyMap()))

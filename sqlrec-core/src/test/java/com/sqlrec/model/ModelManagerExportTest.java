@@ -50,10 +50,7 @@ class ModelManagerExportTest {
     void validatesBeforeReplacingExportsAndPersistsBeforeApplyingYaml() throws Exception {
         for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
             try (ExportFixture fixture = new ExportFixture()) {
-                Checkpoint old = fixture.checkpoint("export_a", status);
-                old.setModelDdl("model-ddl");
-                fixture.converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old))
-                        .thenReturn("/models/rank/export_a");
+                fixture.checkpoint("export_a", status);
 
                 List<CheckpointInfo> result = fixture.export();
 
@@ -84,6 +81,37 @@ class ModelManagerExportTest {
             verify(fixture.controller).genModelExportK8sYaml(any(), any());
             verify(fixture.db, never()).insertCheckpoint(any());
             fixture.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+        }
+    }
+
+    @Test
+    void laterReferencedExportPreventsAnyEarlierDeletion() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            fixture.checkpoint("export_b", Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            com.sqlrec.entity.Service service = new com.sqlrec.entity.Service();
+            service.setName("live-serving");
+            when(fixture.db.getServiceListByCheckpoint("rank", "export_b")).thenReturn(List.of(service));
+            assertThrows(IllegalArgumentException.class, fixture::export);
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            verify(fixture.db, never()).insertCheckpoint(any());
+            fixture.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void laterUnsafeExportCheckpointPreventsAnyEarlierDeletion() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            for (String name : List.of("export_a", "export_b")) {
+                Checkpoint old = fixture.checkpoint(name, Consts.CHECKPOINT_STATUS_FAILED);
+                old.setYaml("old-job");
+                if (name.equals("export_b")) old.setCheckpointName(".");
+            }
+            assertThrows(IllegalArgumentException.class, fixture::export);
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            fixture.k8s.verifyNoInteractions();
         }
     }
 
@@ -149,6 +177,8 @@ class ModelManagerExportTest {
             checkpoint.setModelName("rank");
             checkpoint.setCheckpointName(name);
             checkpoint.setStatus(status);
+            checkpoint.setModelDdl("model-ddl");
+            converter.when(() -> ModelEntityConverter.getModelCheckpointPath(checkpoint)).thenCallRealMethod();
             when(db.getCheckpoint("rank", name)).thenReturn(checkpoint);
             return checkpoint;
         }

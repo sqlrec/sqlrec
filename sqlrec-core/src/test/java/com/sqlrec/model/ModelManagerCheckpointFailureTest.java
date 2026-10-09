@@ -56,6 +56,7 @@ class ModelManagerCheckpointFailureTest {
         checkpoint.setModelName("rank_model");
         checkpoint.setCheckpointName("v1");
         checkpoint.setStatus(Consts.CHECKPOINT_STATUS_FAILED);
+        checkpoint.setModelDdl("CREATE MODEL rank_model (x FLOAT) WITH ('MODEL_PATH'='/models/rank_model')");
         checkpoint.setYaml("kind: Job\nmetadata:\n  name: train\n");
         when(db.getCheckpoint("rank_model", "v1")).thenReturn(checkpoint);
         when(db.getServiceListByCheckpoint("rank_model", "v1")).thenReturn(List.of());

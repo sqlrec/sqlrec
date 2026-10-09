@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.compiler.CompileManager;
@@ -35,6 +36,7 @@ class SessionManagerRoutingTest {
     }
 
     @Test
+    @SilenceLoggers(SessionManager.class)
     void localDdlFailureReturnsAnErrorOperationWithoutForwarding() throws Exception {
         try (Session session = new Session()) {
             when(session.executor.executeSqlAsync(any(SqlNode.class), eq("DROP TABLE missing")))
@@ -52,6 +54,7 @@ class SessionManagerRoutingTest {
     }
 
     @Test
+    @SilenceLoggers(SessionManager.class)
     void parseFailureReturnsALocalErrorWithoutForwarding() throws Exception {
         try (Session session = new Session()) {
             TExecuteStatementResp response = session.manager.executeStatement(

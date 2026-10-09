@@ -6,6 +6,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class PathUtilsTest {
 
+    @Test
+    void checkpointNamesCannotEscapeOrAliasTheModelRoot() {
+        for (String name : new String[]{"", " ", ".", "..", "../other/v1", "v1/..", "/v1",
+                "v1//item", "v1/./item", "v1/", "hdfs://nn/v1", "v1\\item"}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> PathUtils.checkpointPath("/models/rank", name), name);
+        }
+        assertEquals("/models/rank/v1_export/item",
+                PathUtils.checkpointPath("/models/rank", "v1_export/item"));
+        assertEquals("hdfs://nn/models/rank/v1.0",
+                PathUtils.checkpointPath("hdfs://nn/models/rank", "v1.0"));
+    }
+
     // --- normalizePath ---
 
     @Test
@@ -53,7 +66,7 @@ public class PathUtilsTest {
 
     @Test
     public void testValidateModelPathSamePath() {
-        assertDoesNotThrow(() ->
+        assertThrows(IllegalArgumentException.class, () ->
                 PathUtils.validateModelPath("/models/x", "/models/x"));
     }
 
@@ -111,8 +124,8 @@ public class PathUtilsTest {
 
     @Test
     public void testValidateModelPathAcceptsTraversalStayingInside() {
-        // "/models/x/cp1/.." resolves back to the model path itself, which is allowed
-        assertDoesNotThrow(() ->
+        // Resolving to the model root must be rejected.
+        assertThrows(IllegalArgumentException.class, () ->
                 PathUtils.validateModelPath("/models/x/cp1/..", "/models/x"));
         assertDoesNotThrow(() ->
                 PathUtils.validateModelPath("/models/x/../x/cp1", "/models/x"));

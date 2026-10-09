@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.filesystem.calcite;
 
+import com.sqlrec.common.schema.SqlRecCollection;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.apache.calcite.rel.type.RelDataType;
@@ -120,6 +122,7 @@ class FileSystemCalciteTableTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     void testCollectionBatchWriteRejectsInvalidRowAtomically() {
         Collection<Object[]> collection = table.getModifiableCollection();
         assertThrows(IllegalArgumentException.class, () -> collection.addAll(List.of(

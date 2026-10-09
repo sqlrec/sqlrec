@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.*;
 /** Real Thrift handlers, SqlExecutor, metadata adapter and HiveCatalog; only HMS I/O is simulated. */
 class LocalDdlLifecycleTest {
     @Test
+    @SilenceLoggers(SessionManager.class)
     void tableDdlAndJdbcMetadataWorkWithGatewayDisabled() throws Exception {
         String previousAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
         SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue("");

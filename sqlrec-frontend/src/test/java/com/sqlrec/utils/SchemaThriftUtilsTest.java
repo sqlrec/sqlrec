@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.calcite.linq4j.Linq4j;
@@ -30,6 +31,7 @@ public class SchemaThriftUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(ThriftUtils.class)
     public void testThriftValuesForMissingInputAndFailedCast() {
         var empty = ThriftUtils.getValueList(null, 0, String.class);
         assertArrayEquals(new byte[0], empty.getKey());

@@ -1,5 +1,6 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.utils.SqlStatementUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.junit.jupiter.api.Test;
@@ -8,8 +9,19 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class SqlParseTest {
+    @Test
+    void validSqlStillParsesAfterSplitting() throws Exception {
+        for (String sql : List.of("SELECT/*comment*/1", "SELECT 1 AS `a;b`")) {
+            CompileManager.parseSql(sql);
+            List<String> statements = SqlStatementUtils.splitStatements(sql + ";");
+            assertEquals(1, statements.size());
+            assertNotNull(CompileManager.parseSql(statements.get(0)));
+        }
+    }
+
     @Test
     public void testCalciteSql() throws Exception {
         List<String> sqlList = Arrays.asList(

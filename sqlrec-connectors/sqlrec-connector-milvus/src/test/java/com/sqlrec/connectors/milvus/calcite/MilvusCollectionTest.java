@@ -1,5 +1,7 @@
 package com.sqlrec.connectors.milvus.calcite;
 
+import com.sqlrec.common.schema.SqlRecCollection;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
@@ -50,6 +52,7 @@ class MilvusCollectionTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     void failedRemoteWritePropagatesAndDoesNotReportSuccess() {
         MilvusHandler handler = mock(MilvusHandler.class);
         when(handler.addBatch(anyList())).thenThrow(new IllegalStateException("Remote write failed"));

@@ -27,6 +27,18 @@ import static org.mockito.Mockito.*;
 
 class CliTest {
     @Test
+    void preservesCommentsAsTokenSeparatorsAndQuotedSemicolonsInInteractiveInput() throws Throwable {
+        try (InteractiveFixture fixture = new InteractiveFixture()) {
+            when(fixture.reader.readLine("sqlrec> "))
+                    .thenReturn("SELECT/**/1 AS `a;b`;")
+                    .thenThrow(new EndOfFileException());
+            assertEquals(0, runInteractive(new Cli(), fixture.executor));
+            verify(fixture.executor).executeSql("SELECT 1 AS `a;b`");
+            verifyNoMoreInteractions(fixture.executor);
+        }
+    }
+
+    @Test
     void ignoresInterruptAndBlankInputContinuesAfterSqlFailureAndSavesHistoryOnEof() throws Throwable {
         try (InteractiveFixture fixture = new InteractiveFixture()) {
             when(fixture.reader.readLine("sqlrec> "))

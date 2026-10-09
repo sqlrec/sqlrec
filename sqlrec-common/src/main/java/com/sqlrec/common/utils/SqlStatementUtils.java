@@ -18,7 +18,7 @@ public final class SqlStatementUtils {
 
     /**
      * Splits SQL text by top-level ';', appending each trimmed statement to
-     * {@code out}. Semicolons inside single/double quotes or line/block
+     * {@code out}. Semicolons inside single/double/backtick quotes or line/block
      * comments are skipped. Comments are stripped from the output.
      * Returns the remaining text after the last top-level ';' (may be empty).
      */
@@ -51,39 +51,24 @@ public final class SqlStatementUtils {
                 }
                 if (!closed) {
                     cur.append("/*");
+                } else {
+                    // A comment separates tokens even when no whitespace surrounds it.
+                    cur.append(' ');
                 }
                 continue;
             }
-            // single-quoted string
-            if (c == '\'') {
+            // Strings and quoted identifiers share doubled-delimiter escaping.
+            if (c == '\'' || c == '"' || c == '`') {
+                char delimiter = c;
                 cur.append(c);
                 i++;
                 while (i < n) {
                     char cc = text.charAt(i);
                     cur.append(cc);
                     i++;
-                    if (cc == '\'') {
-                        if (i < n && text.charAt(i) == '\'') {
-                            cur.append('\'');
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                }
-                continue;
-            }
-            // double-quoted identifier
-            if (c == '"') {
-                cur.append(c);
-                i++;
-                while (i < n) {
-                    char cc = text.charAt(i);
-                    cur.append(cc);
-                    i++;
-                    if (cc == '"') {
-                        if (i < n && text.charAt(i) == '"') {
-                            cur.append('"');
+                    if (cc == delimiter) {
+                        if (i < n && text.charAt(i) == delimiter) {
+                            cur.append(delimiter);
                             i++;
                             continue;
                         }
@@ -109,7 +94,7 @@ public final class SqlStatementUtils {
 
     /**
      * Split SQL text by top-level ';', ignoring empty statements.
-     * Semicolons inside single/double quotes or line/block comments are skipped.
+     * Semicolons inside single/double/backtick quotes or line/block comments are skipped.
      *
      * @return a list of non-empty trimmed statements; never {@code null}.
      */

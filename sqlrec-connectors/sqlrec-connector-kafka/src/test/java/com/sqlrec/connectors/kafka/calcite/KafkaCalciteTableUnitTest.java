@@ -162,6 +162,7 @@ public class KafkaCalciteTableUnitTest {
     }
 
     @Test
+    @SilenceLoggers(SqlRecCollection.class)
     public void testProtobufAddRejectsIncompatibleRowValue() {
         KafkaConfig protobufConfig = new KafkaConfig();
         protobufConfig.bootstrapServers = config.bootstrapServers;

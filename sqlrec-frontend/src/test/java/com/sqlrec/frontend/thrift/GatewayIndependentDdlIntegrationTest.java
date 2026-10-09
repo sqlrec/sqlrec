@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.CompileManager;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.*;
 @Tag("integration")
 class GatewayIndependentDdlIntegrationTest {
     @Test
+    @SilenceLoggers(SessionManager.class)
     void thriftTableLifecycleAndJdbcMetadataUseRealHmsWithoutGateway() throws Exception {
         String database = "sqlrec_thrift_" + UUID.randomUUID().toString().replace("-", "");
         String previousAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();

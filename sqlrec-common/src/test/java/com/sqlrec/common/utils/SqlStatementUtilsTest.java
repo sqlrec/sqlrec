@@ -15,6 +15,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SqlStatementUtilsTest {
 
+    @Test
+    void commentsKeepAdjacentTokensSeparate() {
+        assertEquals(List.of("SELECT 1", "SELECT foo bar"),
+                SqlStatementUtils.splitStatements("SELECT/**/1; SELECT foo/* comment */bar;"));
+    }
+
+    @Test
+    void backtickIdentifiersProtectSemicolonsAndCommentMarkers() {
+        String sql = "SELECT 1 AS `a;b`, `a``;--/*b` FROM `t;name`";
+        assertEquals(List.of(sql, "SELECT 2"), SqlStatementUtils.splitStatements(sql + "; SELECT 2;"));
+        assertTrue(SqlStatementUtils.isCompleteStatement(sql + ";"));
+        assertFalse(SqlStatementUtils.isCompleteStatement("SELECT `unterminated;"));
+        assertFalse(SqlStatementUtils.isCompleteStatement("SELECT 1; SELECT `a``;"));
+    }
+
     // ===================== splitStatements =====================
 
     @Test

@@ -5,6 +5,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConf;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -16,15 +17,11 @@ import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.utils.CacheUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Optional;
 
 public class ServiceManager {
-    private static final Logger log = LoggerFactory.getLogger(ServiceManager.class);
-
     private static final LoadingCache<String, Optional<ServiceConf>> serviceConfigCache =
             CacheUtils.createRefreshCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
@@ -50,7 +47,7 @@ public class ServiceManager {
     }
 
     public static ServiceConf getServiceConfig(String serviceName) {
-        return serviceConfigCache.get(serviceName).orElse(null);
+        return serviceConfigCache.get(ResourceNames.normalize(serviceName)).orElse(null);
     }
 
     public static boolean isServiceOperationCompleted(String serviceName) {
@@ -66,19 +63,15 @@ public class ServiceManager {
 
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        ServiceConf serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
-
-        Service existingService = db.getService(serviceConfig.getServiceName());
-        if (existingService != null) {
-            if (sqlCreateService.isIfNotExists()) {
-                return serviceConfig.getServiceName();
-            }
+        String serviceName = ResourceNames.of(sqlCreateService.getServiceName());
+        if (sqlCreateService.isIfNotExists() && db.getService(serviceName) != null) {
+            return serviceName;
         }
 
         Service service = saveServiceInDb(sqlCreateService, db, false, false);
         K8sManager.applyYaml(service.getYaml());
 
-        return serviceConfig.getServiceName();
+        return service.getName();
     }
 
     public static Service saveServiceInDb(
@@ -137,10 +130,12 @@ public class ServiceManager {
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
         db.upsertService(service);
+        serviceConfigCache.invalidate(service.getName());
         return service;
     }
 
     public static void deleteService(String serviceName) {
+        serviceName = ResourceNames.normalize(serviceName);
         MetadataAccess db = MetadataAccessFactory.getInstance();
         Service service = db.getService(serviceName);
         if (service == null) {

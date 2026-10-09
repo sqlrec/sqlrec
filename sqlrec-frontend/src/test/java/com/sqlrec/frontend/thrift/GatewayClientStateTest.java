@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.hive.service.rpc.thrift.*;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.*;
 /** Exercises remote state and handle ownership without opening a network connection. */
 class GatewayClientStateTest {
     @Test
+    @SilenceLoggers(GatewayClient.class)
     void lostConnectionDuringStateCleanupRequiresReplayBeforeTheNextSql() throws Exception {
         try (Remote remote = new Remote()) {
             when(remote.client.CloseOperation(any())).thenThrow(new TTransportException("cleanup connection lost"));
@@ -55,6 +57,7 @@ class GatewayClientStateTest {
     }
 
     @Test
+    @SilenceLoggers(GatewayClient.class)
     void resetBypassesPendingOverridesAndCleanupFailureDoesNotUndoSuccess() throws Exception {
         try (Remote remote = new Remote()) {
             remote.proxy.setSessionState("default", java.util.Map.of("invalid.setting", "bad"));
@@ -69,6 +72,7 @@ class GatewayClientStateTest {
     }
 
     @Test
+    @SilenceLoggers(GatewayClient.class)
     void cleanupFailurePreservesTheOriginalCommandError() throws Exception {
         try (Remote remote = new Remote()) {
             TGetOperationStatusResp failed = new TGetOperationStatusResp(success());

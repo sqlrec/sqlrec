@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.utils.TypeSupportTest;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -29,6 +30,7 @@ public class FunctionProxyBindablePartitionTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
     public void testPartitionBy() throws Exception {
         ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);

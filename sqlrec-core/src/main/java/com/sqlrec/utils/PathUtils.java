@@ -25,10 +25,30 @@ public class PathUtils {
         String normalizedPath = normalizePath(hdfsPath);
         String normalizedModelPath = normalizePath(modelPath);
 
-        if (!normalizedPath.equals(normalizedModelPath)
-                && !normalizedPath.startsWith(normalizedModelPath + "/")) {
+        if (normalizedPath.isEmpty() || normalizedPath.equals(normalizedModelPath)
+                || !normalizedPath.startsWith(normalizedModelPath + "/")) {
             throw new IllegalArgumentException("Path must be under model path. Path: " + hdfsPath + ", Model path: " + modelPath);
         }
+    }
+
+    /** Checkpoints may have nested output names, but must remain relative descendants. */
+    public static void validateCheckpointName(String name) {
+        if (StringUtils.isBlank(name) || name.indexOf('\\') >= 0 || name.indexOf(':') >= 0
+                || name.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Invalid checkpoint name: " + name);
+        }
+        for (String segment : name.split("/", -1)) {
+            if (segment.isBlank() || segment.equals(".") || segment.equals("..")) {
+                throw new IllegalArgumentException("Invalid checkpoint name: " + name);
+            }
+        }
+    }
+
+    public static String checkpointPath(String modelPath, String name) {
+        validateCheckpointName(name);
+        String path = modelPath + "/" + name;
+        validateModelPath(path, modelPath);
+        return path;
     }
 
     public static String normalizePath(String path) {

@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.rest;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.google.gson.JsonParseException;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -110,6 +111,7 @@ class RestExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(RestFunctionExecutor.class)
     void executionFailureCancelsContextAndPreservesCause() throws Exception {
         try (FunctionFixture fixture = new FunctionFixture()) {
             AtomicReference<ExecuteContext> context = new AtomicReference<>();

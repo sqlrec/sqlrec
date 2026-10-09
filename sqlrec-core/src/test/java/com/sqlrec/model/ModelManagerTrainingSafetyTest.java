@@ -57,6 +57,33 @@ class ModelManagerTrainingSafetyTest {
             verify(f.controller, never()).genModelTrainK8sYaml(any(), any());
         }
     }
+    @Test
+    void unsafeTrainingTargetsFailBeforeGeneratingOrDeletingResources() throws Exception {
+        for (String name : List.of(".", "../other/v1", "v1/..")) {
+            try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+                f.train.setCheckpointName(name);
+                f.train.setModelDir("/models/model/" + name);
+                assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
+                f.verifyNoDeletion();
+                verify(f.controller, never()).genModelTrainK8sYaml(any(), any());
+                f.k8s.verifyNoInteractions();
+            }
+        }
+    }
+
+    @Test
+    void unsafeSavedCheckpointFailsBeforeStoppingItsJob() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            Checkpoint old = f.db.getCheckpoint("model", "v1");
+            old.setCheckpointName(".");
+            old.setYaml("running-job");
+            when(f.db.getCheckpoint("model", ".")).thenReturn(old);
+            assertThrows(IllegalArgumentException.class, () -> ModelManager.deleteCheckpoint("model", "."));
+            f.verifyNoDeletion();
+            f.k8s.verifyNoInteractions();
+        }
+    }
+
     private static class Fixture implements AutoCloseable {
         final MetadataAccess db = mock(MetadataAccess.class);
         final SqlTrainModel statement = mock(SqlTrainModel.class);
@@ -79,7 +106,7 @@ class ModelManagerTrainingSafetyTest {
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
             converter.when(() -> ModelEntityConverter.convertToModelTrainConf(statement, "default")).thenReturn(train);
             converter.when(() -> ModelEntityConverter.convertToModel("model-ddl")).thenReturn(model);
-            converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old)).thenReturn("/models/model/v1");
+            converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old)).thenCallRealMethod();
             controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);
             when(controller.genModelTrainK8sYaml(model, train)).thenReturn("generated-yaml");
             yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", model, train.getParams()))

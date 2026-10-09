@@ -26,6 +26,16 @@ class SqlFileParserTest {
     }
 
     @Test
+    void adjacentCommentsAndSemicolonsInIdentifiersSurviveFileParsing() throws Exception {
+        parser.parseContent("CREATE/**/MODEL `model;name` (x FLOAT); "
+                + "CREATE/**/SERVICE `service;name` ON MODEL `model;name`;");
+        assertEquals(1, parser.getModelNodes().size());
+        assertEquals(1, parser.getServiceNodes().size());
+        assertEquals("model;name", ((SqlCreateModel) parser.getModelNodes().get(0)).getModelName().getSimple());
+        assertEquals("service;name", ((SqlCreateService) parser.getServiceNodes().get(0)).getServiceName().getSimple());
+    }
+
+    @Test
     void testParseCreateTable() throws Exception {
         parser.parseContent("CREATE TABLE mydb.t1 (id INT, name VARCHAR(100))");
 

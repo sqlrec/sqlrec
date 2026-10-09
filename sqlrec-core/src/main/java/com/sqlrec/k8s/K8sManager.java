@@ -357,7 +357,7 @@ public class K8sManager {
         }
 
         if (deployment.getStatus() != null) {
-            int replicas = valueOrDefault(deployment.getSpec() != null ? deployment.getSpec().getReplicas() : 1, 1);
+            int replicas = valueOrDefault(deployment.getSpec() != null ? deployment.getSpec().getReplicas() : null, 1);
             int readyReplicas = valueOrDefault(deployment.getStatus().getReadyReplicas(), 0);
             int updatedReplicas = valueOrDefault(deployment.getStatus().getUpdatedReplicas(), 0);
             int availableReplicas = valueOrDefault(deployment.getStatus().getAvailableReplicas(), 0);

@@ -1,5 +1,7 @@
 package com.sqlrec.connectors;
 
+import com.sqlrec.common.schema.SqlRecKvTable;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
@@ -41,6 +43,7 @@ public class TestRedisClusterTable {
             "redis://" + SqlRecConfigs.DEFAULT_TEST_IP.getValue() + ":30040/0";
 
     @Test
+    @SilenceLoggers(SqlRecKvTable.class)
     public void testRedisClusterTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
         tableMap.put("ct1", getClusterRedisTable());

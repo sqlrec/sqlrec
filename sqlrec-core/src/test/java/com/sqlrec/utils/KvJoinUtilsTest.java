@@ -319,6 +319,7 @@ public class KvJoinUtilsTest {
         assertEquals(100, rightValue[0]);
     }
     @Test
+    @SilenceLoggers({SqlRecKvTable.class, KvJoinUtils.class})
     void primaryKeyBulkFailureUsesCacheWithoutRetryingBackend() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
         SqlRecKvTable table = mock(SqlRecKvTable.class, CALLS_REAL_METHODS);
@@ -346,6 +347,7 @@ public class KvJoinUtilsTest {
     }
 
     @Test
+    @SilenceLoggers({SqlRecKvTable.class, KvJoinUtils.class})
     void primaryKeyFailureWithoutCacheKeepsLeftRowsAndReturnsNoInnerMatches() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
         SqlRecKvTable table = mock(SqlRecKvTable.class, CALLS_REAL_METHODS);

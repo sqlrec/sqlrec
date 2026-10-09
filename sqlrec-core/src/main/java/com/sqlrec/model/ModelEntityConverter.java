@@ -17,6 +17,7 @@ import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
+import com.sqlrec.utils.PathUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -110,8 +111,8 @@ public class ModelEntityConverter {
 
     public static ServiceConf convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
         ServiceConf serviceConfig = new ServiceConf();
-        serviceConfig.setId(K8sYamlUtils.convertToValidK8sName(sqlCreateService.getServiceName().toString()));
         serviceConfig.setServiceName(ResourceNames.of(sqlCreateService.getServiceName()));
+        serviceConfig.setId(K8sYamlUtils.serviceResourceId(serviceConfig.getServiceName()));
         serviceConfig.setModelName(ResourceNames.of(sqlCreateService.getModelName()));
         if (sqlCreateService.getCheckpoint() != null) {
             serviceConfig.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString())));
@@ -185,12 +186,12 @@ public class ModelEntityConverter {
         }
 
         ModelConf modelConfig = convertToModel(modelDdl);
-        return modelConfig.getPath() + "/" + checkpoint;
+        return PathUtils.checkpointPath(modelConfig.getPath(), checkpoint);
     }
 
     public static String getModelCheckpointPath(Checkpoint checkpointEntity) throws Exception {
         ModelConf modelConfig = convertToModel(checkpointEntity.getModelDdl());
-        return modelConfig.getPath() + "/" + checkpointEntity.getCheckpointName();
+        return PathUtils.checkpointPath(modelConfig.getPath(), checkpointEntity.getCheckpointName());
     }
 
     public static List<String> fixPathProtocol(List<String> partitionPaths) {

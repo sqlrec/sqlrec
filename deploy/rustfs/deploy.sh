@@ -18,6 +18,7 @@ helm upgrade --install rustfs rustfs/rustfs \
   --set-string secret.rustfs.secret_key="${RUSTFS_SECRET_KEY}" \
   --set-string podAnnotations.sqlrec-credentials-checksum="${credentials_checksum}" \
   --set-string config.rustfs.region="${RUSTFS_REGION}" \
+  --set-string config.rustfs.log_level=error \
   --set ingress.enabled=false \
   --set service.type=NodePort \
   --set service.endpoint.nodePort="${RUSTFS_PORT}" \

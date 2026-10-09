@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.utils.TypeSupportTest;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -104,6 +105,7 @@ public class FunctionProxyBindablePartitionCancelTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
     public void testPartitionFailurePropagates() throws Exception {
         // a regular partition failure (unrelated to cancellation) should still propagate as an exception
         ExecuteContext executeContext = new ExecuteContextImpl();

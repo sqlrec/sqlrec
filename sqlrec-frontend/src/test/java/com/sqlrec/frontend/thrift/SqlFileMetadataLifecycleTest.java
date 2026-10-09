@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.db.HdfsAccess;
 import com.sqlrec.db.MetadataAccess;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.*;
 
 class SqlFileMetadataLifecycleTest {
     @Test
+    @SilenceLoggers(SessionManager.class)
     void fileMetadataQueriesWorkWithoutHmsGatewayOrInstalledConnectors(@TempDir Path directory) throws Exception {
         Files.writeString(directory.resolve("schema.sql"), """
                 CREATE TABLE hive.review.items (id BIGINT, event_time TIMESTAMP(3) METADATA FROM 'timestamp',

@@ -100,6 +100,7 @@ public class ModelManager {
 
         Model modelEntity = db.getModel(modelTrainConf.getModelName());
         ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
+        PathUtils.validateModelPath(modelTrainConf.getModelDir(), modelConfig.getPath());
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
@@ -173,6 +174,9 @@ public class ModelManager {
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
+        for (String name : exportCheckpointNames) {
+            PathUtils.checkpointPath(modelConfig.getPath(), name);
+        }
         ExportCheckpoints checkpoints = findExportCheckpoints(
                 db, modelExportConf.getModelName(), exportCheckpointNames);
 
@@ -230,6 +234,11 @@ public class ModelManager {
     }
 
     private static void deleteExportCheckpoints(String modelName, List<Checkpoint> checkpoints) throws Exception {
+        MetadataAccess db = MetadataAccessFactory.getInstance();
+        // Preflight every output before deleting the first one.
+        for (Checkpoint checkpoint : checkpoints) {
+            validateCheckpointDeletion(db, checkpoint);
+        }
         for (Checkpoint checkpoint : checkpoints) {
             log.info("Model {} re export checkpoint {}, deleting old first",
                     modelName, checkpoint.getCheckpointName());
@@ -268,12 +277,7 @@ public class ModelManager {
             return;
         }
 
-        List<Service> services = db.getServiceListByCheckpoint(modelName, checkpointName);
-        if (!services.isEmpty()) {
-            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName +
-                    " because it is being used by " + services.size() + " service(s): " +
-                    String.join(", ", services.stream().map(Service::getName).toList()));
-        }
+        String checkpointPath = validateCheckpointDeletion(db, checkpoint);
 
         String status = checkpoint.getStatus();
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
@@ -283,12 +287,22 @@ public class ModelManager {
             }
         }
 
-        ModelConf modelConfig = ModelEntityConverter.convertToModel(checkpoint.getModelDdl());
-        String checkpointPath = ModelEntityConverter.getModelCheckpointPath(checkpoint);
-        PathUtils.validateModelPath(checkpointPath, modelConfig.getPath());
         db.hdfsDeletePath(checkpointPath);
 
         db.deleteCheckpoint(modelName, checkpointName);
+    }
+
+    private static String validateCheckpointDeletion(MetadataAccess db, Checkpoint checkpoint) throws Exception {
+        String modelName = checkpoint.getModelName();
+        String checkpointName = checkpoint.getCheckpointName();
+        List<Service> services = db.getServiceListByCheckpoint(modelName, checkpointName);
+        if (!services.isEmpty()) {
+            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName +
+                    " because it is being used by " + services.size() + " service(s): " +
+                    String.join(", ", services.stream().map(Service::getName).toList()));
+        }
+
+        return ModelEntityConverter.getModelCheckpointPath(checkpoint);
     }
 
     public static void deleteModel(String modelName) throws Exception {

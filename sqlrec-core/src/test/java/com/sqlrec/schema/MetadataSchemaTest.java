@@ -1,5 +1,6 @@
 package com.sqlrec.schema;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.udf.UdfManager;
@@ -16,6 +17,7 @@ import static org.mockito.Mockito.*;
 
 class MetadataSchemaTest {
     @Test
+    @SilenceLoggers(TableFactoryUtils.class)
     void unsupportedTableDoesNotPreventLoadingOtherTables() throws Exception {
         MetadataAccess metadata = mock(MetadataAccess.class);
         var unsupported = table("unsupported");
@@ -36,6 +38,7 @@ class MetadataSchemaTest {
     }
 
     @Test
+    @SilenceLoggers(HmsSchema.class)
     void missingUdfDependencyDoesNotPreventLoadingOtherFunctions() throws Exception {
         MetadataAccess metadata = mock(MetadataAccess.class);
         var broken = function("broken", "example.Broken");

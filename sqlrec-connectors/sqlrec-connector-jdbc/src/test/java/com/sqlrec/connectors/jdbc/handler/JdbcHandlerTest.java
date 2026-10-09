@@ -408,4 +408,76 @@ class JdbcHandlerTest {
         }
     }
 
+    @Test
+    void credentialsContainingDelimitersDoNotSharePools() {
+        JdbcConfig a = connectionConfig();
+        JdbcConfig b = connectionConfig();
+        a.username = "alice, admin";
+        a.password = "secret";
+        b.username = "alice";
+        b.password = "admin, secret";
+        assertNotEquals(dataSourceKey(a), dataSourceKey(b));
+        a.username = null;
+        b.username = "null";
+        a.password = b.password;
+        assertNotEquals(dataSourceKey(a), dataSourceKey(b));
+    }
+
+    @Test
+    void propertyValuesCannotImpersonateAdditionalProperties() {
+        JdbcConfig a = connectionConfig();
+        JdbcConfig b = connectionConfig();
+        a.jdbcProperties = Map.of("a", "b, c=d");
+        b.jdbcProperties = Map.of("a", "b", "c", "d");
+        assertNotEquals(dataSourceKey(a), dataSourceKey(b));
+    }
+
+    @Test
+    void keysSnapshotPropertiesAndIgnoreTheirIterationOrder() {
+        JdbcConfig a = connectionConfig();
+        JdbcConfig b = connectionConfig();
+        a.jdbcProperties = new HashMap<>(Map.of("a", "1", "b", "2"));
+        b.jdbcProperties = new LinkedHashMap<>();
+        b.jdbcProperties.put("b", "2");
+        b.jdbcProperties.put("a", "1");
+        List<Object> original = dataSourceKey(a);
+        assertThrows(UnsupportedOperationException.class, () -> original.set(0, "changed-url"));
+        int hash = original.hashCode();
+        assertEquals(original, dataSourceKey(b));
+        a.jdbcProperties.put("a", "changed");
+        assertEquals(hash, original.hashCode());
+        assertEquals(original, dataSourceKey(b));
+        assertNotEquals(original, dataSourceKey(a));
+    }
+
+    @Test
+    void differentConnectionAndPoolSettingsUseDifferentKeys() throws Exception {
+        for (String field : new String[]{"url", "username", "password", "driver", "schema",
+                "connectionPoolSize", "connectionPoolMinIdle", "connectionPoolIdleTimeout",
+                "connectionPoolMaxLifetime", "connectionPoolConnectionTimeout", "connectionPoolValidationTimeout",
+                "connectionPoolKeepaliveTime", "connectionPoolName"}) {
+            JdbcConfig a = connectionConfig();
+            JdbcConfig b = connectionConfig();
+            java.lang.reflect.Field property = JdbcConfig.class.getField(field);
+            Object value;
+            if (property.getType() == Integer.class) value = Integer.valueOf(2);
+            else if (property.getType() == Long.class) value = Long.valueOf(1234);
+            else value = "different";
+            property.set(b, value);
+            assertNotEquals(dataSourceKey(a), dataSourceKey(b), field);
+        }
+    }
+
+    private List<Object> dataSourceKey(JdbcConfig config) {
+        return new JdbcHandler(config).dataSourceKey();
+    }
+
+    private JdbcConfig connectionConfig() {
+        JdbcConfig config = new JdbcConfig();
+        config.url = "jdbc:h2:mem:pool-key";
+        config.username = "alice";
+        config.password = "secret";
+        return config;
+    }
+
 }
