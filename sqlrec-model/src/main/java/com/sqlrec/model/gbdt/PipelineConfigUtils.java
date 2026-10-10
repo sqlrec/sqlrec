@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -39,18 +40,23 @@ public class PipelineConfigUtils {
     }
 
     public static String generateTrainConfig(ModelType modelType, ModelConf model, ModelTrainConf trainConf) {
+        return generateTrainConfig(modelType, model, trainConf,
+                operationParams(modelType, model, trainConf.getParams()));
+    }
+
+    static String generateTrainConfig(ModelType modelType, ModelConf model, ModelTrainConf trainConf,
+                                      Map<String, String> params) {
         JsonObject config = new JsonObject();
 
         config.addProperty("model_type", modelType.getKey());
         config.addProperty("train_input_path", joinPaths(trainConf.getTrainDataPaths()));
         config.addProperty("model_dir", orEmpty(trainConf.getModelDir()));
         config.addProperty("base_model_dir", orEmpty(trainConf.getBaseModelDir()));
-        config.addProperty("label_columns", orEmpty(Config.LABEL_COLUMNS.getValue(model.getParams())));
+        config.addProperty("label_columns", orEmpty(Config.LABEL_COLUMNS.getValue(params)));
 
         config.add("feature_columns", toJsonArray(getFeatureNames(model, modelType)));
         config.add("categorical_features", toJsonArray(resolveCategoricalFeatures(model, modelType)));
 
-        Map<String, String> params = mergeParams(model.getParams(), trainConf.getParams());
         config.add("params", buildParams(params, modelType));
 
         // Trailing newline keeps the ConfigMap YAML block scalar a plain "|" (clip) block.
@@ -116,6 +122,27 @@ public class PipelineConfigUtils {
     /** Merge base params with overrides; overrides take precedence. Returns unmodifiable. */
     public static Map<String, String> mergeParams(Map<String, String> base, Map<String, String> overrides) {
         return Collections.unmodifiableMap(ModelConfigUtils.mergeParams(base, overrides));
+    }
+
+    /** Operation settings may override runtime parameters, but cannot change the model contract. */
+    static Map<String, String> operationParams(ModelType modelType, ModelConf model,
+                                              Map<String, String> overrides) {
+        Map<String, String> params = mergeParams(model.getParams(), overrides);
+        if (overrides != null) {
+            if (overrides.containsKey("model") && !Objects.equals("gbdt." + modelType.getKey(), overrides.get("model"))) {
+                throw new IllegalArgumentException("Training/export/serving cannot change the model type; create a new model instead");
+            }
+            String labelKey = Config.LABEL_COLUMNS.getKey();
+            String declaredLabel = model.getParams() == null ? null : model.getParams().get(labelKey);
+            if (overrides.containsKey(labelKey) && !Objects.equals(declaredLabel, overrides.get(labelKey))) {
+                throw new IllegalArgumentException("Training/export/serving cannot change label_columns; create a new model instead");
+            }
+        }
+        String objective = Config.OBJECTIVE.getValue(params);
+        if (!"binary".equals(objective) && !"regression".equals(objective)) {
+            throw new IllegalArgumentException("GBDT serving supports only binary or regression objectives");
+        }
+        return params;
     }
 
     /** Three-tier precedence: primary if set -> fallback if set -> primary default. */

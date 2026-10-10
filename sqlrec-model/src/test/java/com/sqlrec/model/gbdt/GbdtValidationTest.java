@@ -44,4 +44,40 @@ class GbdtValidationTest {
         }
     }
 
+    @Test
+    void allOperationsRejectChangesToLabelsAndModelType() {
+        for (GbdtModelBase backend : List.of(new LightGBMModel(), new XGBoostModel(), new CatBoostModel())) {
+            ModelConf model = model("y1", "binary");
+            for (Map<String, String> overrides : List.of(Map.of("label_columns", "y2"),
+                    Map.of("label_columns", ""), Map.of("model", "tzrec.deepfm"))) {
+                ModelTrainConf train = new ModelTrainConf(); train.setParams(overrides);
+                ModelExportConf export = new ModelExportConf(); export.setParams(overrides);
+                ServiceConf service = new ServiceConf(); service.setParams(overrides);
+                assertThrows(IllegalArgumentException.class, () -> backend.genModelTrainK8sYaml(model, train));
+                assertThrows(IllegalArgumentException.class, () -> backend.genModelExportK8sYaml(model, export));
+                assertThrows(IllegalArgumentException.class, () -> backend.getServiceK8sYaml(model, service));
+            }
+        }
+    }
+
+    @Test
+    void trainConfigUsesRuntimeOverridesAndAcceptsAnUnchangedContract() {
+        ModelConf model = model("y1", "binary");
+        model.setInputFields(List.of(new FieldSchema("feature", "FLOAT"), new FieldSchema("y1", "INT")));
+        ModelTrainConf train = new ModelTrainConf();
+        train.setModelDir("/model"); train.setTrainDataPaths(List.of("/train.parquet"));
+        for (PipelineConfigUtils.ModelType type : PipelineConfigUtils.ModelType.values()) {
+            train.setParams(Map.of("label_columns", "y1", "model", "gbdt." + type.getKey(), "learning_rate", "0.25"));
+            var config = com.google.gson.JsonParser.parseString(
+                    PipelineConfigUtils.generateTrainConfig(type, model, train)).getAsJsonObject();
+            assertEquals("y1", config.get("label_columns").getAsString());
+            assertEquals(0.25, config.getAsJsonObject("params").get("learning_rate").getAsDouble());
+            assertEquals(1, config.getAsJsonArray("feature_columns").size());
+            assertEquals("feature", config.getAsJsonArray("feature_columns").get(0).getAsString());
+            train.setParams(Map.of("label_columns", "y2"));
+            assertThrows(IllegalArgumentException.class, () -> PipelineConfigUtils.generateTrainConfig(type, model, train));
+        }
+        assertEquals(Map.of("label_columns", "y1", "objective", "binary"), model.getParams());
+    }
+
 }

@@ -362,8 +362,8 @@ def main():
                 assert metadata[key] == value
             summary.append(verify_backends(finetune_export, root, env, len(summary)))
         if architecture == "deepfm":
-            # A new generator must not change the structure of a saved checkpoint.
-            requested = config(root, "wide_and_deep")
+            # Fine-tuning keeps the saved structure and allows optimizer overrides.
+            requested = config(root, "deepfm")
             requested.model_dir = str(root / "deepfm_finetune")
             requested.train_config.fine_tune_checkpoint = pipeline.model_dir
             requested.train_config.sparse_optimizer.adagrad_optimizer.lr = 0.02

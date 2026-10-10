@@ -54,14 +54,16 @@ public int getPrimaryKeyIndex();
 支持向量检索的 Table 额外实现：
 
 ```java
-public interface VectorSearchable {
+public interface VectorSearchable extends org.apache.calcite.schema.Table {
+    String getTableName();
+
     List<VectorSearchResult> searchByEmbeddingImpl(
         VectorSearchRequest request
     );
 }
 ```
 
-`VectorSearchable` 是可选能力，不是 Table 基类。当前 Milvus Table 同时继承 `SqlRecKvTable` 并实现该接口。
+`VectorSearchable` 是 Calcite Table 的可选能力接口。实现者需要提供 `getTableName()` 和 Table 的表结构方法，供公共检索包装逻辑进行类型转换、记录日志和指标；不要求继承 `SqlRecTable`。当前 Milvus Table 继承 `SqlRecKvTable`，已有基类和实现提供这些方法。
 
 ## 实现步骤
 

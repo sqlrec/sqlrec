@@ -186,7 +186,7 @@ class WorkflowPlan:
     steps: list[SQLStep]
     files: dict[str, str]
     evaluations: list[dict]
-    format_version: int = 4
+    format_version: int = 5
     execution_profile: str = 'user_workflow'
     resources: dict = field(default_factory=dict)
 
@@ -225,7 +225,7 @@ class ProtocolRecipe:
         declared = manifest.get('candidate_scope')
         if declared != self.candidate_scope:
             raise ValueError('unsupported_protocol: dataset candidate scope differs from the public SQL recipe')
-        if manifest.get('exclude_seen_required', manifest.get('exclude_train_rated_required')) and not self.exclude_seen:
+        if manifest.get('exclude_seen_required') and not self.exclude_seen:
             raise ValueError('Dataset protocol requires excluding training-observed items')
 
 

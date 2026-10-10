@@ -86,7 +86,7 @@ class HuggingFaceHttpTest(unittest.TestCase):
         self.assertEqual(calls[0]["text_column"], "text")
         self.assertEqual(self.server._batch_size, 3)
 
-    def test_legacy_checkpoint_column_options_use_declared_schema_spelling(self):
+    def test_checkpoint_column_options_and_service_overrides_use_declared_schema_spelling(self):
         calls = []
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -94,10 +94,10 @@ class HuggingFaceHttpTest(unittest.TestCase):
             (root / "sqlrec_manifest.json").write_text(json.dumps({
                 "task": "text-classification",
                 "input_fields": [{"name": "Body", "type": "STRING"}, {"name": "Title", "type": "STRING"}],
-                "model_params": {"text_column": "BODY", "text_pair_column": "TITLE"},
+                "model_params": {"text_column": "Title", "text_pair_column": "Title"},
             }))
             config = root / "service.config"
-            config.write_text(json.dumps({"text_column": "body"}))
+            config.write_text(json.dumps({"text_column": "Body"}))
             with patch.dict(self.server.TASK_ADAPTERS, {
                     "text-classification": lambda directory, config: calls.append(config)}):
                 self.server.load_runtime(directory, str(config))

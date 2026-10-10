@@ -36,7 +36,7 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 
 `POST /predict` 接收行数组或列式 JSON，列式数据允许长度为 1 的列广播。整列缺失返回 400；单行缺字段、null、空字符串和空数组按特征默认值处理，稀疏特征默认值为空时编码为空特征，稠密特征必须配置固定维度的数值默认值。额外的非特征列不参与推理。输入错误返回 400，模型执行错误返回 500。
 
-`server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。校验通过后，shell 使用 `exec` 启动所选 serving。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；ARM Python FG 兼容包支持与 SQLRec 生成配置一致的 ID/raw 特征范围。两种后端均在预热成功后就绪，串行执行推理；通过服务副本扩容。
+`server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。两种后端统一通过 `server.sh` 启动，由脚本调用一次 `validate_export.py` 检查清单、完成标记、文件校验和及 pipeline 契约；校验通过后使用 `exec` 启动所选 serving，校验失败会清理本次下载的独立缓存目录。`server.py` 负责模型加载与推理预热，不重复执行导出文件校验。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；ARM Python FG 兼容包支持与 SQLRec 生成配置一致的 ID/raw 特征范围。两种后端均在预热成功后就绪，串行执行推理；通过服务副本扩容。
 
 ### TZRec 样本数据格式
 
@@ -128,9 +128,9 @@ CREATE MODEL float_rec (
 
 普通连续特征、MLP/AutoDis 特征进入 Deep 分组，ID 和 boundaries 分桶特征同时进入 Wide 与 Deep；DeepFM 的 FM 分组只接收稀疏特征且嵌入维度须一致。WideAndDeep/DeepFM 至少需要一个 ID 或 boundaries 分桶特征；DSSM、MMoE、RocketLaunching 可使用纯连续特征，RocketLaunching 只生成一个 Deep 分组。
 
-新建 `tzrec.wide_and_deep` 正确使用 WideAndDeep；旧版本同名模型实际生成的 DeepFM 权重，在导出和继续训练时按 checkpoint 内保存的 `pipeline.config` 保留结构及特征。新建 DeepFM 请使用 `tzrec.deepfm`。历史训练时被忽略的浮点列，需要重新训练才能生效；包含标签特征的 checkpoint 必须排除标签后重训。继续训练可以覆盖学习率、轮数、批次等运行设置；修改学习率时不会恢复旧 optimizer 状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
+`tzrec.wide_and_deep` 使用 WideAndDeep，`tzrec.deepfm` 使用 DeepFM。导出和继续训练要求 checkpoint 的架构与声明的模型一致，并保留 checkpoint 内保存的结构及特征。包含标签特征的 checkpoint 必须排除标签后重训。继续训练可以覆盖学习率、轮数、批次等运行设置；修改学习率时不会恢复旧 optimizer 状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
 
-Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动校验清单；旧版没有清单的完整导出目录仍可加载。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
+Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动时所有模型都必须具备清单和完成标记，并通过文件校验和检查。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
 
 本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE、RocketLaunching，再对照 Python/C++ 特征张量及 HTTP 预测。DSSM 覆盖 softmax 召回训练、续训及双塔导出；MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练；RocketLaunching 覆盖梯度、仅 light 推理、共享层、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
@@ -446,6 +446,8 @@ LightGBM 模型是基于 GBDT（梯度提升决策树）框架实现的模型，
 LightGBM 训练特征先转换为 float32，与 ONNX 和在线服务使用同样的精度；保留 NaN 缺失值，拒绝 Infinity 或 float32 溢出。旧版使用 double 训练的模型需要重新训练，才能保证这项精度一致性。
 
 **模型名称**：`gbdt.lightgbm`
+
+GBDT 的 TRAIN、EXPORT 和 SERVICE 可覆盖运行参数及资源配置，但不能改变 Model 声明的模型类型或 `label_columns`；显式传入相同值允许执行，传入不同值会报错。改变模型类型或标签须新建模型。这项规则适用于 LightGBM、XGBoost 和 CatBoost。
 
 GBDT 在线推理的缺失数值字段和 `null` 在服务内部转换为 float32 `NaN`，供模型按缺失值处理，与训练时一致；`0` 是有效数值。客户端传 `null` 或省略字段即可，JSON 中不要发送 `NaN`。数值字符串须是完整的有限 float32 十进制数，非法值返回 HTTP 400。服务继承模型声明中的镜像、版本和资源配置，服务参数可覆盖这些配置；模型下载、加载完成且 `/health` 探针成功后才接收流量。此行为也适用于 XGBoost 和 CatBoost。
 

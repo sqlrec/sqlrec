@@ -5,7 +5,7 @@ import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ModelExportConf;
 import java.util.Map;
 
-/** Explicit DeepFM backend; legacy WideAndDeep checkpoints retain their saved architecture. */
+/** Explicit DeepFM backend. */
 public class DeepFMModel extends WideAndDeepModel {
     @Override
     protected String getModelNameSuffix() {

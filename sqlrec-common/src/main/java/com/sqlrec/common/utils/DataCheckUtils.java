@@ -14,9 +14,13 @@ public class DataCheckUtils {
             return;
         }
 
-        assert actualResult != null : "actualResult is null";
-        assert actualResult.size() == expectedResult.size() :
-                "size mismatch: expected " + expectedResult.size() + ", actual " + actualResult.size();
+        if (actualResult == null) {
+            throw new AssertionError("actualResult is null");
+        }
+        if (actualResult.size() != expectedResult.size()) {
+            throw new AssertionError("size mismatch: expected " + expectedResult.size()
+                    + ", actual " + actualResult.size());
+        }
         for (int i = 0; i < actualResult.size(); i++) {
             Object[] actualRow = actualResult.get(i);
             Object[] expectedRow = expectedResult.get(i);
@@ -24,7 +28,9 @@ public class DataCheckUtils {
                 log.error("Row {} mismatch:", i);
                 log.error("  Expected: {}", java.util.Arrays.deepToString(expectedRow));
                 log.error("  Actual:   {}", java.util.Arrays.deepToString(actualRow));
-                assert false : "Row " + i + " mismatch";
+                throw new AssertionError("Row " + i + " mismatch: expected "
+                        + java.util.Arrays.deepToString(expectedRow) + ", actual "
+                        + java.util.Arrays.deepToString(actualRow));
             }
         }
     }

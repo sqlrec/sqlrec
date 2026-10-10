@@ -109,17 +109,11 @@ def environment_defaults(env):
 
 
 def resolve_config(value, config_path, profile=None, run_id=None, env=None, prepared_inputs=None):
-    """Return the full schema-v3 contract; legacy complete configs stay loadable."""
+    """Resolve compact or complete experiments into the schema-v3 contract."""
     if not isinstance(value, dict):
         raise ValueError('Experiment config must be a mapping')
     env = os.environ if env is None else env
     config = copy.deepcopy(value)
-    execution = config.get('execution', {})
-    if isinstance(execution, dict) and 'seeds' in execution:
-        legacy = execution.pop('seeds')
-        if 'seed' in execution or not isinstance(legacy, list) or len(legacy) != 1:
-            raise ValueError('Only one execution seed is supported; use seed: 123')
-        execution['seed'] = legacy[0]
     compact = isinstance(config.get('dataset'), dict) and 'config' in config['dataset']
     metadata = copy.deepcopy(config.get('experiment', {}))
     if not isinstance(metadata, dict):

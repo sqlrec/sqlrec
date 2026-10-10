@@ -167,15 +167,14 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
         rocket_contract(saved)
         if list(config.data_config.label_fields) != list(saved.data_config.label_fields):
             raise ValueError("Checkpoint label_fields cannot be changed during export or fine-tuning")
-        multi_task = (requested.model_config.WhichOneof("model") == "mmoe"
-                      or saved.model_config.WhichOneof("model") == "mmoe")
-        rocket = (requested.model_config.WhichOneof("model") == "rocket_launching"
-                  or saved.model_config.WhichOneof("model") == "rocket_launching")
-        if rocket:
+        architecture = requested.model_config.WhichOneof("model")
+        if architecture != saved.model_config.WhichOneof("model"):
+            raise ValueError("Checkpoint architecture must match the declared model; create a new model")
+        if architecture == "rocket_launching":
             if (requested.model_config != saved.model_config
                     or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
                 raise ValueError("Checkpoint RocketLaunching model and features cannot change; create a new model")
-        elif multi_task:
+        elif architecture == "mmoe":
             if (task_contract(requested) != task_contract(saved)
                     or requested.model_config != saved.model_config
                     or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):

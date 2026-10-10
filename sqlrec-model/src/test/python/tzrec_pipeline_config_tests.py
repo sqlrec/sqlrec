@@ -118,13 +118,13 @@ class CheckpointConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
             prepare_config(requested, saved, True)
         requested = self.config("deepfm")
-        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
+        with self.assertRaisesRegex(ValueError, "Checkpoint architecture"):
             prepare_config(requested, saved, True)
 
     def test_selective_overrides_preserve_checkpoint_defaults_with_real_protobufs(self):
         saved = self.config("deepfm")
         saved.feature_configs[0].id_feature.embedding_dim = 8
-        requested = self.config("wide_and_deep")
+        requested = self.config("deepfm")
         effective = prepare_config(requested, saved, structure_options={"hidden_units": "8,4"})
         self.assertEqual(effective.feature_configs, saved.feature_configs)
         self.assertEqual(effective.model_config, saved.model_config)
@@ -141,7 +141,7 @@ class CheckpointConfigTest(unittest.TestCase):
             saved = self.config("deepfm")
             saved.feature_configs[0].id_feature.embedding_dim = 8
             config_util.save_message(saved, str(source / "pipeline.config"))
-            requested = self.config("wide_and_deep")
+            requested = self.config("deepfm")
             requested.train_config.fine_tune_checkpoint = str(source)
             path = root / "requested.config"
             config_util.save_message(requested, str(path))
@@ -375,8 +375,8 @@ class CheckpointConfigTest(unittest.TestCase):
             feature_groups { group_name: "deep" group_type: DEEP feature_names: "id" }
         ''' + architecture + ' { deep { hidden_units: [8,4] } } }', pipeline_pb2.EasyRecConfig())
 
-    def test_legacy_deepfm_retains_saved_features_groups_and_architecture(self):
-        requested = self.config("wide_and_deep")
+    def test_same_architecture_retains_saved_features_groups_and_runtime_overrides(self):
+        requested = self.config("deepfm")
         saved = self.config("deepfm")
         requested.data_config.batch_size = 32
         requested.model_dir = "/new/checkpoint"
@@ -389,10 +389,10 @@ class CheckpointConfigTest(unittest.TestCase):
         self.assertEqual(effective.data_config.batch_size, 32)
         self.assertEqual(effective.model_dir, "/new/checkpoint")
         self.assertEqual(effective.train_config.num_epochs, 7)
-        self.assertEqual(requested.model_config.WhichOneof("model"), "wide_and_deep")
+        self.assertEqual(requested.model_config.WhichOneof("model"), "deepfm")
 
     def test_label_changes_and_label_features_require_retraining(self):
-        requested = self.config("wide_and_deep")
+        requested = self.config("deepfm")
         saved = self.config("deepfm")
         saved.data_config.label_fields[0] = "other"
         with self.assertRaisesRegex(ValueError, "label_fields"):

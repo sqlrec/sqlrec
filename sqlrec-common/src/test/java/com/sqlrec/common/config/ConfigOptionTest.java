@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -376,11 +377,22 @@ public class ConfigOptionTest {
     }
 
     @Test
-    public void testInvalidBooleanValueIsFalse() {
+    public void testInvalidBooleanValuesAreRejected() {
         ConfigOption<Boolean> option = new ConfigOption<>(
                 "test.boolean", true, "Test boolean", null, Boolean.class);
 
-        assertFalse(option.getValue(Map.of("test.boolean", "not-a-boolean")));
+        for (String value : List.of("not-a-boolean", "tru", "1", "0", "", " true ")) {
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                    () -> option.getValue(Map.of("test.boolean", value)));
+            assertTrue(error.getMessage().contains("test.boolean"));
+            assertThrows(IllegalArgumentException.class,
+                    () -> option.getValueOrNull(Map.of("test.boolean", value)));
+            assertThrows(IllegalArgumentException.class,
+                    () -> option.getValueWithEnvFallback(Map.of("test.boolean", value)));
+        }
+        assertTrue(option.getValue(Map.of("test.boolean", "TrUe")));
+        assertFalse(option.getValue(Map.of("test.boolean", "FaLsE")));
+        assertTrue(option.getValue(Map.of()));
     }
 
     @Test

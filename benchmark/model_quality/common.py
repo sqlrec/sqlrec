@@ -19,15 +19,14 @@ def finite(value):
 
 
 def captured_result(capture, results):
-    """Select an explicit result role; retain the frozen v3 artifact layout."""
+    """Select exactly one result by its declared role."""
     role = capture.get('result_role')
-    if role:
-        matches = [result for result in results if result.get('role') == role]
-        if len(matches) != 1:
-            raise ValueError(f'Expected exactly one {role} result')
-        return matches[0]
-    # v3 plans/artifacts are read as-is, never rewritten or re-fingerprinted.
-    return results[-2 if capture['kind'] == 'vectors' else -1]
+    if not role:
+        raise ValueError('Capture requires an explicit result_role')
+    matches = [result for result in results if result.get('role') == role]
+    if len(matches) != 1:
+        raise ValueError(f'Expected exactly one {role} result')
+    return matches[0]
 
 
 def stable_id(*values) -> str:

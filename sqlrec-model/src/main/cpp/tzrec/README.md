@@ -29,10 +29,10 @@ features use the right bucket at boundary equality. MLP/AutoDis transforms run
 inside the saved TorchScript model. Request limits are 16 MiB, 4096 rows, and
 65536 feature values. Nonfinite inputs/outputs and malformed vectors are rejected.
 
-New exports include `model_meta.json` SHA256 hashes and `_SUCCESS`; the launcher
-validates these before either backend starts. Legacy complete exports remain
-compatible. Export/fine-tuning reads checkpoint-owned feature/model configuration
-to preserve legacy DeepFM weights.
+Exports require `model_meta.json` SHA256 hashes and `_SUCCESS`; the launcher
+validates these before either backend starts. Export/fine-tuning requires the
+checkpoint architecture to match the declared model and retains the saved feature
+and network configuration.
 
 Checkpoint comparison resolves raw defaults and normalizer parameters at float32
 precision, preserving vector order and dimensions and resolving omitted log10

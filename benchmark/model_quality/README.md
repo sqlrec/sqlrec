@@ -77,8 +77,9 @@ Dataset references are resolved relative to the experiment YAML, independently o
 the working directory. There is no dataset ID registry or dataset-name branch in
 the public runner. There is no YAML inheritance, environment interpolation, or
 embedded shell Python.
-Existing complete schema-v3 configs remain accepted without deployment defaults.
-Legacy frozen v3/v4/v5 plans remain immutable and do not reapply new defaults on resume.
+Complete schema-v3 configs are accepted without deployment defaults.
+Frozen plans use format v5 exclusively and do not reapply defaults on resume.
+Use `execution.seed` for the single training seed; `execution.seeds` is rejected.
 
 Explicit YAML overrides win over machine defaults. Model hyperparameters come from
 the experiment YAML only. Image versions and resource settings come from the
@@ -172,6 +173,11 @@ all co-timestamp feedback, and pair training subtracts the pair's own feedback.
 same definitions for SQL. The prepared manifest records the definition snapshot,
 path/SHA-256 and effective seed/threshold/split settings. CLI overrides are audited
 in the manifest. Unknown output columns fail instead of creating an implicit schema.
+Prepared manifests must use integer `format_version: 1`, declare
+`dataset_definition.preparation.row_key`, and cover every split file with a SHA256
+checksum. Retrieval exclusion uses `exclude_seen_required`; the former
+`exclude_train_rated_required` field is rejected. Missing metadata does not receive
+implicit defaults.
 
 Adding a dataset using supported prepared data, feature types and SQL protocols
 requires a new dataset YAML and experiment YAML, without editing public Python.
@@ -428,8 +434,7 @@ completed, released models after validating artifact hashes. A partially scored
 model whose service was released needs a new isolated run; uncertain creation
 requires reconciling the original public operation. `--through` also releases
 attempted services and is intended for investigating lifecycle stages, not for
-retaining a live service. Legacy frozen v3/v4 plans keep their original stage
-execution semantics; the suite fallback still verifies service release.
+retaining a live service. The suite fallback also verifies service release.
 `cleanup.sql` is a manually reviewed full cleanup script.
 
 Exit code 0 means the requested execution completed; it is not a quality threshold
@@ -474,7 +479,8 @@ The plan freezes config, SQL, request paths, input hashes and replay rules. Form
 v5 also freezes model-level service/Job bindings, table schemas, connector options
 and warehouse partition locations. Compact hashed model names reserve space for
 native export Job/headless-Service suffixes and prevent Kubernetes truncation
-collisions. Old v3/v4 plans remain readable; v3 is adapted only in memory.
+collisions. Plans with other format versions are rejected. Captured results require
+an explicit `result_role`; result order is never used to infer predictions.
 
 `data_contract.json` keeps labels and audit slice metadata outside prediction inputs.
 `sql/` and `requests/` are the actual public statements and label-free payloads.
@@ -488,8 +494,8 @@ status. Report `resource_status` is separate from prediction completeness.
 Reports distinguish `workflow_status`, `parameters_status`, and
 `quality_status=not_assessed`. `formal=true` means the public workflow and supported
 runtime parameter checks passed and physical resource release was verified. It does
-not mean the model meets a quality target. Legacy plans without release evidence
-remain readable but cannot claim verified resource release.
+not mean the model meets a quality target. Missing release evidence prevents
+claiming verified resource release.
 Missing evidence, unsupported parameter checks and runtime mismatches prevent a
 formal pass. Reports include dataset, feature view, profile, tasks, sample counts,
 candidate protocol, categorical capacity, and per-model results with the actual seed.

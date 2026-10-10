@@ -2,7 +2,6 @@ package com.sqlrec.common.utils;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -11,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-/** JSON serialization of named rows, field projections and grouped columns. */
+/** JSON serialization of named rows and field projections. */
 public final class RowJsonEncoder {
     private static final Gson gson = JsonUtils.getGson();
     private static final Gson requestGson = gson.newBuilder().serializeNulls().create();
@@ -64,45 +63,5 @@ public final class RowJsonEncoder {
         }
 
         return requestGson.toJson(jsonArray);
-    }
-
-    public static String toColumnarJson(List<Object[]> queryData, List<Object[]> valueData,
-                                        List<FieldSchema> queryFields, List<FieldSchema> valueFields,
-                                        List<RelDataTypeField> queryDataFields, List<RelDataTypeField> valueDataFields) {
-        JsonObject jsonObject = new JsonObject();
-
-        for (int i = 0; i < queryFields.size(); i++) {
-            FieldSchema field = queryFields.get(i);
-            int fieldIndex = DataTypeUtils.findFieldIndex(queryDataFields, field.getName());
-            if (fieldIndex >= 0 && queryData.size() > 0) {
-                Object value = queryData.get(0)[fieldIndex];
-                JsonArray jsonArray = new JsonArray();
-                if (value != null) {
-                    jsonArray.add(gson.toJsonTree(value));
-                } else {
-                    jsonArray.add(JsonNull.INSTANCE);
-                }
-                jsonObject.add(field.getName(), jsonArray);
-            }
-        }
-
-        for (int i = 0; i < valueFields.size(); i++) {
-            FieldSchema field = valueFields.get(i);
-            int fieldIndex = DataTypeUtils.findFieldIndex(valueDataFields, field.getName());
-            if (fieldIndex >= 0) {
-                JsonArray jsonArray = new JsonArray();
-                for (Object[] row : valueData) {
-                    Object value = row[fieldIndex];
-                    if (value != null) {
-                        jsonArray.add(gson.toJsonTree(value));
-                    } else {
-                        jsonArray.add(JsonNull.INSTANCE);
-                    }
-                }
-                jsonObject.add(field.getName(), jsonArray);
-            }
-        }
-
-        return gson.toJson(jsonObject);
     }
 }

@@ -32,19 +32,28 @@ class TzrecServeTest(unittest.TestCase):
         self.cache = self.root / "cache with spaces"
         self.log = self.root / "serving.json"
         self.hadoop_log = self.root / "hadoop.json"
+        self.validation_log = self.root / "validation.jsonl"
         self.env = dict(os.environ)
         self.env.pop("TZREC_SERVING_BACKEND", None)
         self.env.update({"PATH": str(self.bin) + os.pathsep + self.env["PATH"],
                          "HADOOP_HOME": str(self.root / "hadoop home"),
                          "LOCAL_CACHE_DIR": str(self.cache),
                          "REMOTE_SOURCE": str(self.model),
-                         "SERVING_LOG": str(self.log), "HADOOP_LOG": str(self.hadoop_log)})
+                         "SERVING_LOG": str(self.log), "HADOOP_LOG": str(self.hadoop_log),
+                         "VALIDATION_LOG": str(self.validation_log)})
         recorder = """import json,os,sys
 from pathlib import Path
 Path(os.environ['SERVING_LOG']).write_text(json.dumps(sys.argv[1:]))
 """
         self.executable(self.app / "tzrec_server", recorder)
-        self.executable(self.bin / "python", recorder)
+        self.executable(self.bin / "python", """import json,os,sys
+from pathlib import Path
+if Path(sys.argv[1]).name == 'validate_export.py':
+    with Path(os.environ['VALIDATION_LOG']).open('a') as log:
+        log.write(json.dumps(sys.argv[1:]) + '\\n')
+    sys.exit(9 if os.environ.get('FAIL_VALIDATION') else 0)
+Path(os.environ['SERVING_LOG']).write_text(json.dumps(sys.argv[1:]))
+""")
         hadoop = Path(self.env["HADOOP_HOME"]) / "bin/hadoop"
         hadoop.parent.mkdir(parents=True)
         self.executable(hadoop, """import json,os,shutil,sys
@@ -73,6 +82,7 @@ shutil.copytree(os.environ['REMOTE_SOURCE'],destination)
         for backend in (None, "cpp", "python"):
             with self.subTest(backend=backend):
                 self.log.unlink(missing_ok=True)
+                self.validation_log.unlink(missing_ok=True)
                 if backend is not None:
                     self.env["TZREC_SERVING_BACKEND"] = backend
                 result = self.launch(self.model, "--host=127.0.0.1", "--port", "08080")
@@ -83,8 +93,24 @@ shutil.copytree(os.environ['REMOTE_SOURCE'],destination)
                              "--host", "127.0.0.1", "--port", "8080"]
                             if backend == "python" else [local, "127.0.0.1", "8080"])
                 self.assertEqual(arguments, expected)
+                self.assertEqual([json.loads(line) for line in self.validation_log.read_text().splitlines()],
+                                 [[str(self.app / "validate_export.py"), local, "--check-pipeline"]])
                 self.assertFalse(self.hadoop_log.exists())
                 self.assertFalse(self.cache.exists())
+
+    def test_validation_failure_blocks_both_backends_and_cleans_only_downloads(self):
+        self.env['FAIL_VALIDATION'] = '1'
+        for backend in ('cpp', 'python'):
+            self.env['TZREC_SERVING_BACKEND'] = backend
+            for directory in ('hdfs://namenode/models/export', self.model):
+                with self.subTest(backend=backend, directory=directory):
+                    self.validation_log.unlink(missing_ok=True)
+                    result = self.launch(directory)
+                    self.assertEqual(result.returncode, 9, result.stderr)
+                    self.assertFalse(self.log.exists())
+                    self.assertEqual(len(self.validation_log.read_text().splitlines()), 1)
+                    self.assertEqual(list(self.cache.iterdir()), [])
+                    self.assertTrue((self.model / 'scripted_model.pt').is_file())
 
     def test_remote_exports_preserve_layout_use_private_caches_and_quote_paths(self):
         remote = 'hdfs://namenode:8020/models/export with spaces/$(touch injected)'

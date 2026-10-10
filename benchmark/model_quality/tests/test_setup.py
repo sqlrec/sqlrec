@@ -51,7 +51,7 @@ class DataSetupTest(unittest.TestCase):
             table = pa.Table.from_pylist([row], schema=pa.schema(fields))
             for name in ('train.parquet', 'valid.parquet', 'test.parquet', 'items.parquet', 'queries_valid.parquet', 'queries_test.parquet'):
                 pq.write_table(table, output / name)
-            write_json(output / 'manifest.json', {'dataset': definition['name'], 'dataset_definition': definition,
+            write_json(output / 'manifest.json', {'format_version': 1, 'dataset': definition['name'], 'dataset_definition': definition,
                 'candidate_scope': definition['protocol']['candidate_scope'], 'max_users': None,
                 'preparation_seed': definition['preparation']['seed'], **metadata,
                 'splits': {split: [split + '.parquet'] for split in ('train', 'valid', 'test')},
@@ -103,18 +103,14 @@ class DataSetupTest(unittest.TestCase):
         self.assertFalse(list((self.root / 'data/prepared').rglob('manifest.json')))
         self.assertFalse(list((self.root / 'data/prepared').rglob('.preparing-*')))
 
-    def test_single_seed_is_preserved_and_multiple_seeds_are_rejected(self):
+    def test_single_seed_is_preserved_and_seeds_field_is_rejected(self):
         config = self.root / 'experiment.yaml'
         value = {'dataset': {'config': 'dataset.yaml', 'view': 'recall'},
                  'models': [{'family': 'tzrec.dssm'}], 'execution': {'seed': 42}}
         self.assertEqual(resolve_config(value, config, env=ENV)['execution']['seed'], 42)
-        value['execution'] = {'seeds': [42]}
-        resolved = resolve_config(value, config, env=ENV)
-        self.assertEqual(resolved['execution']['seed'], 42)
-        self.assertNotIn('seeds', resolved['execution'])
-        for execution in ({'seeds': [42, 123]}, {'seed': 42, 'seeds': [42]}):
+        for execution in ({'seeds': [42]}, {'seeds': [42, 123]}, {'seed': 42, 'seeds': [42]}):
             value['execution'] = execution
-            with self.assertRaisesRegex(ValueError, 'Only one execution seed'):
+            with self.subTest(execution=execution), self.assertRaisesRegex(ValueError, 'execution: unknown fields'):
                 resolve_config(value, config, env=ENV)
 
     def test_duplicate_dataset_configs_prepare_once_and_bind_build_paths(self):

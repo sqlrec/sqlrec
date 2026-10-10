@@ -54,14 +54,16 @@ Keep the default `onlyFilterByPrimaryKey()` if the source supports only key filt
 A Table that supports vector search also implements:
 
 ```java
-public interface VectorSearchable {
+public interface VectorSearchable extends org.apache.calcite.schema.Table {
+    String getTableName();
+
     List<VectorSearchResult> searchByEmbeddingImpl(
         VectorSearchRequest request
     );
 }
 ```
 
-`VectorSearchable` is an optional capability, not a Table base class. The Milvus Table extends `SqlRecKvTable` and implements this interface.
+`VectorSearchable` is an optional capability interface for Calcite tables. Implementations provide `getTableName()` and Table's schema methods so the shared search wrapper can convert row types and record logs and metrics; extending `SqlRecTable` is not required. Milvus extends `SqlRecKvTable`, and its existing base class and implementation already provide these methods.
 
 ## Implementation Steps
 

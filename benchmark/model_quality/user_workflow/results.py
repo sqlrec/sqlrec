@@ -106,7 +106,7 @@ def evaluate(root, diagnostic=False):
     report = {'format_version': 4, 'execution_profile': 'user_workflow', 'formal': formal,
               'status': status, 'workflow_completed':complete, 'runtime_audits':audits, 'plan_id': plan['plan_id'],
               'workflow_status': 'completed' if complete else 'incomplete',
-              'resource_status': journal.get('resource_status', 'legacy_unverified'),
+              'resource_status': journal.get('resource_status', 'unverified'),
               'model_states': journal.get('models', {}),
               'parameters_status': parameters_status, 'quality_status': 'not_assessed',
               'dataset_fingerprint': bundle['fingerprint'], 'sample_kind': bundle['sample_kind'],
@@ -147,7 +147,7 @@ def evaluate(root, diagnostic=False):
         writer = csv.DictWriter(stream, ['experiment', 'recipe', 'model', 'seed', 'slice', 'task', 'metric', 'value']); writer.writeheader(); writer.writerows(long_rows)
     lines = [f'# {plan["name"]}', '', f'Status: {report["status"]}; entrypoint: {report["entrypoint"]}; cohort: {bundle["sample_kind"]}.',
              '', f'Workflow: {report["workflow_status"]}; resources: {report["resource_status"]}; parameters: {parameters_status}; quality: not_assessed.', '',
-             f'Dataset: {report["dataset"]}; profile: {report["experiment"].get("profile", "legacy")}; candidate scope: {bundle["protocol"]["candidate_scope"]}.',
+             f'Dataset: {report["dataset"]}; profile: {report["experiment"].get("profile", "custom")}; candidate scope: {bundle["protocol"]["candidate_scope"]}.',
              f'Sample counts: {report["sample_counts"]}.', '',
              '| Experiment | Slice | Task | Metric | Value |', '| --- | --- | --- | --- | --- |']
     configured = plan['config']['evaluation'].get('metrics')
@@ -199,13 +199,13 @@ def summarize_runs(root, inputs, failed=(), not_executed=()):
         if report['plan_id'] != plan['plan_id']:
             raise ValueError('Suite report belongs to a different plan')
         context = {'run': directory.name, 'dataset': report.get('dataset', ''),
-                   'profile': report.get('experiment', {}).get('profile', 'legacy'),
+                   'profile': report.get('experiment', {}).get('profile', 'custom'),
                    'feature_view': report.get('experiment', {}).get('feature_view', 'custom'),
                    'candidate_scope': report.get('protocol', plan['config']['protocol'])['candidate_scope'],
                    'formal': report['formal'], 'status': report['status'],
                    'suite_status': 'failed' if directory in failures or not report.get('workflow_completed') or report.get('resource_status') == 'blocked' else 'completed'}
         runs.append({**context, 'path': str(path), 'sample_counts': report.get('sample_counts', {}),
-                     'resource_status': report.get('resource_status', 'legacy_unverified'),
+                     'resource_status': report.get('resource_status', 'unverified'),
                      'model_states': report.get('model_states', {})})
         for result in report['results']:
             for row in metric_rows(result):

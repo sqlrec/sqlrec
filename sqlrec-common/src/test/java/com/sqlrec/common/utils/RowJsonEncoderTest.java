@@ -101,122 +101,12 @@ public class RowJsonEncoderTest {
                         DataTypeUtils.getRelDataTypeField("country", 1, SqlTypeName.VARCHAR))));
     }
 
-    @Test
-    public void testToColumnarJson() {
-        List<Object[]> queryData = new ArrayList<>();
-        queryData.add(new Object[]{"user123", "Beijing", true});
-
-        List<Object[]> valueData = new ArrayList<>();
-        valueData.add(new Object[]{1, "Product A", 99.9});
-        valueData.add(new Object[]{2, "Product B", 199.9});
-        valueData.add(new Object[]{3, "Product C", 299.9});
-
-        List<FieldSchema> queryFields = new ArrayList<>();
-        queryFields.add(new FieldSchema("user_id", "string"));
-        queryFields.add(new FieldSchema("user_city", "string"));
-        queryFields.add(new FieldSchema("is_vip", "boolean"));
-
-        List<FieldSchema> valueFields = new ArrayList<>();
-        valueFields.add(new FieldSchema("item_id", "int"));
-        valueFields.add(new FieldSchema("item_name", "string"));
-        valueFields.add(new FieldSchema("price", "double"));
-
-        List<RelDataTypeField> queryDataFields = createQueryDataFields();
-        List<RelDataTypeField> valueDataFields = createValueDataFields();
-
-        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
-                                                queryDataFields, valueDataFields);
-        assertNotNull(json);
-
-        Type mapType = new TypeToken<Map<String, List<Object>>>(){}.getType();
-        Map<String, List<Object>> result = gson.fromJson(json, mapType);
-        
-        assertTrue(result.containsKey("user_id"));
-        assertTrue(result.containsKey("user_city"));
-        assertTrue(result.containsKey("is_vip"));
-        assertTrue(result.containsKey("item_id"));
-        assertTrue(result.containsKey("item_name"));
-        assertTrue(result.containsKey("price"));
-        
-        assertEquals(1, result.get("user_id").size());
-        assertEquals("user123", result.get("user_id").get(0));
-        assertEquals("Beijing", result.get("user_city").get(0));
-        assertEquals(true, result.get("is_vip").get(0));
-        
-        assertEquals(3, result.get("item_id").size());
-        assertEquals(1L, result.get("item_id").get(0));
-        assertEquals(2L, result.get("item_id").get(1));
-        assertEquals(3L, result.get("item_id").get(2));
-        
-        assertEquals("Product A", result.get("item_name").get(0));
-        assertEquals("Product B", result.get("item_name").get(1));
-        assertEquals("Product C", result.get("item_name").get(2));
-        
-        assertEquals(99.9, (Double)result.get("price").get(0), 0.001);
-        assertEquals(199.9, (Double)result.get("price").get(1), 0.001);
-        assertEquals(299.9, (Double)result.get("price").get(2), 0.001);
-    }
-
-    @Test
-    public void testToColumnarJsonWithNull() {
-        List<Object[]> queryData = new ArrayList<>();
-        queryData.add(new Object[]{"user123", null, true});
-
-        List<Object[]> valueData = new ArrayList<>();
-        valueData.add(new Object[]{1, null, 99.9});
-        valueData.add(new Object[]{2, "Product B", null});
-
-        List<FieldSchema> queryFields = new ArrayList<>();
-        queryFields.add(new FieldSchema("user_id", "string"));
-        queryFields.add(new FieldSchema("user_city", "string"));
-        queryFields.add(new FieldSchema("is_vip", "boolean"));
-
-        List<FieldSchema> valueFields = new ArrayList<>();
-        valueFields.add(new FieldSchema("item_id", "int"));
-        valueFields.add(new FieldSchema("item_name", "string"));
-        valueFields.add(new FieldSchema("price", "double"));
-
-        List<RelDataTypeField> queryDataFields = createQueryDataFields();
-        List<RelDataTypeField> valueDataFields = createValueDataFields();
-
-        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
-                                                queryDataFields, valueDataFields);
-        assertNotNull(json);
-
-        Type mapType = new TypeToken<Map<String, List<Object>>>(){}.getType();
-        Map<String, List<Object>> result = gson.fromJson(json, mapType);
-        
-        assertEquals(1, result.get("user_city").size());
-        assertNull(result.get("user_city").get(0));
-        
-        assertNull(result.get("item_name").get(0));
-        assertEquals("Product B", result.get("item_name").get(1));
-        assertEquals(99.9, (Double)result.get("price").get(0), 0.001);
-        assertNull(result.get("price").get(1));
-    }
-
     private List<RelDataTypeField> createTestDataFields() {
         List<RelDataTypeField> fields = new ArrayList<>();
         fields.add(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER));
         fields.add(DataTypeUtils.getRelDataTypeField("name", 1, SqlTypeName.VARCHAR));
         fields.add(DataTypeUtils.getRelDataTypeField("age", 2, SqlTypeName.INTEGER));
         fields.add(DataTypeUtils.getRelDataTypeField("active", 3, SqlTypeName.BOOLEAN));
-        return fields;
-    }
-
-    private List<RelDataTypeField> createQueryDataFields() {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        fields.add(DataTypeUtils.getRelDataTypeField("user_id", 0, SqlTypeName.VARCHAR));
-        fields.add(DataTypeUtils.getRelDataTypeField("user_city", 1, SqlTypeName.VARCHAR));
-        fields.add(DataTypeUtils.getRelDataTypeField("is_vip", 2, SqlTypeName.BOOLEAN));
-        return fields;
-    }
-
-    private List<RelDataTypeField> createValueDataFields() {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        fields.add(DataTypeUtils.getRelDataTypeField("item_id", 0, SqlTypeName.INTEGER));
-        fields.add(DataTypeUtils.getRelDataTypeField("item_name", 1, SqlTypeName.VARCHAR));
-        fields.add(DataTypeUtils.getRelDataTypeField("price", 2, SqlTypeName.DOUBLE));
         return fields;
     }
 
@@ -254,53 +144,6 @@ public class RowJsonEncoderTest {
         assertEquals(2, ((List<?>)secondRow.get("tags")).size());
     }
 
-    @Test
-    public void testToColumnarJsonWithList() {
-        List<Object[]> queryData = new ArrayList<>();
-        queryData.add(new Object[]{"user123", Arrays.asList("tag1", "tag2")});
-
-        List<Object[]> valueData = new ArrayList<>();
-        valueData.add(new Object[]{1, Arrays.asList(1.1, 2.2)});
-        valueData.add(new Object[]{2, Arrays.asList(3.3, 4.4, 5.5)});
-
-        List<FieldSchema> queryFields = new ArrayList<>();
-        queryFields.add(new FieldSchema("user_id", "string"));
-        queryFields.add(new FieldSchema("user_tags", "array<string>"));
-
-        List<FieldSchema> valueFields = new ArrayList<>();
-        valueFields.add(new FieldSchema("item_id", "int"));
-        valueFields.add(new FieldSchema("scores", "array<double>"));
-
-        List<RelDataTypeField> queryDataFields = createQueryDataFieldsWithArray();
-        List<RelDataTypeField> valueDataFields = createValueDataFieldsWithArray();
-
-        String json = RowJsonEncoder.toColumnarJson(queryData, valueData, queryFields, valueFields, 
-                                                queryDataFields, valueDataFields);
-        assertNotNull(json);
-
-        Type mapType = new TypeToken<Map<String, List<Object>>>(){}.getType();
-        Map<String, List<Object>> result = gson.fromJson(json, mapType);
-        
-        assertTrue(result.containsKey("user_id"));
-        assertTrue(result.containsKey("user_tags"));
-        assertTrue(result.containsKey("item_id"));
-        assertTrue(result.containsKey("scores"));
-        
-        assertEquals(1, result.get("user_id").size());
-        assertEquals("user123", result.get("user_id").get(0));
-        assertTrue(result.get("user_tags").get(0) instanceof List);
-        assertEquals(2, ((List<?>)result.get("user_tags").get(0)).size());
-        
-        assertEquals(2, result.get("item_id").size());
-        assertEquals(1L, result.get("item_id").get(0));
-        assertEquals(2L, result.get("item_id").get(1));
-        
-        assertTrue(result.get("scores").get(0) instanceof List);
-        assertEquals(2, ((List<?>)result.get("scores").get(0)).size());
-        assertTrue(result.get("scores").get(1) instanceof List);
-        assertEquals(3, ((List<?>)result.get("scores").get(1)).size());
-    }
-
     private List<RelDataTypeField> createTestDataFieldsWithArray() {
         List<RelDataTypeField> fields = new ArrayList<>();
         fields.add(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER));
@@ -309,17 +152,4 @@ public class RowJsonEncoderTest {
         return fields;
     }
 
-    private List<RelDataTypeField> createQueryDataFieldsWithArray() {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        fields.add(DataTypeUtils.getRelDataTypeField("user_id", 0, SqlTypeName.VARCHAR));
-        fields.add(DataTypeUtils.getRelDataTypeField("user_tags", 1, SqlTypeName.ARRAY));
-        return fields;
-    }
-
-    private List<RelDataTypeField> createValueDataFieldsWithArray() {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        fields.add(DataTypeUtils.getRelDataTypeField("item_id", 0, SqlTypeName.INTEGER));
-        fields.add(DataTypeUtils.getRelDataTypeField("scores", 1, SqlTypeName.ARRAY));
-        return fields;
-    }
 }

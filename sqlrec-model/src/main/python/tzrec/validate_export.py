@@ -1,4 +1,4 @@
-"""Validate complete exports while retaining compatibility with legacy model directories."""
+"""Validate model export completion, manifests and checksums."""
 
 import hashlib
 import argparse
@@ -32,10 +32,8 @@ def validate_export(directory: str, pipeline_labels=None, pipeline_contract=None
     if any("hash_bucket_size" in feature for feature in features) and os.getenv("USE_FARM_HASH_TO_BUCKETIZE", "true").lower() != "true":
         raise ValueError("Hash features require USE_FARM_HASH_TO_BUCKETIZE=true")
     manifest = root / "model_meta.json"
-    if not manifest.exists():
-        if pipeline_contract is not None:
-            raise ValueError("Model export requires an output/task manifest")
-        return
+    if not manifest.is_file():
+        raise ValueError("Model export is missing model_meta.json manifest")
     if not (root / "_SUCCESS").is_file():
         raise ValueError("Model export is incomplete: missing _SUCCESS")
     metadata = json.loads(manifest.read_text())

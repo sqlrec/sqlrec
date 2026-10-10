@@ -1,3 +1,5 @@
+"""Python serving backend, started by server.sh after export-file validation."""
+
 import argparse
 import os
 import json
@@ -16,14 +18,12 @@ from tzrec.features.feature import create_features
 from tzrec.utils import config_util
 from tzrec.constant import Mode
 from tzrec.utils.logging_util import logger
-from validate_export import validate_export
 from prediction_contract import export_contract, validate_predictions
 
 
 _model: torch.jit.ScriptModule | None = None
 _data_parser: DataParser | None = None
 _device: torch.device | None = None
-_id_inputs: set[str] = set()
 _input_specs: dict[str, dict] = {}
 _inference_lock = threading.Lock()
 
@@ -40,7 +40,7 @@ def get_device() -> torch.device:
 
 def _init_model(scripted_model_path: str) -> None:
     """Initialize model and data parser."""
-    global _model, _data_parser, _device, _id_inputs, _input_specs
+    global _model, _data_parser, _device, _input_specs
     device = get_device()
     logger.info(f"Loading model from {scripted_model_path}")
     if "://" in scripted_model_path:
@@ -49,7 +49,6 @@ def _init_model(scripted_model_path: str) -> None:
         os.path.join(scripted_model_path, "pipeline.config"), allow_unknown_field=True
     )
     contract = export_contract(pipeline_config)
-    validate_export(scripted_model_path, list(pipeline_config.data_config.label_fields), contract)
     model = torch.jit.load(
         os.path.join(scripted_model_path, "scripted_model.pt"), map_location=device
     )
@@ -58,11 +57,6 @@ def _init_model(scripted_model_path: str) -> None:
     with open(os.path.join(scripted_model_path, "fg.json")) as f:
         fg = json.load(f)
     input_specs = {config["expression"].split(":", 1)[1]: config for config in fg["features"]}
-    id_inputs = {
-        config.id_feature.expression.split(":", 1)[1]
-        for config in pipeline_config.feature_configs
-        if config.HasField("id_feature")
-    }
     data_parser = DataParser(
         features,
         labels=[],
@@ -77,7 +71,7 @@ def _init_model(scripted_model_path: str) -> None:
         if contract is not None:
             validate_predictions(warmup_outputs, contract, 1)
     with _inference_lock:
-        _model, _data_parser, _device, _input_specs, _id_inputs = model, data_parser, device, input_specs, id_inputs
+        _model, _data_parser, _device, _input_specs = model, data_parser, device, input_specs
     logger.info("Model initialized successfully")
 
 

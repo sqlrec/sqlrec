@@ -105,7 +105,8 @@ class CheckpointStructureTest(unittest.TestCase):
                 requested.feature_configs[0].id_feature.num_buckets = 200
             else:
                 requested = self.config("deepfm")
-            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
+            message = "architecture" if change == "architecture" else "Explicit network and feature overrides"
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
                 self.module.prepare_config(requested, saved, True)
 
     def test_matching_structure_and_runtime_changes_are_allowed(self):
@@ -142,16 +143,27 @@ class CheckpointStructureTest(unittest.TestCase):
                         ValueError, "Explicit network and feature overrides"):
                     self.module.prepare_config(changed, saved, check_checkpoint_structure=True)
 
-    def test_legacy_checkpoint_defaults_are_preserved_without_explicit_overrides(self):
-        saved, requested = self.config("deepfm"), self.config()
+    def test_checkpoint_architecture_must_match_with_or_without_structure_overrides(self):
+        for requested_architecture, saved_architecture in (("wide_and_deep", "deepfm"),
+                                                           ("deepfm", "wide_and_deep"),
+                                                           ("wide_and_deep", "dssm")):
+            requested, saved = self.config(requested_architecture), self.config(saved_architecture)
+            for options in ({}, {"check_checkpoint_structure": True},
+                            {"structure_options": {"embedding_dim": "16"}}):
+                with self.subTest(requested=requested_architecture, saved=saved_architecture, options=options):
+                    with self.assertRaisesRegex(ValueError, "Checkpoint architecture"):
+                        self.module.prepare_config(requested, saved, **options)
+
+    def test_checkpoint_feature_defaults_are_preserved_for_the_same_architecture(self):
+        saved, requested = self.config("deepfm"), self.config("deepfm")
         saved.feature_configs[0].id_feature.embedding_dim = 8
         effective = self.module.prepare_config(requested, saved)
-        self.assertEqual(effective.model_config.WhichOneof("model"), "deepfm")
+        self.assertEqual(effective.model_config, saved.model_config)
         self.assertEqual(effective.feature_configs[0].id_feature.embedding_dim, 8)
 
     def test_repeating_hidden_units_does_not_compare_unrelated_embedding_defaults(self):
         for architecture in ("wide_and_deep", "deepfm"):
-            saved, requested = self.config(architecture), self.config()
+            saved, requested = self.config(architecture), self.config(architecture)
             saved.feature_configs[0].id_feature.embedding_dim = 8
             effective = self.module.prepare_config(requested, saved, structure_options={"hidden_units": "8, 4"})
             self.assertEqual(effective.feature_configs[0].id_feature.embedding_dim, 8)
@@ -206,7 +218,7 @@ class CheckpointStructureTest(unittest.TestCase):
             self.module.prepare_config(requested, saved, structure_options={"column.vector.boundaries": ".2, .5"})
 
     def test_dssm_overrides_do_not_compare_the_other_tower_defaults(self):
-        saved, requested = self.config(), self.config()
+        saved, requested = self.config("dssm"), self.config("dssm")
         saved.model_config.Clear()
         dssm = saved.model_config.dssm
         saved.model_config.losses.add().softmax_cross_entropy.SetInParent()

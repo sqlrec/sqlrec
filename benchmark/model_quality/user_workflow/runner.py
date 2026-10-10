@@ -20,92 +20,58 @@ def verify_plan(root):
         path = (root / name).resolve()
         if not path.is_relative_to(root) or digest(path) != checksum:
             raise ValueError(f'Immutable recipe/input changed: {name}')
-    if plan.get('format_version') not in (3, 4, 5):
+    if type(plan.get('format_version')) is not int or plan['format_version'] != 5:
         raise ValueError('Unsupported frozen plan version')
-    if plan['format_version'] == 3:
-        plan = legacy_plan(plan, root)
-    else:
-        for step in plan['steps']:
-            if len(step.get('result_roles', [])) != len(step['files']):
-                raise ValueError('Invalid statement/result-role contract')
-            if step['kind'] not in {'sql', 'table_create', 'table_partition', 'verify_table', 'define', 'train', 'export',
-                                    'service', 'function', 'api', 'scalar', 'index_empty', 'index_visible',
-                                    'vector_load', 'recall'}:
-                raise ValueError('Unsupported workflow stage kind')
-            if step['replay'] not in ('safe', 'verify', 'never'):
-                raise ValueError('Invalid stage replay policy')
-            if step['kind'] in ('train', 'export') and not step.get('model_id'):
-                raise ValueError('Lifecycle stages need an explicit model identity')
-    if plan['format_version'] == 5:
-        groups = plan.get('resources', {}).get('models')
-        if not isinstance(groups, dict):
-            raise ValueError('Missing frozen model resource bindings')
-        declared = {s['model_id'] for s in plan['steps'] if s['model_id']}
-        if declared != set(groups):
-            raise ValueError('Model groups differ from frozen resource bindings')
-        physical = set()
-        bindings = []
-        for model, group in groups.items():
-            lifecycle = {s['kind'] for s in plan['steps'] if s['model_id'] == model and s['kind'] in ('train', 'export')}
-            if len(group['jobs']) != len(lifecycle) or {b['kind'] for b in group['jobs']} != lifecycle:
-                raise ValueError('Incomplete training/export resource contract')
-            for binding in group['services']:
-                stage = next((s for s in plan['steps'] if s['id'] == binding['step_id']), None)
-                if (stage is None or stage['kind'] != 'service' or stage['model_id'] != model or
-                    binding['model'] != model or not any(all(c.get(k) == binding[k] for k in
-                    ('name', 'model', 'checkpoint')) for c in stage['checks']) or
-                    binding['deployment'] != kubernetes_name(binding['name'])):
-                    raise ValueError('Service resource binding differs from frozen SQL stage')
-                key = ('serving', binding['namespace'], binding['deployment'])
-                if key in physical:
-                    raise ValueError('Physical serving resource name collision')
-                physical.add(key); bindings.append(binding['step_id'])
-            for binding in group['jobs']:
-                suffix = '-v1' if binding['kind'] == 'train' else '-v1-export'
-                if binding['kind'] not in ('train', 'export') or binding['name'] != kubernetes_name(model + suffix) + '-job':
-                    raise ValueError('Invalid native Job resource binding')
-                key = ('job', binding['namespace'], binding['name'])
-                if key in physical:
-                    raise ValueError('Physical Job resource name collision')
-                physical.add(key)
-        if set(bindings) != {s['id'] for s in plan['steps'] if s['kind'] == 'service'}:
-            raise ValueError('Incomplete service release contract')
+    for step in plan['steps']:
+        if len(step.get('result_roles', [])) != len(step['files']):
+            raise ValueError('Invalid statement/result-role contract')
+        if step['kind'] not in {'sql', 'table_create', 'table_partition', 'verify_table', 'define', 'train', 'export',
+                                'service', 'function', 'api', 'scalar', 'index_empty', 'index_visible',
+                                'vector_load', 'recall'}:
+            raise ValueError('Unsupported workflow stage kind')
+        if step['replay'] not in ('safe', 'verify', 'never'):
+            raise ValueError('Invalid stage replay policy')
+        if step['kind'] in ('train', 'export') and not step.get('model_id'):
+            raise ValueError('Lifecycle stages need an explicit model identity')
+    groups = plan.get('resources', {}).get('models')
+    if not isinstance(groups, dict):
+        raise ValueError('Missing frozen model resource bindings')
+    declared = {s['model_id'] for s in plan['steps'] if s['model_id']}
+    if declared != set(groups):
+        raise ValueError('Model groups differ from frozen resource bindings')
+    physical = set()
+    bindings = []
+    for model, group in groups.items():
+        lifecycle = {s['kind'] for s in plan['steps'] if s['model_id'] == model and s['kind'] in ('train', 'export')}
+        if len(group['jobs']) != len(lifecycle) or {b['kind'] for b in group['jobs']} != lifecycle:
+            raise ValueError('Incomplete training/export resource contract')
+        for binding in group['services']:
+            stage = next((s for s in plan['steps'] if s['id'] == binding['step_id']), None)
+            if (stage is None or stage['kind'] != 'service' or stage['model_id'] != model or
+                binding['model'] != model or not any(all(c.get(k) == binding[k] for k in
+                ('name', 'model', 'checkpoint')) for c in stage['checks']) or
+                binding['deployment'] != kubernetes_name(binding['name'])):
+                raise ValueError('Service resource binding differs from frozen SQL stage')
+            key = ('serving', binding['namespace'], binding['deployment'])
+            if key in physical:
+                raise ValueError('Physical serving resource name collision')
+            physical.add(key); bindings.append(binding['step_id'])
+        for binding in group['jobs']:
+            suffix = '-v1' if binding['kind'] == 'train' else '-v1-export'
+            if binding['kind'] not in ('train', 'export') or binding['name'] != kubernetes_name(model + suffix) + '-job':
+                raise ValueError('Invalid native Job resource binding')
+            key = ('job', binding['namespace'], binding['name'])
+            if key in physical:
+                raise ValueError('Physical Job resource name collision')
+            physical.add(key)
+    if set(bindings) != {s['id'] for s in plan['steps'] if s['kind'] == 'service'}:
+        raise ValueError('Incomplete service release contract')
     return plan
 
 
 def describe_map(result):
     rows = result.rows if hasattr(result, 'rows') else [list(row.values()) for row in result]
     return {str(row[0]).strip(): str(row[1]).strip() for row in rows if len(row) >= 2}
-
-
-def legacy_plan(plan, root):
-    """Adapt v3 metadata in memory after checking the original fingerprint."""
-    import copy
-    plan = copy.deepcopy(plan)
-    recipes = {f'{plan["name"]}_{recipe["id"]}_s{seed}': recipe['id']
-               for recipe in plan['config'].get('models', [])
-               for seed in plan['config']['execution'].get('seeds', [])}
-    evaluations = {e['id']: e for e in plan['evaluations']}
-    for evaluation in evaluations.values():
-        evaluation['recipe_id'] = recipes[evaluation['id']]
-    for step in plan['steps']:
-        statements = [(root / path).read_text().lstrip() for path in step['files']]
-        first = statements[0] if statements else ''
-        kind = ('function' if first.startswith('CREATE OR REPLACE SQL FUNCTION') else
-                'train' if first.startswith('TRAIN MODEL') else (step.get('capture') or {}).get('kind', 'sql'))
-        step['kind'] = kind
-        model = next((c['name'] for c in step['checks'] if c['kind'] == 'checkpoint'), None)
-        step['model_id'] = model
-        evaluation = evaluations.get(model, {})
-        step['recipe_id'] = evaluation.get('recipe_id')
-        step['seed'] = evaluation.get('seed')
-        step['result_roles'] = ['sql'] * len(statements)
-        capture = step.get('capture') or {}
-        if capture.get('kind') in ('scalar', 'recall', 'table_count') and statements:
-            step['result_roles'][-1] = 'prediction' if capture['kind'] != 'table_count' else 'table_count'
-        if capture.get('kind') == 'vectors':
-            step['result_roles'][-2] = 'vectors'
-    return plan
 
 
 def validate_capture(capture, results):
@@ -170,7 +136,7 @@ class Runner:
         self.clients = {}; self.api = None
         self.runtime_audit = RuntimeAudit(self.root,self.plan)
         self.workloads = workload_factory(self.plan['config']['execution'])
-        for model in self.plan.get('resources', {}).get('models', {}):
+        for model in self.plan['resources']['models']:
             self.journal.setdefault('models', {}).setdefault(model, {'status': 'not_executed', 'cleanup_status': 'not_required'})
 
     def audit_train(self, step):
@@ -281,7 +247,7 @@ class Runner:
             elif check['kind'] == 'service':
                 if meta.get('Model Name:') != check['model'] or meta.get('Checkpoint Name:') != check['checkpoint'] or not meta.get('URL:'):
                     raise ValueError('Public service binding mismatch')
-                if completion and self.plan['format_version'] == 5:
+                if completion:
                     binding = next(b for b in self._service_bindings(step['model_id']) if b['name'] == check['name'])
                     deployment = self.workloads.get('deployment', binding['namespace'], binding['deployment'])
                     if not deployment or deployment.get('status', {}).get('availableReplicas', 0) < deployment.get('spec', {}).get('replicas', 1):
@@ -313,15 +279,14 @@ class Runner:
             if names & existing:
                 raise ValueError('Run resource names already exist; use a new isolated prefix')
             evidence.append({'sql': sql, 'rows': result.records(), 'source': result.source})
-        if self.plan.get('format_version') == 5:
-            for group in self.plan['resources']['models'].values():
-                for binding in group['services']:
-                    if self.workloads.snapshot(binding):
-                        raise ValueError('Serving Kubernetes resource names already exist')
-                for binding in group['jobs']:
-                    if self.workloads.get('job', binding['namespace'], binding['name']) or (
-                        self.workloads.get('pods', binding['namespace'], selector='job-name=' + binding['name']) or {}).get('items'):
-                        raise ValueError('Training/export Kubernetes resource names already exist')
+        for group in self.plan['resources']['models'].values():
+            for binding in group['services']:
+                if self.workloads.snapshot(binding):
+                    raise ValueError('Serving Kubernetes resource names already exist')
+            for binding in group['jobs']:
+                if self.workloads.get('job', binding['namespace'], binding['name']) or (
+                    self.workloads.get('pods', binding['namespace'], selector='job-name=' + binding['name']) or {}).get('items'):
+                    raise ValueError('Training/export Kubernetes resource names already exist')
         write_json(self.root / 'execution/preflight.json', evidence)
         self.journal['preflight_completed'] = True; self.save()
 
@@ -340,53 +305,46 @@ class Runner:
         try:
             if not self.journal['steps'] and not self.journal.get('preflight_completed'):
                 self.preflight()
-            if self.plan['format_version'] < 5:
-                # Old frozen plans retain their execution contract.
-                cleanup = self.root / 'execution/services_cleanup.json'
-                if cleanup.exists() and read_json(cleanup).get('services'):
-                    raise ValueError('Legacy services were released; use a new run')
-                self._run_steps(self.plan['steps'], through, retry_failed)
-            else:
-                shared = [s for s in self.plan['steps'] if not s['model_id']]
-                self._run_steps(shared, through, retry_failed)
-                if not any(s['id'] == through for s in shared):
-                    for model, resources in self.plan['resources']['models'].items():
-                        steps = [s for s in self.plan['steps'] if s['model_id'] == model]
-                        state = self.journal.setdefault('models', {}).setdefault(model, {})
-                        complete = all(self.journal['steps'].get(s['id'], {}).get('status') == 'succeeded' for s in steps)
-                        if complete:
-                            for step in steps:
-                                record = self.journal['steps'][step['id']]
-                                if not record.get('artifact') or digest(self.root / record['artifact']) != record['sha256']:
-                                    raise ValueError('Saved public result/evidence changed')
-                            self._release_services(model)
-                            state['status'] = 'succeeded'; self.save()
-                        else:
-                            released = self._cleanup_evidence()['services']
-                            if any(b['name'] in released and released[b['name']]['status'] != 'awaiting_creation'
-                                   for b in resources['services']):
-                                raise Indeterminate('Incomplete model has released services; use a new isolated run')
-                            state.update(status='running', cleanup_status='pending'); self.save()
+            shared = [s for s in self.plan['steps'] if not s['model_id']]
+            self._run_steps(shared, through, retry_failed)
+            if not any(s['id'] == through for s in shared):
+                for model, resources in self.plan['resources']['models'].items():
+                    steps = [s for s in self.plan['steps'] if s['model_id'] == model]
+                    state = self.journal.setdefault('models', {}).setdefault(model, {})
+                    complete = all(self.journal['steps'].get(s['id'], {}).get('status') == 'succeeded' for s in steps)
+                    if complete:
+                        for step in steps:
+                            record = self.journal['steps'][step['id']]
+                            if not record.get('artifact') or digest(self.root / record['artifact']) != record['sha256']:
+                                raise ValueError('Saved public result/evidence changed')
+                        self._release_services(model)
+                        state['status'] = 'succeeded'; self.save()
+                    else:
+                        released = self._cleanup_evidence()['services']
+                        if any(b['name'] in released and released[b['name']]['status'] != 'awaiting_creation'
+                               for b in resources['services']):
+                            raise Indeterminate('Incomplete model has released services; use a new isolated run')
+                        state.update(status='running', cleanup_status='pending'); self.save()
+                        try:
+                            self._run_steps(steps, through, retry_failed)
+                            state['status'] = 'succeeded' if all(
+                                self.journal['steps'].get(s['id'], {}).get('status') == 'succeeded' for s in steps) else 'partial'
+                        except BaseException:
+                            state['status'] = 'failed'; raise
+                        finally:
+                            # Mark interruptions before the resource barrier observes Jobs.
+                            for record in self.journal['steps'].values():
+                                if record['status'] in ('submitted', 'running'):
+                                    record['status'] = 'indeterminate'
+                            self.save()
                             try:
-                                self._run_steps(steps, through, retry_failed)
-                                state['status'] = 'succeeded' if all(
-                                    self.journal['steps'].get(s['id'], {}).get('status') == 'succeeded' for s in steps) else 'partial'
+                                self._release_services(model)
                             except BaseException:
-                                state['status'] = 'failed'; raise
-                            finally:
-                                # Mark interruptions before the resource barrier observes Jobs.
-                                for record in self.journal['steps'].values():
-                                    if record['status'] in ('submitted', 'running'):
-                                        record['status'] = 'indeterminate'
-                                self.save()
-                                try:
-                                    self._release_services(model)
-                                except BaseException:
-                                    state['cleanup_status'] = 'blocked'
-                                    self.journal['status'] = 'cleanup_failed'; self.save(); raise
-                        if any(s['id'] == through for s in steps):
-                            break
-            if self.plan['format_version'] == 5 and self.journal.get('resource_status') in ('blocked', 'pending'):
+                                state['cleanup_status'] = 'blocked'
+                                self.journal['status'] = 'cleanup_failed'; self.save(); raise
+                    if any(s['id'] == through for s in steps):
+                        break
+            if self.journal.get('resource_status') in ('blocked', 'pending'):
                 raise Indeterminate('A model resource barrier remains unproven; reconcile cleanup before continuing')
             self.journal['status'] = 'succeeded' if all(
                 self.journal['steps'].get(s['id'], {}).get('status') == 'succeeded' for s in self.plan['steps']) else 'partial'
@@ -485,9 +443,7 @@ class Runner:
                                         'role': step['result_roles'][position]})
                         # Validate embeddings before SQL INSERT, not after a broken index write.
                         if capture and capture['kind'] == 'vectors' and outputs[-1]['role'] == 'vectors':
-                            # v3's fixed layout reserved a final INSERT receipt.
-                            evidence = outputs if capture.get('result_role') else outputs + [{'rows': []}]
-                            validate_capture(capture, evidence)
+                            validate_capture(capture, outputs)
                     record['mutation_completed'] = bool(step['files']); self.save()
                     if capture and capture.get('request') and config['serving']['entrypoint'] == 'sql_api':
                         if self.api is None:
@@ -523,16 +479,8 @@ class Runner:
         return evidence
 
     def _service_bindings(self, model=None):
-        if self.plan['format_version'] == 5:
-            return [binding for name, group in self.plan['resources']['models'].items()
-                    if model is None or name == model for binding in group['services']]
-        # Older frozen plans have no physical-resource manifest.
-        execution = self.plan['config']['execution']
-        namespace = execution.get('service_resources', execution.get('resources', {})).get('NAMESPACE')
-        return [{**step['checks'][0], 'step_id': step['id'], 'namespace': namespace,
-                 'deployment': kubernetes_name(step['checks'][0]['name'])}
-                for step in self.plan['steps'] if step['kind'] == 'service' and
-                (model is None or step['checks'][0]['model'] == model)]
+        return [binding for name, group in self.plan['resources']['models'].items()
+                if model is None or name == model for binding in group['services']]
 
     def _release_services(self, model=None):
         """Idempotent public DROP followed by a read-only physical resource barrier."""
@@ -612,7 +560,7 @@ class Runner:
                 # Try other owned services even when one DSSM tower cannot be released.
                 evidence.setdefault('errors', {})[name] = type(error).__name__
                 write_json(path, evidence)
-        groups = self.plan.get('resources', {}).get('models', {})
+        groups = self.plan['resources']['models']
         for name, resources in groups.items():
             if model is not None and name != model:
                 continue

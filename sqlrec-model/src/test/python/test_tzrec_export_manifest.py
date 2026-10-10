@@ -42,7 +42,7 @@ class ExportManifestTest(unittest.TestCase):
             for name in module.REQUIRED_FILES:
                 (root / name).write_text("fixture")
             (root / "fg.json").write_text(json.dumps({"features": [{"feature_name": "id", "expression": "item:id"}]}))
-            with self.assertRaisesRegex(ValueError, "task manifest"):
+            with self.assertRaisesRegex(ValueError, "manifest"):
                 module.validate_export(temporary, ["click", "watch"], contract)
             metadata = {"format_version": 1, "architecture": "mmoe", "labels": ["click", "watch"],
                         "sha256": {name: module.digest(root / name) for name in module.REQUIRED_FILES}, **contract}
@@ -55,7 +55,7 @@ class ExportManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "task contract"):
                     module.validate_export(temporary, ["click", "watch"], contract)
 
-    def test_legacy_exports_check_labels_from_the_pipeline(self):
+    def test_exports_check_labels_from_the_pipeline(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for name in module.REQUIRED_FILES:
@@ -64,7 +64,7 @@ class ExportManifestTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "label features"):
                 module.validate_export(temporary, ["label"])
 
-    def test_legacy_hash_exports_reject_an_incompatible_hash_environment(self):
+    def test_hash_exports_reject_an_incompatible_hash_environment(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for name in module.REQUIRED_FILES:
@@ -74,13 +74,18 @@ class ExportManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Hash features require"):
                     module.validate_export(temporary)
 
-    def test_legacy_complete_and_corrupt_exports(self):
+    def test_manifest_completion_and_checksums_are_required(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for name in module.REQUIRED_FILES:
                 (root / name).write_text("fixture")
             (root / "fg.json").write_text(json.dumps({"features": [{"feature_name": "id", "expression": "item:id"}]}))
-            module.validate_export(temporary)
+            with self.assertRaisesRegex(ValueError, "model_meta.json"):
+                module.validate_export(temporary)
+            (root / "_SUCCESS").touch()
+            with self.assertRaisesRegex(ValueError, "model_meta.json"):
+                module.validate_export(temporary)
+            (root / "_SUCCESS").unlink()
             metadata = {"format_version": 1, "sha256": {name: module.digest(root / name) for name in module.REQUIRED_FILES}, "labels": ["label"]}
             (root / "model_meta.json").write_text(json.dumps(metadata))
             with self.assertRaisesRegex(ValueError, "incomplete"):

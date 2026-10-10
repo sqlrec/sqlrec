@@ -37,6 +37,9 @@ class Fixture(torch.nn.Module):
 
 
 def main():
+    sys.path.insert(0, "/app")
+    from validate_export import REQUIRED_FILES, digest
+
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         torch.jit.script(Fixture()).save(str(directory / "scripted_model.pt"))
@@ -47,6 +50,18 @@ def main():
           data_config { fg_mode: FG_NORMAL }
           feature_configs { id_feature { feature_name: "id" expression: "item:input" num_buckets: 100 embedding_dim: 16 } }
         ''')
+        for backend in ("cpp", "python"):
+            rejected = subprocess.run(
+                ["bash", "/app/server.sh", "--scripted_model_dir", str(directory)],
+                env={**os.environ, "TZREC_SERVING_BACKEND": backend}, capture_output=True, timeout=30,
+            )
+            assert rejected.returncode != 0
+            assert b"model_meta.json" in rejected.stderr, rejected.stderr
+        (directory / "model_meta.json").write_text(json.dumps({
+            "format_version": 1, "labels": [],
+            "sha256": {name: digest(directory / name) for name in REQUIRED_FILES},
+        }))
+        (directory / "_SUCCESS").touch()
         executable = os.environ.get("TZREC_SERVER", "/app/tzrec_server")
         port = 19080
         with tempfile.TemporaryFile(mode="w+") as log:
@@ -108,7 +123,6 @@ def main():
                 process.terminate()
                 assert process.wait(timeout=10) == 0
         print("Native serving smoke test passed")
-        sys.path.insert(0, "/app")
         import server
         server._init_model(str(directory))
         with server.app.test_client() as client:
@@ -121,7 +135,7 @@ def main():
             assert client.post("/predict", data="{", content_type="application/json").status_code == 400
             assert client.post("/predict", data="[]", content_type="text/plain").status_code == 400
         print("Python FP16/BF16/integer/bool serialization and HTTP smoke test passed")
-        # Old exports have no manifest, but their pipeline labels still apply.
+        # Label leakage must be rejected before loading the model.
         pipeline = directory / "pipeline.config"
         pipeline.write_text(pipeline.read_text().replace("fg_mode: FG_NORMAL", 'fg_mode: FG_NORMAL label_fields: "input"'))
         for backend in ("cpp", "python"):
@@ -131,7 +145,7 @@ def main():
             )
             assert rejected.returncode != 0
             assert b"label features" in rejected.stderr, rejected.stderr
-        print("Legacy label leakage is rejected before starting either backend")
+        print("Label leakage is rejected before starting either backend")
 
 
 if __name__ == "__main__":

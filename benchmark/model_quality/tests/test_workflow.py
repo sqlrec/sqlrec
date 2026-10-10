@@ -36,7 +36,8 @@ def fixture(root, family='tzrec.dssm'):
     items = pd.DataFrame({'video_id': ['i1', 'i2', 'i3'], 'eligible': [True]*3})
     for name, frame in [('train', train), ('valid', valid), ('queries_valid', queries), ('items', items)]:
         frame.to_parquet(data / f'{name}.parquet', index=False)
-    write_json(data / 'manifest.json', {'fingerprint': 'fixture', 'candidate_scope': 'full_catalog', 'files': {p.name: digest(p) for p in data.glob('*.parquet')},
+    write_json(data / 'manifest.json', {'format_version': 1, 'dataset_definition': {'preparation': {'row_key': 'row_id'}},
+                                       'fingerprint': 'fixture', 'candidate_scope': 'full_catalog', 'files': {p.name: digest(p) for p in data.glob('*.parquet')},
                                        'splits': {'train': ['train.parquet'], 'valid': ['valid.parquet']}})
     config = {'schema_version': 3, 'execution_profile': 'user_workflow', 'mode': 'fixed_validation', 'name': 'wf_test',
               'dataset': {'path': str(data), 'storage_uri': 'jfs://myjfs/test/wf_test',
@@ -175,11 +176,35 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_movielens_source_requires_training_rated_exclusion(self):
         path = self.root/'prepared/manifest.json'; manifest = read_json(path)
-        manifest.update(protocol='movielens-user-time-full-catalog', exclude_train_rated_required=True)
+        manifest.update(protocol='movielens-user-time-full-catalog', exclude_seen_required=True)
         write_json(path, manifest); self.config['protocol']['exclude_seen'] = False
         with self.assertRaisesRegex(ValueError, 'training-observed'):
             self.build()
         self.assertFalse((self.root/'run').exists())
+
+    def test_invalid_prepared_manifest_fails_before_creating_output(self):
+        path = self.root / 'prepared/manifest.json'
+        original = read_json(path)
+        cases = []
+        for version in (None, 0, 2, True, '1'):
+            manifest = copy.deepcopy(original)
+            if version is None:
+                manifest.pop('format_version')
+            else:
+                manifest['format_version'] = version
+            cases.append(manifest)
+        for definition in (None, {}, {'preparation': {}}, {'preparation': {'row_key': ''}}):
+            manifest = copy.deepcopy(original); manifest['dataset_definition'] = definition
+            cases.append(manifest)
+        for changes in ({'exclude_train_rated_required': True}, {'exclude_seen_required': 'false'},
+                        {'files': {}}, {'splits': {'train': ['uncovered.parquet']}}):
+            manifest = copy.deepcopy(original); manifest.update(changes); cases.append(manifest)
+        for manifest in cases:
+            with self.subTest(manifest=manifest):
+                write_json(path, manifest)
+                with self.assertRaises(ValueError):
+                    self.build()
+                self.assertFalse((self.root / 'run').exists())
 
     def test_feature_aliases_use_the_same_columns_in_training_and_requests(self):
         self.config['features'] = [{'name':'viewer', 'source':'user_id', 'type':'STRING', 'role':'user'},
@@ -293,29 +318,25 @@ class WorkflowContractTest(unittest.TestCase):
                     self.assertIn('| ndcg_at_2 |', text)
                 self.assertIn('ndcg_at_2', report['results'][0]['retrieval'])
 
-    def test_explicit_stage_metadata_and_v3_readonly_compatibility(self):
+    def test_explicit_stage_metadata_and_current_plan_contract(self):
         plan = self.build(); root = self.root/'run'
         train = next(s for s in plan['steps'] if s['kind']=='train')
         self.assertEqual((train['model_id'], train['recipe_id'], train['seed']), ('wf_test_model_s123','model',123))
         for step in plan['steps']:
             self.assertEqual(len(step['files']), len(step['result_roles']))
-        # A genuine v3 layout has no typed stage/role/recipe metadata.
-        plan['format_version'] = 3
-        plan['config']['execution']['seeds'] = [plan['config']['execution'].pop('seed')]
-        for step in plan['steps']:
-            for field in ('kind','model_id','recipe_id','seed','result_roles'):
-                step.pop(field)
-            if step.get('capture'):
-                step['capture'].pop('result_role', None)
-        for evaluation in plan['evaluations']:
-            evaluation.pop('recipe_id')
-        plan.pop('plan_id'); plan['plan_id'] = stable_id(plan)
-        write_json(root/'resolved_plan.json', plan)
         before = (root/'resolved_plan.json').read_bytes()
-        adapted = verify_plan(root)
-        self.assertEqual(adapted['plan_id'], plan['plan_id'])
-        self.assertEqual(next(s['model_id'] for s in adapted['steps'] if s['kind']=='train'), 'wf_test_model_s123')
+        self.assertEqual(verify_plan(root), plan)
         self.assertEqual((root/'resolved_plan.json').read_bytes(), before)
+        self.assertEqual(plan['format_version'], 5)
+        for version in (3, 4, 6, "5", 5.0):
+            with self.subTest(version=version):
+                changed = copy.deepcopy(plan)
+                changed['format_version'] = version
+                changed.pop('plan_id'); changed['plan_id'] = stable_id(changed)
+                write_json(root/'resolved_plan.json', changed)
+                with self.assertRaisesRegex(ValueError, 'Unsupported frozen plan version'):
+                    verify_plan(root)
+
 
     def test_labels_cannot_be_features(self):
         self.config['features'].append({'name': 'label', 'type': 'INT', 'role': 'item'})
@@ -442,10 +463,12 @@ class MetricsTest(unittest.TestCase):
 
     def test_null_service_output_and_vector_schema_rejected(self):
         with self.assertRaisesRegex(ValueError, 'null'):
-            validate_capture({'kind':'scalar','row_ids':['a'],'outputs':{'x':'probs'}}, [{'rows':[{'row_id':'a','probs':None}]}])
+            validate_capture({'kind':'scalar','result_role':'prediction','row_ids':['a'],'outputs':{'x':'probs'}},
+                             [{'role':'prediction','rows':[{'row_id':'a','probs':None}]}])
         with self.assertRaisesRegex(ValueError, 'dimension'):
-            validate_capture({'kind':'vectors','dimension':2,'rows':1},
-                             [{'rows':[{'catalog_id':1,'item_tower_emb':[0.1]}]}, {'rows':[]}])
+            validate_capture({'kind':'vectors','result_role':'vectors','dimension':2,'rows':1},
+                             [{'role':'vectors','rows':[{'catalog_id':1,'item_tower_emb':[0.1]}]},
+                              {'role':'sql','rows':[]}])
 
     def test_result_roles_and_exact_vector_identity_are_enforced(self):
         capture = {'kind':'scalar', 'result_role':'prediction', 'row_ids':['a'], 'outputs':{'x':'probs'}}
@@ -457,6 +480,8 @@ class MetricsTest(unittest.TestCase):
             captured_result(capture, evidence[1:])
         with self.assertRaisesRegex(ValueError, 'exactly one'):
             captured_result(capture, evidence+evidence[:1])
+        with self.assertRaisesRegex(ValueError, 'explicit result_role'):
+            captured_result({'kind': 'scalar'}, evidence)
         vectors = {'kind':'vectors','result_role':'vectors','dimension':2,'rows':1,'catalog_ids':[1]}
         with self.assertRaisesRegex(ValueError, 'identities'):
             validate_capture(vectors, [{'role':'vectors','rows':[{'catalog_id':99,'item_tower_emb':[.1,.2]}]}])
@@ -468,7 +493,7 @@ class TransportAndRecoveryTest(unittest.TestCase):
             root = Path(directory); (root/'function.sql').write_text('CREATE OR REPLACE SQL FUNCTION isolated;')
             step = SQLStep('renamed_stage', 'sqlrec', ['function.sql'], 'safe', kind='function', result_roles=['sql'])
             plan = WorkflowPlan('isolated', 'fixture', {'sql':{'endpoints':{'sqlrec':{}}},'execution':{}},
-                                [], [], [step], {'function.sql':digest(root/'function.sql')}, []).to_dict()
+                                [], [], [step], {'function.sql':digest(root/'function.sql')}, [], resources={'models': {}}).to_dict()
             write_json(root/'resolved_plan.json', plan)
             class Fake:
                 submissions = 0
@@ -492,7 +517,7 @@ class TransportAndRecoveryTest(unittest.TestCase):
             step = SQLStep('table', 'warehouse', ['table.sql'], 'never', capture=contract,
                            kind='table_create', result_roles=['sql'])
             plan = WorkflowPlan('isolated', 'fixture', {'sql': {'endpoints': {'warehouse': {}}}, 'execution': {}},
-                                [], [], [step], {'table.sql': digest(root / 'table.sql')}, []).to_dict()
+                                [], [], [step], {'table.sql': digest(root / 'table.sql')}, [], resources={'models': {}}).to_dict()
             write_json(root / 'resolved_plan.json', plan)
             class SQL:
                 location = contract['location']; label_type = 'bigint'; partition_sections = False
@@ -599,7 +624,9 @@ class TransportAndRecoveryTest(unittest.TestCase):
                            [{'kind':'checkpoint','name':'isolated','checkpoint':'v1','type':'origin'}],
                            kind='train', model_id='isolated', result_roles=['mutation'])
             plan = WorkflowPlan('isolated','fixture',{'sql':{'endpoints':{'sqlrec':{}}}, 'execution': {}},[],[],[step],
-                                {'train.sql':digest(root/'train.sql')},[]).to_dict()
+                                {'train.sql':digest(root/'train.sql')},[], resources={'models': {
+                                    'isolated': {'services': [], 'jobs': [
+                                        {'kind': 'train', 'namespace': 'sqlrec', 'name': 'isolated-v1-job'}]}}}).to_dict()
             write_json(root/'resolved_plan.json', plan)
             class Fake:
                 submissions=0; complete=False
@@ -615,13 +642,15 @@ class TransportAndRecoveryTest(unittest.TestCase):
                         raise Indeterminate('Connection lost after submission')
                     status = 'succeeded' if Fake.complete else 'created'
                     return SQLResult(['col_name','data_type'], [['Status:',status],['Checkpoint Type:','origin']])
+            workloads = lambda config: SimpleNamespace(
+                get=lambda *args, **kwargs: None, jobs_quiet=lambda bindings: [])
             with self.assertRaises(Indeterminate):
-                Runner(root, client_factory=Fake).run()
+                Runner(root, client_factory=Fake, workload_factory=workloads).run()
             with self.assertRaises(Indeterminate):
-                Runner(root, client_factory=Fake).run()
+                Runner(root, client_factory=Fake, workload_factory=workloads).run()
             self.assertEqual(Fake.submissions, 1)
             Fake.complete=True
-            result=Runner(root, client_factory=Fake).run()
+            result=Runner(root, client_factory=Fake, workload_factory=workloads).run()
             self.assertEqual(result['status'],'succeeded')
             self.assertFalse(result['formal_transport'])
             self.assertEqual(Fake.submissions, 1)

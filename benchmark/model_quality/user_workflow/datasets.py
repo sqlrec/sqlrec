@@ -40,7 +40,7 @@ class PreparedDatasetAdapter:
         if not (self.root / 'manifest.json').is_file():
             raise ValueError(f'Prepared dataset is missing at {self.root}; run benchmark/model_quality/run_tests.sh for automatic data setup')
         self.manifest = read_json(self.root / 'manifest.json')
-        self.row_key = self.manifest.get('dataset_definition', {}).get('preparation', {}).get('row_key', 'row_id')
+        self.row_key = validate_prepared_manifest(self.manifest)
         for name, expected in self.manifest['files'].items():
             path = (self.root / name).resolve()
             if not path.is_relative_to(self.root) or digest(path) != expected:
@@ -64,6 +64,32 @@ class PreparedDatasetAdapter:
     def table(self, name):
         self.require_files([name])
         return pd.read_parquet(self.root / name)
+
+
+def validate_prepared_manifest(manifest):
+    """Require the current prepared-data contract before reading any artifacts."""
+    if not isinstance(manifest, dict) or type(manifest.get('format_version')) is not int or manifest['format_version'] != 1:
+        raise ValueError('Prepared manifests require format_version=1')
+    if 'exclude_train_rated_required' in manifest:
+        raise ValueError('Unsupported prepared manifest field: exclude_train_rated_required; use exclude_seen_required')
+    definition = manifest.get('dataset_definition')
+    preparation = definition.get('preparation') if isinstance(definition, dict) else None
+    row_key = preparation.get('row_key') if isinstance(preparation, dict) else None
+    if not isinstance(row_key, str) or not row_key or not row_key.isidentifier():
+        raise ValueError('Prepared manifest requires dataset_definition.preparation.row_key')
+    files, splits = manifest.get('files'), manifest.get('splits')
+    if not isinstance(files, dict) or not files or any(
+            not isinstance(name, str) or not name or not isinstance(checksum, str)
+            or len(checksum) != 64 or any(c not in '0123456789abcdef' for c in checksum)
+            for name, checksum in files.items()):
+        raise ValueError('Prepared manifest requires file names and SHA256 checksums')
+    if not isinstance(splits, dict) or 'train' not in splits or any(
+            not isinstance(names, list) or not names or any(not isinstance(name, str) or name not in files for name in names)
+            for names in splits.values()):
+        raise ValueError('Prepared manifest requires nonempty, checksum-covered splits')
+    if 'exclude_seen_required' in manifest and type(manifest['exclude_seen_required']) is not bool:
+        raise ValueError('Prepared manifest exclude_seen_required must be boolean')
+    return row_key
 
 
 class FeatureView:

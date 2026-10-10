@@ -49,6 +49,37 @@ class PredictionRequestEncoderTest {
                         modelFields, userFields, itemFields));
     }
 
+    @Test
+    void userItemRequestsUseOnlyTheFirstUserAndPreserveNestedFeatures() {
+        List<FieldSchema> modelFields = Arrays.asList(
+                new FieldSchema("user_tags", "ARRAY<STRING>"),
+                new FieldSchema("item_id", "INT"), new FieldSchema("scores", "ARRAY<DOUBLE>"));
+
+        assertEquals("{\"user_tags\":[[\"tag1\",\"tag2\"]],\"item_id\":[1,2],"
+                        + "\"scores\":[[1.1,2.2],[3.3,4.4,5.5]]}",
+                PredictionRequestEncoder.encodeUserItems(
+                        Arrays.asList(new Object[]{Arrays.asList("tag1", "tag2")},
+                                new Object[]{Collections.singletonList("ignored")}),
+                        Arrays.asList(new Object[]{1, Arrays.asList(1.1, 2.2)},
+                                new Object[]{2, Arrays.asList(3.3, 4.4, 5.5)}),
+                        modelFields, Collections.singletonList(field("user_tags", 0)),
+                        Arrays.asList(field("item_id", 0), field("scores", 1))));
+    }
+
+    @Test
+    void userItemRequestsHandleEmptyUserAndItemBatches() {
+        List<FieldSchema> modelFields = Arrays.asList(
+                new FieldSchema("user", "STRING"), new FieldSchema("item", "STRING"));
+        List<RelDataTypeField> userFields = Collections.singletonList(field("user", 0));
+        List<RelDataTypeField> itemFields = Collections.singletonList(field("item", 0));
+
+        assertEquals("{\"item\":[]}", PredictionRequestEncoder.encodeUserItems(
+                Collections.emptyList(), Collections.emptyList(), modelFields, userFields, itemFields));
+        assertEquals("{\"user\":[null],\"item\":[]}", PredictionRequestEncoder.encodeUserItems(
+                Collections.singletonList(new Object[]{null}), Collections.emptyList(),
+                modelFields, userFields, itemFields));
+    }
+
     private static RelDataTypeField field(String name, int index) {
         return DataTypeUtils.getRelDataTypeField(name, index, SqlTypeName.VARCHAR);
     }

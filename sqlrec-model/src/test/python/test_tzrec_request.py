@@ -19,7 +19,8 @@ class TzrecRequestTest(unittest.TestCase):
         columnar = {"user": [10], "item": ["a", "b"]}
 
         self.assertEqual(parse_request_data(rows), parse_request_data(columnar))
-        arrays = json_to_array_map(parse_request_data(columnar))
+        arrays = json_to_array_map(parse_request_data(columnar), {"user": {"feature_type": "raw_feature"},
+                                                                 "item": {"feature_type": "id_feature"}})
         self.assertEqual(arrays["user"].to_pylist(), [10, 10])
         self.assertEqual(arrays["item"].to_pylist(), ["a", "b"])
 
@@ -47,20 +48,21 @@ class TzrecRequestTest(unittest.TestCase):
 
     def test_missing_fields_become_null(self):
         rows = [{"user": 1}, {"user": 2, "item": "a"}, {"item": "b"}]
-        arrays = json_to_array_map(parse_request_data(rows))
+        arrays = json_to_array_map(parse_request_data(rows), {"user": {"feature_type": "raw_feature"},
+                                                             "item": {"feature_type": "id_feature"}})
 
         self.assertEqual(list(arrays), ["user", "item"])
         self.assertEqual(arrays["user"].to_pylist(), [1, 2, None])
         self.assertEqual(arrays["item"].to_pylist(), [None, "a", "b"])
 
     def test_fields_can_first_appear_after_an_empty_row(self):
-        arrays = json_to_array_map([{}, {"item": "a"}])
+        arrays = json_to_array_map([{}, {"item": "a"}], {"item": {"feature_type": "id_feature"}})
         self.assertEqual(arrays["item"].to_pylist(), [None, "a"])
 
     def test_id_columns_have_types_when_the_entire_batch_is_empty(self):
         arrays = json_to_array_map(
             [{"id": None, "genres": []}, {"id": None, "genres": None}],
-            {"id", "genres"},
+            {"id": {"feature_type": "id_feature"}, "genres": {"feature_type": "id_feature"}},
         )
         self.assertEqual(arrays["id"].type, pa.string())
         self.assertEqual(arrays["genres"].type, pa.list_(pa.string()))
@@ -68,7 +70,7 @@ class TzrecRequestTest(unittest.TestCase):
 
     def test_missing_required_id_column_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Missing input columns: id"):
-            json_to_array_map([{"other": 1}], {"id"})
+            json_to_array_map([{"other": 1}], {"id": {"feature_type": "id_feature"}})
 
     def test_model_schema_filters_extra_columns_and_normalizes_float_inputs(self):
         specs = {"id": {"feature_type": "id_feature"}, "price": {"feature_type": "raw_feature"}}

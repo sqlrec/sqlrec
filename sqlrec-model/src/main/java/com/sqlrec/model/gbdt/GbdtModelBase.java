@@ -132,11 +132,9 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
-        requireSupportedObjective(PipelineConfigUtils.mergeParams(model.getParams(), trainConf.getParams()));
-        String pipelineConfig = PipelineConfigUtils.generateTrainConfig(modelType, model, trainConf);
+        Map<String, String> mergedParams = PipelineConfigUtils.operationParams(modelType, model, trainConf.getParams());
+        String pipelineConfig = PipelineConfigUtils.generateTrainConfig(modelType, model, trainConf, mergedParams);
         String shell = ShellUtils.genTrainModelShell(modelType);
-        Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
-                model.getParams(), trainConf.getParams());
         return GbdtK8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), mergedParams);
     }
 
@@ -156,10 +154,9 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
+        Map<String, String> mergedParams = PipelineConfigUtils.operationParams(modelType, model, exportConf.getParams());
         String pipelineConfig = PipelineConfigUtils.generateExportConfig(exportConf);
         String shell = ShellUtils.genExportModelShell(modelType);
-        Map<String, String> mergedParams = PipelineConfigUtils.mergeParams(
-                model.getParams(), exportConf.getParams());
         return GbdtK8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), mergedParams);
     }
 
@@ -170,18 +167,11 @@ public abstract class GbdtModelBase implements ModelController {
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        Map<String, String> params = PipelineConfigUtils.mergeParams(model.getParams(), serviceConf.getParams());
-        requireSupportedObjective(params);
+        Map<String, String> params = PipelineConfigUtils.operationParams(modelType, model, serviceConf.getParams());
         return GbdtK8sYamlUtils.getServiceK8sYaml(modelType, serviceConf, params);
     }
     private static boolean isSupportedObjective(String objective) {
         return "binary".equals(objective) || "regression".equals(objective);
-    }
-
-    private static void requireSupportedObjective(Map<String, String> params) {
-        if (!isSupportedObjective(Config.OBJECTIVE.getValue(params))) {
-            throw new IllegalArgumentException("GBDT serving supports only binary or regression objectives");
-        }
     }
 
 }

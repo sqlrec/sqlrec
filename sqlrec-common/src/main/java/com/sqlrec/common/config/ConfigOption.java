@@ -113,6 +113,9 @@ public class ConfigOption<T> {
             return type.cast(Byte.valueOf(value));
         }
         if (type == Boolean.class) {
+            if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+                throw new IllegalArgumentException(key + " must be true or false: " + value);
+            }
             return type.cast(Boolean.valueOf(value));
         }
         throw new UnsupportedOperationException("Not supported type: " + type);

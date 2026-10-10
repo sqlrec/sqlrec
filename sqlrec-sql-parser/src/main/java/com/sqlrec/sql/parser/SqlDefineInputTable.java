@@ -10,10 +10,10 @@ import java.util.Objects;
 
 public class SqlDefineInputTable extends SqlCall implements SqlRecStatement {
     public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("DEFINE_INPUT_TABLE", SqlKind.OTHER);
-    private SqlIdentifier tableName;
-    private SqlIdentifier likeTable;
-    private List<SqlIdentifier> columnList;
-    private List<SqlTypeNameSpec> columnTypeList;
+    private final SqlIdentifier tableName;
+    private final SqlIdentifier likeTable;
+    private final List<SqlIdentifier> columnList;
+    private final List<SqlTypeNameSpec> columnTypeList;
 
     public SqlDefineInputTable(SqlParserPos pos, SqlIdentifier tableName, SqlIdentifier likeTable) {
         super(pos);
@@ -71,40 +71,16 @@ public class SqlDefineInputTable extends SqlCall implements SqlRecStatement {
         return tableName;
     }
 
-    /** @deprecated SQL AST nodes should be treated as immutable. */
-    @Deprecated(forRemoval = true)
-    public void setTableName(SqlIdentifier tableName) {
-        this.tableName = Objects.requireNonNull(tableName, "tableName");
-    }
-
     public SqlIdentifier getLikeTable() {
         return likeTable;
-    }
-
-    /** @deprecated SQL AST nodes should be treated as immutable. */
-    @Deprecated(forRemoval = true)
-    public void setLikeTable(SqlIdentifier likeTable) {
-        this.likeTable = likeTable;
     }
 
     public List<SqlIdentifier> getColumnList() {
         return columnList;
     }
 
-    /** @deprecated SQL AST nodes should be treated as immutable. */
-    @Deprecated(forRemoval = true)
-    public void setColumnList(List<SqlIdentifier> columnList) {
-        this.columnList = List.copyOf(Objects.requireNonNull(columnList, "columnList"));
-    }
-
     public List<SqlTypeNameSpec> getColumnTypeList() {
         return columnTypeList;
-    }
-
-    /** @deprecated SQL AST nodes should be treated as immutable. */
-    @Deprecated(forRemoval = true)
-    public void setColumnTypeList(List<SqlTypeNameSpec> columnTypeList) {
-        this.columnTypeList = List.copyOf(Objects.requireNonNull(columnTypeList, "columnTypeList"));
     }
 
 }
