@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import argparse
+import shutil
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -10,7 +13,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .common import arrow_type, binary, digest, provenance, require_columns, stable_id, write_json
-from .user_workflow.configuration import read_dataset_definition
+from .config import DATASETS, PACKAGE, dataset_definition, read_dataset_definition
 
 
 def load_preparation_config(path, adapter):
@@ -61,13 +64,6 @@ def string_ids(frame, columns):
             raise ValueError(f'Null identifier: {column}')
         frame[column] = frame[column].astype(str)
     return frame
-
-
-def select_users(train, max_users, user_key):
-    if max_users is not None and (type(max_users) is not int or max_users <= 0):
-        raise ValueError('max_users must be a positive integer')
-    users = sorted(train[user_key].unique(), key=lambda u: stable_id('cohort', u))
-    return set(users if max_users is None else users[:max_users])
 
 
 def counts(train, statistic, label):
@@ -133,20 +129,6 @@ def describe(frame, config):
             'cold_item_rows': int((~frame[seen[keys['item_key']]]).sum())}
 
 
-def batch_collisions(positive, config, batch_size=256):
-    pairs = 0
-    collisions = {'item': 0, 'user': 0}
-    for start in range(0, len(positive), batch_size):
-        batch = positive.iloc[start:start + batch_size]
-        pairs += len(batch) * (len(batch) - 1)
-        for role in collisions:
-            sizes = batch[config['dataset'][role + '_key']].value_counts().to_numpy(dtype='int64')
-            collisions[role] += int((sizes * (sizes - 1)).sum())
-    return {'order': 'prepared shuffled positives; runtime resampling may differ', 'batch_size': batch_size,
-            'rows': len(positive), 'off_diagonal_pairs': pairs,
-            **{f'same_{role}_pair_fraction': count / pairs if pairs else None for role, count in collisions.items()}}
-
-
 def save_dataset(output, train, splits, items, manifest, config, temporal=True, seed=None):
     output = Path(output)
     if (output / 'manifest.json').exists():
@@ -184,8 +166,14 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
     manifest.update({'format_version': 1, 'dataset_definition': config,
                      'feature_columns': [name for name, spec in config['columns'].items() if 'role' in spec],
                      'preparation_seed': seed, 'splits': {'train': ['train.parquet'], 'valid': [], 'test': []},
-                     'files': {}, 'audit': {'train': describe(samples, config)}, 'provenance': provenance()})
-    manifest['dssm_batch_collision_diagnostic'] = batch_collisions(positives, config)
+                     'files': {}, 'training': {}, 'audit': {'train': describe(samples, config)}, 'provenance': provenance()})
+    # Fixed training views belong to the dataset version, not to a test run.
+    for view, spec in config['views'].items():
+        columns = [*spec['features'], *(config['tasks'][task]['column'] for task in spec['tasks'])]
+        frame = positives if view == 'recall' else samples
+        filename = f'training/{view}/split=train/part.parquet'
+        write_frame(output / filename, frame[columns], config)
+        manifest['training'][view] = {'file': filename, 'rows': len(frame)}
     all_ids = set(samples[row_key])
     for split in ('valid', 'test'):
         query_frames, positive_frames = [], []
@@ -204,9 +192,82 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
         write_frame(output / f'queries_{split}.parquet', query, config)
         positive = pd.concat(positive_frames, ignore_index=True)
         write_frame(output / f'recall_{split}.parquet', positive.sample(frac=1, random_state=seed), config)
-    for path in sorted(output.glob('*.parquet')):
-        manifest['files'][path.name] = digest(path)
+    for path in sorted(output.rglob('*.parquet')):
+        manifest['files'][path.relative_to(output).as_posix()] = digest(path)
     manifest['fingerprint'] = stable_id(json.dumps(manifest['files'], sort_keys=True), manifest['protocol'],
                                         json.dumps(config, sort_keys=True), seed)
     write_json(output / 'manifest.json', manifest)
     return manifest
+
+
+def preparation_version(name):
+    """One version for these fixed rules, not an experiment/cache framework."""
+    sources = ['prepare.py', 'common.py', f'prepare_{name.replace("100k", "")}.py']
+    return stable_id(digest(PACKAGE / 'configs/datasets' / f'{name}.yaml'),
+                     [digest(PACKAGE / source) for source in sources])[:16]
+
+
+def prepare_one(name, data_root):
+    from .common import read_json
+    from .download_data import download
+    from .data import check_prepared
+    from .prepare_movielens import prepare as prepare_ml
+    from .prepare_kuairand import prepare as prepare_rand
+    from .prepare_kuairec import prepare as prepare_rec
+
+    version = preparation_version(name)
+    target = Path(data_root) / 'prepared' / name / version
+    if target.exists():
+        check_prepared(target, name)
+        print(f'Reusing {name}: {target}', flush=True)
+        return target
+    definition = dataset_definition(name)
+    raw = Path(data_root) / 'raw' / name
+    receipt = read_json(raw / 'download.json') if (raw / 'download.json').exists() else {}
+    if receipt.get('spec') != definition['source'] or any(
+            not (raw / filename).is_file() or digest(raw / filename) != receipt.get('files', {}).get(filename)
+            for filename in definition['source']['files'].values()):
+        download(name, raw)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix='.preparing_', dir=target.parent))
+    try:
+        adapters = {'movielens100k': prepare_ml, 'kuairand': prepare_rand, 'kuairec': prepare_rec}
+        manifest = adapters[name](raw, staging)
+        manifest['preparation_version'] = version
+        write_json(staging / 'manifest.json', manifest)
+        check_prepared(staging, name)
+        # Never replace an existing version, including a concurrent preparation.
+        if target.exists():
+            raise FileExistsError(f'Preparation target already exists: {target}')
+        staging.rename(target)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+    print(f'Prepared {name}: {target}', flush=True)
+    return target
+
+
+def main():
+    import os
+    parser = argparse.ArgumentParser(description='Download and prepare the bundled datasets once.')
+    parser.add_argument('--dataset', choices=(*DATASETS, 'all'), default='all')
+    parser.add_argument('--data-root', type=Path, default=Path(os.environ.get('BENCH_DATA_ROOT', PACKAGE / 'data')))
+    parser.add_argument('--upload', action='store_true', help='Upload fixed training views and register reusable Hive tables')
+    args = parser.parse_args()
+    names = DATASETS if args.dataset == 'all' else [args.dataset]
+    targets = [prepare_one(name, args.data_root) for name in names]
+    if args.upload:
+        from .client import HS2Client
+        from .config import environment
+        from .data import upload_training_tables
+        env = environment()
+        warehouse = HS2Client(env.endpoints['warehouse']).connect()
+        try:
+            for target in targets:
+                upload_training_tables(target, warehouse, env)
+        finally:
+            warehouse.close()
+
+
+if __name__ == '__main__':
+    main()

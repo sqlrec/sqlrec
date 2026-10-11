@@ -1,7 +1,6 @@
 """Download pinned official archives; extract only the benchmark's input files."""
 from __future__ import annotations
 
-import argparse
 import shutil
 import sys
 import tarfile
@@ -12,20 +11,14 @@ from urllib.parse import urlsplit
 import requests
 
 from .common import digest, write_json
-from .user_workflow.configuration import read_dataset_definition
-from .user_workflow.specs import identifier
+from .config import PACKAGE, DATASETS, read_dataset_definition
 
 
-def download(dataset, output, config_path=None):
-    if config_path is None:
-        path = Path(__file__).parent / 'configs/datasets' / (identifier(dataset) + '.yaml')
-    else:
-        path = Path(config_path)
+def download(dataset, output):
+    if dataset not in DATASETS:
+        raise ValueError(f'Unknown dataset: {dataset}')
+    path = PACKAGE / 'configs/datasets' / f'{dataset}.yaml'
     config, metadata = read_dataset_definition(path)
-    if dataset is not None and config['id'] != dataset:
-        raise ValueError('--dataset differs from the dataset YAML identity')
-    if 'source' not in config:
-        raise ValueError('Dataset YAML must declare a download source')
     spec = config['source']
     required = set(spec['files'].values())
     output = Path(output)
@@ -83,13 +76,3 @@ def download(dataset, output, config_path=None):
     write_json(output / 'download.json', {'dataset': config['id'], 'spec': spec, **metadata, 'archive_sha256': digest(archive),
                                         'files': {name: digest(output / name) for name in sorted(found)}})
     return output
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    selection = parser.add_mutually_exclusive_group(required=True)
-    selection.add_argument('--dataset', help='Load configs/datasets/<ID>.yaml')
-    selection.add_argument('--config', help='Explicit dataset YAML, also used by preparation and experiments')
-    parser.add_argument('--output', required=True)
-    args = parser.parse_args()
-    print(download(args.dataset, args.output, args.config))

@@ -5,6 +5,7 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import re
 import subprocess
 from pathlib import Path
 
@@ -18,15 +19,14 @@ def finite(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def captured_result(capture, results):
-    """Select exactly one result by its declared role."""
-    role = capture.get('result_role')
-    if not role:
-        raise ValueError('Capture requires an explicit result_role')
-    matches = [result for result in results if result.get('role') == role]
-    if len(matches) != 1:
-        raise ValueError(f'Expected exactly one {role} result')
-    return matches[0]
+def identifier(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,119}', value):
+        raise ValueError(f'Invalid SQL identifier: {value!r}')
+    return value
+
+
+def literal(value):
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def stable_id(*values) -> str:
@@ -75,13 +75,7 @@ def provenance():
             versions[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
             pass
-    # A copied Linux checkout may lack .git; identify executed sources as well.
-    sources = [p for p in (ROOT / 'benchmark/model_quality').rglob('*.py')
-               if not any(part in ('data', 'runs', 'reports', '__pycache__') for part in p.parts)]
-    sources += list((ROOT / 'sqlrec-model/src/main/python').rglob('*.py'))
-    sources += list((ROOT / 'sqlrec-model/src/main/java/com/sqlrec/model').rglob('*.java'))
-    return {'code_sha': sha, 'dirty_worktree': dirty, 'versions': versions,
-            'source_sha256': {str(p.relative_to(ROOT)): digest(p) for p in sorted(sources)}}
+    return {'code_sha': sha, 'dirty_worktree': dirty, 'versions': versions}
 
 
 def require_columns(frame, columns):

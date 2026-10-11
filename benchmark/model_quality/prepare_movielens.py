@@ -1,7 +1,6 @@
 """MovieLens preference labels; pair and per-user chronological holdouts."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -42,12 +41,12 @@ def split_ratings(frame, protocol, seed=None, split_percent=None):
     return frame
 
 
-def prepare(raw, output, protocol=None, seed=None, config_path=None):
+def prepare(raw, output):
     raw = Path(raw)
-    config, metadata = dataset_config(config_path)
+    config, metadata = dataset_config()
     parameters, source = config['preparation']['parameters'], config['source']
-    seed = preparation_seed(config, seed)
-    protocol = parameters['protocol'] if protocol is None else protocol
+    seed = preparation_seed(config, None)
+    protocol = parameters['protocol']
     threshold = parameters['positive_threshold']
     if not np.isfinite(threshold) or not 1 < threshold <= 5:
         raise ValueError('Rating preference threshold must be finite and in (1, 5]')
@@ -82,14 +81,3 @@ def prepare(raw, output, protocol=None, seed=None, config_path=None):
                 'split_description': 'pair hash' if protocol == 'pair' else 'per-user chronological; boundary timestamp ties stay together; no global cutoff',
                 'exclude_seen_required': True, 'ignored_features': ['demographics', 'full-data aggregates']}
     return save_dataset(output, train, splits, items, manifest, config, temporal=(protocol == 'user-time'), seed=seed)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--raw', required=True)
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--protocol', choices=['pair', 'user-time'], help='Override the configured split protocol')
-    parser.add_argument('--seed', type=int, help='Override preparation.seed from the dataset YAML')
-    parser.add_argument('--config', help='Dataset YAML; defaults to configs/datasets/movielens100k.yaml')
-    args = parser.parse_args()
-    print(prepare(args.raw, args.output, args.protocol, args.seed, args.config)['fingerprint'])

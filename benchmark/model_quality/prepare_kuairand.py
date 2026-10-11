@@ -1,7 +1,6 @@
 """KuaiRand-Pure: temporal holdout, frozen profiles, real exposure negatives."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -9,16 +8,16 @@ import pandas as pd
 
 from .common import binary, digest, require_columns, stable_id
 from .prepare import (load_preparation_config, preparation_seed, save_dataset,
-                      select_users, string_ids)
+                      string_ids)
 
 
-def prepare(raw, output, max_users=None, seed=None, config_path=None):
+def prepare(raw, output):
     raw = Path(raw)
-    config, metadata = load_preparation_config(config_path or Path(__file__).parent / 'configs/datasets/kuairand.yaml',
+    config, metadata = load_preparation_config(Path(__file__).parent / 'configs/datasets/kuairand.yaml',
                                               'benchmark.model_quality.prepare_kuairand')
     spec = config['preparation']['parameters']
     source_spec = config['source']
-    seed = preparation_seed(config, seed)
+    seed = preparation_seed(config, None)
     files = [(source_spec['files'][role], source) for role, source in spec['log_sources'].items()]
     if not files or any(source not in ('standard', 'random') for _, source in files):
         raise ValueError('KuaiRand log_sources must declare standard/random input roles')
@@ -56,10 +55,6 @@ def prepare(raw, output, max_users=None, seed=None, config_path=None):
     purged_valid = int((in_dates(spec['valid_dates']) & (events.time_ms >= test_start)).sum())
     train = events.loc[train_mask & (events.time_ms < valid_start)].copy()
     seen_before = set(train.video_id)
-    cohort = select_users(train, max_users, config['dataset']['user_key']) if max_users is not None else None
-    if cohort is not None:
-        events = events.loc[events.user_id.isin(cohort)].copy()
-        train = train.loc[train.user_id.isin(cohort)].copy()
     metadata_path = raw / source_spec['files']['items']
     items = pd.read_csv(metadata_path, dtype={'video_id': str, 'author_id': str})
     inputs[metadata_path.name] = digest(metadata_path)
@@ -82,7 +77,7 @@ def prepare(raw, output, max_users=None, seed=None, config_path=None):
                       for source in ('standard', 'random')} for split in ('valid', 'test')}
     manifest = {'dataset': config['name'], 'protocol': 'temporal-frozen-profile-full-pool',
                 'candidate_scope': config['protocol']['candidate_scope'], 'source_spec': source_spec, **metadata,
-                'raw_files': inputs, 'max_users': max_users, 'exact_duplicate_rows_removed': duplicate_count,
+                'raw_files': inputs, 'max_users': None, 'exact_duplicate_rows_removed': duplicate_count,
                 'candidate_eligible': int(items.eligible.sum()), 'candidate_ineligible': int((~items.eligible).sum()),
                 'candidate_reasons': {str(k): int(v) for k, v in items.eligibility_reason.value_counts().items()},
                 'temporal_boundary_audit': {'valid_start_time_ms': valid_start, 'test_start_time_ms': test_start,
@@ -94,17 +89,3 @@ def prepare(raw, output, max_users=None, seed=None, config_path=None):
 
 def in_dates_for(events, bounds):
     return events.date.between(*bounds)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--raw', required=True)
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--max-users', type=int, help='Development cohort selected independently of test labels')
-    parser.add_argument('--seed', type=int, help='Override preparation.seed from the dataset YAML')
-    parser.add_argument('--config', help='Dataset YAML; defaults to configs/datasets/kuairand.yaml')
-    args = parser.parse_args()
-    if args.max_users is not None and args.max_users <= 0:
-        parser.error('--max-users must be positive')
-    manifest = prepare(args.raw, args.output, args.max_users, args.seed, args.config)
-    print(manifest['fingerprint'])

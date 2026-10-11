@@ -1,619 +1,110 @@
-# Model Quality Benchmark
+# Model Quality
 
-This benchmark follows SQLRec's public application workflow: SQL model definition,
-training, export, service deployment, and SQL or SQL API inference. DSSM retrieval
-loads embeddings through public SQL into the real Milvus Connector. Python prepares
-inputs, collects public returns, validates coverage, and computes metrics.
+Train, export, and deploy models through SQLRec's public SQL interface, then predict through its SQL API. Reports contain two core metrics for the current model, with no historical comparisons, tuning, auditing, or interruption recovery.
 
-This is the single maintained guide for this directory. Prepared data and generated
-runs are ignored by Git. The broader roadmap remains in the
-[framework design](../../docs/model-quality-sql-framework-design.md) and
-[dataset portfolio plan](../../docs/model-quality-dataset-portfolio-plan.md).
+## Prepare and run
 
-The default smoke profile exercises the complete public workflow with a small
-integration cohort. Its metrics describe that cohort; use the full profile for
-full-data model quality evaluation.
-
-## Quick start
-
-With Python 3 and an existing SQLRec deployment built from the current project code,
-run one command from the repository:
+Run from the repository root. Python 3 and an existing SQLRec deployment are required. Dependency installation and local tests are separate from evaluation:
 
 ```bash
-# Automatic environment setup, local regressions and all 22 dataset/model runs.
-./benchmark/model_quality/run_tests.sh
-
-# The same complete suite with full training and validation data.
-./benchmark/model_quality/run_tests.sh --profile full
-
-# Local framework regressions only; no cluster access or data downloads.
-./benchmark/model_quality/run_tests.sh unit
-
-# Quality workflows only; skip local regression execution.
-./benchmark/model_quality/run_tests.sh quality
-
-# Optional subset; --config can be repeated.
-./benchmark/model_quality/run_tests.sh \
-  --config benchmark/model_quality/configs/kuairand_multitask.yaml
-```
-
-No separate pip, download, preparation or environment-source commands are needed.
-The default `all` mode uses the smoke profile and a single training seed, 123.
-The script creates/reuses `.venv`, installs missing requirements, sources
-`deploy/env.sh`, checks deployment access, prepares complete datasets, then executes
-normal public SQL/API workflows sequentially. It also works from another working
-directory when invoked by its absolute path. Deployment installation/upgrades and
-uncertain mutation retries remain separate from benchmark execution.
-
-## Configuration
-
-Configuration has three owners:
-
-| Owner | Settings |
-| --- | --- |
-| `deploy/env.sh` and exported overrides | Addresses, ports, namespace, clients, image versions, resource defaults |
-| `configs/datasets/*.yaml` | Download sources/checksums, preparation rules, all column types/roles, tasks, views, candidate protocols and dataset metrics |
-| `configs/*.yaml` | Explicit dataset-definition reference, view selection, models and experiment parameters |
-
-A compact experiment is sufficient:
-
-```yaml
-dataset:
-  config: datasets/movielens100k.yaml
-  view: recall
-models:
-  - family: tzrec.dssm
-    params:
-      output_dim: 16
-      batch_size: 64
-      num_epochs: 1
-evaluation:
-  ks: [20, 50, 100]
-```
-
-`name` defaults to the config filename stem. Model IDs default to the family suffix.
-The resolver expands this into the existing strict schema-v3 contract before build.
-Dataset references are resolved relative to the experiment YAML, independently of
-the working directory. There is no dataset ID registry or dataset-name branch in
-the public runner. There is no YAML inheritance, environment interpolation, or
-embedded shell Python.
-Complete schema-v3 configs are accepted without deployment defaults.
-Frozen plans use format v5 exclusively and do not reapply defaults on resume.
-Use `execution.seed` for the single training seed; `execution.seeds` is rejected.
-
-Explicit YAML overrides win over machine defaults. Model hyperparameters come from
-the experiment YAML only. Image versions and resource settings come from the
-deployment environment. The supplied YAMLs use TZRec settings of embedding
-dimension 8, batch size 64, one worker and
-one epoch. DSSM uses 32/16 tower widths and output dimension 16. Ranking networks
-use small family-specific widths; tree models use 100 iterations and learning
-rate 0.05. These are initial iteration settings, not tuned quality claims.
-`full` removes sampling limits; it does not silently change hyperparameters.
-
-Training uses one `execution.seed` (default 123), not a seed list. Each configured
-model is trained once; reports retain the actual seed and single-run metrics.
-There is no mean/standard-deviation aggregation across seeds. Old complete configs
-with exactly one `execution.seeds` entry are normalized by the config resolver;
-multi-seed configs are rejected. Old frozen plans are read without rewriting them.
-Dataset preparation has its own declared fixed seed in dataset YAML.
-
-`serving.batch_size` defaults to 32 for inference and catalog-vector writes.
-Typed SQL inputs use `SELECT ... UNION ALL` to preserve array-column aliases.
-Large batches can cause excessive Calcite planning time; smaller batches retain
-the complete catalog and metric inputs. Explicit experiment overrides are allowed.
-
-### Dataset definitions
-
-[MovieLens](configs/datasets/movielens100k.yaml),
-[KuaiRand](configs/datasets/kuairand.yaml), and
-[KuaiRec](configs/datasets/kuairec.yaml) contain the dataset-specific declarations.
-Each dataset has one YAML for download, preparation and evaluation. `columns`
-defines every prepared column's SQL type exactly once, including model features,
-labels and audit metadata. A `role` marks a column as a potential model feature;
-columns without a role cannot enter a named feature view. `tasks` references label
-columns and declares binary/regression semantics, while `views` selects features,
-tasks and compatible model families.
-
-For data prepared externally, the minimal definition is:
-
-```yaml
-schema_version: 1
-id: my_dataset
-name: My-Prepared-Dataset
-dataset:
-  adapter: prepared
-  user_key: customer_id
-  item_key: product_id
-  query_key: query_id
-protocol:
-  candidate_scope: full_catalog
-  exclude_seen: true
-evaluation:
-  split: valid
-  gauc_group: customer_id
-columns:
-  customer_id: {type: STRING, role: user}
-  product_id: {type: STRING, role: item}
-  label: {type: INT}
-tasks:
-  purchased: {column: label, type: binary, description: "observed purchase"}
-views:
-  retrieval:
-    features: [customer_id, product_id]
-    tasks: [purchased]
-    models: [tzrec.dssm]
-    evaluation:
-      ks: [20, 50, 100]
-```
-
-An experiment selects `dataset.config: datasets/my_dataset.yaml` and
-`dataset.view: retrieval`. View names are declared by YAML, not a fixed Python
-list. Optional view `models` restricts allowed families; the normal public model
-validator still checks features/tasks. A view can override protocol/evaluation
-settings. Experiment overrides have the highest precedence.
-
-Dataset keys and audit slices are configurable, including custom scalar audit
-columns. Task descriptions may reference simple scalar prepared-manifest fields,
-such as `{positive_threshold}`; missing fields fail instead of guessing a value.
-The expanded configuration and source definition path/SHA-256 are frozen in the
-run. Resume does not reread a modified source YAML.
-
-The bundled definitions also contain two sections:
-
-| Section | Ownership |
-| --- | --- |
-| `source` | Official archive URL/version/checksum and `files`, a mapping from parser input roles to filenames |
-| `preparation` | Adapter module, seed, primary task, identity/time references, query/static-item columns, defaults, array grouping keys and feedback statistics |
-| `preparation.parameters` | Adapter-specific thresholds, split percentages/date windows, file-role selection and raw-format metadata |
-
-Preparation selects column names from these declarations; it does not impose a
-global feature list. Counts use only training feedback, temporal training excludes
-all co-timestamp feedback, and pair training subtracts the pair's own feedback.
-`write_frame` uses `columns` for Parquet types; experiment expansion selects those
-same definitions for SQL. The prepared manifest records the definition snapshot,
-path/SHA-256 and effective seed/threshold/split settings. CLI overrides are audited
-in the manifest. Unknown output columns fail instead of creating an implicit schema.
-Prepared manifests must use integer `format_version: 1`, declare
-`dataset_definition.preparation.row_key`, and cover every split file with a SHA256
-checksum. Retrieval exclusion uses `exclude_seen_required`; the former
-`exclude_train_rated_required` field is rejected. Missing metadata does not receive
-implicit defaults.
-
-Adding a dataset using supported prepared data, feature types and SQL protocols
-requires a new dataset YAML and experiment YAML, without editing public Python.
-New raw formats belong in dedicated preparation adapters; new SQL capabilities
-are separate framework changes. Add the experiment to the fixed shell suite or
-run it directly with `--config`.
-
-### Environment
-
-Quality modes source the existing `deploy/env.sh`; unit mode and `--help` do not.
-Manual compact builds must source that file themselves. Environment defaults are
-resolved once at build and frozen into `resolved_config.json` and the plan.
-
-| Variable | Default / meaning |
-| --- | --- |
-| `PYTHON_BIN` | Optional existing interpreter; otherwise create/reuse repository `.venv/bin/python` |
-| `NODE_IP`, `SQLREC_THRIFT_PORT`, `SQLREC_REST_PORT`, `KYUUBI_PORT`, `MILVUS_PORT`, `NAMESPACE` | Existing deployment environment |
-| `BENCH_DATA_ROOT` | `benchmark/model_quality/data`; raw inputs at `<root>/raw/<dataset-id>/`, prepared versions at `<root>/prepared/<dataset-id>/<cache-key>/` |
-| `BENCH_FS_URI` | Hadoop `fs.defaultFS`, read from local `core-site.xml`; must be shared storage |
-| `BENCH_STORAGE_ROOT` | `<filesystem>/model_quality` |
-| `BENCH_MODEL_BASE_URI` | `<filesystem>/user/sqlrec/models`; must match actual public artifact storage |
-| `BENCH_TRAIN_CPU`, `BENCH_TRAIN_MEMORY` | `2`, `4Gi` |
-| `BENCH_SERVICE_CPU`, `BENCH_SERVICE_MEMORY` | `1`, `2Gi` |
-| `BENCH_TZREC_VERSION`, `BENCH_GBDT_VERSION` | `${SQLREC_VERSION}-cpu`; YAML `params.version` can override |
-| `HADOOP_BIN`, `HADOOP_HOME`, `JAVA_HOME` | Existing deployment clients; explicit local reader overrides below |
-| `KUBECTL_BIN` | `kubectl`, read-only preflight, runtime audit and resource release verification |
-| `SQLREC_BENCH_MILVUS_TOKEN` | Optional Milvus credential; empty when authentication is disabled; never frozen as a value |
-
-If both storage roots are explicitly set, discovering `fs.defaultFS` is unnecessary.
-Unknown filesystem defaults fail clearly rather than silently choosing a local
-filesystem. Ports/CPU values are converted to numbers and strictly validated.
-Default HS2 authentication is NOSASL for SQLRec and NONE for Kyuubi; non-default
-authentication/addresses can be set through explicit `sql.endpoints` overrides.
-Endpoint password/token/authorization settings name environment variables.
-
-Uploads use `HADOOP_BIN`, then the frozen audit command, then `hadoop` from PATH.
-The local client command can change without changing frozen SQL or data locations.
-Manual runtime reads can use `HADOOP_BIN` and `JAVA_HOME` on another machine.
-
-### Profiles and categorical capacity
-
-| Profile | Limits |
-| --- | --- |
-| `smoke` | Defaults to 32 training users, 256 paired-score observations, and 8 DSSM queries |
-| `full` | No workflow sampling limits; rejects prepared manifests with `max_users` set |
-
-Limits are selected by stable identities, independently of labels. Explicit smoke
-limits can override defaults. A full run rejects limits rather than silently
-removing them. Query sampling retains the full served catalog. Paired-score limits
-do not shrink selected queries' retrieval targets or observed-candidate sets.
-Single-class samples have undefined AUC and are reported accordingly.
-
-The source preparation cohort and the workflow cohort are separate. History
-features remain the source dataset's frozen prepared features. Smoke runs validate
-integration and support debugging; their metrics do not estimate full-data quality.
-Full runs still use the validation split. Test unlocking/model selection is future work.
-
-Compact configs size string/tag hash buckets from distinct training values and,
-for retrieval item features, the served catalog. The next power of two covering
-20 times cardinality is capped at 4,194,304 buckets. Override with
-`dataset.hash_bucket_multiplier`, `dataset.hash_bucket_max`, model `num_buckets`,
-or explicit `column.<feature>.bucket_size` parameters. The report records actual
-submitted bucket sizes and a uniform-hash shared-bucket estimate. This estimate is
-not a measurement of TZRec's hash collisions; runtime audits check submitted sizes.
-
-## Dataset and model suite
-
-The ten configs cover 22 dataset/model combinations:
-
-| Dataset | Recall | Ranking | Trees | Multitask |
-| --- | --- | --- | --- | --- |
-| MovieLens-100K | DSSM | Wide & Deep, DeepFM, Rocket Launching | CatBoost, LightGBM, XGBoost | Not applicable |
-| KuaiRand-Pure | DSSM | Same three models | Same three models | MMoE |
-| KuaiRec small_matrix | DSSM with observed candidates | Same three models | Same three models | Not applicable |
-
-Each group has a file named `configs/<dataset-id>_<view>.yaml`, with explicit model
-parameters and a shared dataset YAML reference. The shell explicitly
-lists these files, runs the three DSSM configs first, then the other groups, and
-runs every declared model once, serially, using the fixed execution seed. `--config` replaces the fixed suite.
-
-Dataset semantics differ:
-
-- MovieLens labels ratings >=4 positive and <=3 observed negative. These are rating
-  preferences, not CTR. Recommended preparation is per-user chronological splitting;
-  all training-rated items are excluded from retrieval.
-- KuaiRand uses real `is_click` as `label`, plus real binary `long_view` for MMoE.
-  Standard and random exposure metrics are also reported separately. Training uses
-  standard exposure history with temporal validation/test cutoffs.
-- KuaiRec labels `watch_ratio > 2` positive using the existing pair-hash holdout.
-  Retrieval candidates are each query's held-out observed pairs, defined without
-  consulting labels. Unobserved pairs are not turned into negative examples.
-
-MMoE requires genuine multiple tasks; MovieLens and KuaiRec do not fabricate a
-second task. Its click and long-view metrics remain separate.
-
-Feature views are declared in each dataset YAML. Neural views contain string user/item IDs, tags,
-applicable author/tab features, and frozen numeric history features. DSSM has only
-user/item roles. Tree configs share explicit FLOAT history features and applicable
-static duration; MovieLens omits its constant zero duration. IDs are not cast to
-continuous numbers. The shared numeric tree view makes the three tree inputs
-consistent; it does not make them equivalent to neural categorical views. A
-categorical CatBoost enhancement can be a separate future experiment.
-
-### Dataset preparation
-
-The shell automatically deduplicates selected dataset YAML references, verifies
-cached raw-file digests, downloads/extracts missing inputs, and invokes the declared
-`preparation.adapter`. Dataset names, URLs, fields, split rules and adapter choices
-remain in each dataset YAML. No dataset registry or name-specific branch exists in
-the generic setup module.
-
-Prepared caches are keyed by the dataset definition, raw-file hashes and adapter /
-shared preparation code hashes. Changing model hyperparameters reuses data;
-changing preprocessing rules or code creates a new immutable cache version.
-Each reused cache must have current provenance, full-cohort semantics, matching
-Parquet types, all split/query/catalog artifacts and valid file checksums. Legacy
-directories without this contract are retained and rebuilt into managed caches.
-Invalid managed versions are preserved under an `_invalid_...` suffix before repair.
-A per-dataset file lock prevents simultaneous writers. Preparation writes a
-staging directory and publishes it only after complete validation; interrupted
-staging outputs are removed. Download partial archives can be resumed.
-
-Both profiles prepare complete data without `max_users`; smoke sampling occurs
-only when the public workflow inputs are frozen. `prepared_inputs.json` selects
-verified cache paths automatically for build. Explicit `dataset.path` values are
-reused only if they satisfy the declared complete dataset contract and are never
-overwritten by automatic setup.
-
-The following commands remain available for optional manual preparation; they are
-not required by `run_tests.sh`. Run them from the repository root:
-
-```bash
-.venv/bin/python -m benchmark.model_quality.download_data \
-  --dataset movielens100k --output benchmark/model_quality/data/raw/movielens100k
-.venv/bin/python -m benchmark.model_quality.prepare_movielens \
-  --raw benchmark/model_quality/data/raw/movielens100k \
-  --output benchmark/model_quality/data/movielens100k --protocol user-time
-
-.venv/bin/python -m benchmark.model_quality.download_data \
-  --dataset kuairand --output benchmark/model_quality/data/raw/kuairand
-.venv/bin/python -m benchmark.model_quality.prepare_kuairand \
-  --raw benchmark/model_quality/data/raw/kuairand \
-  --output benchmark/model_quality/data/kuairand
-
-.venv/bin/python -m benchmark.model_quality.download_data \
-  --dataset kuairec --output benchmark/model_quality/data/raw/kuairec
-.venv/bin/python -m benchmark.model_quality.prepare_kuairec \
-  --raw benchmark/model_quality/data/raw/kuairec \
-  --output benchmark/model_quality/data/kuairec
-```
-
-Existing prepared paths can be selected with YAML `dataset.path`. The definition's
-`name` becomes a generic prepared-manifest identity check. Retrieval manifests must
-explicitly declare `candidate_scope`; the runner does not infer it from dataset
-names or protocol names. Existing frozen runs are unaffected.
-
-The downloader's `--dataset ID` selects `configs/datasets/<ID>.yaml`; it has no
-dataset whitelist. `download_data --config FILE` loads an explicit dataset YAML.
-Each preparation adapter also accepts `--config FILE`, so a custom definition can
-be used consistently for download, preparation and the experiment's
-`dataset.config`. Seeds, thresholds and split settings default to that YAML.
-MovieLens preparation reads the flattened rating/item inputs extracted by the
-downloader. For raw directories containing only an archive, rerun the downloader
-to extract the configured inputs before preparation.
-
-Adaptation remains three small layers: raw `prepare_*.py` modules own real data
-semantics, `PreparedDatasetAdapter`/`FeatureView` own static input conversion, and
-`ProtocolRecipe`/`recipes.py` implement public SQL candidate semantics declared by
-the dataset YAML. Explicit experiment `features` can use an optional `source`
-for aliases; training and requests share the same type conversion.
-Labels and reserved audit identities cannot enter model inputs through aliases.
-
-## Test runner
-
-```bash
-./benchmark/model_quality/run_tests.sh quality --profile smoke --run-id review_01
-./benchmark/model_quality/run_tests.sh quality --profile full --output /path/to/results
-```
-
-Config/output arguments are relative to the invocation directory; dataset paths
-are relative to the repository root. Default output is:
-
-```text
-runs/<run-id>/
-  setup.json
-  prepared_inputs.json
-  logs/
-  summary.json
-  summary.md
-  metrics.csv
-  <config-stem>/
-    resolved_config.json
-    resolved_plan.json
-    execution/
-    results/report.json
-    results/report.md
-    results/metrics.csv
-```
-
-Run IDs default to a UTC timestamp plus process ID. The same suffix isolates SQL
-object names and training storage paths. An explicit `storage_uri` also gains the
-suffix when `--run-id` is supplied. Duplicate config stems and existing suite
-paths are rejected. Interrupted runs are resumed individually through the CLI,
-not by rerunning the suite. No existing upload directories are overwritten.
-
-Options include `--config`, `--profile`, `--run-id`, `--output`, `--skip-upload`,
-`--skip-provision-index`, and `--require-formal`.
-Skipped uploads/index creation require data/empty collections at the *resolved*
-locations, not an unrelated previous run. Failed independent configs are recorded
-and the suite continues only after resource release is verified; uncertain writes are never automatically retried.
-A failed local suite in `all` mode prevents any quality run from starting.
-
-Before downloading, preflight opens SQLRec/Kyuubi sessions with `SELECT 1`, checks
-SQLRec HTTP and Milvus connection/authentication, verifies Kubernetes read
-permissions, and checks shared-filesystem access through the normal Hadoop client.
-It does not deploy/upgrade services or create model resources. No-token Milvus
-requests omit the Authorization header; authenticated deployments must provide
-the credential environment variable. Backend write permissions are also exercised
-by the subsequent normal upload/provision workflow.
-
-`logs/` contains dependency, local-test, preflight, preparation and per-config logs.
-`setup.json` records stages, interpreter/package versions, deployment checks and
-data cache decisions. Failures before model execution still create JSON/Markdown
-suite reports; later configs are marked not executed. Ctrl-C/TERM forwards to the
-active child, performs owned-service cleanup, and finalizes the suite report.
-Arguments/help validation can exit before a suite directory is allocated.
-
-Execution is sequential by **model**, including models sharing one config, with
-one fixed training seed:
-`define → train → export → deploy → predict/save evidence → release → next model`.
-Both DSSM towers are released. The runner's `finally` path and shell `EXIT/INT/TERM`
-fallback use the same cleanup implementation, including failed or interrupted
-runs. Cleanup does not depend on metrics or report generation. Batch service
-retention is intentionally unavailable.
-
-Public `DROP SERVICE` is asynchronous. A read-only Kubernetes barrier verifies
-Deployment, Service, ReplicaSet and Pod removal before the next model starts.
-Training/export Jobs must also be terminal with no active Pods. Frozen bindings,
-initial collision checks, public model/checkpoint/URL checks and saved Kubernetes
-UIDs prevent adopting another workload. Unproven operation outcomes, changed UIDs,
-read failures or cleanup timeouts **stop subsequent scheduling**. The default
-cleanup timeout is 120 seconds (`execution.cleanup_timeout` may override it).
-Nothing cancels training/export Jobs or blindly repeats an uncertain DROP.
-
-An interrupted SQL RPC is discarded; cleanup reconnects through a fresh public
-session. If cancellation leaves training metadata at `created`, a terminal Job
-with the UID captured at submission, plus no active Pods, can prove resource
-release. A failed terminal checkpoint can also prove completion for cleanup.
-Neither case changes the failed/interrupted training result into a success.
-
-Models, checkpoints, collections, tables and local evidence remain. Reports use
-saved predictions and can be generated after services are gone. Resume skips
-completed, released models after validating artifact hashes. A partially scored
-model whose service was released needs a new isolated run; uncertain creation
-requires reconciling the original public operation. `--through` also releases
-attempted services and is intended for investigating lifecycle stages, not for
-retaining a live service. The suite fallback also verifies service release.
-`cleanup.sql` is a manually reviewed full cleanup script.
-
-Exit code 0 means the requested execution completed; it is not a quality threshold
-pass. `--require-formal` additionally requires verified runtime conformance.
-The suite summary preserves both report status and orchestration/cleanup failure
-status, including `cleanup_failed` and later `not_executed` configurations. Completed
-metric inputs from failed workflows are preserved in diagnostic reports.
-
-## Manual workflow
-
-Manual compact builds require the deployment environment; other actions use the
-frozen plan and do not re-resolve machine defaults:
-
-```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r benchmark/model_quality/requirements.txt
 source deploy/env.sh
-.venv/bin/python -m benchmark.model_quality.sql_workflow build \
-  --config benchmark/model_quality/configs/movielens100k_recall.yaml \
-  --run benchmark/model_quality/runs/manual_review \
-  --profile smoke --run-id manual_review
-.venv/bin/python -m benchmark.model_quality.sql_workflow upload-data --run YOUR_RUN
-.venv/bin/python -m benchmark.model_quality.sql_workflow provision-index --run YOUR_RUN
-.venv/bin/python -m benchmark.model_quality.sql_workflow run --run YOUR_RUN
-.venv/bin/python -m benchmark.model_quality.sql_workflow evaluate --run YOUR_RUN
-.venv/bin/python -m benchmark.model_quality.sql_workflow cleanup-services --run YOUR_RUN
+
+# Prepare local data and upload/register reusable training tables once per version.
+.venv/bin/python -m benchmark.model_quality.prepare --dataset all --upload
+
+# Local data preparation only, without a cluster.
+.venv/bin/python -m benchmark.model_quality.prepare --dataset all
+
+# Run one model on all applicable datasets by default.
+.venv/bin/python -m benchmark.model_quality --model deepfm
+
+# Run on one dataset.
+.venv/bin/python -m benchmark.model_quality --model dssm --dataset kuairand
+
+# Run all 22 applicable combinations; MMoE supports only KuaiRand.
+.venv/bin/python -m benchmark.model_quality --model all
+
+# Evaluate the full validation set.
+.venv/bin/python -m benchmark.model_quality --model dssm --full-eval
+
+# Evaluate the full validation sets for all models and datasets.
+.venv/bin/python -m benchmark.model_quality --model all --full-eval
+
+# Optionally save one compact prediction file per model for inspection.
+.venv/bin/python -m benchmark.model_quality --model deepfm --save-predictions
+
+# Run local tests without a cluster.
+.venv/bin/python -m unittest discover -s benchmark/model_quality/tests -v
 ```
 
-Uploads use the normal Hadoop client. Kyuubi creates external Hive tables exposing
-only the frozen training partition; actual public table counts must match.
-DSSM trains on the positive table. Milvus provisioning creates isolated schema and
-FLAT/IP indexes only; embedding insertion remains public SQL. Scalar-only runs
-make index provisioning a no-op, allowing the same lifecycle command sequence.
+`--model` is required; running without arguments does not start training. Supported models are DSSM, Wide & Deep, DeepFM, Rocket Launching, CatBoost, LightGBM, XGBoost, and MMoE.
 
-`run --through STEP_ID` stops with a partial journal. `check` verifies the frozen
-plan and files. `evaluate --diagnostic` writes separate non-formal reports from
-complete metric inputs only. `audit-runtime --model SQL_MODEL --artifact PATH`
-inspects an unmodified native pipeline. `summarize --inputs RUN_A RUN_B --run SUITE_DIR`
-writes the same combined report as the shell runner.
+Training always uses the full training set with seed=123. Defaults are one epoch for neural models and 100 iterations for tree models. Fixed dataset/model overrides are listed below; they are applied after the common and model-specific defaults in `config.py`. Evaluation never searches or selects parameters. By default, ranking evaluation uses a fixed sample of up to 20,000 validation rows, and retrieval uses up to 1,000 queries. Sampling is independent of labels, and models for the same task use the same evaluation samples. `--full-eval` only removes these evaluation limits. Datasets below the limits use the full validation set. Full training times cannot be compared directly with the old smoke run, which trained on only 32 users.
 
-## Artifacts and reports
-
-The plan freezes config, SQL, request paths, input hashes and replay rules. Format
-v5 also freezes model-level service/Job bindings, table schemas, connector options
-and warehouse partition locations. Compact hashed model names reserve space for
-native export Job/headless-Service suffixes and prevent Kubernetes truncation
-collisions. Plans with other format versions are rejected. Captured results require
-an explicit `result_role`; result order is never used to infer predictions.
-
-`data_contract.json` keeps labels and audit slice metadata outside prediction inputs.
-`sql/` and `requests/` are the actual public statements and label-free payloads.
-`infra/` holds index specs/evidence; `execution/` holds the journal, operation IDs,
-raw returns and audits. `results/` contains metrics and collected predictions.
-Service release SQL is derived from frozen bindings instead of a duplicate SQL
-file. `execution/services_cleanup.json` records DROP receipts, owned UIDs and
-absence proofs; `execution/journal.json` records per-model completion and release
-status. Report `resource_status` is separate from prediction completeness.
-
-Reports distinguish `workflow_status`, `parameters_status`, and
-`quality_status=not_assessed`. `formal=true` means the public workflow and supported
-runtime parameter checks passed and physical resource release was verified. It does
-not mean the model meets a quality target. Missing release evidence prevents
-claiming verified resource release.
-Missing evidence, unsupported parameter checks and runtime mismatches prevent a
-formal pass. Reports include dataset, feature view, profile, tasks, sample counts,
-candidate protocol, categorical capacity, and per-model results with the actual seed.
-
-Paired DSSM AUC/AP/GAUC uses actual SQL `ip` scores, without probability conversion.
-Probability outputs also report LogLoss/Brier; regression supports RMSE/MAE.
-GAUC coverage is reported when single-class users cannot contribute. Recall,
-micro Recall and NDCG use returned order and preserve all held-out positives.
-Missing responses, empty lists and zero-positive queries remain distinct.
-
-KuaiRand reports `source` and `tab` slices for scalar and retrieval metrics. Retrieval
-slice truth is formed from the corresponding exposure subset, while already
-collected public query responses are reused. MMoE reports each task separately.
-JSON/CSV preserve diagnostics; `evaluation.metrics` controls Markdown display.
-
-Full-catalog retrieval uses a fixed candidate limit and public SQL seen filtering,
-so truncation/filtering loss remains part of measured quality. Observed-only
-retrieval first requests the entire eligible catalog, then joins a label-free
-`allowed` input table in public SQL and applies seen filtering/sorting/LIMIT.
-Build rejects a candidate limit smaller than the catalog or above Milvus's 16,384
-limit. Larger observed-candidate catalogs need another public recipe; they are not
-silently approximated. Returned membership is checked against the frozen pool.
-Observed-candidate Recall and full-catalog Recall must not be compared as if they
-had the same denominator or difficulty.
-
-The default retrieval candidate budget is 16384, capped to the frozen catalog
-size (and at least max K). For full-catalog recall, the required budget is
-`min(catalog size, max K + maximum seen items in the catalog)` so filtering seen
-items does not shorten an otherwise complete top-K. Observed-only protocols must
-retrieve the whole catalog before public SQL membership filtering; catalogs over
-16384 require another declared retrieval protocol. An explicitly smaller budget
-is reported as `candidate_budget.candidate_limited`; it is rejected when
-`allow_shortlist=false`. This diagnostic is retained in `data_contract.json` and
-the report and does not change target denominators.
-
-## Reproduction and recovery
-
-Normal Beeline/JDBC clients can execute frozen SQL in dependency order. A function
-must compile from CREATE through RETURN in one session; request tables and CALL
-also share a session. SQL API payloads are stored as JSON. SQLRec uses the public
-Flink/default dialect. Python does not privately load weights, fit models, rank
-items, inject samplers, or rewrite native training configs.
-
-TRAIN/EXPORT require public succeeded checkpoint/type proof. Services require exact
-model/checkpoint binding and readiness. After disconnection, non-idempotent stages
-are reconciled using public state and never blindly resubmitted. Function groups
-can replay from CREATE on a fresh session. Vector INSERT receipts and embeddings
-are separated by result roles; completed inserts are not repeated.
-
-`run --retry-failed-create STEP_ID` is an operator-selected retry for a definitively
-failed CREATE TABLE only; it does not retry uncertain writes, TRAIN or EXPORT.
-Existing Connector schema/options and external-table schema/location must match
-the frozen contract. CREATE and warehouse partition registration are separate
-stages; recovery cannot mistake a partially registered table for completed data
-access. Both SQLRec `name/type` and warehouse `col_name/data_type` DESCRIBE layouts
-are supported. Label SQL types come from the dataset's `columns` declaration and
-are preserved in Parquet and model definitions. Initial execution also checks
-public object and Kubernetes resource name collisions.
-
-## Runtime parameter audit
-
-Audits read normal native pipeline configs and capture submitted Kubernetes Job /
-ConfigMap evidence through read-only commands. Submitted configuration takes
-precedence over filesystem artifacts, before export can change them. Polling uses
-one bounded Job/ConfigMap budget. No alternative trainer or config patch is used.
-
-TZRec checks declared feature bindings, task labels, applicable network structure,
-explicit batch/workers/epochs, buckets/embedding sizes, image and training seed
-environment. MMoE checks task towers and loss types; Rocket Launching checks its
-booster/light/shared widths. GBDT checks JSON model type, features/categoricals,
-labels, explicit parameters, image and pipeline random seed. CatBoost-specific
-parameter overrides follow the public generator's precedence and are recorded.
-Unsupported additional parameters remain unverified. Missing Job evidence cannot
-verify the expected training image, even with a manually supplied pipeline.
-
-## Code structure and extension points
-
-| Module | Responsibility |
+| Dataset / model | Fixed overrides |
 | --- | --- |
-| `sql_workflow.py` | Preflight/data setup, public lifecycle CLI and suite summaries |
-| `bootstrap.py` | Standard-library Python dependency setup, stage records and early-failure reports |
-| `user_workflow/data_setup.py` | Deployment preflight, declared preparation adapters and verified versioned caches |
-| `run_tests.sh`, `configs/` | Fixed sequential suite and small experiment definitions |
-| `user_workflow/configuration.py` | Generic dataset YAML loading and environment/default expansion |
-| `configs/datasets/*.yaml` | One definition per dataset: sources, preparation, columns, tasks, views and protocol |
-| `download_data.py`, `prepare.py`, `prepare_*.py` | Pinned download/extraction, configured preparation algorithms and raw-format adapters |
-| `user_workflow/specs.py` | Validation and feature/task/model/protocol/plan contracts |
-| `configs/datasets/` | Dataset-specific fields, labels, views, protocols and evaluation settings |
-| `user_workflow/datasets.py` | Generic prepared adapter, static feature views, frozen cohorts and requests |
-| `user_workflow/recipes.py` | Public SQL generation including candidate recipes |
-| `user_workflow/sql_client.py`, `infrastructure.py` | Public SQL/API clients and index administration |
-| `user_workflow/runner.py`, `runtime_audit.py` | Execution/recovery, runtime evidence and owned-service release |
-| `metrics.py`, `user_workflow/results.py` | Metric mathematics, coverage and JSON/CSV/Markdown reports |
-| `common.py`, `tests/` | Shared file/identity contracts and local tests |
+| MovieLens / DSSM | Embedding 16, batch 256, 3 epochs, sparse learning rate 0.01, tower layers 64/32, output dimension 32 |
+| MovieLens / Wide & Deep, DeepFM, Rocket Launching | Embedding 16, batch 256, 6 epochs, sparse learning rate 0.03 |
+| MovieLens / LightGBM | 300 iterations, depth 4, 15 leaves, minimum 100 rows per leaf, feature/bagging fractions 1, L2 regularization 5 |
+| KuaiRec / DeepFM | Embedding 16, batch 256, sparse learning rate 0.03, logarithmic duration normalization; still 1 epoch |
+| KuaiRand / Rocket Launching | Batch 256, shared layer 64, booster layers 32/16, light layer 16, logarithmic duration normalization; still 1 epoch |
+| KuaiRand / DSSM | The existing retrieval configuration described below |
 
-New datasets declare shared dataset YAML against the prepared contract; different feature/candidate
-semantics require publicly reproducible recipes. Models declare real public
-capabilities and outputs; metrics consume collected returns. External datasets,
-automatic selection/test unlocking, integrated bootstrap intervals, ANN performance
-matrices, streaming execution and private model lifecycles remain out of scope.
-The suite report is a review aid, not a cross-dataset quality leaderboard.
+For the two ranking overrides with duration normalization, `column.duration_s.normalizer=method=log10,threshold=1,default=0` maps durations above one second to `log10(seconds)` and all other values to zero. The exported feature configuration applies the same transformation during training and serving. Prepared data and reusable training tables do not change. Every run records the resolved parameters in the model's `config.json`.
 
-## Validation
+KuaiRand DSSM uses `user_id, tab` in the user tower and `video_id, tag, author_id` in the item tower. Its fixed parameters are embedding dimension 16, batch size 256, 3 epochs, sparse learning rate 0.01, hidden layers 64/32 in both towers, and output dimension 32. Counts and video duration are excluded from the tower inputs. Retrieval blends personalized similarity with a train-only popularity prior: `score = inner_product(user_embedding, item_embedding) + log1p(train_click_count)`. The existing prepared item click counts supply this prior; validation/test labels never enter it. The SQL recipe retains the complete catalog before filtering and sorting by the blended score. MovieLens and KuaiRec use the original similarity score with popularity weight zero. Parameters and the popularity weight are recorded in each model's `config.json`; change the fixed choices in `config.py`.
 
-On 2026-10-07, `bash benchmark/model_quality/run_tests.sh all` completed with exit
-code 0: all 95 framework regression tests and all 10 configurations (22
-dataset/model pairs) passed. Every workflow report verified runtime parameters and
-resource release; all models used the single seed 123. The automatic environment
-checks and prepared-data cache reuse also passed.
+Set data and result paths with `--data-root` and `--output`; `BENCH_DATA_ROOT` also sets the data root. The defaults are `data/` and `runs/` in this directory. Changes to preparation rules create a new data version while retaining previous data and runs. Missing, outdated, or corrupted inputs raise errors and are not repaired automatically. File checksums and types are verified after preparation and again at the start of each evaluation.
 
-The Milvus connector's 102 Java regression tests passed, including bounded SQL bulk
-writes. The normal TZRec image build and verification passed, including native
-health probes with an idle persistent prediction connection, real training/export,
-and comparisons between the C++ and Python serving backends. The old native image
-reproduced the health-probe timeout covered by the new regression.
+Run folder names use the machine's local date and time, followed by the dataset and model, for example `2026-10-11_20-30-45_movielens100k_deepfm`. Runs covering multiple datasets use `all-datasets`, and `--model all` uses `all-models`. `--full-eval` adds `_full`; `--save-predictions` adds `_predictions`. If the same name already exists, a numeric suffix such as `_2` keeps the runs separate without overwriting files. The local time matches the timestamps in `run.log`.
 
-This validation used the default smoke profile. Full-data training and evaluation
-were not run, and no model-quality acceptance thresholds were configured
-(`quality_status: not_assessed`). Metrics describe the integration cohort. Earlier
-failed attempts remain in ignored run directories as diagnostic evidence; each new
-suite writes its own logs, reports and resource proofs under `runs/<run-id>/`.
+Each prepared version includes fixed `training/<view>/split=train/part.parquet` files for ranking, trees, retrieval, and, where applicable, multitask training. Retrieval training includes only positives. `prepare --upload` uploads these views under `<storage>/datasets/<dataset>/<fingerprint>/<view>` and registers external Hive tables. Repeating the command checks and reuses existing tables without uploading again. Evaluation only reads these tables and checks their schema, location, and row count; it never exports or uploads training files. If a table is missing, run the preparation command with `--upload`. Existing tables with mismatched metadata or counts raise an error rather than being overwritten. An interrupted upload that left files without a registered table requires manual inspection before retrying; the command does not overwrite those files.
+
+Connection settings and resources come from `deploy/env.sh`. You can override `NODE_IP`, `SQLREC_THRIFT_PORT`, `SQLREC_REST_PORT`, `KYUUBI_PORT`, `MILVUS_PORT`, `NAMESPACE`, `HADOOP_BIN`, and `KUBECTL_BIN`. Shared storage is read from Hadoop's `core-site.xml`, or configured with `BENCH_STORAGE_ROOT` / `BENCH_FS_URI`. Training defaults to 2 CPUs / 4Gi memory, and serving to 1 CPU / 2Gi memory; override these with `BENCH_TRAIN_CPU`, `BENCH_TRAIN_MEMORY`, `BENCH_SERVICE_CPU`, and `BENCH_SERVICE_MEMORY`. Image versions default to `${SQLREC_VERSION}-cpu`; override them with `BENCH_TZREC_VERSION` and `BENCH_GBDT_VERSION`. If Milvus authentication is enabled, set `SQLREC_BENCH_MILVUS_TOKEN`. Credentials are not written to results.
+
+The two SQL connections serve different purposes: Kyuubi (default port 30009) creates external Hive training tables and registers partitions during `prepare --upload`, and checks existing tables during evaluation; SQLRec (default port 30000) executes model training, export, deployment, and vector SQL. Prediction uses SQLRec HTTP (default port 30001). The evaluation entry point connects to Kyuubi first, then checks training inputs and runs model tasks.
+
+## Read the results
+
+See [Model Quality Test](../../docs/en/docs/performance/model-benchmark.md) for dataset and training configurations, the complete audited result tables, and evaluation scope. Its KuaiRec results supersede the earlier measurements described in the historical notes below.
+
+`summary.md` in each new run directory is the main report:
+
+- Ranking: AUC ↑ and LogLoss ↓. MMoE's click and long_view tasks appear separately.
+- Retrieval: Recall@50 ↑ and NDCG@50 ↑. Evaluation preserves the full candidate catalog, all ground-truth targets for selected queries, and filtering of previously seen items.
+- Each row represents one dataset/model/task, with sample count, elapsed time, and completion status. One model typically produces 3 rows; the full matrix produces about 23.
+- AUC is N/A for a single-class evaluation set. Missing or duplicate prediction IDs raise errors. Empty responses, missing queries, and queries without positives are handled separately.
+
+`COMPLETED` means execution, prediction checks, and service cleanup finished. It does not indicate that a quality threshold was met. Results should not be ranked directly across datasets: MovieLens measures rating preference; KuaiRand measures clicks on mixed standard/random exposures; KuaiRec measures observed watch_ratio preference, with retrieval candidates restricted to each selected query's held-out observed items. Unobserved KuaiRec interactions are not added as negatives. Sampled results estimate performance under the current configuration rather than exact metrics for the full dataset.
+
+`results.json` stores core metrics, necessary coverage information, data versions, and stage timings. Each model directory contains `config.json`, `statements.sql`, and `resources.json`. Predictions are used in memory to calculate metrics and are not saved by default. Runs contain no training data copies, query target/filter sets, or prediction shards.
+
+With `--save-predictions`, each model saves one `predictions.parquet`: ranking stores `row_id` and task probabilities; retrieval stores `query_id`, `item_id`, and `score`. An empty retrieval response is represented by a row with its query ID and null item/score. Input features and labels are not copied into prediction files. API requests still use batches, independently of file output.
+
+On failure or Ctrl-C, the script attempts to release the current model's services and confirms that their Kubernetes Deployments, Services, ReplicaSets, and Pods are gone and training/export Jobs are no longer active. If cleanup cannot be verified, it stops and records an error. The script does not cancel training Jobs or retry writes with uncertain outcomes. After a forced process termination or power loss, use `resources.json` to check for remaining resources manually. Models/checkpoints, APIs, and indexes are retained for inspection and are not reused across runs. Versioned training tables and files are shared across runs and are retained.
+
+## Suggested code reading order
+
+1. [`__main__.py`](__main__.py): selects models/datasets, runs them sequentially, saves results, and cleans up in `finally`.
+2. [`config.py`](config.py): fixed model parameters, evaluation budgets, and deployment settings. The three YAML files contain only dataset inputs, fields, and preprocessing definitions.
+3. [`ranking.py`](ranking.py): the shared batch prediction path for ranking networks, tree models, and MMoE.
+4. [`metrics.py`](metrics.py), [`report.py`](report.py): four metrics and two small tables.
+5. [`retrieval.py`](retrieval.py): DSSM's two towers, loading the full item catalog through public SQL, and retrieval for each query.
+6. [`data.py`](data.py), [`prepare.py`](prepare.py), `prepare_*.py`: local data validation, sampling, reusable versioned training inputs, and data preparation without leakage.
+7. [`client.py`](client.py), [`resources.py`](resources.py): public communication interfaces, resource lifecycle, and cleanup with time limits.
+
+Ranking API batches default to 128 rows. Item SQL batches remain at 32 to avoid Calcite planning overhead from large `UNION ALL` expressions. Short SQL operations poll status every 0.1 seconds; training, export, and service operations poll every second. Training and inference run sequentially, with no plugins, automatic concurrency, recovery, or performance tuning framework.
+
+Before the training-data reuse and output changes, the full run on 2026-10-11 evaluated all 22 combinations with full training and validation data in approximately 68 minutes 48 seconds. All combinations were COMPLETED, and all 25 services were confirmed released. See the [full run report](runs/20261011_103954_4123eb81/summary.md).
+
+The subsequent data/output changes passed 29 local tests, real preparation and reuse checks for all 10 training views, and MovieLens DeepFM/DSSM runs with unchanged metrics and verified service cleanup. DeepFM was tested with default output and with prediction saving; all 9,877 saved probabilities matched the earlier full run exactly. The default DeepFM run contained only 8 files totaling 7,890 bytes. The complete 22-combination matrix was not rerun after these changes.
+
+A batch of 256 returned HTTP 413 under the existing 64 KiB request limit, so 128 was selected after testing. See the [implementation summary](../../docs/reviews/model-quality-implementation.md) for validation scope and measured timings. Request counts alone are not used to infer overall evaluation speedup.
+
+The KuaiRand DSSM update was validated on all 38,079 validation queries and a fixed 1,000-query sample from the later test period. Full-validation Recall@50/NDCG@50 improved from 3.98%/1.62% to 13.09%/5.30%; test-sample results improved from 2.57%/1.34% to 8.03%/3.69%. The full run took about 23 minutes 36 seconds, including the extra test check, versus about 21 minutes 32 seconds previously. All services were released. MovieLens DSSM predictions remained identical, and 29 local tests passed. See the [optimization review](../../docs/reviews/kuairand-recall-optimization.md) for experiment details, scope, and tradeoffs.
+
+The later ranking update validated six dataset/model combinations through real SQL training, export, deployment, and prediction, followed by independent test-set checks. MovieLens DeepFM validation AUC improved from 0.7635 to 0.7834; KuaiRec DeepFM improved from 0.8623 to 0.8669 on the fixed 20,000-row sample, with its sampled run taking about 232 seconds versus 421 seconds for the baseline. KuaiRand Rocket Launching kept validation AUC essentially unchanged and reduced LogLoss from 0.7092 to 0.6495. MMoE and the other tree trials were not adopted where probability quality worsened. The full 22-combination matrix was not rerun, and the existing DSSM configurations were preserved. See the [ranking optimization review](../../docs/reviews/other-model-optimization.md) for all accepted metrics, test results, and timing limits.
+
+A further validation-selected MovieLens DSSM update uses 3 epochs and larger embeddings/towers. Full-validation Recall@50/NDCG@50 improved from 23.95%/11.01% to 27.89%/13.15%; full-test results improved from 23.18%/11.31% to 26.54%/12.68%. The formal CLI reproduced all 46,300 recommendations exactly, 29 local tests passed, and the other 21 parameter sets were unchanged. The eight additional ranking trials and the six-epoch DSSM trial were rejected. See [document-ready results](RESULTS.md) for complete-validation ranking examples and explicit test scopes, and the [latest review](../../docs/reviews/publication-model-optimization.md) for validation details.

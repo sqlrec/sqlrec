@@ -5,6 +5,7 @@ export default defineConfig({
   title: "SQLRec",
   description: "SQLRec docs",
   base: '/sqlrec/',
+  srcExclude: ['reviews/**'],
   ignoreDeadLinks: 'localhostLinks',
   locales: {
     root: {
@@ -72,8 +73,15 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '服务部署', link: '/docs/operations/deployment' },
-              { text: '可观测性', link: '/docs/operations/observability' },
-              { text: '性能测试', link: '/docs/operations/benchmark' }
+              { text: '可观测性', link: '/docs/operations/observability' }
+            ]
+          },
+          {
+            text: '性能测试',
+            collapsed: true,
+            items: [
+              { text: 'SQL性能测试', link: '/docs/performance/sql-benchmark' },
+              { text: '模型效果测试', link: '/docs/performance/model-benchmark' }
             ]
           },
           {
@@ -157,8 +165,15 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Service Deployment', link: '/en/docs/operations/deployment' },
-              { text: 'Observability', link: '/en/docs/operations/observability' },
-              { text: 'Benchmark', link: '/en/docs/operations/benchmark' }
+              { text: 'Observability', link: '/en/docs/operations/observability' }
+            ]
+          },
+          {
+            text: 'Performance Tests',
+            collapsed: true,
+            items: [
+              { text: 'SQL Performance Test', link: '/en/docs/performance/sql-benchmark' },
+              { text: 'Model Quality Test', link: '/en/docs/performance/model-benchmark' }
             ]
           },
           {

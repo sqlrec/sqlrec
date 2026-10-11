@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 
-from .specs import identifier
+from .common import identifier
 
 
 class SQLFailed(RuntimeError):
@@ -22,8 +22,6 @@ class Indeterminate(RuntimeError):
 class SQLResult:
     columns: list[str]
     rows: list[list]
-    operation_id: str = ''
-    source: str = 'public_sql'
 
     def records(self):
         if len(set(self.columns)) != len(self.columns):
@@ -34,7 +32,7 @@ class SQLResult:
 
 
 def resolve_environment(sql):
-    """Secret placeholders stay in saved recipes; escape values only at execution."""
+    """Keep secrets out of the SQL log; resolve placeholders at execution."""
     def replace(match):
         key = match.group(1)
         if key not in os.environ:
@@ -89,9 +87,9 @@ class HS2Client:
             if result.sessionHandle is None or not 5 <= result.serverProtocolVersion <= 9:
                 raise SQLFailed('Unsupported HS2 session/protocol')
             self.session = result.sessionHandle
-            self.execute('USE `' + identifier(self.config.get('database', 'default')) + '`')
+            self.execute('USE `' + identifier(self.config.get('database', 'default')) + '`', timeout=120)
             return self
-        except Exception:
+        except BaseException:
             transport.close()
             raise
 
@@ -100,13 +98,13 @@ class HS2Client:
         if status is None or status.statusCode not in (0, 1):
             raise SQLFailed(getattr(status, 'errorMessage', None) or 'HS2 request failed')
 
-    def execute(self, sql, timeout=3600, on_submitted=None):
+    def execute(self, sql, timeout=3600, on_submitted=None, poll_interval=0.1):
         from TCLIService import ttypes
         handle = None
         try:
-            # A file terminator is a client delimiter (as in Beeline), not a
-            # parser token. Each recipe file contains exactly one statement.
+            # A file terminator is a client delimiter, not a parser token.
             statement = sql.strip().removesuffix(';').rstrip()
+            deadline = time.monotonic() + timeout
             response = self.client.ExecuteStatement(ttypes.TExecuteStatementReq(
                 sessionHandle=self.session, statement=resolve_environment(statement), runAsync=True))
             self._check(response.status)
@@ -116,7 +114,6 @@ class HS2Client:
             operation_id = handle.operationId.guid.hex()
             if on_submitted:
                 on_submitted(operation_id)
-            deadline = time.monotonic() + timeout
             while True:
                 state = self.client.GetOperationStatus(ttypes.TGetOperationStatusReq(operationHandle=handle))
                 self._check(state.status)
@@ -128,9 +125,9 @@ class HS2Client:
                     raise SQLFailed(state.errorMessage or f'Terminal SQL state: {state.operationState}')
                 if time.monotonic() >= deadline:
                     raise Indeterminate(f'Operation {operation_id} still running after {timeout}s')
-                time.sleep(min(1, max(0, deadline - time.monotonic())))
+                time.sleep(min(poll_interval, max(0, deadline - time.monotonic())))
             if not handle.hasResultSet:
-                return SQLResult([], [], operation_id)
+                return SQLResult([], [])
             meta = self.client.GetResultSetMetadata(ttypes.TGetResultSetMetadataReq(operationHandle=handle))
             self._check(meta.status)
             names = [c.columnName for c in meta.schema.columns]
@@ -148,7 +145,7 @@ class HS2Client:
                 # SQLRec consumes local ordinary SQL rows once, unlike Hive paging.
                 if not page.hasMoreRows:
                     break
-            return SQLResult(names, rows, operation_id)
+            return SQLResult(names, rows)
         except SQLFailed as error:
             message = str(error).splitlines()[0][:1000]
             for key in re.findall(r'\{\{env:([A-Z][A-Z0-9_]*)\}\}', sql):
@@ -201,14 +198,12 @@ class APIClient:
             headers['Authorization'] = os.environ[self.config['authorization_env']]
         # Generated scoring/recall functions are read-only. Newly deployed
         # metadata/service caches can briefly lag readiness; retry the same
-        # public request, retaining every status, with no prediction fallback.
+        # public request, with no prediction fallback.
         deadline = time.monotonic() + self.config.get('readiness_timeout', 120)
-        self.last_call = {'api': name, 'attempt_statuses': []}
         while True:
             response = self.session.post(self.config['base_url'].rstrip('/') + '/api/v1/' + name,
                                          json=payload, headers=headers,
                                          timeout=min(self.config.get('timeout', 120), max(1, deadline-time.monotonic())))
-            self.last_call['attempt_statuses'].append(response.status_code)
             if response.status_code in (500, 502, 503, 504) and time.monotonic() < deadline:
                 time.sleep(1)
                 continue

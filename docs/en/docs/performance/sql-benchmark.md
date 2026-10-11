@@ -1,4 +1,4 @@
-# Benchmark
+# SQL Performance Test
 
 This page explains how to run the benchmark in `benchmark/movielens/` and records one historical result. The numbers apply only to the specified hardware, data, and deployment configuration; they are not a performance guarantee for other environments.
 
@@ -45,7 +45,7 @@ The models include two `FLOAT` features: `age_years = CAST(age AS FLOAT)` and `g
 
 ## Prerequisites
 
-Start the complete environment by following [Service Deployment](./deployment.md). `init.sh` also uses or installs `wrk`, starts Kyuubi, and downloads MovieLens data and Python dependencies.
+Start the complete environment by following [Service Deployment](../operations/deployment.md). `init.sh` also uses or installs `wrk`, starts Kyuubi, and downloads MovieLens data and Python dependencies.
 
 The historical result below used:
 

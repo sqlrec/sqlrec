@@ -1,4 +1,4 @@
-# 性能测试
+# SQL性能测试
 
 本页记录仓库中 `benchmark/movielens/` 压测的执行方法和一次历史测试结果。数字只反映特定硬件、数据和部署配置，不应视为其他环境的性能保证。
 
@@ -45,7 +45,7 @@
 
 ## 环境前提
 
-先按[服务部署](./deployment.md)启动完整测试环境。`init.sh` 还会使用或安装 `wrk`、启动 Kyuubi，并从网络下载 MovieLens 数据和 Python 依赖。
+先按[服务部署](../operations/deployment.md)启动完整测试环境。`init.sh` 还会使用或安装 `wrk`、启动 Kyuubi，并从网络下载 MovieLens 数据和 Python 依赖。
 
 历史测试所用环境：
 

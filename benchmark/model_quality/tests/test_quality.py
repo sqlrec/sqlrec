@@ -5,16 +5,17 @@ import unittest
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import log_loss, roc_auc_score
 
 from benchmark.model_quality.common import load_split, stable_id
 import pyarrow as pa
 import pyarrow.parquet as pq
-from benchmark.model_quality.metrics import BinaryMetrics, grouped_auc, scalar_metrics
-from benchmark.model_quality.prepare import batch_collisions, past_counts, write_frame
+from benchmark.model_quality.metrics import binary_metrics, ranking_metrics
+from benchmark.model_quality.config import Task
+from benchmark.model_quality.prepare import past_counts, write_frame
 from benchmark.model_quality.prepare_kuairand import prepare as prepare_rand
 from benchmark.model_quality.prepare_kuairec import prepare as prepare_rec
-from benchmark.model_quality.user_workflow.configuration import read_dataset_definition
+from benchmark.model_quality.config import read_dataset_definition
 
 
 def preparation_definition():
@@ -24,59 +25,31 @@ def preparation_definition():
 
 class MetricsTest(unittest.TestCase):
 
-    def test_shared_gauc_matches_an_independent_weighted_reference(self):
-        labels = [0, 1, 0, 1, 1, 1]
-        scores = [0, 1, 1, 0, 0, 0]
-        users = ['a', 'a', 'b', 'b', 'b', 'c']
-        expected = (2*roc_auc_score(labels[:2], scores[:2]) + 3*roc_auc_score(labels[2:5], scores[2:5]))/5
-        shared = grouped_auc(labels, scores, users)
-        self.assertAlmostEqual(shared['gauc'], expected)
-        self.assertAlmostEqual(shared['gauc_row_coverage'], 5/6)
-        observations = [{'row_id': str(i), 'label': label, 'user_id': user} for i, (label, user) in enumerate(zip(labels, users))]
-        predictions = [{'row_id': str(i), 'score': score} for i, score in enumerate(scores)]
-        scalar = scalar_metrics(observations, predictions, [{'id':'click','column':'label','type':'binary'}], {'click':'score'}, False, 'user_id')
-        self.assertEqual(scalar['click']['gauc'], shared['gauc'])
-        self.assertEqual(scalar['click']['gauc_row_coverage'], shared['gauc_row_coverage'])
-        with self.assertRaises(ValueError):
-            grouped_auc(labels, scores, users[:-1]+[None])
-
-    def test_auc_ap_ties_and_weights_match_independent_reference(self):
+    def test_auc_logloss_match_independent_reference(self):
         rng = np.random.default_rng(7)
         for _ in range(20):
-            y, scores, weights = rng.integers(2, size=100), rng.integers(5, size=100) / 4, rng.integers(4, size=100)
-            actual = BinaryMetrics(y, scores).compute(weights)
-            self.assertAlmostEqual(actual['auc'], roc_auc_score(y, scores, sample_weight=weights))
-            self.assertEqual(actual['auc'], BinaryMetrics(y, scores).auc(weights))
-            self.assertAlmostEqual(actual['ap'], average_precision_score(y, scores, sample_weight=weights))
-        tied = BinaryMetrics([1, 0], [.3, .3]).compute()
-        self.assertEqual(tied['auc'], .5)
-        self.assertEqual(tied['ap'], .5)
+            labels = rng.integers(2, size=100)
+            scores = rng.integers(5, size=100) / 4
+            actual = binary_metrics(labels, scores)
+            self.assertAlmostEqual(actual['auc'], roc_auc_score(labels, scores))
+            clipped = np.clip(scores, 1e-15, 1-1e-15)
+            self.assertAlmostEqual(actual['logloss'], log_loss(labels, clipped))
+        self.assertEqual(binary_metrics([1, 0], [.3, .3])['auc'], .5)
 
-    def test_degenerate_labels_and_raw_scores_are_explicit(self):
-        self.assertEqual(BinaryMetrics([0, 0], [.1, .2]).compute()['auc_reason'], 'single_class')
-        self.assertEqual(BinaryMetrics([], []).compute()['auc_reason'], 'empty')
-        with self.assertRaises(ValueError):
-            BinaryMetrics([0, .5], [.1, .2])
-        with self.assertRaises(ValueError):
-            BinaryMetrics([0, 1], [-1, 2]).compute()
-        self.assertEqual(BinaryMetrics([0, 1], [-1, 2]).compute(probability=False)['auc'], 1)
-
-    def test_predictions_align_by_identity_and_fail_closed(self):
-        observations = [{'row_id': 'a', 'label': 0}, {'row_id': 'b', 'label': 1}]
-        prediction = [{'row_id': 'b', 'score': .9}, {'row_id': 'a', 'score': .1}]
-        tasks = [{'id': 'click', 'column': 'label', 'type': 'binary'}]
-        actual = scalar_metrics(observations, prediction, tasks, {'click': 'score'}, True)
-        self.assertEqual(actual['click']['auc'], 1)
-        for invalid in (prediction[:1], prediction + prediction[:1],
-                        [dict(r, score=float('nan')) for r in prediction]):
+    def test_degenerate_and_invalid_inputs(self):
+        self.assertEqual(binary_metrics([0, 0], [.1, .2])['auc_reason'], 'single_class')
+        for labels, scores in [([], []), ([0, .5], [.1, .2]), ([0, 1], [-1, 2]), ([0, 1], [np.nan, .5])]:
             with self.assertRaises(ValueError):
-                scalar_metrics(observations, invalid, tasks, {'click': 'score'}, True)
+                binary_metrics(labels, scores)
 
-    def test_gauc_single_class_group_remains_in_coverage(self):
-        report = grouped_auc([0, 1, 1], [.1, .9, .9], ['a', 'a', 'b'])
-        self.assertEqual(report['gauc'], 1)
-        self.assertEqual(report['gauc_users'], 1)
-        self.assertAlmostEqual(report['gauc_exposure_coverage'], 2 / 3)
+    def test_predictions_align_by_identity(self):
+        observations = pd.DataFrame([{'row_id': 'a', 'label': 0}, {'row_id': 'b', 'label': 1}])
+        prediction = [{'row_id': 'b', 'probs': .9}, {'row_id': 'a', 'probs': .1}]
+        tasks = [Task('click', 'label')]
+        self.assertEqual(ranking_metrics(observations, prediction, tasks, {'click': 'probs'})['click']['auc'], 1)
+        for invalid in (prediction[:1], prediction + prediction[:1]):
+            with self.assertRaises(ValueError):
+                ranking_metrics(observations, invalid, tasks, {'click': 'probs'})
 
     def test_same_timestamp_feedback_is_not_in_history(self):
         train = pd.DataFrame({'user_id': ['u'] * 3, 'time_ms': [1, 1, 2], 'label': [1, 0, 1]})
@@ -85,12 +58,6 @@ class MetricsTest(unittest.TestCase):
         history = past_counts(train, statistic, 'label', config['preparation']['time_key'])
         np.testing.assert_allclose(history.user_show_count, [0, np.log1p(2)])
         np.testing.assert_allclose(history.user_positive_count, [0, np.log1p(1)])
-
-    def test_batch_collision_diagnostic(self):
-        stats = batch_collisions(pd.DataFrame({'user_id': ['u', 'u', 'v'], 'video_id': ['a', 'b', 'a']}), preparation_definition())
-        self.assertEqual(stats['off_diagonal_pairs'], 6)
-        self.assertEqual(stats['same_item_pair_fraction'], 1/3)
-        self.assertEqual(stats['same_user_pair_fraction'], 1/3)
 
     def test_parquet_schema_is_compatible_with_fg_including_empty_tags(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -120,6 +87,32 @@ def rand_fixture(root):
 
 
 class PreparationTest(unittest.TestCase):
+
+    def test_kuairec_heldout_feedback_cannot_change_training_or_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = [{'user_id': str(u), 'video_id': str(v), 'timestamp': np.nan if u % 7 == 0 else 1,
+                     'watch_ratio': 3 if (u + v) % 3 == 0 else .5, 'video_duration': 1000 + u}
+                    for u in range(20) for v in range(30)]
+            raw = pd.DataFrame(rows)
+            raw.to_csv(root / 'small_matrix.csv', index=False)
+            pd.DataFrame({'video_id': range(30), 'feat': ['[1,2]'] * 30}).to_csv(root / 'item_categories.csv', index=False)
+            original = root / 'original'
+            prepare_rec(root, original)
+            train_pairs = set(load_split(original, 'train')[['user_id', 'video_id']].itertuples(index=False, name=None))
+            heldout = [pair not in train_pairs for pair in raw[['user_id', 'video_id']].itertuples(index=False, name=None)]
+            raw.loc[heldout, 'watch_ratio'] = 100.
+            raw.to_csv(root / 'small_matrix.csv', index=False)
+            changed = root / 'changed'
+            prepare_rec(root, changed)
+            pd.testing.assert_frame_equal(load_split(original, 'train'), load_split(changed, 'train'))
+            pd.testing.assert_frame_equal(pd.read_parquet(original / 'items.parquet'),
+                                          pd.read_parquet(changed / 'items.parquet'))
+            for split in ('valid', 'test'):
+                pd.testing.assert_frame_equal(load_split(original, split).drop(columns='label'),
+                                              load_split(changed, split).drop(columns='label'))
+                pd.testing.assert_frame_equal(pd.read_parquet(original / f'queries_{split}.parquet'),
+                                              pd.read_parquet(changed / f'queries_{split}.parquet'))
 
 
     def test_real_exposure_protocol_and_immutable_preparation(self):

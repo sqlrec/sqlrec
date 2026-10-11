@@ -1,7 +1,6 @@
 """KuaiRec small_matrix: deterministic pair holdout, never implicit negatives."""
 from __future__ import annotations
 
-import argparse
 import ast
 from pathlib import Path
 
@@ -10,16 +9,16 @@ import pandas as pd
 
 from .common import digest, require_columns, stable_id
 from .prepare import (load_preparation_config, preparation_seed, save_dataset,
-                      select_users, split_percentages, string_ids)
+                      split_percentages, string_ids)
 
 
-def prepare(raw, output, max_users=None, seed=None, threshold=None, config_path=None):
+def prepare(raw, output):
     raw = Path(raw)
-    config, metadata = load_preparation_config(config_path or Path(__file__).parent / 'configs/datasets/kuairec.yaml',
+    config, metadata = load_preparation_config(Path(__file__).parent / 'configs/datasets/kuairec.yaml',
                                               'benchmark.model_quality.prepare_kuairec')
     spec, source_spec = config['preparation']['parameters'], config['source']
-    seed = preparation_seed(config, seed)
-    threshold = spec['positive_threshold'] if threshold is None else threshold
+    seed = preparation_seed(config, None)
+    threshold = spec['positive_threshold']
     train_end, valid_end = split_percentages(spec['split_percent'])
     if not np.isfinite(threshold) or threshold <= 0:
         raise ValueError('Preference threshold must be positive and finite')
@@ -37,9 +36,10 @@ def prepare(raw, output, max_users=None, seed=None, threshold=None, config_path=
         if not np.isfinite(frame[col]).all() or (frame[col] < 0).any():
             raise ValueError(f'Invalid {col}')
     original_rows = len(frame)
-    # Known timestamps precede missing timestamps; label/duration resolve ties
-    # independently of input order. Official small_matrix has no repeated pairs.
-    frame = frame.sort_values(['timestamp_missing', 'timestamp', 'watch_ratio', 'video_duration'], kind='stable').drop_duplicates(['user_id', 'video_id']).copy()
+    # Feedback must not choose rows or metadata: held-out labels cannot change
+    # training features. Resolve timestamp ties with static fields only.
+    frame = frame.sort_values(['timestamp_missing', 'timestamp', 'video_duration', 'user_id', 'video_id'],
+                              kind='stable').drop_duplicates(['user_id', 'video_id']).copy()
     frame['row_id'] = [stable_id('kuairec-pair', u, v) for u, v in frame[['user_id', 'video_id']].itertuples(index=False, name=None)]
     buckets = np.array([int(stable_id('pair-split', seed, u, v)[:16], 16) % 100
                         for u, v in frame[['user_id', 'video_id']].itertuples(index=False, name=None)])
@@ -47,9 +47,6 @@ def prepare(raw, output, max_users=None, seed=None, threshold=None, config_path=
     frame['label'] = (frame.watch_ratio > threshold).astype('int32')
     frame['time_ms'] = (frame.timestamp * 1000).astype('int64')
     frame['tab'], frame['source'] = '0', 'observed'
-    if max_users is not None:
-        cohort = select_users(frame.loc[frame.split == 'train'], max_users, config['dataset']['user_key'])
-        frame = frame.loc[frame.user_id.isin(cohort)].copy()
     categories = pd.read_csv(categories_path, dtype={'video_id': str})
     require_columns(categories, ['video_id', 'feat'])
     def tags(value):
@@ -59,7 +56,7 @@ def prepare(raw, output, max_users=None, seed=None, threshold=None, config_path=
         return sorted(set(map(str, decoded)))
     categories['tag'] = categories.feat.map(tags)
     # Static duration; no aggregate user/item statistics from held-out pairs.
-    items = frame.sort_values('time_ms').drop_duplicates('video_id')[['video_id', 'video_duration']].copy()
+    items = frame.drop_duplicates('video_id')[['video_id', 'video_duration']].copy()
     items = items.merge(categories[['video_id', 'tag']], on='video_id', how='left', validate='one_to_one')
     items['tag'] = items.tag.map(lambda t: t if isinstance(t, list) else [])
     items['author_id'] = config['preparation']['defaults']['author_id']
@@ -71,23 +68,9 @@ def prepare(raw, output, max_users=None, seed=None, threshold=None, config_path=
     splits = {split: {'observed': frame.loc[frame.split == split, columns].copy()} for split in ('valid', 'test')}
     manifest = {'dataset': config['name'], 'protocol': 'held-out-preference-observed-candidates',
                 'candidate_scope': config['protocol']['candidate_scope'], 'source_spec': source_spec, **metadata,
-                'split_seed': seed, 'split_percent': spec['split_percent'], 'positive_threshold': threshold, 'max_users': max_users,
+                'split_seed': seed, 'split_percent': spec['split_percent'], 'positive_threshold': threshold, 'max_users': None,
                 'raw_files': {p.name: digest(p) for p in (matrix_path, categories_path)},
                 'missing_timestamps': missing_timestamps, 'missing_timestamp_policy': 'retained; time_ms=0 sentinel; pair holdout only',
-                'repeat_pairs_removed': original_rows - len(frame) if max_users is None else None,
+                'repeat_pairs_removed': original_rows - len(frame),
                 'ignored_features': ['big_matrix', 'full-matrix statistics', 'user snapshot', 'missing pairs']}
     return save_dataset(output, train, splits, items, manifest, config, temporal=False, seed=seed)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--raw', required=True)
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--seed', type=int, help='Override preparation.seed from the dataset YAML')
-    parser.add_argument('--threshold', type=float, help='Override the configured preference threshold')
-    parser.add_argument('--config', help='Dataset YAML; defaults to configs/datasets/kuairec.yaml')
-    parser.add_argument('--max-users', type=int)
-    args = parser.parse_args()
-    if args.max_users is not None and args.max_users <= 0:
-        parser.error('--max-users must be positive')
-    print(prepare(args.raw, args.output, args.max_users, args.seed, args.threshold, args.config)['fingerprint'])
