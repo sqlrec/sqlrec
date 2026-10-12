@@ -388,6 +388,10 @@ DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，
 | `user_hidden_units` | String | "512,256,128" | 用户塔隐藏层单元数 |
 | `item_hidden_units` | String | "512,256,128" | 物品塔隐藏层单元数 |
 | `output_dim` | Integer | 64 | 输出嵌入维度 |
+| `negative_sampling` | String | `in_batch` | `in_batch` 批内负例，或 `pool` 物品池采样 |
+| `negative_sample_count` | Integer | 256 | 池采样每批共享的负例数 |
+| `negative_pool_size` | Integer | 4096 | 不同物品的容量上限，须大于 `batch_size` |
+| `item_id_column` | String | — | 池模式必填：`item_features` 中的标量 STRING/INT/BIGINT 物品 ID |
 | `mixed_precision` | String | - | 混合精度训练模式，可选 `BF16`/`FP16`，默认不开启 |
 
 **分布式训练参数**：
@@ -407,7 +411,18 @@ DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，
 | `column.{feature_name}.bucket_size` | 特征的分桶数量 |
 | `column.{feature_name}.embedding_dim` | 特征的嵌入维度 |
 
+**负采样方式**：
+
+DSSM 训练时需要用负例作为对照，学习让正例物品获得更高的匹配分数。通过 `negative_sampling` 选择负例的来源：
+
+- `in_batch`（默认）：将同一批次中其他样本的物品作为负例，负例数量随批次大小变化。
+- `pool`（池采样）：将训练过程中出现的物品组成候选池，每批从池中随机抽取负例。候选物品可以来自其他批次，因此使用较小的训练批次时，也能获得更多负例。
+
+池采样直接使用现有训练数据，无需额外准备物品表。`negative_sample_count` 控制每批抽取的负例数，`negative_pool_size` 控制池中最多保留多少个不同物品，`item_id_column` 指定用于区分物品的 ID 列。池只包含训练中出现的物品，不代表完整物品目录；增大池容量也不一定提升效果，应以验证结果为准。
+
 **使用示例**：
+
+下面启用池采样，训练批次大小为 256，每批抽取 256 个负例，物品池最多容纳 4096 个不同物品：
 
 ```sql
 CREATE MODEL dssm_model (
@@ -421,6 +436,11 @@ CREATE MODEL dssm_model (
     'label_columns' = 'label',
     'user_features' = 'user_id,user_age',
     'item_features' = 'item_id,item_category',
+    'batch_size' = '256',
+    'negative_sampling' = 'pool',
+    'negative_sample_count' = '256',
+    'negative_pool_size' = '4096',
+    'item_id_column' = 'item_id',
     'embedding_dim' = '64',
     'user_hidden_units' = '256,128,64',
     'item_hidden_units' = '256,128,64'

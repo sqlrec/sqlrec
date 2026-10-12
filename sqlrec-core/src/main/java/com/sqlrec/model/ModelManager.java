@@ -337,6 +337,7 @@ public class ModelManager {
         }
 
         boolean allCompleted = true;
+        Map<String, K8sManager.JobStatus> jobStatuses = new HashMap<>();
         Set<String> yamlsToDelete = new HashSet<>();
         List<String> failedCheckpoints = new ArrayList<>();
 
@@ -363,7 +364,8 @@ public class ModelManager {
                     continue;
                 }
 
-                K8sManager.JobStatus jobStatus = K8sManager.checkJobsStatusDetailFromYaml(k8sYaml);
+                K8sManager.JobStatus jobStatus = jobStatuses.computeIfAbsent(
+                        k8sYaml, K8sManager::checkJobsStatusDetailFromYaml);
                 if ("succeeded".equals(jobStatus.state())) {
                     updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     yamlsToDelete.add(k8sYaml);

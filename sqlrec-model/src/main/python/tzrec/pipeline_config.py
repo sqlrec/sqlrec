@@ -150,13 +150,24 @@ def _check_structure_options(saved, options, masks):
                 expected = [name for name in features if name not in other_features]
         elif key == "output_dim" and architecture == "dssm":
             actual, expected = network.output_dim, int(value)
+        elif key == "negative_sampling" and architecture == "dssm":
+            actual = "pool" if saved.data_config.HasField("pool_negative_sampler") else "in_batch"
+            expected = value
+        elif key in ("negative_sample_count", "negative_pool_size", "item_id_column") and architecture == "dssm":
+            if not saved.data_config.HasField("pool_negative_sampler"):
+                raise ValueError(f"Explicit structure override {key} requires a pool checkpoint")
+            field = {"negative_sample_count": "num_sample", "negative_pool_size": "pool_size",
+                     "item_id_column": "item_id_field"}[key]
+            actual = getattr(saved.data_config.pool_negative_sampler, field)
+            expected = value if key == "item_id_column" else int(value)
         else:
             raise ValueError(f"Explicit structure override {key} is incompatible with checkpoint model {architecture}")
         if actual != expected:
             raise ValueError(f"Explicit structure override {key} does not match the checkpoint; create a new model to change its structure")
 
 
-def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None):
+def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None,
+                   training=False):
     """Retain checkpoint structure and validate the effective label contract."""
     _check_dssm_loss(requested)
     rocket_contract(requested)
@@ -190,6 +201,10 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
         batch_size, workers = config.data_config.batch_size, config.data_config.num_workers
         config.data_config.CopyFrom(saved.data_config)
         config.data_config.batch_size, config.data_config.num_workers = batch_size, workers
+    if training and config.data_config.HasField("pool_negative_sampler"):
+        if not config.train_input_path:
+            raise ValueError("Pool sampling requires a parquet training input")
+        config.data_config.pool_negative_sampler.input_path = config.train_input_path
     contract = task_contract(config)
     labels = set(config.data_config.label_fields)
     if contract is None and (len(config.data_config.label_fields) != 1 or len(labels) != 1):

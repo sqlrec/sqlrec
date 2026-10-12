@@ -24,8 +24,8 @@ preparation:
   array_keys:
     tag_key: tag
   statistics:
-  - {key: user_id, count: user_show_count, positive: user_positive_count, seen: user_seen}
-  - {key: video_id, count: item_show_count, positive: item_positive_count, seen: item_seen}
+  - {key: user_id, count: user_show_count, positive: user_positive_count, seen: user_seen, rate: user_positive_rate}
+  - {key: video_id, count: item_show_count, positive: item_positive_count, seen: item_seen, rate: item_positive_rate}
   parameters:
     positive_threshold: 2.0
     split_percent: [80, 10, 10]
@@ -47,6 +47,8 @@ columns:
   item_show_count: {type: FLOAT, role: item}
   item_positive_count: {type: FLOAT, role: item}
   duration_s: {type: FLOAT, role: item}
+  user_positive_rate: {type: FLOAT, role: user}
+  item_positive_rate: {type: FLOAT, role: item}
   label: {type: INT}
   row_id: {type: STRING}
   query_id: {type: STRING}
@@ -70,8 +72,8 @@ views:
     tasks: [watch_positive]
   ranking:
     features: [user_id, video_id, tag, author_id, tab, user_show_count, user_positive_count, item_show_count, item_positive_count,
-      duration_s]
+      duration_s, user_positive_rate, item_positive_rate]
     tasks: [watch_positive]
   trees:
-    features: [user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s]
+    features: [user_show_count, user_positive_count, item_show_count, item_positive_count, duration_s, user_positive_rate, item_positive_rate]
     tasks: [watch_positive]

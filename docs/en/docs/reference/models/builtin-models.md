@@ -385,6 +385,10 @@ SQLRec DSSM uses a fixed `softmax_cross_entropy` objective with Recall@1 and Rec
 | `user_hidden_units` | String | "512,256,128" | User tower hidden layer unit count |
 | `item_hidden_units` | String | "512,256,128" | Item tower hidden layer unit count |
 | `output_dim` | Integer | 64 | Output embedding dimension |
+| `negative_sampling` | String | `in_batch` | `in_batch` or `pool` |
+| `negative_sample_count` | Integer | 256 | Shared negatives per batch in pool mode |
+| `negative_pool_size` | Integer | 4096 | Maximum distinct cached items; must exceed `batch_size` |
+| `item_id_column` | String | — | Required in pool mode: scalar STRING/INT/BIGINT ID in `item_features` |
 | `mixed_precision` | String | - | Mixed precision training mode, `BF16` or `FP16`, disabled by default |
 
 **Distributed Training Parameters**:
@@ -404,7 +408,18 @@ Can configure parameters separately for each feature column:
 | `column.{feature_name}.bucket_size` | Feature bucket count |
 | `column.{feature_name}.embedding_dim` | Feature embedding dimension |
 
+**Negative Sampling**:
+
+DSSM uses negative examples as a contrast during training, learning to give positive items higher matching scores. Choose the source of negatives with `negative_sampling`:
+
+- `in_batch` (default): Uses items from other examples in the same batch as negatives. The number of negatives depends on the batch size.
+- `pool`: Builds a candidate pool from items encountered during training and randomly draws negatives from it for each batch. Candidates can come from other batches, allowing more negatives even with a smaller training batch.
+
+Pool sampling uses existing training data, so no separate item table is needed. `negative_sample_count` controls how many negatives to draw per batch, `negative_pool_size` limits the number of distinct items in the pool, and `item_id_column` identifies the item ID column. The pool contains only items encountered during training, rather than the complete catalog. A larger pool does not necessarily improve quality; use validation results to choose its size.
+
 **Usage Example**:
+
+This example enables pool sampling with a training batch size of 256, 256 negatives per batch, and a pool capacity of 4096 distinct items:
 
 ```sql
 CREATE MODEL dssm_model (
@@ -418,6 +433,11 @@ CREATE MODEL dssm_model (
     'label_columns' = 'label',
     'user_features' = 'user_id,user_age',
     'item_features' = 'item_id,item_category',
+    'batch_size' = '256',
+    'negative_sampling' = 'pool',
+    'negative_sample_count' = '256',
+    'negative_pool_size' = '4096',
+    'item_id_column' = 'item_id',
     'embedding_dim' = '64',
     'user_hidden_units' = '256,128,64',
     'item_hidden_units' = '256,128,64'

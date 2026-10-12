@@ -115,4 +115,13 @@ public class Config extends ModelConfigBase {
     public static final ConfigOption<Integer> OUTPUT_DIM = new ConfigOption<>(
             "output_dim",
             64, "Output embedding dimension for DSSM", null, Integer.class);
+
+    public static final ConfigOption<String> NEGATIVE_SAMPLING = new ConfigOption<>(
+            "negative_sampling", "in_batch", "DSSM negatives: in_batch or pool", null, String.class);
+    public static final ConfigOption<Integer> NEGATIVE_SAMPLE_COUNT = new ConfigOption<>(
+            "negative_sample_count", 256, "Shared negatives per DSSM batch", null, Integer.class);
+    public static final ConfigOption<Integer> NEGATIVE_POOL_SIZE = new ConfigOption<>(
+            "negative_pool_size", 4096, "Maximum distinct cached training items", null, Integer.class);
+    public static final ConfigOption<String> ITEM_ID_COLUMN = new ConfigOption<>(
+            "item_id_column", null, "Scalar item ID for pool sampling", null, String.class);
 }

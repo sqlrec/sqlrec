@@ -63,7 +63,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<Integer> REST_MAX_CONTENT_LENGTH = new ConfigOption<>(
             "REST_MAX_CONTENT_LENGTH",
-            64 * 1024,
+            1024 * 1024,
             "maximum aggregated REST request content length in bytes",
             null,
             Integer.class

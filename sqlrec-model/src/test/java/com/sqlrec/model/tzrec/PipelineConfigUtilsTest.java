@@ -10,6 +10,49 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
     @Test
+    void poolSamplingUsesTheTrainingSourceAndNativeDssmPath() {
+        ModelConf model = model("INT");
+        model.getParams().putAll(Map.of("item_features", "iid,price", "negative_sampling", "pool",
+                "item_id_column", "iid", "batch_size", "256"));
+        assertNull(new DSSMModel().checkModel(model));
+        ModelTrainConf train = new ModelTrainConf();
+        train.setParams(Map.of());
+        train.setTrainDataPaths(List.of("jfs://myjfs/train/*"));
+        String config = PipelineConfigUtils.generateDSSMTrainConfig(model, train);
+        assertEquals(1, config.split("data_config \\{", -1).length - 1);
+        assertTrue(config.contains("pool_negative_sampler {\n        input_path: \"jfs://myjfs/train/*.parquet\""), config);
+        assertTrue(config.contains("num_sample: 256"));
+        assertTrue(config.contains("pool_size: 4096"));
+        assertTrue(config.contains("attr_fields: \"price\""));
+        assertTrue(config.contains("in_batch_negative: false"));
+        assertFalse(config.contains("logq"));
+        assertNotNull(new WideAndDeepModel().checkModel(model));
+        ModelConf inferred = model("INT");
+        inferred.getParams().putAll(model.getParams());
+        inferred.getParams().remove("item_features");
+        inferred.getParams().put("user_features", "uid");
+        assertNull(new DSSMModel().checkModel(inferred));
+        assertTrue(PipelineConfigUtils.generateDataConfig(inferred, Map.of()).contains("attr_fields: \"iid\""));
+        for (String type : List.of("string", "int", "integer", "bigint")) {
+            ModelConf candidate = model("INT");
+            candidate.getParams().putAll(model.getParams());
+            candidate.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("iid", type),
+                    new FieldSchema("price", "DOUBLE"), new FieldSchema("label", "INT")));
+            assertNull(new DSSMModel().checkModel(candidate), type);
+        }
+        for (Map<String, String> invalid : List.of(Map.of("negative_sample_count", "0"),
+                Map.of("negative_pool_size", "256"), Map.of("item_id_column", "price"),
+                Map.of("item_id_column", "uid"), Map.of("negative_sampling", "uniform"))) {
+            ModelConf candidate = model("INT");
+            candidate.getParams().putAll(model.getParams());
+            candidate.getParams().putAll(invalid);
+            assertNotNull(new DSSMModel().checkModel(candidate), invalid.toString());
+        }
+        model.getParams().put("negative_sampling", "in_batch");
+        assertNotNull(new DSSMModel().checkModel(model));
+    }
+
+    @Test
     void integerAliasUsesDirectBucketsRatherThanHashing() {
         for (String type : List.of("INT", "INTEGER", "BIGINT")) {
             ModelConf model = model("INTEGER");

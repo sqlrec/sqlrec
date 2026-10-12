@@ -191,20 +191,19 @@ class APIClient:
         import requests
         self.config, self.session = config, requests.Session()
 
-    def call(self, name, payload):
+    def call(self, name, payload, *, retry=True):
         identifier(name)
         headers = {}
         if self.config.get('authorization_env'):
             headers['Authorization'] = os.environ[self.config['authorization_env']]
-        # Generated scoring/recall functions are read-only. Newly deployed
-        # metadata/service caches can briefly lag readiness; retry the same
-        # public request, with no prediction fallback.
+        # Only read-only scoring/recall requests may retry readiness failures.
+        # Item loading writes to Milvus and must pass retry=False.
         deadline = time.monotonic() + self.config.get('readiness_timeout', 120)
         while True:
             response = self.session.post(self.config['base_url'].rstrip('/') + '/api/v1/' + name,
                                          json=payload, headers=headers,
                                          timeout=min(self.config.get('timeout', 120), max(1, deadline-time.monotonic())))
-            if response.status_code in (500, 502, 503, 504) and time.monotonic() < deadline:
+            if retry and response.status_code in (500, 502, 503, 504) and time.monotonic() < deadline:
                 time.sleep(1)
                 continue
             if response.status_code != 200:

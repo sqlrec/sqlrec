@@ -102,11 +102,11 @@ def load_dataset(name, data_root, full_eval=False):
 
 
 def fields(features):
-    return ', '.join(f'`{identifier(f.name)}` {f.type}' for f in features)
+    return '\n    ' + ',\n    '.join(f'`{identifier(f.name)}` {f.type}' for f in features) + '\n'
 
 
 def options(values):
-    return ', '.join(f'{literal(key)}={literal(value)}' for key, value in values.items())
+    return '\n    ' + ',\n    '.join(f'{literal(key)} = {literal(value)}' for key, value in values.items()) + '\n'
 
 
 def training_identity(manifest, view, env):

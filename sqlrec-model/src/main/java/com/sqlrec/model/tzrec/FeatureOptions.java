@@ -135,6 +135,34 @@ final class FeatureOptions {
             }
             List<FieldSchema> features = features(model);
             if (features.isEmpty()) return "TZRec requires at least one non-label feature";
+            String sampling = Config.NEGATIVE_SAMPLING.getValue(params);
+            Set<String> samplingKeys = Set.of("negative_sampling", "negative_sample_count", "negative_pool_size", "item_id_column");
+            if (!dssm && params.keySet().stream().anyMatch(samplingKeys::contains)) {
+                return "Negative sampling options are only supported for DSSM";
+            }
+            if (!Set.of("in_batch", "pool").contains(sampling)) return "negative_sampling must be in_batch or pool";
+            if ("pool".equals(sampling)) {
+                positive(Config.NEGATIVE_SAMPLE_COUNT.getValue(params), "negative_sample_count");
+                if (Config.NEGATIVE_POOL_SIZE.getValue(params) <= Config.BATCH_SIZE.getValue(params)) {
+                    return "negative_pool_size must exceed batch_size";
+                }
+                String itemId = Config.ITEM_ID_COLUMN.getValueOrNull(params);
+                List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(params));
+                if (items.isEmpty()) {
+                    List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(params));
+                    items = features.stream().map(FieldSchema::getName)
+                            .filter(name -> !users.contains(name))
+                            .collect(java.util.stream.Collectors.toList());
+                }
+                if (itemId == null || !items.contains(itemId)) return "item_id_column must belong to item_features";
+                FieldSchema idField = features.stream().filter(f -> f.getName().equals(itemId)).findFirst().orElse(null);
+                if (idField == null || !(FieldTypeUtils.isString(compactType(idField.getType()))
+                        || FieldTypeUtils.isInteger(compactType(idField.getType())))) {
+                    return "item_id_column must be a scalar STRING, INT or BIGINT";
+                }
+            } else if (params.keySet().stream().anyMatch(key -> samplingKeys.contains(key) && !key.equals("negative_sampling"))) {
+                return "Pool options require negative_sampling=pool";
+            }
             for (String key : params.keySet()) {
                 if (!key.startsWith("column.")) continue;
                 boolean recognized = false;

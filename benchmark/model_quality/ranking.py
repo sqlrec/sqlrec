@@ -25,16 +25,17 @@ def run_ranking(dataset, model, table, resources, api, save_predictions=False):
     columns = [Feature('row_id', 'STRING'), *features]
     outputs = output_columns(model, tasks)
     result_columns = ['row_id', *outputs.values()]
+    projection = ',\n    '.join(result_columns)
     # Row IDs pass through call_service, so responses can be aligned by identity.
     for sql in [f'CREATE OR REPLACE SQL FUNCTION `{function}`',
                 f'DEFINE INPUT TABLE observations ({fields(columns)})',
-                f'CACHE TABLE scores AS CALL call_service({literal(services["scalar"])}, observations)',
-                f'CACHE TABLE predictions AS SELECT {", ".join(result_columns)} FROM scores',
+                f'CACHE TABLE scores AS\nCALL call_service({literal(services["scalar"])}, observations)',
+                f'CACHE TABLE predictions AS\nSELECT\n    {projection}\nFROM scores',
                 'RETURN predictions']:
         resources.execute(sql)
     if any(row[0] == function for row in resources.execute('SHOW APIS').rows):
         raise ValueError('API name already exists')
-    resources.execute(f'CREATE OR REPLACE API `{function}` WITH `{function}`')
+    resources.execute(f'CREATE OR REPLACE API `{function}`\nWITH `{function}`')
     observations = dataset.ranking_sample()
     predictions = []
     with resources.stage('predict'):

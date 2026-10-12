@@ -10,6 +10,7 @@ import time
 
 from .client import HS2Client, Indeterminate
 from .common import identifier, literal, write_json
+from .config import Feature
 from .data import fields, options
 
 
@@ -98,8 +99,8 @@ class RunResources:
     def define(self, features, tasks, params, definition):
         if any(row[0] == self.name for row in self.execute('SHOW MODELS').rows):
             raise ValueError('Model name already exists')
-        labels = ', '.join(f'`{t.column}` {definition["columns"][t.column]["type"]}' for t in tasks)
-        self.execute(f'CREATE MODEL `{self.name}` ({fields(features)}, {labels}) WITH ({options(params)})')
+        labels = [Feature(t.column, definition['columns'][t.column]['type']) for t in tasks]
+        self.execute(f'CREATE MODEL `{self.name}` ({fields([*features, *labels])})\nWITH ({options(params)})')
         self.save()
 
     def checkpoint(self, checkpoint, timeout=3600):
@@ -131,7 +132,7 @@ class RunResources:
             self.jobs.append(job)
             self.save()
             with self.stage(kind):
-                self.execute(f"{kind.upper()} MODEL `{self.name}` CHECKPOINT='v1' ON `{table}` "
+                self.execute(f"{kind.upper()} MODEL `{self.name}`\nCHECKPOINT = 'v1'\nON `{table}`\n"
                              f'WITH ({options(self.env.train_resources)})', long=True,
                              on_submitted=lambda operation: self.capture_job(job))
                 expected = 'origin' if kind == 'train' else 'export'
@@ -157,7 +158,7 @@ class RunResources:
                 service = {'name': name, 'checkpoint': checkpoint, 'status': 'submitted'}
                 self.services.append(service)
                 self.save()
-                self.execute(f'CREATE SERVICE `{name}` ON MODEL `{self.name}` CHECKPOINT={literal(checkpoint)} '
+                self.execute(f'CREATE SERVICE `{name}`\nON MODEL `{self.name}`\nCHECKPOINT = {literal(checkpoint)}\n'
                              f'WITH ({options(self.env.service_resources)})', long=True)
                 self.verify_service(service)
                 physical = service['deployment']

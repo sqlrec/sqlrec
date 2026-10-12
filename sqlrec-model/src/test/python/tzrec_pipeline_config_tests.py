@@ -19,6 +19,29 @@ import torch
 
 
 class CheckpointConfigTest(unittest.TestCase):
+    def test_pool_checkpoint_preserves_settings_but_refreshes_training_source(self):
+        requested = text_format.Parse('data_config { label_fields: "label" } '
+                'model_config { dssm {} losses { softmax_cross_entropy {} } }', pipeline_pb2.EasyRecConfig())
+        saved = pipeline_pb2.EasyRecConfig()
+        saved.CopyFrom(requested)
+        saved.data_config.pool_negative_sampler.input_path = "/old/*.parquet"
+        saved.data_config.pool_negative_sampler.num_sample = 256
+        saved.data_config.pool_negative_sampler.pool_size = 4096
+        saved.data_config.pool_negative_sampler.item_id_field = "id"
+        saved.data_config.pool_negative_sampler.attr_fields.append("id")
+        requested.train_input_path = "/new/*.parquet"
+        self.assertEqual(prepare_config(requested, saved).data_config.pool_negative_sampler.input_path,
+                         "/old/*.parquet")
+        effective = prepare_config(requested, saved, training=True)
+        self.assertEqual(effective.data_config.pool_negative_sampler.input_path, "/new/*.parquet")
+        self.assertEqual(effective.data_config.pool_negative_sampler.pool_size, 4096)
+        for key, value in (("negative_sampling", "in_batch"), ("negative_sample_count", "512"),
+                           ("negative_pool_size", "2048"), ("item_id_column", "other")):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "override"):
+                prepare_config(requested, saved, structure_options={key: value})
+        prepare_config(requested, saved, structure_options={"negative_sampling": "pool",
+                       "negative_sample_count": "256", "negative_pool_size": "4096", "item_id_column": "id"})
+
     def test_dssm_unsupported_objectives_are_rejected_before_checkpoint_merge(self):
         def recall():
             return text_format.Parse(

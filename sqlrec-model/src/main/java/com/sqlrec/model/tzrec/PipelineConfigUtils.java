@@ -62,7 +62,7 @@ public class PipelineConfigUtils {
 
         config.append(generateTrainConfig(model, model.getParams(), trainConf.getBaseModelDir()));
 
-        config.append(generateDataConfig(model, model.getParams()));
+        config.append(generateDataConfig(model, model.getParams(), trainConf.getTrainDataPaths()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -76,7 +76,7 @@ public class PipelineConfigUtils {
 
         addModelDir(config, exportConf.getBaseModelDir());
 
-        config.append(generateDataConfig(model, model.getParams()));
+        config.append(generateDataConfig(model, model.getParams(), exportConf.getTrainDataPaths()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -139,6 +139,10 @@ public class PipelineConfigUtils {
     }
 
     public static String generateDataConfig(ModelConf model, Map<String, String> params) {
+        return generateDataConfig(model, params, List.of());
+    }
+
+    private static String generateDataConfig(ModelConf model, Map<String, String> params, List<String> trainPaths) {
         params = ModelConfigUtils.mergeParams(model.getParams(), params);
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
@@ -153,6 +157,20 @@ public class PipelineConfigUtils {
             config.append("    label_fields: ").append(quoted(label)).append("\n");
         }
         config.append("    num_workers: " + numWorkers + "\n");
+        if ("pool".equals(Config.NEGATIVE_SAMPLING.getValue(params))) {
+            List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(params));
+            if (items.isEmpty()) items = inferRemainingFeatures(getFeatures(model),
+                    FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(params)));
+            config.append("    pool_negative_sampler {\n");
+            String inputPath = trainPaths == null ? "" : parquetInputPaths(String.join(",", trainPaths));
+            config.append("        input_path: ").append(quoted(inputPath)).append("\n");
+            config.append("        num_sample: ").append(Config.NEGATIVE_SAMPLE_COUNT.getValue(params)).append("\n");
+            config.append("        num_eval_sample: ").append(Config.NEGATIVE_SAMPLE_COUNT.getValue(params)).append("\n");
+            config.append("        pool_size: ").append(Config.NEGATIVE_POOL_SIZE.getValue(params)).append("\n");
+            config.append("        item_id_field: ").append(quoted(Config.ITEM_ID_COLUMN.getValue(params))).append("\n");
+            for (String item : items) config.append("        attr_fields: ").append(quoted(item)).append("\n");
+            config.append("    }\n");
+        }
         config.append("}\n");
         return config.toString();
     }
@@ -329,7 +347,8 @@ public class PipelineConfigUtils {
         addDssmTower(config, "user", userHiddenUnits);
         addDssmTower(config, "item", itemHiddenUnits);
         config.append("        output_dim: " + outputDim + "\n");
-        config.append("        in_batch_negative: true\n");
+        config.append("        in_batch_negative: ")
+                .append(!"pool".equals(Config.NEGATIVE_SAMPLING.getValue(model.getParams()))).append("\n");
         config.append("    }\n");
 
         addRecallMetric(config, 1);

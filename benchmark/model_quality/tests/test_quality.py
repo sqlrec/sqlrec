@@ -12,7 +12,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from benchmark.model_quality.metrics import binary_metrics, ranking_metrics
 from benchmark.model_quality.config import Task
-from benchmark.model_quality.prepare import past_counts, write_frame
+from benchmark.model_quality.prepare import past_counts, positive_rates, write_frame
 from benchmark.model_quality.prepare_kuairand import prepare as prepare_rand
 from benchmark.model_quality.prepare_kuairec import prepare as prepare_rec
 from benchmark.model_quality.config import read_dataset_definition
@@ -51,6 +51,13 @@ class MetricsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ranking_metrics(observations, invalid, tasks, {'click': 'probs'})
 
+    def test_smoothed_rates_match_hand_calculation(self):
+        frame = pd.DataFrame({'user_show_count': np.log1p([0, 2, 3]),
+                              'user_positive_count': np.log1p([0, 2, 2])})
+        path = Path(__file__).resolve().parents[1] / 'configs/datasets/kuairec.yaml'
+        result = positive_rates(frame, read_dataset_definition(path)[0])
+        np.testing.assert_allclose(result.user_positive_rate, [.5, .75, .6])
+
     def test_same_timestamp_feedback_is_not_in_history(self):
         train = pd.DataFrame({'user_id': ['u'] * 3, 'time_ms': [1, 1, 2], 'label': [1, 0, 1]})
         config = preparation_definition()
@@ -58,6 +65,12 @@ class MetricsTest(unittest.TestCase):
         history = past_counts(train, statistic, 'label', config['preparation']['time_key'])
         np.testing.assert_allclose(history.user_show_count, [0, np.log1p(2)])
         np.testing.assert_allclose(history.user_positive_count, [0, np.log1p(1)])
+        statistic['rate'] = 'user_positive_rate'
+        before = positive_rates(history.copy(), config)
+        train.loc[train.time_ms == 2, 'label'] = 0
+        after = positive_rates(past_counts(train, statistic, 'label', 'time_ms'), config)
+        np.testing.assert_allclose(before.user_positive_rate, [.5, .5])
+        pd.testing.assert_series_equal(before.user_positive_rate, after.user_positive_rate)
 
     def test_parquet_schema_is_compatible_with_fg_including_empty_tags(self):
         with tempfile.TemporaryDirectory() as directory:

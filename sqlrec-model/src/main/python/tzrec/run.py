@@ -70,7 +70,8 @@ def main():
         saved = text_format.Parse(common.read_text(source.rstrip("/") + "/pipeline.config"), pipeline_pb2.EasyRecConfig())
     structure = json.loads(args.checkpoint_structure_options)
     config = prepare_config(requested, saved, check_checkpoint_structure=args.check_checkpoint_structure,
-                            structure_options=structure.get("options"), structure_masks=structure.get("masked_features"))
+                            structure_options=structure.get("options"), structure_masks=structure.get("masked_features"),
+                            training=args.mode == "train")
     with tempfile.TemporaryDirectory(prefix="sqlrec-tzrec-") as temporary:
         path = os.path.join(temporary, "pipeline.config")
         config_util.save_message(config, path)

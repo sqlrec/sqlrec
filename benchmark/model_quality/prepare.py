@@ -72,6 +72,16 @@ def counts(train, statistic, label):
     return np.log1p(result.astype('float64'))
 
 
+def positive_rates(frame, config):
+    """Laplace-smoothed rates from the already past-only/leave-one-out counts."""
+    for statistic in config['preparation']['statistics']:
+        if 'rate' in statistic and statistic['count'] in frame:
+            positives = np.expm1(frame[statistic['positive']])
+            shows = np.expm1(frame[statistic['count']])
+            frame[statistic['rate']] = (positives + 1) / (shows + 2)
+    return frame
+
+
 def past_counts(train, statistic, label, time_key):
     """Exclude all feedback at the same timestamp, independent of row order."""
     at_time = train.groupby([statistic['key'], time_key], sort=True)[label].agg(['size', 'sum'])
@@ -154,6 +164,7 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
                 column = statistic[name]
                 subtract = 1 if name == 'count' else samples[label]
                 samples[column] = np.log1p(np.maximum(0, np.expm1(samples[column]) - subtract))
+    samples = positive_rates(samples, config)
     samples = samples.sample(frac=1, random_state=seed).reset_index(drop=True)
     write_frame(output / 'train.parquet', samples, config)
     positives = samples.loc[samples[label] == 1].copy()
@@ -162,7 +173,7 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
     item_features = fill_features(items.merge(snapshots[item_key], on=item_key, how='left', validate='one_to_one'), config)
     for name in ('count', 'positive'):
         item_features[item_statistic[name]] = item_features[item_statistic[name]].fillna(0)
-    write_frame(output / 'items.parquet', item_features, config)
+    write_frame(output / 'items.parquet', positive_rates(item_features, config), config)
     manifest.update({'format_version': 1, 'dataset_definition': config,
                      'feature_columns': [name for name, spec in config['columns'].items() if 'role' in spec],
                      'preparation_seed': seed, 'splits': {'train': ['train.parquet'], 'valid': [], 'test': []},
@@ -181,7 +192,7 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
             if frame[row_key].isna().any() or frame[row_key].duplicated().any() or all_ids.intersection(frame[row_key]):
                 raise ValueError('Exposure identities are null, duplicated or overlap between splits')
             all_ids.update(frame[row_key])
-            frame = enrich(frame, items, snapshots, config)
+            frame = positive_rates(enrich(frame, items, snapshots, config), config)
             name = f'{split}_{source}.parquet'
             write_frame(output / name, frame, config)
             manifest['splits'][split].append(name)

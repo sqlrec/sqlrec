@@ -23,7 +23,7 @@ from benchmark.model_quality.prepare_kuairand import prepare
 from benchmark.model_quality.ranking import output_columns, run_ranking
 from benchmark.model_quality.report import write_report
 from benchmark.model_quality.resources import RunResources, Workloads
-from benchmark.model_quality.retrieval import input_sql, query_inputs, run_retrieval
+from benchmark.model_quality.retrieval import query_inputs, run_retrieval
 from benchmark.model_quality.tests.test_quality import rand_fixture
 
 
@@ -131,6 +131,17 @@ class PreparedTest(unittest.TestCase):
             if model == 'rocket_launching':
                 self.assertEqual(output_columns(model, tasks), {'click': 'probs_light'})
 
+    def test_history_rates_are_opt_in_and_dssm_keeps_original_features(self):
+        for dataset in config.DATASETS:
+            definition = config.dataset_definition(dataset)
+            for model in config.applicable_models(dataset, 'all'):
+                features, _ = config.view_fields(definition, model)
+                rates = {f.name for f in features} & {'user_positive_rate', 'item_positive_rate'}
+                expected = {'user_positive_rate', 'item_positive_rate'} if (dataset, model) in config.POSITIVE_RATE_MODELS else set()
+                self.assertEqual(rates, expected)
+                if model == 'dssm':
+                    self.assertEqual([f.name for f in features], definition['views']['recall']['features'])
+
     def test_ranking_public_api_without_saved_predictions(self):
         resources = Mock()
         resources.env, resources.root, resources.name = environment(), self.root / 'ranking', 'mq_rank'
@@ -152,7 +163,7 @@ class PreparedTest(unittest.TestCase):
 
     def test_ranking_batch_boundary_and_reordered_responses(self):
         dataset = copy.copy(self.dataset)
-        frame = pd.concat([dataset.valid.iloc[:1]] * 257, ignore_index=True)
+        frame = pd.concat([dataset.valid.iloc[:1]] * 1025, ignore_index=True)
         frame['row_id'] = [str(i) for i in range(len(frame))]
         dataset.valid = frame
         resources = Mock(env=environment(), root=self.root / 'batches')
@@ -167,9 +178,9 @@ class PreparedTest(unittest.TestCase):
                                                      for row in reversed(payload['data']['observations'])]
         observations, predictions, tasks, outputs = run_ranking(dataset, 'deepfm', 'train', resources, api, save_predictions=True)
         ranking_metrics(observations, predictions, tasks, outputs)
-        self.assertEqual([len(call.args[1]['data']['observations']) for call in api.call.call_args_list], [128, 128, 1])
+        self.assertEqual([len(call.args[1]['data']['observations']) for call in api.call.call_args_list], [512, 512, 1])
         saved = pd.read_parquet(resources.root / 'predictions.parquet')
-        self.assertEqual(len(saved), 257)
+        self.assertEqual(len(saved), 1025)
         self.assertEqual(list(saved.columns), ['row_id', 'probs'])
         self.assertFalse((resources.root / 'predictions').exists())
 
@@ -189,24 +200,34 @@ class PreparedTest(unittest.TestCase):
         resources.stage.return_value = nullcontext()
         resources.train_export.return_value = ['v1_export/user', 'v1_export/item']
         resources.deploy.return_value = {'user': 'user_service', 'item': 'item_service'}
-        def execute(sql):
-            if sql.startswith('SELECT catalog_id'):
-                embedding = json.dumps([0.] * config.KUAIRAND_DSSM_PARAMS['output_dim'])
-                return SQLResult(['catalog_id', 'item_tower_emb'], [[1, embedding], [2, embedding]])
-            return SQLResult([], [])
-        resources.execute.side_effect = execute
+        resources.execute.return_value = SQLResult([], [])
         api = Mock()
-        api.call.return_value = []
-        with patch('benchmark.model_quality.retrieval.IndexAdmin') as index, patch.dict('os.environ', {}, clear=True):
+        def call(name, payload, **kwargs):
+            if name.endswith('_load_items'):
+                self.assertEqual(kwargs, {'retry': False})
+                return [{'catalog_id': row['catalog_id'], 'item_tower_emb': [0.] * config.DATASET_MODEL_PARAMS[('kuairand', 'dssm')]['output_dim']}
+                        for row in payload['data']['catalog_input']]
+            return []
+        api.call.side_effect = call
+        with patch('benchmark.model_quality.retrieval.APIClient', return_value=api), patch('benchmark.model_quality.retrieval.IndexAdmin') as index, patch.dict('os.environ', {}, clear=True):
             queries, responses = run_retrieval(dataset, 'train', resources, api)
             index.return_value.wait_count.assert_called_once_with('mq_dssm_vectors', 2)
         statements = '\n'.join(call.args[0] for call in resources.execute.call_args_list)
         self.assertNotIn('_score', statements)
+        self.assertNotIn('popularity', statements)
+        self.assertIn('unseen.score AS score', statements)
+        self.assertEqual(read_json(resources.root / 'config.json')['retrieval'], {'score': 'inner_product'})
+        self.assertIn('DEFINE INPUT TABLE catalog_input', statements)
+        self.assertNotIn('UNION ALL', statements)
+        item_call = next(call for call in api.call.call_args_list if call.args[0].endswith('_load_items'))
+        self.assertEqual({row['catalog_id'] for row in item_call.args[1]['data']['catalog_input']}, {1, 2})
+        self.assertTrue(all(isinstance(row['tag'], list) for row in item_call.args[1]['data']['catalog_input']))
         self.assertNotIn('{{env:UNUSED}}', statements)
-        self.assertIn("'token'=''", statements)
+        self.assertIn("'token' = ''", statements)
         self.assertIn('JOIN allowed', statements)
         self.assertIn('LIMIT 50', statements)
-        inputs = [call.args[1]['data']['query_input'][0] for call in api.call.call_args_list]
+        inputs = [call.args[1]['data']['query_input'][0] for call in api.call.call_args_list
+                  if call.args[0].endswith('_recall')]
         self.assertEqual({row['user_id'] for row in inputs}, {second.user_id.iloc[0]})
         self.assertEqual({row['tab'] for row in inputs}, {'1', '2'})
         self.assertIn('tab', resources.define.call_args.args[2]['user_features'].split(','))
@@ -214,7 +235,7 @@ class PreparedTest(unittest.TestCase):
         self.assertEqual(responses, {query['query_id']: [] for query in queries})
         self.assertFalse((resources.root / 'queries.json').exists())
         self.assertFalse((resources.root / 'predictions.parquet').exists())
-        with patch('benchmark.model_quality.retrieval.IndexAdmin'):
+        with patch('benchmark.model_quality.retrieval.APIClient', return_value=api), patch('benchmark.model_quality.retrieval.IndexAdmin'):
             run_retrieval(dataset, 'train', resources, api, save_predictions=True)
         saved = pd.read_parquet(resources.root / 'predictions.parquet')
         self.assertEqual(saved.query_id.tolist(), list(responses))
@@ -254,6 +275,20 @@ class ResourceTest(unittest.TestCase):
         resource.workloads.get.return_value = None
         resource.workloads.snapshot.return_value = {}
         return resource
+
+    def test_generated_model_sql_is_readable_and_logged_as_executed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            resource = self.resource(directory)
+            resource.define([config.Feature('tag', 'ARRAY<STRING>')], [config.Task('click', 'label')],
+                            {'model': 'tzrec.deepfm', 'note': "a,b; WITH ON = 'quoted'", 'token': '{{env:TEST_TOKEN}}'},
+                            {'columns': {'label': {'type': 'INT'}}})
+            sql = resource.client.execute.call_args.args[0]
+            logged = resource.sql_log.read_text()
+            self.assertIn('\n    `tag` ARRAY<STRING>,\n    `label` INT\n', sql)
+            self.assertIn("\nWITH (\n    'model' = 'tzrec.deepfm',\n", sql)
+            self.assertIn("'note' = 'a,b; WITH ON = ''quoted'''", sql)
+            self.assertIn("'token' = '{{env:TEST_TOKEN}}'", sql)
+            self.assertTrue(logged.endswith(sql + ';\n\n'))
 
     def test_cleanup_attempts_both_services_and_blocks_on_unknown_job(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -404,8 +439,56 @@ class ReportTest(unittest.TestCase):
             self.assertNotIn('baseline', '\n'.join(lines))
             self.assertEqual(results, before)
 
-    def test_array_sql_preserves_aliases_and_empty_arrays(self):
-        sql = input_sql('input', [config.Feature('tag', 'ARRAY<STRING>')], [{'tag': []}, {'tag': ["it's"]}])
-        self.assertIn('UNION ALL', sql)
-        self.assertIn("it''s", sql)
-        self.assertEqual(sql.count('AS `tag`'), 2)
+
+
+class SpeedExecutionTest(unittest.TestCase):
+    def test_item_write_is_not_retried_but_scoring_read_can_retry(self):
+        from benchmark.model_quality.client import APIClient, SQLFailed
+        api = APIClient({'base_url': 'http://unused'})
+        self.addCleanup(api.close)
+        failed = Mock(status_code=500)
+        success = Mock(status_code=200)
+        success.json.return_value = {'data': []}
+        with patch.object(api.session, 'post', side_effect=[failed, success]) as post:
+            with self.assertRaises(SQLFailed):
+                api.call('load_items', {'data': {}}, retry=False)
+            self.assertEqual(post.call_count, 1)
+        with patch.object(api.session, 'post', side_effect=[failed, success]) as post, \
+             patch('benchmark.model_quality.client.time.sleep'):
+            self.assertEqual(api.call('score', {'data': {}}), [])
+            self.assertEqual(post.call_count, 2)
+
+    def test_recall_parallelism_preserves_order_empty_results_and_closes_sessions(self):
+        import threading
+        from benchmark.model_quality.retrieval import predict_queries
+        barrier = threading.Barrier(4)
+        clients = []
+        threads = set()
+        def make_client(config):
+            client = Mock()
+            def call(name, payload):
+                threads.add(threading.get_ident())
+                barrier.wait(timeout=5)
+                query_id = payload['data']['query_input'][0]['query_id']
+                return [] if query_id == '0' else [{'query_id': query_id, 'item_id': 'a', 'score': 1}]
+            client.call.side_effect = call
+            clients.append(client)
+            return client
+        queries = [{'query_id': str(i), 'features': {'query_id': str(i)}, 'seen': []} for i in range(4)]
+        with patch('benchmark.model_quality.retrieval.APIClient', side_effect=make_client):
+            result = predict_queries(queries, [config.Feature('query_id', 'STRING')], False, 'recall', {})
+        self.assertEqual(list(result), ['0', '1', '2', '3'])
+        self.assertEqual(result['0'], [])
+        self.assertEqual(len(threads), 4)
+        for client in clients:
+            client.close.assert_called_once()
+
+    def test_recall_failure_closes_worker_sessions(self):
+        from benchmark.model_quality.retrieval import predict_queries
+        client = Mock()
+        client.call.side_effect = ValueError('prediction failed')
+        queries = [{'query_id': 'q', 'features': {'query_id': 'q'}, 'seen': []}]
+        with patch('benchmark.model_quality.retrieval.APIClient', return_value=client):
+            with self.assertRaisesRegex(ValueError, 'prediction failed'):
+                predict_queries(queries, [config.Feature('query_id', 'STRING')], False, 'recall', {})
+        client.close.assert_called_once()

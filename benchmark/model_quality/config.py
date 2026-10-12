@@ -13,15 +13,17 @@ DATASETS = ('movielens100k', 'kuairand', 'kuairec')
 SEED = 123
 EVAL_ROWS = 20_000
 EVAL_QUERIES = 1_000
-API_BATCH = 128  # Keeps bundled dataset requests below the default 64 KiB REST limit.
-ITEM_BATCH = 32
+API_BATCH = 512  # Prediction request rows; independent of training batch_size.
+ITEM_BATCH = 256  # Item embeddings per catalog-loading request.
+RECALL_WORKERS = 4
 K = 50
-KUAIRAND_POPULARITY_WEIGHT = 1.0  # Blend DSSM similarity with log1p(train clicks).
 TREE_MODELS = ('catboost', 'lightgbm', 'xgboost')
 MODELS = ('dssm', 'wide_and_deep', 'deepfm', 'rocket_launching', *TREE_MODELS, 'mmoe')
 NEURAL_PARAMS = dict(embedding_dim=8, batch_size=64, num_workers=1, num_epochs=1)
 MODEL_PARAMS = {
-    'dssm': dict(user_hidden_units='32,16', item_hidden_units='32,16', output_dim=16),
+    'dssm': dict(user_hidden_units='32,16', item_hidden_units='32,16', output_dim=16,
+                 negative_sampling='pool', negative_sample_count=256,
+                 negative_pool_size=4096, item_id_column='video_id'),
     'wide_and_deep': dict(hidden_units='64,32'),
     'deepfm': dict(hidden_units='64,32'),
     'rocket_launching': dict(booster_hidden_units='64,32', light_hidden_units='32,16'),
@@ -30,10 +32,10 @@ MODEL_PARAMS = {
     'lightgbm': dict(objective='binary', num_iterations=100, num_leaves=31, learning_rate=.05),
     'xgboost': dict(objective='binary', num_iterations=100, max_depth=6, learning_rate=.05),
 }
-KUAIRAND_DSSM_PARAMS = dict(embedding_dim=16, batch_size=256, num_epochs=3, sparse_lr=.01,
-                           user_hidden_units='64,32', item_hidden_units='64,32', output_dim=32)
 # Fixed overrides selected on validation data; evaluation never searches parameters.
 DATASET_MODEL_PARAMS = {
+    ('kuairand', 'dssm'): dict(embedding_dim=16, batch_size=256, num_epochs=6, sparse_lr=.01,
+                             user_hidden_units='64,32', item_hidden_units='64,32', output_dim=32),
     ('movielens100k', 'dssm'): dict(embedding_dim=16, batch_size=256, num_epochs=3, sparse_lr=.01,
                                  user_hidden_units='64,32', item_hidden_units='64,32', output_dim=32),
     ('movielens100k', 'deepfm'): dict(embedding_dim=16, batch_size=256, num_epochs=6, sparse_lr=.03),
@@ -42,6 +44,14 @@ DATASET_MODEL_PARAMS = {
     ('movielens100k', 'lightgbm'): dict(num_iterations=300, max_depth=4, num_leaves=15,
                                     min_data_in_leaf=100, feature_fraction=1., bagging_fraction=1.,
                                     l2_regularization=5.),
+    ('kuairec', 'wide_and_deep'): {
+        'embedding_dim': 16, 'batch_size': 256, 'sparse_lr': .01,
+        'column.duration_s.normalizer': 'method=log10,threshold=1,default=0',
+    },
+    ('kuairec', 'rocket_launching'): {
+        'embedding_dim': 16, 'batch_size': 256, 'sparse_lr': .01,
+        'column.duration_s.normalizer': 'method=log10,threshold=1,default=0',
+    },
     ('kuairec', 'deepfm'): {
         'embedding_dim': 16, 'batch_size': 256, 'sparse_lr': .03,
         'column.duration_s.normalizer': 'method=log10,threshold=1,default=0',
@@ -51,6 +61,15 @@ DATASET_MODEL_PARAMS = {
         'booster_hidden_units': '32,16', 'light_hidden_units': '16',
         'column.duration_s.normalizer': 'method=log10,threshold=1,default=0',
     },
+}
+
+
+# Only validation-selected models use the two smoothed history rates.
+POSITIVE_RATE_MODELS = {
+    ('movielens100k', 'deepfm'), ('movielens100k', 'rocket_launching'),
+    ('movielens100k', 'catboost'), ('movielens100k', 'xgboost'),
+    ('kuairec', 'wide_and_deep'), ('kuairec', 'deepfm'),
+    ('kuairec', 'rocket_launching'), ('kuairec', 'lightgbm'),
 }
 
 
@@ -100,7 +119,9 @@ def applicable_models(dataset, model):
 
 def view_fields(definition, model):
     view = definition['views'][model_view(model)]
-    features = [Feature(name, **definition['columns'][name]) for name in view['features']]
+    use_rates = (definition['id'], model) in POSITIVE_RATE_MODELS
+    features = [Feature(name, **definition['columns'][name]) for name in view['features']
+                if use_rates or name not in ('user_positive_rate', 'item_positive_rate')]
     tasks = [Task(name, definition['tasks'][name]['column']) for name in view['tasks']]
     if {f.name for f in features} & ({t.column for t in tasks} | {'row_id', 'query_id', 'source'}):
         raise ValueError('Labels and audit identities cannot be model features')

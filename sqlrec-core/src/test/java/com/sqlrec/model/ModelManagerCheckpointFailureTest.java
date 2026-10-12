@@ -20,8 +20,52 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 class ModelManagerCheckpointFailureTest {
+    @Test
+    void sharedExportJobUsesOneStatusSnapshotPerPoll() {
+        MetadataAccess db = mock(MetadataAccess.class);
+        String yaml = "kind: Job\nmetadata:\n  name: export\n";
+        Checkpoint user = new Checkpoint();
+        user.setModelName("recall_model");
+        user.setCheckpointName("v1_export/user");
+        user.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
+        user.setYaml(yaml);
+        Checkpoint item = new Checkpoint();
+        item.setModelName("recall_model");
+        item.setCheckpointName("v1_export/item");
+        item.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
+        item.setYaml(yaml);
+        when(db.getCheckpoint("recall_model", "v1_export/user")).thenReturn(user);
+        when(db.getCheckpoint("recall_model", "v1_export/item")).thenReturn(item);
+        List<CheckpointInfo> checkpoints = List.of(
+                new CheckpointInfo("recall_model", "v1_export/user"),
+                new CheckpointInfo("recall_model", "v1_export/item"));
+
+        try (MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
+             MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
+            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
+            k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml))
+                    .thenReturn(new K8sManager.JobStatus("running", null),
+                            new K8sManager.JobStatus("succeeded", null));
+
+            assertFalse(ModelManager.isCheckpointOperationCompleted(checkpoints));
+            assertEquals(Consts.CHECKPOINT_STATUS_CREATED, user.getStatus());
+            assertEquals(Consts.CHECKPOINT_STATUS_CREATED, item.getStatus());
+            k8s.verify(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml), times(1));
+            k8s.verify(() -> K8sManager.deleteYaml(yaml), never());
+
+            assertTrue(ModelManager.isCheckpointOperationCompleted(checkpoints));
+            assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, user.getStatus());
+            assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, item.getStatus());
+            k8s.verify(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml), times(2));
+            k8s.verify(() -> K8sManager.deleteYaml(yaml), times(1));
+            verify(db).upsertCheckpoint(user);
+            verify(db).upsertCheckpoint(item);
+        }
+    }
+
     @Test
     void imagePullFailureMarksCheckpointFailedAndReachesSqlCaller() {
         MetadataAccess db = mock(MetadataAccess.class);
