@@ -23,7 +23,7 @@ source deploy/env.sh
 # Run on one dataset.
 .venv/bin/python -m benchmark.model_quality --model dssm --dataset kuairand
 
-# Run all 22 applicable combinations; MMoE supports only KuaiRand.
+# Run all 28 applicable combinations; unsupported dataset/model pairs are skipped.
 .venv/bin/python -m benchmark.model_quality --model all
 
 # Evaluate the full validation set.
@@ -39,12 +39,13 @@ source deploy/env.sh
 .venv/bin/python -m unittest discover -s benchmark/model_quality/tests -v
 ```
 
-`--model` is required; running without arguments does not start training. Supported models are DSSM, Wide & Deep, DeepFM, Rocket Launching, CatBoost, LightGBM, XGBoost, and MMoE.
+`--model` is required; running without arguments does not start training. Supported models are DSSM, Wide & Deep, DeepFM, Rocket Launching, CatBoost, LightGBM, XGBoost, and MMoE. Each dataset declares its supported models and feature views in YAML. Criteo supports the six single-task ranking models; DSSM supports MovieLens, KuaiRand, and KuaiRec; MMoE supports only KuaiRand. An explicitly requested unsupported combination fails before connecting to the cluster.
 
 Training always uses the full training set with seed=123. Defaults are one epoch for neural models and 100 iterations for tree models. Fixed dataset/model overrides are listed below; they are applied after the common and model-specific defaults in `config.py`. Evaluation never searches or selects parameters. By default, ranking evaluation uses a fixed sample of up to 20,000 validation rows, and retrieval uses up to 1,000 queries. Sampling is independent of labels, and models for the same task use the same evaluation samples. `--full-eval` only removes these evaluation limits. Datasets below the limits use the full validation set. Full training times cannot be compared directly with the old smoke run, which trained on only 32 users.
 
 | Dataset / model | Fixed overrides |
 | --- | --- |
+| Criteo / Wide & Deep, DeepFM, Rocket Launching | Batch 256, logarithmic numeric feature normalization; embedding 8 and 1 epoch |
 | MovieLens / DSSM | Embedding 16, batch 256, 3 epochs, sparse learning rate 0.01, tower layers 64/32, output dimension 32 |
 | MovieLens / Wide & Deep, DeepFM, Rocket Launching | Embedding 16, batch 256, 6 epochs, sparse learning rate 0.03 |
 | MovieLens / LightGBM | 300 iterations, depth 4, 15 leaves, minimum 100 rows per leaf, feature/bagging fractions 1, L2 regularization 5 |
@@ -56,7 +57,18 @@ Training always uses the full training set with seed=123. Defaults are one epoch
 
 For ranking overrides with duration normalization, `column.duration_s.normalizer=method=log10,threshold=1,default=0` maps durations above one second to `log10(seconds)` and all other values to zero. The exported feature configuration applies the same transformation during training and serving. Prepared data and reusable training tables do not change. Every run records the resolved parameters in the model's `config.json`.
 
-MovieLens and KuaiRec prepare two additional numeric features: `user_positive_rate` and `item_positive_rate`. Each is `(history_positives + 1) / (history_interactions + 2)`, a smoothed positive rate. They use the same leakage controls as the existing counts: exclude the current training interaction, and use training data only for validation/test. `POSITIVE_RATE_MODELS` in `config.py` enables them for MovieLens DeepFM, Rocket Launching, CatBoost, and XGBoost, and KuaiRec Wide & Deep, DeepFM, Rocket Launching, and LightGBM. Other models retain their previous inputs. Training tables contain the full view schema; each model selects only its configured inputs. Tree models still use numeric history features (and video duration where available), without raw ID features.
+MovieLens and KuaiRec prepare two additional numeric features: `user_positive_rate` and `item_positive_rate`. Each is `(history_positives + 1) / (history_interactions + 2)`, a smoothed positive rate. They use the same leakage controls as the existing counts: exclude the current training interaction, and use training data only for validation/test. `POSITIVE_RATE_MODELS` in `config.py` enables them for MovieLens DeepFM, Rocket Launching, CatBoost, and XGBoost, and KuaiRec Wide & Deep, DeepFM, Rocket Launching, and LightGBM. Other models retain their previous inputs. Training tables contain the full view schema; each model selects only its configured inputs. On MovieLens, KuaiRand, and KuaiRec, tree models use numeric history features (and video duration where available), without raw ID features.
+
+Criteo 1M is a pure ranking dataset, pinned to Kaggle `datuman/criteo-ad-click-limited-1m` version 4 with an archive SHA256. The original 1,000,000 labeled rows are split by a seed-123 hash of the 39 model input values into approximately 80%/10%/10% train/validation/test. Identical feature rows stay together regardless of label. No user/item identities, retrieval catalog, or history statistics are synthesized. The prepared splits contain 799,561 / 100,266 / 100,173 rows. `row_id` aligns predictions; `feature_id` audits duplicate grouping; neither enters model inputs.
+
+Criteo numeric fields `i1`–`i13` use FLOAT with missing values filled with zero. Category fields `c1`–`c26` preserve the original strings, including leading zeros; empty values become `__MISSING__`. CatBoost and the three neural ranking models use all 39 features. LightGBM/XGBoost use the 13 numeric features because SQLRec's current training/export path accepts only floating-point inputs for these models. Their scores therefore reflect different feature sets. Neural models apply `log10(x)` to numeric values above one and map other values to zero, consistently during training and serving. Tree inputs retain the prepared numeric values. No target encoding or label-derived features are added. All three tree models use 100 iterations.
+
+```bash
+.venv/bin/python -m benchmark.model_quality.prepare --dataset criteo1m --upload
+.venv/bin/python -m benchmark.model_quality --dataset criteo1m --model all --full-eval --save-predictions
+```
+
+Pure ranking runs do not connect to Milvus. Data preparation writes reusable ranking/numeric training views without retrieval files. Changes to shared preparation code create new versions for existing datasets as well; rerun preparation before testing those datasets again.
 
 All DSSM retrieval scores are strictly `inner_product(user_embedding, item_embedding)`. There is no popularity term, extra vector coordinate, normalization, or reranking score. Milvus uses a FLAT inner-product index over the complete eligible catalog; SQL applies the existing seen/observed-item filters and orders by this score, then item ID for ties. KuaiRand DSSM uses `user_id, tab` in the user tower and `video_id, tag, author_id` in the item tower, without history counts or duration.
 
@@ -74,16 +86,18 @@ The two SQL connections serve different purposes: Kyuubi (default port 30009) cr
 
 ## Read the results
 
-The [Model Quality Test](../../docs/en/docs/performance/model-benchmark.md) documents the current fixed configuration and verified full-validation results for all models. DSSM Recall@50/NDCG@50 are 34.26%/19.15% on MovieLens, 11.05%/4.45% on KuaiRand, and 57.82%/51.47% on KuaiRec. All 22 combinations have been retrained and evaluated through the standard CLI using the complete validation sets. Saved predictions passed independent metric and identity checks; actual native configurations and service release were verified. See the [full run](runs/2026-10-15_01-53-44_all-datasets_all-models_full_predictions/summary.md) and its [verification record](runs/2026-10-15_01-53-44_all-datasets_all-models_full_predictions/verification.json). See the [configuration audit](../../docs/reviews/model-quality-current-status.md) for parameter and feature checks, and the [Pool capacity comparison](../../docs/reviews/pool-negative-sampler-larger-pools.md) for why capacity remains 4096. Removed popularity-blended and logQ experiments do not describe the current recipe.
+The [Model Quality Test](../../docs/en/docs/performance/model-benchmark.md) documents the current fixed configuration and verified full-validation results for all models. DSSM Recall@50/NDCG@50 are 34.26%/19.15% on MovieLens, 11.05%/4.45% on KuaiRand, and 57.82%/51.47% on KuaiRec. The original 22 combinations have been retrained and evaluated through the standard CLI using the complete validation sets. Saved predictions passed independent metric and identity checks; actual native configurations and service release were verified. See the [full run](runs/2026-10-15_01-53-44_all-datasets_all-models_full_predictions/summary.md) and its [verification record](runs/2026-10-15_01-53-44_all-datasets_all-models_full_predictions/verification.json). See the [configuration audit](../../docs/reviews/model-quality-current-status.md) for parameter and feature checks, and the [Pool capacity comparison](../../docs/reviews/pool-negative-sampler-larger-pools.md) for why capacity remains 4096. Removed popularity-blended and logQ experiments do not describe the current recipe.
+
+All six Criteo models completed full training and evaluation on all 100,266 validation rows. Saved predictions passed independent AUC/LogLoss recalculation with zero difference, and captured native train/export configurations confirmed the declared feature sets. DeepFM achieved AUC 0.7881 and LogLoss 0.4590. See the [Criteo run](runs/2026-10-16_00-13-32_criteo1m_all-models_full_predictions/summary.md) and [integration verification](../../docs/reviews/criteo1m-integration.md). The existing 22 combinations retain identical features, tasks, and model parameters; all 39 prepared Parquet files across the three original datasets are byte-for-byte unchanged. Their training tables have been prepared under the new version identifiers.
 
 `summary.md` in each new run directory is the main report:
 
 - Ranking: AUC ↑ and LogLoss ↓. MMoE's click and long_view tasks appear separately.
 - Retrieval: Recall@50 ↑ and NDCG@50 ↑. Evaluation preserves the full candidate catalog, all ground-truth targets for selected queries, and filtering of previously seen items.
-- Each row represents one dataset/model/task, with sample count, elapsed time, and completion status. One model typically produces 3 rows; the full matrix produces about 23.
+- Each row represents one dataset/model/task, with sample count, elapsed time, and completion status. One model produces one row per supported dataset/task; the full matrix produces 29 rows for 28 dataset/model combinations.
 - AUC is N/A for a single-class evaluation set. Missing or duplicate prediction IDs raise errors. Empty responses, missing queries, and queries without positives are handled separately.
 
-`COMPLETED` means execution, prediction checks, and service cleanup finished. It does not indicate that a quality threshold was met. Results should not be ranked directly across datasets: MovieLens measures rating preference; KuaiRand measures clicks on mixed standard/random exposures; KuaiRec measures observed watch_ratio preference, with retrieval candidates restricted to each selected query's held-out observed items. Unobserved KuaiRec interactions are not added as negatives. Sampled results estimate performance under the current configuration rather than exact metrics for the full dataset.
+`COMPLETED` means execution, prediction checks, and service cleanup finished. It does not indicate that a quality threshold was met. Results should not be ranked directly across datasets: Criteo measures ad clicks; MovieLens measures rating preference; KuaiRand measures clicks on mixed standard/random exposures; KuaiRec measures observed watch_ratio preference, with retrieval candidates restricted to each selected query's held-out observed items. Unobserved KuaiRec interactions are not added as negatives. Sampled results estimate performance under the current configuration rather than exact metrics for the full dataset.
 
 `results.json` stores core metrics, necessary coverage information, data versions, and stage timings. Each model directory contains `config.json`, `statements.sql`, and `resources.json`. SQL is generated with indented fields, options, and query clauses; `statements.sql` records the executed SQL for review. Predictions are used in memory to calculate metrics and are not saved by default. Runs contain no training data copies, query target/filter sets, or prediction shards.
 
@@ -94,7 +108,7 @@ On failure or Ctrl-C, the script attempts to release the current model's service
 ## Suggested code reading order
 
 1. [`__main__.py`](__main__.py): selects models/datasets, runs them sequentially, saves results, and cleans up in `finally`.
-2. [`config.py`](config.py): fixed model parameters, evaluation budgets, and deployment settings. The three YAML files contain only dataset inputs, fields, and preprocessing definitions.
+2. [`config.py`](config.py): fixed model parameters, evaluation budgets, and deployment settings. The dataset YAML files declare inputs, fields, preprocessing definitions, and model-to-view mappings.
 3. [`ranking.py`](ranking.py): the shared batch prediction path for ranking networks, tree models, and MMoE.
 4. [`metrics.py`](metrics.py), [`report.py`](report.py): four metrics and two small tables.
 5. [`retrieval.py`](retrieval.py): DSSM's two towers, loading the full item catalog through public SQL, and retrieval for each query.

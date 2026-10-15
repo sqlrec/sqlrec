@@ -22,7 +22,9 @@ def check_prepared(root, name):
         raise ValueError(f'{name} preparation rules changed; run the prepare command again')
     if manifest.get('dataset_definition') != dataset_definition(name):
         raise ValueError('Prepared dataset definition differs from the current definition')
-    required = ['train.parquet', 'items.parquet', 'queries_valid.parquet']
+    required = ['train.parquet']
+    if 'dssm' in manifest['dataset_definition']['models']:
+        required.extend(['items.parquet', 'queries_valid.parquet'])
     required.extend(manifest['splits']['valid'])
     if set(manifest.get('training', {})) != set(manifest['dataset_definition']['views']):
         raise ValueError('Prepared dataset is missing fixed training views; run the prepare command again')
@@ -83,21 +85,24 @@ def load_dataset(name, data_root, full_eval=False):
     if train.empty or valid.empty or set(train.row_id) & set(valid.row_id):
         raise ValueError('Empty or overlapping train/valid data')
     for frame in (train, valid):
-        for key in ('row_id', 'user_id', 'video_id', 'query_id'):
-            if frame[key].isna().any():
-                raise ValueError(f'Null dataset identity: {key}')
         for task in definition['tasks'].values():
             binary(frame[task['column']])
-    items = pd.read_parquet(root / 'items.parquet')
-    items = items[items.eligible].sort_values('video_id').reset_index(drop=True)
-    queries = pd.read_parquet(root / 'queries_valid.parquet')
-    if items.empty or items.video_id.isna().any() or items.video_id.duplicated().any():
-        raise ValueError('Empty/null/duplicate catalog identities')
-    if queries.query_id.isna().any() or queries.query_id.duplicated().any():
-        raise ValueError('Null/duplicate query identities')
-    users = queries.set_index('query_id').user_id
-    if not valid.user_id.eq(valid.query_id.map(users)).all():
-        raise ValueError('Query identities do not cover valid user bindings')
+    items, queries = pd.DataFrame(), pd.DataFrame()
+    if 'dssm' in definition['models']:
+        for frame in (train, valid):
+            for key in ('user_id', 'video_id', 'query_id'):
+                if frame[key].isna().any():
+                    raise ValueError(f'Null dataset identity: {key}')
+        items = pd.read_parquet(root / 'items.parquet')
+        items = items[items.eligible].sort_values('video_id').reset_index(drop=True)
+        queries = pd.read_parquet(root / 'queries_valid.parquet')
+        if items.empty or items.video_id.isna().any() or items.video_id.duplicated().any():
+            raise ValueError('Empty/null/duplicate catalog identities')
+        if queries.query_id.isna().any() or queries.query_id.duplicated().any():
+            raise ValueError('Null/duplicate query identities')
+        users = queries.set_index('query_id').user_id
+        if not valid.user_id.eq(valid.query_id.map(users)).all():
+            raise ValueError('Query identities do not cover valid user bindings')
     return Dataset(name, root, definition, manifest, train, valid, items, queries, full_eval)
 
 
@@ -162,7 +167,7 @@ def upload_training_tables(root, warehouse, env):
 
 def training_table(dataset, model, warehouse, env):
     """Reuse the versioned table, checking each view once per loaded dataset."""
-    view = model_view(model)
+    view = model_view(model, dataset.definition)
     if view in dataset.training_tables:
         return dataset.training_tables[view]
     if view == 'recall' and dataset.manifest['training'][view]['rows'] < 2:

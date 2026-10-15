@@ -29,8 +29,11 @@ def arguments():
     parser.add_argument('--data-root', type=Path, default=Path(os.environ.get('BENCH_DATA_ROOT', PACKAGE / 'data')))
     parser.add_argument('--output', type=Path, default=PACKAGE / 'runs', help='Parent directory for a new isolated run')
     args = parser.parse_args()
-    if args.model == 'mmoe' and args.dataset not in ('all', 'kuairand'):
-        parser.error('MMoE is available only on KuaiRand')
+    if args.dataset != 'all':
+        try:
+            applicable_models(args.dataset, args.model)
+        except ValueError as error:
+            parser.error(str(error))
     return args
 
 
@@ -55,8 +58,8 @@ def create_run_directory(args, datasets):
 def main():
     args = arguments()
     names = DATASETS if args.dataset == 'all' else [args.dataset]
-    if args.model == 'mmoe':
-        names = ['kuairand']
+    if args.dataset == 'all' and args.model != 'all':
+        names = [name for name in names if args.model in dataset_definition(name)['models']]
     root = create_run_directory(args, names)
     run_id = uuid.uuid4().hex  # Internal resource identity, independent of the readable folder name.
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s',
@@ -68,7 +71,7 @@ def main():
             _, tasks = view_fields(definition, model)
             results.append({'dataset': name, 'model': model, 'tasks': [task.id for task in tasks],
                             'kind': 'retrieval' if model == 'dssm' else 'ranking',
-                            'candidate_scope': definition['protocol']['candidate_scope'], 'status': 'NOT_EXECUTED'})
+                            'candidate_scope': definition.get('protocol', {}).get('candidate_scope'), 'status': 'NOT_EXECUTED'})
     write_report(root, results, args.full_eval)
     write_json(root / 'config.json', {'model': args.model, 'datasets': list(names), 'full_eval': args.full_eval,
                                       'save_predictions': args.save_predictions, 'data_root': str(args.data_root.resolve())})

@@ -12,7 +12,7 @@ def write_report(root, results, full_eval):
     root = Path(root)
     write_json(root / 'results.json', {'evaluation': 'full' if full_eval else 'sampled', 'results': results})
     lines = ['# Model quality', '', f'Evaluation: {"full valid" if full_eval else "fixed valid sample"}; training: full train.',
-             'MovieLens: rating preference; KuaiRand: mixed standard/random click exposures; KuaiRec: observed engagement.', '']
+             '']
     for kind in ('ranking', 'retrieval'):
         selected = [result for result in results if result['kind'] == kind]
         if not selected:

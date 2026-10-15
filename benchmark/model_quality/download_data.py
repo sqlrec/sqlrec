@@ -1,4 +1,4 @@
-"""Download pinned official archives; extract only the benchmark's input files."""
+"""Download pinned dataset archives; extract only the benchmark's input files."""
 from __future__ import annotations
 
 import shutil
@@ -23,7 +23,7 @@ def download(dataset, output):
     required = set(spec['files'].values())
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    archive = output / Path(urlsplit(spec['url']).path).name
+    archive = output / spec.get('archive', Path(urlsplit(spec['url']).path).name)
     algorithm = 'sha256' if 'sha256' in spec else 'md5'
     expected = spec[algorithm]
     if not archive.exists() or digest(archive, algorithm) != expected:
@@ -42,7 +42,7 @@ def download(dataset, output):
                             stream.write(chunk)
                 if digest(temporary, algorithm) != expected:
                     temporary.unlink()
-                    raise ValueError('Official archive checksum mismatch')
+                    raise ValueError('Dataset archive checksum mismatch')
                 temporary.replace(archive)
                 break
             except (requests.RequestException, ValueError) as error:

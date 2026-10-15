@@ -9,7 +9,7 @@ import yaml
 from .common import digest
 
 PACKAGE = Path(__file__).parent
-DATASETS = ('movielens100k', 'kuairand', 'kuairec')
+DATASETS = ('movielens100k', 'kuairand', 'kuairec', 'criteo1m')
 SEED = 123
 EVAL_ROWS = 20_000
 EVAL_QUERIES = 1_000
@@ -32,8 +32,12 @@ MODEL_PARAMS = {
     'lightgbm': dict(objective='binary', num_iterations=100, num_leaves=31, learning_rate=.05),
     'xgboost': dict(objective='binary', num_iterations=100, max_depth=6, learning_rate=.05),
 }
-# Fixed overrides selected on validation data; evaluation never searches parameters.
+# Fixed dataset budgets and validation-selected overrides; evaluation never searches parameters.
 DATASET_MODEL_PARAMS = {
+    **{('criteo1m', model): {
+        'batch_size': 256,
+        **{f'column.i{i}.normalizer': 'method=log10,threshold=1,default=0' for i in range(1, 14)},
+    } for model in ('wide_and_deep', 'deepfm', 'rocket_launching')},
     ('kuairand', 'dssm'): dict(embedding_dim=16, batch_size=256, num_epochs=6, sparse_lr=.01,
                              user_hidden_units='64,32', item_hidden_units='64,32', output_dim=32),
     ('movielens100k', 'dssm'): dict(embedding_dim=16, batch_size=256, num_epochs=3, sparse_lr=.01,
@@ -90,7 +94,7 @@ def read_dataset_definition(path):
     path = Path(path)
     value = yaml.safe_load(path.read_text())
     if value['id'] not in DATASETS:
-        raise ValueError('Only the three bundled datasets are supported')
+        raise ValueError('Unknown bundled dataset')
     return value, {'dataset_config_sha256': digest(path)}
 
 
@@ -100,30 +104,29 @@ def dataset_definition(name):
     return read_dataset_definition(PACKAGE / 'configs/datasets' / f'{name}.yaml')[0]
 
 
-def model_view(model):
-    if model == 'dssm':
-        return 'recall'
-    if model in TREE_MODELS:
-        return 'trees'
-    return 'multitask' if model == 'mmoe' else 'ranking'
+def model_view(model, definition):
+    try:
+        return definition['models'][model]
+    except KeyError:
+        raise ValueError(f"{model} is unavailable on {definition['id']}") from None
 
 
 def applicable_models(dataset, model):
-    names = list(MODELS) if model == 'all' else [model]
-    if dataset != 'kuairand':
-        names = [name for name in names if name != 'mmoe']
-    if not names:
-        raise ValueError('MMoE requires KuaiRand\'s real click and long_view tasks')
-    return names
+    supported = dataset_definition(dataset)['models']
+    if model == 'all':
+        return [name for name in MODELS if name in supported]
+    if model not in supported:
+        raise ValueError(f'{model} is unavailable on {dataset}')
+    return [model]
 
 
 def view_fields(definition, model):
-    view = definition['views'][model_view(model)]
+    view = definition['views'][model_view(model, definition)]
     use_rates = (definition['id'], model) in POSITIVE_RATE_MODELS
     features = [Feature(name, **definition['columns'][name]) for name in view['features']
                 if use_rates or name not in ('user_positive_rate', 'item_positive_rate')]
     tasks = [Task(name, definition['tasks'][name]['column']) for name in view['tasks']]
-    if {f.name for f in features} & ({t.column for t in tasks} | {'row_id', 'query_id', 'source'}):
+    if {f.name for f in features} & ({t.column for t in tasks} | {'row_id', 'query_id', 'feature_id', 'source'}):
         raise ValueError('Labels and audit identities cannot be model features')
     return features, tasks
 

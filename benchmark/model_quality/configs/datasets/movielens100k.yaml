@@ -67,6 +67,14 @@ tasks:
     column: label
     type: binary
     description: '{label_semantics}'
+models:
+  dssm: recall
+  wide_and_deep: ranking
+  deepfm: ranking
+  rocket_launching: ranking
+  catboost: trees
+  lightgbm: trees
+  xgboost: trees
 views:
   recall:
     features: [user_id, video_id, tag, user_show_count, user_positive_count, item_show_count, item_positive_count]

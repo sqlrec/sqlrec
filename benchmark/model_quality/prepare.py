@@ -174,17 +174,9 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
     for name in ('count', 'positive'):
         item_features[item_statistic[name]] = item_features[item_statistic[name]].fillna(0)
     write_frame(output / 'items.parquet', positive_rates(item_features, config), config)
-    manifest.update({'format_version': 1, 'dataset_definition': config,
-                     'feature_columns': [name for name, spec in config['columns'].items() if 'role' in spec],
-                     'preparation_seed': seed, 'splits': {'train': ['train.parquet'], 'valid': [], 'test': []},
-                     'files': {}, 'training': {}, 'audit': {'train': describe(samples, config)}, 'provenance': provenance()})
-    # Fixed training views belong to the dataset version, not to a test run.
-    for view, spec in config['views'].items():
-        columns = [*spec['features'], *(config['tasks'][task]['column'] for task in spec['tasks'])]
-        frame = positives if view == 'recall' else samples
-        filename = f'training/{view}/split=train/part.parquet'
-        write_frame(output / filename, frame[columns], config)
-        manifest['training'][view] = {'file': filename, 'rows': len(frame)}
+    manifest.update({'splits': {'train': ['train.parquet'], 'valid': [], 'test': []},
+                     'audit': {'train': describe(samples, config)}})
+    write_training_views(output, samples, config, manifest)
     all_ids = set(samples[row_key])
     for split in ('valid', 'test'):
         query_frames, positive_frames = [], []
@@ -203,6 +195,29 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
         write_frame(output / f'queries_{split}.parquet', query, config)
         positive = pd.concat(positive_frames, ignore_index=True)
         write_frame(output / f'recall_{split}.parquet', positive.sample(frac=1, random_state=seed), config)
+    return finish_dataset(output, manifest, config, seed)
+
+
+def write_training_views(output, train, config, manifest):
+    """Persist each declared view once, shared by every run and model using it."""
+    manifest['training'] = {}
+    for view, spec in config['views'].items():
+        columns = [*spec['features'], *(config['tasks'][task]['column'] for task in spec['tasks'])]
+        frame = train
+        if view == 'recall':
+            label = config['tasks'][config['preparation']['primary_task']]['column']
+            frame = train.loc[train[label].eq(1)]
+        filename = f'training/{view}/split=train/part.parquet'
+        write_frame(Path(output) / filename, frame[columns], config)
+        manifest['training'][view] = {'file': filename, 'rows': len(frame)}
+
+
+def finish_dataset(output, manifest, config, seed):
+    """Record schemas, checksums and provenance for either kind of dataset."""
+    output = Path(output)
+    manifest.update({'format_version': 1, 'dataset_definition': config,
+                     'feature_columns': [name for name, spec in config['columns'].items() if 'role' in spec],
+                     'preparation_seed': seed, 'files': {}, 'provenance': provenance()})
     for path in sorted(output.rglob('*.parquet')):
         manifest['files'][path.relative_to(output).as_posix()] = digest(path)
     manifest['fingerprint'] = stable_id(json.dumps(manifest['files'], sort_keys=True), manifest['protocol'],
@@ -213,7 +228,7 @@ def save_dataset(output, train, splits, items, manifest, config, temporal=True, 
 
 def preparation_version(name):
     """One version for these fixed rules, not an experiment/cache framework."""
-    sources = ['prepare.py', 'common.py', f'prepare_{name.replace("100k", "")}.py']
+    sources = ['prepare.py', 'common.py', dataset_definition(name)['preparation']['adapter'].rsplit('.', 1)[-1] + '.py']
     return stable_id(digest(PACKAGE / 'configs/datasets' / f'{name}.yaml'),
                      [digest(PACKAGE / source) for source in sources])[:16]
 
@@ -225,6 +240,7 @@ def prepare_one(name, data_root):
     from .prepare_movielens import prepare as prepare_ml
     from .prepare_kuairand import prepare as prepare_rand
     from .prepare_kuairec import prepare as prepare_rec
+    from .prepare_criteo import prepare as prepare_ctr
 
     version = preparation_version(name)
     target = Path(data_root) / 'prepared' / name / version
@@ -242,7 +258,7 @@ def prepare_one(name, data_root):
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.preparing_', dir=target.parent))
     try:
-        adapters = {'movielens100k': prepare_ml, 'kuairand': prepare_rand, 'kuairec': prepare_rec}
+        adapters = {'movielens100k': prepare_ml, 'kuairand': prepare_rand, 'kuairec': prepare_rec, 'criteo1m': prepare_ctr}
         manifest = adapters[name](raw, staging)
         manifest['preparation_version'] = version
         write_json(staging / 'manifest.json', manifest)

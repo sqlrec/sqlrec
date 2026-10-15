@@ -77,6 +77,15 @@ tasks:
     column: long_view
     type: binary
     description: observed binary long_view
+models:
+  dssm: recall
+  wide_and_deep: ranking
+  deepfm: ranking
+  rocket_launching: ranking
+  catboost: trees
+  lightgbm: trees
+  xgboost: trees
+  mmoe: multitask
 views:
   recall:
     features: [user_id, video_id, tag, author_id, tab]

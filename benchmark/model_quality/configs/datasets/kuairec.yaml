@@ -65,6 +65,14 @@ tasks:
     column: label
     type: binary
     description: watch_ratio > {positive_threshold}; observed preference, not CTR
+models:
+  dssm: recall
+  wide_and_deep: ranking
+  deepfm: ranking
+  rocket_launching: ranking
+  catboost: trees
+  lightgbm: trees
+  xgboost: trees
 views:
   recall:
     features: [user_id, video_id, tag, author_id, user_show_count, user_positive_count, item_show_count, item_positive_count,

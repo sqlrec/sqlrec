@@ -119,7 +119,7 @@ class PreparedTest(unittest.TestCase):
 
     def test_all_model_views_outputs_and_parameters(self):
         combinations = sum(len(config.applicable_models(name, 'all')) for name in config.DATASETS)
-        self.assertEqual(combinations, 22)
+        self.assertEqual(combinations, 28)
         for model in config.MODELS:
             features, tasks = config.view_fields(self.dataset.definition, model)
             params = config.model_parameters(model, features, tasks, self.dataset.train, self.dataset.items, environment(), self.dataset.name)
@@ -424,7 +424,7 @@ class RunnerTest(unittest.TestCase):
 
 
 class ReportTest(unittest.TestCase):
-    def test_full_matrix_is_23_rows_without_historical_comparison(self):
+    def test_full_matrix_is_29_rows_without_historical_comparison(self):
         results = []
         for dataset in config.DATASETS:
             for model in config.applicable_models(dataset, 'all'):
@@ -435,7 +435,7 @@ class ReportTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             write_report(directory, results, False)
             lines = (Path(directory) / 'summary.md').read_text().splitlines()
-            self.assertEqual(sum(line.startswith(('| movielens100k', '| kuairand', '| kuairec')) for line in lines), 23)
+            self.assertEqual(sum(line.startswith(tuple('| ' + name for name in config.DATASETS)) for line in lines), 29)
             self.assertNotIn('baseline', '\n'.join(lines))
             self.assertEqual(results, before)
 

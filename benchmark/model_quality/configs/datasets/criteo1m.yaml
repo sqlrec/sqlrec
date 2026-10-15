@@ -1,0 +1,218 @@
+id: criteo1m
+name: Criteo 1M
+source:
+  version: kaggle-datuman-v4
+  url: https://www.kaggle.com/api/v1/datasets/download/datuman/criteo-ad-click-limited-1m?datasetVersionNumber=4
+  archive: criteo1m-v4.zip
+  sha256: d4c560eb6a05cdbd868efc555e3999f02d2b5c88fdf927881e56f69fde852830
+  homepage: https://www.kaggle.com/datasets/datuman/criteo-ad-click-limited-1m
+  files:
+    observations: Criteo_1M_with_nans.csv
+preparation:
+  adapter: benchmark.model_quality.prepare_criteo
+  seed: 123
+  primary_task: click
+  row_key: row_id
+  parameters:
+    expected_rows: 1000000
+    split_percent:
+    - 80
+    - 10
+    - 10
+columns:
+  label:
+    type: INT
+  row_id:
+    type: STRING
+  feature_id:
+    type: STRING
+  i1:
+    type: FLOAT
+    role: context
+  i2:
+    type: FLOAT
+    role: context
+  i3:
+    type: FLOAT
+    role: context
+  i4:
+    type: FLOAT
+    role: context
+  i5:
+    type: FLOAT
+    role: context
+  i6:
+    type: FLOAT
+    role: context
+  i7:
+    type: FLOAT
+    role: context
+  i8:
+    type: FLOAT
+    role: context
+  i9:
+    type: FLOAT
+    role: context
+  i10:
+    type: FLOAT
+    role: context
+  i11:
+    type: FLOAT
+    role: context
+  i12:
+    type: FLOAT
+    role: context
+  i13:
+    type: FLOAT
+    role: context
+  c1:
+    type: STRING
+    role: context
+  c2:
+    type: STRING
+    role: context
+  c3:
+    type: STRING
+    role: context
+  c4:
+    type: STRING
+    role: context
+  c5:
+    type: STRING
+    role: context
+  c6:
+    type: STRING
+    role: context
+  c7:
+    type: STRING
+    role: context
+  c8:
+    type: STRING
+    role: context
+  c9:
+    type: STRING
+    role: context
+  c10:
+    type: STRING
+    role: context
+  c11:
+    type: STRING
+    role: context
+  c12:
+    type: STRING
+    role: context
+  c13:
+    type: STRING
+    role: context
+  c14:
+    type: STRING
+    role: context
+  c15:
+    type: STRING
+    role: context
+  c16:
+    type: STRING
+    role: context
+  c17:
+    type: STRING
+    role: context
+  c18:
+    type: STRING
+    role: context
+  c19:
+    type: STRING
+    role: context
+  c20:
+    type: STRING
+    role: context
+  c21:
+    type: STRING
+    role: context
+  c22:
+    type: STRING
+    role: context
+  c23:
+    type: STRING
+    role: context
+  c24:
+    type: STRING
+    role: context
+  c25:
+    type: STRING
+    role: context
+  c26:
+    type: STRING
+    role: context
+tasks:
+  click:
+    column: label
+    type: binary
+    description: observed ad click
+models:
+  wide_and_deep: ranking
+  deepfm: ranking
+  rocket_launching: ranking
+  catboost: ranking
+  lightgbm: trees
+  xgboost: trees
+views:
+  ranking:
+    features:
+    - i1
+    - i2
+    - i3
+    - i4
+    - i5
+    - i6
+    - i7
+    - i8
+    - i9
+    - i10
+    - i11
+    - i12
+    - i13
+    - c1
+    - c2
+    - c3
+    - c4
+    - c5
+    - c6
+    - c7
+    - c8
+    - c9
+    - c10
+    - c11
+    - c12
+    - c13
+    - c14
+    - c15
+    - c16
+    - c17
+    - c18
+    - c19
+    - c20
+    - c21
+    - c22
+    - c23
+    - c24
+    - c25
+    - c26
+    tasks:
+    - click
+  trees:
+    features:
+    - i1
+    - i2
+    - i3
+    - i4
+    - i5
+    - i6
+    - i7
+    - i8
+    - i9
+    - i10
+    - i11
+    - i12
+    - i13
+    tasks:
+    - click
