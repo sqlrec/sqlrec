@@ -121,7 +121,16 @@ class RemoteHdfsAccessTest {
                 """);
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         HdfsConfiguration.init();
-        try (URLClassLoader loader = new URLClassLoader(new URL[]{temporary.toUri().toURL()}, original);
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{temporary.toUri().toURL()}, original) {
+            @Override
+            public URL getResource(String name) {
+                // Isolate this fixture from deployed configuration added by bin/test.sh.
+                if ("core-site.xml".equals(name) || "hdfs-site.xml".equals(name)) {
+                    return findResource(name);
+                }
+                return super.getResource(name);
+            }
+        };
              var factory = mockStatic(FileSystem.class)) {
             Thread.currentThread().setContextClassLoader(loader);
             Path path = new Path("hdfs://configured-namenode:8020/models/checkpoint");

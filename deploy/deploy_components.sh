@@ -22,10 +22,6 @@ kubectl create namespace "${NAMESPACE}-milvus" --dry-run=client -o yaml | kubect
 mkdir -p "${CONF_DIR}"
 bash "${dir}/storage/deploy.sh"
 
-# juicefs-hadoop jar must be on the hadoop/spark client classpath before hadoop/deploy.sh runs `hadoop fs` against jfs://
-cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/share/hadoop/common/lib/"
-cp "${LIB_DIR}/${JUICEFS_HADOOP_JAR_NAME}" "${CLIENT_DIR}/${SPARK_CLIENT_DIR_NAME}/jars/"
-
 bash "${dir}/rustfs/deploy.sh"
 bash "${dir}/juicefs/deploy.sh"
 bash "${dir}/hadoop/deploy.sh"

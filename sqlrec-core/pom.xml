@@ -16,6 +16,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <immutables.version>2.8.8</immutables.version>
+        <juicefs.version>1.3.1</juicefs.version>
     </properties>
 
     <dependencies>
@@ -135,6 +136,13 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-mapreduce-client-core</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.juicefs</groupId>
+            <artifactId>juicefs-hadoop</artifactId>
+            <version>${juicefs.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <!-- Independent official Flink client used by compatibility tests, never packaged. -->
