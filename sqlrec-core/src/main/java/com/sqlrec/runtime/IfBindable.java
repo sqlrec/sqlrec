@@ -149,7 +149,7 @@ public class IfBindable extends BindableInterface {
 
         BindableInterface selectedClause = conditionValue ? thenClause : elseClause;
 
-        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "branch", conditionValue ? "then" : "else");
+        Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName(), "branch", conditionValue ? "then" : "else");
         MetricsUtils.getCompositeMeterRegistry()
                 .counter(Consts.METRICS_IF_CACHE_BRANCH, tags)
                 .increment();
@@ -190,7 +190,7 @@ public class IfBindable extends BindableInterface {
         }
         long timeout = ((Number) value).longValue();
         if (timeout <= 0) {
-            incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_DIRECT_FALLBACK);
+            recordTimeinOutcome(context, "direct");
             return elseClause.bind(schema, context);
         }
         return executeThen(schema, context, timeout);
@@ -224,10 +224,10 @@ public class IfBindable extends BindableInterface {
             }
             if (waitingTimedOut) {
                 log.warn("thenClause execution timeout after {}ms, falling back to elseClause", timeout);
-                incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_TIMEOUT);
+                recordTimeinOutcome(context, "timeout");
             } else {
                 log.error("Error executing thenClause, falling back to elseClause", cause);
-                incrementFallbackMetric(context, Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK);
+                recordTimeinOutcome(context, "error");
             }
             return elseClause.bind(schema, context);
         } catch (Error failure) {
@@ -235,17 +235,16 @@ public class IfBindable extends BindableInterface {
             throw failure;
         }
 
+        recordTimeinOutcome(context, "primary_success");
         if (containsReturn) {
             functionContext.commitFunctionReturnFrom(thenContext);
         }
         return result;
     }
 
-    private void incrementFallbackMetric(ExecuteContext context, String metricName) {
-        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
-        MetricsUtils.getCompositeMeterRegistry()
-                .counter(metricName, tags)
-                .increment();
+    private void recordTimeinOutcome(ExecuteContext context, String reason) {
+        Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName(), "reason", reason);
+        MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_IF_TIMEIN_OUTCOME, tags).increment();
     }
 
     @Override

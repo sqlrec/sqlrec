@@ -83,10 +83,10 @@ class IfBindableFailureTest {
                 assertSame(result, parent.getFunctionReturnResult());
                 assertFalse(parent.isCancelled());
                 assertFalse(Thread.currentThread().isInterrupted());
-                assertEquals(1.0, registry.get(Consts.METRICS_IF_CACHE_DIRECT_FALLBACK)
+                assertEquals(1.0, registry.get(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "direct")
                         .tag("name", name).counter().count());
-                assertNull(registry.find(Consts.METRICS_IF_CACHE_TIMEOUT).tag("name", name).counter());
-                assertNull(registry.find(Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK).tag("name", name).counter());
+                assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "timeout").tag("name", name).counter());
+                assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "error").tag("name", name).counter());
             }
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(registry);
@@ -136,9 +136,9 @@ class IfBindableFailureTest {
             assertEquals(2, result.single()[0]);
             assertSame(result, parent.getFunctionReturnResult());
             assertFalse(parent.isCancelled());
-            assertEquals(1.0, registry.get(Consts.METRICS_IF_CACHE_TIMEOUT).tag("name", name).counter().count());
-            assertNull(registry.find(Consts.METRICS_IF_CACHE_DIRECT_FALLBACK).tag("name", name).counter());
-            assertNull(registry.find(Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK).tag("name", name).counter());
+            assertEquals(1.0, registry.get(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "timeout").tag("name", name).counter().count());
+            assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "direct").tag("name", name).counter());
+            assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "error").tag("name", name).counter());
         } finally {
             release.countDown();
             MetricsUtils.getCompositeMeterRegistry().remove(registry);
@@ -195,10 +195,10 @@ class IfBindableFailureTest {
                 assertEquals(2, result.single()[0]);
                 assertSame(result, parent.getFunctionReturnResult());
                 assertFalse(parent.isCancelled());
-                assertEquals(1.0, registry.get(Consts.METRICS_IF_CACHE_EXCEPTION_FALLBACK)
+                assertEquals(1.0, registry.get(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "error")
                         .tag("name", name).counter().count());
-                assertNull(registry.find(Consts.METRICS_IF_CACHE_DIRECT_FALLBACK).tag("name", name).counter());
-                assertNull(registry.find(Consts.METRICS_IF_CACHE_TIMEOUT).tag("name", name).counter());
+                assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "direct").tag("name", name).counter());
+                assertNull(registry.find(Consts.METRICS_IF_TIMEIN_OUTCOME).tag("reason", "timeout").tag("name", name).counter());
             }
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(registry);

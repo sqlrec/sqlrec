@@ -48,16 +48,20 @@ kubectl -n sqlrec get secret prometheus-grafana \
 
 ### 看哪些面板
 
-在 Grafana 的 **SQLRec** 仪表盘中，先选顶部的 `namespace`、`job`、`pod`，再按问题查看：
+两份 Grafana 仪表盘默认聚合当前筛选范围内的所有实例。先选顶部的 `namespace`、`job` 确定范围；`pod`、`instance` 保持 All 时查看整体，选择单个实例后，同一组面板即展示该实例。业务面板保留 path、api、节点名、表名等维度。在 **SQLRec** 仪表盘中按问题查看：
 
 | 想看什么 | 面板 |
 | --- | --- |
-| API 请求耗时、请求速率和状态码 | HTTP Request Metrics |
-| 节点耗时、成功/错误速率和输出行数 | Node Execution Duration、Node Execution Status、Node Data Size |
-| 表查询与缓存分支 | Table Scan Metrics、Table Get By Primary Key Metrics、Table Vector Search Metrics、Cache Table Metrics、If Cache Metrics |
-| SQL 定义更新、活动会话和操作 | Function Update Metrics、Session and Operation Metrics |
+| API 请求耗时、速率、状态、队列 | Service overview、API and SQL outcomes |
+| 节点耗时、状态、输出行数和降级 | Node execution |
+| 表查询、写入 QPS 与失败率、缓存命中与容量 | Tables |
+| 函数刷新、会话/句柄、特征覆盖 | Control plane and feature quality |
 
-**SQLRec JVM** 仪表盘用于看内存、GC、CPU 和线程。它包含一些通用面板；例如 `Log Events` 使用的 `logback_events_total` 并非 SQLRec 当前提供的指标，面板空白时先在 `/metrics` 中确认指标是否存在。仓库脚本只提供采集和仪表盘，没有配置 SQLRec 专用告警规则。
+**SQLRec JVM** 默认展示内存、当前线程数、文件描述符等总用量；CPU 展示实例平均值和最高值，堆展示整体使用率和单实例最高使用率，FD 使用率及 GC 暂停占比展示单实例最高值。平均暂停按总耗时/总次数计算，最长暂停取最大值。内存池、线程状态等语义维度保留；uptime、历史线程峰值、类数和系统负载放在默认折叠的 Instance details 中，选择实例后展开查看。虚拟线程 scheduler Gauge 需要 Java 24+，FD 指标取决于平台；GC 事件发生前部分指标可能不存在。仓库未配置业务 SLO 告警规则。
+
+业务执行器展示线程总数、总积压及单执行器最大积压；缓存条目数按表汇总各实例副本，包含重复 key，不代表去重数据量；Session/Operation 展示持有数量总和。
+
+表写入 QPS 折线图展示速率窗口内平均每秒完成的调用次数，按表、操作和 outcome 分组；一次批量写入计一次，不代表写入行数。失败率按速率窗口计算，为同一表、同一操作的非 success 调用数占全部调用数的比例，包含异常和超时；返回 false 但未抛异常仍记为 success。没有失败时显示 0%，没有写入流量时显示 N/A。
 
 SQLRec UI 的 `/ui/static/index.html` 也能查看函数执行 DAG，以及当前进程中节点的平均耗时和平均输出行数。Docker Demo 可访问 [http://localhost:30001/ui/static/index.html](http://localhost:30001/ui/static/index.html)。这些值来自已记录的成功执行，是历史平均值，不能代表某一次请求。
 
@@ -65,7 +69,7 @@ SQLRec UI 的 `/ui/static/index.html` 也能查看函数执行 DAG，以及当�
 
 1. 访问 SQLRec 的 `/metrics`；调用一次 API 后，确认能看到节点指标。
 2. 在 Prometheus 的 **Status → Targets** 中确认 SQLRec 目标为 `UP`。若没有目标，检查 ServiceMonitor 是否匹配 SQLRec Service 的命名空间、`app=sqlrec` 标签和 `rest` 端口名。
-3. 在 Grafana 选对 `namespace`、`job`、`pod` 和时间范围。SQLRec 仪表盘的选项来自节点指标；尚未执行节点时可能为空，低流量下速率图也可能暂时没有数据。
+3. 在 Grafana 选对 `namespace`、`job`、`pod` 和时间范围。目标筛选来自 `up{service="sqlrec"}`，空闲启动也能选择；低流量下速率图仍可能暂时没有数据。
 
 ## 定位一次请求
 
@@ -117,9 +121,11 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['sqlrec.example.internal:30001']
+        labels:
+          service: sqlrec
 ```
 
-替换为采集器实际能访问的地址；多实例需要发现并抓取每个实例。可导入 `deploy/prometheus/sqlrec_grafana.json` 和 `jvm_grafana.json`，但非 Kubernetes 的静态抓取默认没有 `namespace`、`pod` 标签，需要补充标签或调整仪表盘筛选条件。更多抓取选项见 [Prometheus 配置文档](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)。
+替换为采集器实际能访问的地址；多实例需要发现并抓取每个实例。可导入 `deploy/prometheus/sqlrec_grafana.json` 和 `jvm_grafana.json`。面板限定 `service="sqlrec"`，静态抓取需如上补充该标签；非 Kubernetes 部署没有 namespace/pod 时，保留这些筛选为 All，使用 instance 选择实例。数据源的 scrape interval/Min step 设为 15s，或按实际抓取频率调整。更多抓取选项见 [Prometheus 配置文档](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)。
 
 ### 配置 Trace 导出
 
@@ -145,13 +151,14 @@ Prometheus 暴露的指标名使用下划线；计数器带 `_total`，计时器
 
 | 用途 | 指标 |
 | --- | --- |
-| HTTP 请求量与状态码 | `sqlrec_http_request_count_total` |
+| HTTP 请求量与状态码 | `sqlrec_http_request_duration_seconds_count` |
 | HTTP 平均耗时 | `sqlrec_http_request_duration_seconds_sum`、`sqlrec_http_request_duration_seconds_count` |
+| 业务执行器线程数 / 待处理任务数 | `netty_eventexecutor_workers`、`netty_eventexecutor_tasks_pending`，筛选 `pool="rest-business"` |
 | 节点平均耗时与状态 | `sqlrec_node_exec_duration_seconds_sum`、`sqlrec_node_exec_duration_seconds_count` |
 | 表扫描耗时 | `sqlrec_table_scan_duration_seconds_sum`、`sqlrec_table_scan_duration_seconds_count` |
-| TIMEIN 非正数预算直接降级 | `sqlrec_if_cache_direct_fallback_total` |
-| TIMEIN 等待 THEN 超时 | `sqlrec_if_cache_timeout_total` |
-| TIMEIN 普通异常回退 | `sqlrec_if_cache_exception_fallback_total` |
+| TIMEIN 非正数预算直接降级 | `sqlrec_if_timein_outcome_total{reason="direct"}` |
+| TIMEIN 等待 THEN 超时 | `sqlrec_if_timein_outcome_total{reason="timeout"}` |
+| TIMEIN 普通异常回退 | `sqlrec_if_timein_outcome_total{reason="error"}` |
 
 平均耗时用对应的 `_sum` 除以 `_count`，单位为秒。主键查询和向量搜索还分别有 `sqlrec_table_get_by_primary_key_duration_seconds_*`、`sqlrec_table_vector_search_duration_seconds_*` 指标。例如，比较各节点最近五分钟的平均耗时：
 
@@ -161,7 +168,19 @@ sum by (name) (rate(sqlrec_node_exec_duration_seconds_sum[5m]))
 sum by (name) (rate(sqlrec_node_exec_duration_seconds_count[5m]))
 ```
 
-HTTP 指标的 `path` 会归一化，例如 `/api/v1/demo_rec` 记为 `/api/v1/{apiName}`，不能用于区分具体 API。请求体中的 `metricTags` 可给节点执行等指标附加标签，但 HTTP 指标和部分 Connector 指标不会继承它。只使用取值数量有限的标签，如固定场景；不要传用户 ID、请求 ID。请求格式见[发布和调用 API](../guides/api.md)。
+HTTP 指标的 `path` 使用实际请求路径，不包含查询参数，例如 `/api/v1/demo_rec?trace=true` 记为 `/api/v1/demo_rec`。API、UI、未知路径及查询参数解析失败的请求均保留实际路径，不使用模板或统一占位值。具体 API 的执行结果使用 `sqlrec_api_execution_duration_seconds_*{api="demo_rec",outcome="success"}`；SQL statement 使用 `sqlrec_sql_execution_duration_seconds_*`，可以观察 HTTP 200 内部的 SQL 失败。节点与表执行统一使用 `outcome` 标签，节点取消另有 `phase=before_start/running`，不能把取消事件与 Timer 的 cancelled 次数相加。
+
+在进程环境中配置 `METRICS_TAG_KEYS=scene,experiment`，统一打点 helper 会从当前执行变量提取同名值，直接导出为 `scene`、`experiment`。配置为空时不附加业务标签；解析时 trim、忽略空项并去重，配置在启动时固定，请求不能覆盖。缺失、null、空白值统一为空字符串；与当前指标的系统标签同名时，系统标签优先。未配置变量（包括 log_id）不会自动导出。HTTP 与表指标不继承业务维度，API/SQL/节点、分支/降级、特征覆盖指标支持它。打点时读取当前变量值，同一事件复用一份标签快照；不会更改业务原值。直方图与注册失败回调在实际 Prometheus registry 初始化时配置，composite 仅负责分发指标。
+
+业务标签非空值按原值记录，不限制维度数、取值数量、长度、组合数或 meter 总量，也不设置变量名黑名单。配置键保留合法标签名的格式校验。HTTP method 使用请求中的原值；SQL statement_type 使用首个词的大写形式，空 SQL 记为空字符串，不做白名单归并。`sqlrec_metrics_registration_failures_total` 记录注册失败。
+
+HTTP、API 和主要表查询默认提供有限直方图桶；节点按 `METRICS_HISTOGRAM_NODES=demo_rec:RETURN,demo_rec:items` 精确名称开启，默认关闭节点桶。桶边界为 5/10/25/50/100/250/500/1000/3000/10000/30000/60000ms，另有 +Inf；分位数精度受桶宽限制，超过最大有限桶的分位数也不能准确表示。
+
+HTTP 仅保留 request duration Timer，从业务 Handler 开始执行计到响应写操作完成（含写失败），不包含此前业务队列等待或客户端网络全程。QPS、状态码比例、平均耗时、P95/P99 均来自这个 Timer；进入 Handler 前被拒绝的请求不计入。使用 Netty 内置业务线程分发，队列满时沿用 Netty 的拒绝机制，不保证返回 HTTP 503。线程和队列使用官方 `NettyEventExecutorMetrics`，固定 `pool="rest-business"`；workers 是工作线程总数，pending 按线程 `name` 导出，包含 HTTP 以外的 pipeline 任务。不额外采集排队/处理耗时、在途请求、拒绝或写失败计数。
+
+表缓存启用 Caffeine `recordStats()`，通过 Micrometer 官方 `CaffeineCacheMetrics` 采集。面板使用 `cache_gets_total{result="hit|miss"}`、`cache_size`、`cache_evictions_total`，固定 `cache`/`table` 标签均为完整表名。命中率合并 read-through/cache-only 两种读取，未启用缓存的请求不计入；不增加容量或后端加载耗时等自定义缓存指标。表刷新创建新缓存时，先注销同表旧指标，再绑定新实例；新实例关闭缓存时只注销旧指标。成功刷新表清单并确认某表已删除时，注销该表的缓存指标；读取元数据失败不触发删表注销。未变化的表复用原缓存及其指标。新缓存的累计计数重新开始；Prometheus 已存储的历史数据保留，跨实例切换的窗口不能视为精确连续计数。条目数为估算值，非字节占用。
+
+UI 的成功节点均值按所有业务标签组合的总量/次数加权计算，仍是本进程累计历史值。
 
 ### Trace 配置
 

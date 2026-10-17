@@ -2,8 +2,10 @@ package com.sqlrec.schema;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.HiveTableUtils;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.udf.UdfManager;
@@ -95,6 +97,15 @@ public class HmsSchema extends AbstractSchema {
                 Table table = TableFactoryUtils.getTableFromHmsTable(tableMeta);
                 if (table != null) {
                     tableMap.put(tableName, table);
+                }
+            }
+            // Modification times survive explicit invalidation, when oldTableMap is unavailable.
+            for (String oldTableName : oldModificationTimes.keySet()) {
+                if (!newModificationTimes.containsKey(oldTableName)) {
+                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(databaseName)
+                            ? oldTableName
+                            : databaseName + "." + oldTableName;
+                    MetricsUtils.unregisterTableCacheMetrics(fullName);
                 }
             }
             tableModificationTimes = Collections.unmodifiableMap(newModificationTimes);

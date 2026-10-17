@@ -80,7 +80,7 @@ public class ExecuteContextImplCancelTest {
 
     @Test
     public void testCloneStillSharesVariablesAndFunNameStack() {
-        // regression: clone semantics unchanged (shares variables/metricsTags, copies funNameStack)
+        // regression: clone semantics unchanged (shares variables, copies funNameStack)
         ExecuteContextImpl root = new ExecuteContextImpl();
         root.setVariable("k", "v");
         root.addFunNameToStack("fun1");

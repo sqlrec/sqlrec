@@ -8,7 +8,7 @@ import java.util.Map;
  *
  * <p>{@code data} holds input tables keyed by table name (each table is a list of row maps);
  * {@code sqls} holds SQL statements for the {@code /sql/v1} endpoint;
- * {@code params} and {@code metricTags} carry execution variables and metric tags.
+ * {@code params} carries execution variables, including configured business metric dimensions.
  *
  * <p>This class is part of the external interface protocol shared between the
  * frontend REST layer and remote callers (e.g. {@code call_sqlrec_api} UDF).
@@ -17,7 +17,6 @@ public class RequestData {
     private Map<String, List<Map<String, Object>>> data;
     private List<String> sqls;
     private Map<String, String> params;
-    private Map<String, String> metricTags;
 
     public Map<String, List<Map<String, Object>>> getData() {
         return data;
@@ -43,11 +42,4 @@ public class RequestData {
         this.params = params;
     }
 
-    public Map<String, String> getMetricTags() {
-        return metricTags;
-    }
-
-    public void setMetricTags(Map<String, String> metricTags) {
-        this.metricTags = metricTags;
-    }
 }

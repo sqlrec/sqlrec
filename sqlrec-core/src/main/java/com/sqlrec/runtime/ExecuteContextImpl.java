@@ -17,7 +17,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ExecuteContextImpl implements ExecuteContext {
     private Map<String, String> variableMap;
-    private Map<String, String> metricsTagMap;
     private List<String> funNameStack;
     private Object traceContext;
     private FunctionReturnState functionReturnState;
@@ -28,7 +27,6 @@ public class ExecuteContextImpl implements ExecuteContext {
     public ExecuteContextImpl() {
         variableMap = new ConcurrentHashMap<>();
         variableMap.put(Consts.LOG_ID, UUID.randomUUID().toString());
-        metricsTagMap = new ConcurrentHashMap<>();
         funNameStack = new ArrayList<>();
         functionReturnState = null;
         parent = null;
@@ -36,7 +34,6 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
         variableMap = parentContext.variableMap;
-        metricsTagMap = parentContext.metricsTagMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
         traceContext = parentContext.traceContext;
         functionReturnState = parentContext.functionReturnState;
@@ -65,16 +62,6 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public Map<String, String> getVariables() {
         return variableMap;
-    }
-
-    @Override
-    public void setMetricsTag(String key, String value) {
-        metricsTagMap.put(key, value);
-    }
-
-    @Override
-    public Map<String, String> getMetricsTags() {
-        return metricsTagMap;
     }
 
     @Override

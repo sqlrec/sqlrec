@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +46,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         if (oldRows.size() != newRows.size()) {
             throw new IllegalArgumentException("UPDATE row counts do not match");
         }
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
         try {
             int updated = replaceAllImpl(oldRows, newRows);
@@ -61,10 +60,10 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             return updated > 0;
         } catch (Throwable e) {
             log.error("replaceAll in table {} error", tableName, e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "addAll", status, startTime);
+            recordDuration("update", "true", status, startTime);
         }
     }
 
@@ -84,12 +83,11 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         return modified;
     }
 
-    private void recordDuration(String metricName, String operation, String status, long startTime) {
-        Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", tableName,
-                "operation", operation, "status", status);
+    private void recordDuration(String operation, String batch, String status, long startTime) {
+        Tags tags = Tags.of("table", tableName, "operation", operation, "batch", batch, "outcome", status);
         MetricsUtils.getCompositeMeterRegistry()
-                .timer(metricName, tags)
-                .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+                .timer(Consts.METRICS_TABLE_WRITE_DURATION, tags)
+                .record(System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
     }
 
     private void invalidateCacheIfNeeded(Object[] row) {
@@ -134,7 +132,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
     @Override
     public boolean add(Object[] objects) {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
 
         try {
@@ -146,10 +144,10 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             return result;
         } catch (Throwable e) {
             log.error("add to table {} error", tableName, e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "add", status, startTime);
+            recordDuration("insert", "false", status, startTime);
         }
     }
 
@@ -159,7 +157,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             throw new RuntimeException("SqlRecCollection only support Object[]");
         }
 
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
 
         try {
@@ -174,10 +172,10 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             return result;
         } catch (Throwable e) {
             log.error("remove from table {} error", tableName, e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            recordDuration(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, "remove", status, startTime);
+            recordDuration("delete", "false", status, startTime);
         }
     }
 
@@ -188,7 +186,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
 
     @Override
     public boolean addAll(Collection<? extends Object[]> c) {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
 
         try {
@@ -204,10 +202,10 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             return result;
         } catch (Throwable e) {
             log.error("addAll to table {} error", tableName, e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            recordDuration(Consts.METRICS_TABLE_COLLECTION_ADD_DURATION, "addAll", status, startTime);
+            recordDuration("insert", "true", status, startTime);
         }
     }
 
@@ -219,7 +217,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             }
         }
 
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
 
         try {
@@ -235,10 +233,10 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
             return result;
         } catch (Throwable e) {
             log.error("removeAll from table {} error", tableName, e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            recordDuration(Consts.METRICS_TABLE_COLLECTION_REMOVE_DURATION, "removeAll", status, startTime);
+            recordDuration("delete", "true", status, startTime);
         }
     }
 

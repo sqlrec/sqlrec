@@ -15,8 +15,6 @@ public interface ReadonlyContext {
 
     Map<String, String> getVariables();
 
-    Map<String, String> getMetricsTags();
-
     String getLogId();
 
     Object getTraceContext();

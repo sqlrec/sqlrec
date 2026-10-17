@@ -65,27 +65,22 @@ public final class SqlFunctionCache {
     }
 
     private static SqlFunctionBindable refreshFunction(String functionName) throws Exception {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
-        String result = "success";
         try {
             Cache<String, SqlFunctionBindable> temporaryCache = Caffeine.newBuilder().build();
             SqlFunctionBindable bindable =
                     new CompileManager(temporaryCache).getSqlFunction(functionName);
             log.info("SQL function cache refreshed: {}", functionName);
             return bindable;
-        } catch (Exception e) {
+        } catch (Exception | Error e) {
             status = "error";
-            result = "failed";
             throw e;
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
+            long duration = System.nanoTime() - startTime;
             MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_FUNCTION_UPDATE_DURATION, Tags.of("status", status))
-                    .record(duration, TimeUnit.MILLISECONDS);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_FUNCTION_UPDATE_COUNT, Tags.of("result", result))
-                    .increment();
+                    .timer(Consts.METRICS_FUNCTION_UPDATE_DURATION, Tags.of("outcome", status))
+                    .record(duration, TimeUnit.NANOSECONDS);
         }
     }
 

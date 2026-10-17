@@ -50,11 +50,11 @@ public class ProxyAllBindable extends ForwardingBindable {
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         if (context.isCancelled()) {
-            recordCancelled(context);
+            recordCancelled(context, "before_start");
             throw new RuntimeException("node " + getName() + " execution cancelled before start");
         }
 
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         long count = 0;
         String status = "success";
         boolean debugPrint = isDebugPrintEnabled(context);
@@ -78,7 +78,7 @@ public class ProxyAllBindable extends ForwardingBindable {
 
             if (debugPrint) {
                 log.info("[{}] node [{}] execution complete, cost {} ms", logId, nodeName,
-                        System.currentTimeMillis() - startTime);
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime));
             }
             return result;
         } catch (Throwable failure) {
@@ -89,7 +89,6 @@ public class ProxyAllBindable extends ForwardingBindable {
             }
             if (context.isCancelled()) {
                 status = "cancelled";
-                recordCancelled(context);
                 throw propagate(failure);
             }
             boolean timeout = failure instanceof TimeoutException;
@@ -99,15 +98,20 @@ public class ProxyAllBindable extends ForwardingBindable {
                     : "Node " + nodeName + " execution failed";
             throw new RuntimeException(message, failure);
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            TraceUtils.endSpan(span, logId, duration, count, status, error);
-            Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName(), "status", status);
+            long duration = System.nanoTime() - startTime;
+            TraceUtils.endSpan(span, logId, TimeUnit.NANOSECONDS.toMillis(duration), count, status, error);
+            Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName());
             MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_NODE_EXEC_DURATION, tags)
-                    .record(duration, TimeUnit.MILLISECONDS);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_NODE_DATA_SIZE, tags)
-                    .record(count);
+                    .timer(Consts.METRICS_NODE_EXEC_DURATION, tags.and("outcome", status))
+                    .record(duration, TimeUnit.NANOSECONDS);
+            if ("success".equals(status)) {
+                MetricsUtils.getCompositeMeterRegistry()
+                        .summary(Consts.METRICS_NODE_ROWS, tags.and("outcome", status))
+                        .record(count);
+            } else if ("cancelled".equals(status)) {
+                MetricsUtils.getCompositeMeterRegistry()
+                        .counter(Consts.METRICS_NODE_CANCELLED, tags.and("phase", "running")).increment();
+            }
         }
     }
 
@@ -168,7 +172,7 @@ public class ProxyAllBindable extends ForwardingBindable {
         }
 
         log.warn("ignore exception when bind cache table {}: {}", cacheTableName, failure.getMessage(), failure);
-        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+        Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName());
         MetricsUtils.getCompositeMeterRegistry()
                 .counter(Consts.METRICS_CACHE_TABLE_IGNORE_EXCEPTION, tags)
                 .increment();
@@ -185,8 +189,8 @@ public class ProxyAllBindable extends ForwardingBindable {
         return Linq4j.asEnumerable(rows);
     }
 
-    private void recordCancelled(ExecuteContext context) {
-        Tags tags = MetricsUtils.createTags(context.getMetricsTags(), "name", getName());
+    private void recordCancelled(ExecuteContext context, String phase) {
+        Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName(), "phase", phase);
         MetricsUtils.getCompositeMeterRegistry()
                 .counter(Consts.METRICS_NODE_CANCELLED, tags)
                 .increment();

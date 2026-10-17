@@ -589,7 +589,7 @@ Feature coverage metrics function that calculates feature coverage for each fiel
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `metricsName` | String | Metrics name |
+| `metricGroup` | String | Group label within the fixed feature metric families |
 | `tables` | CacheTable... | One or more input tables |
 
 **Return Value**: No return value.
@@ -605,8 +605,8 @@ CALL feature_coverage_metrics('user.feature.coverage', user_info);
 ```
 
 **Notes**:
-- If table is empty, it will be skipped
-- Metrics name cannot be empty
+- Non-missing and observed samples increment `sqlrec_feature_non_missing_total` and `sqlrec_feature_observed_total`, grouped by table/field/group for sample-weighted coverage.
+- Empty tables increment `sqlrec_feature_empty_batches_total`. The group must be nonempty; arbitrary metric names are not created.
 
 ---
 

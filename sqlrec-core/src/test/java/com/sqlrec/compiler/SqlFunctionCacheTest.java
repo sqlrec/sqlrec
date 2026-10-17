@@ -18,7 +18,6 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -103,13 +102,9 @@ class SqlFunctionCacheTest {
             assertNotSame(original, refreshed);
             assertEquals(2, executeScalar(refreshed));
 
-            Counter success = metrics.find(Consts.METRICS_FUNCTION_UPDATE_COUNT)
-                    .tag("result", "success")
-                    .counter();
             Timer duration = metrics.find(Consts.METRICS_FUNCTION_UPDATE_DURATION)
-                    .tag("status", "success")
+                    .tag("outcome", "success")
                     .timer();
-            assertEquals(1.0, success.count());
             assertEquals(1, duration.count());
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(metrics);
@@ -171,13 +166,9 @@ class SqlFunctionCacheTest {
             assertSame(original, manager.getSqlFunction("deleted"));
             assertEquals(1, executor.size());
 
-            Counter failed = metrics.find(Consts.METRICS_FUNCTION_UPDATE_COUNT)
-                    .tag("result", "failed")
-                    .counter();
             Timer duration = metrics.find(Consts.METRICS_FUNCTION_UPDATE_DURATION)
-                    .tag("status", "error")
+                    .tag("outcome", "error")
                     .timer();
-            assertEquals(1.0, failed.count());
             assertEquals(1, duration.count());
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(metrics);

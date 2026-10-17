@@ -390,14 +390,14 @@ final class UiApiService {
 
     private static double getNodeAvgExecTime(String nodeName) {
         try {
-            Tags tags = Tags.of("name", nodeName, "status", "success");
-            Timer timer = MetricsUtils.getCompositeMeterRegistry()
+            Tags tags = Tags.of("name", nodeName, "outcome", "success");
+            java.util.Collection<Timer> timers = MetricsUtils.getCompositeMeterRegistry()
                     .find(Consts.METRICS_NODE_EXEC_DURATION)
                     .tags(tags)
-                    .timer();
-            return timer != null && timer.count() > 0
-                    ? timer.mean(TimeUnit.MILLISECONDS)
-                    : -1;
+                    .timers();
+            long count = timers.stream().mapToLong(Timer::count).sum();
+            double total = timers.stream().mapToDouble(timer -> timer.totalTime(TimeUnit.MILLISECONDS)).sum();
+            return count > 0 ? total / count : -1;
         } catch (Exception e) {
             logger.debug("Failed to get avg exec time for node: {}", nodeName);
             return -1;
@@ -406,12 +406,14 @@ final class UiApiService {
 
     private static double getNodeAvgDataCount(String nodeName) {
         try {
-            Tags tags = Tags.of("name", nodeName, "status", "success");
-            DistributionSummary summary = MetricsUtils.getCompositeMeterRegistry()
-                    .find(Consts.METRICS_NODE_DATA_SIZE)
+            Tags tags = Tags.of("name", nodeName, "outcome", "success");
+            java.util.Collection<DistributionSummary> summaries = MetricsUtils.getCompositeMeterRegistry()
+                    .find(Consts.METRICS_NODE_ROWS)
                     .tags(tags)
-                    .summary();
-            return summary != null && summary.count() > 0 ? summary.mean() : -1;
+                    .summaries();
+            long count = summaries.stream().mapToLong(DistributionSummary::count).sum();
+            double total = summaries.stream().mapToDouble(DistributionSummary::totalAmount).sum();
+            return count > 0 ? total / count : -1;
         } catch (Exception e) {
             logger.debug("Failed to get avg data count for node: {}", nodeName);
             return -1;

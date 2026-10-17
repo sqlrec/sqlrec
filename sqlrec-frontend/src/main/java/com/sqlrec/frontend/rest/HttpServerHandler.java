@@ -9,6 +9,7 @@ import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.frontend.utils.RestUtils;
 import io.micrometer.core.instrument.Tags;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -47,12 +48,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
+        // Netty has already dispatched this request to the business executor.
         long startNanos = System.nanoTime();
-        RequestContext requestContext = null;
+        QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
         FullHttpResponse response;
 
         try {
-            requestContext = parseRequest(request);
+            RequestContext requestContext = parseRequest(request, decoder);
             response = dispatch(requestContext);
         } catch (IllegalArgumentException e) {
             logger.debug("Invalid HTTP request: uri={}, message={}", request.uri(), e.getMessage());
@@ -63,14 +65,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
                     RestUtils.errorMessage(e, "internal server error"));
         }
 
-        String metricsPath = requestContext == null
-                ? "unmatched"
-                : normalizeMetricsPath(requestContext.path());
-        writeResponse(ctx, request, response, metricsPath, startNanos);
+        writeResponse(ctx, request, response, decoder.rawPath(), startNanos);
     }
 
-    private RequestContext parseRequest(FullHttpRequest request) {
-        QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
+    private RequestContext parseRequest(FullHttpRequest request, QueryStringDecoder decoder) {
         return new RequestContext(
                 request.method(),
                 decoder.rawPath(),
@@ -156,43 +154,21 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     private void writeResponse(ChannelHandlerContext ctx, FullHttpRequest request,
                                FullHttpResponse response, String path, long startNanos) {
-        long durationNanos = System.nanoTime() - startNanos;
         Tags tags = Tags.of("path", path)
                 .and("method", request.method().name())
                 .and("status", String.valueOf(response.status().code()));
 
-        MetricsUtils.getCompositeMeterRegistry()
+        boolean keepAlive = HttpUtil.isKeepAlive(request);
+        response.headers().set(HttpHeaderNames.CONNECTION,
+                keepAlive ? HttpHeaderValues.KEEP_ALIVE : HttpHeaderValues.CLOSE);
+        // Notify on the I/O loop so later business tasks do not delay this measurement.
+        ChannelFuture written = ctx.writeAndFlush(response, ctx.channel().newPromise());
+        written.addListener(future -> MetricsUtils.getCompositeMeterRegistry()
                 .timer(Consts.METRICS_HTTP_REQUEST_DURATION, tags)
-                .record(durationNanos, TimeUnit.NANOSECONDS);
-        MetricsUtils.getCompositeMeterRegistry()
-                .counter(Consts.METRICS_HTTP_REQUEST_COUNT, tags)
-                .increment();
-
-        if (HttpUtil.isKeepAlive(request)) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-            ctx.writeAndFlush(response);
-        } else {
-            ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                .record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS));
+        if (!keepAlive) {
+            written.addListener(ChannelFutureListener.CLOSE);
         }
-    }
-
-    private String normalizeMetricsPath(String path) {
-        if (SQL_V1_PATH.equals(path)) {
-            return SQL_V1_PATH;
-        }
-        if (path.startsWith(API_V1_PREFIX)) {
-            return API_V1_PREFIX + "{apiName}";
-        }
-        if (METRICS_PATH.equals(path)) {
-            return METRICS_PATH;
-        }
-        if (path.startsWith(UI_STATIC_PREFIX)) {
-            return UI_STATIC_PREFIX + "{resource}";
-        }
-        if (path.startsWith(UI_API_PREFIX)) {
-            return UI_API_PREFIX + "{resource}";
-        }
-        return "unmatched";
     }
 
     // Connection lifecycle

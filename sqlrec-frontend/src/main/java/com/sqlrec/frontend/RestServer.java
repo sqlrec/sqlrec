@@ -1,9 +1,12 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.rest.HttpServerHandler;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.binder.netty4.NettyEventExecutorMetrics;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -45,6 +48,8 @@ public class RestServer {
                 RejectedExecutionHandlers.reject());
 
         try {
+            new NettyEventExecutorMetrics(businessGroup, Tags.of("pool", "rest-business"))
+                    .bindTo(MetricsUtils.getCompositeMeterRegistry());
             logger.info(
                     "RestServer is running on port {}, businessExecutorThreads={}, businessMaxPendingTasks={}",
                     SqlRecConfigs.REST_SERVER_PORT.getValue(),

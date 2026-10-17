@@ -61,7 +61,7 @@ public class SqlRecApiClientUnitTest {
     @Test
     public void testCallFunctionApiEmptyUrl() {
         assertThrows(IllegalArgumentException.class, () ->
-                SqlRecApiClient.callFunctionApi("", new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi("", new HashMap<>(), null));
     }
 
     /**
@@ -80,7 +80,7 @@ public class SqlRecApiClientUnitTest {
         Map<String, List<Map<String, Object>>> data = new HashMap<>();
 
         ExecuteData result = SqlRecApiClient.callFunctionApi(
-                "http://test", data, null, null);
+                "http://test", data, null);
 
         // Assert the returned ExecuteData is not null
         assertNotNull(result);
@@ -97,7 +97,7 @@ public class SqlRecApiClientUnitTest {
         when(mockResponse.code()).thenReturn(404);
 
         assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null));
     }
 
     /**
@@ -106,7 +106,7 @@ public class SqlRecApiClientUnitTest {
     @Test
     public void testCallSqlApiEmptyUrl() {
         assertThrows(IllegalArgumentException.class, () ->
-                SqlRecApiClient.callSqlApi("", Arrays.asList("SELECT 1"), null, null));
+                SqlRecApiClient.callSqlApi("", Arrays.asList("SELECT 1"), null));
     }
 
     /**
@@ -122,7 +122,7 @@ public class SqlRecApiClientUnitTest {
         when(mockBody.string()).thenReturn("{\"dataList\":[],\"status\":\"ok\"}");
 
         ExecuteDataList result = SqlRecApiClient.callSqlApi(
-                "http://test", Arrays.asList("SELECT 1"), null, null);
+                "http://test", Arrays.asList("SELECT 1"), null);
 
         // Assert the returned ExecuteDataList is not null
         assertNotNull(result);
@@ -134,7 +134,7 @@ public class SqlRecApiClientUnitTest {
     @Test
     public void testCallFunctionApiNullUrl() {
         assertThrows(IllegalArgumentException.class, () ->
-                SqlRecApiClient.callFunctionApi(null, new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi(null, new HashMap<>(), null));
     }
 
     /**
@@ -150,7 +150,7 @@ public class SqlRecApiClientUnitTest {
         when(mockBody.string()).thenReturn("not valid json");
 
         assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null));
     }
 
     /**
@@ -166,7 +166,7 @@ public class SqlRecApiClientUnitTest {
         when(mockBody.string()).thenReturn("");
 
         ExecuteData result = SqlRecApiClient.callFunctionApi(
-                "http://test", new HashMap<>(), null, null);
+                "http://test", new HashMap<>(), null);
         assertNotNull(result);
     }
 
@@ -181,7 +181,7 @@ public class SqlRecApiClientUnitTest {
         when(mockResponse.code()).thenReturn(500);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null));
         assertTrue(ex.getMessage().contains("500"));
     }
 
@@ -195,7 +195,7 @@ public class SqlRecApiClientUnitTest {
         when(mockCall.execute()).thenThrow(new IOException("connection refused"));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null, null));
+                SqlRecApiClient.callFunctionApi("http://test", new HashMap<>(), null));
         assertTrue(ex.getMessage().contains("connection refused"));
     }
 
@@ -205,7 +205,7 @@ public class SqlRecApiClientUnitTest {
     @Test
     public void testCallSqlApiNullUrl() {
         assertThrows(IllegalArgumentException.class, () ->
-                SqlRecApiClient.callSqlApi(null, Arrays.asList("SELECT 1"), null, null));
+                SqlRecApiClient.callSqlApi(null, Arrays.asList("SELECT 1"), null));
     }
 
     /**
@@ -221,7 +221,7 @@ public class SqlRecApiClientUnitTest {
         when(mockBody.string()).thenReturn("not json");
 
         assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null, null));
+                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null));
     }
 
     /**
@@ -234,7 +234,7 @@ public class SqlRecApiClientUnitTest {
         when(mockCall.execute()).thenThrow(new IOException("timeout"));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null, null));
+                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null));
         assertTrue(ex.getMessage().contains("timeout"));
     }
 
@@ -249,7 +249,7 @@ public class SqlRecApiClientUnitTest {
         when(mockResponse.code()).thenReturn(500);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null, null));
+                SqlRecApiClient.callSqlApi("http://test", Arrays.asList("SELECT 1"), null));
         assertTrue(ex.getMessage().contains("500"));
     }
 }

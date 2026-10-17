@@ -77,7 +77,7 @@ class RestExecutorTest {
                 ExecuteContext execution = call.getArgument(1);
                 context.set(execution);
                 assertEquals("before", execution.getVariable("value"));
-                assertEquals("test", execution.getMetricsTags().get("source"));
+                assertEquals("test", execution.getVariable("source"));
                 assertArrayEquals(new Object[]{"input value"}, ((CacheTable) fixture.schema.plus()
                         .getTable("input")).scan(null).toList().get(0));
                 return rows;
@@ -89,7 +89,7 @@ class RestExecutorTest {
 
             ExecuteData result = RestFunctionExecutor.execute(" Example ",
                     "{\"data\":{\"input\":[{\"value\":\"input value\"}]},"
-                            + "\"params\":{\"value\":\"before\"},\"metricTags\":{\"source\":\"test\"}}");
+                            + "\"params\":{\"value\":\"before\",\"source\":\"test\"}}");
 
             assertEquals(List.of(Map.of("value", "result")), result.getData());
             assertEquals("before", result.getParams().get("value"));

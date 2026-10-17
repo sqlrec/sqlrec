@@ -99,7 +99,7 @@ public class ProxyAllBindableTimeoutTest {
             assertFalse(context.isCancelled(), "node timeout must not cancel the parent context");
 
             Timer timer = registry.find(Consts.METRICS_NODE_EXEC_DURATION)
-                    .tags("name", "slow_node", "status", "timeout")
+                    .tags("name", "slow_node", "outcome", "timeout")
                     .timer();
             assertNotNull(timer);
             assertEquals(1L, timer.count());
@@ -550,7 +550,7 @@ public class ProxyAllBindableTimeoutTest {
                     .tag("name", "ancestor_cancelled_node")
                     .counter());
             assertNotNull(registry.find(Consts.METRICS_NODE_EXEC_DURATION)
-                    .tags("name", "ancestor_cancelled_node", "status", "cancelled")
+                    .tags("name", "ancestor_cancelled_node", "outcome", "cancelled")
                     .timer());
         } finally {
             release.countDown();

@@ -6,6 +6,8 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.ResourceNames;
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.entity.SqlApi;
@@ -23,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class RestFunctionExecutor {
     private static final Logger logger = LoggerFactory.getLogger(RestFunctionExecutor.class);
@@ -68,15 +71,14 @@ public class RestFunctionExecutor {
         if (request.getParams() != null) {
             request.getParams().forEach(context::setVariable);
         }
-        if (request.getMetricTags() != null) {
-            request.getMetricTags().forEach(context::setMetricsTag);
-        }
         return context;
     }
 
     private static ExecuteData executeFunction(
             String apiName, SqlFunctionBindable function, CalciteSchema schema, ExecuteContext context) {
         ExecuteData result = new ExecuteData();
+        long start = System.nanoTime();
+        String outcome = "success";
         try {
             BindableInterface bindable = CompileManager.prepareSqlFunctionForExecution(function);
             Enumerable<Object[]> rows = bindable.bind(schema, context);
@@ -88,10 +90,19 @@ public class RestFunctionExecutor {
                 result.setMsg("API '" + apiName + "' returned no result");
             }
         } catch (Exception e) {
+            outcome = MetricsUtils.outcome(e, context.isCancelled());
             logger.error("execute function error", e);
             context.cancel();
             throw new RuntimeException("failed to execute API '" + apiName + "': "
                     + RestUtils.errorMessage(e, "function execution failed"), e);
+        } catch (Error e) {
+            outcome = "error";
+            throw e;
+        } finally {
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_API_EXECUTION_DURATION,
+                            MetricsUtils.createTags(context.getVariables(), "api", apiName, "outcome", outcome))
+                    .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
         return result;
     }

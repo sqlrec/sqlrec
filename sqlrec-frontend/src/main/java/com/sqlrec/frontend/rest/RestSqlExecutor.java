@@ -3,6 +3,8 @@ package com.sqlrec.frontend.rest;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.rest.RequestData;
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.executor.SqlExecutor;
@@ -11,6 +13,8 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public class RestSqlExecutor {
     public static ExecuteDataList execute(String requestData) throws Exception {
@@ -43,12 +47,14 @@ public class RestSqlExecutor {
     private static ExecuteData executeSingleSql(SqlExecutor sqlExecutor, String sql, int index) {
         ExecuteData executeData = new ExecuteData();
 
-        if (StringUtils.isBlank(sql)) {
-            executeData.setMsg("sqls[" + index + "] is null or empty; skipped execution");
-            return executeData;
-        }
-
+        long start = System.nanoTime();
+        String outcome = "success";
         try {
+            if (StringUtils.isBlank(sql)) {
+                outcome = "error";
+                executeData.setMsg("sqls[" + index + "] is null or empty; skipped execution");
+                return executeData;
+            }
             CacheTable result = sqlExecutor.executeSql(sql);
             Enumerable<Object[]> rows = result.scan(null);
             executeData.setData(RowTransformUtils.convertToMapList(
@@ -57,9 +63,23 @@ public class RestSqlExecutor {
             ));
             executeData.setParams(sqlExecutor.getExecuteContext().getVariables());
         } catch (Exception e) {
+            outcome = MetricsUtils.outcome(e, sqlExecutor.getExecuteContext().isCancelled());
             executeData.setMsg("sqls[" + index + "] failed: "
                     + RestUtils.errorMessage(e, "SQL execution failed"));
+        } catch (Error e) {
+            outcome = "error";
+            throw e;
+        } finally {
+            MetricsUtils.getCompositeMeterRegistry()
+                    .timer(Consts.METRICS_SQL_EXECUTION_DURATION,
+                            MetricsUtils.createTags(sqlExecutor.getExecuteContext().getVariables(),
+                                    "statement_type", statementType(sql), "outcome", outcome))
+                    .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
         return executeData;
+    }
+
+    private static String statementType(String sql) {
+        return sql == null ? "" : sql.strip().split("\\s+", 2)[0].toUpperCase(Locale.ROOT);
     }
 }

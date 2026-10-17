@@ -28,7 +28,7 @@ public interface VectorSearchable extends Table {
     }
 
     default List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         long count = 0;
         String status = "success";
 
@@ -47,15 +47,15 @@ public interface VectorSearchable extends Table {
             return result;
         } catch (Throwable e) {
             log.error("searchByEmbedding table {} error", getTableName(), e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(java.util.Collections.emptyMap(), "table", getTableName(), "status", status);
+            Tags tags = Tags.of("table", getTableName(), "outcome", status);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_TABLE_VECTOR_SEARCH_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    .record(System.nanoTime() - startTime, java.util.concurrent.TimeUnit.NANOSECONDS);
             MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_VECTOR_SEARCH_DATA_SIZE, tags)
+                    .summary(Consts.METRICS_TABLE_VECTOR_SEARCH_ROWS, tags)
                     .record(count);
         }
     }

@@ -91,6 +91,16 @@ public class SqlRecConfigs {
     );
 
 
+    // Process-wide metrics schema. Never resolve these options from request variables.
+    public static final ConfigOption<String> METRICS_TAG_KEYS = new ConfigOption<>(
+            "METRICS_TAG_KEYS", "",
+            "comma-separated execution variable names used as business metric tags",
+            null, String.class);
+    public static final ConfigOption<String> METRICS_HISTOGRAM_NODES = new ConfigOption<>(
+            "METRICS_HISTOGRAM_NODES", "",
+            "comma-separated node names with latency histograms enabled; empty disables node histograms",
+            null, String.class);
+
     // exec config
     public static final ConfigOption<Boolean> PARALLELISM_EXEC = new ConfigOption<>(
             "PARALLELISM_EXEC",

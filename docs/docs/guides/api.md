@@ -99,20 +99,20 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 ## 高级选项：指标标签
 
-如果需要给本次调用产生的监控指标附加标签，可传入 `metricTags`：
+在服务进程中配置 `METRICS_TAG_KEYS=scene` 后，打点会从 `params` 中提取对应变量：
 
 ```json
 {
   "data": {
     "user_info": [{"user_id": 1000001}]
   },
-  "metricTags": {
+  "params": {
     "scene": "homepage"
   }
 }
 ```
 
-`metricTags` 的作用范围和标签取值建议见[可观测性](../operations/observability.md#常用指标)。
+`scene` 直接作为标签名导出，缺失或空白值导出为空字符串；与当前指标的系统标签同名时，系统标签优先。`METRICS_TAG_KEYS` 是进程环境配置，按逗号分隔，修改后重启生效；请求不能覆盖维度列表。执行中的变量修改会影响后续打点，远端调用仅通过 `params` 传递这些变量。详见[可观测性](../operations/observability.md#常用指标)。
 
 ## 常见问题
 

@@ -589,7 +589,7 @@ SELECT `get`('user_id') AS user_id;
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `metricsName` | String | 指标名称 |
+| `metricGroup` | String | 固定指标族中的 group 标签值 |
 | `tables` | CacheTable... | 一个或多个输入表 |
 
 **返回值**：无返回值。
@@ -605,8 +605,8 @@ CALL feature_coverage_metrics('user.feature.coverage', user_info);
 ```
 
 **注意事项**：
-- 如果表为空，则跳过该表
-- 指标名称不能为空
+- 非空字段数和样本数分别累计到 `sqlrec_feature_non_missing_total`、`sqlrec_feature_observed_total`，按 table/field/group 计算样本加权覆盖率。
+- 空表增加 `sqlrec_feature_empty_batches_total`；group 不能为空，不会创建任意名称的指标。
 
 ---
 

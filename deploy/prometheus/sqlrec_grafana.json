@@ -1,3148 +1,3069 @@
 {
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "4.6.5"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "singlestat",
-      "name": "Singlestat",
-      "version": ""
-    }
-  ],
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": "-- Grafana --",
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "limit": 100,
-        "name": "Annotations & Alerts",
-        "showIn": 0,
-        "type": "dashboard"
-      }
-    ]
-  },
-  "description": "Dashboard for SQLRec application metrics",
+  "title": "SQLRec",
+  "uid": "sqlrec",
+  "schemaVersion": 39,
+  "version": 1,
   "editable": true,
-  "gnetId": null,
-  "graphTooltip": 1,
-  "hideControls": false,
-  "id": null,
-  "links": [],
-  "refresh": "30s",
-  "rows": [
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 1,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_node_exec_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name) / sum(rate(sqlrec_node_exec_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Execution Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 2,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(sqlrec_node_exec_duration_seconds_max{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Execution Duration (Max)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Node Execution Duration",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 3,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_node_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name) / sum(rate(sqlrec_node_data_size_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Data Size (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 4,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(sqlrec_node_data_size_max{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Data Size (Max)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Node Data Size",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 5,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_node_exec_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", status=\"success\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Execution Success Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {
-            "error": "#bf1b00"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 6,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_node_exec_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\", status=\"error\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Node Execution Error Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Node Execution Status",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {
-            "ignore_exception": "#bf1b00"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 7,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 12,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_cache_table_ignore_exception_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Cache Table Ignore Exception Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Cache Table Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {
-            "else": "#f2914d",
-            "then": "#7eb26d"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 8,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_if_cache_branch_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name, branch)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}} - {{branch}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Branch Execution Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {
-            "timeout": "#eab839"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 9,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_if_cache_timeout_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Timeout Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {
-            "exception_fallback": "#bf1b00"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 10,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_if_cache_exception_fallback_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Exception Fallback Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "If Cache Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 11,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 12,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(increase(sqlrec_cache_table_ignore_exception_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1h])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Cache Table Ignore Exception Count (Hourly)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Cache Table Ignore Exception Count",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {
-            "else": "#f2914d",
-            "then": "#7eb26d"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 12,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(increase(sqlrec_if_cache_branch_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1h])) by (name, branch)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}} - {{branch}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Branch Count (Hourly)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {
-            "timeout": "#eab839"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 13,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(increase(sqlrec_if_cache_timeout_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1h])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Timeout Count (Hourly)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {
-            "exception_fallback": "#bf1b00"
-          },
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "leftLogBase": 1,
-            "leftMax": null,
-            "leftMin": null,
-            "rightLogBase": 1,
-            "rightMax": null,
-            "rightMin": null
-          },
-          "id": 14,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(increase(sqlrec_if_cache_exception_fallback_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1h])) by (name)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{name}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "If Cache Exception Fallback Count (Hourly)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "If Cache Count (Hourly)",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 15,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_scan_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_scan_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Scan Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 16,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_scan_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_scan_data_size_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Scan Data Size (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Table Scan Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 17,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_get_by_primary_key_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_get_by_primary_key_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Get By Primary Key Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 18,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_cache_hit_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_get_by_primary_key_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Cache Hit Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "percentunit",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "percentunit",
-              "label": null,
-              "logBase": 1,
-              "max": 1,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 30,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 4,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_cache_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_get_by_primary_key_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Cache Data Size (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Table Get By Primary Key Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 19,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_vector_search_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_vector_search_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Vector Search Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 20,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_vector_search_data_size_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_vector_search_data_size_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Vector Search Data Size (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Table Vector Search Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 21,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_collection_add_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_collection_add_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Collection Add Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 22,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_table_collection_remove_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table) / sum(rate(sqlrec_table_collection_remove_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (table)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{table}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Collection Remove Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Table Collection Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 23,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_http_request_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (path) / sum(rate(sqlrec_http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (path)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{path}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "HTTP Request Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 24,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_http_request_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (path, method, status)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{path}} - {{method}} - {{status}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "HTTP Request Count",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "HTTP Request Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 25,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_function_update_duration_seconds_sum{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (status) / sum(rate(sqlrec_function_update_duration_seconds_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (status)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{status}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Function Update Duration (Average)",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "s",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 26,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 6,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_function_update_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m])) by (result)",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{result}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Function Update Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Function Update Metrics",
-      "titleSize": "h6"
-    },
-    {
-      "collapse": false,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 27,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 3,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sqlrec_session_active_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{pod}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Active Sessions",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 28,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 3,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_session_open_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m]))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "open",
-              "refId": "A",
-              "step": 2400
-            },
-            {
-              "expr": "sum(rate(sqlrec_session_close_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m]))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "close",
-              "refId": "B",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Session Open/Close Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 29,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 3,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sqlrec_operation_active_count{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "{{pod}}",
-              "refId": "A",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Active Operations",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "short",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "Prometheus",
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {},
-          "id": 31,
-          "legend": {
-            "avg": true,
-            "current": false,
-            "max": true,
-            "min": true,
-            "show": true,
-            "total": false,
-            "values": true,
-            "alignAsTable": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "span": 3,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(sqlrec_operation_open_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m]))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "open",
-              "refId": "A",
-              "step": 2400
-            },
-            {
-              "expr": "sum(rate(sqlrec_operation_close_count_total{namespace=\"$namespace\", job=\"$job\", pod=~\"$pod\"}[1m]))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "close",
-              "refId": "B",
-              "step": 2400
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Operation Open/Close Rate",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "x-axis": true,
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "y-axis": true,
-          "y_formats": [
-            "ops",
-            "short"
-          ],
-          "yaxes": [
-            {
-              "format": "ops",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "repeat": null,
-      "repeatIteration": null,
-      "repeatRowId": null,
-      "showTitle": true,
-      "title": "Session and Operation Metrics",
-      "titleSize": "h6"
-    }
+  "tags": [
+    "sqlrec",
+    "prometheus"
   ],
-  "schemaVersion": 14,
-  "style": "dark",
-  "tags": ["sqlrec"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
-        "allValue": null,
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
         "current": {},
-        "datasource": "Prometheus",
-        "hide": 0,
-        "includeAll": false,
-        "label": "Namespace",
-        "multi": false,
+        "options": []
+      },
+      {
         "name": "namespace",
-        "options": [],
-        "query": "label_values(sqlrec_node_exec_duration_seconds_count, namespace)",
-        "refresh": 2,
-        "regex": "",
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
+        "label": "Namespace",
         "type": "query",
-        "useTags": false
-      },
-      {
-        "allFormat": "glob",
-        "allValue": null,
-        "current": {},
-        "datasource": "Prometheus",
-        "hide": 0,
-        "includeAll": false,
-        "label": "Job",
-        "multi": false,
-        "multiFormat": "glob",
-        "name": "job",
-        "options": [],
-        "query": "label_values(sqlrec_node_exec_duration_seconds_count{namespace=\"$namespace\"}, job)",
-        "refresh": 2,
-        "regex": "",
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
-      },
-      {
-        "allFormat": "glob",
-        "allValue": ".*",
-        "current": {},
-        "datasource": "Prometheus",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Pod",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up{service=\"sqlrec\"}, namespace)",
+        "refresh": 1,
+        "sort": 1,
         "multi": true,
-        "multiFormat": "glob",
-        "name": "pod",
-        "options": [],
-        "query": "label_values(sqlrec_node_exec_duration_seconds_count{namespace=\"$namespace\", job=\"$job\"}, pod)",
-        "refresh": 2,
-        "regex": "",
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "job",
+        "label": "Job",
         "type": "query",
-        "useTags": false
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up{service=\"sqlrec\",namespace=~\"$namespace\"}, job)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\"}, pod)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\"}, instance)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "api",
+        "label": "Api",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}, api)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "node",
+        "label": "Node",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}, name)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "table",
+        "label": "Table",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values({service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",__name__=~\"sqlrec_table_.*|cache_.*\"}, table)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "business_key",
+        "label": "Business label",
+        "type": "textbox",
+        "query": "scene",
+        "current": {
+          "text": "scene",
+          "value": "scene"
+        }
+      },
+      {
+        "name": "business_value",
+        "label": "Business value",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}, $business_key)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
       }
     ]
   },
-  "time": {
-    "from": "now-24h",
-    "to": "now"
-  },
-  "timepicker": {
-    "now": true,
-    "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
-      "1m",
-      "5m",
-      "15m",
-      "30m",
-      "1h",
-      "2h",
-      "1d"
-    ],
-    "time_options": [
-      "5m",
-      "15m",
-      "1h",
-      "6h",
-      "12h",
-      "24h",
-      "2d",
-      "7d",
-      "30d"
-    ]
-  },
-  "timezone": "browser",
-  "title": "SQLRec",
-  "version": 1
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Service overview — HTTP excludes metrics/UI; business filters apply to API/SQL/nodes/features",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Scrape target health",
+      "description": "Counts within the selected namespace/job/pod/instance scope. Missing targets require service-discovery/replica monitoring.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"})",
+          "legendFormat": "healthy",
+          "range": false,
+          "instant": true,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "count(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}) - sum(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"})",
+          "legendFormat": "failed",
+          "range": false,
+          "instant": true,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "count(up{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"})",
+          "legendFormat": "total",
+          "range": false,
+          "instant": true,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Business HTTP requests/s",
+      "description": "Actual request paths without query strings, reaching response write completion, including failed writes. Requests rejected before the business handler are excluded.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (path) (rate(sqlrec_http_request_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval]))",
+          "legendFormat": "{{path}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HTTP error ratio by status",
+      "description": "Each 4xx/5xx status is shown separately as a fraction of all business HTTP requests across selected instances. Statuses never observed have no series; no traffic yields N/A. SQL statement failures inside HTTP 200 are shown separately.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(sqlrec_http_request_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\",status=~\"[45]..\"}[$__rate_interval])) / on() group_left sum(rate(sqlrec_http_request_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval]))",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP P95 server latency",
+      "description": "From business handler execution start to response write completion. Excludes prior business queue wait and client network time. Fixed SLO buckets.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,path) (rate(sqlrec_http_request_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval])))",
+          "legendFormat": "{{path}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP P99 server latency",
+      "description": "From business handler execution start to response write completion. Excludes prior business queue wait and client network time. Fixed SLO buckets.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,path) (rate(sqlrec_http_request_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval])))",
+          "legendFormat": "{{path}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "HTTP average server latency",
+      "description": "Same timer as HTTP P95/P99; excludes queue wait before the business handler starts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (path) (rate(sqlrec_http_request_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval])) / sum by (path) (rate(sqlrec_http_request_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",path=~\"/api/v1/.*|/sql/v1\"}[$__rate_interval]))",
+          "legendFormat": "{{path}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Business executor workers",
+      "description": "Total official NettyEventExecutorMetrics workers across selected instances, not busy workers. Select pod/instance to drill down.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(netty_eventexecutor_workers{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",pool=\"rest-business\"})",
+          "legendFormat": "total",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Business executor pending tasks",
+      "description": "Total pending tasks and the largest individual executor queue within the selected scope. Includes pipeline tasks, not only HTTP requests.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(netty_eventexecutor_tasks_pending{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",pool=\"rest-business\"})",
+          "legendFormat": "total",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "max(netty_eventexecutor_tasks_pending{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",pool=\"rest-business\"})",
+          "legendFormat": "maximum per executor",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "API and SQL outcomes",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "API executions/s by outcome",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (api,outcome) (rate(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{api}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "API success ratio",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum by (api) (rate(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",outcome=\"success\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))) or (0 * (sum by (api) (rate(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))))) / (sum by (api) (rate(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{api}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "API P99 latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,api) (rate(sqlrec_api_execution_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{api}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "API average latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (api,outcome) (rate(sqlrec_api_execution_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])) / sum by (api,outcome) (rate(sqlrec_api_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",api=~\"$api\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{api}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "SQL statement outcomes/s",
+      "description": "REST /sql/v1 statements, including failures returned inside HTTP 200; not remote Flink job completion.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (statement_type,outcome) (rate(sqlrec_sql_execution_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{statement_type}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Node execution — timers count started executions; cancellation events are separate",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Node executions/s by outcome",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name,outcome) (rate(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Started node execution success ratio",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum by (name) (rate(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",outcome=\"success\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))) or (0 * (sum by (name) (rate(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))))) / (sum by (name) (rate(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Node average latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name,outcome) (rate(sqlrec_node_exec_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])) / sum by (name,outcome) (rate(sqlrec_node_exec_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Node sliding-window maximum latency",
+      "description": "Micrometer time-window maximum; expires to zero. Not summed across pods and not an all-time maximum.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 67,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (name) (sqlrec_node_exec_duration_seconds_max{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"})",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Node P99 latency (opt-in)",
+      "description": "Only nodes in METRICS_HISTOGRAM_NODES publish buckets. N/A is expected for other nodes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le,name) (rate(sqlrec_node_exec_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Successful node output rows per execution",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name) (rate(sqlrec_node_rows_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",outcome=\"success\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])) / sum by (name) (rate(sqlrec_node_rows_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",outcome=\"success\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Node sliding-window maximum output rows",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (name) (sqlrec_node_rows_max{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"})",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Node cancellation events/s",
+      "description": "before_start does not enter the node timer; running also appears in timer outcome=cancelled. Do not add both metrics.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 83,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name,phase) (rate(sqlrec_node_cancelled_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}} {{phase}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Ignored cache-node exceptions/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name) (rate(sqlrec_cache_table_ignore_exception_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "IF branch decisions/s",
+      "description": "Conditional IF only; TIMEIN decisions are shown below.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 91,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name,branch) (rate(sqlrec_if_cache_branch_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}} {{branch}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "TIMEIN path decisions/s",
+      "description": "primary_success/direct/timeout/error describe path selection. A fallback can still fail; direct is a configured policy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 99,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name,reason) (rate(sqlrec_if_timein_outcome_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{name}} {{reason}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "TIMEIN timeout/error fallback ratio",
+      "description": "Direct policy fallbacks are in the denominator but are not failures.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 99,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum by (name) (rate(sqlrec_if_timein_outcome_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",reason=~\"timeout|error\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))) or (0 * (sum by (name) (rate(sqlrec_if_timein_outcome_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))))) / (sum by (name) (rate(sqlrec_if_timein_outcome_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",name=~\"$node\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])))",
+          "legendFormat": "{{name}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Tables — no request business labels; scan may include a PK lookup",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 107,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Scan operations/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 108,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,outcome) (rate(sqlrec_table_scan_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Scan average / P99 latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 108,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_scan_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_scan_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} average",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le,table) (rate(sqlrec_table_scan_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])))",
+          "legendFormat": "{{table}} P99",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Primary-key query operations/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 116,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,outcome) (rate(sqlrec_table_get_by_primary_key_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Primary-key query average / P99 latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 116,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_get_by_primary_key_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_get_by_primary_key_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} average",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le,table) (rate(sqlrec_table_get_by_primary_key_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])))",
+          "legendFormat": "{{table}} P99",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "Vector search operations/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 124,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,outcome) (rate(sqlrec_table_vector_search_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "Vector search average / P99 latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 124,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_vector_search_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_vector_search_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} average",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le,table) (rate(sqlrec_table_vector_search_duration_seconds_bucket{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])))",
+          "legendFormat": "{{table}} P99",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "Scan output rows per successful operation",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 132,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_scan_rows_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_scan_rows_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval]))",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "timeseries",
+      "title": "Vector search output rows per successful operation",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 132,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_vector_search_rows_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_vector_search_rows_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval]))",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "type": "timeseries",
+      "title": "Requested distinct converted primary keys per successful operation",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 140,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(sqlrec_table_get_by_primary_key_keys_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval])) / sum by (table) (rate(sqlrec_table_get_by_primary_key_keys_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome=\"success\"}[$__rate_interval]))",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "description": "Caffeine statistics across read-through and cache-only lookups. Only the current cache instance is bound; counters restart when it is replaced.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 140,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(cache_gets_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",result=\"hit\"}[$__rate_interval])) / sum by (table) (rate(cache_gets_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Cache lookups/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 148,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,result) (rate(cache_gets_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{result}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Cache estimated entries",
+      "description": "Estimated entries across selected cache replicas, not unique keys or bytes. Expiry cleanup is asynchronous. Select pod/instance to inspect one cache.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 148,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (cache_size{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"})",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Cache evictions/s",
+      "description": "Caffeine evictions exclude explicit invalidations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 156,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table) (rate(cache_evictions_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "timeseries",
+      "title": "Table write QPS",
+      "description": "Completed write calls per second over the rate interval, grouped by table, operation and outcome. Each batch counts as one call, not its row count. Single and batch calls are combined.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 156,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,operation,outcome) (rate(sqlrec_table_write_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{operation}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Table write failure ratio",
+      "description": "Non-successful completed write calls / all completed write calls over the rate interval, grouped by table and operation. Failures include errors and timeouts; a call returning false without an exception is recorded as success. No traffic yields N/A.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 164,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum by (table,operation) (rate(sqlrec_table_write_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\",outcome!=\"success\"}[$__rate_interval]))) or (0 * (sum by (table,operation) (rate(sqlrec_table_write_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))))) / (sum by (table,operation) (rate(sqlrec_table_write_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])))",
+          "legendFormat": "{{table}} {{operation}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Table write average latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 164,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (table,operation,batch,outcome) (rate(sqlrec_table_write_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval])) / sum by (table,operation,batch,outcome) (rate(sqlrec_table_write_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",table=~\"$table\"}[$__rate_interval]))",
+          "legendFormat": "{{table}} {{operation}} batch={{batch}} {{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "type": "row",
+      "title": "Control plane and feature quality",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 172,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 47,
+      "type": "timeseries",
+      "title": "Function refresh outcomes/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 173,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(sqlrec_function_update_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "type": "timeseries",
+      "title": "Function refresh average latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 173,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(sqlrec_function_update_duration_seconds_sum{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval])) / sum by (outcome) (rate(sqlrec_function_update_duration_seconds_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "type": "timeseries",
+      "title": "Sessions held",
+      "description": "Total held handles across selected instances, not currently executing SQL statements. Requires Thrift.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 181,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sqlrec_session_active_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"})",
+          "legendFormat": "total",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "Session open/close events/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 181,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(sqlrec_session_open_count_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "open",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(sqlrec_session_close_count_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "close",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "Operation handles held",
+      "description": "Total held handles across selected instances, not currently executing SQL statements. Requires Thrift.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(sqlrec_operation_active_count{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"})",
+          "legendFormat": "total",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "Operation handle open/close events/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(sqlrec_operation_open_count_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "open",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(sqlrec_operation_close_count_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "close",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Feature coverage (sample-weighted)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 197,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (group,table,field) (rate(sqlrec_feature_non_missing_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval])) / sum by (group,table,field) (rate(sqlrec_feature_observed_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{group}} {{table}} {{field}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "type": "timeseries",
+      "title": "Feature empty batches/s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 197,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (group,table) (rate(sqlrec_feature_empty_batches_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\",${business_key:raw}=~\"${business_value:regex}\"}[$__rate_interval]))",
+          "legendFormat": "{{group}} {{table}}",
+          "range": true,
+          "instant": false,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "type": "stat",
+      "title": "Metric registration failures (last 5m)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 205,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "N/A",
+          "custom": {
+            "drawStyle": "line",
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(sqlrec_metrics_registration_failures_total{service=\"sqlrec\",namespace=~\"$namespace\",job=~\"$job\",pod=~\"$pod\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "Metric registration failures (last 5m)",
+          "range": false,
+          "instant": true,
+          "interval": "15s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "title": "SQLRec",
+      "url": "/d/sqlrec",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "SQLRec JVM",
+      "url": "/d/sqlrec-jvm",
+      "keepTime": true,
+      "includeVars": true
+    }
+  ]
 }

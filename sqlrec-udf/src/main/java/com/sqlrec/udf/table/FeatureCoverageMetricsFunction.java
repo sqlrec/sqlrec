@@ -1,6 +1,7 @@
 package com.sqlrec.udf.table;
 
 import com.sqlrec.common.runtime.ReadonlyContext;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Tags;
@@ -12,12 +13,12 @@ import java.util.List;
 import java.util.Map;
 
 public class FeatureCoverageMetricsFunction {
-    public Void evaluate(ReadonlyContext context, String metricsName, CacheTable... tables) {
+    public Void evaluate(ReadonlyContext context, String metricGroup, CacheTable... tables) {
         if (context == null) {
             throw new IllegalArgumentException("context cannot be null");
         }
-        if (metricsName == null || metricsName.isEmpty()) {
-            throw new IllegalArgumentException("metricsName cannot be null or empty");
+        if (metricGroup == null || metricGroup.isEmpty()) {
+            throw new IllegalArgumentException("metricGroup cannot be null or empty");
         }
         if (tables == null || tables.length == 0) {
             throw new IllegalArgumentException("tables cannot be null or empty");
@@ -27,13 +28,13 @@ public class FeatureCoverageMetricsFunction {
             if (table == null) {
                 continue;
             }
-            processTable(context, metricsName, table);
+            processTable(context, metricGroup, table);
         }
 
         return null;
     }
 
-    private void processTable(ReadonlyContext context, String metricsName, CacheTable table) {
+    private void processTable(ReadonlyContext context, String metricGroup, CacheTable table) {
         String tableName = table.getTableName();
         List<RelDataTypeField> fields = table.getDataFields();
         Enumerable<Object[]> enumerable = table.scan(null);
@@ -56,21 +57,24 @@ public class FeatureCoverageMetricsFunction {
             }
         }
 
+        Tags baseTags = MetricsUtils.createTags(context.getVariables(),
+                "group", metricGroup, "table", tableName);
         if (totalCount == 0) {
+            MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_FEATURE_EMPTY_BATCHES, baseTags)
+                    .increment();
             return;
         }
 
         for (int i = 0; i < fields.size(); i++) {
             String fieldName = fields.get(i).getName();
-            double coverage = (double) fieldNonNullCounts[i] / totalCount;
-
-            Tags tags = MetricsUtils.createTags(context.getMetricsTags(),
-                    "table", tableName,
-                    "field", fieldName);
+            Tags tags = baseTags.and("field", fieldName);
 
             MetricsUtils.getCompositeMeterRegistry()
-                    .summary(metricsName, tags)
-                    .record(coverage);
+                    .counter(Consts.METRICS_FEATURE_OBSERVED, tags)
+                    .increment(totalCount);
+            MetricsUtils.getCompositeMeterRegistry()
+                    .counter(Consts.METRICS_FEATURE_NON_MISSING, tags)
+                    .increment(fieldNonNullCounts[i]);
         }
     }
 

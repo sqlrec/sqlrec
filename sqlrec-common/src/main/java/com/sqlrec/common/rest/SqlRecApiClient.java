@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  *
  * <ul>
  *   <li>{@link #callFunctionApi} — function endpoints (e.g. {@code /api/v1/<name>}),
- *       request body matches {@link RequestData} ({@code {data, params, metricTags}}),
+ *       request body matches {@link RequestData} ({@code {data, params}}),
  *       response body matches {@link ExecuteData} ({@code {msg, data, params}}).</li>
  *   <li>{@link #callSqlApi} — the SQL endpoint ({@code /sql/v1}), request body carries
  *       {@code sqls}, response body matches {@link ExecuteDataList}
@@ -54,24 +54,22 @@ public final class SqlRecApiClient {
      * @param url        remote API url
      * @param data       input tables keyed by table name, each table is a list of row maps (may be {@code null})
      * @param params     execution variables (may be {@code null})
-     * @param metricTags metric tags (may be {@code null})
      * @return parsed response; never {@code null}
      * @throws IllegalArgumentException if {@code url} is null or empty
      * @throws RuntimeException         if the HTTP call fails or the response cannot be parsed
      */
     public static ExecuteData callFunctionApi(String url,
                                               Map<String, List<Map<String, Object>>> data,
-                                              Map<String, String> params,
-                                              Map<String, String> metricTags) {
-        RequestData requestData = createRequestData(params, metricTags);
+                                              Map<String, String> params) {
+        RequestData requestData = createRequestData(params);
         requestData.setData(data);
         return postRequest(url, requestData, ExecuteData.class, ExecuteData::new);
     }
 
     /**
      * Call a remote sqlrec function API endpoint with only the input tables, using
-     * empty execution variables and metric tags. Equivalent to
-     * {@link #callFunctionApi(String, Map, Map, Map)} with {@code null} params and metricTags.
+     * empty execution variables. Equivalent to
+     * {@link #callFunctionApi(String, Map, Map)} with {@code null} params.
      *
      * @param url  remote API url
      * @param data input tables keyed by table name, each table is a list of row maps (may be {@code null})
@@ -81,7 +79,7 @@ public final class SqlRecApiClient {
      */
     public static ExecuteData callFunctionApi(String url,
                                               Map<String, List<Map<String, Object>>> data) {
-        return callFunctionApi(url, data, null, null);
+        return callFunctionApi(url, data, null);
     }
 
     /**
@@ -92,24 +90,22 @@ public final class SqlRecApiClient {
      * @param url        remote API url
      * @param sqls       SQL statements to execute
      * @param params     execution variables (may be {@code null})
-     * @param metricTags metric tags (may be {@code null})
      * @return parsed response; never {@code null}
      * @throws IllegalArgumentException if {@code url} is null or empty
      * @throws RuntimeException         if the HTTP call fails or the response cannot be parsed
      */
     public static ExecuteDataList callSqlApi(String url,
                                              List<String> sqls,
-                                             Map<String, String> params,
-                                             Map<String, String> metricTags) {
-        RequestData requestData = createRequestData(params, metricTags);
+                                             Map<String, String> params) {
+        RequestData requestData = createRequestData(params);
         requestData.setSqls(sqls);
         return postRequest(url, requestData, ExecuteDataList.class, ExecuteDataList::new);
     }
 
     /**
      * Call a remote sqlrec SQL API endpoint with only the SQL statements, using empty
-     * execution variables and metric tags. Equivalent to
-     * {@link #callSqlApi(String, List, Map, Map)} with {@code null} params and metricTags.
+     * execution variables. Equivalent to
+     * {@link #callSqlApi(String, List, Map)} with {@code null} params.
      *
      * @param url  remote API url
      * @param sqls SQL statements to execute
@@ -118,16 +114,14 @@ public final class SqlRecApiClient {
      * @throws RuntimeException         if the HTTP call fails or the response cannot be parsed
      */
     public static ExecuteDataList callSqlApi(String url, List<String> sqls) {
-        return callSqlApi(url, sqls, null, null);
+        return callSqlApi(url, sqls, null);
     }
 
     private static RequestData createRequestData(
-            Map<String, String> params,
-            Map<String, String> metricTags
+            Map<String, String> params
     ) {
         RequestData requestData = new RequestData();
         requestData.setParams(params);
-        requestData.setMetricTags(metricTags);
         return requestData;
     }
 

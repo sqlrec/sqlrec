@@ -21,6 +21,10 @@ spec:
           env:
             - name: SERVICE_NAME
               value: sqlrec
+            - name: METRICS_TAG_KEYS
+              value: "${METRICS_TAG_KEYS}"
+            - name: METRICS_HISTOGRAM_NODES
+              value: "${METRICS_HISTOGRAM_NODES}"
             - name: ENABLE_REST_SERVER
               value: "true"
             - name: ENABLE_THRIFT_SERVER

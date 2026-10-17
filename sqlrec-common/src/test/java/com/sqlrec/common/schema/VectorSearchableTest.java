@@ -91,10 +91,10 @@ class VectorSearchableTest {
     }
 
     private void assertMetrics(String status, long calls, double rows) {
-        String[] tags = {"table", "independent_vector_table", "status", status};
+        String[] tags = {"table", "independent_vector_table", "outcome", status};
         assertEquals(calls, metrics.get(Consts.METRICS_TABLE_VECTOR_SEARCH_DURATION).tags(tags).timer().count());
-        assertEquals(calls, metrics.get(Consts.METRICS_TABLE_VECTOR_SEARCH_DATA_SIZE).tags(tags).summary().count());
-        assertEquals(rows, metrics.get(Consts.METRICS_TABLE_VECTOR_SEARCH_DATA_SIZE).tags(tags).summary().totalAmount());
+        assertEquals(calls, metrics.get(Consts.METRICS_TABLE_VECTOR_SEARCH_ROWS).tags(tags).summary().count());
+        assertEquals(rows, metrics.get(Consts.METRICS_TABLE_VECTOR_SEARCH_ROWS).tags(tags).summary().totalAmount());
     }
 
     private static VectorSearchRequest request() {

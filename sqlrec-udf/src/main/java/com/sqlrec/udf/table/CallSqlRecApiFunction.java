@@ -57,7 +57,7 @@ public class CallSqlRecApiFunction {
         }
 
         ExecuteData response = client.call(
-                url, inputs, context.getVariables(), context.getMetricsTags());
+                url, inputs, context.getVariables());
         List<Map<String, Object>> dataRows = response.getData();
 
         if (dataRows == null || dataRows.isEmpty()) {
@@ -90,7 +90,6 @@ public class CallSqlRecApiFunction {
         ExecuteData call(
                 String url,
                 Map<String, List<Map<String, Object>>> data,
-                Map<String, String> params,
-                Map<String, String> metricTags);
+                Map<String, String> params);
     }
 }

@@ -9,6 +9,7 @@ metadata:
 spec:
   endpoints:
     - interval: 15s
+      scrapeTimeout: 10s
       path: /metrics
       port: rest
   namespaceSelector:

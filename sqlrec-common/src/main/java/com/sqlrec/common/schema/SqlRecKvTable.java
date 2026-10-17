@@ -43,11 +43,23 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
 
     private transient Cache<Object, List<Object[]>> cache;
 
+    @Override
+    public void setTableName(String name) {
+        super.setTableName(name);
+        registerCacheMetrics();
+    }
+
+    private void registerCacheMetrics() {
+        if (!getTableName().isEmpty()) {
+            MetricsUtils.registerTableCacheMetrics(getTableName(), cache);
+        }
+    }
+
     protected abstract Enumerable<Object[]> scanImpl(List<RexNode> filters);
 
     @Override
     public Enumerable<Object[]> scan(DataContext root, List<RexNode> filters) {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         long count = 0;
         String status = "success";
 
@@ -82,15 +94,15 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             return result;
         } catch (Throwable e) {
             log.error("scan table {} error", getTableName(), e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
+            Tags tags = Tags.of("table", getTableName(), "outcome", status);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_TABLE_SCAN_DURATION, tags)
-                    .record(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+                    .record(System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
             MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_SCAN_DATA_SIZE, tags)
+                    .summary(Consts.METRICS_TABLE_SCAN_ROWS, tags)
                     .record(count);
         }
     }
@@ -134,17 +146,20 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         cache = Caffeine.newBuilder()
                 .maximumSize(maxSize)
                 .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
+                .recordStats()
                 .build();
+        registerCacheMetrics();
     }
 
     public Map<Object, List<Object[]>> getByPrimaryKey(Set<Object> keySet) {
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         String status = "success";
         int totalCount = keySet.size();
 
         try {
             SqlTypeName primaryKeyType = getPrimaryKeyType();
             Set<Object> convertedKeySet = RowTransformUtils.convertKeySet(keySet, primaryKeyType);
+            totalCount = convertedKeySet.size();
 
             if (cache == null) {
                 Map<Object, List<Object[]>> result = RowTransformUtils.convertMapKeys(
@@ -156,14 +171,12 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 return result;
             }
 
-            int hitCount = 0;
             Map<Object, List<Object[]>> result = new HashMap<>(convertedKeySet.size());
             Set<Object> missKeys = new HashSet<>();
             for (Object key : convertedKeySet) {
                 List<Object[]> list = cache.getIfPresent(key);
                 if (list != null) {
                     result.put(key, list);
-                    hitCount++;
                 } else {
                     missKeys.add(key);
                 }
@@ -179,27 +192,19 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 }
             }
 
-            Tags cacheTags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .counter(Consts.METRICS_TABLE_CACHE_HIT_COUNT, cacheTags)
-                    .increment(hitCount);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_CACHE_DATA_SIZE, cacheTags)
-                    .record(cache.estimatedSize());
-
             return result;
         } catch (Throwable e) {
             log.error("getByPrimaryKey table {} error", getTableName(), e);
-            status = "error";
+            status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            Tags tags = MetricsUtils.createTags(Collections.emptyMap(), "table", getTableName(), "status", status);
+            long duration = System.nanoTime() - startTime;
+            Tags tags = Tags.of("table", getTableName(), "outcome", status);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DURATION, tags)
-                    .record(duration, TimeUnit.MILLISECONDS);
+                    .record(duration, TimeUnit.NANOSECONDS);
             MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DATA_SIZE, tags)
+                    .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_KEYS, tags)
                     .record(totalCount);
         }
     }

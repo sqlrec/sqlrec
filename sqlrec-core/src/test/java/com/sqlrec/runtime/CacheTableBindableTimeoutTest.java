@@ -291,7 +291,7 @@ public class CacheTableBindableTimeoutTest {
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
             assertNotNull(registry.find(Consts.METRICS_NODE_EXEC_DURATION)
-                    .tags("name", "test_node", "status", "success")
+                    .tags("name", "test_node", "outcome", "success")
                     .timer());
         } finally {
             MetricsUtils.getCompositeMeterRegistry().remove(registry);
