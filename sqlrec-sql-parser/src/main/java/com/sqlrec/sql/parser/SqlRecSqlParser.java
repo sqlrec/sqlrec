@@ -4,10 +4,14 @@ import com.sqlrec.sql.parser.impl.SqlRecParserImpl;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserImplFactory;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.flink.sql.parser.ddl.SqlSet;
+import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
+import org.apache.flink.sql.parser.dql.SqlShowTables;
 import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
 import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 
@@ -32,7 +36,7 @@ public final class SqlRecSqlParser {
         }
 
         ParseAttempt sqlRec = tryParse(sql, config, SqlRecParserImpl.FACTORY);
-        if (sqlRec.succeeded() && sqlRec.node() instanceof SqlRecStatement) {
+        if (sqlRec.succeeded() && isExtensionOrCompatibilityStatement(sqlRec.node())) {
             return sqlRec.node();
         }
         if (flink.succeeded()) {
@@ -42,6 +46,13 @@ public final class SqlRecSqlParser {
             throw flink.error();
         }
         throw furthestError(flink.error(), sqlRec.error());
+    }
+
+    private static boolean isExtensionOrCompatibilityStatement(SqlNode node) {
+        // These standard Flink nodes are also emitted by our narrow compatibility
+        // productions. Other Calcite statements must not bypass the Flink parser.
+        return node instanceof SqlRecStatement || node instanceof SqlSet
+                || node instanceof SqlUseDatabase || node instanceof SqlShowTables;
     }
 
     public static SqlParser.Config defaultConfig() {
@@ -55,8 +66,19 @@ public final class SqlRecSqlParser {
             SqlParser.Config config,
             SqlParserImplFactory factory) {
         try {
-            SqlNode node = SqlParser.create(sql, config.withParserFactory(factory)).parseQuery();
-            return ParseAttempt.success(node);
+            SqlParser parser = SqlParser.create(sql, config.withParserFactory(factory));
+            if (factory == FlinkSqlParserImpl.FACTORY) {
+                return ParseAttempt.success(parser.parseQuery());
+            }
+            // Calcite's statement-list entry accepts a trailing delimiter without
+            // changing the input text or its positions. Never return multiple SQLs.
+            SqlNodeList statements = parser.parseStmtList();
+            if (statements.size() != 1) {
+                SqlParserPos pos = statements.size() > 1
+                        ? statements.get(1).getParserPosition() : SqlParserPos.ZERO;
+                throw new SqlParseException("Expected exactly one SQL statement", pos, null, null, null);
+            }
+            return ParseAttempt.success(statements.get(0));
         } catch (SqlParseException error) {
             return ParseAttempt.failure(error);
         }

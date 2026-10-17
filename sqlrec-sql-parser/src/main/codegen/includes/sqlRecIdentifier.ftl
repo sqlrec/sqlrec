@@ -739,10 +739,7 @@ SqlTypeNameSpec SqlRecAliasTypeName() :
     }
 }
 
-/**
- * Keeps SET usable inside IF while standard top-level SET remains owned by the
- * dependency-provided Flink parser.
- */
+/** Quoted and bare SET operands share the same string-valued Flink AST. */
 SqlNode SqlRecSet() :
 {
     Span span;
@@ -752,9 +749,17 @@ SqlNode SqlRecSet() :
 {
     <SET> { span = span(); }
     [
-        key = StringLiteral()
+        LOOKAHEAD({ getToken(1).kind != EOF && getToken(1).kind != SEMICOLON
+            && getToken(1).kind != RPAREN })
+        key = SqlRecSettingLiteral(true)
         <EQ>
-        value = StringLiteral()
+        (
+            LOOKAHEAD({ getToken(1).kind == EOF || getToken(1).kind == SEMICOLON
+                || getToken(1).kind == RPAREN })
+            { value = SqlLiteral.createCharString("", getPos()); }
+        |
+            value = SqlRecSettingLiteral(false)
+        )
     ]
     {
         if (key == null) {
@@ -762,6 +767,93 @@ SqlNode SqlRecSet() :
         }
         return new SqlSet(span.end(this), key, value);
     }
+}
+
+SqlNode SqlRecSettingLiteral(boolean key) :
+{
+    SqlNode value;
+}
+{
+    (
+        LOOKAHEAD({ getToken(1).kind == QUOTED_STRING
+            || getToken(1).kind == PREFIXED_STRING_LITERAL
+            || getToken(1).kind == UNICODE_STRING_LITERAL })
+        value = StringLiteral()
+    |
+        value = SqlRecBareSetting(key)
+    )
+    { return value; }
+}
+
+/**
+ * Configuration operands may contain keywords (table, default, true, ...) and
+ * punctuation, so they are not SQL identifiers or expressions. Consume adjacent
+ * lexer tokens only: whitespace/comments separate operands, and statement/IF
+ * delimiters are left to the enclosing grammar. Complex values use SQL quotes.
+ */
+JAVACODE SqlNode SqlRecBareSetting(boolean key) {
+    Token first = getToken(1);
+    Token last = null;
+    StringBuilder text = new StringBuilder();
+    while (true) {
+        Token next = getToken(1);
+        if (next.kind == EOF || next.kind == SEMICOLON || next.kind == RPAREN
+                || (key && next.kind == EQ)) {
+            break;
+        }
+        if (last != null && (next.beginLine != last.endLine
+                || next.beginColumn != last.endColumn + 1)) {
+            break;
+        }
+        if (!next.image.matches(key ? "[A-Za-z0-9_.-]+" : "[A-Za-z0-9_.,:+/=?@%$*{}\\[\\]-]+")) {
+            break;
+        }
+        last = getNextToken();
+        text.append(last.image);
+    }
+    if (last == null) {
+        throw new ParseException(getToken(0), new int[][] {{IDENTIFIER}, {QUOTED_STRING}}, tokenImage);
+    }
+    SqlParserPos pos = new SqlParserPos(first.beginLine, first.beginColumn,
+        last.endLine, last.endColumn);
+    return SqlLiteral.createCharString(text.toString(), pos);
+}
+
+/** Only the legacy unquoted default database needs a compatibility production. */
+SqlNode SqlRecUseDefault() :
+{
+    Span span;
+    SqlIdentifier database;
+}
+{
+    <USE> { span = span(); }
+    <DEFAULT_> { database = new SqlIdentifier("default", getPos()); }
+    { return new SqlUseDatabase(span.end(this), database); }
+}
+
+SqlNode SqlRecShowTablesInDefault() :
+{
+    Span span;
+    String preposition;
+    SqlIdentifier database;
+    boolean notLike = false;
+    SqlNode pattern = null;
+}
+{
+    <SHOW> { span = span(); }
+    <TABLES>
+    (
+        <FROM> { preposition = "FROM"; }
+    |
+        <IN> { preposition = "IN"; }
+    )
+    <DEFAULT_> { database = new SqlIdentifier("default", getPos()); }
+    [
+        [ <NOT> { notLike = true; } ]
+        <LIKE> pattern = StringLiteral()
+    ]
+    { return new SqlShowTables(span.end(this), preposition, database,
+        notLike, (SqlCharStringLiteral) pattern); }
 }
 
 boolean IfExistsOpt() :

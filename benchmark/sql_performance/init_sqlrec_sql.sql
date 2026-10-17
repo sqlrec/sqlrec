@@ -19,14 +19,10 @@ IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
 ELSE
   (cache table user_embedding as
     select
-      user_id,
-      gender,
-      age,
-      occupation,
-      zip_code,
-      random_vec('64') as user_tower_emb,
-      random_vec('64') as item_tower_emb
-    from user_info
+      *,
+      random_vec('32') as user_tower_emb,
+      random_vec('32') as item_tower_emb
+    from user_features
   );
 
 cache table vector_recall as

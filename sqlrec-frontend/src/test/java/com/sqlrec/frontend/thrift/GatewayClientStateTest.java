@@ -7,9 +7,14 @@ import org.apache.hive.service.rpc.thrift.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransportException;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedConstruction;
+
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,18 +45,165 @@ class GatewayClientStateTest {
     }
 
     @Test
-    void stateIsEscapedAndAppliedBeforeSqlOnlyWhenItChanges() throws Exception {
+    void settingsUseBareCommandsInSavedOrderOnlyWhenStateChanges() throws Exception {
         try (Remote remote = new Remote()) {
             java.util.Map<String, String> settings = new java.util.LinkedHashMap<>();
-            settings.put("custom.key", "it's quoted");
+            settings.put("parallelism.default", "2");
             settings.put("table.sql-dialect", "default");
             remote.proxy.setSessionState("db`name", settings);
             remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
             remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
             ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
             verify(remote.client, times(5)).ExecuteStatement(requests.capture());
-            assertEquals(java.util.List.of("SET 'table.sql-dialect' = 'default'",
-                    "SET 'custom.key' = 'it''s quoted'", "USE `db``name`", "SELECT 1", "SELECT 2"),
+            assertEquals(java.util.List.of("SET parallelism.default = 2",
+                    "SET table.sql-dialect = default", "USE `db``name`", "SELECT 1", "SELECT 2"),
+                    requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+        }
+    }
+
+    @TestFactory
+    Stream<DynamicTest> settingsAreForwardedWithoutAddingQuotesOrEscapingValues() {
+        return Stream.of("2", "true", "MiXeD", "", " value ", "it's quoted", "a;b", "'literal'")
+                .map(value -> DynamicTest.dynamicTest("raw setting: " + value, () -> {
+                    try (Remote remote = new Remote()) {
+                        remote.proxy.setSessionState("default", Map.of("custom.key", value));
+                        remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+
+                        ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+                        verify(remote.client, times(3)).ExecuteStatement(requests.capture());
+                        assertEquals(java.util.List.of("SET custom.key = " + value, "USE `default`", "SELECT 1"),
+                                requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+                    }
+                }));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> dialectSettingsUseBareCommandsWithoutChangingCase() {
+        return Stream.of("default", "DEFAULT", "DeFaUlT", "hive", "HIVE", "HiVe")
+                .map(dialect -> DynamicTest.dynamicTest(dialect, () -> {
+                    try (Remote remote = new Remote()) {
+                        remote.proxy.setSessionState("default", Map.of("table.sql-dialect", dialect));
+                        remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+
+                        ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+                        verify(remote.client, times(3)).ExecuteStatement(requests.capture());
+                        assertEquals(java.util.List.of("SET table.sql-dialect = " + dialect,
+                                        "USE `default`", "SELECT 1"),
+                                requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+                    }
+                }));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> dialectValuesAreForwardedWithoutLocalValidation() {
+        return Stream.of("", "spark", " default ", "'default'", "custom-dialect")
+                .map(dialect -> DynamicTest.dynamicTest("raw: " + dialect, () -> {
+                    try (Remote remote = new Remote()) {
+                        remote.proxy.setSessionState("default", Map.of("table.sql-dialect", dialect));
+                        remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+
+                        ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+                        verify(remote.client, times(3)).ExecuteStatement(requests.capture());
+                        assertEquals(java.util.List.of("SET table.sql-dialect = " + dialect,
+                                        "USE `default`", "SELECT 1"),
+                                requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+                    }
+                }));
+    }
+
+    @Test
+    void changingDialectUsesTheSelectedTargetOnTheExistingConnection() throws Exception {
+        try (Remote remote = new Remote()) {
+            for (String dialect : java.util.List.of("default", "hive", "default")) {
+                remote.proxy.setSessionState("default", Map.of("table.sql-dialect", dialect));
+                remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+            }
+
+            assertEquals(1, remote.sockets.constructed().size());
+            ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.client, times(9)).ExecuteStatement(requests.capture());
+            assertEquals(java.util.List.of(
+                            "SET table.sql-dialect = default", "USE `default`", "SELECT 1",
+                            "SET table.sql-dialect = hive", "USE `default`", "SELECT 1",
+                            "SET table.sql-dialect = default", "USE `default`", "SELECT 1"),
+                    requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+        }
+    }
+
+    @TestFactory
+    Stream<DynamicTest> reconnectReplaysTheSelectedDialectBeforeBusinessSql() {
+        return Stream.of("default", "hive").map(dialect -> DynamicTest.dynamicTest(dialect, () -> {
+            try (Remote remote = new Remote()) {
+                remote.proxy.setSessionState("review", Map.of("table.sql-dialect", dialect));
+                remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 1"));
+                clearInvocations(remote.client);
+                when(remote.client.ExecuteStatement(any())).thenThrow(new TTransportException("response lost"));
+                assertThrows(TTransportException.class, () -> remote.proxy.executeStatement(
+                        new TExecuteStatementReq(remote.session, "SELECT 2")));
+                verify(remote.client).ExecuteStatement(any());
+
+                remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 3"));
+                assertEquals(2, remote.sockets.constructed().size());
+                ArgumentCaptor<TExecuteStatementReq> replay = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+                verify(remote.clients.constructed().get(1), times(3)).ExecuteStatement(replay.capture());
+                assertEquals(java.util.List.of("SET table.sql-dialect = " + dialect, "USE `review`", "SELECT 3"),
+                        replay.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
+            }
+        }));
+    }
+
+    @Test
+    void rejectedDialectSwitchStopsBeforeUseAndBusinessSql() throws Exception {
+        try (Remote remote = new Remote()) {
+            remote.proxy.setSessionState("default", Map.of("table.sql-dialect", "default"));
+            when(remote.client.ExecuteStatement(any())).thenReturn(new TExecuteStatementResp(error("switch rejected")));
+            TException failure = assertThrows(TException.class, () -> remote.proxy.executeStatement(
+                    new TExecuteStatementReq(remote.session, "SELECT 1")));
+            assertTrue(failure.getMessage().startsWith("FLINK_SESSION_STATE_SYNC_FAILED"));
+            assertEquals("switch rejected", failure.getCause().getMessage());
+            ArgumentCaptor<TExecuteStatementReq> request = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.client).ExecuteStatement(request.capture());
+            assertEquals("SET table.sql-dialect = default", request.getValue().getStatement());
+            verify(remote.client, never()).GetOperationStatus(any());
+        }
+    }
+
+    @Test
+    void rejectedSettingStopsBeforeFollowingSettingsAndBusinessSql() throws Exception {
+        try (Remote remote = new Remote()) {
+            Map<String, String> settings = new java.util.LinkedHashMap<>();
+            settings.put("parallelism.default", "invalid");
+            settings.put("table.sql-dialect", "default");
+            remote.proxy.setSessionState("default", settings);
+            when(remote.client.ExecuteStatement(any())).thenReturn(new TExecuteStatementResp(error("setting rejected")));
+
+            TException failure = assertThrows(TException.class, () -> remote.proxy.executeStatement(
+                    new TExecuteStatementReq(remote.session, "SELECT 1")));
+            assertTrue(failure.getMessage().contains("could not apply parallelism.default"));
+            assertEquals("setting rejected", failure.getCause().getMessage());
+            ArgumentCaptor<TExecuteStatementReq> request = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.client).ExecuteStatement(request.capture());
+            assertEquals("SET parallelism.default = invalid", request.getValue().getStatement());
+        }
+    }
+
+    @Test
+    void correctedDialectCanBeAppliedAfterGatewayRejection() throws Exception {
+        try (Remote remote = new Remote()) {
+            when(remote.client.ExecuteStatement(argThat(request -> request != null
+                    && request.getStatement().equals("SET table.sql-dialect = invalid"))))
+                    .thenReturn(new TExecuteStatementResp(error("unsupported dialect")));
+            remote.proxy.setSessionState("default", Map.of("table.sql-dialect", "invalid"));
+            TException failure = assertThrows(TException.class, () -> remote.proxy.executeStatement(
+                    new TExecuteStatementReq(remote.session, "SELECT 1")));
+            assertEquals("unsupported dialect", failure.getCause().getMessage());
+            remote.proxy.setSessionState("default", Map.of("table.sql-dialect", "default"));
+            remote.proxy.executeStatement(new TExecuteStatementReq(remote.session, "SELECT 2"));
+
+            ArgumentCaptor<TExecuteStatementReq> requests = ArgumentCaptor.forClass(TExecuteStatementReq.class);
+            verify(remote.client, times(4)).ExecuteStatement(requests.capture());
+            assertEquals(java.util.List.of("SET table.sql-dialect = invalid", "SET table.sql-dialect = default",
+                            "USE `default`", "SELECT 2"),
                     requests.getAllValues().stream().map(TExecuteStatementReq::getStatement).toList());
         }
     }

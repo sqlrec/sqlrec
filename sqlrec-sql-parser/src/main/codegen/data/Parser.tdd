@@ -6,6 +6,8 @@
     "com.sqlrec.sql.parser.*"
     "org.apache.calcite.sql.SqlAlienSystemTypeNameSpec"
     "org.apache.flink.sql.parser.ddl.SqlSet"
+    "org.apache.flink.sql.parser.ddl.SqlUseDatabase"
+    "org.apache.flink.sql.parser.dql.SqlShowTables"
     "java.util.ArrayList"
     "java.util.List"
   ]
@@ -30,12 +32,16 @@
     "SERVICE"
     "SERVICES"
     "STRING"
+    "TABLES"
     "TIMEIN"
     "TRAIN"
+    "USE"
   ]
 
   nonReservedKeywordsToAdd: [
     "IF"
+    "TABLES"
+    "USE"
   ]
 
   statementParserMethods: [
@@ -63,6 +69,8 @@
     "SqlAssert()"
     "SqlFlush()"
     "SqlRecSet()"
+    "SqlRecUseDefault()"
+    "SqlRecShowTablesInDefault()"
   ]
 
   dataTypeParserMethods: [

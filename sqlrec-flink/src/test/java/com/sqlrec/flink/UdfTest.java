@@ -1,6 +1,5 @@
 package com.sqlrec.flink;
 
-import com.sqlrec.udf.config.FunctionConfigs;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
@@ -12,9 +11,10 @@ import org.apache.flink.util.CloseableIterator;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +43,17 @@ class UdfTest {
     @RegisterExtension
     static final MiniClusterExtension MINI_CLUSTER = new MiniClusterExtension();
 
-    private static final String HIVE_VERSION = "3.1.3";
+    @TempDir
+    Path warehouseDir;
+
+    private IsolatedHiveCatalog isolatedCatalog;
+
+    @AfterEach
+    void closeCatalog() throws Exception {
+        if (isolatedCatalog != null) {
+            isolatedCatalog.close();
+        }
+    }
 
     // ---- Environment setup ----
 
@@ -57,29 +67,13 @@ class UdfTest {
         env.setParallelism(1);
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
 
-        // Programmatic HiveConf with embedded Derby metastore
-        Path warehouseDir = Files.createTempDirectory("hive-warehouse");
-        HiveConf hiveConf = new HiveConf();
-        hiveConf.setVar(HiveConf.ConfVars.METASTOREURIS, "");
-        hiveConf.setVar(HiveConf.ConfVars.METASTORECONNECTURLKEY,
-                "jdbc:derby:memory:metastore_db;create=true");
-        hiveConf.setVar(HiveConf.ConfVars.METASTOREWAREHOUSE,
-                warehouseDir.toAbsolutePath().toString());
-        hiveConf.setBoolVar(HiveConf.ConfVars.METASTORE_EXECUTE_SET_UGI, false);
-        // Disable connection pooling for embedded Derby (avoids HikariCP/DBCP dependency)
-        hiveConf.set("datanucleus.connectionPoolingType", "None");
-        // Auto-create metastore schema (avoids running schematool)
-        hiveConf.setBoolean("hive.metastore.schema.verification", false);
-        hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true);
-        hiveConf.setBoolean("hive.metastore.try.direct.sql", true);
-
-        // Register HiveCatalog (allowEmbedded=true for in-memory Derby metastore)
-        HiveCatalog hiveCatalog = new HiveCatalog("hive", "default", hiveConf, HIVE_VERSION, true);
+        isolatedCatalog = new IsolatedHiveCatalog(new HiveConf(), warehouseDir);
+        HiveCatalog hiveCatalog = isolatedCatalog.open();
         tEnv.registerCatalog("hive", hiveCatalog);
         tEnv.useCatalog("hive");
 
         // Load HiveModule so Flink can recognize Hive UDFs
-        tEnv.loadModule("hive", new HiveModule(HIVE_VERSION));
+        tEnv.loadModule("hive", new HiveModule("3.1.3"));
 
         return tEnv;
     }

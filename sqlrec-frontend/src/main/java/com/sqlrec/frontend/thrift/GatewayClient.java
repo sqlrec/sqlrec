@@ -165,17 +165,11 @@ public final class GatewayClient {
         if (!stateDirty) {
             return;
         }
-        String synchronizing = "table.sql-dialect";
+        String synchronizing = "session settings";
         try {
-            String dialect = desiredSettings.get("table.sql-dialect");
-            if (dialect != null) {
-                applyStateStatement("SET 'table.sql-dialect' = " + literal(dialect));
-            }
             for (Map.Entry<String, String> setting : desiredSettings.entrySet()) {
-                if (!setting.getKey().equals("table.sql-dialect")) {
-                    synchronizing = setting.getKey();
-                    applyStateStatement("SET " + literal(setting.getKey()) + " = " + literal(setting.getValue()));
-                }
+                synchronizing = setting.getKey();
+                applyStateStatement("SET " + setting.getKey() + " = " + setting.getValue());
             }
             synchronizing = "current database";
             applyStateStatement("USE `" + desiredDatabase.replace("`", "``") + "`");
@@ -184,10 +178,6 @@ public final class GatewayClient {
             throw new TException("FLINK_SESSION_STATE_SYNC_FAILED: could not apply " + synchronizing
                     + "; correct this setting and retry the remote statement", e);
         }
-    }
-
-    private static String literal(String value) {
-        return "'" + value.replace("'", "''") + "'";
     }
 
     private void applyStateStatement(String sql) throws TException {

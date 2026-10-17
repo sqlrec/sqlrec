@@ -69,7 +69,7 @@ export schema='{
                 "fieldName": "embedding",
                 "dataType": "FloatVector",
                 "elementTypeParams": {
-                    "dim": "64"
+                    "dim": "32"
                 }
             }
         ]
@@ -77,7 +77,7 @@ export schema='{
 export indexParams='[
         {
             "fieldName": "embedding",
-            "metricType": "COSINE",
+            "metricType": "IP",
             "indexName": "embedding",
             "indexType": "AUTOINDEX"
         },

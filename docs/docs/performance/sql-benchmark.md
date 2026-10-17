@@ -1,6 +1,6 @@
 # SQL性能测试
 
-本页记录仓库中 `benchmark/movielens/` 压测的执行方法和一次历史测试结果。数字只反映特定硬件、数据和部署配置，不应视为其他环境的性能保证。
+本页记录仓库中 `benchmark/sql_performance/` 压测的执行方法和一次历史测试结果。数字只反映特定硬件、数据和部署配置，不应视为其他环境的性能保证。
 
 ## 测试覆盖什么
 
@@ -25,7 +25,7 @@
 | 评分 | 约 100 万条 |
 | 向量维度 | 64 |
 
-推荐流程定义在 `benchmark/movielens/init_sqlrec_sql.sql`。
+推荐流程定义在 `benchmark/sql_performance/init_sqlrec_sql.sql`。
 
 | 环节 | 默认行为 |
 |------|----------|
@@ -61,7 +61,7 @@
 在项目根目录执行：
 
 ```bash
-cd benchmark/movielens
+cd benchmark/sql_performance
 bash init.sh
 ```
 
@@ -84,7 +84,7 @@ bash init.sh
 ## 执行压测
 
 ```bash
-cd benchmark/movielens
+cd benchmark/sql_performance
 bash benchmark.sh
 ```
 

@@ -1,6 +1,6 @@
 # SQL Performance Test
 
-This page explains how to run the benchmark in `benchmark/movielens/` and records one historical result. The numbers apply only to the specified hardware, data, and deployment configuration; they are not a performance guarantee for other environments.
+This page explains how to run the benchmark in `benchmark/sql_performance/` and records one historical result. The numbers apply only to the specified hardware, data, and deployment configuration; they are not a performance guarantee for other environments.
 
 ## What the Benchmark Covers
 
@@ -25,7 +25,7 @@ The benchmark uses MovieLens 1M:
 | Ratings | About 1 million |
 | Embedding dimensions | 64 |
 
-The recommendation flow is defined in `benchmark/movielens/init_sqlrec_sql.sql`.
+The recommendation flow is defined in `benchmark/sql_performance/init_sqlrec_sql.sql`.
 
 | Stage | Default behavior |
 |-------|------------------|
@@ -61,7 +61,7 @@ The historical result below used:
 From the repository root:
 
 ```bash
-cd benchmark/movielens
+cd benchmark/sql_performance
 bash init.sh
 ```
 
@@ -84,7 +84,7 @@ The script:
 ## Run the Benchmark
 
 ```bash
-cd benchmark/movielens
+cd benchmark/sql_performance
 bash benchmark.sh
 ```
 

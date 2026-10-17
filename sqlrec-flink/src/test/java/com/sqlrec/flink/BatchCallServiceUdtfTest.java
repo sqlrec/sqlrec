@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Integration test for BatchCallServiceUDTF (batch_call_service), mirroring the
- * item_embedding pipeline in benchmark/movielens/load_features.sql:
+ * item_embedding pipeline in benchmark/sql_performance/load_features.sql:
  *
  * INSERT INTO item_embedding
  * SELECT r.long_map['movie_id'] AS id, r.string_map['title'] AS title,

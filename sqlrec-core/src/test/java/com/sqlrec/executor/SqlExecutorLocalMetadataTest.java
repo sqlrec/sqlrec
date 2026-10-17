@@ -226,6 +226,20 @@ class SqlExecutorLocalMetadataTest {
     }
 
     @Test
+    void parserCompatibilityCommandsKeepTheirExistingExecutionSemantics() throws Exception {
+        SqlExecutor executor = new SqlExecutor();
+        executor.executeSqlAsync("-- before\nSET\ttable.sql-dialect=default; -- after");
+        assertEquals("default", executor.getSessionSettings().get("table.sql-dialect"));
+        assertEquals("default", executor.getExecuteContext().getVariable("table.sql-dialect"));
+        executor.executeSqlAsync("SET key='it''s a;b=c' -- comment");
+        assertEquals("it's a;b=c", executor.getSessionSettings().get("key"));
+        executor.executeSqlAsync("USE review");
+        assertEquals("review", executor.getDefaultSchema());
+        executor.executeSqlAsync("/* before */ USE DEFAULT;");
+        assertEquals("default", executor.getDefaultSchema());
+    }
+
+    @Test
     void setPreservesLiteralValuesAndResetOnlyRemovesSavedOverrides() throws Exception {
         SqlExecutor executor = new SqlExecutor();
         executor.setExecuteParams(Map.of("request.param", "retained"));

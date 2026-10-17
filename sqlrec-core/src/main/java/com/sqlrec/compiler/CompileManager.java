@@ -42,7 +42,6 @@ public class CompileManager {
     }
 
     public static SqlNode parseSql(String sql) throws Exception {
-        sql = SqlPreProcesser.preProcessSql(sql);
         return SqlRecSqlParser.parse(sql);
     }
 
