@@ -90,10 +90,10 @@ public class ProxyAllBindableCancelTest {
         });
         proxy.setName("cancelled_node");
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.cancel();
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class, () -> proxy.bind(schema, context));
         assertTrue(ex.getMessage().contains("cancelled before start"));
         assertFalse(executed.get(), "delegate should not execute when context already cancelled");
@@ -101,7 +101,8 @@ public class ProxyAllBindableCancelTest {
 
     @Test
     public void testCancelledDuringExecutionThrowsAndSkipsMaterialization() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         ProxyAllBindable proxy = new ProxyAllBindable(new TestBindable() {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext ctx) {
@@ -112,7 +113,6 @@ public class ProxyAllBindableCancelTest {
         });
         proxy.setName("mid_cancel_node");
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> proxy.bind(schema, context));
         assertTrue(ex.getMessage().contains("mid_cancel_node"));
@@ -121,7 +121,8 @@ public class ProxyAllBindableCancelTest {
 
     @Test
     public void testDelegateExceptionWhileCancelledPropagatesUnwrapped() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         ProxyAllBindable proxy = new ProxyAllBindable(new TestBindable() {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext ctx) {
@@ -131,7 +132,6 @@ public class ProxyAllBindableCancelTest {
             }
         });
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> proxy.bind(schema, context));
         // the cancelled path must not wrap into "Node xxx execution failed"
@@ -148,8 +148,8 @@ public class ProxyAllBindableCancelTest {
         });
         proxy.setName("failed_node");
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         RuntimeException ex = assertThrows(RuntimeException.class, () -> proxy.bind(schema, context));
         assertEquals("Node failed_node execution failed", ex.getMessage());
     }
@@ -165,8 +165,8 @@ public class ProxyAllBindableCancelTest {
             }
         });
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Enumerable<Object[]> result = proxy.bind(schema, context);
         assertEquals(1, result.count());
     }
@@ -185,10 +185,10 @@ public class ProxyAllBindableCancelTest {
             });
             proxy.setName("metric_cancel_node");
 
-            ExecuteContextImpl context = new ExecuteContextImpl();
+            CalciteSchema schema = CalciteSchema.createRootSchema(false);
+            ExecuteContextImpl context = new ExecuteContextImpl(schema);
             context.cancel();
 
-            CalciteSchema schema = CalciteSchema.createRootSchema(false);
             assertThrows(RuntimeException.class, () -> proxy.bind(schema, context));
 
             Counter counter = simple.find(Consts.METRICS_NODE_CANCELLED)
@@ -206,7 +206,8 @@ public class ProxyAllBindableCancelTest {
         SimpleMeterRegistry simple = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(simple);
         try {
-            ExecuteContextImpl context = new ExecuteContextImpl();
+            CalciteSchema schema = CalciteSchema.createRootSchema(false);
+            ExecuteContextImpl context = new ExecuteContextImpl(schema);
             ProxyAllBindable proxy = new ProxyAllBindable(new TestBindable() {
                 @Override
                 public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext ctx) {
@@ -216,7 +217,6 @@ public class ProxyAllBindableCancelTest {
             });
             proxy.setName("metric_cancel_node_delegate");
 
-            CalciteSchema schema = CalciteSchema.createRootSchema(false);
             assertThrows(RuntimeException.class, () -> proxy.bind(schema, context));
 
             Counter counter = simple.find(Consts.METRICS_NODE_CANCELLED)

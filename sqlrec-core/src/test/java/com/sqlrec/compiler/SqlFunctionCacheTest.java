@@ -219,9 +219,10 @@ class SqlFunctionCacheTest {
     }
 
     private int executeScalar(SqlFunctionBindable bindable) {
+        CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
         Enumerable<Object[]> result = bindable.bind(
-                CalciteSchemaFactory.createCalciteSchema(),
-                new ExecuteContextImpl()
+                schema,
+                new ExecuteContextImpl(schema)
         );
         return ((Number) result.toList().getFirst()[0]).intValue();
     }

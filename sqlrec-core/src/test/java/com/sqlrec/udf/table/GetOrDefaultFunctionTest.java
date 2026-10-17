@@ -19,8 +19,8 @@ public class GetOrDefaultFunctionTest {
 
     @BeforeEach
     public void setUp() {
-        executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        executeContext = new ExecuteContextImpl(schema);
         dataContext = new SqlRecDataContextImpl(Collections.emptyMap(), schema, executeContext);
     }
 

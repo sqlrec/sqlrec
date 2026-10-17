@@ -282,7 +282,7 @@ public class TypeSupportTest {
         );
 
         for (SqlTestCase sqlTestCase : sqlList) {
-            sqlTestCase.test(schema, new ExecuteContextImpl());
+            sqlTestCase.test(schema, new ExecuteContextImpl(schema));
         }
     }
 

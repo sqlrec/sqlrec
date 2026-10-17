@@ -5,6 +5,7 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.schema.RootFirstCatalogReader;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableCalc;
 import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
@@ -26,6 +27,8 @@ import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.runtime.Bindable;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
@@ -101,7 +104,20 @@ public class NormalSqlCompiler {
         // todo use Programs.standard() when don't access outside storage
         Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
-        final RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
+        RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
+        // Calcite may append hidden ORDER BY fields. Keep them for sorting, then
+        // project only the SELECT fields, with their validated names and types.
+        if (!root.isRefTrivial()) {
+            RexBuilder rexBuilder = cluster.getRexBuilder();
+            List<RexNode> projects = new ArrayList<>();
+            for (var field : root.fields) {
+                projects.add(rexBuilder.makeInputRef(bestExp, field.left));
+            }
+            List<String> names = SqlValidatorUtil.uniquify(root.validatedRowType.getFieldNames(),
+                    catalogReader.nameMatcher().isCaseSensitive());
+            bestExp = EnumerableCalc.create(bestExp, RexProgram.create(
+                    bestExp.getRowType(), projects, null, names, rexBuilder));
+        }
         String physicalPlan = RelOptUtil.toString(bestExp);
         log.info("compile bestExp: {}", physicalPlan);
 

@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 
 /** Executes one bindable once per partition and merges the successful results. */
 final class PartitionExecutor {
@@ -47,8 +48,21 @@ final class PartitionExecutor {
         ExecuteContextImpl partitionContext = ((ExecuteContextImpl) context).clone();
         List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();
         for (List<Object[]> partition : split(rows, resolveSize(context))) {
-            futures.add(ExecutorServiceUtils.submit(
-                    () -> bindable.bind(createSchema(schema, partition, fields), partitionContext)));
+            futures.add(ExecutorServiceUtils.submit(() -> {
+                CalciteSchema partitionSchema = createSchema(schema, partition, fields);
+                ExecuteContextImpl child = partitionContext.clone(partitionSchema);
+                try {
+                    if (child.isCancelled()) {
+                        throw new CancellationException("partition execution cancelled before start");
+                    }
+                    Enumerable<Object[]> result = bindable.bind(partitionSchema, child);
+                    // Lazy failures also belong to this partition and cancel only its scope.
+                    return result == null ? null : Linq4j.asEnumerable(result.toList());
+                } catch (Throwable failure) {
+                    child.cancel();
+                    throw failure;
+                }
+            }));
         }
         return merge(context, partitionContext, futures);
     }
@@ -60,19 +74,28 @@ final class PartitionExecutor {
     ) {
         boolean ignoreFailures = SqlRecConfigs.IGNORE_PARTITION_EXCEPTION
                 .getValueWithEnvFallback(context.getVariables());
+        if (!ignoreFailures) {
+            try {
+                ExecutorServiceUtils.awaitAll(partitionContext, futures);
+            } catch (RuntimeException failure) {
+                throw new RuntimeException("Partition execution failed", ExecutorServiceUtils.unwrap(failure));
+            }
+        }
         List<Object[]> merged = new ArrayList<>();
         List<Throwable> failures = new ArrayList<>();
         int successes = 0;
 
         for (int i = 0; i < futures.size(); i++) {
             try {
-                Enumerable<Object[]> result = futures.get(i).join();
-                List<Object[]> partitionResult = new ArrayList<>();
+                Enumerable<Object[]> result = futures.get(i).get();
                 if (result != null) {
-                    result.forEach(partitionResult::add);
+                    result.forEach(merged::add);
                 }
-                merged.addAll(partitionResult);
                 successes++;
+            } catch (InterruptedException interruption) {
+                ExecutorServiceUtils.cancel(partitionContext, futures);
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Partition execution interrupted", interruption);
             } catch (Exception exception) {
                 Throwable failure = ExecutorServiceUtils.unwrap(exception);
                 if (!ignoreFailures || context.isCancelled() || partitionContext.isCancelled()

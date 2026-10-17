@@ -7,11 +7,13 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.model.ModelControllerFactory;
 import com.sqlrec.model.ServiceManager;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,8 +25,10 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     private final ExecuteContextImpl parent;
     private volatile boolean cancelled = false;
+    private final CalciteSchema executionSchema;
 
-    public ExecuteContextImpl() {
+    public ExecuteContextImpl(CalciteSchema schema) {
+        executionSchema = Objects.requireNonNull(schema, "schema");
         variableMap = new ConcurrentHashMap<>();
         variableMap.put(Consts.LOG_ID, UUID.randomUUID().toString());
         funNameStack = new ArrayList<>();
@@ -33,10 +37,15 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
+        this(parentContext, parentContext.executionSchema);
+    }
+
+    private ExecuteContextImpl(ExecuteContextImpl parentContext, CalciteSchema schema) {
         variableMap = parentContext.variableMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
         traceContext = parentContext.traceContext;
         functionReturnState = parentContext.functionReturnState;
+        executionSchema = Objects.requireNonNull(schema, "schema");
         parent = parentContext;
     }
 
@@ -145,7 +154,11 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     @Override
     public void cancel() {
-        this.cancelled = true;
+        // Publication checks cancellation under the same schema monitor.
+        // Isolated function/partition schemas do not block one another.
+        synchronized (executionSchema) {
+            cancelled = true;
+        }
     }
 
     @Override
@@ -163,6 +176,11 @@ public class ExecuteContextImpl implements ExecuteContext {
     @Override
     public ExecuteContextImpl clone() {
         return new ExecuteContextImpl(this);
+    }
+
+    /** Enter an isolated function/partition schema while retaining ancestor cancellation. */
+    ExecuteContextImpl clone(CalciteSchema schema) {
+        return new ExecuteContextImpl(this, schema);
     }
 
     private static class FunctionReturnState {

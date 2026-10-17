@@ -6,6 +6,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.udf.table.SetVariablesFunction;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -22,7 +23,7 @@ public class SetVariablesFunctionTest {
 
     @BeforeEach
     public void setUp() {
-        context = new ExecuteContextImpl();
+        context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         context.setVariable(Consts.LOG_ID, null);
     }
 

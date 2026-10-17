@@ -130,7 +130,7 @@ public class CalciteSchemaTest {
         SqlNode flinkSqlNode = CompileManager.parseSql(sql);
         BindableInterface bindable = new CompileManager().compileSql(flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql);
 
-        Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl());
+        Enumerable enumerable = bindable.bind(schema, new ExecuteContextImpl(schema));
         assert enumerable != null;
         List<Object[]> results = enumerable.toList();
         assert results.size() == 1;

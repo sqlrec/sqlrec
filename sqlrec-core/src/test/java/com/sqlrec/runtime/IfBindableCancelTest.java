@@ -24,8 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,7 +111,8 @@ public class IfBindableCancelTest {
     // ==================== timein mode: timeout/failure cancels the then subtree ====================
 
     @Test
-    public void testTimeinErrorPropagatesWithoutElse() {
+    public void testTimeinErrorRunsElse() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         AssertionError failure = new AssertionError("fatal THEN failure");
         AtomicBoolean elseExecuted = new AtomicBoolean(false);
         TestBindable thenInner = new TestBindable() {
@@ -130,16 +130,16 @@ public class IfBindableCancelTest {
         };
         IfBindable bindable = new IfBindable(condition(5000L),
                 cacheClause("t", thenInner), cacheClause("t", elseInner), true);
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
 
-        assertSame(failure, assertThrows(AssertionError.class,
-                () -> bindable.bind(CalciteSchema.createRootSchema(false), context)));
-        assertFalse(elseExecuted.get());
+        bindable.bind(schema, context);
+        assertTrue(elseExecuted.get());
         assertFalse(context.isCancelled());
     }
 
     @Test
-    public void testInterruptedTimeinWaitDoesNotRunElseOrCommitReturn() throws Exception {
+    public void testInterruptedTimeinWaitRunsElseAndCommitsOnlyItsReturn() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
@@ -164,18 +164,19 @@ public class IfBindableCancelTest {
         TestBindable elseValue = new TestBindable() {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                assertFalse(Thread.currentThread().isInterrupted());
                 elseExecuted.set(true);
                 return Linq4j.emptyEnumerable();
             }
         };
         IfBindable bindable = new IfBindable(condition(5000L),
                 new ReturnBindable(thenValue), new ReturnBindable(elseValue), true);
-        ExecuteContextImpl context = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl context = new ExecuteContextImpl(schema).createFunctionContext();
         AtomicReference<Throwable> thrown = new AtomicReference<>();
         AtomicBoolean interrupted = new AtomicBoolean(false);
         Thread caller = new Thread(() -> {
             try {
-                bindable.bind(CalciteSchema.createRootSchema(false), context);
+                bindable.bind(schema, context);
             } catch (Throwable failure) {
                 thrown.set(failure);
             } finally {
@@ -188,12 +189,10 @@ public class IfBindableCancelTest {
             caller.interrupt();
             caller.join(5000);
             assertFalse(caller.isAlive());
-            RuntimeException failure = assertInstanceOf(RuntimeException.class, thrown.get());
-
-            assertInstanceOf(InterruptedException.class, failure.getCause());
-            assertTrue(interrupted.get());
-            assertFalse(elseExecuted.get());
-            assertFalse(context.hasReturnedFromFunction());
+            assertNull(thrown.get());
+            assertFalse(interrupted.get());
+            assertTrue(elseExecuted.get());
+            assertTrue(context.hasReturnedFromFunction());
             assertFalse(context.isCancelled());
         } finally {
             caller.interrupt();
@@ -202,7 +201,7 @@ public class IfBindableCancelTest {
         }
         assertTrue(finished.await(5, TimeUnit.SECONDS));
         assertTrue(thenCancelled.get());
-        assertFalse(context.hasReturnedFromFunction());
+        assertTrue(context.hasReturnedFromFunction());
     }
 
     @Test
@@ -227,8 +226,8 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         long startTime = System.currentTimeMillis();
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
         long duration = System.currentTimeMillis() - startTime;
@@ -278,8 +277,8 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
 
         assertTrue(thenExecuted.get());
@@ -318,8 +317,8 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
 
         assertFalse(thenExecuted.get());
@@ -351,14 +350,14 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Thread canceller = new Thread(() -> {
             sleepQuietly(100);
             context.cancel();
         });
         canceller.start();
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         try {
             RuntimeException ex = assertThrows(RuntimeException.class, () -> ifBindable.bind(schema, context));
             assertTrue(ex.getMessage().contains("cancelled"));
@@ -398,14 +397,14 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Thread canceller = new Thread(() -> {
             sleepQuietly(100);
             context.cancel();
         });
         canceller.start();
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         try {
             RuntimeException ex = assertThrows(RuntimeException.class, () -> ifBindable.bind(schema, context));
             assertTrue(ex.getMessage().contains("cancelled"));
@@ -442,8 +441,8 @@ public class IfBindableCancelTest {
                 true
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         ifBindable.bind(schema, context);
 
         assertFalse(thenExecuted.get());
@@ -480,8 +479,8 @@ public class IfBindableCancelTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
 
         assertTrue(thenExecuted.get());
@@ -502,8 +501,8 @@ public class IfBindableCancelTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         Enumerable<Object[]> result = ifBindable.bind(schema, context);
 
         assertEquals(0, result.count());
@@ -520,8 +519,8 @@ public class IfBindableCancelTest {
                 null,
                 false
         );
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> ifBindable.bind(schema, context));
         assertEquals("condition must return exactly one row", ex.getMessage());
@@ -535,8 +534,8 @@ public class IfBindableCancelTest {
                 null,
                 false
         );
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> ifBindable.bind(schema, context));
         assertEquals("condition must return a boolean value", ex.getMessage());
@@ -550,8 +549,8 @@ public class IfBindableCancelTest {
                 cacheClause("t", returningRow()),
                 true
         );
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> ifBindable.bind(schema, context));
         assertEquals("condition must return a numeric value for timein mode", ex.getMessage());

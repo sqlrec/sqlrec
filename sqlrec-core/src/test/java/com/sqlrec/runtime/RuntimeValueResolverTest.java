@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.sql.parser.SqlGetVariable;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class RuntimeValueResolverTest {
     @Test
     void preservesDifferentDefaultRulesForFunctionNamesAndStringArguments() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         SqlGetVariable variable = new SqlGetVariable(SqlParserPos.ZERO,
                 SqlLiteral.createCharString("target", SqlParserPos.ZERO),
                 SqlLiteral.createCharString("fallback", SqlParserPos.ZERO));
@@ -32,7 +33,7 @@ class RuntimeValueResolverTest {
 
     @Test
     void leavesMissingValuesAndEmptyDefaultsForTheCallerToValidate() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         SqlGetVariable withoutDefault = new SqlGetVariable(SqlParserPos.ZERO,
                 SqlLiteral.createCharString("size", SqlParserPos.ZERO));
         assertNull(RuntimeValueResolver.resolveVariable(withoutDefault, context, NULL_ONLY));

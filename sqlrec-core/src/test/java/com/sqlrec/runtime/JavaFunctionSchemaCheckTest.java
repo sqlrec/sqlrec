@@ -91,8 +91,8 @@ public class JavaFunctionSchemaCheckTest {
 
     @Test
     public void testSchemaMatch() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -127,8 +127,8 @@ public class JavaFunctionSchemaCheckTest {
 
     @Test
     public void testSchemaFieldNameMismatch() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -160,8 +160,8 @@ public class JavaFunctionSchemaCheckTest {
 
     @Test
     public void testSchemaFieldTypeMismatch() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -193,8 +193,8 @@ public class JavaFunctionSchemaCheckTest {
 
     @Test
     public void testSchemaFieldCountMismatch() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {

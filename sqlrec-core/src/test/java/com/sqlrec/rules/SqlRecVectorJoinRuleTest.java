@@ -75,7 +75,7 @@ public class SqlRecVectorJoinRuleTest {
                 + "order by ip(left_table.embedding, vector_table.embedding) limit 2";
 
         BindableInterface bindable = compile(sql);
-        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl()).toList();
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl(schema)).toList();
 
         assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
         assertTrue(bindable.getPhysicalPlan().contains("EnumerableTableScan(table=[[default, left_table]])"));
@@ -101,7 +101,7 @@ public class SqlRecVectorJoinRuleTest {
                 + "order by ip(left_table.embedding, vector_table.embedding) desc limit 2";
 
         BindableInterface bindable = compile(sql);
-        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl()).toList();
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl(schema)).toList();
 
         assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
         assertFalse(bindable.getPhysicalPlan().contains("EnumerableSort"));
@@ -125,7 +125,7 @@ public class SqlRecVectorJoinRuleTest {
                 + "order by ip(left_table.embedding, vector_table.embedding) limit 2";
 
         BindableInterface bindable = compile(sql);
-        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl()).toList();
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl(schema)).toList();
 
         assertTrue(bindable.getPhysicalPlan().contains("SqlrecEnumerableVectorLookupJoin"));
         assertTrue(bindable.getPhysicalPlan().contains("EnumerableCalc"));

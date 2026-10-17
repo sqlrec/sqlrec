@@ -27,32 +27,35 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class IfBindableFailureTest {
     @Test
-    void interruptedWorkerDoesNotInterruptCallerOrRunElse() {
-        for (boolean wrapped : new boolean[]{false, true}) {
-            InterruptedException interruption = new InterruptedException("worker interrupted");
+    @SilenceLoggers(IfBindable.class)
+    void workerErrorsAndInterruptionsRunElseWithoutInterruptingCaller() {
+        for (Throwable failure : List.of(new AssertionError("worker error"),
+                new InterruptedException("worker interrupted"),
+                new CompletionException(new AssertionError("wrapped error")),
+                new CompletionException(new InterruptedException("wrapped interruption")))) {
+                    CalciteSchema schema = CalciteSchema.createRootSchema(false);
             AtomicReference<ExecuteContext> thenContext = new AtomicReference<>();
             AtomicBoolean elseRan = new AtomicBoolean();
             IfBindable bindable = timein(5000, context -> {
                 thenContext.set(context);
                 Thread.currentThread().interrupt();
-                return IfBindableFailureTest.<RuntimeException>fail(
-                        wrapped ? new CompletionException(interruption) : interruption);
+                return IfBindableFailureTest.<RuntimeException>fail(failure);
             }, context -> {
                 elseRan.set(true);
                 return row(2);
             });
-            ExecuteContextImpl parent = new ExecuteContextImpl().createFunctionContext();
+            ExecuteContextImpl parent = new ExecuteContextImpl(schema).createFunctionContext();
             try {
                 assertFalse(Thread.currentThread().isInterrupted());
-                RuntimeException failure = assertThrows(RuntimeException.class,
-                        () -> bindable.bind(CalciteSchema.createRootSchema(false), parent));
+                Enumerable<Object[]> result = bindable.bind(schema, parent);
 
-                assertSame(interruption, failure.getCause());
+                assertEquals(2, result.single()[0]);
+                assertSame(result, parent.getFunctionReturnResult());
                 assertFalse(Thread.currentThread().isInterrupted());
                 assertTrue(thenContext.get().isCancelled());
-                assertFalse(elseRan.get());
+                assertTrue(elseRan.get());
                 assertFalse(parent.isCancelled());
-                assertFalse(parent.hasReturnedFromFunction());
+                assertTrue(parent.hasReturnedFromFunction());
             } finally {
                 Thread.interrupted();
             }
@@ -61,11 +64,12 @@ class IfBindableFailureTest {
 
     @Test
     void nonPositiveTimeinExecutesOnlyElseInlineAndRecordsDirectFallback() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(registry);
         try {
             for (long timeout : new long[]{0, -1}) {
-                ExecuteContextImpl parent = new ExecuteContextImpl().createFunctionContext();
+                ExecuteContextImpl parent = new ExecuteContextImpl(schema).createFunctionContext();
                 Thread caller = Thread.currentThread();
                 IfBindable bindable = timein(timeout, context -> {
                     throw new AssertionError("non-positive TIMEIN must not start THEN");
@@ -77,7 +81,7 @@ class IfBindableFailureTest {
                 String name = "direct_timein_" + timeout;
                 bindable.setName(name);
 
-                Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), parent);
+                Enumerable<Object[]> result = bindable.bind(schema, parent);
 
                 assertEquals(2, result.single()[0]);
                 assertSame(result, parent.getFunctionReturnResult());
@@ -96,6 +100,7 @@ class IfBindableFailureTest {
 
     @Test
     void nonPositiveTimeinPropagatesElseFailureWithoutStartingThen() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         for (long timeout : new long[]{0, -1}) {
             RuntimeException failure = new RuntimeException("ELSE failed");
             IfBindable bindable = timein(timeout, context -> {
@@ -103,10 +108,10 @@ class IfBindableFailureTest {
             }, context -> {
                 throw failure;
             });
-            ExecuteContextImpl parent = new ExecuteContextImpl().createFunctionContext();
+            ExecuteContextImpl parent = new ExecuteContextImpl(schema).createFunctionContext();
 
             assertSame(failure, assertThrows(RuntimeException.class,
-                    () -> bindable.bind(CalciteSchema.createRootSchema(false), parent)));
+                    () -> bindable.bind(schema, parent)));
             assertFalse(parent.hasReturnedFromFunction());
         }
     }
@@ -114,6 +119,7 @@ class IfBindableFailureTest {
     @Test
     @SilenceLoggers(IfBindable.class)
     void waitingTimeoutRecordsTimeoutInsteadOfDirectFallback() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(registry);
         CountDownLatch release = new CountDownLatch(1);
@@ -129,9 +135,9 @@ class IfBindableFailureTest {
             }, context -> row(2));
             String name = "waiting_timein_timeout_metric";
             bindable.setName(name);
-            ExecuteContextImpl parent = new ExecuteContextImpl().createFunctionContext();
+            ExecuteContextImpl parent = new ExecuteContextImpl(schema).createFunctionContext();
 
-            Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), parent);
+            Enumerable<Object[]> result = bindable.bind(schema, parent);
 
             assertEquals(2, result.single()[0]);
             assertSame(result, parent.getFunctionReturnResult());
@@ -148,8 +154,9 @@ class IfBindableFailureTest {
 
     @Test
     void nonPositiveTimeinDoesNotRunEitherBranchAfterAncestorCancellation() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         for (long timeout : new long[]{0, -1}) {
-            ExecuteContextImpl ancestor = new ExecuteContextImpl();
+            ExecuteContextImpl ancestor = new ExecuteContextImpl(schema);
             ExecuteContextImpl parent = ancestor.createFunctionContext();
             ancestor.cancel();
             IfBindable bindable = timein(timeout, context -> {
@@ -159,7 +166,7 @@ class IfBindableFailureTest {
             });
 
             RuntimeException failure = assertThrows(RuntimeException.class,
-                    () -> bindable.bind(CalciteSchema.createRootSchema(false), parent));
+                    () -> bindable.bind(schema, parent));
 
             assertTrue(failure.getMessage().contains("cancelled"));
             assertFalse(parent.hasReturnedFromFunction());
@@ -169,6 +176,7 @@ class IfBindableFailureTest {
     @Test
     @SilenceLoggers(IfBindable.class)
     void internalTimeoutCancelsThenBeforeFallbackAndUsesExceptionMetric() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(registry);
         try {
@@ -188,9 +196,9 @@ class IfBindableFailureTest {
                 });
                 String name = "internal_timeout_wrapped_" + wrapped;
                 bindable.setName(name);
-                ExecuteContextImpl parent = new ExecuteContextImpl().createFunctionContext();
+                ExecuteContextImpl parent = new ExecuteContextImpl(schema).createFunctionContext();
 
-                Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), parent);
+                Enumerable<Object[]> result = bindable.bind(schema, parent);
 
                 assertEquals(2, result.single()[0]);
                 assertSame(result, parent.getFunctionReturnResult());

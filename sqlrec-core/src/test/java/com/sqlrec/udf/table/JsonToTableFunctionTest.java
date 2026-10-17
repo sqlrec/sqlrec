@@ -26,8 +26,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testJsonObject() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -56,8 +56,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testJsonArray() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -89,8 +89,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testWithArrayField() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -119,8 +119,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testWithBooleanField() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -148,8 +148,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testWithNullAndMissingFields() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -181,8 +181,8 @@ public class JsonToTableFunctionTest {
 
     @Test
     public void testWithStringArrayField() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {

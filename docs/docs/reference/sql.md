@@ -187,6 +187,8 @@ CACHE TABLE table_name AS
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
 | `select_statement` | SELECT 查询语句 |
 
+缓存表名不区分大小写，创建时统一保存为小写；SQL 函数的输入表名使用相同规则，并按此规则检查重复声明。不同大小写的同名缓存写入会覆盖同一张表。表名引号内的空格属于名称的一部分，会保留。
+
 **示例：**
 
 ```sql
@@ -235,6 +237,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `ASYNC` | 可选。异步执行 |
 
 `ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
+
+SQL 函数调用指定 `LIKE` 时，实际输出必须满足声明的列数、列名、顺序、完整字段类型和可空性约束。静态调用在编译时检查，动态调用在解析目标函数后、执行前检查；不匹配会报错。
 
 **示例：**
 
@@ -287,12 +291,14 @@ IF 语句支持两种执行模式：
 - 条件查询必须恰好返回一行一列。普通模式下该值必须是 BOOLEAN（NULL 按 false 处理）；TIMEIN 模式下必须是数值。
 - THEN 和 ELSE 子句必须同为 CACHE 语句，或同为非 CACHE 语句，不允许混用
 - 两分支均为 CACHE 语句时：必须写入相同的表名，且表结构必须兼容
+- IF 的结果结构合并所有可能分支的可空性和类型长度；无 ELSE 且可能保留已有缓存时，也合并已有缓存的结构。函数的多处 RETURN 使用同样的合并规则。
 - 两分支均为非 CACHE 语句时：两个分支的返回字段结构必须兼容
 - IF 包含 `RETURN` 时，仅支持两种结构：THEN 返回且没有 ELSE；或者 THEN 和 ELSE 都返回。不能只在 ELSE 返回，也不能将返回分支与非返回 ELSE 混用
 - 两个分支都返回时，返回模式必须兼容；该 IF 后必须立即以一条空 `RETURN;` 结束函数定义，不能再写其他语句。函数结果模式由两个分支推导，不受末尾空 RETURN 影响
 - THEN 返回且没有 ELSE 时，如果条件为 false，函数继续执行 IF 后面的语句
 - TIMEIN 模式必须提供 ELSE；两个分支必须同为 CACHE，或同为 RETURN
-- 请求已取消或等待线程被中断时终止执行，不再降级到 ELSE
+- TIMEIN 的缓存数据由工作线程计算，成功后由等待线程发布；超时后迟到的 THEN 数据不会覆盖 ELSE。
+- 请求已取消时终止执行，不再降级到 ELSE；请求仍有效时，THEN 的异常、Error 和中断均可触发 ELSE。
 - TIMEIN 的非正数预算表示直接降级；`NODE_EXEC_TIMEOUT <= 0` 仍表示不设置节点超时，两者含义不同
 - 当前不支持在 THEN 或 ELSE 中直接嵌套另一个 IF
 - 无 ELSE 子句且条件为 false 时：若 THEN 子句为 CACHE 语句，对应的缓存表会被注册为空表（若尚不存在），保证后续语句可正常引用

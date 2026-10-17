@@ -3,10 +3,8 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.utils.ExecutorServiceUtils;
-import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.utils.SchemaUtils;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -30,12 +28,24 @@ public class IfBindable extends BindableInterface {
     private final BindableInterface thenClause;
     private final BindableInterface elseClause;
     private final boolean timein;
+    private final List<RelDataTypeField> returnDataFields;
+    private final List<RelDataTypeField> cacheTableDataFields;
 
     public IfBindable(
             CalciteBindable condition,
             BindableInterface thenClause,
             BindableInterface elseClause,
             boolean timein
+    ) {
+        this(condition, thenClause, elseClause, timein, null);
+    }
+
+    public IfBindable(
+            CalciteBindable condition,
+            BindableInterface thenClause,
+            BindableInterface elseClause,
+            boolean timein,
+            List<RelDataTypeField> existingCacheFields
     ) {
         if (thenClause instanceof IfBindable || elseClause instanceof IfBindable) {
             throw new RuntimeException("if statement cannot be nested in then or else clause");
@@ -51,6 +61,17 @@ public class IfBindable extends BindableInterface {
         checkReturnBranches(thenReturns, elseReturns);
         checkBranchCompatibility(thenReturns || elseReturns, thenIsCache);
         checkTimein(thenIsCache, thenReturns);
+        List<RelDataTypeField> thenFields = thenClause.getReturnDataFields();
+        returnDataFields = elseClause != null && thenFields != null && !thenFields.isEmpty()
+                ? DataTypeUtils.mergeTableSchemas(thenFields, elseClause.getReturnDataFields()) : thenFields;
+        if (thenIsCache) {
+            List<RelDataTypeField> otherFields = elseClause == null
+                    ? existingCacheFields : elseClause.getCacheTableDataFields();
+            cacheTableDataFields = otherFields == null ? thenClause.getCacheTableDataFields()
+                    : DataTypeUtils.mergeTableSchemas(thenClause.getCacheTableDataFields(), otherFields);
+        } else {
+            cacheTableDataFields = null;
+        }
     }
 
     private void checkReturnBranches(boolean thenReturns, boolean elseReturns) {
@@ -159,18 +180,8 @@ public class IfBindable extends BindableInterface {
         }
 
         // no else clause and condition is false: keep the cache table visible as an empty table
-        if (thenClause instanceof CacheTableBindable) {
-            CacheTableBindable thenCache = (CacheTableBindable) thenClause;
-            CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
-            if (table == null) {
-                // add empty table
-                CacheTable cacheTable = new CacheTable(thenCache.getTableName(), Linq4j.emptyEnumerable(), thenCache.getTableDataFields());
-                schema.add(thenCache.getTableName(), cacheTable);
-            } else {
-                // the existing table must keep the exact same schema as the then clause,
-                // otherwise statements compiled against the then schema would read mismatched data
-                DataTypeUtils.checkTableSchemaSame(thenCache.getTableDataFields(), table.getDataFields());
-            }
+        if (thenClause instanceof CacheTableBindable thenCache) {
+            thenCache.ensureTable(schema, context);
         }
         return Linq4j.emptyEnumerable();
     }
@@ -205,17 +216,10 @@ public class IfBindable extends BindableInterface {
         Enumerable<Object[]> result;
         try {
             result = ExecutorServiceUtils.execute(() -> thenClause.bind(schema, thenContext), thenContext, timeout);
-        } catch (Exception failure) {
+        } catch (Throwable failure) {
             thenContext.cancel();
             boolean waitingTimedOut = failure instanceof TimeoutException;
             Throwable cause = ExecutorServiceUtils.unwrap(failure);
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            if (cause instanceof InterruptedException) {
-                // ExecutorServiceUtils restores interruption of the waiting thread only.
-                throw new RuntimeException("if node " + getName() + " interrupted", cause);
-            }
             if (context.isCancelled()) {
                 if (waitingTimedOut) {
                     throw new RuntimeException("if node " + getName() + " cancelled while waiting for thenClause");
@@ -229,10 +233,9 @@ public class IfBindable extends BindableInterface {
                 log.error("Error executing thenClause, falling back to elseClause", cause);
                 recordTimeinOutcome(context, "error");
             }
+            // ELSE starts after the failed THEN's interruption has been handled.
+            Thread.interrupted();
             return elseClause.bind(schema, context);
-        } catch (Error failure) {
-            thenContext.cancel();
-            throw failure;
         }
 
         recordTimeinOutcome(context, "primary_success");
@@ -249,7 +252,7 @@ public class IfBindable extends BindableInterface {
 
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
-        return thenClause.getReturnDataFields();
+        return returnDataFields;
     }
 
     @Override
@@ -298,13 +301,6 @@ public class IfBindable extends BindableInterface {
         return timein;
     }
 
-    public boolean isUnionSql() {
-        if (elseClause == null) {
-            return false;
-        }
-        return thenClause.isUnionSql() && elseClause.isUnionSql();
-    }
-
     public String getCacheTableName() {
         if (thenClause instanceof CacheTableBindable) {
             return thenClause.getCacheTableName();
@@ -313,10 +309,7 @@ public class IfBindable extends BindableInterface {
     }
 
     public List<RelDataTypeField> getCacheTableDataFields() {
-        if (thenClause instanceof CacheTableBindable) {
-            return thenClause.getCacheTableDataFields();
-        }
-        return super.getCacheTableDataFields();
+        return cacheTableDataFields;
     }
 
     @Override

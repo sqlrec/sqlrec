@@ -38,10 +38,9 @@ public class CallSqlFunctionBindable extends BindableInterface {
         if (!(context instanceof ExecuteContextImpl)) {
             throw new RuntimeException("function call context must be ExecuteContextImpl");
         }
-        ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone();
-        finalContext.addFunNameToStack(funName);
-
         CalciteSchema tmpSchema = CalciteSchemaFactory.createCalciteSchema();
+        ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone(tmpSchema);
+        finalContext.addFunNameToStack(funName);
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTables.get(i), false);
             tmpSchema.add(tablePlaceholders.get(i).getKey(), inputTableEntry.getTable());
@@ -90,8 +89,10 @@ public class CallSqlFunctionBindable extends BindableInterface {
     @Override
     public Set<String> getReadTables() {
         Set<String> readTables = new HashSet<>(sqlFunctionBindable.getReadTables());
-        inputTables.stream().map(NodeUtils::normalizeTableName).forEach(readTables::add);
+        // Remove callee-local names before adding caller inputs: an actual argument
+        // may have the same name as any of the callee's parameters.
         readTables.removeAll(getPlaceholdersTableNames());
+        inputTables.stream().map(NodeUtils::normalizeTableName).forEach(readTables::add);
         return readTables;
     }
 

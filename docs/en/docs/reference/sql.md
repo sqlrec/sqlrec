@@ -187,6 +187,8 @@ CACHE TABLE table_name AS
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
 | `select_statement` | SELECT query statement |
 
+Cache table names are case-insensitive and stored in lowercase. SQL function input table names follow the same rule and must be unique under that rule. Cache writes whose names differ only in case replace the same table. Spaces inside quoted table names remain part of the name.
+
 **Examples:**
 
 ```sql
@@ -235,6 +237,8 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | `ASYNC` | Optional. Execute asynchronously |
 
 `ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.
+
+For a SQL function call with `LIKE`, the actual output must satisfy the declared column count, names, order, complete field types, and nullability constraints. Static calls are checked during compilation; dynamic calls are checked after resolving the target and before executing it. A mismatch raises an error.
 
 **Examples:**
 
@@ -287,12 +291,14 @@ The IF statement supports two execution modes:
 - The condition query must return exactly one row and one column. In normal mode the value must be BOOLEAN (NULL is treated as false); in TIMEIN mode it must be numeric.
 - THEN and ELSE clauses must be both CACHE statements or both non-CACHE statements; mixing is not allowed
 - When both branches are CACHE statements: they must write to the same table name with compatible table schemas
+- The IF result schema merges nullability and type bounds from every possible branch, including an existing cache that may be retained when ELSE is omitted. Multiple RETURN statements in a function use the same merging rule.
 - When both branches are non-CACHE statements: the return field structures of the two branches must be compatible
 - An IF containing `RETURN` has only two valid shapes: a returning THEN with no ELSE, or both THEN and ELSE returning. An ELSE-only return and a returning THEN paired with a non-returning ELSE are rejected
 - When both branches return, their result schemas must be compatible. The IF must be followed immediately by one empty `RETURN;` that ends the definition, with no intervening statement. The function result schema comes from the two branches and is unaffected by this empty terminator
 - When THEN returns and ELSE is omitted, a false condition continues with the statements following the IF
 - TIMEIN requires ELSE; both branches must be CACHE statements or both must be RETURN statements
-- Request cancellation or interruption of the waiting thread terminates execution without falling back to ELSE
+- A TIMEIN worker computes cache data; the waiting thread publishes it only after success. A late THEN result after timeout cannot overwrite ELSE.
+- Request cancellation terminates execution without falling back to ELSE. While the request remains active, THEN exceptions, Errors, and interruptions may all trigger ELSE.
 - A non-positive TIMEIN budget selects ELSE directly; `NODE_EXEC_TIMEOUT <= 0` still disables the node timeout
 - Directly nesting another IF in THEN or ELSE is currently unsupported
 - With no ELSE clause and a false condition: if the THEN clause is a CACHE statement, the corresponding cache table is registered as an empty table (if it does not already exist), so subsequent statements can reference it normally

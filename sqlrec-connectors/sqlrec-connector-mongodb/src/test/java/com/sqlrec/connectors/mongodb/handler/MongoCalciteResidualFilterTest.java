@@ -102,7 +102,7 @@ class MongoCalciteResidualFilterTest {
                 Consts.DEFAULT_SCHEMA_NAME);
 
         List<Integer> ids = new ArrayList<>();
-        Enumerable<Object[]> result = bindable.bind(schema, new ExecuteContextImpl());
+        Enumerable<Object[]> result = bindable.bind(schema, new ExecuteContextImpl(schema));
         for (Object[] row : result) {
             ids.add(((Number) row[0]).intValue());
         }

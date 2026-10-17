@@ -41,7 +41,7 @@ public class RestFunctionExecutor {
         CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
         addTableToSchema(schema, function, request.getData());
 
-        ExecuteContext context = createExecuteContext(request);
+        ExecuteContext context = createExecuteContext(request, schema);
         return executeFunction(apiName, function, schema, context);
     }
 
@@ -66,8 +66,8 @@ public class RestFunctionExecutor {
         return function;
     }
 
-    private static ExecuteContext createExecuteContext(RequestData request) {
-        ExecuteContext context = new ExecuteContextImpl();
+    private static ExecuteContext createExecuteContext(RequestData request, CalciteSchema schema) {
+        ExecuteContext context = new ExecuteContextImpl(schema);
         if (request.getParams() != null) {
             request.getParams().forEach(context::setVariable);
         }

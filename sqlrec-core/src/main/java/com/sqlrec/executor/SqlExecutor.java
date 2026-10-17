@@ -55,7 +55,7 @@ public class SqlExecutor {
 
     public SqlExecutor() {
         schema = CalciteSchemaFactory.createCalciteSchema();
-        context = new ExecuteContextImpl();
+        context = new ExecuteContextImpl(schema);
         defaultSchema = Consts.DEFAULT_SCHEMA_NAME;
     }
 

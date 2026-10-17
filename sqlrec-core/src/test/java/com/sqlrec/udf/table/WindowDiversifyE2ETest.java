@@ -33,8 +33,8 @@ public class WindowDiversifyE2ETest {
 
     @Test
     public void testTableFunction() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {

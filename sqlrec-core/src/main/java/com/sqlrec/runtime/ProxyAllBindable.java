@@ -123,12 +123,11 @@ public class ProxyAllBindable extends ForwardingBindable {
         try {
             return executeDelegate(schema, nodeContext);
         } catch (Throwable failure) {
+            nodeContext.cancel();
             Throwable cause = ExecutorServiceUtils.unwrap(failure);
-            if (!(cause instanceof InterruptedException) && !(cause instanceof Error)) {
-                Enumerable<Object[]> recovered = recoverIgnoredCacheFailure(schema, context, cause);
-                if (recovered != null) {
-                    return recovered;
-                }
+            Enumerable<Object[]> recovered = recoverIgnoredCacheFailure(schema, context, cause);
+            if (recovered != null) {
+                return recovered;
             }
             throw cause;
         }
@@ -171,6 +170,8 @@ public class ProxyAllBindable extends ForwardingBindable {
             return null;
         }
 
+        // Recovery handles this node's interruption; later nodes may block normally.
+        Thread.interrupted();
         log.warn("ignore exception when bind cache table {}: {}", cacheTableName, failure.getMessage(), failure);
         Tags tags = MetricsUtils.createTags(context.getVariables(), "name", getName());
         MetricsUtils.getCompositeMeterRegistry()
@@ -179,10 +180,7 @@ public class ProxyAllBindable extends ForwardingBindable {
 
         CacheTable cacheTable = new CacheTable(cacheTableName, Linq4j.emptyEnumerable(), cacheTableDataFields);
         cacheTable.setCreateSql(delegate.getSql());
-        if (context.isCancelled()) {
-            throw new RuntimeException("node " + getName() + " execution cancelled");
-        }
-        schema.add(cacheTableName, cacheTable);
+        CacheTableBindable.publish(schema, context, cacheTable);
 
         List<Object[]> rows = new ArrayList<>();
         rows.add(new Object[]{cacheTableName, 0L});

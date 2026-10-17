@@ -93,7 +93,7 @@ public class SqlTestCase {
     }
 
     public void test(CalciteSchema schema) throws Exception {
-        test(schema, new ExecuteContextImpl());
+        test(schema, new ExecuteContextImpl(schema));
     }
 
     public void test(CalciteSchema schema, ExecuteContext executeContext) throws Exception {

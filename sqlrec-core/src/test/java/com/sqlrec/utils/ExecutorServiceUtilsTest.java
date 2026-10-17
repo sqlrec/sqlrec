@@ -1,6 +1,7 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.runtime.ExecuteContextImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ExecutorService;
@@ -12,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -64,7 +66,7 @@ public class ExecutorServiceUtilsTest {
     @Test
     void nonPositiveTimeoutExecutesInlineAndPositiveTimeoutUsesExecutor() throws Exception {
         Thread caller = Thread.currentThread();
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
 
         assertSame(caller, ExecutorServiceUtils.execute(Thread::currentThread, context, 0));
         assertSame(caller, ExecutorServiceUtils.execute(Thread::currentThread, context, -1));
@@ -74,7 +76,7 @@ public class ExecutorServiceUtilsTest {
 
     @Test
     void timeoutCancelsOnlyChildScope() {
-        ExecuteContextImpl parent = new ExecuteContextImpl();
+        ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl child = parent.clone();
         CountDownLatch release = new CountDownLatch(1);
         try {
@@ -94,7 +96,7 @@ public class ExecutorServiceUtilsTest {
 
     @Test
     void interruptedWaitRestoresInterruptAndCancelsOnlyChild() {
-        ExecuteContextImpl parent = new ExecuteContextImpl();
+        ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl child = parent.clone();
         CountDownLatch release = new CountDownLatch(1);
         try {
@@ -141,7 +143,7 @@ public class ExecutorServiceUtilsTest {
 
     @Test
     void failedGroupWaitPreservesCauseAndCancelsOnlyChildScope() {
-        ExecuteContextImpl parent = new ExecuteContextImpl();
+        ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl child = parent.clone();
         IllegalStateException failure = new IllegalStateException("failed");
         CompletableFuture<Void> failed = CompletableFuture.failedFuture(failure);
@@ -153,6 +155,95 @@ public class ExecutorServiceUtilsTest {
         assertSame(failure, ExecutorServiceUtils.unwrap(thrown));
         assertTrue(child.isCancelled());
         assertFalse(parent.isCancelled());
+    }
+
+    @Test
+    void failedGroupStopsWaitingForAnUnfinishedSibling() throws Exception {
+        ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
+        ExecuteContextImpl child = parent.clone();
+        CompletableFuture<Void> pending = new CompletableFuture<>();
+        CompletableFuture<Void> failed = new CompletableFuture<>();
+        IllegalStateException original = new IllegalStateException("first failure");
+        CompletableFuture<Void> waiter = CompletableFuture.runAsync(
+                () -> ExecutorServiceUtils.awaitAll(child, List.of(pending, failed)));
+        try {
+            failed.completeExceptionally(original);
+            ExecutionException thrown = assertThrows(ExecutionException.class,
+                    () -> waiter.get(2, TimeUnit.SECONDS));
+            assertSame(original, ExecutorServiceUtils.unwrap(thrown));
+            assertTrue(pending.isCancelled());
+            assertTrue(child.isCancelled());
+            assertFalse(parent.isCancelled());
+        } finally {
+            pending.cancel(true);
+            failed.cancel(true);
+        }
+    }
+
+    @Test
+    void interruptedGroupWaitPreservesInterruptAndCancelsOnlyItsScope() throws Exception {
+        ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
+        ExecuteContextImpl child = parent.clone();
+        CompletableFuture<Void> pending = new CompletableFuture<>();
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        AtomicReference<Throwable> cause = new AtomicReference<>();
+        Thread waiter = Thread.ofVirtual().start(() -> {
+            started.countDown();
+            try {
+                ExecutorServiceUtils.awaitAll(child, List.of(pending));
+            } catch (CompletionException failure) {
+                cause.set(ExecutorServiceUtils.unwrap(failure));
+                interrupted.set(Thread.currentThread().isInterrupted());
+            }
+        });
+        try {
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            waiter.interrupt();
+            waiter.join(2000);
+            assertFalse(waiter.isAlive());
+            assertInstanceOf(InterruptedException.class, cause.get());
+            assertTrue(interrupted.get());
+            assertTrue(pending.isCancelled());
+            assertTrue(child.isCancelled());
+            assertFalse(parent.isCancelled());
+        } finally {
+            pending.cancel(true);
+            waiter.interrupt();
+            waiter.join(2000);
+        }
+    }
+
+    @Test
+    void successfulGroupWaitRequiresEveryNodeToComplete() throws Exception {
+        ExecuteContextImpl context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
+        CompletableFuture<Void> first = new CompletableFuture<>();
+        CompletableFuture<Void> second = new CompletableFuture<>();
+        CompletableFuture<Void> waiter = CompletableFuture.runAsync(
+                () -> ExecutorServiceUtils.awaitAll(context, List.of(first, second)));
+        try {
+            first.complete(null);
+            assertFalse(waiter.isDone());
+            second.complete(null);
+            waiter.get(2, TimeUnit.SECONDS);
+            assertFalse(context.isCancelled());
+            assertFalse(first.isCancelled());
+            assertFalse(second.isCancelled());
+        } finally {
+            first.cancel(true);
+            second.cancel(true);
+        }
+    }
+
+    @Test
+    void alreadyCancelledRequestsCannotPassEmptyOrAlreadyCompletedWaits() {
+        for (List<CompletableFuture<Void>> futures : List.of(
+                List.<CompletableFuture<Void>>of(), List.of(CompletableFuture.<Void>completedFuture(null)))) {
+            ExecuteContextImpl parent = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
+            parent.cancel();
+            assertThrows(java.util.concurrent.CancellationException.class,
+                    () -> ExecutorServiceUtils.awaitAll(parent.clone(), futures));
+        }
     }
 
     private static void await(CountDownLatch latch) {

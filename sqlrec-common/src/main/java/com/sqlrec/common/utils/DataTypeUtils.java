@@ -114,6 +114,22 @@ public class DataTypeUtils {
         DataTypeSupport.Schemas.checkSame(fields1, fields2);
     }
 
+    /** Common schema for alternative results, preserving nullability and type bounds from both. */
+    public static List<RelDataTypeField> mergeTableSchemas(
+            List<RelDataTypeField> first, List<RelDataTypeField> second) {
+        checkTableSchemaSame(first, second);
+        RelDataTypeFactory factory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+        List<RelDataTypeField> merged = new ArrayList<>();
+        for (int i = 0; i < first.size(); i++) {
+            RelDataType type = factory.leastRestrictive(List.of(first.get(i).getType(), second.get(i).getType()));
+            if (type == null) {
+                throw new IllegalArgumentException("cannot merge field types: " + first.get(i) + " and " + second.get(i));
+            }
+            merged.add(new RelDataTypeFieldImpl(first.get(i).getName(), i, type));
+        }
+        return merged;
+    }
+
     public static void checkTableSchemaIdentical(List<RelDataTypeField> referenceFields, List<RelDataTypeField> fields, int tableIndex) {
         DataTypeSupport.Schemas.checkIdentical(referenceFields, fields, tableIndex);
     }

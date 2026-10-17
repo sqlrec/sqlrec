@@ -31,7 +31,7 @@ public class CalciteBuiltInFunctionSupportTest {
         schema = CalciteSchema.createRootSchema(false);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema());
         CalciteSchemaFactory.setGlobalSchema(schema);
-        executeContext = new ExecuteContextImpl();
+        executeContext = new ExecuteContextImpl(schema);
     }
 
     @Test

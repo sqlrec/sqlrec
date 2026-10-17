@@ -30,7 +30,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testExecuteWithoutTimeout() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
 
         List<Object[]> testData = new ArrayList<>();
@@ -42,7 +43,6 @@ public class CacheTableBindableTimeoutTest {
                 "test_table", testBindable
         );
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, schema, context);
 
@@ -56,7 +56,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testExecuteWithTimeoutSuccess() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
 
         List<Object[]> testData = new ArrayList<>();
@@ -67,7 +68,6 @@ public class CacheTableBindableTimeoutTest {
                 "test_table", testBindable
         );
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, schema, context);
 
@@ -76,7 +76,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testExecuteWithTimeout() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
 
         AtomicBoolean taskStarted = new AtomicBoolean(false);
@@ -129,7 +130,6 @@ public class CacheTableBindableTimeoutTest {
                 "test_table", slowBindable
         );
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         long startTime = System.currentTimeMillis();
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
@@ -146,7 +146,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testTimeoutNotAppliedWhenNotTimeoutAble() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
 
         BindableInterface notTimeoutAbleBindable = new BindableInterface() {
@@ -194,7 +195,6 @@ public class CacheTableBindableTimeoutTest {
                 "test_table", notTimeoutAbleBindable
         );
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         long startTime = System.currentTimeMillis();
         Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, schema, context);
@@ -207,7 +207,8 @@ public class CacheTableBindableTimeoutTest {
     @Test
     @SilenceLoggers(ProxyAllBindable.class)
     public void testIgnoreExceptionWithTimeout() throws Exception {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         CountDownLatch finished = new CountDownLatch(1);
         AtomicBoolean cancellationObserved = new AtomicBoolean(false);
@@ -264,7 +265,6 @@ public class CacheTableBindableTimeoutTest {
         cacheTableBindable.setIgnoreException(true);
         cacheTableBindable.setSql("CACHE TABLE test_table AS SELECT col1");
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(registry);
 
@@ -300,7 +300,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testExceptionHandlingWithoutTimeout() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
 
         BindableInterface exceptionBindable = new BindableInterface() {
@@ -336,7 +337,6 @@ public class CacheTableBindableTimeoutTest {
                 "test_table", exceptionBindable
         );
 
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
             bindWithProxy(cacheTableBindable, schema, context);
@@ -348,7 +348,8 @@ public class CacheTableBindableTimeoutTest {
 
     @Test
     public void testMultipleTimeoutsInSequence() {
-        ExecuteContext context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
 
         AtomicInteger executionCount = new AtomicInteger(0);
@@ -394,8 +395,6 @@ public class CacheTableBindableTimeoutTest {
             CacheTableBindable cacheTableBindable = new CacheTableBindable(
                     "test_table_" + i, quickBindable
             );
-
-            CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
             Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, schema, context);
             assertNotNull(result);

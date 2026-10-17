@@ -66,7 +66,7 @@ public class BindableForwardingTest {
         assertFalse(tableReturn.isUnionSql());
         assertTrue(tableReturn.containsReturn());
         assertTrue(tableReturn.isParallelizable());
-        assertFalse(tableReturn.isTimeoutAble(null, new ExecuteContextImpl()));
+        assertFalse(tableReturn.isTimeoutAble(null, new ExecuteContextImpl(CalciteSchema.createRootSchema(false))));
         assertEquals(Set.of("input"), tableReturn.getReadTables());
     }
 

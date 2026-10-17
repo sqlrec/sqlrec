@@ -1,12 +1,15 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.JavaFunctionUtils;
 import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -79,6 +82,9 @@ final class FunctionBindableFactory {
         if (sqlFunction == null) {
             throw new Exception("function not find: " + functionName);
         }
+        if (returnFields != null) {
+            checkSqlReturnFields(functionName, returnFields, sqlFunction.getReturnDataFields());
+        }
 
         List<String> inputTables = new ArrayList<>(inputs.size());
         for (SqlNode input : inputs) {
@@ -92,5 +98,28 @@ final class FunctionBindableFactory {
                 functionName, inputTables, sqlFunction);
         bindable.checkInputTable(schema);
         return bindable;
+    }
+
+    private static void checkSqlReturnFields(
+            String functionName, List<RelDataTypeField> declared, List<RelDataTypeField> actual) {
+        try {
+            DataTypeUtils.checkTableSchemaSame(declared, actual == null ? List.of() : actual);
+            JavaTypeFactoryImpl factory = new JavaTypeFactoryImpl();
+            for (int i = 0; i < declared.size(); i++) {
+                RelDataType expectedType = declared.get(i).getType();
+                RelDataType actualType = actual.get(i).getType();
+                // Rows are passed through unchanged: their complete type must fit the
+                // compiled contract, including precision, nested types and NULLs.
+                if (actualType.isNullable() && !expectedType.isNullable()
+                        || !factory.createTypeWithNullability(actualType, expectedType.isNullable()).equals(expectedType)) {
+                    throw new IllegalArgumentException("field " + declared.get(i).getName()
+                            + " expects " + expectedType.getFullTypeString()
+                            + ", got " + actualType.getFullTypeString());
+                }
+            }
+        } catch (RuntimeException failure) {
+            throw new IllegalArgumentException("SQL function " + functionName
+                    + " return schema does not match LIKE: " + failure.getMessage(), failure);
+        }
     }
 }

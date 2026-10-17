@@ -7,7 +7,6 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Tag;
@@ -15,6 +14,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
 public class SqlFunctionCompileIntegrationTest {
@@ -86,25 +88,21 @@ public class SqlFunctionCompileIntegrationTest {
                 "create sql function fun1",
                 "cache table t1 as select 1 as id",
                 "call get('func_name')() like t1",
-                "return"
+                "return t1"
         );
         new CompileManager().compileSqlFunction("fun1", fun1SqlList);
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        ExecuteContextImpl executeContext = new ExecuteContextImpl(schema);
         executeContext.setVariable("func_name", "fun1");
         SqlNode flinkSqlNode = CompileManager.parseSql("call fun1()");
         BindableInterface bindable = new CompileManager().compileSql(
                 flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, "call fun1()"
         );
 
-        Exception e = null;
-        try {
-            Enumerable enumerable = bindable.bind(schema, executeContext);
-        } catch (Exception ex) {
-            e = ex;
-        }
-        assert e != null;
-        assert ExceptionUtils.getRootCause(e).getMessage().contains("Circular dependency detected: fun1 in stack: fun1");
+        Exception failure = assertThrows(Exception.class, () -> bindable.bind(schema, executeContext));
+        assertTrue(ExceptionUtils.getRootCauseMessage(failure)
+                        .contains("Circular dependency detected: fun1 in stack: fun1"),
+                () -> ExceptionUtils.getStackTrace(failure));
     }
 }

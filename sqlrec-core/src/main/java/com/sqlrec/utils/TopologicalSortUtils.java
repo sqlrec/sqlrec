@@ -1,6 +1,8 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.IfBindable;
+import com.sqlrec.runtime.ProxyAllBindable;
 
 import java.util.*;
 
@@ -13,10 +15,13 @@ public class TopologicalSortUtils {
         return Map.entry(sortedBindableList, bindableDependency);
     }
 
+    /** Removes redundant execution edges from a DAG without modifying the input. */
     public static Map<Integer, Set<Integer>> optimizeDependency(Map<Integer, Set<Integer>> bindableDependency) {
         if (bindableDependency == null || bindableDependency.isEmpty()) {
             return bindableDependency;
         }
+        // Transitive reduction is only valid here for an acyclic, complete graph.
+        topologicalSort(bindableDependency);
 
         Map<Integer, Set<Integer>> optimized = new HashMap<>();
         for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
@@ -29,7 +34,7 @@ public class TopologicalSortUtils {
             Set<Integer> toRemove = new HashSet<>();
 
             for (Integer dep : directDeps) {
-                if (hasIndirectPath(optimized, node, dep, directDeps)) {
+                if (hasIndirectPath(optimized, node, dep)) {
                     toRemove.add(dep);
                 }
             }
@@ -43,8 +48,7 @@ public class TopologicalSortUtils {
     private static boolean hasIndirectPath(
             Map<Integer, Set<Integer>> dependency,
             Integer start,
-            Integer target,
-            Set<Integer> excludeDirectDeps
+            Integer target
     ) {
         Set<Integer> visited = new HashSet<>();
         Queue<Integer> queue = new LinkedList<>();
@@ -84,6 +88,12 @@ public class TopologicalSortUtils {
     public static List<Integer> topologicalSort(Map<Integer, Set<Integer>> bindableDependency) {
         Map<Integer, Set<Integer>> forwardDependency = new HashMap<>();
         for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
+            for (Integer dependency : entry.getValue()) {
+                if (!bindableDependency.containsKey(dependency)) {
+                    throw new IllegalArgumentException("unknown dependency node " + dependency
+                            + " referenced by node " + entry.getKey());
+                }
+            }
             forwardDependency.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
@@ -96,7 +106,7 @@ public class TopologicalSortUtils {
                 }
             }
             if (noDependBindableList.isEmpty()) {
-                throw new RuntimeException("circular dependency");
+                throw new IllegalArgumentException("circular dependency: " + forwardDependency.keySet());
             }
             sortedBindableList.addAll(noDependBindableList);
             for (Integer bindableIndex : noDependBindableList) {
@@ -111,13 +121,6 @@ public class TopologicalSortUtils {
     }
 
     public static Map<Integer, Set<Integer>> buildBindableDependency(List<BindableInterface> bindableList) {
-        return buildBindableDependency(bindableList, false);
-    }
-
-    private static Map<Integer, Set<Integer>> buildBindableDependency(
-            List<BindableInterface> bindableList,
-            boolean dataDependenciesOnly
-    ) {
         Map<String, Set<Integer>> readTableToBindableIndex = new HashMap<>();
         Map<String, Set<Integer>> writeTableToBindableIndex = new HashMap<>();
         Map<Integer, Set<Integer>> bindableDependency = new HashMap<>();
@@ -130,7 +133,7 @@ public class TopologicalSortUtils {
             BindableInterface bindable = bindableList.get(i);
 
             boolean executionBarrier = !bindable.isParallelizable() || bindable.containsReturn();
-            if (executionBarrier && !dataDependenciesOnly) {
+            if (executionBarrier) {
                 for (int j = 0; j < i; j++) {
                     bindableDependency.get(i).add(j);
                 }
@@ -181,58 +184,69 @@ public class TopologicalSortUtils {
         return bindableDependency;
     }
 
-    /*
-    set true if:
-    1. the bindable is only union source, directly or indirectly
-    2. the bindable is not source of result table, directly or indirectly
+    /**
+     * Uses direct read edges, never execution barriers or transitive reduction.
+     * Local conditional nodes and all writers of a repeatedly written table must
+     * not recover automatically, nor may their upstream producers in this function.
+     * Other branches and the internals of called functions keep their own policy.
      */
     public static Map<Integer, Boolean> getIsUnionSource(
             List<BindableInterface> bindableList,
             List<Integer> sortedBindableList
     ) {
-        Map<Integer, Boolean> isUnionSource = new HashMap<>();
-        Map<Integer, Boolean> isUnionNode = new HashMap<>();
-
-        // Execution barriers add control edges to the execution graph. Exception-ignore
-        // analysis must use only real table dependencies, otherwise a SET or RETURN between
-        // a source and its UNION consumer incorrectly disables branch degradation.
-        Map<Integer, Set<Integer>> exceptionDependency = optimizeDependency(
-                buildBindableDependency(bindableList, true)
-        );
-        Map<Integer, Set<Integer>> reverseBindableDependency = getReverseBindableDependency(exceptionDependency);
-
-        for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
-            int bindableIndex = sortedBindableList.get(i);
-            BindableInterface bindable = bindableList.get(bindableIndex);
-            isUnionNode.put(bindableIndex, bindable.isUnionSql());
-
-            // A RETURN node is a result sink. Keep its non-UNION inputs on the result path
-            // from being treated as ignorable UNION-only sources.
-            if (bindable.containsReturn()) {
-                isUnionSource.put(bindableIndex, false);
-                continue;
+        Map<String, Set<Integer>> tableWriters = new HashMap<>();
+        Map<Integer, Set<Integer>> readDependencies = new HashMap<>();
+        Set<Integer> protectedNodes = new HashSet<>();
+        for (int i = 0; i < bindableList.size(); i++) {
+            BindableInterface bindable = bindableList.get(i);
+            if (isIfNode(bindable)) {
+                protectedNodes.add(i);
             }
-
-            Set<Integer> consumers = reverseBindableDependency.getOrDefault(
-                    bindableIndex, Collections.emptySet());
-            boolean reachesUnion = false;
-            boolean hasNonUnionConsumer = false;
-            for (Integer consumerIndex : consumers) {
-                if (isUnionNode.getOrDefault(consumerIndex, false)
-                        || isUnionSource.getOrDefault(consumerIndex, false)) {
-                    reachesUnion = true;
-                } else {
-                    hasNonUnionConsumer = true;
-                    break;
-                }
+            Set<Integer> producers = new HashSet<>();
+            for (String tableName : bindable.getReadTables()) {
+                producers.addAll(tableWriters.getOrDefault(
+                        NodeUtils.normalizeTableName(tableName), Collections.emptySet()));
             }
-
-            // A node is recoverable only when it actually feeds a UNION and every one of
-            // its consumers stays on a UNION-only path. Unused non-UNION work must fail.
-            isUnionSource.put(bindableIndex, reachesUnion && !hasNonUnionConsumer);
+            readDependencies.put(i, producers);
+            // Register writes after reads to avoid a self-dependency.
+            for (String tableName : bindable.getWriteTables()) {
+                tableWriters.computeIfAbsent(NodeUtils.normalizeTableName(tableName), k -> new HashSet<>()).add(i);
+            }
+        }
+        for (Set<Integer> writers : tableWriters.values()) {
+            if (writers.size() > 1) {
+                protectedNodes.addAll(writers);
+            }
+        }
+        // Read edges always point to earlier statements, so one reverse pass suffices.
+        for (int i = bindableList.size() - 1; i >= 0; i--) {
+            if (protectedNodes.contains(i)) {
+                protectedNodes.addAll(readDependencies.get(i));
+            }
         }
 
-        return isUnionSource;
+        Map<Integer, Set<Integer>> tableConsumers = getReverseBindableDependency(readDependencies);
+        Map<Integer, Boolean> unionSources = new HashMap<>();
+        for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
+            int index = sortedBindableList.get(i);
+            if (protectedNodes.contains(index) || bindableList.get(index).containsReturn()) {
+                unionSources.put(index, false);
+                continue;
+            }
+            Set<Integer> consumers = tableConsumers.getOrDefault(index, Collections.emptySet());
+            boolean onlyUnionConsumers = !consumers.isEmpty() && consumers.stream().allMatch(consumer ->
+                    bindableList.get(consumer).isUnionSql() || unionSources.getOrDefault(consumer, false));
+            unionSources.put(index, onlyUnionConsumers);
+        }
+        return unionSources;
+    }
+
+    private static boolean isIfNode(BindableInterface bindable) {
+        // Unwrap execution proxies only; a CALL is a separate function boundary.
+        while (bindable instanceof ProxyAllBindable proxy) {
+            bindable = proxy.getDelegate();
+        }
+        return bindable instanceof IfBindable;
     }
 
     public static Map<Integer, Set<Integer>> getReverseBindableDependency(

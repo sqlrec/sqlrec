@@ -221,7 +221,7 @@ public class IfBindableTest {
     @Test
     public void testIfTableSchemaMismatch() throws Exception {
         SqlTestCase sqlTestCase = new SqlTestCase(
-                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table t1 as SELECT 'x' as name)"
+                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table T1 as SELECT 'x' as name)"
         );
         sqlTestCase.expectedException = new RuntimeException("desired field type not equal to given field type");
         sqlTestCase.test(schema);
@@ -495,7 +495,7 @@ public class IfBindableTest {
     @Test
     public void testIfCacheBranchFieldCountMismatch() throws Exception {
         SqlTestCase sqlTestCase = new SqlTestCase(
-                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table t1 as SELECT 1 as id, 'x' as name)"
+                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table T1 as SELECT 1 as id, 'x' as name)"
         );
         sqlTestCase.expectedException = new RuntimeException("field count not equal");
         sqlTestCase.test(schema);

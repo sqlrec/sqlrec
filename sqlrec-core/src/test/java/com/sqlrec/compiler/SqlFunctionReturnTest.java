@@ -53,7 +53,7 @@ class SqlFunctionReturnTest {
     void executesEmptyReturn() throws Exception {
         SqlFunctionBindable function = compile("return_empty", "RETURN");
 
-        Enumerable<Object[]> result = function.bind(schema, new ExecuteContextImpl());
+        Enumerable<Object[]> result = function.bind(schema, new ExecuteContextImpl(schema));
 
         assertNull(result);
         assertNull(function.getReturnDataFields());
@@ -66,7 +66,7 @@ class SqlFunctionReturnTest {
                 "RETURN SELECT 1 AS id, 'ok' AS name"
         );
 
-        List<Object[]> rows = function.bind(schema, new ExecuteContextImpl()).toList();
+        List<Object[]> rows = function.bind(schema, new ExecuteContextImpl(schema)).toList();
 
         assertEquals(1, rows.size());
         assertEquals(1, rows.get(0)[0]);
@@ -84,7 +84,7 @@ class SqlFunctionReturnTest {
                 "RETURN result_table"
         );
 
-        List<Integer> values = function.bind(schema, new ExecuteContextImpl())
+        List<Integer> values = function.bind(schema, new ExecuteContextImpl(schema))
                 .select(row -> (Integer) row[0])
                 .toList();
 
@@ -99,7 +99,7 @@ class SqlFunctionReturnTest {
                 "RETURN CALL return_child()"
         );
 
-        assertEquals(7, parent.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+        assertEquals(7, parent.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
         assertEquals(java.util.Set.of("return_child"), parent.getDependencySqlFunctions());
         assertEquals("return_child", parent.getAllDependSqlFunctionMap().get("return_child"));
     }
@@ -113,7 +113,7 @@ class SqlFunctionReturnTest {
                 "RETURN SELECT 2 AS id"
         );
 
-        assertEquals(2, parent.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+        assertEquals(2, parent.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
     }
 
     @Test
@@ -146,7 +146,7 @@ class SqlFunctionReturnTest {
                     "RETURN SELECT 2 AS id"
             );
 
-            assertEquals(1, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(1, function.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
             assertNull(schema.getTable("should_not_exist", false));
         }
     }
@@ -159,7 +159,7 @@ class SqlFunctionReturnTest {
                 "RETURN SELECT 2 AS id"
         );
 
-        assertEquals(2, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+        assertEquals(2, function.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
     }
 
     @Test
@@ -178,8 +178,8 @@ class SqlFunctionReturnTest {
                     "RETURN"
             );
 
-            assertEquals(1, trueFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
-            assertEquals(2, falseFunction.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(1, trueFunction.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
+            assertEquals(2, falseFunction.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
             assertEquals("id", trueFunction.getReturnDataFields().get(0).getName().toLowerCase());
         }
     }
@@ -194,7 +194,7 @@ class SqlFunctionReturnTest {
                     "RETURN"
             );
 
-            assertEquals(timeout > 0 ? 1 : 2, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+            assertEquals(timeout > 0 ? 1 : 2, function.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
         }
     }
 
@@ -377,7 +377,7 @@ class SqlFunctionReturnTest {
         );
 
         assertFalse(function.getReturnDataFields().isEmpty());
-        assertEquals(2, function.bind(schema, new ExecuteContextImpl()).toList().get(0)[0]);
+        assertEquals(2, function.bind(schema, new ExecuteContextImpl(schema)).toList().get(0)[0]);
     }
 
     private SqlFunctionBindable compile(String name, String... body) throws Exception {

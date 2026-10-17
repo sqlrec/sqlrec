@@ -175,10 +175,11 @@ public class KvJoinUtilsTest {
     @Test
     public void testExecutionContextOverridesDefault() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
-        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl executeContext = new ExecuteContextImpl(schema);
         executeContext.setVariable("IGNORE_JOIN_QUERY_EXCEPTION", "false");
         SqlRecDataContext dataContext = new SqlRecDataContextImpl(
-                Collections.emptyMap(), CalciteSchema.createRootSchema(false), executeContext);
+                Collections.emptyMap(), schema, executeContext);
 
         Enumerable left = Linq4j.asEnumerable(Collections.singletonList(new Object[]{1, "Alice"}));
         SqlRecKvTable rightTable = mock(SqlRecKvTable.class);

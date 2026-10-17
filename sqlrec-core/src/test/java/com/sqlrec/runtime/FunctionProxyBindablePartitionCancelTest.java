@@ -53,9 +53,9 @@ public class FunctionProxyBindablePartitionCancelTest {
     @Test
     public void testPartitionTasksObserveAncestorCancellation() throws Exception {
         CANCEL_OBSERVED.set(false);
-        ExecuteContext executeContext = new ExecuteContextImpl();
-        executeContext.setVariable("IGNORE_PARTITION_EXCEPTION", "true");
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
+        executeContext.setVariable("IGNORE_PARTITION_EXCEPTION", "true");
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -108,8 +108,8 @@ public class FunctionProxyBindablePartitionCancelTest {
     @SilenceLoggers(PartitionExecutor.class)
     public void testPartitionFailurePropagates() throws Exception {
         // a regular partition failure (unrelated to cancellation) should still propagate as an exception
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {

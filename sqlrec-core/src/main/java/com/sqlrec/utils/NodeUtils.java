@@ -269,7 +269,7 @@ public class NodeUtils {
     }
 
     public static String normalizeTableName(String tableName) {
-        return tableName == null ? null : tableName.trim().toLowerCase(Locale.ROOT);
+        return tableName == null ? null : tableName.toLowerCase(Locale.ROOT);
     }
 
     private static String normalizeTableName(List<String> qualifiedName) {

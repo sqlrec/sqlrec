@@ -304,7 +304,7 @@ public class CalciteRuleRegressionTest {
     }
 
     private List<Object[]> execute(BindableInterface bindable) {
-        return bindable.bind(rootSchema, new ExecuteContextImpl()).toList();
+        return bindable.bind(rootSchema, new ExecuteContextImpl(rootSchema)).toList();
     }
 
     private RelBuilder relBuilder() {

@@ -12,7 +12,7 @@ An occasional remote-service, recall-source, or partition failure does not alway
 
 ## Fallback for timeout or exception: `IF TIMEIN`
 
-`IF TIMEIN` handles both timeout and ordinary exceptions in THEN. It is not limited to timeout handling.
+`IF TIMEIN` handles timeouts and failures in THEN, including `Error` and `InterruptedException`.
 
 ```sql
 IF TIMEIN (SELECT 100 FROM config_table) THEN (
@@ -26,8 +26,12 @@ Here `100` is milliseconds:
 
 - a successful THEN result is used when it finishes within 100ms;
 - a timeout cancels THEN and runs ELSE;
-- an ordinary THEN exception runs ELSE;
+- a THEN exception or error, including interruption, runs ELSE;
 - an ancestor cancellation does not run ELSE and terminates the request.
+
+Cache data is fully computed before publication. Publication and context cancellation use the same schema monitor: after cancellation completes, a late THEN cannot overwrite the cache written by ELSE. SQL callees and partitions use independent temporary schemas and do not share publication locks.
+
+An outer `NODE_EXEC_TIMEOUT` covers the entire ordinary `IF` or `IF TIMEIN`, so condition, THEN, and ELSE execution do not reset the node budget. Once the node timeout cancels the IF, it does not run ELSE.
 
 The timeout can come from a variable:
 
@@ -86,7 +90,9 @@ CACHE TABLE all_recall AS
     SELECT * FROM recall_b;
 ```
 
-For an eligible cache branch that is eventually consumed by a UNION, an ordinary exception or node timeout is treated as an empty branch and the other inputs continue. This is suitable for recall and optional feature sources.
+For an eligible cache branch that is eventually consumed by a UNION, a failure or node timeout is treated as an empty branch and the other inputs continue. This includes `Error`, `InterruptedException`, and wrapped failures. Recovery clears the current thread's handled interrupt flag so later nodes can continue. This is suitable for recall and optional feature sources.
+
+The failed node's child context is cancelled while the parent context can continue. Late computation results from a timed-out cache node are discarded and cannot overwrite the recovered empty table.
 
 Disable it when the branch is mandatory:
 
@@ -94,7 +100,16 @@ Disable it when the branch is mandatory:
 SET 'IGNORE_UNION_EXCEPTION' = 'false';
 ```
 
-It does not apply when the failed result is returned directly, also feeds a non-UNION path, the request is cancelled, or the function is selected dynamically with `GET()` and cannot be classified at compile time.
+It does not apply when the failed result is returned directly, also feeds a non-UNION path, or the request is cancelled.
+
+Restrictions apply to individual nodes; an IF does not disable recovery for the entire SQL function:
+
+- `IF` / `IF TIMEIN` is neither a UNION merge boundary nor eligible for automatic empty-table recovery, even if its result later feeds a UNION.
+- When multiple nodes write the same table, none of those writers can recover automatically. This avoids guessing which table version a conditional write preserves or replaces.
+
+A callee's restrictions do not propagate to its caller. For both static and dynamic `CALL`, recovery depends on how the caller uses the result. An eligible UNION branch may treat a failed call as empty, even when the error originated from an IF or repeated-write node inside the callee.
+
+Within the current function, protected nodes and their upstream producers cannot recover automatically. This does not disable eligible UNION recovery inside a callee. A successfully returned result can feed an outer IF condition or other operation; if the callee throws an error, the caller decides how to handle it based on how it uses the call result. Unrelated UNION branches remain eligible. The ELSE fallback provided by `IF TIMEIN` remains available.
 
 ## Continue after an external Join lookup failure: `IGNORE_JOIN_QUERY_EXCEPTION`
 
@@ -122,7 +137,7 @@ This handles external lookup failures. Missing tables, invalid schemas, and quer
 
 ## Keep successful partitions: `IGNORE_PARTITION_EXCEPTION`
 
-By default, any failed partition fails the complete partitioned call:
+By default, any failed partition immediately ends the wait for the partitioned call and cancels its child context; running tasks exit cooperatively:
 
 ```sql
 CACHE TABLE ranked AS
@@ -141,6 +156,8 @@ PARTITION BY items SIZE get_or_default('partition_size', '100');
 ```
 
 With the option enabled, successful partitions are merged and failed partition results are discarded. At least one successful partition returns partial results; if every partition fails, the call still raises an error. Cancellation, timeout, and serious errors are not treated as ordinary partition failures.
+
+Each partition has its own child context; a failure cancels only that partition and its background descendants. Interrupting the waiting thread preserves the interrupt flag, cancels the partitioned call, and raises an error in both strict and partial-result modes.
 
 Disable it to restore strict behavior:
 
@@ -183,6 +200,10 @@ This affects the current execution context. If the execution does not set the op
 
 ## Failures that should remain terminal
 
-The following normally indicate that the request cannot continue and should not be degraded: failed `ASSERT`, missing tables/functions/fields, incompatible schemas, a SQL function that never executes `RETURN`, ancestor cancellation, thread interruption, and serious errors.
+The following normally indicate that the request cannot continue and should not be degraded: failed `ASSERT`, missing tables/functions/fields, incompatible schemas, a SQL function that never executes `RETURN`, and ancestor cancellation.
+
+Request-context cancellation always terminates execution and prevents UNION recovery or an `IF TIMEIN` ELSE fallback. Thread interruption alone does not mean that the request context has been cancelled.
+
+During parallel execution, a node failure that is not recovered immediately ends the wait and propagates the exception. Other nodes continue to use context cancellation checks; running tasks exit cooperatively.
 
 Recovery changes the failure scope, not result ordering. Add an explicit `ORDER BY` whenever stable ordering is required.

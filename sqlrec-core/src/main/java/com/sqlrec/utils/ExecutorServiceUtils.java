@@ -5,6 +5,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -74,8 +75,26 @@ public final class ExecutorServiceUtils {
     }
 
     public static void awaitAll(ExecuteContext context, Collection<? extends CompletableFuture<?>> futures) {
+        CompletableFuture<Void> completion = allOf(futures);
+        // allOf normally waits for every task even after a failure. Complete the
+        // wait immediately on the first error; running tasks observe cancellation.
+        futures.forEach(future -> future.whenComplete((result, failure) -> {
+            if (failure != null) {
+                completion.completeExceptionally(failure);
+            }
+        }));
         try {
-            allOf(futures).join();
+            completion.get();
+            if (context.isCancelled()) {
+                throw new CancellationException("execution cancelled while waiting for nodes");
+            }
+        } catch (InterruptedException failure) {
+            cancel(context, futures);
+            Thread.currentThread().interrupt();
+            throw new CompletionException(failure);
+        } catch (ExecutionException failure) {
+            cancel(context, futures);
+            throw new CompletionException(unwrap(failure));
         } catch (RuntimeException | Error failure) {
             cancel(context, futures);
             throw failure;

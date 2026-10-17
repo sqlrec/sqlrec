@@ -5,6 +5,7 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.udf.table.GetVariablesFunction;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ public class GetVariablesFunctionTest {
 
     @BeforeEach
     public void setUp() {
-        context = new ExecuteContextImpl();
+        context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         context.setVariable(Consts.LOG_ID, null);
     }
 

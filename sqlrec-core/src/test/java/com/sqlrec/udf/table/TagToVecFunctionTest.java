@@ -247,7 +247,7 @@ public class TagToVecFunctionTest {
             }
         });
         return NormalSqlCompiler.getNormalSqlBindable(sql, schema, "default")
-                .bind(schema, new ExecuteContextImpl()).toList();
+                .bind(schema, new ExecuteContextImpl(schema)).toList();
     }
 
 }

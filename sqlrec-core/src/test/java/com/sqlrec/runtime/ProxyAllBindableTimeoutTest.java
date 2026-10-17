@@ -4,6 +4,7 @@ import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import io.micrometer.core.instrument.Counter;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -62,7 +64,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testTimeoutAppliesToNonCacheNodeAndCancelsOnlyChildContext() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         AtomicBoolean cancellationObserved = new AtomicBoolean(false);
         CountDownLatch finished = new CountDownLatch(1);
@@ -91,7 +94,7 @@ public class ProxyAllBindableTimeoutTest {
 
         try {
             RuntimeException exception = assertThrows(RuntimeException.class,
-                    () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                    () -> proxy.bind(schema, context));
 
             assertEquals("Node slow_node execution timeout", exception.getMessage());
             assertTrue(finished.await(5, TimeUnit.SECONDS));
@@ -110,7 +113,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testExecutionSucceedsWithinTimeoutOnExecutorThread() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
         Thread callerThread = Thread.currentThread();
         AtomicReference<Thread> executionThread = new AtomicReference<>();
@@ -123,7 +127,7 @@ public class ProxyAllBindableTimeoutTest {
             }
         });
 
-        Enumerable<Object[]> result = proxy.bind(CalciteSchema.createRootSchema(false), context);
+        Enumerable<Object[]> result = proxy.bind(schema, context);
 
         assertEquals(1L, result.count());
         assertNotSame(callerThread, executionThread.get());
@@ -131,7 +135,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testZeroTimeoutExecutesInline() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
         AtomicReference<Thread> executionThread = new AtomicReference<>();
 
@@ -143,14 +148,15 @@ public class ProxyAllBindableTimeoutTest {
             }
         });
 
-        proxy.bind(CalciteSchema.createRootSchema(false), context);
+        proxy.bind(schema, context);
 
         assertSame(Thread.currentThread(), executionThread.get());
     }
 
     @Test
     public void testTimeoutIsSkippedWhenDelegateIsNotTimeoutAble() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "50");
         AtomicReference<Thread> executionThread = new AtomicReference<>();
 
@@ -167,7 +173,7 @@ public class ProxyAllBindableTimeoutTest {
             }
         });
 
-        Enumerable<Object[]> result = proxy.bind(CalciteSchema.createRootSchema(false), context);
+        Enumerable<Object[]> result = proxy.bind(schema, context);
 
         assertNotNull(result);
         assertSame(Thread.currentThread(), executionThread.get());
@@ -175,7 +181,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testRuntimeExceptionFromTimedExecutionPreservesCause() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
         IllegalStateException delegateFailure = new IllegalStateException("delegate failed");
 
@@ -188,7 +195,7 @@ public class ProxyAllBindableTimeoutTest {
         proxy.setName("failed_node");
 
         RuntimeException exception = assertThrows(RuntimeException.class,
-                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                () -> proxy.bind(schema, context));
 
         assertEquals("Node failed_node execution failed", exception.getMessage());
         assertSame(delegateFailure, exception.getCause());
@@ -197,7 +204,8 @@ public class ProxyAllBindableTimeoutTest {
     @Test
     @SilenceLoggers(ProxyAllBindable.class)
     public void testRegularExceptionOnTimedCacheNodeIsRecovered() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(registry);
@@ -221,7 +229,6 @@ public class ProxyAllBindableTimeoutTest {
         delegate.setIgnoreException(true);
         ProxyAllBindable proxy = new ProxyAllBindable(delegate);
         proxy.setName("recovered_cache_node");
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         try {
             Enumerable<Object[]> result = proxy.bind(schema, context);
@@ -245,7 +252,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testUnionRecoveryCanBeDisabledByExecutionVariable() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
         context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), "false");
 
@@ -270,7 +278,7 @@ public class ProxyAllBindableTimeoutTest {
         proxy.setName("required_cache_node");
 
         RuntimeException exception = assertThrows(RuntimeException.class,
-                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                () -> proxy.bind(schema, context));
 
         assertEquals("Node required_cache_node execution failed", exception.getMessage());
         assertEquals("must not be ignored", exception.getCause().getMessage());
@@ -278,7 +286,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testErrorFromTimedExecutionPropagatesUnwrapped() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
         AssertionError delegateFailure = new AssertionError("fatal delegate failure");
 
@@ -290,14 +299,103 @@ public class ProxyAllBindableTimeoutTest {
         });
 
         AssertionError exception = assertThrows(AssertionError.class,
-                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                () -> proxy.bind(schema, context));
 
         assertSame(delegateFailure, exception);
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
+    public void testUnionRecoveryHandlesErrorsAndInterruptionsWithOrWithoutWrapping() {
+        for (long timeout : new long[]{0, 5000}) {
+            for (Throwable failure : List.of(new AssertionError("error"), new InterruptedException("interrupted"),
+                    new CompletionException(new AssertionError("wrapped error")),
+                    new RuntimeException(new InterruptedException("wrapped interruption")))) {
+                CalciteSchema schema = CalciteSchema.createRootSchema(false);
+                ExecuteContextImpl context = new ExecuteContextImpl(schema);
+                context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), Long.toString(timeout));
+                context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), "true");
+
+                Object[] result = recoverableFailure(failure).bind(schema, context).single();
+
+                assertEquals("recovered_cache", result[0]);
+                assertEquals(0L, result[1]);
+                assertEquals(0, ((CacheTable)
+                        schema.getTable("recovered_cache", false).getTable()).scan(null).count());
+                assertFalse(context.isCancelled());
+            }
+        }
+    }
+
+    @Test
+    public void testErrorsAndInterruptionsStillPropagateWhenUnionRecoveryIsNotAllowed() {
+        for (long timeout : new long[]{0, 5000}) {
+            for (Throwable failure : List.of(new AssertionError("error"), new InterruptedException("interrupted"))) {
+                for (boolean enabled : new boolean[]{false, true}) {
+                    CalciteSchema schema = CalciteSchema.createRootSchema(false);
+                    ExecuteContextImpl context = new ExecuteContextImpl(schema);
+                    context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), Long.toString(timeout));
+                    context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), Boolean.toString(enabled));
+                    ProxyAllBindable proxy = recoverableFailure(failure);
+                    proxy.setIgnoreException(!enabled);
+
+                    assertThrows(Throwable.class, () -> proxy.bind(schema, context));
+                    assertNull(schema.getTable("recovered_cache", false));
+                }
+            }
+        }
+    }
+
+    @Test
+    @SilenceLoggers(ProxyAllBindable.class)
+    public void testRecoveringInterruptedWaitAllowsTheNextTimedNodeToRun() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
+        context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
+        context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), "true");
+        ProxyAllBindable proxy = new ProxyAllBindable(new CacheTableBindable("interrupted_cache", new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext childContext) {
+                while (!childContext.isCancelled()) {
+                    Thread.yield();
+                }
+                return Linq4j.emptyEnumerable();
+            }
+        }));
+        proxy.setIgnoreException(true);
+        try {
+            Thread.currentThread().interrupt();
+            assertEquals(0L, proxy.bind(schema, context).single()[1]);
+            assertFalse(Thread.currentThread().isInterrupted());
+            assertFalse(context.isCancelled());
+
+            ProxyAllBindable next = new ProxyAllBindable(new TestBindable() {
+                @Override
+                public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext childContext) {
+                    return Linq4j.singletonEnumerable(new Object[]{"healthy"});
+                }
+            });
+            assertEquals("healthy", next.bind(schema, context).single()[0]);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    private static ProxyAllBindable recoverableFailure(Throwable failure) {
+        ProxyAllBindable proxy = new ProxyAllBindable(new CacheTableBindable("recovered_cache", new TestBindable() {
+            @Override
+            public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                return ProxyAllBindableTimeoutTest.<RuntimeException, Enumerable<Object[]>>sneakyThrow(failure);
+            }
+        }));
+        proxy.setIgnoreException(true);
+        return proxy;
+    }
+
+    @Test
     public void testCheckedThrowableFromTimedExecutionIsWrapped() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "5000");
         Exception delegateFailure = new Exception("checked delegate failure");
 
@@ -311,7 +409,7 @@ public class ProxyAllBindableTimeoutTest {
         proxy.setName("checked_failure_node");
 
         RuntimeException exception = assertThrows(RuntimeException.class,
-                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                () -> proxy.bind(schema, context));
 
         assertEquals("Node checked_failure_node execution failed", exception.getMessage());
         assertSame(delegateFailure, exception.getCause());
@@ -319,7 +417,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testInterruptedWaitRestoresInterruptAndCancelsChildContext() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "10000");
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
@@ -350,7 +449,7 @@ public class ProxyAllBindableTimeoutTest {
 
         Thread caller = new Thread(() -> {
             try {
-                proxy.bind(CalciteSchema.createRootSchema(false), context);
+                proxy.bind(schema, context);
             } catch (Throwable e) {
                 failure.set(e);
                 interruptRestored.set(Thread.currentThread().isInterrupted());
@@ -379,7 +478,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testIgnoreExceptionDoesNotHideTimeoutForNonCacheNode() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         CountDownLatch finished = new CountDownLatch(1);
 
@@ -404,7 +504,7 @@ public class ProxyAllBindableTimeoutTest {
         proxy.setName("non_cache_node");
 
         RuntimeException exception = assertThrows(RuntimeException.class,
-                () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                () -> proxy.bind(schema, context));
 
         assertEquals("Node non_cache_node execution timeout", exception.getMessage());
         assertTrue(finished.await(5, TimeUnit.SECONDS));
@@ -412,7 +512,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testIgnoreTimeoutRequiresCompleteCacheMetadata() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         CountDownLatch finished = new CountDownLatch(1);
 
@@ -440,7 +541,6 @@ public class ProxyAllBindableTimeoutTest {
         delegate.setIgnoreException(true);
         ProxyAllBindable proxy = new ProxyAllBindable(delegate);
         proxy.setName("incomplete_cache_node");
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         RuntimeException exception = assertThrows(RuntimeException.class,
                 () -> proxy.bind(schema, context));
@@ -453,7 +553,8 @@ public class ProxyAllBindableTimeoutTest {
     @Test
     @SilenceLoggers(ProxyAllBindable.class)
     public void testCancellationDuringTimeoutRecoveryPreventsCacheWrite() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         CountDownLatch finished = new CountDownLatch(1);
 
@@ -492,12 +593,11 @@ public class ProxyAllBindableTimeoutTest {
         delegate.setIgnoreException(true);
         ProxyAllBindable proxy = new ProxyAllBindable(delegate);
         proxy.setName("cancelled_cache_node");
-        CalciteSchema schema = CalciteSchema.createRootSchema(false);
 
         RuntimeException exception = assertThrows(RuntimeException.class,
                 () -> proxy.bind(schema, context));
 
-        assertEquals("node cancelled_cache_node execution cancelled", exception.getMessage());
+        assertEquals("cache table cancelled_cache execution cancelled", exception.getMessage());
         assertTrue(context.isCancelled());
         assertNull(schema.getTable("cancelled_cache", false));
         assertTrue(finished.await(5, TimeUnit.SECONDS));
@@ -505,7 +605,8 @@ public class ProxyAllBindableTimeoutTest {
 
     @Test
     public void testAncestorCancellationWhileWaitingIsReportedAsCancellation() throws Exception {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "100");
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -542,7 +643,7 @@ public class ProxyAllBindableTimeoutTest {
         try {
             canceller.start();
             RuntimeException exception = assertThrows(RuntimeException.class,
-                    () -> proxy.bind(CalciteSchema.createRootSchema(false), context));
+                    () -> proxy.bind(schema, context));
 
             assertTrue(exception.getMessage().contains("Task execution timeout"));
             assertFalse(exception.getMessage().contains("Node ancestor_cancelled_node execution timeout"));

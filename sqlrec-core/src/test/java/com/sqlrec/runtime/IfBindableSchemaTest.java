@@ -115,8 +115,8 @@ public class IfBindableSchemaTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         registerExistingTable(schema, "t",
                 Collections.singletonList(DataTypeUtils.getRelDataTypeField("col1", 0, SqlTypeName.VARCHAR)),
                 Collections.singletonList(new Object[]{"old"}));
@@ -141,8 +141,8 @@ public class IfBindableSchemaTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         registerExistingTable(schema, "t",
                 Arrays.asList(
                         DataTypeUtils.getRelDataTypeField("col1", 0, SqlTypeName.VARCHAR),
@@ -163,8 +163,8 @@ public class IfBindableSchemaTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         registerExistingTable(schema, "t",
                 Collections.emptyList(),
                 Collections.emptyList());
@@ -182,8 +182,8 @@ public class IfBindableSchemaTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         registerExistingTable(schema, "t",
                 Collections.singletonList(DataTypeUtils.getRelDataTypeField("other", 0, SqlTypeName.VARCHAR)),
                 Collections.singletonList(new Object[]{"old"}));
@@ -201,8 +201,8 @@ public class IfBindableSchemaTest {
                 false
         );
 
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
         registerExistingTable(schema, "t",
                 Collections.singletonList(DataTypeUtils.getRelDataTypeField("col1", 0, SqlTypeName.BIGINT)),
                 Collections.singletonList(new Object[]{1L}));

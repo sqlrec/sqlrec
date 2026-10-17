@@ -2,6 +2,8 @@ package com.sqlrec.compiler;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.runtime.BindableInterface;
+import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -22,7 +24,65 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 public class NormalSqlCompilerTest {
+    @Test
+    void orderByUnselectedColumnDoesNotExposeTheSortKey() throws Exception {
+        assertProjectedNames("SELECT NAME AS label FROM myTable ORDER BY ID DESC",
+                List.of("Charlie", "Bob", "Alice"));
+    }
+
+    @Test
+    void orderByExpressionPreservesLimitAndOffset() throws Exception {
+        assertProjectedNames("SELECT NAME AS label FROM myTable ORDER BY CHAR_LENGTH(NAME) DESC, ID ASC LIMIT 1 OFFSET 1",
+                List.of("Alice"));
+    }
+
+    @Test
+    void orderByUnselectedAggregateDoesNotExposeTheAggregate() throws Exception {
+        assertProjectedNames("SELECT NAME AS label FROM myTable GROUP BY NAME ORDER BY MAX(ID) DESC LIMIT 2",
+                List.of("Charlie", "Bob"));
+    }
+
+    @Test
+    void orderBySelectedColumnStillPreservesOrderAndAlias() throws Exception {
+        assertProjectedNames("SELECT NAME AS label FROM myTable ORDER BY label DESC",
+                List.of("Charlie", "Bob", "Alice"));
+    }
+
+    @Test
+    void sortedJoinKeepsUniqueColumnNamesWhenCached() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema()).add("myTable", new MyTable());
+        new SqlTestCase("CACHE TABLE sorted_join AS SELECT l.ID AS ID, r.ID AS id "
+                + "FROM myTable l JOIN myTable r ON l.ID = r.ID ORDER BY l.NAME", null).test(schema);
+
+        BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(
+                "SELECT * FROM sorted_join ORDER BY ID", schema, Consts.DEFAULT_SCHEMA_NAME);
+        assertEquals(List.of("ID", "id0"),
+                bindable.getReturnDataFields().stream().map(field -> field.getName()).toList());
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl(schema)).toList();
+        assertEquals(3, rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            assertArrayEquals(new Object[]{i + 1, i + 1}, rows.get(i));
+        }
+    }
+
+    private void assertProjectedNames(String sql, List<String> expected) throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema()).add("myTable", new MyTable());
+        BindableInterface bindable = NormalSqlCompiler.getNormalSqlBindable(sql, schema, Consts.DEFAULT_SCHEMA_NAME);
+
+        assertEquals(List.of("label"), bindable.getReturnDataFields().stream().map(field -> field.getName()).toList());
+        List<Object[]> rows = bindable.bind(schema, new ExecuteContextImpl(schema)).toList();
+        assertEquals(expected.size(), rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            assertArrayEquals(new Object[]{expected.get(i)}, rows.get(i));
+        }
+    }
+
     @Test
     public void testNormalSqlCompiler() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);

@@ -3,7 +3,6 @@ package com.sqlrec.compiler;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
@@ -18,6 +17,7 @@ import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlWriterConfig;
@@ -197,19 +197,17 @@ public class CompileManager {
         BindableInterface thenBindable = compileIfBranch(thenClause, schema, defaultSchema);
 
         BindableInterface elseBindable = null;
+        List<RelDataTypeField> existingCacheFields = null;
         if (elseClause != null) {
             elseBindable = compileIfBranch(elseClause, schema, defaultSchema);
         } else if (thenBindable instanceof CacheTableBindable thenCache) {
             CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
             if (table != null) {
-                DataTypeUtils.checkTableSchemaSame(
-                        thenCache.getCacheTableDataFields(),
-                        table.getDataFields()
-                );
+                existingCacheFields = table.getDataFields();
             }
         }
 
-        return new IfBindable(conditionBindable, thenBindable, elseBindable, timein);
+        return new IfBindable(conditionBindable, thenBindable, elseBindable, timein, existingCacheFields);
     }
 
     private BindableInterface compileIfBranch(

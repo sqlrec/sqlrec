@@ -37,7 +37,7 @@ class ReturnBindableTest {
                 Linq4j.asEnumerable(new Object[][]{{1}, {2}}),
                 FIELDS
         ));
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
         ReturnBindable bindable = new ReturnBindable("result_table", FIELDS);
 
         Enumerable<Object[]> result = bindable.bind(schema, function);
@@ -54,10 +54,11 @@ class ReturnBindableTest {
 
     @Test
     void emptyReturnCompletesTheFunctionWithNull() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
         ReturnBindable bindable = new ReturnBindable((BindableInterface) null);
 
-        assertNull(bindable.bind(CalciteSchema.createRootSchema(false), function));
+        assertNull(bindable.bind(schema, function));
         assertTrue(function.hasReturnedFromFunction());
         assertNull(function.getFunctionReturnResult());
         assertNull(bindable.getReturnDataFields());
@@ -71,7 +72,7 @@ class ReturnBindableTest {
         BindableInterface delegate = new MetadataBindable(calls, expected);
         ReturnBindable bindable = new ReturnBindable(delegate);
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
         Enumerable<Object[]> actual = bindable.bind(schema, function);
 
@@ -106,11 +107,12 @@ class ReturnBindableTest {
 
     @Test
     void bindRejectsEngineContextWithoutFunctionFrame() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         ReturnBindable bindable = new ReturnBindable((BindableInterface) null);
 
         RuntimeException error = assertThrows(
                 RuntimeException.class,
-                () -> bindable.bind(CalciteSchema.createRootSchema(false), new ExecuteContextImpl())
+                () -> bindable.bind(schema, new ExecuteContextImpl(schema))
         );
 
         assertTrue(error.getMessage().contains("inside a SQL function"));

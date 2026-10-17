@@ -3,6 +3,8 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.utils.NodeUtils;
+import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -16,7 +18,7 @@ public class CacheTableBindable extends ForwardingBindable {
     private final BindableInterface bindable;
 
     public CacheTableBindable(String tableName, BindableInterface bindable) {
-        this.tableName = tableName;
+        this.tableName = NodeUtils.normalizeTableName(tableName);
         this.bindable = bindable;
 
         List<RelDataTypeField> bindableFields = bindable.getReturnDataFields();
@@ -33,23 +35,39 @@ public class CacheTableBindable extends ForwardingBindable {
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
         Enumerable<Object[]> enumerable = bindable.bind(schema, context);
-        if (enumerable == null) {
-            enumerable = Linq4j.emptyEnumerable();
-        }
-
-        if (context.isCancelled()) {
-            // a cancelled branch no longer writes the cache table, avoiding side effects from zombie branches
-            throw new RuntimeException("cache table " + tableName + " execution cancelled");
-        }
-
-        CacheTable cacheTable = new CacheTable(tableName, enumerable, bindable.getReturnDataFields());
+        // Finish lazy results inside the execution budget, before publishing any table.
+        List<Object[]> rows = enumerable == null ? Collections.emptyList() : enumerable.toList();
+        CacheTable cacheTable = new CacheTable(tableName, Linq4j.asEnumerable(rows), bindable.getReturnDataFields());
         cacheTable.setCreateSql(getSql());
-        schema.add(tableName, cacheTable);
+        publish(schema, context, cacheTable);
 
         // return cache table counts
-        List<Object[]> list = new ArrayList<>();
-        list.add(new Object[]{tableName, (long) enumerable.count()});
-        return Linq4j.asEnumerable(list);
+        return Linq4j.singletonEnumerable(new Object[]{tableName, (long) rows.size()});
+    }
+
+    void ensureTable(CalciteSchema schema, ExecuteContext context) {
+        publish(schema, context, new CacheTable(tableName, Linq4j.emptyEnumerable(), getTableDataFields()), true);
+    }
+
+    static void publish(CalciteSchema schema, ExecuteContext context, CacheTable table) {
+        publish(schema, context, table, false);
+    }
+
+    // All runtime cache writes, including recovery and missing ELSE tables, enter here.
+    private static void publish(CalciteSchema schema, ExecuteContext context, CacheTable table, boolean ifAbsent) {
+        synchronized (schema) {
+            if (context.isCancelled()) {
+                throw new RuntimeException("cache table " + table.getTableName() + " execution cancelled");
+            }
+            if (ifAbsent) {
+                CacheTable existing = SchemaUtils.tryGetCacheTable(table.getTableName(), schema);
+                if (existing != null) {
+                    DataTypeUtils.checkTableSchemaSame(table.getDataFields(), existing.getDataFields());
+                    return;
+                }
+            }
+            schema.add(table.getTableName(), table);
+        }
     }
 
     @Override

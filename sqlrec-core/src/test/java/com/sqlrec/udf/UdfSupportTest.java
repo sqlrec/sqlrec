@@ -60,7 +60,7 @@ public class UdfSupportTest {
                 "com.sqlrec.udf.scalar.ArrayContainsFunction"
         );
 
-        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        ExecuteContextImpl executeContext = new ExecuteContextImpl(schema);
         executeContext.setVariable("test_var", "hello_world");
 
         List<SqlTestCase> sqlList = Arrays.asList(

@@ -16,13 +16,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SqlFunctionBindableCancelTest {
 
@@ -80,8 +84,8 @@ public class SqlFunctionBindableCancelTest {
         });
 
         SqlFunctionBindable sqlFunctionBindable = newFunction(new ArrayList<>(List.of(nodeA, nodeB)));
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
 
         Enumerable<Object[]> result = sqlFunctionBindable.bind(schema, context);
 
@@ -132,8 +136,8 @@ public class SqlFunctionBindableCancelTest {
         });
 
         SqlFunctionBindable sqlFunctionBindable = newFunction(new ArrayList<>(List.of(nodeA, nodeB)));
-        ExecuteContextImpl context = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
 
         assertThrows(RuntimeException.class, () -> sqlFunctionBindable.bind(schema, context));
 
@@ -181,8 +185,8 @@ public class SqlFunctionBindableCancelTest {
             });
 
             SqlFunctionBindable sqlFunctionBindable = newFunction(new ArrayList<>(List.of(node1, node2)));
-            ExecuteContextImpl context = new ExecuteContextImpl();
             CalciteSchema schema = CalciteSchema.createRootSchema(false);
+            ExecuteContextImpl context = new ExecuteContextImpl(schema);
 
             assertThrows(RuntimeException.class, () -> sqlFunctionBindable.bind(schema, context));
 
@@ -191,6 +195,32 @@ public class SqlFunctionBindableCancelTest {
             assertTrue(zombieFinished.await(5, TimeUnit.SECONDS),
                     "nested async task should exit shortly after function failure");
             assertTrue(zombieCancelledObserved.get(), "nested async task should observe cancellation");
+        } finally {
+            SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(originalParallelism);
+        }
+    }
+
+    @Test
+    public void testSerialErrorCancelsOnlyTheFailedFunctionContext() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        boolean originalParallelism = SqlRecConfigs.PARALLELISM_EXEC.getDefaultValue();
+        SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(false);
+        try {
+            AtomicReference<ExecuteContext> failedContext = new AtomicReference<>();
+            BindableInterface node = new TestBindable() {
+                @Override
+                public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                    failedContext.set(context);
+                    throw new AssertionError("failed child function");
+                }
+            };
+            SqlFunctionBindable function = newFunction(new ArrayList<>(List.of(node)));
+            ExecuteContextImpl caller = new ExecuteContextImpl(schema);
+
+            assertThrows(AssertionError.class,
+                    () -> function.bind(schema, caller));
+            assertTrue(failedContext.get().isCancelled());
+            assertFalse(caller.isCancelled());
         } finally {
             SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(originalParallelism);
         }
@@ -216,12 +246,66 @@ public class SqlFunctionBindableCancelTest {
         });
 
         SqlFunctionBindable sqlFunctionBindable = newFunction(new ArrayList<>(List.of(nodeA, nodeB)));
-        ExecuteContextImpl context = new ExecuteContextImpl();
-        context.cancel();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
+        context.cancel();
 
         assertThrows(RuntimeException.class, () -> sqlFunctionBindable.bind(schema, context));
         assertFalse(firstExecuted.get());
         assertFalse(secondExecuted.get());
+    }
+
+    @Test
+    void parallelFailureReturnsWhileAnUncooperativeSiblingIsStillBlocked() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        boolean originalParallelism = SqlRecConfigs.PARALLELISM_EXEC.getDefaultValue();
+        SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(true);
+        CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1), finished = new CountDownLatch(1);
+        AtomicReference<ExecuteContext> runningContext = new AtomicReference<>();
+        BindableInterface blocked = ProxyAllBindable.wrap(new TestBindable() {
+            @Override public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                runningContext.set(context);
+                started.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("release timeout");
+                    return Linq4j.emptyEnumerable();
+                } catch (InterruptedException failure) {
+                    throw new RuntimeException(failure);
+                } finally {
+                    finished.countDown();
+                }
+            }
+        });
+        List<BindableInterface> nodes = new ArrayList<>(List.of(blocked));
+        nodes.add(ProxyAllBindable.wrap(new TestBindable() {
+            @Override public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
+                try {
+                    if (!started.await(5, TimeUnit.SECONDS)) throw new AssertionError("start timeout");
+                } catch (InterruptedException failure) {
+                    throw new RuntimeException(failure);
+                }
+                throw new IllegalStateException("failed sibling");
+            }
+        }));
+        SqlFunctionBindable function = newFunction(nodes);
+        ExecuteContextImpl request = new ExecuteContextImpl(schema);
+        request.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
+        CompletableFuture<?> call = CompletableFuture.runAsync(
+                () -> function.bind(schema, request));
+        try {
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> call.get(2, TimeUnit.SECONDS));
+            assertEquals("failed sibling", ExecutorServiceUtils.unwrap(failure).getCause().getMessage());
+            assertEquals(1, finished.getCount(), "the failed call must return before the blocked node finishes");
+            assertTrue(runningContext.get().isCancelled());
+            assertFalse(request.isCancelled());
+        } finally {
+            release.countDown();
+            try {
+                assertTrue(finished.await(5, TimeUnit.SECONDS));
+            } finally {
+                SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(originalParallelism);
+            }
+        }
     }
 }

@@ -14,6 +14,8 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 @Tag("integration")
 public class TestRec {
     @BeforeAll
@@ -37,6 +39,9 @@ public class TestRec {
         );
 
         CacheTable result = sqlExecutor.executeSql("call main_rec(t1)");
+        assertEquals(List.of("user_id", "movie_id", "item_name", "rec_reason", "req_time", "req_id"),
+                result.getDataFields().stream().map(field -> field.getName()).toList());
+        result.scan(null).forEach(row -> assertEquals(6, row.length));
         List<String> lines = TableTextFormatter.formatAsTable(result.scan(null), result.getDataFields());
         lines.forEach(System.out::println);
     }

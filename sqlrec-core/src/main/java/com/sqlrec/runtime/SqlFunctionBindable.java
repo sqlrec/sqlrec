@@ -66,7 +66,7 @@ public class SqlFunctionBindable extends BindableInterface {
                     bindable.bind(schema, functionContext);
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // stop nested async tasks still running inside this function (timeout branches within nodes, partitions, async calls, etc.)
             functionContext.cancel();
             throw e;

@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TopologicalSortUtilsTest {
 
@@ -69,6 +71,58 @@ public class TopologicalSortUtilsTest {
         assertThrows(RuntimeException.class, () -> {
             TopologicalSortUtils.topologicalSort(dependency);
         });
+    }
+
+    @Test
+    public void testTopologicalSortRejectsMissingDependencyNode() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.topologicalSort(Map.of(0, Set.of(99))));
+
+        assertTrue(error.getMessage().contains("99"));
+        assertFalse(error.getMessage().contains("circular"));
+    }
+
+    @Test
+    public void testTopologicalSortRejectsSelfDependency() {
+        assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.topologicalSort(Map.of(0, Set.of(0))));
+    }
+
+    @Test
+    public void testTopologicalSortRejectsCycleAlongsideIndependentNodes() {
+        Map<Integer, Set<Integer>> dependency = Map.of(
+                10, Set.of(), 20, Set.of(30), 30, Set.of(20));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.topologicalSort(dependency));
+
+        assertTrue(error.getMessage().contains("circular dependency"));
+        assertEquals(Set.of(30), dependency.get(20));
+    }
+
+    @Test
+    public void testTopologicalSortWithSparseUnorderedNodeIds() {
+        Map<Integer, Set<Integer>> dependency = Map.of(
+                100, Set.of(-7), -7, Set.of(42), 42, Set.of(), 500, Set.of());
+
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(dependency);
+
+        assertEquals(dependency.keySet(), new HashSet<>(sorted));
+        assertEquals(4, sorted.size());
+        assertTrue(sorted.indexOf(42) < sorted.indexOf(-7));
+        assertTrue(sorted.indexOf(-7) < sorted.indexOf(100));
+    }
+
+    @Test
+    public void testOptimizeDependencyRejectsMissingNodesAndCyclesWithoutChangingInput() {
+        Map<Integer, Set<Integer>> dependency = Map.of(
+                0, Set.of(1, 2), 1, Set.of(2), 2, Set.of(1));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.optimizeDependency(dependency));
+        assertEquals(Set.of(1, 2), dependency.get(0));
+        assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.optimizeDependency(Map.of(0, Set.of(99))));
     }
 
     @Test
@@ -513,6 +567,74 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
+    public void testInPlaceWritesDoNotDiscardEarlierTableProducers() {
+        BindableInterface source = mock(BindableInterface.class);
+        when(source.getCacheTableName()).thenReturn("source_table");
+        when(source.getWriteTables()).thenReturn(Set.of("source_table"));
+        BindableInterface union = mock(BindableInterface.class);
+        when(union.getReadTables()).thenReturn(Set.of("source_table"));
+        when(union.getWriteTables()).thenReturn(Set.of("merged"));
+        when(union.getCacheTableName()).thenReturn("merged");
+        when(union.isUnionSql()).thenReturn(true);
+        BindableInterface insert = mock(BindableInterface.class);
+        when(insert.getWriteTables()).thenReturn(Set.of("source_table"));
+        BindableInterface result = mock(BindableInterface.class);
+        when(result.getReadTables()).thenReturn(Set.of("source_table", "merged"));
+        when(result.containsReturn()).thenReturn(true);
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(
+                List.of(source, union, insert, result), List.of(0, 1, 2, 3));
+
+        assertFalse(unionSources.get(0), "INSERT retains old rows needed by the non-UNION result");
+        assertFalse(unionSources.get(2));
+    }
+
+    @Test
+    public void testRepeatedWritersProtectOnlyTheirUpstreamNodes() {
+        BindableInterface seed = tableNode(Set.of(), Set.of("seed"));
+        BindableInterface firstWrite = tableNode(Set.of("seed"), Set.of("My_Table"));
+        BindableInterface secondWrite = tableNode(Set.of(), Set.of("MY_TABLE"));
+        BindableInterface independentBranch = tableNode(Set.of("seed"), Set.of("branch"));
+        BindableInterface union = tableNode(Set.of("my_table", "branch"), Set.of("merged"));
+        when(union.isUnionSql()).thenReturn(true);
+        BindableInterface result = tableNode(Set.of("merged"), Set.of());
+        when(result.containsReturn()).thenReturn(true);
+
+        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(
+                List.of(seed, firstWrite, secondWrite, independentBranch, union, result),
+                List.of(0, 1, 2, 3, 4, 5));
+
+        assertFalse(unionSources.get(0));
+        assertFalse(unionSources.get(1));
+        assertFalse(unionSources.get(2));
+        assertTrue(unionSources.get(3), "sharing a healthy input must not protect a sibling branch");
+    }
+
+    @Test
+    public void testOneWriterWithCaseVariantsAndSelfReadIsNotMultipleWriters() {
+        BindableInterface source = tableNode(Set.of("my_table"), Set.of("My_Table", "MY_TABLE"));
+        BindableInterface union = tableNode(Set.of("my_table"), Set.of("merged"));
+        when(union.isUnionSql()).thenReturn(true);
+        BindableInterface result = tableNode(Set.of("merged"), Set.of());
+        when(result.containsReturn()).thenReturn(true);
+        List<BindableInterface> nodes = List.of(source, union, result);
+
+        Map<Integer, Boolean> unionSources =
+                TopologicalSortUtils.getIsUnionSource(nodes, List.of(0, 1, 2));
+
+        assertTrue(unionSources.get(0));
+        assertEquals(Set.of(), TopologicalSortUtils.buildBindableDependency(nodes).get(0));
+    }
+
+    private BindableInterface tableNode(Set<String> reads, Set<String> writes) {
+        BindableInterface node = mock(BindableInterface.class);
+        when(node.getReadTables()).thenReturn(reads);
+        when(node.getWriteTables()).thenReturn(writes);
+        when(node.isParallelizable()).thenReturn(true);
+        return node;
+    }
+
+    @Test
     public void testTopologicalSortWithSqlFunctionBindables() throws Exception {
         SqlFunctionBindable function = compileFunction(List.of(
                 "CREATE SQL FUNCTION sorted_sql_bindables",
@@ -722,11 +844,9 @@ public class TopologicalSortUtilsTest {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>(Collections.singleton(0)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertTrue(result.get(0).contains(0));
+        assertThrows(IllegalArgumentException.class,
+                () -> TopologicalSortUtils.optimizeDependency(dependency));
+        assertEquals(Set.of(0), dependency.get(0));
     }
 
     @Test

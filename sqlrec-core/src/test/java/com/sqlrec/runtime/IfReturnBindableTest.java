@@ -45,6 +45,7 @@ class IfReturnBindableTest {
 
     @Test
     void bothReturnBranchesWithTheSameSchemaAreAccepted() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         IfBindable bindable = new IfBindable(
                 condition(Boolean.FALSE),
                 returning(INT_FIELDS, 1),
@@ -52,8 +53,8 @@ class IfReturnBindableTest {
                 false
         );
 
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
-        Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), function);
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
+        Enumerable<Object[]> result = bindable.bind(schema, function);
 
         assertEquals(2, result.single()[0]);
         assertSame(result, function.getFunctionReturnResult());
@@ -61,15 +62,16 @@ class IfReturnBindableTest {
 
     @Test
     void falseConditionWithoutElseDoesNotReturn() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         IfBindable bindable = new IfBindable(
                 condition(Boolean.FALSE),
                 returning(INT_FIELDS, 1),
                 null,
                 false
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), function);
+        Enumerable<Object[]> result = bindable.bind(schema, function);
 
         assertEquals(0, result.count());
         assertFalse(function.hasReturnedFromFunction());
@@ -152,6 +154,7 @@ class IfReturnBindableTest {
 
     @Test
     void timeinSuccessfulReturnCommitsTemporaryState() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         AtomicBoolean elseExecuted = new AtomicBoolean(false);
         IfBindable bindable = new IfBindable(
                 condition(1000L),
@@ -159,9 +162,9 @@ class IfReturnBindableTest {
                 returning(INT_FIELDS, elseExecuted, 2),
                 true
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), function);
+        Enumerable<Object[]> result = bindable.bind(schema, function);
 
         assertEquals(1, result.single()[0]);
         assertEquals(1, function.getFunctionReturnResult().single()[0]);
@@ -170,6 +173,7 @@ class IfReturnBindableTest {
 
     @Test
     void nonPositiveTimeinCommitsOnlyElseReturn() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         for (long timeout : new long[]{0, -1}) {
             AtomicBoolean thenExecuted = new AtomicBoolean(false);
             IfBindable bindable = new IfBindable(
@@ -178,9 +182,9 @@ class IfReturnBindableTest {
                     returning(INT_FIELDS, 2),
                     true
             );
-            ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+            ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-            Enumerable<Object[]> result = bindable.bind(CalciteSchema.createRootSchema(false), function);
+            Enumerable<Object[]> result = bindable.bind(schema, function);
 
             assertFalse(thenExecuted.get());
             assertEquals(2, function.getFunctionReturnResult().single()[0]);
@@ -191,6 +195,7 @@ class IfReturnBindableTest {
     @Test
     @SilenceLoggers(IfBindable.class)
     void timeinTimeoutDiscardsLateThenReturnAndKeepsElseReturn() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         CountDownLatch thenFinished = new CountDownLatch(1);
         BindableInterface slowValue = new ValueBindable(INT_FIELDS, 1) {
             @Override
@@ -213,9 +218,9 @@ class IfReturnBindableTest {
                 returning(INT_FIELDS, 2),
                 true
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        bindable.bind(CalciteSchema.createRootSchema(false), function);
+        bindable.bind(schema, function);
 
         assertEquals(2, function.getFunctionReturnResult().single()[0]);
         assertTrue(thenFinished.await(2, TimeUnit.SECONDS));
@@ -225,6 +230,7 @@ class IfReturnBindableTest {
     @Test
     @SilenceLoggers(IfBindable.class)
     void timeinExceptionDiscardsThenStateAndFallsBackToElseReturn() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         BindableInterface failure = new ValueBindable(INT_FIELDS, 1) {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
@@ -237,9 +243,9 @@ class IfReturnBindableTest {
                 returning(INT_FIELDS, 2),
                 true
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        bindable.bind(CalciteSchema.createRootSchema(false), function);
+        bindable.bind(schema, function);
 
         assertEquals(2, function.getFunctionReturnResult().single()[0]);
     }
@@ -247,6 +253,7 @@ class IfReturnBindableTest {
     @Test
     @SilenceLoggers(IfBindable.class)
     void timeinExceptionAfterTemporaryReturnStillKeepsElseReturn() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         BindableInterface partialReturnThenFailure = new ValueBindable(INT_FIELDS, 1) {
             @Override
             public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
@@ -266,39 +273,41 @@ class IfReturnBindableTest {
                 returning(INT_FIELDS, 2),
                 true
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        bindable.bind(CalciteSchema.createRootSchema(false), function);
+        bindable.bind(schema, function);
 
         assertEquals(2, function.getFunctionReturnResult().single()[0]);
     }
 
     @Test
     void nullConditionSelectsElseReturn() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         IfBindable bindable = new IfBindable(
                 condition(null),
                 returning(INT_FIELDS, 1),
                 returning(INT_FIELDS, 2),
                 false
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        bindable.bind(CalciteSchema.createRootSchema(false), function);
+        bindable.bind(schema, function);
 
         assertEquals(2, function.getFunctionReturnResult().single()[0]);
     }
 
     @Test
     void emptyReturnsAreCompatibleInBothBranches() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
         IfBindable bindable = new IfBindable(
                 condition(Boolean.TRUE),
                 new ReturnBindable((BindableInterface) null),
                 new ReturnBindable((BindableInterface) null),
                 false
         );
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(schema).createFunctionContext();
 
-        assertNull(bindable.bind(CalciteSchema.createRootSchema(false), function));
+        assertNull(bindable.bind(schema, function));
         assertTrue(function.hasReturnedFromFunction());
         assertNull(function.getFunctionReturnResult());
     }

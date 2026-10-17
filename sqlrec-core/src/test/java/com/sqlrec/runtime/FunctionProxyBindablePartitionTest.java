@@ -32,8 +32,8 @@ public class FunctionProxyBindablePartitionTest {
     @Test
     @SilenceLoggers(PartitionExecutor.class)
     public void testPartitionBy() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -135,7 +135,7 @@ public class FunctionProxyBindablePartitionTest {
                 // table identity is case-insensitive during validation and partition replacement
                 new SqlTestCase(
                         "cache table MixedCaseTable as select * from myTable",
-                        Arrays.<Object[]>asList(new Object[]{"MixedCaseTable", 3L})
+                        Arrays.<Object[]>asList(new Object[]{"mixedcasetable", 3L})
                 ),
                 new SqlTestCase(
                         "cache table r6 as call partition_echo_fun(mixedcasetable) " +

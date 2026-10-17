@@ -11,6 +11,7 @@ import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlIfCache;
 import com.sqlrec.sql.parser.SqlReturn;
+import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -119,13 +120,17 @@ public class FunctionCompiler {
     private void compileFunctionParam(SqlNode flinkSqlNode, String sql) throws Exception {
         if (flinkSqlNode instanceof SqlDefineInputTable inputTable) {
             List<RelDataTypeField> relDataTypeFields = resolveInputTableFields(inputTable);
-            sqlFunctionBindable.addInputTable(inputTable.getTableName().getSimple(), relDataTypeFields);
+            String tableName = NodeUtils.normalizeTableName(inputTable.getTableName().getSimple());
+            if (sqlFunctionBindable.getInputTables().stream().anyMatch(input -> input.getKey().equals(tableName))) {
+                throw new IllegalArgumentException("duplicate input table: " + tableName);
+            }
+            sqlFunctionBindable.addInputTable(tableName, relDataTypeFields);
             CacheTable tmpTable = new CacheTable(
-                    inputTable.getTableName().getSimple(),
+                    tableName,
                     null,
                     relDataTypeFields
             );
-            schema.add(inputTable.getTableName().getSimple(), tmpTable);
+            schema.add(tableName, tmpTable);
         } else {
             stage = FunctionCompileStage.FUNCTION_BODY;
             compileFunctionBody(flinkSqlNode, sql);
@@ -258,7 +263,7 @@ public class FunctionCompiler {
             throw new RuntimeException("return statements must either all return data or all return empty");
         }
         if (hasDataFields) {
-            DataTypeUtils.checkTableSchemaSame(returnDataFields, dataFields);
+            returnDataFields = DataTypeUtils.mergeTableSchemas(returnDataFields, dataFields);
         }
     }
 

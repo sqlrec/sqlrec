@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.udf.table.GetGrowthbookFeaturesFunction;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -44,7 +45,7 @@ public class GetGrowthbookFeaturesFunctionTest {
     }
 
     private ExecuteContext createContext() {
-        ExecuteContextImpl ctx = new ExecuteContextImpl();
+        ExecuteContextImpl ctx = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ctx.setVariable(Consts.LOG_ID, null);
         return ctx;
     }

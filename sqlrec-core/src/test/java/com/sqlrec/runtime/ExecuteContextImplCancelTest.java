@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +11,7 @@ public class ExecuteContextImplCancelTest {
 
     @Test
     public void testCancelMarksSelfAndAllDescendants() {
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl child = root.clone();
         ExecuteContextImpl grandChild = child.clone();
 
@@ -27,7 +28,7 @@ public class ExecuteContextImplCancelTest {
 
     @Test
     public void testCancelChildDoesNotAffectAncestorOrSibling() {
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl childA = root.clone();
         ExecuteContextImpl childB = root.clone();
         ExecuteContextImpl grandChildOfA = childA.clone();
@@ -43,7 +44,7 @@ public class ExecuteContextImplCancelTest {
     @Test
     public void testCloneAfterCancelSeesCancelled() {
         // even if cancel races with clone, the newly cloned child context still sees the cancellation via the parent chain
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         root.cancel();
         ExecuteContextImpl child = root.clone();
         assertTrue(child.isCancelled());
@@ -51,7 +52,7 @@ public class ExecuteContextImplCancelTest {
 
     @Test
     public void testCancelIsIdempotent() {
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         root.cancel();
         root.cancel();
         assertTrue(root.isCancelled());
@@ -59,7 +60,7 @@ public class ExecuteContextImplCancelTest {
 
     @Test
     public void testDeepChainCancelled() {
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl c1 = root.clone();
         ExecuteContextImpl c2 = c1.clone();
         ExecuteContextImpl c3 = c2.clone();
@@ -69,7 +70,7 @@ public class ExecuteContextImplCancelTest {
         root.cancel();
         assertTrue(c4.isCancelled());
 
-        root = new ExecuteContextImpl();
+        root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         c1 = root.clone();
         c2 = c1.clone();
         siblingOfC2 = c1.clone();
@@ -81,7 +82,7 @@ public class ExecuteContextImplCancelTest {
     @Test
     public void testCloneStillSharesVariablesAndFunNameStack() {
         // regression: clone semantics unchanged (shares variables, copies funNameStack)
-        ExecuteContextImpl root = new ExecuteContextImpl();
+        ExecuteContextImpl root = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         root.setVariable("k", "v");
         root.addFunNameToStack("fun1");
 

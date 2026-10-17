@@ -213,10 +213,11 @@ public class VectorJoinExecutorTest {
     @Test
     public void executionContextOverridesDefault() {
         SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
-        ExecuteContextImpl executeContext = new ExecuteContextImpl();
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContextImpl executeContext = new ExecuteContextImpl(schema);
         executeContext.setVariable("IGNORE_JOIN_QUERY_EXCEPTION", "false");
         SqlRecDataContextImpl dataContext = new SqlRecDataContextImpl(
-                Collections.emptyMap(), CalciteSchema.createRootSchema(false), executeContext);
+                Collections.emptyMap(), schema, executeContext);
         VectorSearchable rightTable = mock(VectorSearchable.class);
         doThrow(new RuntimeException("search failed"))
                 .when(rightTable).searchByEmbedding(any());

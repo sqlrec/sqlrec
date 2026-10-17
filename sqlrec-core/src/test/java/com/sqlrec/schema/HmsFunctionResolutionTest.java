@@ -49,7 +49,7 @@ class HmsFunctionResolutionTest {
     @Test
     void vectorRecallCompilesAndExecutesWithHmsAndBuiltinIp() throws Exception {
         CalciteSchema root = schema("ip", IpFunction.class.getName());
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(root);
         CompileManager compiler = new CompileManager();
         for (String sql : List.of(
                 "CACHE TABLE user_embedding AS SELECT "
@@ -85,7 +85,7 @@ class HmsFunctionResolutionTest {
         String sql = "SELECT ip(ARRAY[CAST(1 AS FLOAT), CAST(2 AS FLOAT)], "
                 + "ARRAY[CAST(3 AS DOUBLE), CAST(4 AS DOUBLE)]) AS score";
         List<Object[]> rows = NormalSqlCompiler.getNormalSqlBindable(sql, root, "default")
-                .bind(root, new ExecuteContextImpl()).toList();
+                .bind(root, new ExecuteContextImpl(root)).toList();
         assertEquals(1, rows.size());
         assertEquals(expected, rows.get(0)[0]);
     }

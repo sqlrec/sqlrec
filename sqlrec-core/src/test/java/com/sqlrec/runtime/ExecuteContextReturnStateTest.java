@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.junit.jupiter.api.Test;
@@ -17,7 +18,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void ordinaryClonesShareTheCurrentFunctionReturnState() {
-        ExecuteContextImpl outer = new ExecuteContextImpl();
+        ExecuteContextImpl outer = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl function = outer.createFunctionContext();
         ExecuteContextImpl child = function.clone();
         Enumerable<Object[]> result = result(1);
@@ -32,7 +33,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void differentFunctionFramesAreIsolated() {
-        ExecuteContextImpl outer = new ExecuteContextImpl();
+        ExecuteContextImpl outer = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl firstFunction = outer.createFunctionContext();
         ExecuteContextImpl secondFunction = outer.createFunctionContext();
 
@@ -45,7 +46,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void isolatedReturnIsInvisibleUntilCommitted() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
         ExecuteContextImpl isolated = function.createIsolatedReturnContext();
         Enumerable<Object[]> result = result(2);
 
@@ -59,7 +60,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void committingAnIsolatedContextWithoutReturnIsANoOp() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
 
         function.commitFunctionReturnFrom(function.createIsolatedReturnContext());
 
@@ -68,7 +69,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void duplicateReturnIsRejectedWithoutOverwritingFirstResult() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
         Enumerable<Object[]> first = result(1);
 
         function.returnFromFunction(first);
@@ -79,7 +80,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void committingIntoAnAlreadyReturnedFunctionIsRejected() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
         ExecuteContextImpl isolated = function.createIsolatedReturnContext();
         Enumerable<Object[]> first = result(1);
         function.returnFromFunction(first);
@@ -91,7 +92,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void returnOutsideAFunctionFrameIsRejected() {
-        ExecuteContextImpl context = new ExecuteContextImpl();
+        ExecuteContextImpl context = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
 
         RuntimeException error = assertThrows(
                 RuntimeException.class,
@@ -103,7 +104,7 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void readingAnUnavailableOrIncompleteReturnStateIsRejected() {
-        ExecuteContextImpl outer = new ExecuteContextImpl();
+        ExecuteContextImpl outer = new ExecuteContextImpl(CalciteSchema.createRootSchema(false));
         ExecuteContextImpl function = outer.createFunctionContext();
 
         assertThrows(IllegalStateException.class, outer::getFunctionReturnResult);
@@ -112,19 +113,19 @@ class ExecuteContextReturnStateTest {
 
     @Test
     void commitDefensivelyRejectsInvalidContexts() {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
 
         assertThrows(IllegalArgumentException.class, () -> function.commitFunctionReturnFrom(null));
         assertThrows(IllegalArgumentException.class, () -> function.commitFunctionReturnFrom(function.clone()));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> function.commitFunctionReturnFrom(new ExecuteContextImpl())
+                () -> function.commitFunctionReturnFrom(new ExecuteContextImpl(CalciteSchema.createRootSchema(false)))
         );
     }
 
     @Test
     void concurrentReturnsAllowExactlyOneWinner() throws Exception {
-        ExecuteContextImpl function = new ExecuteContextImpl().createFunctionContext();
+        ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
         ExecuteContextImpl firstChild = function.clone();
         ExecuteContextImpl secondChild = function.clone();
         CountDownLatch start = new CountDownLatch(1);

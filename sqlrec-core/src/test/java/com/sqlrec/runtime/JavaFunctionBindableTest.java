@@ -34,8 +34,8 @@ public class JavaFunctionBindableTest {
 
     @Test
     public void testTableFunction() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -131,8 +131,8 @@ public class JavaFunctionBindableTest {
 
     @Test
     public void testOverloadAndVarArgs() throws Exception {
-        ExecuteContext executeContext = new ExecuteContextImpl();
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        ExecuteContext executeContext = new ExecuteContextImpl(schema);
         schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema() {
             @Override
             protected Map<String, Table> getTableMap() {
@@ -338,7 +338,7 @@ public class JavaFunctionBindableTest {
     @Test
     public void missingDynamicFunctionNameFailsBeforeAsyncSubmission() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
-        ExecuteContext context = new ExecuteContextImpl();
+        ExecuteContext context = new ExecuteContextImpl(schema);
         SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
                 "call get('target')() like output async");
         FunctionProxyBindable bindable = new FunctionProxyBindable(
@@ -359,7 +359,7 @@ public class JavaFunctionBindableTest {
         CalciteSchemaFactory.setGlobalSchema(schema);
         JavaFunctionUtils.registerTableFunction("default", "dynamic_default", TestOverloadFun.class);
         JavaFunctionUtils.registerTableFunction("default", "dynamic_override", TestVarArgsFun.class);
-        ExecuteContext context = new ExecuteContextImpl();
+        ExecuteContext context = new ExecuteContextImpl(schema);
         SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
                 "call get_or_default('target', 'dynamic_default')() like output");
         FunctionProxyBindable bindable = new FunctionProxyBindable(
