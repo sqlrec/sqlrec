@@ -104,8 +104,8 @@ public class DataTypeUtils {
 
     /**
      * Checks that two field lists describe the same schema: same field count,
-     * same field names and same types. String types (CHAR/VARCHAR/...) are
-     * interchangeable with each other, everything else must match exactly.
+     * same field names and type names, including nested element, key/value and row field types.
+     * Nullability and type bounds are ignored; string types (CHAR/VARCHAR/...) are interchangeable.
      */
     public static void checkTableSchemaSame(
             List<RelDataTypeField> fields1,

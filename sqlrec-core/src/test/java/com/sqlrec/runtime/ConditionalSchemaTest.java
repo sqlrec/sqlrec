@@ -1,11 +1,17 @@
 package com.sqlrec.runtime;
 
+import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.Multimap;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.ConcurrentCalciteSchema;
+import com.sqlrec.udf.UdfManager;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.schema.Function;
+import org.apache.calcite.schema.ScalarFunction;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -105,6 +111,81 @@ class ConditionalSchemaTest {
                     "RETURN SELECT CHAR_LENGTH(text_value) AS text_length FROM output_table");
             assertEquals(6, execute(function, parallel)[0]);
             assertEquals(6, function.getBindableList().getFirst().getCacheTableDataFields().getFirst().getType().getPrecision());
+        }
+    }
+
+    @Test
+    void rejectsDifferentArrayElementsInIfAndTimeinCacheBranches() {
+        for (String condition : List.of("(SELECT TRUE)", "TIMEIN (SELECT 0)")) {
+            RuntimeException error = assertThrows(RuntimeException.class, () -> compile("array_cache_mismatch",
+                    "IF " + condition + " THEN (CACHE TABLE t AS SELECT ARRAY[CAST(1 AS INTEGER)] AS xs) "
+                            + "ELSE (CACHE TABLE t AS SELECT ARRAY[CAST(2 AS BIGINT)] AS xs)",
+                    "RETURN SELECT xs[1] AS result_value FROM t"));
+            assertTrue(error.getMessage().contains("field type not equal"), error.getMessage());
+            assertTrue(error.getMessage().contains("INTEGER ARRAY"), error.getMessage());
+            assertTrue(error.getMessage().contains("BIGINT ARRAY"), error.getMessage());
+        }
+    }
+
+    @Test
+    void rejectsDifferentArrayElementsAgainstRetainedCache() {
+        RuntimeException error = assertThrows(RuntimeException.class, () -> compile("array_retained_mismatch",
+                "CACHE TABLE t AS SELECT ARRAY[CAST(1 AS INTEGER)] AS xs",
+                "IF (SELECT FALSE) THEN (CACHE TABLE t AS SELECT ARRAY[CAST(2 AS BIGINT)] AS xs)",
+                "RETURN SELECT xs[1] AS result_value FROM t"));
+        assertTrue(error.getMessage().contains("field type not equal"), error.getMessage());
+    }
+
+    @Test
+    void rejectsDifferentArrayElementsInReturnSchemas() {
+        RuntimeException branchError = assertThrows(RuntimeException.class, () -> compile("array_return_mismatch",
+                "IF (SELECT TRUE) THEN (RETURN SELECT ARRAY[CAST(1 AS INTEGER)] AS xs) "
+                        + "ELSE (RETURN SELECT ARRAY[CAST(2 AS BIGINT)] AS xs)", "RETURN"));
+        assertTrue(branchError.getMessage().contains("field type not equal"), branchError.getMessage());
+
+        RuntimeException earlyReturnError = assertThrows(RuntimeException.class, () -> compile("early_array_mismatch",
+                "IF (SELECT TRUE) THEN (RETURN SELECT ARRAY[CAST(1 AS INTEGER)] AS xs)",
+                "RETURN SELECT ARRAY[CAST(2 AS BIGINT)] AS xs"));
+        assertTrue(earlyReturnError.getMessage().contains("field type not equal"), earlyReturnError.getMessage());
+    }
+
+    @Test
+    void matchingArrayElementsStillExecuteBothBranches() throws Exception {
+        for (boolean parallel : List.of(false, true)) {
+            for (boolean condition : List.of(false, true)) {
+                SqlFunctionBindable function = compile("matching_array_cache",
+                        "IF (SELECT " + condition + ") THEN (CACHE TABLE t AS SELECT ARRAY[1] AS xs) "
+                                + "ELSE (CACHE TABLE t AS SELECT ARRAY[2] AS xs)",
+                        "RETURN SELECT xs[1] AS result_value FROM t");
+                assertArrayEquals(new Object[]{condition ? 1 : 2}, execute(function, parallel));
+            }
+        }
+    }
+
+    @Test
+    void explicitArrayCastMakesUdfBranchCompatible() throws Exception {
+        CalciteSchema root = ConcurrentCalciteSchema.createRootSchema();
+        ScalarFunction randomVec = UdfManager.createScalarFunction("com.sqlrec.udf.scalar.RandomVecFunction");
+        root.add("default", new AbstractSchema() {
+            @Override
+            protected Multimap<String, Function> getFunctionMultimap() {
+                return ImmutableMultimap.of("random_vec", randomVec);
+            }
+        });
+        CalciteSchemaFactory.setGlobalSchema(root);
+
+        for (boolean parallel : List.of(false, true)) {
+            for (boolean condition : List.of(false, true)) {
+                SqlFunctionBindable function = compile("cast_array_cache",
+                        "IF (SELECT " + condition + ") THEN (CACHE TABLE t AS SELECT ARRAY[CAST(1 AS FLOAT)] AS xs) "
+                                + "ELSE (CACHE TABLE t AS SELECT CAST(random_vec('3') AS FLOAT ARRAY) AS xs)",
+                        "RETURN SELECT xs[1] + 1 AS result_value FROM t");
+                Number result = assertInstanceOf(Number.class, execute(function, parallel)[0]);
+                assertTrue(result.doubleValue() >= 1 && result.doubleValue() <= 2);
+                if (condition) {
+                    assertEquals(2.0, result.doubleValue());
+                }
+            }
         }
     }
 

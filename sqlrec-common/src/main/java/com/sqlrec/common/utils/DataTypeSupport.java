@@ -84,10 +84,9 @@ final class DataTypeSupport {
                     throw new RuntimeException("desired field name not equal to given field name: "
                             + desiredField.getName() + " != " + givenField.getName());
                 }
-                if (!compatibleTypes(desiredField, givenField)) {
+                if (!compatibleTypes(desiredField.getType(), givenField.getType())) {
                     throw new RuntimeException("desired field type not equal to given field type: "
-                            + desiredField.getType().getSqlTypeName() + " != "
-                            + givenField.getType().getSqlTypeName());
+                            + desiredField.getType() + " != " + givenField.getType());
                 }
             }
         }
@@ -104,10 +103,9 @@ final class DataTypeSupport {
                     throw new RuntimeException("field name not equal: "
                             + firstField.getName() + " != " + secondField.getName());
                 }
-                if (!compatibleTypes(firstField, secondField)) {
+                if (!compatibleTypes(firstField.getType(), secondField.getType())) {
                     throw new RuntimeException("field type not equal: "
-                            + firstField.getType().getSqlTypeName() + " != "
-                            + secondField.getType().getSqlTypeName());
+                            + firstField.getType() + " != " + secondField.getType());
                 }
             }
         }
@@ -129,12 +127,37 @@ final class DataTypeSupport {
             }
         }
 
-        private static boolean compatibleTypes(RelDataTypeField first, RelDataTypeField second) {
-            SqlTypeName firstType = first.getType().getSqlTypeName();
-            SqlTypeName secondType = second.getType().getSqlTypeName();
-            return firstType.equals(secondType)
-                    || SqlTypeName.STRING_TYPES.contains(firstType)
-                    && SqlTypeName.STRING_TYPES.contains(secondType);
+        private static boolean compatibleTypes(RelDataType first, RelDataType second) {
+            SqlTypeName firstType = first.getSqlTypeName();
+            SqlTypeName secondType = second.getSqlTypeName();
+            if (firstType != secondType) {
+                return SqlTypeName.STRING_TYPES.contains(firstType)
+                        && SqlTypeName.STRING_TYPES.contains(secondType);
+            }
+            // Composite types must also agree internally: schema merging does not convert row values.
+            switch (firstType) {
+                case ARRAY:
+                case MULTISET:
+                    return compatibleTypes(first.getComponentType(), second.getComponentType());
+                case MAP:
+                    return compatibleTypes(first.getKeyType(), second.getKeyType())
+                            && compatibleTypes(first.getValueType(), second.getValueType());
+                case ROW:
+                    if (first.getFieldCount() != second.getFieldCount()) {
+                        return false;
+                    }
+                    for (int i = 0; i < first.getFieldCount(); i++) {
+                        RelDataTypeField firstField = first.getFieldList().get(i);
+                        RelDataTypeField secondField = second.getFieldList().get(i);
+                        if (!firstField.getName().equalsIgnoreCase(secondField.getName())
+                                || !compatibleTypes(firstField.getType(), secondField.getType())) {
+                            return false;
+                        }
+                    }
+                    return true;
+                default:
+                    return true;
+            }
         }
     }
 }
