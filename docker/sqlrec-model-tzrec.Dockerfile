@@ -9,6 +9,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libgomp1 libnuma1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Keep later pip installs from replacing the CPU wheel through transitive
+# dependencies. TensorDict 0.15+ requires a newer Torch than FBGEMM 1.7 supports.
+RUN printf '%s\n' 'torch==2.12.1+cpu' 'tensordict==0.14.2' > /opt/tzrec-constraints.txt
+ENV PIP_CONSTRAINT=/opt/tzrec-constraints.txt
+
 # TorchRec uses the fbgemm_gpu Python module supplied by fbgemm-gpu-cpu.
 # Install TorchRec without its fbgemm-gpu distribution dependency.
 RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
@@ -56,6 +61,7 @@ RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
     && pip install 'numpy==1.26.4' 'pyarrow==17.0.0' /tmp/juicefs-*.whl flask \
     && pip install --no-deps /tmp/tzrec-*.whl \
     && rm -f /tmp/*.whl \
+    && python -c 'import torch; print(f"PyTorch {torch.__version__}, CUDA {torch.version.cuda}"); assert torch.version.cuda is None, "TZRec CPU images require a CPU-only PyTorch build"' \
     && mkdir -p /app
 
 WORKDIR /app
