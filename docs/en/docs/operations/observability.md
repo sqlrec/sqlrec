@@ -109,7 +109,7 @@ In a public cloud, SQLRec can use an existing Prometheus-compatible collector an
 
 ### Configure Metric Scraping
 
-Let the collector reach `http://<sqlrec-host>:30001/metrics` over a private network. Use the actual port if you changed `SQLREC_REST_PORT`. The endpoint has no separate authentication, so restrict access and avoid exposing it directly to the public internet; see the [Prometheus security model](https://prometheus.io/docs/operating/security/).
+Let the collector reach `http://<sqlrec-host>:30001/metrics` over a private network. Use the actual port if you changed `SQLREC_REST_PORT`. `GET /metrics` always permits anonymous access, including when `AUTH_ENABLED` is enabled, so collectors need no credentials. Restrict access and avoid exposing it directly to the public internet; see the [Prometheus security model](https://prometheus.io/docs/operating/security/).
 
 - **With Prometheus Operator:** Use `deploy/prometheus/sqlrec-servicemonitor.yaml` as a starting point. Adapt its namespace, Service labels, and port name. Ensure the platform's Prometheus `serviceMonitorSelector` and `serviceMonitorNamespaceSelector` select it. The example's `release: prometheus` label belongs to this repository's Helm setup. The [Operator documentation](https://prometheus-operator.dev/docs/getting-started/design/) explains these selectors.
 - **With plain Prometheus or a scraping agent:** Scrape the same endpoint. For one instance, a configuration looks like this:

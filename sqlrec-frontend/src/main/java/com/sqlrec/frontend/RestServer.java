@@ -3,6 +3,7 @@ package com.sqlrec.frontend;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.frontend.rest.HttpServerHandler;
+import com.sqlrec.frontend.auth.Authentication;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import io.micrometer.core.instrument.Tags;
@@ -32,6 +33,7 @@ public class RestServer {
     private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
 
     public static void main(String[] args) throws InterruptedException {
+        Authentication.validateConfig();
         int businessExecutorThreads = SqlRecConfigs.REST_BUSINESS_EXECUTOR_THREADS.getValue();
         int businessMaxPendingTasks = SqlRecConfigs.REST_BUSINESS_MAX_PENDING_TASKS.getValue();
         validateBusinessExecutorConfig(businessExecutorThreads, businessMaxPendingTasks);

@@ -205,6 +205,73 @@ To use dependencies managed by SRE teams, adjust the corresponding deployment st
 
 SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `edit` access through ClusterRoleBindings. For production, scope permissions to the required resources and namespaces using restricted Roles/RoleBindings.
 
+### Entry Authentication
+
+These settings are defined in `SqlRecConfigs.java` and read from the server process environment:
+
+| Environment variable | Default | Description |
+|----------------------|---------|-------------|
+| `AUTH_ENABLED` | `false` | Enable HTTP Basic and Thrift/JDBC SASL PLAIN authentication |
+| `AUTH_USERNAME` | Empty string | Required when enabled; cannot contain colons or control characters |
+| `AUTH_PASSWORD` | Empty string | Required when enabled; cannot contain control characters |
+
+Keep these settings with other secrets in your environment configuration file, for example `/etc/sqlrec/sqlrec.env`:
+
+```bash
+export AUTH_ENABLED=true
+export AUTH_USERNAME=sqlrec
+export AUTH_PASSWORD='replace-with-your-password'
+```
+
+Set `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env` before startup; `bin/server.sh` loads the file. In Kubernetes, mount the file in the SQLRec container and set this variable there, or configure the three container environment variables directly. Restart after changes. Empty or invalid credentials prevent startup when authentication is enabled. SQL `SET` and request `params` cannot override authentication settings.
+
+- **HTTP and UI**: All requests except `GET /metrics` require HTTP Basic. Missing or incorrect credentials return `401` and `WWW-Authenticate`. The UI uses the browser's native credential prompt. Browsers cache credentials, so there is no application logout action.
+- **Metrics**: `GET /metrics` always permits anonymous access, including when authentication is enabled. Prometheus needs no additional credentials.
+- **Thrift/JDBC**: When authentication is enabled, use `jdbc:hive2://<host>:<port>/default` and supply the client's username and password for SASL PLAIN authentication. Remove `auth=noSasl`. For example, run `AUTH_ENABLED=true bash ./bin/beeline.sh -n sqlrec` and enter the password when prompted. Here `AUTH_ENABLED` is set explicitly by the client to select its connection mode; `beeline.sh` does not read `SQLREC_ENV_CONF` or require a server configuration file. Invalid credentials are rejected during the SASL handshake, before `OpenSession` can be called. With authentication disabled, use `;auth=noSasl`, which is the script's default. Clients must switch connection modes after changing the server's authentication setting. Local login credentials are not forwarded to Flink Gateway.
+- **Local CLI**: Runs the engine directly and continues to rely on operating system access control.
+
+Example HTTP calls (`--user sqlrec` prompts for the password; use the configured username):
+
+```bash
+curl --user sqlrec -X POST http://localhost:30001/sql/v1 \
+  -H 'Content-Type: application/json' \
+  -d '{"sqls":["SHOW TABLES"]}'
+
+curl http://localhost:30001/metrics
+```
+
+When authentication is enabled, SQL and recommendation API POST requests must use `Content-Type: application/json`, otherwise they return `415`. Java callers can use `SqlRecApiClient.callFunctionApi(url, data, params, username, password)` or `callSqlApi(url, sqls, params, username, password)`. Credentials go only in the HTTP header, never execution parameters. Existing overloads remain anonymous and do not automatically send local entry credentials to remote servers.
+
+All authenticated clients have the same capabilities, with no roles or resource permissions. For serving-only deployments, disable unused REST SQL, UI, and Thrift entry points. HTTP Basic and Thrift SASL PLAIN do not encrypt traffic; protect connections with HTTPS, TLS tunnels, or equivalent transport security.
+
+#### Python / PyHive
+
+Install the pure Python SASL dependencies without requiring system `libsasl`:
+
+```bash
+pip install 'PyHive[hive_pure_sasl]'
+```
+
+With authentication enabled, use `auth="CUSTOM"` and credentials matching the server's `AUTH_USERNAME` and `AUTH_PASSWORD`:
+
+```python
+from pyhive import hive
+
+with hive.Connection(
+    host="localhost",
+    port=30000,
+    username="sqlrec",
+    password="your-password",
+    auth="CUSTOM",
+    database="default",
+) as connection:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+        print(cursor.fetchall())
+```
+
+With authentication disabled, use `auth="NOSASL"` and omit `password`. The server supports Hive CLI protocol V6–V10 and negotiates the client's requested version, including PyHive's V6. Passwords are checked during the SASL handshake; `OpenSession` does not need to send them again.
+
 ### Gateway Forwarding Configuration
 
 Deployment scripts install Flink SQL Gateway and configure SQLRec's connection address by default. Gateway serves requests that require Flink execution; local SQL, [metadata queries](../reference/sql.md#metadata-queries) such as `SHOW CREATE TABLE` and `DESCRIBE`, JDBC metadata, and persistent table/database/UDF metadata DDL do not depend on it.

@@ -109,7 +109,7 @@ Docker Demo 使用 `docker logs -f sqlrec-demo`；Kubernetes 部署使用 `kubec
 
 ### 配置指标采集
 
-让采集器从内网访问 `http://<sqlrec-host>:30001/metrics`；若修改了 `SQLREC_REST_PORT`，使用实际端口。`/metrics` 没有独立鉴权，应限制访问，不要直接暴露到公网；参见 [Prometheus 安全模型](https://prometheus.io/docs/operating/security/)。
+让采集器从内网访问 `http://<sqlrec-host>:30001/metrics`；若修改了 `SQLREC_REST_PORT`，使用实际端口。`GET /metrics` 始终允许匿名访问，开启 `AUTH_ENABLED` 后也无需给采集器配置账号密码。应限制访问，不要直接暴露到公网；参见 [Prometheus 安全模型](https://prometheus.io/docs/operating/security/)。
 
 - **使用 Prometheus Operator**：参考 `deploy/prometheus/sqlrec-servicemonitor.yaml`，按实际命名空间、Service 标签和端口名调整。还要确认平台 Prometheus 的 `serviceMonitorSelector`、`serviceMonitorNamespaceSelector` 会选中它；示例中的 `release: prometheus` 是本仓库的 Helm 安装约定。[Operator 文档](https://prometheus-operator.dev/docs/getting-started/design/)解释了选择关系。
 - **使用普通 Prometheus 或采集代理**：抓取相同端点。单实例配置示例：

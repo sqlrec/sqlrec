@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e
 
 if [ -n "${SQLREC_ENV_CONF}" ]; then
   source "${SQLREC_ENV_CONF}"

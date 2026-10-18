@@ -6,6 +6,7 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.frontend.auth.Authentication;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.frontend.utils.RestUtils;
 import io.micrometer.core.instrument.Tags;
@@ -54,8 +55,22 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         FullHttpResponse response;
 
         try {
-            RequestContext requestContext = parseRequest(request, decoder);
-            response = dispatch(requestContext);
+            boolean publicMetrics = HttpMethod.GET.equals(request.method())
+                    && METRICS_PATH.equals(decoder.rawPath());
+            if (!publicMetrics && !isAuthenticated(request)) {
+                response = RestUtils.error(HttpResponseStatus.UNAUTHORIZED, "authentication required");
+                response.headers().set(HttpHeaderNames.WWW_AUTHENTICATE,
+                        "Basic realm=\"SQLRec\", charset=\"UTF-8\"");
+            } else if (Authentication.isEnabled() && HttpMethod.POST.equals(request.method())
+                    && (SQL_V1_PATH.equals(decoder.rawPath()) || decoder.rawPath().startsWith(API_V1_PREFIX))
+                    && !isJsonRequest(request)) {
+                // Browsers cache Basic credentials. Require JSON so cross-origin HTML forms
+                // cannot submit authenticated SQL/API requests with a safelisted content type.
+                response = RestUtils.error(HttpResponseStatus.UNSUPPORTED_MEDIA_TYPE,
+                        "Content-Type must be application/json");
+            } else {
+                response = dispatch(parseRequest(request, decoder));
+            }
         } catch (IllegalArgumentException e) {
             logger.debug("Invalid HTTP request: uri={}, message={}", request.uri(), e.getMessage());
             response = RestUtils.error(HttpResponseStatus.BAD_REQUEST, RestUtils.errorMessage(e, "invalid request"));
@@ -66,6 +81,19 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         }
 
         writeResponse(ctx, request, response, decoder.rawPath(), startNanos);
+    }
+
+    private boolean isAuthenticated(FullHttpRequest request) {
+        if (!Authentication.isEnabled()) {
+            return true;
+        }
+        List<String> headers = request.headers().getAll(HttpHeaderNames.AUTHORIZATION);
+        return headers.size() == 1 && Authentication.authenticateBasic(headers.get(0));
+    }
+
+    private boolean isJsonRequest(FullHttpRequest request) {
+        String contentType = request.headers().get(HttpHeaderNames.CONTENT_TYPE);
+        return contentType != null && "application/json".equalsIgnoreCase(contentType.split(";", 2)[0].trim());
     }
 
     private RequestContext parseRequest(FullHttpRequest request, QueryStringDecoder decoder) {

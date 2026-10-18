@@ -6,6 +6,7 @@ import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
+import com.sqlrec.frontend.auth.Authentication;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlReset;
@@ -91,15 +92,32 @@ public class SessionManager {
     }
 
     public TOpenSessionResp openSession(TOpenSessionReq request) throws TException {
+        // Network authentication is handled by the SASL transport. Clients such as
+        // PyHive intentionally omit the password in this RPC after authenticating.
+        TProtocolVersion clientVersion = request.getClient_protocol();
+        if (clientVersion == null || clientVersion.getValue() < TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6.getValue()) {
+            TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
+            status.setSqlState("0A000");
+            status.setErrorMessage("SQLRec requires Hive CLI protocol V6 or newer");
+            return new TOpenSessionResp(status, TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10);
+        }
+        TProtocolVersion protocol = clientVersion.getValue() > TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10.getValue()
+                ? TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10 : clientVersion;
         // Initialize metadata before publishing the session.
         SqlExecutor executor = new SqlExecutor();
         THandleIdentifier id = ThriftUtils.getHandleIdentifier();
-        Session session = new Session(id, executor, new GatewayClient(request));
+        TOpenSessionReq gatewayRequest = request.deepCopy();
+        if (Authentication.isEnabled()) {
+            // SQLRec's account authenticates this entry point, not the downstream Gateway.
+            gatewayRequest.unsetUsername();
+            gatewayRequest.unsetPassword();
+        }
+        Session session = new Session(id, executor, new GatewayClient(gatewayRequest));
         sessions.put(id, session);
         MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_SESSION_OPEN_COUNT).increment();
         logger.info("Local session opened, sessionGuid: {}", ThriftUtils.safeHandleId(id));
 
-        TOpenSessionResp response = new TOpenSessionResp(successStatus(), TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10);
+        TOpenSessionResp response = new TOpenSessionResp(successStatus(), protocol);
         response.setSessionHandle(new TSessionHandle(id.deepCopy()));
         response.setConfiguration(Map.of());
         return response;

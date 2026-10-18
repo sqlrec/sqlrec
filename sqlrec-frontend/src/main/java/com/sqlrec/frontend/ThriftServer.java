@@ -1,6 +1,8 @@
 package com.sqlrec.frontend;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.frontend.auth.Authentication;
+import com.sqlrec.frontend.auth.PlainSaslAuthentication;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import com.sqlrec.frontend.thrift.TCLIServiceImpl;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -17,6 +19,7 @@ public class ThriftServer {
     private static final Logger logger = LoggerFactory.getLogger(ThriftServer.class);
 
     public static void main(String[] args) throws TTransportException {
+        Authentication.validateConfig();
         PrometheusMetricsUtils.initMetrics();
         CalciteSchemaFactory.createCalciteSchema();
 
@@ -27,6 +30,10 @@ public class ThriftServer {
             logger.info("Thrift server is running on port {}", SqlRecConfigs.THRIFT_SERVER_PORT.getValue());
             TThreadPoolServer.Args tArgs = new TThreadPoolServer.Args(serverTransport);
             tArgs.protocolFactory(new TBinaryProtocol.Factory());
+            if (Authentication.isEnabled()) {
+                // Authenticate the connection before any RPC, including OpenSession.
+                tArgs.transportFactory(PlainSaslAuthentication.transportFactory());
+            }
 
             TProcessor tprocessor = new TCLIService.Processor<TCLIService.Iface>(serviceImpl);
             tArgs.processor(tprocessor);

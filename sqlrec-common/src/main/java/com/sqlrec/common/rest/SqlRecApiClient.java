@@ -3,8 +3,10 @@ package com.sqlrec.common.rest;
 import com.sqlrec.common.http.JsonHttpTransport;
 import com.sqlrec.common.utils.JsonUtils;
 import okhttp3.OkHttpClient;
+import okhttp3.Credentials;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -61,9 +63,18 @@ public final class SqlRecApiClient {
     public static ExecuteData callFunctionApi(String url,
                                               Map<String, List<Map<String, Object>>> data,
                                               Map<String, String> params) {
+        return callFunctionApi(url, data, params, null, null);
+    }
+
+    /** Calls an authenticated endpoint; credentials are sent only in the HTTP header. */
+    public static ExecuteData callFunctionApi(String url,
+                                              Map<String, List<Map<String, Object>>> data,
+                                              Map<String, String> params,
+                                              String username, String password) {
         RequestData requestData = createRequestData(params);
         requestData.setData(data);
-        return postRequest(url, requestData, ExecuteData.class, ExecuteData::new);
+        return postRequest(url, requestData, ExecuteData.class, ExecuteData::new,
+                authorization(username, password));
     }
 
     /**
@@ -97,9 +108,17 @@ public final class SqlRecApiClient {
     public static ExecuteDataList callSqlApi(String url,
                                              List<String> sqls,
                                              Map<String, String> params) {
+        return callSqlApi(url, sqls, params, null, null);
+    }
+
+    /** Calls an authenticated SQL endpoint without adding credentials to execution params. */
+    public static ExecuteDataList callSqlApi(String url, List<String> sqls,
+                                             Map<String, String> params,
+                                             String username, String password) {
         RequestData requestData = createRequestData(params);
         requestData.setSqls(sqls);
-        return postRequest(url, requestData, ExecuteDataList.class, ExecuteDataList::new);
+        return postRequest(url, requestData, ExecuteDataList.class, ExecuteDataList::new,
+                authorization(username, password));
     }
 
     /**
@@ -129,21 +148,32 @@ public final class SqlRecApiClient {
             String url,
             RequestData requestData,
             Class<T> responseType,
-            Supplier<T> emptyResponse
+            Supplier<T> emptyResponse,
+            String authorization
     ) {
         if (url == null || url.isEmpty()) {
             throw new IllegalArgumentException("url is null or empty");
         }
         T response = JsonUtils.fromJson(
-                doPost(url, JsonUtils.toJson(requestData)),
+                doPost(url, JsonUtils.toJson(requestData), authorization),
                 responseType
         );
         return response != null ? response : emptyResponse.get();
     }
 
-    private static String doPost(String url, String bodyJson) {
+    private static String authorization(String username, String password) {
+        if (username == null && password == null) {
+            return null;
+        }
+        if (username == null || password == null) {
+            throw new IllegalArgumentException("both username and password are required");
+        }
+        return Credentials.basic(username, password, StandardCharsets.UTF_8);
+    }
+
+    private static String doPost(String url, String bodyJson, String authorization) {
         try {
-            return JsonHttpTransport.post(HTTP_CLIENT, url, bodyJson);
+            return JsonHttpTransport.post(HTTP_CLIENT, url, bodyJson, authorization);
         } catch (IOException e) {
             throw new RuntimeException("Failed to call remote sqlrec api: " + e.getMessage(), e);
         }

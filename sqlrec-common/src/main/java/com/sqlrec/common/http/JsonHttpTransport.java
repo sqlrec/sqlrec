@@ -16,12 +16,19 @@ public final class JsonHttpTransport {
     }
 
     public static String post(OkHttpClient client, String url, String bodyJson) throws IOException {
-        Request request = new Request.Builder()
+        return post(client, url, bodyJson, null);
+    }
+
+    public static String post(OkHttpClient client, String url, String bodyJson,
+                              String authorization) throws IOException {
+        Request.Builder request = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(bodyJson, JSON))
-                .addHeader("Accept", "application/json")
-                .build();
-        try (Response response = client.newCall(request).execute()) {
+                .addHeader("Accept", "application/json");
+        if (authorization != null) {
+            request.header("Authorization", authorization);
+        }
+        try (Response response = client.newCall(request.build()).execute()) {
             if (!response.isSuccessful()) {
                 throw new RuntimeException("HTTP request failed with response code: " + response.code());
             }

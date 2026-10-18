@@ -10,19 +10,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 /**
  * HTTP mock unit tests for SqlRecApiClient.
@@ -47,6 +53,43 @@ public class SqlRecApiClientUnitTest {
     void setUp() {
         // Inject mock OkHttpClient into the class under test
         SqlRecApiClient.setHttpClientForTest(mockHttpClient);
+    }
+
+    @Test
+    void sendsExplicitCredentialsInTheHeaderForBothEndpointsOnly() throws IOException {
+        when(mockHttpClient.newCall(any(Request.class))).thenReturn(mockCall);
+        when(mockCall.execute()).thenReturn(mockResponse);
+        when(mockResponse.isSuccessful()).thenReturn(true);
+        when(mockResponse.body()).thenReturn(mockBody);
+        when(mockBody.string()).thenReturn("{}");
+
+        SqlRecApiClient.callFunctionApi("http://test/api/v1/recommend", Map.of(), Map.of("scene", "home"),
+                "用户", "secret:密码");
+        ArgumentCaptor<Request> requests = ArgumentCaptor.forClass(Request.class);
+        verify(mockHttpClient).newCall(requests.capture());
+        Request function = requests.getValue();
+        assertEquals(okhttp3.Credentials.basic("用户", "secret:密码", StandardCharsets.UTF_8),
+                function.header("Authorization"));
+        okio.Buffer body = new okio.Buffer();
+        function.body().writeTo(body);
+        String json = body.readUtf8();
+        assertTrue(json.contains("scene"));
+        assertFalse(json.contains("secret"));
+        assertFalse(json.contains("用户"));
+
+        SqlRecApiClient.callSqlApi("http://test/sql/v1", List.of("SELECT 1"), null, "sqlrec", "secret");
+        verify(mockHttpClient, org.mockito.Mockito.times(2)).newCall(requests.capture());
+        assertEquals("Basic c3FscmVjOnNlY3JldA==", requests.getValue().header("Authorization"));
+
+        SqlRecApiClient.callFunctionApi("http://other/api/v1/recommend", Map.of());
+        verify(mockHttpClient, org.mockito.Mockito.times(3)).newCall(requests.capture());
+        assertNull(requests.getValue().header("Authorization"));
+    }
+
+    @Test
+    void requiresBothCredentialFields() {
+        assertThrows(IllegalArgumentException.class, () ->
+                SqlRecApiClient.callSqlApi("http://test/sql/v1", List.of("SELECT 1"), null, "sqlrec", null));
     }
 
     @AfterEach

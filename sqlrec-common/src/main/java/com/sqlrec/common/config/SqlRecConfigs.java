@@ -18,6 +18,20 @@ public class SqlRecConfigs {
             String.class
     );
 
+    // Entry authentication is process-wide; never resolve it from request/session variables.
+    public static final ConfigOption<Boolean> AUTH_ENABLED = new ConfigOption<>(
+            "AUTH_ENABLED", false,
+            "enable HTTP Basic and Thrift SASL PLAIN authentication; GET /metrics remains public",
+            null, Boolean.class);
+    public static final ConfigOption<String> AUTH_USERNAME = new ConfigOption<>(
+            "AUTH_USERNAME", "",
+            "shared username for HTTP and Thrift authentication",
+            null, String.class);
+    public static final ConfigOption<String> AUTH_PASSWORD = new ConfigOption<>(
+            "AUTH_PASSWORD", "",
+            "shared password for HTTP and Thrift authentication",
+            null, String.class);
+
     // service network config
     public static final ConfigOption<Boolean> ENABLE_REST_SERVER = new ConfigOption<>(
             "ENABLE_REST_SERVER",

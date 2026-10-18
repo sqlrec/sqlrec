@@ -46,6 +46,8 @@ curl -X POST http://localhost:30001/api/v1/recommend \
   }'
 ```
 
+When the server enables `AUTH_ENABLED`, add `--user sqlrec` to curl and enter the password when prompted, replacing `sqlrec` with `AUTH_USERNAME`. Missing or incorrect credentials return HTTP `401`. See [entry authentication](../operations/deployment.md#entry-authentication) for configuration and JDBC access.
+
 For multiple inputs, add each table under `data`:
 
 ```json

@@ -205,6 +205,73 @@ SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlre
 
 SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 ClusterRoleBinding 授予集群级 `edit` 权限。生产环境应按所需资源和命名空间调整为受限 Role/RoleBinding。
 
+### 入口认证
+
+以下配置统一定义在 `SqlRecConfigs.java`，从服务进程的环境变量读取：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `AUTH_ENABLED` | `false` | 开启 HTTP Basic 和 Thrift/JDBC SASL PLAIN 认证 |
+| `AUTH_USERNAME` | 空字符串 | 共享用户名，开启认证时必填，不能包含冒号或控制字符 |
+| `AUTH_PASSWORD` | 空字符串 | 共享密码，开启认证时必填，不能包含控制字符 |
+
+可以把这些配置和其他密钥统一放到 `/etc/sqlrec/sqlrec.env` 等自己的环境配置文件中：
+
+```bash
+export AUTH_ENABLED=true
+export AUTH_USERNAME=sqlrec
+export AUTH_PASSWORD='replace-with-your-password'
+```
+
+启动前设置 `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env`，`bin/server.sh` 会加载该文件。Kubernetes 部署时，将文件挂载到 SQLRec 容器内并在容器中设置此变量，也可以直接配置上述三个容器环境变量。修改后重启服务；开启认证但凭证为空或格式不合法时，启动失败。SQL `SET` 和请求 `params` 不能覆盖认证配置。
+
+- **HTTP 和 UI**：除 `GET /metrics` 外，所有请求均要求 HTTP Basic；缺少或错误凭证返回 `401` 和 `WWW-Authenticate`。UI 使用浏览器原生账号密码提示框；浏览器缓存凭证，暂不提供应用内退出登录。
+- **指标**：`GET /metrics` 始终匿名放行，包括开启认证时。Prometheus 无需增加账号密码配置。
+- **Thrift/JDBC**：开启认证时，使用 `jdbc:hive2://<host>:<port>/default`，通过客户端的用户名、密码字段进行 SASL PLAIN 认证，不再使用 `auth=noSasl`。例如 `AUTH_ENABLED=true bash ./bin/beeline.sh -n sqlrec` 后按提示输入密码。这里的 `AUTH_ENABLED` 由客户端显式设置，用于选择连接方式；`beeline.sh` 不读取 `SQLREC_ENV_CONF`，也不依赖服务端配置文件。错误凭证在 SASL 握手阶段被拒绝，成功后才允许调用 `OpenSession`。关闭认证时继续使用 `;auth=noSasl`，脚本默认采用此方式。修改服务端认证开关后，客户端需相应切换连接方式。本地登录凭证不会转发给 Flink Gateway。
+- **本地 CLI**：直接运行引擎，继续依赖操作系统的访问控制。
+
+HTTP 调用示例（`--user sqlrec` 会提示输入密码，用户名取实际配置）：
+
+```bash
+curl --user sqlrec -X POST http://localhost:30001/sql/v1 \
+  -H 'Content-Type: application/json' \
+  -d '{"sqls":["SHOW TABLES"]}'
+
+curl http://localhost:30001/metrics
+```
+
+开启认证时，SQL 和推荐 API 的 POST 请求必须使用 `Content-Type: application/json`，否则返回 `415`。Java 调用方可使用 `SqlRecApiClient.callFunctionApi(url, data, params, username, password)` 或 `callSqlApi(url, sqls, params, username, password)`；凭证仅放入 HTTP Header，不进入执行参数。原有方法继续匿名调用，不会自动把本机入口凭证发送给远端。
+
+所有认证通过的客户端拥有相同能力，不区分角色或资源权限；仅提供在线推荐服务时，可关闭不需要的 REST SQL、UI 和 Thrift 入口。HTTP Basic 和 Thrift SASL PLAIN 不提供传输加密，部署时通过 HTTPS、TLS 隧道等保护连接。
+
+#### Python / PyHive
+
+安装纯 Python SASL 依赖，无需系统 `libsasl`：
+
+```bash
+pip install 'PyHive[hive_pure_sasl]'
+```
+
+开启认证后，使用 `auth="CUSTOM"`，账号密码对应服务端的 `AUTH_USERNAME` 和 `AUTH_PASSWORD`：
+
+```python
+from pyhive import hive
+
+with hive.Connection(
+    host="localhost",
+    port=30000,
+    username="sqlrec",
+    password="your-password",
+    auth="CUSTOM",
+    database="default",
+) as connection:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+        print(cursor.fetchall())
+```
+
+关闭认证时，改用 `auth="NOSASL"` 并省略 `password`。服务端支持 Hive CLI 协议 V6–V10，按客户端请求协商版本，兼容 PyHive 的 V6 请求。密码在 SASL 握手中校验，`OpenSession` 不要求重复携带密码。
+
 ### Gateway 转发配置
 
 部署脚本默认安装 Flink SQL Gateway，并配置 SQLRec 的连接地址。Gateway 仅供需要 Flink 执行的请求使用；本地 SQL、[元数据查询](../reference/sql.md#元数据查询)（如 `SHOW CREATE TABLE`、`DESCRIBE`）、JDBC 元数据和持久表、库、UDF 的纯元数据 DDL 不依赖 Gateway。
