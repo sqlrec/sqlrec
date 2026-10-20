@@ -1,5 +1,5 @@
 #!/bin/bash
-set -exo pipefail
+set -eo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 

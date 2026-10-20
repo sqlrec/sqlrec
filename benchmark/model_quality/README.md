@@ -37,7 +37,12 @@ source deploy/env.sh
 
 # Run local tests without a cluster.
 .venv/bin/python -m unittest discover -s benchmark/model_quality/tests -v
+
+# Run authentication tests, including the PyHive CUSTOM/V6 client test.
+.venv/bin/python -m unittest benchmark.model_quality.tests.test_auth -v
 ```
+
+Authentication tests mock network transport and RPC responses; they do not connect to SQLRec.
 
 `--model` is required; running without arguments does not start training. Supported models are DSSM, Wide & Deep, DeepFM, Rocket Launching, CatBoost, LightGBM, XGBoost, and MMoE. Each dataset declares its supported models and feature views in YAML. Criteo supports the six single-task ranking models; DSSM supports MovieLens, KuaiRand, and KuaiRec; MMoE supports only KuaiRand. An explicitly requested unsupported combination fails before connecting to the cluster.
 
@@ -81,6 +86,14 @@ Run folder names use the machine's local date and time, followed by the dataset 
 Each prepared version includes fixed `training/<view>/split=train/part.parquet` files for ranking, trees, retrieval, and, where applicable, multitask training. Retrieval training includes only positives. `prepare --upload` uploads these views under `<storage>/datasets/<dataset>/<fingerprint>/<view>` and registers external Hive tables. Repeating the command checks and reuses existing tables without uploading again. Evaluation only reads these tables and checks their schema, location, and row count; it never exports or uploads training files. If a table is missing, run the preparation command with `--upload`. Existing tables with mismatched metadata or counts raise an error rather than being overwritten. An interrupted upload that left files without a registered table requires manual inspection before retrying; the command does not overwrite those files.
 
 Connection settings and resources come from `deploy/env.sh`. You can override `NODE_IP`, `SQLREC_THRIFT_PORT`, `SQLREC_REST_PORT`, `KYUUBI_PORT`, `MILVUS_PORT`, `NAMESPACE`, `HADOOP_BIN`, and `KUBECTL_BIN`. Shared storage is read from Hadoop's `core-site.xml`, or configured with `BENCH_STORAGE_ROOT` / `BENCH_FS_URI`. Training defaults to 2 CPUs / 4Gi memory, and serving to 1 CPU / 2Gi memory; override these with `BENCH_TRAIN_CPU`, `BENCH_TRAIN_MEMORY`, `BENCH_SERVICE_CPU`, and `BENCH_SERVICE_MEMORY`. Image versions default to `${SQLREC_VERSION}-cpu`; override them with `BENCH_TZREC_VERSION` and `BENCH_GBDT_VERSION`. Build and deploy SQLRec and its model images from the current source; the TZRec image must contain native `PoolNegativeSampler` and SQLRec must support its model parameters. If Milvus authentication is enabled, set `SQLREC_BENCH_MILVUS_TOKEN`. Credentials are not written to results.
+
+SQLRec authentication defaults to enabled through `deploy/env.sh`. After sourcing
+that file, `AUTH_ENABLED`, `AUTH_USERNAME`, and `AUTH_PASSWORD` configure both
+SQLRec Thrift (SASL PLAIN / `CUSTOM`) and HTTP (Basic). Override exported variables
+for a different account; use `AUTH_ENABLED=false` only for an anonymous server.
+SQLRec validates credentials. `environment.json` stores
+credential environment variable names, never passwords or Basic headers.
+Kyuubi and Milvus authentication remain independent.
 
 The two SQL connections serve different purposes: Kyuubi (default port 30009) creates external Hive training tables and registers partitions during `prepare --upload`, and checks existing tables during evaluation; SQLRec (default port 30000) executes model training, export, deployment, and vector SQL. Prediction uses SQLRec HTTP (default port 30001). The evaluation entry point connects to Kyuubi first, then checks training inputs and runs model tasks.
 

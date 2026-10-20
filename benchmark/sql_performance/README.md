@@ -25,6 +25,15 @@ outside the timed benchmark.
 disable online model inference and use random user embeddings. Initialization
 also checks the inference-enabled workflow.
 
+SQLRec authentication defaults to enabled through `deploy/env.sh`. Both scripts
+use `AUTH_ENABLED`, `AUTH_USERNAME`, and `AUTH_PASSWORD`; override them with
+environment variables or edit that file. `init.sh` uses `bin/beeline.sh` for
+SQLRec connections. HTTP warm-up and timed requests use Basic authentication
+through `wrk -H`. Check the non-2xx response count when reviewing results.
+Set `AUTH_ENABLED=false` for a server
+with authentication disabled. Kyuubi and Milvus keep their own authentication.
+Credentials are not written to benchmark files.
+
 See the [English guide](../../docs/en/docs/performance/sql-benchmark.md) or
 [中文说明](../../docs/docs/performance/sql-benchmark.md) for deployment requirements,
 workload details, and historical results.

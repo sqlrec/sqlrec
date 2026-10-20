@@ -1,6 +1,7 @@
 """Standard HS2/Thrift client. No SQLRec internals and no model/connector SDKs."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -64,24 +65,26 @@ class HS2Client:
         socket = TSocket.TSocket(self.config['host'], int(self.config['port']))
         socket.setTimeout(int(self.config.get('rpc_timeout', 120) * 1000))
         auth = self.config.get('auth', 'NOSASL').upper()
+        username = (os.environ[self.config['username_env']] if self.config.get('username_env')
+                    else self.config.get('username', 'quality_benchmark'))
         if auth == 'NOSASL':
             transport = TTransport.TBufferedTransport(socket)
-        elif auth in ('NONE', 'LDAP'):
+        elif auth in ('NONE', 'LDAP', 'CUSTOM'):
             from thrift_sasl import TSaslClientTransport
             from pyhive.hive import get_pure_sasl_client
-            password = os.environ[self.config['password_env']] if auth == 'LDAP' else 'x'
+            password = os.environ[self.config['password_env']] if auth in ('LDAP', 'CUSTOM') else 'x'
             transport = TSaslClientTransport(lambda: get_pure_sasl_client(
-                self.config['host'], 'PLAIN', username=self.config.get('username', 'quality_benchmark'),
+                self.config['host'], 'PLAIN', username=username,
                 password=password), 'PLAIN', socket)
         else:
-            raise ValueError('Supported HS2 auth: NOSASL, NONE, LDAP (password_env)')
+            raise ValueError('Supported HS2 auth: NOSASL, NONE, LDAP/CUSTOM (password_env)')
         self.transport = transport
         try:
             transport.open()
             self.client = TCLIService.Client(TBinaryProtocol.TBinaryProtocol(transport))
             result = self.client.OpenSession(ttypes.TOpenSessionReq(
                 client_protocol=ttypes.TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10,
-                username=self.config.get('username', 'quality_benchmark'),
+                username=username,
                 configuration=self.config.get('configuration', {})))
             self._check(result.status)
             if result.sessionHandle is None or not 5 <= result.serverProtocolVersion <= 9:
@@ -196,6 +199,12 @@ class APIClient:
         headers = {}
         if self.config.get('authorization_env'):
             headers['Authorization'] = os.environ[self.config['authorization_env']]
+        elif self.config.get('username_env'):
+            username = os.environ[self.config['username_env']]
+            password = os.environ[self.config['password_env']]
+            # Match the server's UTF-8 encoding, including non-ASCII passwords.
+            token = base64.b64encode(f'{username}:{password}'.encode('utf-8')).decode('ascii')
+            headers['Authorization'] = 'Basic ' + token
         # Only read-only scoring/recall requests may retry readiness failures.
         # Item loading writes to Milvus and must pass retry=False.
         deadline = time.monotonic() + self.config.get('readiness_timeout', 120)

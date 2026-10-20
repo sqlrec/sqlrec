@@ -207,13 +207,21 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 
 ### 入口认证
 
-以下配置统一定义在 `SqlRecConfigs.java`，从服务进程的环境变量读取：
+以下配置统一定义在 `SqlRecConfigs.java`，从服务进程的环境变量读取。直接启动服务时使用下表默认值；仓库部署脚本通过 `deploy/env.sh` 将默认值覆盖为 `AUTH_ENABLED=true`、`AUTH_USERNAME=sqlrec`、`AUTH_PASSWORD=abc123456`。默认凭证用于开发环境，可修改 `deploy/env.sh` 或用同名环境变量覆盖：
 
-| 环境变量 | 默认值 | 说明 |
+| 环境变量 | 服务默认值 | 说明 |
 |----------|--------|------|
 | `AUTH_ENABLED` | `false` | 开启 HTTP Basic 和 Thrift/JDBC SASL PLAIN 认证 |
 | `AUTH_USERNAME` | 空字符串 | 共享用户名，开启认证时必填，不能包含冒号或控制字符 |
 | `AUTH_PASSWORD` | 空字符串 | 共享密码，开启认证时必填，不能包含控制字符 |
+
+普通部署和 demo 部署都将这三个配置直接写入容器环境变量；渲染后的 YAML 包含账号密码。修改配置后重新运行部署脚本，Deployment 会根据环境变量变更自动更新 Pod。凭证合法性由服务端在启动时校验。`AUTH_ENABLED` 使用 `true` 或 `false`。
+
+```bash
+AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
+# 兼容旧的匿名环境；客户端也需设置 AUTH_ENABLED=false
+AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
+```
 
 可以把这些配置和其他密钥统一放到 `/etc/sqlrec/sqlrec.env` 等自己的环境配置文件中：
 
@@ -227,8 +235,19 @@ export AUTH_PASSWORD='replace-with-your-password'
 
 - **HTTP 和 UI**：除 `GET /metrics` 外，所有请求均要求 HTTP Basic；缺少或错误凭证返回 `401` 和 `WWW-Authenticate`。UI 使用浏览器原生账号密码提示框；浏览器缓存凭证，暂不提供应用内退出登录。
 - **指标**：`GET /metrics` 始终匿名放行，包括开启认证时。Prometheus 无需增加账号密码配置。
-- **Thrift/JDBC**：开启认证时，使用 `jdbc:hive2://<host>:<port>/default`，通过客户端的用户名、密码字段进行 SASL PLAIN 认证，不再使用 `auth=noSasl`。例如 `AUTH_ENABLED=true bash ./bin/beeline.sh -n sqlrec` 后按提示输入密码。这里的 `AUTH_ENABLED` 由客户端显式设置，用于选择连接方式；`beeline.sh` 不读取 `SQLREC_ENV_CONF`，也不依赖服务端配置文件。错误凭证在 SASL 握手阶段被拒绝，成功后才允许调用 `OpenSession`。关闭认证时继续使用 `;auth=noSasl`，脚本默认采用此方式。修改服务端认证开关后，客户端需相应切换连接方式。本地登录凭证不会转发给 Flink Gateway。
+- **Thrift/JDBC**：开启认证时使用 `jdbc:hive2://<host>:<port>/default` 和 SASL PLAIN；关闭时使用 `;auth=noSasl`。`bin/beeline.sh` 自动读取 `deploy/env.sh` 的地址、认证开关和凭证，通过同名环境变量覆盖配置。脚本将 `-e`、`-f` 等执行参数原样传给 Beeline，不解析命令行连接或凭证参数；连接设置使用 `NODE_IP`、`SQLREC_THRIFT_PORT`、`AUTH_USERNAME` 和 `AUTH_PASSWORD`。脚本不读取 `SQLREC_ENV_CONF`。错误凭证在 SASL 握手阶段被拒绝，本地凭证不会转发给 Flink Gateway。
 - **本地 CLI**：直接运行引擎，继续依赖操作系统的访问控制。
+
+Beeline 示例：
+
+```bash
+bash bin/beeline.sh -e 'SELECT 1'
+AUTH_USERNAME=alice AUTH_PASSWORD='my-password' bash bin/beeline.sh -f query.sql
+NODE_IP=other-host SQLREC_THRIFT_PORT=10000 bash bin/beeline.sh
+AUTH_ENABLED=false bash bin/beeline.sh            # 连接关闭认证的服务
+```
+
+凭证通过 Beeline 原生 `-n/-p` 参数传入。Hive Beeline 3.1.3 会再次按空格拆分凭证，应使用不含空格的用户名和密码。
 
 HTTP 调用示例（`--user sqlrec` 会提示输入密码，用户名取实际配置）：
 

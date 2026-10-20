@@ -193,6 +193,11 @@ def environment():
         'api': dict(base_url=f'http://{address}:{os.environ.get("SQLREC_REST_PORT", 30001)}'),
         'milvus': dict(url=f'http://{address}:{os.environ.get("MILVUS_PORT", 30022)}', token_env='SQLREC_BENCH_MILVUS_TOKEN'),
     }
+    if os.environ.get('AUTH_ENABLED', 'true').lower() == 'true':
+        # Environment is serialized to environment.json. Store references only.
+        credentials = dict(username_env='AUTH_USERNAME', password_env='AUTH_PASSWORD')
+        endpoints['sqlrec'].update(auth='CUSTOM', **credentials)
+        endpoints['api'].update(**credentials)
     namespace = os.environ.get('NAMESPACE', 'sqlrec')
     train = dict(NAMESPACE=namespace, pod_cpu_cores=int(os.environ.get('BENCH_TRAIN_CPU', 2)),
                  pod_memory=os.environ.get('BENCH_TRAIN_MEMORY', '4Gi'))

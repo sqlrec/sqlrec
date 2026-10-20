@@ -207,13 +207,21 @@ SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `ed
 
 ### Entry Authentication
 
-These settings are defined in `SqlRecConfigs.java` and read from the server process environment:
+These settings are defined in `SqlRecConfigs.java` and read from the server process environment. The table lists defaults for direct server startup. Repository deployment scripts override them through `deploy/env.sh` with `AUTH_ENABLED=true`, `AUTH_USERNAME=sqlrec`, and `AUTH_PASSWORD=abc123456`. These credentials are development defaults; edit `deploy/env.sh` or override them with environment variables:
 
-| Environment variable | Default | Description |
+| Environment variable | Server default | Description |
 |----------------------|---------|-------------|
 | `AUTH_ENABLED` | `false` | Enable HTTP Basic and Thrift/JDBC SASL PLAIN authentication |
 | `AUTH_USERNAME` | Empty string | Required when enabled; cannot contain colons or control characters |
 | `AUTH_PASSWORD` | Empty string | Required when enabled; cannot contain control characters |
+
+Both regular and demo deployments write these settings directly into container environment variables; rendered YAML contains the credentials. Rerun deployment after configuration changes; the Deployment updates Pods when environment variables change. The server validates credentials at startup. Use `true` or `false` for `AUTH_ENABLED`.
+
+```bash
+AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
+# Legacy anonymous deployments; clients must also set AUTH_ENABLED=false
+AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
+```
 
 Keep these settings with other secrets in your environment configuration file, for example `/etc/sqlrec/sqlrec.env`:
 
@@ -227,8 +235,19 @@ Set `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env` before startup; `bin/server.
 
 - **HTTP and UI**: All requests except `GET /metrics` require HTTP Basic. Missing or incorrect credentials return `401` and `WWW-Authenticate`. The UI uses the browser's native credential prompt. Browsers cache credentials, so there is no application logout action.
 - **Metrics**: `GET /metrics` always permits anonymous access, including when authentication is enabled. Prometheus needs no additional credentials.
-- **Thrift/JDBC**: When authentication is enabled, use `jdbc:hive2://<host>:<port>/default` and supply the client's username and password for SASL PLAIN authentication. Remove `auth=noSasl`. For example, run `AUTH_ENABLED=true bash ./bin/beeline.sh -n sqlrec` and enter the password when prompted. Here `AUTH_ENABLED` is set explicitly by the client to select its connection mode; `beeline.sh` does not read `SQLREC_ENV_CONF` or require a server configuration file. Invalid credentials are rejected during the SASL handshake, before `OpenSession` can be called. With authentication disabled, use `;auth=noSasl`, which is the script's default. Clients must switch connection modes after changing the server's authentication setting. Local login credentials are not forwarded to Flink Gateway.
+- **Thrift/JDBC**: Use `jdbc:hive2://<host>:<port>/default` with SASL PLAIN when authentication is enabled, and `;auth=noSasl` when disabled. `bin/beeline.sh` reads addresses, authentication mode, and credentials from `deploy/env.sh`, with environment variable overrides. Execution arguments such as `-e` and `-f` are passed through unchanged; the script does not parse connection or credential options. Configure the connection with `NODE_IP`, `SQLREC_THRIFT_PORT`, `AUTH_USERNAME`, and `AUTH_PASSWORD`. The script does not read `SQLREC_ENV_CONF`. Incorrect credentials are rejected during SASL negotiation. Local credentials are not forwarded to Flink Gateway.
 - **Local CLI**: Runs the engine directly and continues to rely on operating system access control.
+
+Beeline examples:
+
+```bash
+bash bin/beeline.sh -e 'SELECT 1'
+AUTH_USERNAME=alice AUTH_PASSWORD='my-password' bash bin/beeline.sh -f query.sql
+NODE_IP=other-host SQLREC_THRIFT_PORT=10000 bash bin/beeline.sh
+AUTH_ENABLED=false bash bin/beeline.sh            # Server with authentication disabled
+```
+
+Credentials are passed through Beeline's native `-n/-p` options. Hive Beeline 3.1.3 tokenizes credentials on spaces again, so use usernames and passwords without spaces.
 
 Example HTTP calls (`--user sqlrec` prompts for the password; use the configured username):
 

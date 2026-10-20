@@ -1,10 +1,9 @@
 #!/bin/bash
-set -ex
-dir=$(dirname $(realpath $0))
+set -eo pipefail
+dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 
-export BASE_DIR=$(dirname $(dirname ${dir}))/deploy
-source ${BASE_DIR}/env.sh
-bash ${BASE_DIR}/kyuubi/deploy.sh
+source "${dir}/../../deploy/env.sh"
+bash "${dir}/../../deploy/kyuubi/deploy.sh"
 
 
 if command -v wrk >/dev/null 2>&1; then
@@ -122,7 +121,7 @@ hdfs dfs -put -f ${RATINGS_PARQUET} ${HDFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION
 echo "Ratings parquet file uploaded successfully"
 
 envsubst < ${dir}/init_flink_table.sql > ${dir}/init_flink_table.sql.tmp
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_flink_table.sql.tmp
+bash "${dir}/../../bin/beeline.sh" -f "${dir}/init_flink_table.sql.tmp"
 hive -f ${dir}/init_hive_table.sql
 
 echo "Computing features from MovieLens data..."
@@ -131,18 +130,18 @@ echo "Feature computation completed"
 
 echo "Training and deploying MovieLens models..."
 envsubst '${NAMESPACE}' < "${dir}/init_model.sql" > "${dir}/init_model.sql.tmp"
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f "${dir}/init_model.sql.tmp"
+bash "${dir}/../../bin/beeline.sh" -f "${dir}/init_model.sql.tmp"
 echo "Model services are ready"
 
 echo "Loading features to Redis..."
 envsubst '${NAMESPACE}' < "${dir}/load_features.sql" > "${dir}/load_features.sql.tmp"
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f "${dir}/load_features.sql.tmp"
+bash "${dir}/../../bin/beeline.sh" -f "${dir}/load_features.sql.tmp"
 echo "Features loaded successfully"
 
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -f ${dir}/init_sqlrec_sql.sql
+bash "${dir}/../../bin/beeline.sh" -f "${dir}/init_sqlrec_sql.sql"
 
 echo "Test rec..."
-beeline -u "jdbc:hive2://${NODE_IP}:${SQLREC_THRIFT_PORT}/default;auth=noSasl" -e "
+bash "${dir}/../../bin/beeline.sh" -e "
 cache table t1 as select cast(1 as bigint) as user_id;
 call main_rec(t1);
 set rank_fun=rank_fun;

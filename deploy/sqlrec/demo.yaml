@@ -18,6 +18,12 @@ spec:
         - name: sqlrec
           image: sqlrec/sqlrec-demo:${SQLREC_VERSION}
           env:
+            - name: AUTH_ENABLED
+              value: "${AUTH_ENABLED}"
+            - name: AUTH_USERNAME
+              value: "${AUTH_USERNAME}"
+            - name: AUTH_PASSWORD
+              value: "${AUTH_PASSWORD}"
             - name: SERVICE_NAME
               value: sqlrec
             - name: METRICS_TAG_KEYS
