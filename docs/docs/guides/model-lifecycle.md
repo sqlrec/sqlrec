@@ -21,14 +21,14 @@ CREATE MODEL external_rank_model (
   'output_columns' = 'score:FLOAT'
 );
 
-CREATE SERVICE external_rank_service
+CREATE SERVICE `external-rank-service`
 ON MODEL external_rank_model
 WITH (
   'url' = 'http://rank-service:8080/predict'
 );
 ```
 
-本地文件模式将两份定义分别保存为 `model/external_rank_model.sql` 和 `service/external_rank_service.sql`，放在完整的 `SQL_SCHEMA_DIR` 下并重启；加载方法见[Docker 指南](../getting-started/docker.md#管理本地-sql-定义)。远程元数据模式通过 Beeline 或 JDBC 执行定义。
+本地文件模式将两份定义分别保存为 `model/external_rank_model.sql` 和 `service/external-rank-service.sql`，放在完整的 `SQL_SCHEMA_DIR` 下并重启；加载方法见[Docker 指南](../getting-started/docker.md#管理本地-sql-定义)。远程元数据模式通过 Beeline 或 JDBC 执行定义。
 
 先准备包含上述字段的 `rank_input` 缓存表，再调用服务。用空表声明输出结构：
 
@@ -37,7 +37,7 @@ CACHE TABLE external_rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS score FROM rank_input LIMIT 0;
 
 CACHE TABLE result_table AS
-CALL call_service('external_rank_service', rank_input)
+CALL call_service('external-rank-service', rank_input)
 LIKE external_rank_output;
 ```
 
@@ -157,7 +157,7 @@ RocketLaunching 导出单个 light 推理产物，输出 `probs_light`；训练�
 ### 4. 创建在线服务
 
 ```sql
-CREATE SERVICE rank_service
+CREATE SERVICE `rank-service`
 ON MODEL rank_model
 CHECKPOINT = '2026_09_13_export'
 WITH (
@@ -172,7 +172,7 @@ WITH (
 ```sql
 SHOW SERVICES;
 
-DESCRIBE FORMATTED SERVICE rank_service;
+DESCRIBE FORMATTED SERVICE `rank-service`;
 ```
 
 ## 调用模型服务
@@ -189,7 +189,7 @@ CACHE TABLE rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS probs FROM rank_input LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', rank_input) LIKE rank_output;
+CALL call_service('rank-service', rank_input) LIKE rank_output;
 ```
 
 这个 Wide & Deep 示例保留输入列，并追加 `probs`；其他模型的输出字段见[内置模型](../reference/models/builtin-models.md)。
@@ -203,7 +203,7 @@ CACHE TABLE item_rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS probs FROM item_candidates LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', user_features, item_candidates)
+CALL call_service('rank-service', user_features, item_candidates)
 LIKE item_rank_output;
 ```
 

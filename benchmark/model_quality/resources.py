@@ -149,11 +149,12 @@ class RunResources:
         with self.stage('deploy'):
             for checkpoint in checkpoints:
                 tower = checkpoint.split('/')[-1] if '/' in checkpoint else 'scalar'
-                name = identifier(self.name + '_' + tower)
-                prefix = kubernetes_name(name)[:42].rstrip('-')
+                name = self.name.replace('_', '-') + '-' + tower
+                if len(name) > 63 or not re.fullmatch(r'[a-z]([-a-z0-9]*[a-z0-9])?', name):
+                    raise ValueError(f'Invalid service name: {name!r}')
                 existing = (self.workloads.get('deployment,service') or {}).get('items', [])
                 if (any(row[0] == name for row in self.execute('SHOW SERVICES').rows)
-                        or any(obj['metadata']['name'] == prefix or obj['metadata']['name'].startswith(prefix + '-') for obj in existing)):
+                        or any(obj['metadata']['name'] == name for obj in existing)):
                     raise ValueError('Service name already exists')
                 service = {'name': name, 'checkpoint': checkpoint, 'status': 'submitted'}
                 self.services.append(service)
@@ -186,13 +187,12 @@ class RunResources:
         host = urlsplit(info.get('URL:', '')).hostname or ''
         suffix = '.' + self.workloads.namespace + '.svc.cluster.local'
         physical = host.removesuffix(suffix)
-        prefix = kubernetes_name(service['name'])[:42].rstrip('-')
         if (info.get('Model Name:') != self.name or info.get('Checkpoint Name:') != service['checkpoint']
                 or not host.endswith(suffix) or not re.fullmatch(r'[a-z0-9-]{1,63}', physical)
-                or not (physical == prefix or physical.startswith(prefix + '-'))
+                or physical != service['name']
                 or service.get('deployment', physical) != physical):
             raise Indeterminate('Service binding differs from this run')
-        # Public metadata is authoritative; do not copy the server's naming algorithm.
+        # The public URL must use the exact, validated Service name.
         service['deployment'] = physical
         self.save()
 

@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -15,20 +14,21 @@ import static org.junit.jupiter.api.Assertions.*;
 public class K8sYamlUtilsTest {
 
     @Test
-    void serviceIdsDistinguishLossyNamesAndLongPrefixes() {
-        assertNotEquals(K8sYamlUtils.serviceResourceId("rank_a"), K8sYamlUtils.serviceResourceId("rank__a"));
-        assertNotEquals(K8sYamlUtils.serviceResourceId("a".repeat(70) + "x"),
-                K8sYamlUtils.serviceResourceId("a".repeat(70) + "y"));
-        String longId = K8sYamlUtils.serviceResourceId("a".repeat(100));
-        assertTrue(longId.length() <= 63);
-        assertTrue(longId.matches("[a-z0-9]([-a-z0-9]*[a-z0-9])?"));
-        Locale previous = Locale.getDefault();
-        try {
-            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
-            assertEquals(K8sYamlUtils.serviceResourceId("item"), K8sYamlUtils.serviceResourceId("ITEM"));
-        } finally {
-            Locale.setDefault(previous);
+    void serviceIdsUseTheNameWithoutSuffixOrLossyConversion() {
+        for (String name : List.of("a", "rank-service", "rank--a", "rank1", "a".repeat(63))) {
+            assertEquals(name, K8sYamlUtils.serviceResourceId(name));
         }
+    }
+
+    @Test
+    void serviceIdsRejectInvalidNamesRatherThanRepairingThem() {
+        for (String name : List.of("", " ", "Rank-service", "ITEM", "Krank", "rank_a", "rank__a", "rank.a", "rank/a", "rank a",
+                " rank", "rank ", "模型", "1rank", "-rank", "rank-", "a".repeat(64))) {
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                    () -> K8sYamlUtils.serviceResourceId(name), name);
+            assertTrue(error.getMessage().contains("Invalid service name"));
+        }
+        assertThrows(IllegalArgumentException.class, () -> K8sYamlUtils.serviceResourceId(null));
     }
 
     @Test

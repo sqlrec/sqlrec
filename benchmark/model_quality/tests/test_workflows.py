@@ -199,7 +199,7 @@ class PreparedTest(unittest.TestCase):
         resources.root.mkdir()
         resources.stage.return_value = nullcontext()
         resources.train_export.return_value = ['v1_export/user', 'v1_export/item']
-        resources.deploy.return_value = {'user': 'user_service', 'item': 'item_service'}
+        resources.deploy.return_value = {'user': 'user-service', 'item': 'item-service'}
         resources.execute.return_value = SQLResult([], [])
         api = Mock()
         def call(name, payload, **kwargs):
@@ -317,13 +317,13 @@ class ResourceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             resource = self.resource(directory)
             owned = {'Deployment/mq-test-scalar': {'uid': 'uid1', 'owners': []}}
-            resource.services = [{'name': 'mq_test_scalar', 'deployment': 'mq-test-scalar', 'checkpoint': 'v1_export',
+            resource.services = [{'name': 'mq-test-scalar', 'deployment': 'mq-test-scalar', 'checkpoint': 'v1_export',
                                   'status': 'created', 'owned': owned}]
             present = True
             def execute(sql, **kwargs):
                 nonlocal present
                 if sql == 'SHOW SERVICES':
-                    return SQLResult(['name'], [['mq_test_scalar']] if present else [])
+                    return SQLResult(['name'], [['mq-test-scalar']] if present else [])
                 if sql.startswith('DESCRIBE'):
                     return SQLResult(['key', 'value'], [['Model Name:', 'mq_test'], ['Checkpoint Name:', 'v1_export'],
                                                        ['URL:', 'http://mq-test-scalar.test.svc.cluster.local:80']])
@@ -361,7 +361,7 @@ class ResourceTest(unittest.TestCase):
     def test_deploy_reads_public_workload_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             resource = self.resource(directory)
-            physical = 'mq-test-scalar-85cfc61389d8f3d4a338'
+            physical = 'mq-test-scalar'
             owned = {'Deployment/' + physical: {'uid': 'uid1', 'owners': []}}
             resource.workloads.snapshot.return_value = owned
             resource.workloads.get.return_value = {'metadata': {'uid': 'uid1'}, 'status': {'availableReplicas': 1}}
@@ -371,8 +371,28 @@ class ResourceTest(unittest.TestCase):
                                                        ['URL:', f'http://{physical}.test.svc.cluster.local:80/predict']])
                 return SQLResult([], [])
             resource.client.execute.side_effect = execute
-            self.assertEqual(resource.deploy(['v1_export']), {'scalar': 'mq_test_scalar'})
+            self.assertEqual(resource.deploy(['v1_export']), {'scalar': 'mq-test-scalar'})
             self.assertEqual(resource.services[0]['deployment'], physical)
+            statements = [call.args[0] for call in resource.client.execute.call_args_list]
+            self.assertTrue(any(sql.startswith('CREATE SERVICE `mq-test-scalar`') for sql in statements))
+
+    def test_deploy_rejects_invalid_or_overlong_generated_service_names(self):
+        for model_name, checkpoint in [('a' * 60, 'v1_export'), ('mq_test', 'v1_export/user_name')]:
+            with self.subTest(model=model_name, checkpoint=checkpoint), tempfile.TemporaryDirectory() as directory:
+                resource = self.resource(directory)
+                resource.name = model_name
+                with self.assertRaisesRegex(ValueError, 'Invalid service name'):
+                    resource.deploy([checkpoint])
+                resource.client.execute.assert_not_called()
+
+    def test_service_verification_rejects_a_suffixed_url(self):
+        with tempfile.TemporaryDirectory() as directory:
+            resource = self.resource(directory)
+            resource.client.execute.return_value = SQLResult(['key', 'value'], [
+                ['Model Name:', 'mq_test'], ['Checkpoint Name:', 'v1_export'],
+                ['URL:', 'http://mq-test-scalar-85cfc61389d8f3d4a338.test.svc.cluster.local:80/predict']])
+            with self.assertRaisesRegex(Indeterminate, 'Service binding differs'):
+                resource.verify_service({'name': 'mq-test-scalar', 'checkpoint': 'v1_export'})
 
     def test_cleanup_retains_verified_ancestry_when_parent_disappears(self):
         owned = {'Deployment/d': {'uid': 'd1', 'owners': []},

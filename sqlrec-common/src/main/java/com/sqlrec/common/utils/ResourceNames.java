@@ -8,6 +8,8 @@ import java.util.Locale;
  * Single entry for sqlrec resource name normalization (sql function, api, model,
  * service, checkpoint). Resource names are case-insensitive and are stored and
  * compared in lower case.
+ * Service creation additionally validates the original name against Kubernetes
+ * Service DNS naming rules before normalization; uppercase names are rejected.
  * <p>
  * Normalization must happen at system boundaries (SQL DDL parsing, REST path
  * parameters, {@code MetadataAccess} facade); downstream code can assume names

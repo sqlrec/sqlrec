@@ -180,7 +180,7 @@ CREATE MODEL external_model (
     'output_columns' = 'score:FLOAT,label:VARCHAR'
 );
 
-CREATE SERVICE external_service
+CREATE SERVICE `external-service`
     ON MODEL external_model
     WITH (
         'url' = 'http://external-service:8080/predict'
@@ -445,11 +445,11 @@ CREATE MODEL dssm_model (
 
 -- After training and exporting as in the model guide, DSSM produces:
 -- v1.0_export/item and v1.0_export/user
-CREATE SERVICE dssm_item_service
+CREATE SERVICE `dssm-item-service`
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/item';
 
-CREATE SERVICE dssm_user_service
+CREATE SERVICE `dssm-user-service`
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/user';
 ```
@@ -681,7 +681,7 @@ TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
     'revision' = 'main'
 );
 
-CREATE SERVICE text_embedding_service
+CREATE SERVICE `text-embedding-service`
     ON MODEL text_embedding_model
     CHECKPOINT = 'v1'
     WITH (

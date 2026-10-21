@@ -21,14 +21,14 @@ CREATE MODEL external_rank_model (
   'output_columns' = 'score:FLOAT'
 );
 
-CREATE SERVICE external_rank_service
+CREATE SERVICE `external-rank-service`
 ON MODEL external_rank_model
 WITH (
   'url' = 'http://rank-service:8080/predict'
 );
 ```
 
-In local file mode, save these definitions separately as `model/external_rank_model.sql` and `service/external_rank_service.sql` under the complete `SQL_SCHEMA_DIR`, then restart. See [the Docker guide](../getting-started/docker.md#managing-local-sql-definitions) for loading files. In remote metadata mode, execute the definitions through Beeline or JDBC.
+In local file mode, save these definitions separately as `model/external_rank_model.sql` and `service/external-rank-service.sql` under the complete `SQL_SCHEMA_DIR`, then restart. See [the Docker guide](../getting-started/docker.md#managing-local-sql-definitions) for loading files. In remote metadata mode, execute the definitions through Beeline or JDBC.
 
 Prepare a cached `rank_input` table containing those fields. Declare the result schema with an empty table, then call the service:
 
@@ -37,7 +37,7 @@ CACHE TABLE external_rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS score FROM rank_input LIMIT 0;
 
 CACHE TABLE result_table AS
-CALL call_service('external_rank_service', rank_input)
+CALL call_service('external-rank-service', rank_input)
 LIKE external_rank_output;
 ```
 
@@ -157,7 +157,7 @@ RocketLaunching produces one export checkpoint that serves only the light networ
 ### 4. Create an Online Service
 
 ```sql
-CREATE SERVICE rank_service
+CREATE SERVICE `rank-service`
 ON MODEL rank_model
 CHECKPOINT = '2026_09_13_export'
 WITH (
@@ -172,7 +172,7 @@ Inspect the definition and status after creating the service:
 ```sql
 SHOW SERVICES;
 
-DESCRIBE FORMATTED SERVICE rank_service;
+DESCRIBE FORMATTED SERVICE `rank-service`;
 ```
 
 ## Call a Model Service
@@ -189,7 +189,7 @@ CACHE TABLE rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS probs FROM rank_input LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', rank_input) LIKE rank_output;
+CALL call_service('rank-service', rank_input) LIKE rank_output;
 ```
 
 This Wide & Deep example keeps input columns and appends `probs`. See [Built-in Models](../reference/models/builtin-models.md) for other output fields.
@@ -203,7 +203,7 @@ CACHE TABLE item_rank_output AS
 SELECT *, CAST(NULL AS FLOAT) AS probs FROM item_candidates LIMIT 0;
 
 CACHE TABLE ranked_item AS
-CALL call_service('rank_service', user_features, item_candidates)
+CALL call_service('rank-service', user_features, item_candidates)
 LIKE item_rank_output;
 ```
 

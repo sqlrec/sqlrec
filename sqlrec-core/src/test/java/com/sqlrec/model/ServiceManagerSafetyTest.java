@@ -24,10 +24,10 @@ class ServiceManagerSafetyTest {
     @Test
     void distinctLogicalServicesCreateAndDeleteDistinctResources() throws Exception {
         try (Fixture f = new Fixture()) {
-            ServiceManager.createService(f.statement("rank_a"));
-            ServiceManager.createService(f.statement("rank__a"));
-            Service a = f.services.get("rank_a");
-            Service b = f.services.get("rank__a");
+            ServiceManager.createService(f.statement("rank-a"));
+            ServiceManager.createService(f.statement("rank--a"));
+            Service a = f.services.get("rank-a");
+            Service b = f.services.get("rank--a");
             assertNotEquals(a.getUrl(), b.getUrl());
             var aDeployments = K8sYamlUtils.parseK8sYamlAndGetDeployments(a.getYaml());
             var bDeployments = K8sYamlUtils.parseK8sYamlAndGetDeployments(b.getYaml());
@@ -35,27 +35,127 @@ class ServiceManagerSafetyTest {
             assertEquals(1, bDeployments.size());
             String aId = aDeployments.getFirst().getMetadata().getName();
             String bId = bDeployments.getFirst().getMetadata().getName();
+            assertEquals("rank-a", aId);
+            assertEquals("rank--a", bId);
             assertNotEquals(aId, bId);
-            assertEquals(aId, ServiceManager.getServiceConfig("rank_a").getId());
+            assertEquals(aId, ServiceManager.getServiceConfig("rank-a").getId());
             assertEquals(f.url(aId), a.getUrl());
             assertEquals(f.url(bId), b.getUrl());
-            ServiceManager.deleteService("rank_a");
+            ServiceManager.deleteService("rank-a");
             f.k8s.verify(() -> K8sManager.deleteYaml(a.getYaml()));
             f.k8s.verify(() -> K8sManager.deleteYaml(b.getYaml()), never());
-            assertSame(b, f.services.get("rank__a"));
+            assertSame(b, f.services.get("rank--a"));
+        }
+    }
+
+    @Test
+    void invalidNamesFailBeforeModelLookupMetadataWriteOrDeployment() throws Exception {
+        try (Fixture f = new Fixture()) {
+            for (String name : List.of("Rank-a", "RANK", "rank_a", "rank.a", "rank a", " rank", "rank ", "1rank", "a".repeat(64))) {
+                assertThrows(IllegalArgumentException.class, () -> ServiceManager.createService(f.statement(name)), name);
+            }
+            verify(f.db, never()).getModel(any());
+            verify(f.db, never()).upsertService(any());
+            verifyNoInteractions(f.controller);
+            f.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void ifNotExistsDoesNotBypassDnsNameValidation() throws Exception {
+        try (Fixture f = new Fixture()) {
+            ServiceManager.createService(f.statement("rank-a"));
+            clearInvocations(f.db, f.controller);
+            f.k8s.clearInvocations();
+            var statement = (SqlCreateService) CompileManager.parseSql(
+                    "CREATE SERVICE IF NOT EXISTS `RANK-A` ON MODEL `rank`");
+            assertThrows(IllegalArgumentException.class, () -> ServiceManager.createService(statement));
+            verifyNoInteractions(f.db, f.controller);
+            f.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void failedUpdateKeepsTheDesiredConfigurationAndInvalidatesCache() throws Exception {
+        try (Fixture f = new Fixture()) {
+            ServiceManager.createService(f.statement("rank-a"));
+            Service before = f.services.get("rank-a");
+            ServiceConf cached = ServiceManager.getServiceConfig("rank-a");
+            String changedUrl = "http://changed-endpoint/predict";
+            doReturn(changedUrl).when(f.controller).getServiceUrl(any(), any());
+            f.k8s.when(() -> K8sManager.applyYaml(any()))
+                    .thenThrow(new RuntimeException("conflict"));
+            assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
+            assertNotSame(before, f.services.get("rank-a"));
+            assertEquals(changedUrl, f.services.get("rank-a").getUrl());
+            ServiceConf after = ServiceManager.getServiceConfig("rank-a");
+            assertNotSame(cached, after);
+            assertEquals(changedUrl, after.getUrl());
+        }
+    }
+
+    @Test
+    void failedInitialApplyKeepsMetadataAndCanBeRetriedWithoutIfNotExists() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.k8s.when(() -> K8sManager.applyYaml(any()))
+                    .thenThrow(new RuntimeException("partial apply failure"))
+                    .thenAnswer(invocation -> null);
+
+            assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
+            Service submitted = f.services.get("rank-a");
+            assertNotNull(submitted);
+            assertFalse(submitted.getYaml().isBlank());
+            assertEquals("rank-a", K8sYamlUtils.parseK8sYamlAndGetDeployments(submitted.getYaml())
+                    .getFirst().getMetadata().getName());
+            assertEquals(f.url("rank-a"), submitted.getUrl());
+            assertFalse(ServiceManager.isServiceOperationCompleted("rank-a"));
+
+            var skip = (SqlCreateService) CompileManager.parseSql(
+                    "CREATE SERVICE IF NOT EXISTS `rank-a` ON MODEL `rank`");
+            assertEquals("rank-a", ServiceManager.createService(skip));
+            f.k8s.verify(() -> K8sManager.applyYaml(submitted.getYaml()));
+
+            assertEquals("rank-a", ServiceManager.createService(f.statement("rank-a")));
+            Service service = f.services.get("rank-a");
+            assertNotNull(service);
+            assertEquals(f.url("rank-a"), service.getUrl());
+            f.k8s.verify(() -> K8sManager.applyYaml(service.getYaml()), times(2));
+        }
+    }
+
+    @Test
+    void failedInitialApplyCanBeCleanedUpUsingTheSavedYaml() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.k8s.when(() -> K8sManager.applyYaml(any()))
+                    .thenThrow(new RuntimeException("partial apply failure"));
+            assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
+            String yaml = f.services.get("rank-a").getYaml();
+
+            ServiceManager.deleteService("rank-a");
+            f.k8s.verify(() -> K8sManager.deleteYaml(yaml));
+            assertFalse(f.services.containsKey("rank-a"));
+        }
+    }
+
+    @Test
+    void metadataWriteFailurePreventsKubernetesSubmission() throws Exception {
+        try (Fixture f = new Fixture()) {
+            doThrow(new RuntimeException("database unavailable")).when(f.db).upsertService(any());
+            assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
+            f.k8s.verifyNoInteractions();
         }
     }
 
     @Test
     void creatingExistingServiceWithIfNotExistsSkipsConfigurationAndDeployment() throws Exception {
         try (Fixture f = new Fixture()) {
-            ServiceManager.createService(f.statement("rank_a"));
+            ServiceManager.createService(f.statement("rank-a"));
             clearInvocations(f.db, f.controller);
             f.k8s.clearInvocations();
             SqlCreateService statement = (SqlCreateService) CompileManager.parseSql(
-                    "CREATE SERVICE IF NOT EXISTS RANK_A ON MODEL `rank` CHECKPOINT='missing' WITH ('NAMESPACE'='test')");
-            assertEquals("rank_a", ServiceManager.createService(statement));
-            verify(f.db).getService("rank_a");
+                    "CREATE SERVICE IF NOT EXISTS `rank-a` ON MODEL `rank` CHECKPOINT='missing' WITH ('NAMESPACE'='test')");
+            assertEquals("rank-a", ServiceManager.createService(statement));
+            verify(f.db).getService("rank-a");
             verify(f.db, never()).getModel(any());
             verify(f.db, never()).getCheckpoint(any(), any());
             verify(f.db, never()).upsertService(any());
@@ -67,26 +167,26 @@ class ServiceManagerSafetyTest {
     @Test
     void deletingServiceWithDifferentCaseInvalidatesConfiguration() throws Exception {
         try (Fixture f = new Fixture()) {
-            ServiceManager.createService(f.statement("rank_a"));
-            Service service = f.services.get("rank_a");
-            assertNotNull(ServiceManager.getServiceConfig("RANK_A"));
-            ServiceManager.deleteService("RANK_A");
+            ServiceManager.createService(f.statement("rank-a"));
+            Service service = f.services.get("rank-a");
+            assertNotNull(ServiceManager.getServiceConfig("RANK-A"));
+            ServiceManager.deleteService("RANK-A");
             f.k8s.verify(() -> K8sManager.deleteYaml(service.getYaml()));
-            verify(f.db).deleteService("rank_a");
-            assertFalse(f.services.containsKey("rank_a"));
-            assertNull(ServiceManager.getServiceConfig("RANK_A"));
+            verify(f.db).deleteService("rank-a");
+            assertFalse(f.services.containsKey("rank-a"));
+            assertNull(ServiceManager.getServiceConfig("RANK-A"));
         }
     }
 
     @Test
     void updatingServiceInvalidatesConfigurationReadThroughAnotherCase() throws Exception {
         try (Fixture f = new Fixture()) {
-            ServiceManager.createService(f.statement("rank_a"));
-            ServiceConf before = ServiceManager.getServiceConfig("RANK_A");
+            ServiceManager.createService(f.statement("rank-a"));
+            ServiceConf before = ServiceManager.getServiceConfig("RANK-A");
             String changedUrl = "http://changed-endpoint/predict";
             doReturn(changedUrl).when(f.controller).getServiceUrl(any(), any());
-            ServiceManager.createService(f.statement("rank_a"));
-            ServiceConf after = ServiceManager.getServiceConfig("RANK_A");
+            ServiceManager.createService(f.statement("rank-a"));
+            ServiceConf after = ServiceManager.getServiceConfig("RANK-A");
             assertNotEquals(before.getUrl(), after.getUrl());
             assertEquals(changedUrl, after.getUrl());
             assertEquals(before.getId(), after.getId());
@@ -129,7 +229,7 @@ class ServiceManagerSafetyTest {
 
         SqlCreateService statement(String name) throws Exception {
             return (SqlCreateService) CompileManager.parseSql(
-                    "CREATE SERVICE " + name + " ON MODEL `rank` WITH ('NAMESPACE'='test')");
+                    "CREATE SERVICE `" + name + "` ON MODEL `rank` WITH ('NAMESPACE'='test')");
         }
 
         String yaml(String id) {

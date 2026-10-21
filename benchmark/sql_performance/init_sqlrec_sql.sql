@@ -14,7 +14,7 @@ select *, cast(age as float) as age_years from user_info;
 
 IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
   (cache table user_embedding as
-    call call_service('recall_service_user', user_features)
+    call call_service('recall-service-user', user_features)
   )
 ELSE
   (cache table user_embedding as
@@ -174,7 +174,7 @@ select
 from
     recall_item_with_info join user_info on 1=1;
 
-cache table ranked_item as call call_service('rank_service', rank_feature);
+cache table ranked_item as call call_service('rank-service', rank_feature);
 
 cache table rec_item as
 select

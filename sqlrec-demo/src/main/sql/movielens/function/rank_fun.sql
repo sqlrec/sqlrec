@@ -1,4 +1,4 @@
--- rank_fun: full ranking function that calls an online rank_service.
+-- rank_fun: full ranking function that calls an online rank-service.
 create or replace sql function rank_fun;
 
 define input table user_info(
@@ -38,7 +38,7 @@ from
     recall_item_with_info join user_info on 1=1;
 
 -- Call the online ranking service to score each (user, item) pair.
-cache table ranked_item as call call_service('rank_service', rank_feature);
+cache table ranked_item as call call_service('rank-service', rank_feature);
 
 -- Final ranking: join scores back to item metadata and sort by prob desc.
 cache table rec_item as

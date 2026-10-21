@@ -171,7 +171,7 @@ CREATE MODEL external_model (
     'output_columns' = 'score:FLOAT,label:VARCHAR'
 );
 
-CREATE SERVICE external_service
+CREATE SERVICE `external-service`
     ON MODEL external_model
     WITH (
         'url' = 'http://external-service:8080/predict'
@@ -298,7 +298,7 @@ CREATE MODEL multi_rank (
 输出为 `probs_<label> FLOAT`（二分类）或 `y_<label> FLOAT`（回归）。例如上述模型返回 `probs_click`、`probs_like`、`y_watch_time`；通过 `call_service` 追加到输入表。最终排序可在 SQL 中融合：
 
 ```sql
-CACHE TABLE scored AS CALL call_service('multi_rank_service', rank_feature);
+CACHE TABLE scored AS CALL call_service('multi-rank-service', rank_feature);
 SELECT item_id, 0.6 * probs_click + 0.4 * probs_like AS rank_score
 FROM scored ORDER BY rank_score DESC;
 ```
@@ -448,11 +448,11 @@ CREATE MODEL dssm_model (
 
 -- 按模型指南完成训练和导出后，DSSM 生成两个 tower checkpoint：
 -- v1.0_export/item 和 v1.0_export/user
-CREATE SERVICE dssm_item_service
+CREATE SERVICE `dssm-item-service`
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/item';
 
-CREATE SERVICE dssm_user_service
+CREATE SERVICE `dssm-user-service`
     ON MODEL dssm_model
     CHECKPOINT = 'v1.0_export/user';
 ```
@@ -684,7 +684,7 @@ TRAIN MODEL text_embedding_model CHECKPOINT = 'v1' WITH (
     'revision' = 'main'
 );
 
-CREATE SERVICE text_embedding_service
+CREATE SERVICE `text-embedding-service`
     ON MODEL text_embedding_model
     CHECKPOINT = 'v1'
     WITH (

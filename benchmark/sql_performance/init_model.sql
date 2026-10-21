@@ -48,7 +48,7 @@ with (
 'pod_memory'='4Gi'
 );
 
-create service rank_service on model rank_model checkpoint='v1_export'
+create service `rank-service` on model rank_model checkpoint='v1_export'
 with (
 'NAMESPACE'='${NAMESPACE}'
 );
@@ -67,7 +67,7 @@ SELECT
     CAST(25 AS FLOAT) AS age_years,
     CAST(3 AS FLOAT) AS genre_count;
 
-call call_service('rank_service', t1);
+call call_service('rank-service', t1);
 
 create model if not exists `recall_model`
 (
@@ -117,12 +117,12 @@ with (
 'pod_memory'='4Gi'
 );
 
-create service recall_service_user on model recall_model checkpoint='v1_export/user'
+create service `recall-service-user` on model recall_model checkpoint='v1_export/user'
 with (
 'NAMESPACE'='${NAMESPACE}'
 );
 
-create service recall_service_item on model recall_model checkpoint='v1_export/item'
+create service `recall-service-item` on model recall_model checkpoint='v1_export/item'
 with (
 'NAMESPACE'='${NAMESPACE}'
 );
@@ -138,7 +138,7 @@ SELECT
     '10001' AS zip_code,
     CAST(25 AS FLOAT) AS age_years;
 
-call call_service('recall_service_user', tmp_user);
+call call_service('recall-service-user', tmp_user);
 
 CACHE TABLE tmp_item AS
 SELECT
@@ -146,7 +146,7 @@ SELECT
     ARRAY['Action', 'Adventure', 'Sci-Fi'] AS genres,
     CAST(3 AS FLOAT) AS genre_count;
 
-call call_service('recall_service_item', tmp_item);
+call call_service('recall-service-item', tmp_item);
 
 create model if not exists `rank_model_proxy`
 (
@@ -165,9 +165,9 @@ with (
 'output_columns'='probs:FLOAT'
 );
 
-create service rank_service_proxy on model rank_model_proxy
+create service `rank-service-proxy` on model rank_model_proxy
 with (
 'url'='http://rank-service.${NAMESPACE}.svc.cluster.local:80/predict'
 );
 
-call call_service('rank_service_proxy', t1);
+call call_service('rank-service-proxy', t1);

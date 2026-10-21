@@ -41,7 +41,7 @@ The recommendation flow is defined in `benchmark/sql_performance/init_sqlrec_sql
 
 The models include two `FLOAT` features: `age_years = CAST(age AS FLOAT)` and `genre_count = CAST(number of genres AS FLOAT)`. MovieLens `age` is an age-group code; `age_years` is its numeric representation, not an exact age. Their minmax parameters are `[0,100]` and `[0,18]`, respectively, with missing values defaulting to 0. Both enter the ranking model's deep branch. DSSM uses `age_years` in the user tower and `genre_count` in the item tower. Offline samples, online requests, and item-embedding loading use the same calculations. `rating` remains a label and never becomes an input feature.
 
-`init.sh` generates samples in `ml_sample` and `ml_recall_sample`, trains and exports `rank_model` and `recall_model`, deploys `rank_service`, `recall_service_user`, and `recall_service_item`, and generates the Milvus item vectors.
+`init.sh` generates samples in `ml_sample` and `ml_recall_sample`, trains and exports `rank_model` and `recall_model`, deploys `rank-service`, `recall-service-user`, and `recall-service-item`, and generates the Milvus item vectors.
 
 ## Prerequisites
 

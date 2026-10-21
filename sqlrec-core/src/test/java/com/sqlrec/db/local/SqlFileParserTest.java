@@ -177,7 +177,7 @@ class SqlFileParserTest {
     @Test
     void testParseCreateService() throws Exception {
         parser.parseContent("""
-            CREATE SERVICE rank_service ON MODEL rank_model CHECKPOINT='v1_export'
+            CREATE SERVICE `rank-service` ON MODEL rank_model CHECKPOINT='v1_export'
             WITH (
               'NAMESPACE' = 'sqlrec'
             )
@@ -212,7 +212,7 @@ class SqlFileParserTest {
               gender STRING,
               age INT
             );
-            CACHE TABLE user_embedding AS CALL call_service('recall_service_user', user_info);
+            CACHE TABLE user_embedding AS CALL call_service('recall-service-user', user_info);
             CACHE TABLE vector_recall AS
             SELECT item_embedding.id AS movie_id
             FROM user_embedding JOIN item_embedding ON 1=1
@@ -264,7 +264,7 @@ class SqlFileParserTest {
             RETURN t;
             CREATE API my_api WITH my_func;
             CREATE MODEL my_model WITH ('type'='test');
-            CREATE SERVICE my_svc ON MODEL my_model
+            CREATE SERVICE `my-svc` ON MODEL my_model
             """);
 
         assertEquals(1, parser.getTableNodes().size());
@@ -367,7 +367,7 @@ class SqlFileParserTest {
               occupation INT,
               zip_code STRING
             );
-            CACHE TABLE user_embedding AS CALL call_service('recall_service_user', user_info);
+            CACHE TABLE user_embedding AS CALL call_service('recall-service-user', user_info);
             RETURN user_embedding;
             CREATE SQL FUNCTION rank_fun;
             DEFINE INPUT TABLE user_info(
@@ -390,7 +390,7 @@ class SqlFileParserTest {
               'model' = 'tzrec.wide_and_deep',
               'label_columns' = 'rating'
             );
-            CREATE SERVICE rank_service ON MODEL rank_model CHECKPOINT='v1_export'
+            CREATE SERVICE `rank-service` ON MODEL rank_model CHECKPOINT='v1_export'
             WITH (
               'NAMESPACE' = 'sqlrec'
             )

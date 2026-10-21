@@ -41,7 +41,7 @@
 
 模型包含两个 `FLOAT` 特征：`age_years = CAST(age AS FLOAT)` 和 `genre_count = CAST(电影类型数量 AS FLOAT)`。MovieLens 的 `age` 表示年龄段编码，`age_years` 是该编码的数值形式，并非精确年龄。两者分别使用 minmax 的 `[0,100]` 和 `[0,18]` 参数归一化；缺失值默认 0。排序模型将它们输入 deep 分支，DSSM 将 `age_years` 输入用户塔、`genre_count` 输入物品塔。离线样本、在线请求和物品向量加载使用相同的计算方式。`rating` 只作为标签，不参与特征输入。
 
-`init.sh` 生成 `ml_sample`、`ml_recall_sample` 样本，训练并导出 `rank_model`、`recall_model`，部署 `rank_service`、`recall_service_user`、`recall_service_item`，并生成 Milvus 物品向量。
+`init.sh` 生成 `ml_sample`、`ml_recall_sample` 样本，训练并导出 `rank_model`、`recall_model`，部署 `rank-service`、`recall-service-user`、`recall-service-item`，并生成 Milvus 物品向量。
 
 ## 环境前提
 

@@ -18,7 +18,7 @@ define input table user_info(
 -- Conditional branch: use online service when use_recall_service='true'.
 IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
   (cache table user_embedding as
-    call call_service('recall_service_user', user_info)
+    call call_service('recall-service-user', user_info)
   )
 ELSE
   (cache table user_embedding as

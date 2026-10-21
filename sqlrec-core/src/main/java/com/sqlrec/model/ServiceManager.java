@@ -62,8 +62,8 @@ public class ServiceManager {
     }
 
     public static String createService(SqlCreateService sqlCreateService) throws Exception {
+        String serviceName = K8sYamlUtils.serviceResourceId(sqlCreateService.getServiceName().getSimple());
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        String serviceName = ResourceNames.of(sqlCreateService.getServiceName());
         if (sqlCreateService.isIfNotExists() && db.getService(serviceName) != null) {
             return serviceName;
         }

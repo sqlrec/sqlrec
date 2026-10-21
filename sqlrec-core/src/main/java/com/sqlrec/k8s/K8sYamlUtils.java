@@ -2,7 +2,6 @@ package com.sqlrec.k8s;
 
 import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.ModelConf;
-import com.sqlrec.common.utils.ResourceNames;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -13,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -43,23 +40,16 @@ public class K8sYamlUtils {
         return validName;
     }
 
-    /** Keep a readable prefix; hash the complete identity before any lossy conversion. */
+    /** Kubernetes Service RFC 1035 DNS labels, without normalization or suffixes. */
     public static String serviceResourceId(String serviceName) {
-        String identity = ResourceNames.normalize(serviceName);
-        if (identity == null || identity.isEmpty()) {
-            throw new IllegalArgumentException("Service name cannot be blank");
+        if (serviceName == null || serviceName.length() > 63
+                || !serviceName.matches("[a-z]([-a-z0-9]*[a-z0-9])?")) {
+            throw new IllegalArgumentException("Invalid service name: " + serviceName
+                    + ". Follow Kubernetes Service DNS (RFC 1035) naming rules: 1-63 lowercase letters,"
+                    + " digits or hyphens, starting with a lowercase letter and ending with a lowercase"
+                    + " letter or digit. Uppercase letters and other characters are not allowed.");
         }
-        String prefix = convertToValidK8sName(identity);
-        if (prefix.isEmpty()) prefix = "service";
-        if (prefix.length() > 42) prefix = prefix.substring(0, 42);
-        prefix = prefix.replaceAll("-+$", "");
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(("service:" + identity).getBytes(StandardCharsets.UTF_8));
-            return prefix + "-" + HexFormat.of().formatHex(digest, 0, 10);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
+        return serviceName;
     }
 
     @SuppressWarnings("deprecation")

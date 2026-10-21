@@ -223,9 +223,9 @@ EXPORT MODEL `rank_model` checkpoint= 'v1' ON `ml_sample` WITH (
 
     @Test
     void testCreateService() throws Exception {
-        String result = formatSql("create service rank_service on model rank_model checkpoint='v1_export' with ('NAMESPACE'='sqlrec')");
+        String result = formatSql("create service `rank-service` on model rank_model checkpoint='v1_export' with ('NAMESPACE'='sqlrec')");
         assertEquals("""
-CREATE SERVICE `rank_service` ON MODEL `rank_model` checkpoint= 'v1_export' WITH (
+CREATE SERVICE `rank-service` ON MODEL `rank_model` checkpoint= 'v1_export' WITH (
   'NAMESPACE' = 'sqlrec'
 )""", result);
     }
@@ -240,8 +240,8 @@ CACHE TABLE `t1` AS SELECT 1 AS `user_id`,
 
     @Test
     void testCacheTableAsCall() throws Exception {
-        String result = formatSql("cache table user_embedding as call call_service('recall_service_user', user_info)");
-        assertEquals("CACHE TABLE `user_embedding` AS CALL `call_service` ('recall_service_user', `user_info`)", result);
+        String result = formatSql("cache table user_embedding as call call_service('recall-service-user', user_info)");
+        assertEquals("CACHE TABLE `user_embedding` AS CALL `call_service` ('recall-service-user', `user_info`)", result);
     }
 
     @Test
@@ -287,8 +287,8 @@ DEFINE INPUT TABLE `user_info` (
 
     @Test
     void testDropService() throws Exception {
-        String result = formatSql("drop service if exists rank_service");
-        assertEquals("DROP SERVICE IF EXISTS `rank_service`", result);
+        String result = formatSql("drop service if exists `rank-service`");
+        assertEquals("DROP SERVICE IF EXISTS `rank-service`", result);
     }
 
     @Test

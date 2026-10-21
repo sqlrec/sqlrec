@@ -1,7 +1,7 @@
 /*
  * recall_model: DSSM two-tower recall model (tzrec.dssm).
  * Trained jointly on user and item features; serves two towers via
- * recall_service_user and recall_service_item.
+ * recall-service-user and recall-service-item.
  * Architecture and training parameters follow benchmark/model_quality/config.py
  * (movielens100k, dssm); retain the demo's MovieLens-1M features.
  */

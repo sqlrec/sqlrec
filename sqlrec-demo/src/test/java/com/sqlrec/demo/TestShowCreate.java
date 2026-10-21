@@ -98,11 +98,11 @@ public class TestShowCreate {
     @Test
     void testShowCreateService() throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        Service rankService = db.getService("rank_service");
-        assertNotNull(rankService, "rank_service should exist");
+        Service rankService = db.getService("rank-service");
+        assertNotNull(rankService, "rank-service should exist");
         assertNotNull(rankService.getDdl(), "service ddl should not be null");
 
-        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "service", "rank_service.sql")).trim();
+        String sourceContent = Files.readString(Paths.get(sqlDir, "movielens", "service", "rank-service.sql")).trim();
         SqlNode sourceNode = CompileManager.parseSql(stripTrailingSemicolon(sourceContent));
         String normalizedSource = CompileManager.getSqlStr(sourceNode);
 

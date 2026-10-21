@@ -854,8 +854,8 @@ CREATE SERVICE [IF NOT EXISTS] service_name
 
 | Parameter | Description |
 |-----------|-------------|
-| `IF NOT EXISTS` | Optional. If the service already exists, no new service is created and no error is raised |
-| `service_name` | Service name |
+| `IF NOT EXISTS` | Optional. The name must pass validation first; if the service already exists, no new service is created and no error is raised |
+| `service_name` | Follows Kubernetes Service DNS (RFC 1035) naming rules: only lowercase letters, digits and hyphens `-`; 1–63 characters, starting with a lowercase letter and ending with a lowercase letter or digit |
 | `model_name` | Associated model name |
 | `checkpoint_name` | Optional. Checkpoint name to use |
 | `property_name` | Optional. Service property name |
@@ -864,14 +864,18 @@ CREATE SERVICE [IF NOT EXISTS] service_name
 **Examples:**
 
 ```sql
-CREATE SERVICE rank_service
+CREATE SERVICE `rank-service`
     ON MODEL rank_model
     CHECKPOINT = 'v1.0_export';
 
-CREATE SERVICE IF NOT EXISTS external_rank_service
+CREATE SERVICE IF NOT EXISTS `external-rank-service`
     ON MODEL external_rank_model
     WITH ('url' = 'http://rank-service:8080/predict');
 ```
+
+Names follow [Kubernetes Service DNS naming rules](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names). Uppercase letters, underscores, dots and spaces are rejected without case conversion. Name validation also applies to `IF NOT EXISTS`. Quote names containing hyphens with backticks. Hosted services use the service name directly for Kubernetes Services and Deployments, without a hash suffix. Their URL is `http://<service-name>.<namespace>.svc.cluster.local:80/predict`. Invalid names are rejected without substitution or truncation. The same name validation applies to external services.
+
+The service definition, including its URL and complete YAML, is saved before submission to Kubernetes. The record is retained if submission fails; its existence does not imply readiness. Retry with `CREATE SERVICE` without `IF NOT EXISTS`, or use `DROP SERVICE` to clean up resources already created. `IF NOT EXISTS` skips existing records and does not retry failed deployments.
 
 ### DROP SERVICE
 
@@ -893,9 +897,9 @@ DROP SERVICE [IF EXISTS] service_name
 **Examples:**
 
 ```sql
-DROP SERVICE my_service;
+DROP SERVICE `my-service`;
 
-DROP SERVICE IF EXISTS my_service;
+DROP SERVICE IF EXISTS `my-service`;
 ```
 
 ### SHOW SERVICES
@@ -934,11 +938,11 @@ Show service creation statement.
 **Examples:**
 
 ```sql
-DESCRIBE SERVICE my_service;
+DESCRIBE SERVICE `my-service`;
 
-DESC SERVICE my_service;
+DESC SERVICE `my-service`;
 
-DESCRIBE FORMATTED SERVICE my_service;
+DESCRIBE FORMATTED SERVICE `my-service`;
 ```
 
 ## Metadata DDL

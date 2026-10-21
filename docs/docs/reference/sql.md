@@ -854,8 +854,8 @@ CREATE SERVICE [IF NOT EXISTS] service_name
 
 | 参数 | 描述 |
 |------|------|
-| `IF NOT EXISTS` | 可选。如果服务已存在，则不创建新服务，也不报错 |
-| `service_name` | 服务名称 |
+| `IF NOT EXISTS` | 可选。名称须先通过校验；如果服务已存在，则不创建新服务，也不报错 |
+| `service_name` | 与 Kubernetes Service 的 DNS（RFC 1035）命名规则一致：仅允许小写字母、数字和连字符 `-`；长度为 1～63，以小写字母开头，以小写字母或数字结尾 |
 | `model_name` | 关联的模型名称 |
 | `checkpoint_name` | 可选。使用的检查点名称 |
 | `property_name` | 可选。服务属性名 |
@@ -864,14 +864,18 @@ CREATE SERVICE [IF NOT EXISTS] service_name
 **示例：**
 
 ```sql
-CREATE SERVICE rank_service
+CREATE SERVICE `rank-service`
     ON MODEL rank_model
     CHECKPOINT = 'v1.0_export';
 
-CREATE SERVICE IF NOT EXISTS external_rank_service
+CREATE SERVICE IF NOT EXISTS `external-rank-service`
     ON MODEL external_rank_model
     WITH ('url' = 'http://rank-service:8080/predict');
 ```
+
+名称限制遵循 [Kubernetes Service 的 DNS 命名规则](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names)。大写字母、下划线、点号、空格等均会报错，不自动转换大小写；`IF NOT EXISTS` 也必须通过名称校验。含连字符的名称须用反引号包裹。自托管服务直接使用服务名作为 Kubernetes Service 和 Deployment 名称，不追加哈希后缀；URL 为 `http://<service-name>.<namespace>.svc.cluster.local:80/predict`。非法名称直接报错，不自动替换或截断。此名称校验也适用于 external 服务。
+
+服务定义（含 URL 和完整 YAML）在提交 Kubernetes 前保存。提交失败时保留记录，服务记录存在不代表已就绪。可重新执行不带 `IF NOT EXISTS` 的 `CREATE SERVICE` 重试，或用 `DROP SERVICE` 清理已创建的资源；`IF NOT EXISTS` 会跳过已有记录，不能用于重试失败的部署。
 
 ### DROP SERVICE
 
@@ -893,9 +897,9 @@ DROP SERVICE [IF EXISTS] service_name
 **示例：**
 
 ```sql
-DROP SERVICE my_service;
+DROP SERVICE `my-service`;
 
-DROP SERVICE IF EXISTS my_service;
+DROP SERVICE IF EXISTS `my-service`;
 ```
 
 ### SHOW SERVICES
@@ -934,11 +938,11 @@ SHOW SERVICES;
 **示例：**
 
 ```sql
-DESCRIBE SERVICE my_service;
+DESCRIBE SERVICE `my-service`;
 
-DESC SERVICE my_service;
+DESC SERVICE `my-service`;
 
-DESCRIBE FORMATTED SERVICE my_service;
+DESCRIBE FORMATTED SERVICE `my-service`;
 ```
 
 ## 元数据 DDL

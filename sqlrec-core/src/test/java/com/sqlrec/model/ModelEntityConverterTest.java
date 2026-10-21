@@ -8,6 +8,7 @@ import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.model.tzrec.PipelineConfigUtils;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.sql.parser.SqlCreateModel;
+import com.sqlrec.sql.parser.SqlCreateService;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -20,10 +21,24 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 /**
- * Model/service names are normalized (lower case, back-quotes stripped) when
- * extracted from DDL, so the stored name never keeps quoting or casing.
+ * Model names are normalized; new Service names must already be valid lowercase
+ * Kubernetes Service DNS labels. Quoting is removed when extracting identifiers.
  */
 class ModelEntityConverterTest {
+
+    @Test
+    void serviceIdIsTheExactSqlNameAndInvalidQuotedNamesAreRejected() throws Exception {
+        var service = ModelEntityConverter.convertToServiceConf((SqlCreateService) CompileManager.parseSql(
+                "CREATE SERVICE `rank-service` ON MODEL `rank`"));
+        assertEquals("rank-service", service.getServiceName());
+        assertEquals("rank-service", service.getId());
+        for (String name : List.of("Rank-Service", "RANK", "rank_service", "rank.service", " rank-service", "rank-service ")) {
+            var sql = (SqlCreateService) CompileManager.parseSql("CREATE SERVICE `" + name + "` ON MODEL `rank`");
+            assertThrows(IllegalArgumentException.class, () -> ModelEntityConverter.convertToServiceConf(sql));
+        }
+        var unquoted = (SqlCreateService) CompileManager.parseSql("CREATE SERVICE RANKING ON MODEL `rank`");
+        assertThrows(IllegalArgumentException.class, () -> ModelEntityConverter.convertToServiceConf(unquoted));
+    }
 
     @Test
     void trainingSqlRejectsTraversalButSupportsNestedCheckpointNames() throws Exception {

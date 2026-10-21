@@ -111,8 +111,9 @@ public class ModelEntityConverter {
 
     public static ServiceConf convertToServiceConf(SqlCreateService sqlCreateService) throws Exception {
         ServiceConf serviceConfig = new ServiceConf();
-        serviceConfig.setServiceName(ResourceNames.of(sqlCreateService.getServiceName()));
-        serviceConfig.setId(K8sYamlUtils.serviceResourceId(serviceConfig.getServiceName()));
+        String serviceName = K8sYamlUtils.serviceResourceId(sqlCreateService.getServiceName().getSimple());
+        serviceConfig.setServiceName(serviceName);
+        serviceConfig.setId(serviceName);
         serviceConfig.setModelName(ResourceNames.of(sqlCreateService.getModelName()));
         if (sqlCreateService.getCheckpoint() != null) {
             serviceConfig.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString())));
