@@ -34,14 +34,21 @@ def task_contract(config):
                 or not tower.mlp.hidden_units or any(unit <= 0 for unit in tower.mlp.hidden_units)):
             raise ValueError(f"{tower.tower_name}: requires positive weight and hidden units")
         unsupported = {"sample_weight_name", "task_space_indicator_label", "in_task_space_weight",
-                       "out_task_space_weight", "pareto_min_loss_weight", "train_metrics"}
+                       "out_task_space_weight", "pareto_min_loss_weight"}
         if any(field.name in unsupported for field, _ in tower.ListFields()):
             raise ValueError(f"{tower.tower_name}: unsupported task sampling or weighting option")
         binary = loss == "binary_cross_entropy"
-        allowed = {"auc", "accuracy"} if binary else {"mean_squared_error", "mean_absolute_error"}
+        allowed = {"auc", "accuracy", "normalized_entropy"} if binary else {"mean_squared_error", "mean_absolute_error"}
         metrics = [metric.WhichOneof("metric") for metric in tower.metrics]
         if not metrics or len(set(metrics)) != len(metrics) or not set(metrics) <= allowed:
             raise ValueError(f"{tower.tower_name}: metrics do not match task loss")
+        train_metrics = [metric.WhichOneof("metric") for metric in tower.train_metrics]
+        if len(set(train_metrics)) != len(train_metrics) or not set(train_metrics) <= allowed - {"normalized_entropy"}:
+            raise ValueError(f"{tower.tower_name}: train_metrics do not match task loss")
+        for metric in tower.train_metrics:
+            if (metric.decay_step <= 0 or not math.isfinite(metric.decay_rate)
+                    or not 0 <= metric.decay_rate < 1):
+                raise ValueError(f"{tower.tower_name}: invalid training metric decay")
         tasks.append({"name": tower.tower_name, "label": tower.label_name,
                       "type": "binary" if binary else "regression"})
         fields.append({"name": ("probs_" if binary else "y_") + tower.tower_name, "type": "FLOAT"})

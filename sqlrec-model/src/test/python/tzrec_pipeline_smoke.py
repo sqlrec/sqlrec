@@ -49,6 +49,22 @@ def execute(command, log, env, expected_error=None, timeout=180):
         raise AssertionError(f"{command} failed:\n{log.read_text()[-12000:]}")
 
 
+def with_training_metrics(pipeline):
+    if not pipeline.train_config.tensorboard_summaries:
+        pipeline.train_config.tensorboard_summaries.extend(("loss", "learning_rate", "global_gradient_norm"))
+    model = pipeline.model_config
+    owners = model.mmoe.task_towers if model.WhichOneof("model") == "mmoe" else [model]
+    for owner in owners:
+        del owner.train_metrics[:]
+        for metric in owner.metrics:
+            kind = metric.WhichOneof("metric")
+            if kind == "normalized_entropy":
+                continue
+            training = owner.train_metrics.add(decay_step=1, decay_rate=.9)
+            getattr(training, kind).CopyFrom(getattr(metric, kind))
+    return pipeline
+
+
 def config(root, architecture):
     if architecture.startswith("rocket_launching"):
         result = config_util.load_pipeline_config(f"/tests/configs/{architecture}.config")
@@ -58,7 +74,7 @@ def config(root, architecture):
         result.model_dir = str(root / architecture)
         result.train_config.save_checkpoints_steps = 2
         result.train_config.log_step_count_steps = 1
-        return result
+        return with_training_metrics(result)
     if architecture.startswith("mmoe"):
         fixture = "mmoe_mixed" if architecture == "mmoe_regression" else architecture
         result = config_util.load_pipeline_config(f"/tests/configs/{fixture}.config")
@@ -67,17 +83,22 @@ def config(root, architecture):
             tower = result.model_config.mmoe.task_towers[0]
             tower.label_name = tower.tower_name = "watch_aux"
             tower.losses[0].l2_loss.SetInParent()
-            tower.metrics[0].mean_squared_error.SetInParent()
+            del tower.metrics[:]
+            tower.metrics.add().mean_squared_error.SetInParent()
+            tower.metrics.add().mean_absolute_error.SetInParent()
         result.train_input_path = str(root / "data.parquet")
         result.eval_input_path = str(root / "eval.parquet")
         result.eval_config.SetInParent()
         result.model_dir = str(root / architecture)
         result.train_config.save_checkpoints_steps = 2
         result.train_config.log_step_count_steps = 1
-        return result
+        return with_training_metrics(result)
     model = """
       wide_and_deep { deep { hidden_units: [16, 8] } }
       losses { binary_cross_entropy {} }
+      metrics { auc {} }
+      metrics { normalized_entropy {} }
+      metrics { accuracy {} }
     """
     groups = """
       feature_groups { group_name: "wide" group_type: WIDE feature_names: ["category", "tags", "bucket_price"] }
@@ -95,6 +116,10 @@ def config(root, architecture):
           dssm { user_tower { input: "user" mlp { hidden_units: [16,8] } }
                  item_tower { input: "item" mlp { hidden_units: [16,8] } } output_dim: 8 in_batch_negative: true }
           losses { softmax_cross_entropy {} }
+          metrics { recall_at_k { top_k: 1 } }
+          metrics { recall_at_k { top_k: 5 } }
+          metrics { recall_at_k { top_k: 10 } }
+          metrics { recall_at_k { top_k: 20 } }
         """
     text = r'''
       data_config { dataset_type: ParquetDataset fg_mode: FG_NORMAL batch_size: 8 num_workers: 0 label_fields: "label" }
@@ -113,8 +138,61 @@ def config(root, architecture):
     '''
     result = text_format.Parse(text + "model_config {" + groups + model + "}", pipeline_pb2.EasyRecConfig())
     result.train_input_path = str(root / "data.parquet")
+    result.eval_input_path = str(root / "eval.parquet")
+    result.eval_config.SetInParent()
     result.model_dir = str(root / architecture)
-    return result
+    return with_training_metrics(result)
+
+
+def verify_events(pipeline):
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+    from tzrec.constant import TRAIN_EVAL_RESULT_FILENAME
+
+    directory = Path(pipeline.model_dir)
+    events = directory
+    assert len(list(events.glob("events.out.tfevents.*"))) == 1, events
+    assert len(list((events / "eval_val").glob("events.out.tfevents.*"))) == 1, events
+    train = EventAccumulator(str(events), size_guidance={"scalars": 0}).Reload()
+    validation = EventAccumulator(str(events / "eval_val"), size_guidance={"scalars": 0}).Reload()
+    assert {"loss/total", "lr/g0"} <= set(train.Tags()["scalars"]), train.Tags()
+    assert len({point.step for point in train.Scalars("loss/total")}) >= 2
+    train_tags = set(train.Tags()["scalars"])
+    if "global_gradient_norm" in pipeline.train_config.tensorboard_summaries:
+        assert "global_gradient_norm" in train_tags, train_tags
+        assert any(point.value > 0 for point in train.Scalars("global_gradient_norm"))
+    eval_tags = set(validation.Tags()["scalars"])
+    metric_tags = {tag for tag in eval_tags if tag.startswith("metric/")}
+    model = pipeline.model_config
+    if model.WhichOneof("model") == "mmoe":
+        expected = {"metric/" + metric.WhichOneof("metric") + "_" + tower.tower_name
+                    for tower in model.mmoe.task_towers for metric in tower.metrics}
+        expected_train = {"metric/" + metric.WhichOneof("metric") + "_" + tower.tower_name
+                          for tower in model.mmoe.task_towers for metric in tower.train_metrics}
+    elif model.WhichOneof("model") == "dssm":
+        expected = {"metric/recall@1", "metric/recall@5", "metric/recall@10", "metric/recall@20"}
+        expected_train = expected
+    elif model.WhichOneof("model") == "rocket_launching":
+        expected = {"metric/" + kind + "_light" for kind in ("auc", "normalized_entropy", "accuracy")}
+        expected_train = {"metric/" + kind + "_" + branch
+                          for kind in ("auc", "accuracy") for branch in ("booster", "light")}
+    else:
+        expected = {"metric/auc", "metric/normalized_entropy", "metric/accuracy"}
+        expected_train = {"metric/auc", "metric/accuracy"}
+    assert expected_train <= train_tags, (expected_train, train_tags)
+    assert expected <= eval_tags, (expected, eval_tags)
+    assert not any("normalized_entropy" in tag for tag in train_tags), train_tags
+    if model.WhichOneof("model") == "rocket_launching":
+        metric_tags = {tag for tag in metric_tags if not tag.endswith("_booster")}
+    for accumulator in (train, validation):
+        for tag in accumulator.Tags()["scalars"]:
+            if accumulator is validation and model.WhichOneof("model") == "rocket_launching" and tag.endswith("_booster"):
+                continue
+            assert all(math.isfinite(point.value) for point in accumulator.Scalars(tag)), tag
+    results = [json.loads(line) for line in (directory / TRAIN_EVAL_RESULT_FILENAME).read_text().splitlines()]
+    for tag in metric_tags:
+        point = validation.Scalars(tag)[-1]
+        assert point.step == results[-1]["global_step"], tag
+        assert math.isclose(point.value, results[-1][tag.removeprefix("metric/")], rel_tol=1e-5, abs_tol=1e-6), tag
 
 
 def verify_task_metrics(pipeline):
@@ -262,6 +340,7 @@ def main():
         config_util.save_message(pipeline, str(pipeline_path))
         launcher = ["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=1", "/app/run.py"]
         execute(launcher + ["--mode", "train", "--pipeline_config_path", str(pipeline_path)], root / f"{architecture}-train.log", env)
+        verify_events(pipeline)
         if architecture.startswith("mmoe"):
             verify_task_metrics(pipeline)
         if architecture.startswith("rocket_launching"):
@@ -305,6 +384,7 @@ def main():
             execute(["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", "/app/run.py",
                      "--mode", "train", "--pipeline_config_path", str(distributed_path)], root / "rocket-distributed.log", env)
             verify_rocket_metrics(distributed)
+            verify_events(distributed)
             distributed_export = root / "rocket_distributed_export"
             execute(launcher + ["--mode", "export", "--pipeline_config_path", str(distributed_path), "--export_dir", str(distributed_export)], root / "rocket-distributed-export.log", env)
             summary.append(verify_backends(distributed_export, root, env, len(summary)))
@@ -335,6 +415,7 @@ def main():
             execute(["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", "/app/run.py",
                      "--mode", "train", "--pipeline_config_path", str(distributed_path)], root / "mmoe-distributed-train.log", env)
             verify_task_metrics(distributed)
+            verify_events(distributed)
             distributed_export = root / "mmoe_distributed_export"
             execute(launcher + ["--mode", "export", "--pipeline_config_path", str(distributed_path), "--export_dir", str(distributed_export)], root / "mmoe-distributed-export.log", env)
             summary.append(verify_backends(distributed_export, root, env, len(summary)))

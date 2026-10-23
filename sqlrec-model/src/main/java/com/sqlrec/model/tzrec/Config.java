@@ -31,6 +31,25 @@ public class Config extends ModelConfigBase {
     public static final ConfigOption<Integer> NUM_EPOCHS = new ConfigOption<>(
             "num_epochs",
             1, "Number of training epochs", null, Integer.class);
+    public static final ConfigOption<Boolean> USE_TENSORBOARD = new ConfigOption<>(
+            "use_tensorboard", true, "Use TZRec native TensorBoard summaries", null, Boolean.class);
+    public static final ConfigOption<String> TENSORBOARD_SUMMARIES = new ConfigOption<>(
+            "tensorboard_summaries", "loss,learning_rate,global_gradient_norm",
+            "Comma-separated native TensorBoard summary types", null, String.class);
+    public static final ConfigOption<Boolean> IS_PROFILING = new ConfigOption<>(
+            "is_profiling", false, "Collect native training profiler traces", null, Boolean.class);
+    public static final ConfigOption<Integer> LOG_STEP_COUNT_STEPS = new ConfigOption<>(
+            "log_step_count_steps", 100, "Training log and summary interval", null, Integer.class);
+    public static final ConfigOption<Integer> SAVE_CHECKPOINTS_STEPS = new ConfigOption<>(
+            "save_checkpoints_steps", 1000, "Checkpoint and evaluation step interval", null, Integer.class);
+    public static final ConfigOption<Integer> SAVE_CHECKPOINTS_EPOCHS = new ConfigOption<>(
+            "save_checkpoints_epochs", null, "Checkpoint and evaluation epoch interval", null, Integer.class);
+    public static final ConfigOption<Boolean> ENABLE_TRAIN_METRICS = new ConfigOption<>(
+            "enable_train_metrics", true, "Compute supported training metrics matching evaluation metrics", null, Boolean.class);
+    public static final ConfigOption<Integer> TRAIN_METRIC_DECAY_STEP = new ConfigOption<>(
+            "train_metric_decay_step", 100, "Native training metric decay interval", null, Integer.class);
+    public static final ConfigOption<Double> TRAIN_METRIC_DECAY_RATE = new ConfigOption<>(
+            "train_metric_decay_rate", 0.9, "Historical training metric decay rate in [0,1)", null, Double.class);
     public static final ConfigOption<String> MIXED_PRECISION = new ConfigOption<>(
             "mixed_precision",
             null, "Mixed precision training mode, e.g. BF16 or FP16, disabled by default",

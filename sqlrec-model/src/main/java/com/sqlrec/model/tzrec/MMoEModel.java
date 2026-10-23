@@ -34,7 +34,7 @@ public class MMoEModel extends TzrecModelBase {
         ModelConf effective = PipelineConfigUtils.effectiveModel(model, overrides);
         String error = checkModel(effective);
         if (error != null) throw new IllegalArgumentException(error);
-        if (!MultiTaskPipelineConfigUtils.modelConfig(model).equals(MultiTaskPipelineConfigUtils.modelConfig(effective))
+        if (!MultiTaskPipelineConfigUtils.modelConfig(model, false).equals(MultiTaskPipelineConfigUtils.modelConfig(effective, false))
                 || !PipelineConfigUtils.generateFeatureConfigs(model).equals(PipelineConfigUtils.generateFeatureConfigs(effective))) {
             throw new IllegalArgumentException("MMoE task, network and feature configuration cannot be changed by operation overrides; create a new model");
         }

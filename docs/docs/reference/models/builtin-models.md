@@ -38,6 +38,96 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 
 `server.sh` 使用 `hadoop fs -get` 下载远程导出目录，优先使用 `$HADOOP_HOME/bin/hadoop`，否则使用 PATH 中的 `hadoop`。容器中的 Hadoop 客户端需要配置好对应文件系统（例如 HDFS 或 JuiceFS）的连接和认证；本地目录直接使用。`LOCAL_CACHE_DIR` 可指定远程模型缓存的父目录，默认 `/tmp/tzrec_model_cache`；每次启动使用独立子目录，下载失败或缺少必要文件时清理该目录并退出。两种后端统一通过 `server.sh` 启动，由脚本调用一次 `validate_export.py` 检查清单、完成标记、文件校验和及 pipeline 契约；校验通过后使用 `exec` 启动所选 serving，校验失败会清理本次下载的独立缓存目录。`server.py` 负责模型加载与推理预热，不重复执行导出文件校验。Python 后端使用 Torch 和 Python FG 进行特征处理与推理；ARM Python FG 兼容包支持与 SQLRec 生成配置一致的 ID/raw 特征范围。两种后端均在预热成功后就绪，串行执行推理；通过服务副本扩容。
 
+### TZRec 训练曲线
+
+SQLRec 仅生成 TZRec 原生的 `train_config`、`metrics` 和 `train_metrics` 配置，采集和写入由 TZRec 自身完成，无须修改 TZRec 源码。默认保存 TensorBoard loss、学习率、可用梯度的总范数和适合当前任务的训练指标曲线；配置 `eval_input_path` 后同时保存验证指标。下列参数适用于所有内置 TZRec 模型，可在 `CREATE MODEL WITH` 中设置，并由 `TRAIN MODEL WITH` 覆盖：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `use_tensorboard` | `true` | 控制训练期间的 TensorBoard 写入，训练日志及验证结果文件仍保留 |
+| `tensorboard_summaries` | `loss,learning_rate,global_gradient_norm` | 逗号分隔的原生 summary 类型，详见下表；不允许空项、重复项或未知名称 |
+| `is_profiling` | `false` | 开启原生训练性能分析 trace；仅支持本地或挂载路径，远程 URI 会在训练前报错 |
+| `log_step_count_steps` | `100` | 训练日志和曲线的 step 间隔，须为正整数 |
+| `save_checkpoints_steps` | `1000` | 保存 checkpoint 并运行验证的 step 间隔；须为非负整数，`0` 关闭按 step 周期保存 |
+| `save_checkpoints_epochs` | 不设置 | 按 epoch 保存并验证的间隔；须为非负整数，`0` 关闭按 epoch 周期保存；不能与显式设置的正数 `save_checkpoints_steps` 同时为正 |
+| `enable_train_metrics` | `true` | 开启当前模型支持的训练指标；不包含仅支持验证的 NE |
+| `train_metric_decay_step` | `100` | TZRec 原生默认更新周期；开启训练指标时须为日志间隔的正整数倍 |
+| `train_metric_decay_rate` | `0.9` | 历史训练指标的衰减率，须为 `[0,1)` 内的有限数值 |
+
+仅在训练结束时保存 checkpoint 并验证，可设置 `save_checkpoints_steps=0`，同时保持 `save_checkpoints_epochs` 未设置或为 `0`。切换已声明的保存策略时，在 `TRAIN MODEL WITH` 中将原间隔设为 `0`，再设置另一种正数间隔。只设置正数 epoch 间隔时，会自动关闭默认的 step 间隔；epoch 间隔为 `0` 时保留 step 间隔。
+
+```sql
+TRAIN MODEL rank_model CHECKPOINT = 'curves_v1'
+ON training_sample
+WITH (
+  'num_epochs' = '3',
+  'eval_input_path' = 'jfs://myjfs/eval/*.parquet',
+  'log_step_count_steps' = '100',
+  'save_checkpoints_steps' = '500',
+  'enable_train_metrics' = 'true'
+);
+```
+
+沿用当前 TZRec 版本的原生目录：训练 event 直接保存在本次 origin 的 `model_dir` 下，训练中的验证 event 保存在 `model_dir/eval_val/`，独立评估 event 保存在 `model_dir/eval/`，性能分析 trace 位于 `model_dir/train_eval_trace/`。当前版本没有独立的日志目录配置。`pipeline.config`、`model.ckpt-*` 和逐行 JSON 格式的 `train_eval_result_v2.txt` 也保存在训练目录。将本次训练目录挂载或同步到 `/local/rank_model/curves_v1` 后运行：
+
+```bash
+tensorboard --logdir /local/rank_model/curves_v1 --port 6006
+```
+
+`tensorboard_summaries` 支持以下六种原生类型，采集频率均为 `log_step_count_steps`。TZRec 始终保留基础 loss 和学习率，`train_metrics` 单独控制训练指标；例如只填写 `gradient_norm` 时仍有 loss、学习率，但不再采集总梯度范数。
+
+| 类型 | TensorBoard 内容 | 默认开启 |
+|------|-------------------|----------|
+| `loss` | `loss/total` 及各项 `loss/*`，包括 MMoE 任务 loss 和 RocketLaunching 蒸馏 loss | 是 |
+| `learning_rate` | 优化器参数组的 `lr/g*` | 是 |
+| `global_gradient_norm` | `global_gradient_norm` 标量，统计当前可见梯度的 L2 总范数 | 是 |
+| `gradient_norm` | `<参数名>/gradient_norm`，逐参数梯度 L2 范数 | 否 |
+| `parameter` | 参数值直方图，位于 Histograms / Distributions | 否 |
+| `gradient` | `<参数名>/gradient` 梯度直方图 | 否 |
+
+梯度和参数 summary 只由 rank 0 写入。总梯度范数排除 `ShardedTensor`，且仅统计 `.grad` 非空的参数；分片 Embedding / fused optimizer 的梯度可能不在其中，不能将其解释为全卡、全参数范数。分片参数直方图只记录本地 shard。参数和梯度直方图可能明显增加采集开销及 event 大小，建议排障时开启；当前原生接口没有独立的直方图频率或参数白名单。
+
+```sql
+-- 排障时开启全部原生曲线与直方图，训练指标开关保持独立。
+TRAIN MODEL rank_model CHECKPOINT = 'diagnostics_v1'
+ON training_sample
+WITH (
+  'tensorboard_summaries' = 'loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
+  'log_step_count_steps' = '100'
+);
+```
+
+仅保留基础 loss 和学习率时，设置 `'tensorboard_summaries' = 'loss,learning_rate'`。`use_tensorboard=false` 会关闭所有训练期间的 summary 写入，但不会关闭 `is_profiling`。
+
+`is_profiling=true` 仅支持本地文件系统或容器内挂载路径的 `model_dir`，不支持 `jfs://`、`hdfs://`、`s3://` 等远程 URI。原生 Profiler 使用 C++ Kineto 导出 trace，不经过 Python 的 fsspec，JuiceFS 实测会报 `No logger registered for the jfs protocol prefix`。SQLRec 在提交训练任务及训练入口校验该限制；远程目录的普通 TensorBoard 曲线、梯度范数及直方图不受影响。
+
+Profiler 使用当前固定 TZRec 版本的原生采集窗口：等待 1 步、预热 1 步、记录 10 步，单次采集输入 shape、内存及调用栈等信息，输出到 `model_dir/train_eval_trace/`。当前 SQLRec 没有透出其他版本中的 `profiler_config`。trace 是独立文件，下载时需连同 `train_eval_trace/` 保存，并使用兼容的性能分析工具查看，不能作为普通 Scalars 曲线打开。
+
+当前固定的 TZRec 版本支持以下 10 类验证指标，其中 6 类也支持训练采集；模型本身还会限制可用指标。完整配置见 [TZRec 官方指标文档](https://torcheasyrec.readthedocs.io/zh-cn/latest/models/evaluation_metrics.html)。SQLRec 按输出类型选择默认值：
+
+| 原生指标 | 支持训练 | SQLRec 默认选择及用途 |
+|----------|----------|----------------------|
+| `auc` | 是 | 二分类默认开启，衡量正负样本排序能力，越高越好 |
+| `normalized_entropy` | 否 | 二分类验证默认开启，衡量相对于标签均值基线的交叉熵，越低越好；小于 1 表示优于基线 |
+| `accuracy` | 是 | 二分类默认开启，原生阈值为 0.5；只作为辅助观察，类别不平衡时不能代替 AUC |
+| `mean_squared_error` | 是 | MMoE 回归任务默认开启，观察平方误差，越低越好 |
+| `mean_absolute_error` | 是 | MMoE 回归任务默认开启，观察与标签同量纲的绝对误差，越低越好 |
+| `recall_at_k` | 是 | DSSM 默认开启 K=1、5、10、20，越高越好 |
+| `multiclass_auc` | 否 | 原生支持多分类；SQLRec 当前排序任务为标量二分类或回归，不默认配置 |
+| `grouped_auc` | 否 | 需要明确的 `grouping_key` 及对应特征，不自动猜测用户分组 |
+| `xauc` | 是 | 连续值目标的成对排序指标，需要按数据规模选择采样和样本对上限，不默认开启 |
+| `grouped_xauc` | 否 | 需要分组字段和组内样本对配置，不默认开启 |
+
+训练曲线包含 `loss/total`、各项 `loss/*` 和 `lr/g*`。WideAndDeep/DeepFM 默认记录 `metric/auc`、`metric/accuracy`，验证另有 `metric/normalized_entropy`；DSSM 默认记录 `metric/recall@1`、`metric/recall@5`、`metric/recall@10`、`metric/recall@20`。MMoE 按各任务的 `task.<label>.metrics` 记录带任务名后缀的指标，如 `metric/auc_label`、`metric/normalized_entropy_label`、`metric/mean_absolute_error_watch_time`；NE 仅出现在验证中。RocketLaunching 训练时记录 booster 和 light 的 AUC、Accuracy；验证只执行 light 分支，应查看 `metric/auc_light`、`metric/accuracy_light` 和 `metric/normalized_entropy_light`，原生结果中可能包含未更新的 booster 占位指标。
+
+验证 loss 位于 `metric/*`，如 `metric/binary_cross_entropy`、`metric/l2_loss_watch_time`，由原生流程自动记录，无须重复配置 logloss。DSSM 的 Recall 在当前 batch/采样候选集合上计算，不等同于全量索引召回；K 不小于候选数时会饱和。需要配置独立的 `eval_input_path` 才会产生验证曲线，验证采样频率与 checkpoint 保存频率一致；短任务可能只有结束时的一个验证点。
+
+训练 loss 是日志采样时的 batch loss，分布式时由 rank 0 记录，并非全局 epoch 平均值。训练指标采用历史衰减统计，新建指标在首个更新周期完成前为 0，与固定验证集上的指标口径不同。未显式设置衰减参数时，SQLRec 使用 TZRec 的默认值 `decay_step=100`、`decay_rate=0.9`。AUC 的训练与验证标签均须为 0/1；使用软标签训练 WideAndDeep/DeepFM 时，应关闭训练指标。
+
+训练频率、训练指标和验证指标可以在从旧 checkpoint 开始的新一轮训练中覆盖，网络、特征及任务结构仍由 checkpoint 保持。writer 的生命周期、缓冲和训练指标恢复均沿用所固定 TZRec 版本的原生行为：fine-tune 可能继承 checkpoint 中已有的训练指标统计；训练期间只由 rank 0 写入 event。当前版本的独立 `tzrec.eval` 命令会独立创建 `eval/` writer，不受训练开关控制；该命令未显式关闭 writer，异步 summary 可能未落盘，独立评估以 `eval_result.txt` 为准。SQLRec 训练曲线优先查看 `eval_val/`。
+
+`model_dir` 须位于持久存储或持久挂载上，否则容器删除后曲线会丢失。远程 URI 需要训练端和 TensorBoard 查看端均具备对应文件系统依赖、连接和认证；`USE_FSSPEC=1` 本身不保证 TensorBoard 远程读写可用，可先同步到本地查看。日志随 origin 训练目录保留，导出模型不负责归档训练曲线。
+
 ### TZRec 样本数据格式
 
 TZRec 训练时，通过 `ON` 指定 Hive 表，通过 `WHERE` 选择分区；导出时指定的 `ON` 数据源也按此方式处理。SQLRec 将所选表或分区解析为存储目录，再用 `*.parquet` 筛选目录中的数据文件，避开 `_SUCCESS` 等标记文件。因此这些数据文件需采用 Parquet 格式并以 `.parquet` 结尾。文件筛选由 SQLRec 自动完成，用户按原有方式指定表和分区即可。
@@ -288,7 +378,7 @@ CREATE MODEL multi_rank (
 | `task.<label>.hidden_units` | 继承任务塔默认值 | 单个任务塔 MLP |
 | `task.<label>.type` | `binary` | `binary` 使用 BCE，`regression` 使用 L2/MSE |
 | `task.<label>.weight` | `1.0` | 有限且大于零的 float32 训练损失权重 |
-| `task.<label>.metrics` | binary：`auc`；regression：`mean_squared_error` | binary 支持 `auc,accuracy`，regression 支持 `mean_squared_error,mean_absolute_error` |
+| `task.<label>.metrics` | binary 为 `auc,normalized_entropy,accuracy`，regression 为 `mean_squared_error,mean_absolute_error` | 逗号分隔，可选当前任务默认列表中的子集；NE 仅用于验证，其余同步用于训练指标 |
 | `eval_input_path` | 不设置 | 独立 Parquet 验证集路径，可在 TRAIN 的 WITH 中覆盖 |
 
 资源、batch、epoch、学习率和 `column.*` 特征参数沿用 TZRec 通用配置。MMoE 使用独立的专家/任务塔参数，不能使用单目标 `hidden_units` 或 DSSM 塔参数。未知目标和未知 `task.*` 参数会在创建模型时报错。
@@ -333,7 +423,7 @@ booster/light 至少有一个同宽层。特征蒸馏固定开启并使用 COSIN
 
 单个数值标签须声明在模型字段中，训练/验证文件中的值由用户保证为 0/1；不自动扫描、过滤或生成负例。已曝光未点击记录可作为负样本，未曝光候选不能直接标为 0。固定 BCE 和 num_class=1；标签不进入特征，线上无需提供标签。原生 light 输入被 detach，共享 embedding/share_mlp 由 booster 的监督梯度更新，light 的监督与蒸馏梯度不更新共享输入部分。
 
-验证使用 `auc_light`、`binary_cross_entropy_light`。原生日志可能包含未更新的 booster 评估指标（包括 NaN），不要将它们当作有效验证结果。粗排效果还须在固定候选池评估 Top K 的正样本/精排 Top M 保留率、最终指标及端到端成本，不能仅根据 AUC 决定上线。
+验证使用 `auc_light`、`normalized_entropy_light`、`accuracy_light`、`binary_cross_entropy_light`。原生日志可能包含未更新的 booster 评估指标（包括 NaN），不要将它们当作有效验证结果。粗排效果还须在固定候选池评估 Top K 的正样本/精排 Top M 保留率、最终指标及端到端成本，不能仅根据 AUC 决定上线。
 
 训练、导出及服务部署沿用[模型生命周期](../../guides/model-lifecycle.md)。只生成 `<checkpoint>_export`，公共输出为 **`probs_light FLOAT`**；原生 `logits_light` 作为额外输出保留。导出前验证 light 输出形状、范围与有限性，产物要求匹配的 output manifest。TRAIN/EXPORT/SERVICE 不能改变网络、特征、标签或蒸馏配置；续训可调整学习率、batch、epoch 和验证集路径。
 
@@ -345,7 +435,7 @@ DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的�
 
 DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，数值标签建议统一为 1。标签值不参与正负样本筛选或样本加权；训练入口不拒绝或过滤零、负标签行，请在生成样本时先筛选正样本。具体格式见上文「TZRec 样本数据格式」。
 
-当前 SQLRec DSSM 固定使用 `softmax_cross_entropy`，生成 Recall@1、Recall@5 验证指标；不提供训练目标选择。显式配置其他 loss，或恢复、导出保存了其他目标的 checkpoint 时会报错。训练和验证样本由用户提前准备，SQLRec 不自动过滤。
+当前 SQLRec DSSM 固定使用 `softmax_cross_entropy`，生成 Recall@1、Recall@5、Recall@10、Recall@20 验证指标；不提供训练目标选择。显式配置其他 loss，或恢复、导出保存了其他目标的 checkpoint 时会报错。训练和验证样本由用户提前准备，SQLRec 不自动过滤。
 
 **模型名称**：`tzrec.dssm`
 

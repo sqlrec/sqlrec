@@ -20,6 +20,10 @@ final class RocketLaunchingPipelineConfigUtils {
     }
 
     static String modelConfig(ModelConf model) {
+        return modelConfig(model, true);
+    }
+
+    static String modelConfig(ModelConf model, boolean includeMetrics) {
         StringBuilder config = new StringBuilder("model_config {\n");
         PipelineConfigUtils.addFeatureGroup(config, "deep", FeatureOptions.features(model).stream().map(FieldSchema::getName).toList(), "DEEP");
         config.append("    rocket_launching {\n");
@@ -27,9 +31,11 @@ final class RocketLaunchingPipelineConfigUtils {
         if (shared != null) addMlp(config, "share", shared);
         addMlp(config, "booster", Config.BOOSTER_HIDDEN_UNITS.getValue(model.getParams()));
         addMlp(config, "light", Config.LIGHT_HIDDEN_UNITS.getValue(model.getParams()));
-        return config.append("        feature_based_distillation: true\n")
+        config.append("        feature_based_distillation: true\n")
                 .append("        feature_distillation_function: COSINE\n    }\n")
-                .append("    num_class: 1\n    losses { binary_cross_entropy {} }\n    metrics { auc {} }\n}\n").toString();
+                .append("    num_class: 1\n    losses { binary_cross_entropy {} }\n");
+        if (includeMetrics) MetricOptions.addMetrics(config, model.getParams(), MetricOptions.BINARY, "    ");
+        return config.append("}\n").toString();
     }
 
     private static void addMlp(StringBuilder config, String name, String widths) {

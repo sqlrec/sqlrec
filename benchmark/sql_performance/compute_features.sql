@@ -99,12 +99,13 @@ FROM (
 ) t
 WHERE rn <= 100;
 
--- Metadata-only float features: rating remains the label.
+-- Binary FLOAT labels for AUC/Accuracy: original MovieLens rating >= 4 maps to 1.
+-- ml_ratings.rating retains the normalized original score: (rating - 1) / 4.
 INSERT OVERWRITE TABLE ml_sample PARTITION(dt='2024-01-01')
 SELECT
     r.user_id,
     r.movie_id,
-    r.rating,
+    CAST(CASE WHEN r.rating >= 0.75 THEN 1 ELSE 0 END AS FLOAT) AS rating,
     r.timestamp,
     m.genres,
     u.gender,

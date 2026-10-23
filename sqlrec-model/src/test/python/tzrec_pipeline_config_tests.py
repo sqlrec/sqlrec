@@ -2,6 +2,7 @@
 
 import sys
 import json
+import math
 import os
 from pathlib import Path
 import tempfile
@@ -19,6 +20,72 @@ import torch
 
 
 class CheckpointConfigTest(unittest.TestCase):
+    def test_remote_profiling_is_rejected_before_native_training(self):
+        requested = self.config("wide_and_deep")
+        requested.model_dir = "jfs://myjfs/model"
+        requested.train_config.is_profiling = True
+        with self.assertRaisesRegex(ValueError, "local or mounted model_dir"):
+            prepare_config(requested, training=True)
+        requested.train_config.is_profiling = False
+        prepare_config(requested, training=True)
+
+    def test_metrics_can_change_from_legacy_checkpoints_without_changing_structure(self):
+        single = text_format.Parse('data_config { label_fields: "label" } '
+                'model_config { wide_and_deep {} losses { binary_cross_entropy {} } metrics { auc {} } }',
+                pipeline_pb2.EasyRecConfig())
+        rocket = config_util.load_pipeline_config("/tests/configs/rocket_launching.config")
+        for saved in (single, self.mmoe(), rocket):
+            requested = pipeline_pb2.EasyRecConfig()
+            requested.CopyFrom(saved)
+            saved_owners = saved.model_config.mmoe.task_towers if saved.model_config.WhichOneof("model") == "mmoe" else [saved.model_config]
+            for owner in saved_owners:
+                del owner.metrics[1:]
+                del owner.train_metrics[:]
+            requested.train_config.log_step_count_steps = 5
+            model = requested.model_config
+            owners = model.mmoe.task_towers if model.WhichOneof("model") == "mmoe" else [model]
+            for owner in owners:
+                del owner.train_metrics[:]
+                if owner is model and model.WhichOneof("model") == "wide_and_deep":
+                    owner.metrics.add().normalized_entropy.SetInParent()
+                    owner.metrics.add().accuracy.SetInParent()
+                for metric in owner.metrics:
+                    kind = metric.WhichOneof("metric")
+                    if kind == "normalized_entropy":
+                        continue
+                    train_metric = owner.train_metrics.add(decay_step=10, decay_rate=.8)
+                    getattr(train_metric, kind).CopyFrom(getattr(metric, kind))
+            with self.subTest(architecture=model.WhichOneof("model")):
+                effective = prepare_config(requested, saved, training=True, check_checkpoint_structure=True)
+                self.assertEqual(effective.model_config, requested.model_config)
+                exported = prepare_config(saved, effective, training=False, check_checkpoint_structure=True)
+                self.assertEqual(exported.model_config, effective.model_config)
+                disabled = prepare_config(saved, effective, training=True, check_checkpoint_structure=True)
+                self.assertEqual(disabled.model_config, saved.model_config)
+                self.assertEqual(effective.feature_configs, saved.feature_configs)
+
+    def test_training_metrics_validate_decay_and_task_type(self):
+        for change in ("type", "duplicate", "zero_step", "unaligned_step", "rate", "log_step"):
+            requested = self.mmoe()
+            for tower in requested.model_config.mmoe.task_towers:
+                del tower.train_metrics[:]
+            metric = requested.model_config.mmoe.task_towers[1].train_metrics.add()
+            metric.mean_squared_error.SetInParent()
+            if change == "type":
+                metric.auc.SetInParent()
+            elif change == "duplicate":
+                requested.model_config.mmoe.task_towers[1].train_metrics.add().CopyFrom(metric)
+            elif change == "zero_step":
+                metric.decay_step = 0
+            elif change == "unaligned_step":
+                metric.decay_step = 150
+            elif change == "rate":
+                metric.decay_rate = float("nan")
+            else:
+                requested.train_config.log_step_count_steps = 0
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                prepare_config(requested, training=True)
+
     def test_pool_checkpoint_preserves_settings_but_refreshes_training_source(self):
         requested = text_format.Parse('data_config { label_fields: "label" } '
                 'model_config { dssm {} losses { softmax_cross_entropy {} } }', pipeline_pb2.EasyRecConfig())
@@ -304,6 +371,40 @@ class CheckpointConfigTest(unittest.TestCase):
         sum(losses.values()).backward()
         torch.testing.assert_close(logits.grad, logits.detach().sigmoid() - labels.float())
         torch.testing.assert_close(regression.grad, torch.tensor([.1, -.3]))
+
+    def test_default_binary_and_regression_metrics_use_the_correct_predictions(self):
+        from tzrec.datasets.utils import Batch
+        from tzrec.features.feature import create_features
+        from tzrec.models.mmoe import MMoE
+        import torch.nn.functional as functional
+
+        config = self.mmoe()
+        for tower in config.model_config.mmoe.task_towers:
+            for metric in tower.train_metrics:
+                metric.decay_step = 1
+        model = MMoE(config.model_config,
+                     create_features(list(config.feature_configs), config.data_config.fg_mode),
+                     list(config.data_config.label_fields))
+        model.init_loss()
+        model.init_metric()
+        probabilities = torch.tensor([.1, .4, .35, .8])
+        binary = torch.tensor([0, 0, 1, 1])
+        batch = Batch(labels={"label": binary, "watch_time": torch.tensor([1., 7., 1., 6.])})
+        predictions = {"probs_label": probabilities, "logits_label": probabilities.logit(),
+                       "y_watch_time": torch.tensor([2., 4., 1., 8.])}
+        losses = model.loss(predictions, batch)
+        model.update_metric(predictions, batch, losses)
+        model.update_train_metric(predictions, batch)
+        evaluated, trained = model.compute_metric(), model.compute_train_metric()
+        expected = {"auc_label": .75, "accuracy_label": .75,
+                    "mean_squared_error_watch_time": 3.5, "mean_absolute_error_watch_time": 1.5}
+        for name, value in expected.items():
+            with self.subTest(metric=name):
+                self.assertAlmostEqual(evaluated[name].item(), value, places=5)
+                self.assertAlmostEqual(trained[name].item(), value, places=5)
+        expected_ne = functional.binary_cross_entropy(probabilities, binary.float()).item() / math.log(2)
+        self.assertAlmostEqual(evaluated["normalized_entropy_label"].item(), expected_ne, places=5)
+        self.assertNotIn("normalized_entropy_label", trained)
 
     def test_export_retry_uses_a_fresh_staging_directory_and_cleans_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

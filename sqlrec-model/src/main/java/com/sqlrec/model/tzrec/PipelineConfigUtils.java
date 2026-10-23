@@ -49,6 +49,7 @@ public class PipelineConfigUtils {
     }
 
     static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
+        TrainingOptions.validateModelDir(model.getParams(), trainConf.getModelDir());
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
@@ -104,6 +105,7 @@ public class PipelineConfigUtils {
 
     public static String generateTrainConfig(ModelConf model, Map<String, String> params, String baseModelDir) {
         params = ModelConfigUtils.mergeParams(model.getParams(), params);
+        TrainingOptions.validate(params);
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(params);
         double denseLr = Config.DENSE_LR.getValue(params);
@@ -125,6 +127,21 @@ public class PipelineConfigUtils {
         config.append("        }\n");
         config.append("    }\n");
         config.append("    num_epochs: " + numEpochs + "\n");
+        config.append("    use_tensorboard: ").append(Config.USE_TENSORBOARD.getValue(params)).append("\n");
+        for (String summary : TrainingOptions.summaries(params)) {
+            config.append("    tensorboard_summaries: ").append(quoted(summary)).append("\n");
+        }
+        if (Config.IS_PROFILING.isSet(params)) {
+            config.append("    is_profiling: ").append(Config.IS_PROFILING.getValue(params)).append("\n");
+        }
+        config.append("    log_step_count_steps: ").append(Config.LOG_STEP_COUNT_STEPS.getValue(params)).append("\n");
+        Integer checkpointEpochs = Config.SAVE_CHECKPOINTS_EPOCHS.getValueOrNull(params);
+        if (checkpointEpochs == null || checkpointEpochs == 0) {
+            config.append("    save_checkpoints_steps: ").append(Config.SAVE_CHECKPOINTS_STEPS.getValue(params)).append("\n");
+        } else {
+            config.append("    save_checkpoints_steps: 0\n");
+            config.append("    save_checkpoints_epochs: ").append(checkpointEpochs).append("\n");
+        }
         // getValueOrNull: unset + null default returns null (no throw), so mixed
         // precision stays off by default; a non-null default would still apply.
         String mixedPrecision = Config.MIXED_PRECISION.getValueOrNull(params);
@@ -266,9 +283,7 @@ public class PipelineConfigUtils {
         config.append("        }\n");
         config.append("    }\n");
 
-        config.append("    metrics {\n");
-        config.append("        auc {}\n");
-        config.append("    }\n");
+        MetricOptions.addMetrics(config, model.getParams(), MetricOptions.BINARY, "    ");
 
         config.append("    losses {\n");
         config.append("        binary_cross_entropy {}\n");
@@ -351,9 +366,10 @@ public class PipelineConfigUtils {
                 .append(!"pool".equals(Config.NEGATIVE_SAMPLING.getValue(model.getParams()))).append("\n");
         config.append("    }\n");
 
-        addRecallMetric(config, 1);
-
-        addRecallMetric(config, 5);
+        for (int topK : MetricOptions.RECALL_TOP_K) addRecallMetric(config, topK);
+        for (int topK : MetricOptions.RECALL_TOP_K) {
+            TrainingOptions.addMetric(config, model.getParams(), "recall_at_k { top_k: " + topK + " }", "    ");
+        }
 
         config.append("    losses {\n");
         config.append("        softmax_cross_entropy {}\n");

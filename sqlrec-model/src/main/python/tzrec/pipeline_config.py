@@ -4,6 +4,7 @@ import math
 import os
 import re
 import struct
+from urllib.parse import urlsplit
 
 from multi_task import task_contract
 from rocket_launching_contract import rocket_contract
@@ -166,6 +167,19 @@ def _check_structure_options(saved, options, masks):
             raise ValueError(f"Explicit structure override {key} does not match the checkpoint; create a new model to change its structure")
 
 
+def _model_structure(model):
+    """Compare checkpoint structure independently of runtime metrics."""
+    structure = type(model)()
+    structure.CopyFrom(model)
+    structure.ClearField("metrics")
+    structure.ClearField("train_metrics")
+    if structure.WhichOneof("model") == "mmoe":
+        for tower in structure.mmoe.task_towers:
+            tower.ClearField("metrics")
+            tower.ClearField("train_metrics")
+    return structure
+
+
 def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None,
                    training=False):
     """Retain checkpoint structure and validate the effective label contract."""
@@ -181,21 +195,34 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
         architecture = requested.model_config.WhichOneof("model")
         if architecture != saved.model_config.WhichOneof("model"):
             raise ValueError("Checkpoint architecture must match the declared model; create a new model")
+        requested_structure = _model_structure(requested.model_config)
+        saved_structure = _model_structure(saved.model_config)
         if architecture == "rocket_launching":
-            if (requested.model_config != saved.model_config
+            if (requested_structure != saved_structure
                     or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
                 raise ValueError("Checkpoint RocketLaunching model and features cannot change; create a new model")
         elif architecture == "mmoe":
             if (task_contract(requested) != task_contract(saved)
-                    or requested.model_config != saved.model_config
+                    or requested_structure != saved_structure
                     or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
                 raise ValueError("Checkpoint MMoE task, model and feature configuration cannot be changed; create a new model")
         elif structure_options:
             _check_structure_options(saved, structure_options, structure_masks or {})
-        elif check_checkpoint_structure and (requested.model_config != saved.model_config
+        elif check_checkpoint_structure and (requested_structure != saved_structure
                                             or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
             raise ValueError("Explicit network and feature overrides must match the checkpoint; create a new model to change its structure")
         config.model_config.CopyFrom(saved.model_config)
+        if training:
+            del config.model_config.metrics[:]
+            config.model_config.metrics.extend(requested.model_config.metrics)
+            del config.model_config.train_metrics[:]
+            config.model_config.train_metrics.extend(requested.model_config.train_metrics)
+            if architecture == "mmoe":
+                for tower, current in zip(config.model_config.mmoe.task_towers, requested.model_config.mmoe.task_towers):
+                    del tower.metrics[:]
+                    tower.metrics.extend(current.metrics)
+                    del tower.train_metrics[:]
+                    tower.train_metrics.extend(current.train_metrics)
         del config.feature_configs[:]
         config.feature_configs.extend(saved.feature_configs)
         batch_size, workers = config.data_config.batch_size, config.data_config.num_workers
@@ -206,6 +233,20 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
             raise ValueError("Pool sampling requires a parquet training input")
         config.data_config.pool_negative_sampler.input_path = config.train_input_path
     contract = task_contract(config)
+    if training:
+        if config.train_config.is_profiling and urlsplit(config.model_dir).scheme not in ("", "file"):
+            raise ValueError("Native profiling requires a local or mounted model_dir; remote URIs are unsupported")
+        log_steps = config.train_config.log_step_count_steps
+        metrics = list(config.model_config.train_metrics)
+        if config.model_config.WhichOneof("model") == "mmoe":
+            metrics.extend(metric for tower in config.model_config.mmoe.task_towers for metric in tower.train_metrics)
+        if log_steps <= 0:
+            raise ValueError("log_step_count_steps must be positive")
+        for metric in metrics:
+            if metric.decay_step <= 0 or metric.decay_step % log_steps != 0:
+                raise ValueError("Training metric decay_step must be a positive multiple of log_step_count_steps")
+            if not math.isfinite(metric.decay_rate) or not 0 <= metric.decay_rate < 1:
+                raise ValueError("Training metric decay_rate must be finite and in [0,1)")
     labels = set(config.data_config.label_fields)
     if contract is None and (len(config.data_config.label_fields) != 1 or len(labels) != 1):
         raise ValueError("TZRec requires exactly one label")

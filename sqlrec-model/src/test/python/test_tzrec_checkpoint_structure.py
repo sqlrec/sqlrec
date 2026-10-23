@@ -26,12 +26,20 @@ def config_type():
             if oneof:
                 field.oneof_index = 0
         return result
-    message("Data", [("label_fields", 9, True), ("batch_size", 5, False), ("num_workers", 5, False)])
+    message("Data", [("label_fields", 9, True), ("batch_size", 5, False), ("num_workers", 5, False),
+                     ("pool_negative_sampler", ".Empty", False)])
     message("Empty", [])
+    message("Metric", [("auc", ".Empty", False), ("normalized_entropy", ".Empty", False)], "metric")
+    train_metric = message("TrainMetric", [("auc", ".Empty", False)], "metric")
+    train_metric.field.add(name="decay_step", number=2, label=1, type=13, default_value="100")
+    train_metric.field.add(name="decay_rate", number=3, label=1, type=2, default_value="0.9")
+    train = message("Train", [("log_step_count_steps", 13, False), ("is_profiling", 8, False)])
+    train.field[0].default_value = "100"
+    message("TaskTower", [("train_metrics", ".TrainMetric", True), ("metrics", ".Metric", True)])
     message("Loss", [("softmax_cross_entropy", ".Empty", False),
                      ("binary_cross_entropy", ".Empty", False), ("l2_loss", ".Empty", False)], "loss")
     message("Mlp", [("hidden_units", 5, True)])
-    message("Network", [("deep", ".Mlp", False)])
+    message("Network", [("deep", ".Mlp", False), ("task_towers", ".TaskTower", True)])
     message("Tower", [("input", 9, False), ("mlp", ".Mlp", False)])
     message("Dssm", [("user_tower", ".Tower", False), ("item_tower", ".Tower", False),
                      ("output_dim", 5, False)])
@@ -41,6 +49,8 @@ def config_type():
     model.field.add(name="feature_groups", number=4, label=3, type=11, type_name=".Group")
     model.field.add(name="mmoe", number=5, label=1, type=11, type_name=".Network", oneof_index=0)
     model.field.add(name="losses", number=6, label=3, type=11, type_name=".Loss")
+    model.field.add(name="train_metrics", number=7, label=3, type=11, type_name=".TrainMetric")
+    model.field.add(name="metrics", number=8, label=3, type=11, type_name=".Metric")
     message("Id", [("feature_name", 9, False), ("expression", 9, False),
                    ("embedding_dim", 5, False), ("num_buckets", 5, False), ("hash_bucket_size", 5, False),
                    ("default_value", 9, False), ("separator", 9, False)])
@@ -60,7 +70,8 @@ def config_type():
     raw.field.add(name="autodis", number=10, label=1, type=11, type_name=".AutoDis", oneof_index=0)
     message("Feature", [("id_feature", ".Id", False), ("raw_feature", ".Raw", False)], "feature")
     message("Pipeline", [("data_config", ".Data", False), ("model_config", ".Model", False),
-                         ("feature_configs", ".Feature", True)])
+                         ("feature_configs", ".Feature", True), ("train_config", ".Train", False),
+                         ("model_dir", 9, False)])
     pool = descriptor_pool.DescriptorPool()
     pool.Add(file)
     return message_factory.GetMessageClass(pool.FindMessageTypeByName("Pipeline"))
@@ -108,6 +119,58 @@ class CheckpointStructureTest(unittest.TestCase):
             message = "architecture" if change == "architecture" else "Explicit network and feature overrides"
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
                 self.module.prepare_config(requested, saved, True)
+
+    def test_metrics_can_change_from_legacy_checkpoints_but_preserve_export_structure(self):
+        for architecture in ("wide_and_deep", "deepfm", "dssm", "mmoe"):
+            saved = self.config(architecture)
+            if architecture == "mmoe":
+                saved.model_config.mmoe.task_towers.add()
+            requested = self.Config()
+            requested.CopyFrom(saved)
+            requested.train_config.log_step_count_steps = 5
+            owner = requested.model_config.mmoe.task_towers[0] if architecture == "mmoe" else requested.model_config
+            owner.metrics.add().auc.SetInParent()
+            owner.metrics.add().normalized_entropy.SetInParent()
+            metric = owner.train_metrics.add(decay_step=10, decay_rate=.8)
+            metric.auc.SetInParent()
+            with self.subTest(architecture=architecture):
+                effective = self.module.prepare_config(requested, saved, training=True,
+                                                       check_checkpoint_structure=True)
+                self.assertEqual(effective.model_config, requested.model_config)
+                self.assertEqual(effective.feature_configs, saved.feature_configs)
+                exported = self.module.prepare_config(saved, effective, check_checkpoint_structure=True)
+                self.assertEqual(exported.model_config, effective.model_config)
+                disabled = self.module.prepare_config(saved, effective, training=True,
+                                                      check_checkpoint_structure=True)
+                self.assertEqual(disabled.model_config, saved.model_config)
+                self.assertNotEqual(effective.model_config, saved.model_config)
+                if architecture != "mmoe":
+                    getattr(requested.model_config, architecture).Clear()
+                    with self.assertRaises(ValueError):
+                        self.module.prepare_config(requested, saved, training=True,
+                                                   check_checkpoint_structure=True)
+
+    def test_training_metric_decay_is_validated_with_the_effective_log_interval(self):
+        for steps, rate, log_steps in ((0, .9, 100), (150, .9, 100), (100, .9, 0),
+                                      (100, float("nan"), 100), (100, 1.0, 100), (100, -.1, 100)):
+            requested = self.config()
+            requested.train_config.log_step_count_steps = log_steps
+            requested.model_config.train_metrics.add(decay_step=steps, decay_rate=rate).auc.SetInParent()
+            with self.subTest(steps=steps, rate=rate, log_steps=log_steps), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, training=True)
+
+    def test_profiling_requires_a_local_or_mounted_training_directory(self):
+        requested = self.config()
+        requested.train_config.is_profiling = True
+        for path in ("jfs://myjfs/model", "hdfs://cluster/model", "s3://bucket/model"):
+            requested.model_dir = path
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "local or mounted model_dir"):
+                self.module.prepare_config(requested, training=True)
+        requested.model_dir = "/mnt/models/profiling"
+        self.module.prepare_config(requested, training=True)
+        requested.train_config.is_profiling = False
+        requested.model_dir = "jfs://myjfs/model"
+        self.module.prepare_config(requested, training=True)
 
     def test_matching_structure_and_runtime_changes_are_allowed(self):
         saved, requested = self.config(), self.config()

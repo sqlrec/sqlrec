@@ -41,7 +41,7 @@ public class RocketLaunchingModel extends TzrecModelBase {
         ModelConf effective = PipelineConfigUtils.effectiveModel(model, overrides);
         error = checkModel(effective);
         if (error != null) throw new IllegalArgumentException(error);
-        if (!RocketLaunchingPipelineConfigUtils.modelConfig(model).equals(RocketLaunchingPipelineConfigUtils.modelConfig(effective))
+        if (!RocketLaunchingPipelineConfigUtils.modelConfig(model, false).equals(RocketLaunchingPipelineConfigUtils.modelConfig(effective, false))
                 || !PipelineConfigUtils.generateFeatureConfigs(model).equals(PipelineConfigUtils.generateFeatureConfigs(effective))
                 || !model.getParams().get("label_columns").equals(effective.getParams().get("label_columns"))) {
             throw new IllegalArgumentException("RocketLaunching network, features and labels cannot change by operation overrides; create a new model");

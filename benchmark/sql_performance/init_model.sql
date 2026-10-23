@@ -1,6 +1,7 @@
 -- Architecture and training parameters follow benchmark/model_quality/config.py
 -- (movielens100k); keep the MovieLens-1M data and feature schema used here.
 -- rating is supplied by the training table and is never an input feature.
+-- ml_sample.rating is binary (original MovieLens rating >= 4) for AUC/Accuracy.
 create model if not exists `rank_model`
 (
  `user_id` BIGINT,
@@ -29,6 +30,9 @@ with (
 
 train model rank_model checkpoint='v1' on ml_sample
 with (
+'use_tensorboard'='true',
+'enable_train_metrics'='true',
+'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
 'NAMESPACE'='${NAMESPACE}',
 'pod_cpu_cores'='2',
 'pod_memory'='4Gi'
@@ -36,6 +40,9 @@ with (
 
 -- train model rank_model checkpoint='v2' on ml_sample from 'v1'
 -- with (
+-- 'use_tensorboard'='true',
+-- 'enable_train_metrics'='true',
+-- 'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
 -- 'NAMESPACE'='${NAMESPACE}',
 -- 'pod_cpu_cores'='2',
 -- 'pod_memory'='4Gi'
@@ -105,6 +112,9 @@ with (
 
 train model recall_model checkpoint='v1' on ml_recall_sample
 with (
+'use_tensorboard'='true',
+'enable_train_metrics'='true',
+'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
 'NAMESPACE'='${NAMESPACE}',
 'pod_cpu_cores'='2',
 'pod_memory'='4Gi'

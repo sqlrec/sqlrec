@@ -261,6 +261,7 @@ final class FeatureOptions {
             positive(Config.BATCH_SIZE.getValue(params), "batch_size");
             if (Config.NUM_WORKERS.getValue(params) < 0) return "num_workers must be nonnegative";
             positive(Config.NUM_EPOCHS.getValue(params), "num_epochs");
+            TrainingOptions.validate(params);
             positive(Config.NNODES.getValue(params), "nnodes");
             positive(Config.NPROC_PER_NODE.getValue(params), "nproc_per_node");
             positive(Config.POD_CPU_CORES.getValue(params), "pod_cpu_cores");

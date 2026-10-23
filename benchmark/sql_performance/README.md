@@ -21,6 +21,26 @@ bash benchmark.sh
 registers the recommendation SQL functions and API. These preparation steps are
 outside the timed benchmark.
 
+`ml_ratings.rating` retains the normalized original MovieLens score `(score - 1) / 4`.
+`compute_features.sql` creates binary `FLOAT` labels in `ml_sample.rating`: original
+scores of 4 or 5 map to `1.0`, and scores of 1 through 3 map to `0.0`. TZRec training
+AUC and Accuracy require 0/1 labels; normalized soft labels must not be used with
+these metrics. The `ml_recall_sample` positive-pair filter selects the same 4/5-star
+interactions as before. Regenerate both sample tables before retraining an existing
+setup; changing the SQL does not update previously generated data or checkpoints.
+
+Model training explicitly enables TensorBoard, training metrics, and all six
+native summary types: `loss`, `learning_rate`, `global_gradient_norm`,
+`gradient_norm`, `parameter`, and `gradient`. WideAndDeep records training AUC
+and Accuracy; DSSM records training Recall@1/5/10/20. Parameter and gradient
+histograms add preparation overhead and use the default 100-step log interval.
+
+The generated model configuration also includes evaluation AUC, Accuracy, and
+NormalizedEntropy for WideAndDeep, and Recall@1/5/10/20 for DSSM. This workload
+does not define a separate validation set; set `eval_input_path` in the training
+options to collect evaluation curves. Event files are saved under each origin
+checkpoint's `model_dir`, with evaluation events under `eval_val/` when enabled.
+
 `benchmark.sh` uses `wrk` with the workload in `request.lua`. Default requests
 disable online model inference and use random user embeddings. Initialization
 also checks the inference-enabled workflow.

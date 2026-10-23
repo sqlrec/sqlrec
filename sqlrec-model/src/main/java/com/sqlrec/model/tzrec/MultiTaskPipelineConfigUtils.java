@@ -20,6 +20,10 @@ final class MultiTaskPipelineConfigUtils {
     }
 
     static String modelConfig(ModelConf model) {
+        return modelConfig(model, true);
+    }
+
+    static String modelConfig(ModelConf model, boolean includeMetrics) {
         StringBuilder config = new StringBuilder("model_config {\n");
         PipelineConfigUtils.addFeatureGroup(config, "deep", FeatureOptions.features(model).stream().map(FieldSchema::getName).toList(), "DEEP");
         config.append("    mmoe {\n        num_expert: ").append(Config.NUM_EXPERT.getValue(model.getParams())).append("\n");
@@ -31,7 +35,7 @@ final class MultiTaskPipelineConfigUtils {
             config.append("            num_class: 1\n            mlp { hidden_units: [").append(task.hiddenUnits()).append("] }\n");
             config.append("            weight: ").append(task.weight()).append("\n");
             config.append("            losses { ").append(task.type().equals("binary") ? "binary_cross_entropy" : "l2_loss").append(" {} }\n");
-            for (String metric : task.metrics()) config.append("            metrics { ").append(metric).append(" {} }\n");
+            if (includeMetrics) MetricOptions.addMetrics(config, model.getParams(), task.metrics(), "            ");
             config.append("        }\n");
         }
         return config.append("    }\n}\n").toString();

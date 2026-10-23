@@ -158,6 +158,12 @@ data:
             }
         }
         num_epochs: 3
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 4096
@@ -210,9 +216,11 @@ data:
                 hidden_units: [256,128,64]
             }
         }
-        metrics {
-            auc {}
-        }
+        metrics { auc {} }
+        metrics { normalized_entropy {} }
+        metrics { accuracy {} }
+        train_metrics { auc {} }
+        train_metrics { accuracy {} }
         losses {
             binary_cross_entropy {}
         }
@@ -338,6 +346,12 @@ data:
             }
         }
         num_epochs: 1
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 8192
@@ -370,9 +384,11 @@ data:
                 hidden_units: [512,256,128]
             }
         }
-        metrics {
-            auc {}
-        }
+        metrics { auc {} }
+        metrics { normalized_entropy {} }
+        metrics { accuracy {} }
+        train_metrics { auc {} }
+        train_metrics { accuracy {} }
         losses {
             binary_cross_entropy {}
         }
@@ -545,9 +561,11 @@ data:
                 hidden_units: [256,128,64]
             }
         }
-        metrics {
-            auc {}
-        }
+        metrics { auc {} }
+        metrics { normalized_entropy {} }
+        metrics { accuracy {} }
+        train_metrics { auc {} }
+        train_metrics { accuracy {} }
         losses {
             binary_cross_entropy {}
         }
@@ -863,6 +881,12 @@ data:
             }
         }
         num_epochs: 1
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 8192
@@ -895,9 +919,11 @@ data:
                 hidden_units: [512,256,128]
             }
         }
-        metrics {
-            auc {}
-        }
+        metrics { auc {} }
+        metrics { normalized_entropy {} }
+        metrics { accuracy {} }
+        train_metrics { auc {} }
+        train_metrics { accuracy {} }
         losses {
             binary_cross_entropy {}
         }

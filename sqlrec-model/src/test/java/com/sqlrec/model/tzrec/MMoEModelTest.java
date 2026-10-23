@@ -71,6 +71,12 @@ data:
             }
         }
         num_epochs: 2
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
         fine_tune_checkpoint: "/fixture/base"
     }
     data_config {
@@ -115,6 +121,10 @@ data:
                 weight: 1.0
                 losses { binary_cross_entropy {} }
                 metrics { auc {} }
+                metrics { normalized_entropy {} }
+                metrics { accuracy {} }
+                train_metrics { auc {} }
+                train_metrics { accuracy {} }
             }
             task_towers {
                 tower_name: "watch_time"
@@ -124,6 +134,9 @@ data:
                 weight: 0.1
                 losses { l2_loss {} }
                 metrics { mean_squared_error {} }
+                metrics { mean_absolute_error {} }
+                train_metrics { mean_squared_error {} }
+                train_metrics { mean_absolute_error {} }
             }
         }
     }
@@ -263,6 +276,10 @@ data:
                 weight: 1.0
                 losses { binary_cross_entropy {} }
                 metrics { auc {} }
+                metrics { normalized_entropy {} }
+                metrics { accuracy {} }
+                train_metrics { auc {} }
+                train_metrics { accuracy {} }
             }
             task_towers {
                 tower_name: "watch_time"
@@ -272,6 +289,9 @@ data:
                 weight: 0.1
                 losses { l2_loss {} }
                 metrics { mean_squared_error {} }
+                metrics { mean_absolute_error {} }
+                train_metrics { mean_squared_error {} }
+                train_metrics { mean_absolute_error {} }
             }
         }
     }
@@ -512,10 +532,14 @@ spec:
             assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
         }
         Map<String, String> runtime = Map.of("batch_size", "16", "dense_lr", "0.02", "eval_input_path", "/fixture/eval.parquet",
-                "task.label.weight", "1", "task_hidden_units", "8, 8");
+                "task.label.weight", "1", "task_hidden_units", "8, 8", "enable_train_metrics", "false",
+                "task.label.metrics", "auc,normalized_entropy", "tensorboard_summaries", "gradient_norm", "is_profiling", "false");
         String yaml = controller.genModelTrainK8sYaml(model, train(runtime));
         assertTrue(yaml.contains("eval_input_path:"));
         assertTrue(yaml.contains("batch_size: 16"));
+        assertFalse(yaml.contains("train_metrics"));
+        assertTrue(yaml.contains("tensorboard_summaries: \"gradient_norm\""));
+        assertTrue(yaml.contains("is_profiling: false"));
         export.setParams(Map.of("batch_size", "16"));
         assertTrue(controller.genModelExportK8sYaml(model, export).contains("mmoe {"));
         assertEquals(List.of("v1_export"), controller.getExportCheckpoints(export));

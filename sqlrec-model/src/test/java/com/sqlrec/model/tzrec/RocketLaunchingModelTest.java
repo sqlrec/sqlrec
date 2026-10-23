@@ -85,8 +85,14 @@ class RocketLaunchingModelTest {
             assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
             assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
         }
-        Map<String, String> runtime = Map.of("batch_size", "16", "dense_lr", "0.02", "booster_hidden_units", "16, 8");
-        assertTrue(controller.genModelTrainK8sYaml(model, train(runtime)).contains("batch_size: 16"));
+        Map<String, String> runtime = Map.of("batch_size", "16", "dense_lr", "0.02", "booster_hidden_units", "16, 8",
+                "enable_train_metrics", "false", "train_metric_decay_rate", "0.8",
+                "tensorboard_summaries", "parameter,gradient", "is_profiling", "false");
+        String yaml = controller.genModelTrainK8sYaml(model, train(runtime));
+        assertTrue(yaml.contains("batch_size: 16"));
+        assertFalse(yaml.contains("train_metrics"));
+        assertTrue(yaml.contains("tensorboard_summaries: \"parameter\""));
+        assertTrue(yaml.contains("tensorboard_summaries: \"gradient\""));
         export.setParams(Map.of("batch_size", "16"));
         assertTrue(controller.genModelExportK8sYaml(model, export).contains("rocket_launching {"));
         service.setParams(Map.of("replicas", "2"));

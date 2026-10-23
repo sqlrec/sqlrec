@@ -208,6 +208,12 @@ data:
             }
         }
         num_epochs: 1
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 2048
@@ -287,6 +293,20 @@ data:
                 top_k: 5
             }
         }
+        metrics {
+            recall_at_k {
+                top_k: 10
+            }
+        }
+        metrics {
+            recall_at_k {
+                top_k: 20
+            }
+        }
+        train_metrics { recall_at_k { top_k: 1 } }
+        train_metrics { recall_at_k { top_k: 5 } }
+        train_metrics { recall_at_k { top_k: 10 } }
+        train_metrics { recall_at_k { top_k: 20 } }
         losses {
             softmax_cross_entropy {}
         }
@@ -415,6 +435,12 @@ data:
             }
         }
         num_epochs: 1
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 8192
@@ -485,6 +511,20 @@ data:
                 top_k: 5
             }
         }
+        metrics {
+            recall_at_k {
+                top_k: 10
+            }
+        }
+        metrics {
+            recall_at_k {
+                top_k: 20
+            }
+        }
+        train_metrics { recall_at_k { top_k: 1 } }
+        train_metrics { recall_at_k { top_k: 5 } }
+        train_metrics { recall_at_k { top_k: 10 } }
+        train_metrics { recall_at_k { top_k: 20 } }
         losses {
             softmax_cross_entropy {}
         }
@@ -613,6 +653,12 @@ data:
             }
         }
         num_epochs: 1
+        use_tensorboard: true
+        tensorboard_summaries: "loss"
+        tensorboard_summaries: "learning_rate"
+        tensorboard_summaries: "global_gradient_norm"
+        log_step_count_steps: 100
+        save_checkpoints_steps: 1000
     }
     data_config {
         batch_size: 8192
@@ -683,6 +729,20 @@ data:
                 top_k: 5
             }
         }
+        metrics {
+            recall_at_k {
+                top_k: 10
+            }
+        }
+        metrics {
+            recall_at_k {
+                top_k: 20
+            }
+        }
+        train_metrics { recall_at_k { top_k: 1 } }
+        train_metrics { recall_at_k { top_k: 5 } }
+        train_metrics { recall_at_k { top_k: 10 } }
+        train_metrics { recall_at_k { top_k: 20 } }
         losses {
             softmax_cross_entropy {}
         }
@@ -856,6 +916,20 @@ data:
                 top_k: 5
             }
         }
+        metrics {
+            recall_at_k {
+                top_k: 10
+            }
+        }
+        metrics {
+            recall_at_k {
+                top_k: 20
+            }
+        }
+        train_metrics { recall_at_k { top_k: 1 } }
+        train_metrics { recall_at_k { top_k: 5 } }
+        train_metrics { recall_at_k { top_k: 10 } }
+        train_metrics { recall_at_k { top_k: 20 } }
         losses {
             softmax_cross_entropy {}
         }

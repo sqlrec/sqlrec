@@ -69,8 +69,9 @@ final class MultiTaskOptions {
             }
             float weight = Float.parseFloat(params.getOrDefault(prefix + "weight", "1.0"));
             if (!Float.isFinite(weight) || weight <= 0) throw new IllegalArgumentException(prefix + "weight must be finite and positive float32");
-            List<String> metrics = csv(params.getOrDefault(prefix + "metrics", type.equals("binary") ? "auc" : "mean_squared_error"), prefix + "metrics");
-            Set<String> allowed = type.equals("binary") ? Set.of("auc", "accuracy") : Set.of("mean_squared_error", "mean_absolute_error");
+            List<String> defaults = type.equals("binary") ? MetricOptions.BINARY : MetricOptions.REGRESSION;
+            List<String> metrics = csv(params.getOrDefault(prefix + "metrics", String.join(",", defaults)), prefix + "metrics");
+            Set<String> allowed = Set.copyOf(defaults);
             if (!allowed.containsAll(metrics) || new HashSet<>(metrics).size() != metrics.size()) throw new IllegalArgumentException("Metrics do not match task type or are duplicated: " + label);
             TaskSpec task = new TaskSpec(label, type, hiddenUnits(params.getOrDefault(prefix + "hidden_units", defaultUnits)), weight, List.copyOf(metrics));
             if (folded.contains(task.outputName().toLowerCase(Locale.ROOT))) throw new IllegalArgumentException("Task output conflicts with input: " + task.outputName());
