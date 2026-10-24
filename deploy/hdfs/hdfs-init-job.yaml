@@ -3,9 +3,13 @@ kind: Job
 metadata:
   name: hdfs-namenode-init
 spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: ${DEPLOY_TIMEOUT}
   template:
     spec:
-      restartPolicy: OnFailure
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/hostname: "${HDFS_NODE_HOSTNAME}"
       containers:
       - name: init
         image: debian:${DEBIAN_IMAGE_VERSION}
@@ -13,9 +17,17 @@ spec:
         - /bin/bash
         - -c
         - |
-          mkdir -p ${HDFS_NAMENODE_DATA_DIR}
-          mkdir -p ${HDFS_DATANODE_DATA_DIR}
-          ${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs namenode -format
+          set -eu
+          if [ -s "${HDFS_NAMENODE_DATA_DIR}/current/VERSION" ]; then
+            echo 'NameNode already initialized; preserving existing metadata.'
+            exit 0
+          fi
+          mkdir -p "${HDFS_NAMENODE_DATA_DIR}"
+          if find "${HDFS_NAMENODE_DATA_DIR}" -mindepth 1 -maxdepth 1 ! -name lost+found -print -quit | grep -q .; then
+            echo 'ERROR: NameNode directory is nonempty but has no VERSION; refusing to format.' >&2
+            exit 1
+          fi
+          "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs" namenode -format -nonInteractive
         env:
         - name: JAVA_HOME
           value: ${CONTAINER_JAVA_HOME}
@@ -24,8 +36,6 @@ spec:
           mountPath: ${CLIENT_DIR}
         - name: namenode-data
           mountPath: ${HDFS_NAMENODE_DATA_DIR}
-        - name: datanode-data
-          mountPath: ${HDFS_DATANODE_DATA_DIR}
       volumes:
       - name: client-pv
         persistentVolumeClaim:
@@ -33,6 +43,3 @@ spec:
       - name: namenode-data
         persistentVolumeClaim:
           claimName: ${HDFS_NAMENODE_PVC_NAME}
-      - name: datanode-data
-        persistentVolumeClaim:
-          claimName: ${HDFS_DATANODE_PVC_NAME}

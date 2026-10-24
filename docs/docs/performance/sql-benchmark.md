@@ -45,7 +45,7 @@
 
 训练 SQL 显式开启训练指标和全部六种原生 TensorBoard summary：loss、学习率、梯度总范数、逐参数梯度范数、参数直方图、梯度直方图。排序模型记录训练 AUC/Accuracy，召回模型记录训练 Recall@1/5/10/20。直方图采集增加的是准备阶段开销，不计入 `wrk` 压测时间；验证曲线另需配置 `eval_input_path`。
 
-`init.sh` 生成 `ml_sample`、`ml_recall_sample` 样本，训练并导出 `rank_model`、`recall_model`，部署 `rank-service`、`recall-service-user`、`recall-service-item`，并生成 Milvus 物品向量。
+`init.sh` 保留 JuiceFS 上的 `ml_sample`、`ml_recall_sample`，并生成内容相同的 HDFS 副本 `ml_sample_hdfs`、`ml_recall_sample_hdfs`。排序模型 `rank_model` 继续使用 JuiceFS；DSSM 模型 `recall_model_hdfs` 使用 HDFS 召回样本，训练 checkpoint、TensorBoard 事件和双塔导出均写入 HDFS。独立模型名避免已有环境的 `IF NOT EXISTS` 沿用旧 JuiceFS 定义。部署的服务仍为 `rank-service`、`recall-service-user`、`recall-service-item`，后续生成的 Milvus 物品向量来自 HDFS 模型。
 
 ## 环境前提
 

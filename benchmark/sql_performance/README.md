@@ -21,6 +21,40 @@ bash benchmark.sh
 registers the recommendation SQL functions and API. These preparation steps are
 outside the timed benchmark.
 
+HDFS and JuiceFS must both be deployed (`deploy_components.sh` includes both).
+`ml_sample` and `ml_recall_sample` remain on JuiceFS; feature preparation copies
+them into `ml_sample_hdfs` and `ml_recall_sample_hdfs` on `hdfs://myhdfs`.
+WideAndDeep (`rank_model`) trains, exports, and serves from JuiceFS. DSSM
+(`recall_model_hdfs`) uses the HDFS recall samples and stores checkpoints,
+TensorBoard events, and both tower exports on HDFS. The existing recall service
+names are retained, so online feature loading and requests use the HDFS model.
+The separate DSSM model name also avoids reusing an older JuiceFS definition
+through `CREATE MODEL IF NOT EXISTS`.
+
+On ARM, run `bash deploy/hadoop/init.sh` after updating an older deployment,
+then `bash deploy/hdfs/deploy.sh`. The Hadoop archive must match
+`CONTAINER_ARCH`; Python training requires its native `libhdfs.so`, even when
+the Java Hadoop CLI already works. Each initializer run refreshes native libraries
+in existing clients while preserving configuration and additional JARs.
+The single-DataNode deployment also disables pipeline node replacement so that
+PyArrow's default replication request does not break TensorBoard event appends.
+Rebuild the TZRec image with `bash bin/build_model_docker.sh tzrec` when upgrading
+an existing installation: HDFS export needs the directory-glob fix and the pinned
+fsspec version that supports PyTorch checkpoint stream reads.
+Use a SQLRec server image built from the current source as well, so generated
+service names and training options match these SQL files.
+
+The deployed storage integration tests exercise both backends explicitly:
+
+```bash
+bash bin/test.sh -pl sqlrec-core -am \
+  -Dtest=RemoteHdfsAccessIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Run this command from the repository root. `HADOOP_TEST_HDFS_URI` and
+`HADOOP_TEST_JUICEFS_URI` override the test endpoints (defaults:
+`hdfs://myhdfs` and `jfs://myjfs`); an unavailable backend fails the test.
+
 `ml_ratings.rating` retains the normalized original MovieLens score `(score - 1) / 4`.
 `compute_features.sql` creates binary `FLOAT` labels in `ml_sample.rating`: original
 scores of 4 or 5 map to `1.0`, and scores of 1 through 3 map to `0.0`. TZRec training

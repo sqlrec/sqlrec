@@ -1,6 +1,7 @@
 """Train/export with checkpoint-owned structure and complete export publication."""
 
 import argparse
+import glob
 import hashlib
 import importlib.metadata
 import json
@@ -14,6 +15,7 @@ import fsspec
 import torch
 
 import common
+from common import filesystem as shared_filesystem
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
 from validate_export import REQUIRED_FILES
@@ -60,6 +62,10 @@ def main():
     parser.add_argument("--check_checkpoint_structure", action="store_true")
     parser.add_argument("--checkpoint_structure_options", default="{}")
     args = parser.parse_args()
+    if os.getenv("USE_FSSPEC") == "1":
+        # Use the shared glob implementation for directory discovery and URI
+        # authority preservation across both Hadoop and JuiceFS clients.
+        glob.glob = shared_filesystem._patched_glob
     os.environ.setdefault("USE_FARM_HASH_TO_BUCKETIZE", "true")
     if args.mode == "export" and (int(os.getenv("WORLD_SIZE", "1")) != 1 or int(os.getenv("RANK", "0")) != 0):
         raise ValueError("TZRec export requires a single process")

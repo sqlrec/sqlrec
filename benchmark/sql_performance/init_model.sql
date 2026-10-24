@@ -16,6 +16,7 @@ create model if not exists `rank_model`
 )
 with (
 'model'='tzrec.wide_and_deep',
+'MODEL_PATH'='jfs://myjfs/user/sqlrec/models/rank_model',
 'label_columns'='rating',
 'random_seed'='123',
 'embedding_dim'='16',
@@ -76,7 +77,8 @@ SELECT
 
 call call_service('rank-service', t1);
 
-create model if not exists `recall_model`
+-- A separate name avoids reusing an existing JuiceFS model through IF NOT EXISTS.
+create model if not exists `recall_model_hdfs`
 (
  `user_id` BIGINT,
  `movie_id` BIGINT,
@@ -90,6 +92,7 @@ create model if not exists `recall_model`
 )
 with (
 'model'='tzrec.dssm',
+'MODEL_PATH'='hdfs://myhdfs/user/sqlrec/models/recall_model_hdfs',
 'label_columns'='rating',
 'random_seed'='123',
 'embedding_dim'='16',
@@ -110,7 +113,7 @@ with (
 'column.genre_count.normalizer'='method=minmax,min=0,max=18'
 );
 
-train model recall_model checkpoint='v1' on ml_recall_sample
+train model recall_model_hdfs checkpoint='v1' on ml_recall_sample_hdfs
 with (
 'use_tensorboard'='true',
 'enable_train_metrics'='true',
@@ -120,19 +123,19 @@ with (
 'pod_memory'='4Gi'
 );
 
-export model recall_model checkpoint='v1' on ml_recall_sample
+export model recall_model_hdfs checkpoint='v1' on ml_recall_sample_hdfs
 with (
 'NAMESPACE'='${NAMESPACE}',
 'pod_cpu_cores'='2',
 'pod_memory'='4Gi'
 );
 
-create service `recall-service-user` on model recall_model checkpoint='v1_export/user'
+create service `recall-service-user` on model recall_model_hdfs checkpoint='v1_export/user'
 with (
 'NAMESPACE'='${NAMESPACE}'
 );
 
-create service `recall-service-item` on model recall_model checkpoint='v1_export/item'
+create service `recall-service-item` on model recall_model_hdfs checkpoint='v1_export/item'
 with (
 'NAMESPACE'='${NAMESPACE}'
 );

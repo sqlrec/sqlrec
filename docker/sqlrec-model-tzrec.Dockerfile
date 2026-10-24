@@ -34,7 +34,6 @@ RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
         'common_io @ https://tzrec.oss-accelerate.aliyuncs.com/third_party/common_io-0.4.1%2Btunnel-py2.py3-none-any.whl' \
         confluent-kafka \
         'feature_store_py @ https://feature-store-py.oss-cn-beijing.aliyuncs.com/package/feature_store_py-2.2.7-py3-none-any.whl' \
-        fsspec \
         'grpcio-tools<1.63.0' \
         'numpy==1.26.4' packaging pandas psutil \
         'pyodps==0.12.5.1' \
@@ -56,9 +55,10 @@ COPY tzrec-*.whl /tmp/
 
 # Apply the deployment pins on both architectures together with the final pip
 # dependencies. Keep these versions aligned with compat's test requirements.
+# fsspec must expose ArrowFile.readinto for PyTorch HDFS checkpoint restoration.
 RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
     python -c 'import sys; assert sys.version_info[:2] == (3, 11)' \
-    && pip install 'numpy==1.26.4' 'pyarrow==17.0.0' /tmp/juicefs-*.whl flask \
+    && pip install 'numpy==1.26.4' 'pyarrow==17.0.0' 'fsspec==2026.9.0' /tmp/juicefs-*.whl flask \
     && pip install --no-deps /tmp/tzrec-*.whl \
     && rm -f /tmp/*.whl \
     && python -c 'import torch; print(f"PyTorch {torch.__version__}, CUDA {torch.version.cuda}"); assert torch.version.cuda is None, "TZRec CPU images require a CPU-only PyTorch build"' \

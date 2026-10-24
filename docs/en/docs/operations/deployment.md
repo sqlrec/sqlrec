@@ -72,7 +72,7 @@ This flow installs components in the cluster selected by the current kubeconfig 
 2. Prepare a StorageClass supporting **ReadWriteMany (RWX)** and set `STORAGE_CLASS` so clients and JARs can be shared across nodes. The script checks that the class exists; the cluster administrator must confirm RWX support.
 3. Ensure a usable default StorageClass is available for data volumes such as PostgreSQL and RustFS. It can differ from the RWX class used for clients.
 4. Select a worker node address reachable from both the deployment machine and pods as `NODE_IP`, and ensure the required NodePorts are accessible. Discovery selects a Ready worker that is not cordoned, excludes control-plane nodes, and uses its InternalIP. Set a reachable address explicitly if the deployment machine cannot reach that InternalIP.
-5. If the deployment machine and cluster nodes have different architectures, set `CONTAINER_ARCH=amd64` or `arm64` before downloading resources to select container Java. This does not change host Java or automatically reconcile different architectures within a cluster.
+5. If the deployment machine and cluster nodes have different architectures, set `CONTAINER_ARCH=amd64` or `arm64` before downloading resources to select container Java and Hadoop native libraries. This does not change host Java or automatically reconcile different architectures within a cluster.
 
 ### Deployment Example
 
@@ -100,7 +100,9 @@ bash ./bin/beeline.sh
 
 `K8S_APISERVER_ADDR` is read from the current kubeconfig by default, in the form `k8s://https://...`. It accesses the Kubernetes API and is separate from `NODE_IP`, which is used for NodePorts.
 
-`deploy_components.sh` deploys PostgreSQL, RustFS/JuiceFS, Hadoop configuration, Spark configuration, HMS, Flink SQL Gateway, SQLRec, and Kafka, Redis, and Milvus by default. Milvus runs in `${NAMESPACE}-milvus`. HDFS, MongoDB, Kyuubi, Jupyter, and observability components use their own deployment scripts.
+`deploy_components.sh` deploys PostgreSQL, RustFS/JuiceFS, Hadoop configuration, HDFS, Spark configuration, HMS, Flink SQL Gateway, SQLRec, and Kafka, Redis, and Milvus by default. Milvus runs in `${NAMESPACE}-milvus`. MongoDB, Kyuubi, Jupyter, and observability components use their own deployment scripts. The default filesystem remains `jfs://myjfs`; access HDFS explicitly through `hdfs://myhdfs`.
+
+HDFS runs one NameNode and one DataNode on the node identified by `NODE_IP`. Deployment waits for readiness and verifies actual remote writes and reads. Redeployment checks `current/VERSION` on the volume and preserves existing metadata. Hadoop downloads match `CONTAINER_ARCH`; older ARM deployments must rerun `deploy/hadoop/init.sh` to refresh the native libraries required by Python/PyArrow, followed by the HDFS deployment script.
 
 ## Storage and Resource Synchronization
 

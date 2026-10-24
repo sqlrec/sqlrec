@@ -115,6 +115,30 @@ class FilesystemTest(unittest.TestCase):
                 ["hdfs://host:8020/data/model.parquet"],
             )
 
+    def test_directory_glob_normalizes_arrow_pattern_and_excludes_files(self):
+        class ArrowFS:
+            @staticmethod
+            def _strip_protocol(path):
+                return path.removeprefix("hdfs://host:8020")
+
+            @staticmethod
+            def glob(pattern, **kwargs):
+                # Reproduce Arrow/HDFS: a directory glob ending in / is empty.
+                if pattern.endswith("/"):
+                    return []
+                return ["/model/model.ckpt-1000", "/model/model.ckpt-2000", "/model/model.ckpt-notes"]
+
+            @staticmethod
+            def isdir(path):
+                return not path.endswith("notes")
+
+        pattern = "hdfs://host:8020/model/model.ckpt-*/"
+        with patch.object(filesystem, "url_to_fs", return_value=(ArrowFS(), pattern)):
+            self.assertEqual(filesystem._patched_glob(pattern), [
+                "hdfs://host:8020/model/model.ckpt-1000",
+                "hdfs://host:8020/model/model.ckpt-2000",
+            ])
+
     def test_source_is_closed_if_destination_cannot_be_opened(self):
         with tempfile.TemporaryDirectory() as local_dir:
             source = Path(local_dir) / "source"

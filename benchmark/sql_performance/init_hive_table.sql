@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS `ml_sample` (
  `age_years` FLOAT,
  `genre_count` FLOAT
 ) PARTITIONED BY (`dt` STRING)
-    STORED AS PARQUET;
+    STORED AS PARQUET
+    LOCATION 'jfs://myjfs/user/hive/warehouse/ml_sample';
 
 CREATE TABLE IF NOT EXISTS `ml_recall_sample` (
  `user_id` BIGINT,
@@ -85,7 +86,16 @@ CREATE TABLE IF NOT EXISTS `ml_recall_sample` (
  `age_years` FLOAT,
  `genre_count` FLOAT
 ) PARTITIONED BY (`dt` STRING)
-    STORED AS PARQUET;
+    STORED AS PARQUET
+    LOCATION 'jfs://myjfs/user/hive/warehouse/ml_recall_sample';
+
+-- Keep identical samples on both storage backends. DSSM uses the HDFS copy,
+-- while ranking continues to use the original JuiceFS table.
+CREATE TABLE IF NOT EXISTS `ml_sample_hdfs` LIKE `ml_sample`
+    LOCATION 'hdfs://myhdfs/user/hive/warehouse/ml_sample_hdfs';
+
+CREATE TABLE IF NOT EXISTS `ml_recall_sample_hdfs` LIKE `ml_recall_sample`
+    LOCATION 'hdfs://myhdfs/user/hive/warehouse/ml_recall_sample_hdfs';
 
 ALTER TABLE `ml_users` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');
 ALTER TABLE `ml_movies` ADD IF NOT EXISTS PARTITION (`dt` = '2024-01-01');

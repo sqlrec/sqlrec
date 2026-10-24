@@ -45,7 +45,7 @@ The models include two `FLOAT` features: `age_years = CAST(age AS FLOAT)` and `g
 
 Training SQL explicitly enables training metrics and all six native TensorBoard summary types: loss, learning rate, total gradient norm, per-parameter gradient norm, parameter histograms, and gradient histograms. Ranking records training AUC/Accuracy, and recall records training Recall@1/5/10/20. Histogram collection adds preparation overhead outside the timed `wrk` run. Evaluation curves additionally require `eval_input_path`.
 
-`init.sh` generates samples in `ml_sample` and `ml_recall_sample`, trains and exports `rank_model` and `recall_model`, deploys `rank-service`, `recall-service-user`, and `recall-service-item`, and generates the Milvus item vectors.
+`init.sh` keeps `ml_sample` and `ml_recall_sample` on JuiceFS and creates identical HDFS copies in `ml_sample_hdfs` and `ml_recall_sample_hdfs`. Ranking (`rank_model`) continues to use JuiceFS. DSSM (`recall_model_hdfs`) reads the HDFS recall samples and writes training checkpoints, TensorBoard events, and both tower exports to HDFS. The separate model name prevents `IF NOT EXISTS` from retaining an older JuiceFS definition. Service names remain `rank-service`, `recall-service-user`, and `recall-service-item`; subsequent Milvus item vectors come from the HDFS model.
 
 ## Prerequisites
 

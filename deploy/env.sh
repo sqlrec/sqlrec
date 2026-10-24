@@ -209,6 +209,10 @@ export OPENSEARCH_PASSWORD="${OPENSEARCH_PASSWORD:-Sqlrec_123456}"
 export OPENSEARCH_DASHBOARDS_PORT="${OPENSEARCH_DASHBOARDS_PORT:-30027}"
 
 # Downloadable clients and libraries
+# Java distribution (also initializes and validates CONTAINER_ARCH).
+export JAVA_VERSION="${JAVA_VERSION:-8.472.08.1}"
+configure_java_distribution || { return 1 2>/dev/null || exit 1; }
+
 # JuiceFS
 export JFS_LATEST_TAG="${JFS_LATEST_TAG:-1.3.1}"
 export JUICEFS_PLATFORM="${DEPLOY_OS}"
@@ -219,8 +223,12 @@ export JUICEFS_HADOOP_JAR_NAME="juicefs-hadoop-${JFS_LATEST_TAG}.jar"
 
 # Hadoop, Hive, Spark, and Kyuubi distributions
 export HADOOP_CLIENT_DIR_NAME="hadoop-${HADOOP_VERSION}"
-export HADOOP_CLIENT_ARCH_NAME="${HADOOP_CLIENT_DIR_NAME}.tar.gz"
-export HADOOP_CLIENT_URL="https://dlcdn.apache.org/hadoop/common/${HADOOP_CLIENT_DIR_NAME}/${HADOOP_CLIENT_ARCH_NAME}"
+case "${CONTAINER_ARCH}" in
+    amd64) export HADOOP_CLIENT_ARCH_NAME="${HADOOP_CLIENT_DIR_NAME}.tar.gz" ;;
+    arm64) export HADOOP_CLIENT_ARCH_NAME="${HADOOP_CLIENT_DIR_NAME}-aarch64.tar.gz" ;;
+    *) echo 'ERROR: CONTAINER_ARCH must be amd64 or arm64.' >&2; return 1 2>/dev/null || exit 1 ;;
+esac
+export HADOOP_CLIENT_URL="https://archive.apache.org/dist/hadoop/common/${HADOOP_CLIENT_DIR_NAME}/${HADOOP_CLIENT_ARCH_NAME}"
 
 export HIVE_CLIENT_DIR_NAME="apache-hive-${HIVE_VERSION}-bin"
 export HIVE_CLIENT_ARCH_NAME="${HIVE_CLIENT_DIR_NAME}.tar.gz"
@@ -247,10 +255,6 @@ export SQLREC_FLINK_JAR_NAME="sqlrec-flink-${SQLREC_VERSION}.jar"
 export POSTGRESQL_CONNECTOR_VERSION="${POSTGRESQL_CONNECTOR_VERSION:-42.7.8}"
 export POSTGRESQL_CONNECTOR_JAR_NAME="postgresql-${POSTGRESQL_CONNECTOR_VERSION}.jar"
 export POSTGRESQL_CONNECTOR_JAR_URL="https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRESQL_CONNECTOR_VERSION}/${POSTGRESQL_CONNECTOR_JAR_NAME}"
-
-# Java distribution
-export JAVA_VERSION="${JAVA_VERSION:-8.472.08.1}"
-configure_java_distribution || { return 1 2>/dev/null || exit 1; }
 
 # Runtime locations
 export HADOOP_HOME="${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}"

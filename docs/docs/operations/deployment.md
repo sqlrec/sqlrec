@@ -72,7 +72,7 @@ bash ./cache_images.sh save
 2. 准备支持 **ReadWriteMany（RWX）** 的 StorageClass，通过 `STORAGE_CLASS` 指定，供客户端和 JAR 跨节点共享。脚本会检查 StorageClass 是否存在，实际 RWX 能力需由集群管理员确认。
 3. 确保集群有可用的默认 StorageClass，供 PostgreSQL、RustFS 等组件创建数据卷。它可以与客户端使用的 RWX StorageClass 不同。
 4. 选择部署机器和 Pod 都能访问的工作节点地址作为 `NODE_IP`，并确认所用 NodePort 可达。自动发现只选择 Ready、未被 cordon 的工作节点，排除管控面节点；默认取工作节点的 InternalIP。部署机器无法访问 InternalIP 时应显式设置可达地址。
-5. 如果部署机器和集群节点架构不同，在下载资源前设置 `CONTAINER_ARCH=amd64` 或 `arm64`，用于选择容器内 Java。它不会改变部署机器使用的 Java 架构，也不会自动统一集群中不同节点的架构。
+5. 如果部署机器和集群节点架构不同，在下载资源前设置 `CONTAINER_ARCH=amd64` 或 `arm64`，用于选择容器内 Java 和 Hadoop 原生库。它不会改变部署机器使用的 Java 架构，也不会自动统一集群中不同节点的架构。
 
 ### 部署示例
 
@@ -100,7 +100,9 @@ bash ./bin/beeline.sh
 
 `K8S_APISERVER_ADDR` 默认从当前 kubeconfig 中读取，格式为 `k8s://https://...`；它用于访问 Kubernetes API，与 NodePort 使用的 `NODE_IP` 不同。
 
-`deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop 配置、Spark 配置、HMS、Flink SQL Gateway、SQLRec，以及 Kafka、Redis、Milvus。Milvus 位于 `${NAMESPACE}-milvus` 命名空间。HDFS、MongoDB、Kyuubi、Jupyter、监控等组件通过各自脚本单独启用。
+`deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop 配置、HDFS、Spark 配置、HMS、Flink SQL Gateway、SQLRec，以及 Kafka、Redis、Milvus。Milvus 位于 `${NAMESPACE}-milvus` 命名空间。MongoDB、Kyuubi、Jupyter、监控等组件通过各自脚本单独启用。默认文件系统仍为 `jfs://myjfs`，HDFS 使用 `hdfs://myhdfs` 显式访问。
+
+HDFS 使用单 NameNode、单 DataNode，并绑定到 `NODE_IP` 对应节点；部署脚本等待节点就绪后执行真实读写检查。重复部署通过卷内 `current/VERSION` 判断初始化状态，保留已有元数据。ARM 环境的 Hadoop 下载包按 `CONTAINER_ARCH` 选择；旧部署需重新执行 `deploy/hadoop/init.sh`，更新 Python/PyArrow 所需的 ARM 原生库，再运行 HDFS 部署脚本。
 
 ## 存储与资源同步
 

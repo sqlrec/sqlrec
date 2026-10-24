@@ -25,6 +25,7 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
   links="$(ldd /app/tzrec_server 2>&1)"
   if [[ "$links" == *"not found"* ]]; then printf "%s\n" "$links"; exit 1; fi
   python -c "import ctypes, pathlib, flask, graphlearn, juicefs, pyarrow, pyfg, server, torch, torchrec, tzrec.main; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name(\"libjfs.so\")))"
+  python -c "import io; from fsspec.implementations.arrow import ArrowFile; stream = ArrowFile(None, io.BytesIO(b\"checkpoint\"), \"/fixture\", \"rb\"); buffer = bytearray(10); assert stream.readinto(buffer) == 10 and buffer == b\"checkpoint\"; stream.close()"
   python /tests/tzrec_pipeline_config_tests.py
   python /tests/tzrec_dssm_tests.py
   python /tests/tzrec_pool_sampler_tests.py

@@ -7,6 +7,8 @@ metadata:
     component: namenode
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: hadoop
@@ -18,10 +20,17 @@ spec:
         component: namenode
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: "${HDFS_NODE_HOSTNAME}"
       containers:
       - name: namenode
         image: debian:${DEBIAN_IMAGE_VERSION}
         command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "namenode"]
+        readinessProbe:
+          tcpSocket:
+            port: ${HDFS_NAMENODE_PORT}
+          periodSeconds: 5
         env:
         - name: JAVA_HOME
           value: ${CONTAINER_JAVA_HOME}
@@ -47,6 +56,8 @@ metadata:
     component: datanode
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: hadoop
@@ -58,10 +69,17 @@ spec:
         component: datanode
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: "${HDFS_NODE_HOSTNAME}"
       containers:
       - name: datanode
         image: debian:${DEBIAN_IMAGE_VERSION}
         command: ["${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}/bin/hdfs", "datanode"]
+        readinessProbe:
+          tcpSocket:
+            port: ${HDFS_DATANODE_PORT}
+          periodSeconds: 5
         env:
         - name: JAVA_HOME
           value: ${CONTAINER_JAVA_HOME}

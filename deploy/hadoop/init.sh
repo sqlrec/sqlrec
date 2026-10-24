@@ -10,6 +10,10 @@ fi
 
 if [ ! -e "${CLIENT_DIR}/${HADOOP_CLIENT_DIR_NAME}" ]; then
   tar -xzf "${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME}" -C "${CLIENT_DIR}"
+else
+  # Refresh native libraries on every run, preserving existing config and JARs.
+  tar -xzf "${CLIENT_DIR}/${HADOOP_CLIENT_ARCH_NAME}" -C "${CLIENT_DIR}" \
+    "${HADOOP_CLIENT_DIR_NAME}/lib/native"
 fi
 
 if [ ! -f "${CLIENT_DIR}/${JAVA_CLIENT_ARCH_NAME}" ]; then

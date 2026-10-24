@@ -12,6 +12,12 @@
         <name>dfs.replication</name>
         <value>1</value>
     </property>
+    <!-- This development cluster has one DataNode. PyArrow defaults to three
+         replicas, so appended TensorBoard files must not require a new node. -->
+    <property>
+        <name>dfs.client.block.write.replace-datanode-on-failure.policy</name>
+        <value>NEVER</value>
+    </property>
     <property>
         <name>dfs.namenode.name.dir</name>
         <value>${HDFS_NAMENODE_DATA_DIR}</value>

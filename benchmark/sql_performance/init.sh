@@ -101,23 +101,23 @@ curl --request POST \
 bash "${dir}/../../bin/setup_python_env.sh"
 "${dir}/../../.venv/bin/python" "${dir}/download_data.py"
 
-HDFS_WAREHOUSE_DIR="/user/hive/warehouse"
+JFS_WAREHOUSE_DIR="jfs://myjfs/user/hive/warehouse"
 PARTITION_DATE="dt=2024-01-01"
 
 USERS_PARQUET="${dir}/ml_users.parquet"
 MOVIES_PARQUET="${dir}/ml_movies.parquet"
 RATINGS_PARQUET="${dir}/ml_ratings.parquet"
 
-hdfs dfs -mkdir -p ${HDFS_WAREHOUSE_DIR}/ml_users/${PARTITION_DATE}
-hdfs dfs -put -f ${USERS_PARQUET} ${HDFS_WAREHOUSE_DIR}/ml_users/${PARTITION_DATE}/
+hdfs dfs -mkdir -p "${JFS_WAREHOUSE_DIR}/ml_users/${PARTITION_DATE}"
+hdfs dfs -put -f "${USERS_PARQUET}" "${JFS_WAREHOUSE_DIR}/ml_users/${PARTITION_DATE}/"
 echo "Users parquet file uploaded successfully"
 
-hdfs dfs -mkdir -p ${HDFS_WAREHOUSE_DIR}/ml_movies/${PARTITION_DATE}
-hdfs dfs -put -f ${MOVIES_PARQUET} ${HDFS_WAREHOUSE_DIR}/ml_movies/${PARTITION_DATE}/
+hdfs dfs -mkdir -p "${JFS_WAREHOUSE_DIR}/ml_movies/${PARTITION_DATE}"
+hdfs dfs -put -f "${MOVIES_PARQUET}" "${JFS_WAREHOUSE_DIR}/ml_movies/${PARTITION_DATE}/"
 echo "Movies parquet file uploaded successfully"
 
-hdfs dfs -mkdir -p ${HDFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}
-hdfs dfs -put -f ${RATINGS_PARQUET} ${HDFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}/
+hdfs dfs -mkdir -p "${JFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}"
+hdfs dfs -put -f "${RATINGS_PARQUET}" "${JFS_WAREHOUSE_DIR}/ml_ratings/${PARTITION_DATE}/"
 echo "Ratings parquet file uploaded successfully"
 
 envsubst < ${dir}/init_flink_table.sql > ${dir}/init_flink_table.sql.tmp

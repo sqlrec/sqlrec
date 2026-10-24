@@ -266,8 +266,14 @@ def _patched_glob(pattern, *args, **kwargs):
         native_pattern = fs._strip_protocol(full)
         suffix = native_pattern.lstrip("/")
         prefix = full[:-len(suffix)] if suffix else full
+        # Arrow's HDFS glob returns no matches for a trailing slash. Preserve
+        # Python's directory-only semantics, used by TZRec checkpoint discovery.
+        directories_only = native_pattern.endswith("/")
+        if directories_only:
+            native_pattern = native_pattern.rstrip("/")
         return [path if "://" in path else prefix + path.lstrip("/")
-                for path in fs.glob(native_pattern, *args, **kwargs)]
+                for path in fs.glob(native_pattern, *args, **kwargs)
+                if not directories_only or fs.isdir(path)]
     return _original_glob(pattern, *args, **kwargs)
 
 

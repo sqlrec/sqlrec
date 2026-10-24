@@ -134,3 +134,16 @@ SELECT
     genre_count
 FROM ml_sample
 WHERE rating > 0.5 AND dt = '2024-01-01';
+
+-- Copy the exact computed samples, including binary labels and dense features.
+INSERT OVERWRITE TABLE ml_sample_hdfs PARTITION(dt='2024-01-01')
+SELECT user_id, movie_id, rating, `timestamp`, genres, gender, age,
+       occupation, zip_code, age_years, genre_count
+FROM ml_sample
+WHERE dt = '2024-01-01';
+
+INSERT OVERWRITE TABLE ml_recall_sample_hdfs PARTITION(dt='2024-01-01')
+SELECT user_id, movie_id, rating, `timestamp`, genres, gender, age,
+       occupation, zip_code, age_years, genre_count
+FROM ml_recall_sample
+WHERE dt = '2024-01-01';
