@@ -20,6 +20,85 @@ import torch
 
 
 class CheckpointConfigTest(unittest.TestCase):
+    def test_training_resume_uses_output_checkpoint_structure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            requested = self.config("wide_and_deep")
+            requested.model_dir = str(root / "model")
+            requested.train_config.fine_tune_checkpoint = str(root / "missing-base")
+            saved = self.config("wide_and_deep")
+            saved.feature_configs[0].id_feature.embedding_dim = 32
+            saved.train_config.sparse_optimizer.adagrad_optimizer.lr = .03
+            Path(requested.model_dir).mkdir()
+            (Path(requested.model_dir) / "model.ckpt-0").mkdir()
+            config_util.save_message(saved, requested.model_dir + "/pipeline.config")
+            path = root / "request.config"
+            config_util.save_message(requested, str(path))
+            snapshots = []
+            with (patch.object(sys, "argv", ["run.py", "--mode", "train", "--continue_train",
+                                            "--pipeline_config_path", str(path)]),
+                  patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
+                        snapshots.append(config_util.load_pipeline_config(path))) as train):
+                main()
+            self.assertEqual(snapshots[0].feature_configs, saved.feature_configs)
+            self.assertEqual(snapshots[0].model_dir, requested.model_dir)
+            self.assertFalse(snapshots[0].train_config.HasField("fine_tune_checkpoint"))
+            self.assertTrue(train.call_args.kwargs["continue_train"])
+            self.assertTrue(train.call_args.kwargs["ignore_restore_optimizer"])
+
+    def test_training_resume_without_checkpoint_starts_normally(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            requested = self.config("wide_and_deep")
+            requested.model_dir = str(root / "model")
+            path = root / "request.config"
+            config_util.save_message(requested, str(path))
+            for resume in (False, True):
+                argv = ["run.py", "--mode", "train", "--pipeline_config_path", str(path)]
+                if resume:
+                    argv.append("--continue_train")
+                with (self.subTest(resume=resume), patch.object(sys, "argv", argv),
+                      patch("tzrec.main.train_and_evaluate") as train):
+                    main()
+                self.assertFalse(train.call_args.kwargs["continue_train"])
+                self.assertFalse(train.call_args.kwargs["ignore_restore_optimizer"])
+
+    def test_retry_before_first_checkpoint_uses_fine_tune_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "base", root / "output"
+            source.mkdir()
+            output.mkdir()
+            base = self.config("wide_and_deep")
+            base.train_config.sparse_optimizer.adagrad_optimizer.lr = .01
+            config_util.save_message(base, str(source / "pipeline.config"))
+            requested = self.config("wide_and_deep")
+            requested.model_dir = str(output)
+            requested.train_config.fine_tune_checkpoint = str(source)
+            requested.train_config.sparse_optimizer.adagrad_optimizer.lr = .03
+            orphan = pipeline_pb2.EasyRecConfig()
+            orphan.CopyFrom(requested)
+            orphan.feature_configs[0].id_feature.embedding_dim = 32
+            config_util.save_message(orphan, str(output / "pipeline.config"))
+            path = root / "request.config"
+            config_util.save_message(requested, str(path))
+            snapshots = []
+            with (patch.object(sys, "argv", ["run.py", "--mode", "train", "--continue_train",
+                                            "--pipeline_config_path", str(path)]),
+                  patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
+                        snapshots.append(config_util.load_pipeline_config(path))) as train):
+                main()
+            self.assertEqual(snapshots[0].feature_configs, base.feature_configs)
+            self.assertEqual(snapshots[0].train_config.fine_tune_checkpoint, str(source))
+            self.assertFalse(train.call_args.kwargs["continue_train"])
+            self.assertTrue(train.call_args.kwargs["ignore_restore_optimizer"])
+
+    def test_export_rejects_training_resume_flag(self):
+        with (patch.object(sys, "argv", ["run.py", "--mode", "export", "--continue_train",
+                                        "--pipeline_config_path", "/missing"]),
+              self.assertRaisesRegex(ValueError, "only supported for training")):
+            main()
+
     def test_remote_profiling_is_rejected_before_native_training(self):
         requested = self.config("wide_and_deep")
         requested.model_dir = "jfs://myjfs/model"

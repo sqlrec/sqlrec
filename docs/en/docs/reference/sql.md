@@ -671,6 +671,8 @@ Train or download a model and create a checkpoint.
 
 Training backends require an `ON` table. For Hugging Face, `TRAIN MODEL` downloads a model without `ON`. See [the model guide](../guides/model-lifecycle.md) for backend differences.
 
+Retrying the same checkpoint is idempotent: running or succeeded tasks return the existing checkpoint. Failed tasks stop and remove the old Kubernetes resources, then resubmit while preserving the model directory and checkpoint record. TZRec resumes from saved progress in that directory; progress recovery for other backends depends on their training entry point. Keep training data and configuration unchanged when retrying. To retrain, change parameters, or add training epochs, use a new checkpoint name and optionally select an existing model with `FROM`.
+
 **Syntax:**
 
 ```sql

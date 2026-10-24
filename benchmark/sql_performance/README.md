@@ -21,6 +21,21 @@ bash benchmark.sh
 registers the recommendation SQL functions and API. These preparation steps are
 outside the timed benchmark.
 
+Both WideAndDeep and DSSM train with two nodes (`nnodes=2`), one training
+process per node (`nproc_per_node=1`), and one spawned DataLoader worker per
+process. Each training Pod requests 2 CPUs and 4 GiB of memory. Both Pods can
+run on a single-node Minikube cluster with enough available resources
+(4 CPUs and 8 GiB in total); no host affinity is required.
+`nnodes=2` counts torchrun node agents, not physical Kubernetes nodes.
+Export remains single-process.
+
+Multi-node training fails the entire Job when any worker Pod fails; individual
+Pods are not retried against an existing process group. Recreate the whole Job
+from its generated YAML to resume the same output directory from its latest
+checkpoint. Generated training commands enable `--continue_train`; a fresh
+output directory starts normally. Rebuild both the TZRec and SQLRec server
+images to pick up the worker sharding and Job-generation fixes.
+
 HDFS and JuiceFS must both be deployed (`deploy_components.sh` includes both).
 `ml_sample` and `ml_recall_sample` remain on JuiceFS; feature preparation copies
 them into `ml_sample_hdfs` and `ml_recall_sample_hdfs` on `hdfs://myhdfs`.

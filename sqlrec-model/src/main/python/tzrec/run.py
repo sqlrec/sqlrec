@@ -59,9 +59,12 @@ def main():
     parser.add_argument("--mode", choices=("train", "export"), required=True)
     parser.add_argument("--pipeline_config_path", required=True)
     parser.add_argument("--export_dir")
+    parser.add_argument("--continue_train", action="store_true")
     parser.add_argument("--check_checkpoint_structure", action="store_true")
     parser.add_argument("--checkpoint_structure_options", default="{}")
     args = parser.parse_args()
+    if args.continue_train and args.mode != "train":
+        raise ValueError("--continue_train is only supported for training")
     if os.getenv("USE_FSSPEC") == "1":
         # Use the shared glob implementation for directory discovery and URI
         # authority preservation across both Hadoop and JuiceFS clients.
@@ -70,7 +73,13 @@ def main():
     if args.mode == "export" and (int(os.getenv("WORLD_SIZE", "1")) != 1 or int(os.getenv("RANK", "0")) != 0):
         raise ValueError("TZRec export requires a single process")
     requested = config_util.load_pipeline_config(args.pipeline_config_path)
+    resume_checkpoint = None
+    if args.continue_train:
+        from tzrec.utils.checkpoint_util import latest_checkpoint
+        resume_checkpoint, _ = latest_checkpoint(requested.model_dir)
     source = requested.model_dir if args.mode == "export" else requested.train_config.fine_tune_checkpoint
+    if resume_checkpoint:
+        source = requested.model_dir
     saved = None
     if source:
         saved = text_format.Parse(common.read_text(source.rstrip("/") + "/pipeline.config"), pipeline_pb2.EasyRecConfig())
@@ -78,6 +87,8 @@ def main():
     config = prepare_config(requested, saved, check_checkpoint_structure=args.check_checkpoint_structure,
                             structure_options=structure.get("options"), structure_masks=structure.get("masked_features"),
                             training=args.mode == "train")
+    if resume_checkpoint:
+        config.train_config.ClearField("fine_tune_checkpoint")
     with tempfile.TemporaryDirectory(prefix="sqlrec-tzrec-") as temporary:
         path = os.path.join(temporary, "pipeline.config")
         config_util.save_message(config, path)
@@ -87,7 +98,7 @@ def main():
                 config.train_config.sparse_optimizer != saved.train_config.sparse_optimizer
                 or config.train_config.dense_optimizer != saved.train_config.dense_optimizer
             )
-            train_and_evaluate(path, ignore_restore_optimizer=changed_optimizer)
+            train_and_evaluate(path, continue_train=resume_checkpoint is not None, ignore_restore_optimizer=changed_optimizer)
         else:
             if not args.export_dir:
                 raise ValueError("--export_dir is required")

@@ -139,6 +139,26 @@ class FilesystemTest(unittest.TestCase):
                 "hdfs://host:8020/model/model.ckpt-2000",
             ])
 
+    def test_directory_glob_handles_backend_stripping_trailing_slash(self):
+        class JuiceFS:
+            @staticmethod
+            def _strip_protocol(path):
+                return path.removeprefix("jfs://myjfs").rstrip("/")
+
+            @staticmethod
+            def glob(pattern, **kwargs):
+                return ["/user/model/model.ckpt-1000", "/user/model/model.ckpt-notes"]
+
+            @staticmethod
+            def isdir(path):
+                return not path.endswith("notes")
+
+        pattern = "jfs://myjfs/user/model/model.ckpt-*/"
+        with patch.object(filesystem, "url_to_fs", return_value=(JuiceFS(), pattern)):
+            self.assertEqual(filesystem._patched_glob(pattern), [
+                "jfs://myjfs/user/model/model.ckpt-1000",
+            ])
+
     def test_source_is_closed_if_destination_cannot_be_opened(self):
         with tempfile.TemporaryDirectory() as local_dir:
             source = Path(local_dir) / "source"

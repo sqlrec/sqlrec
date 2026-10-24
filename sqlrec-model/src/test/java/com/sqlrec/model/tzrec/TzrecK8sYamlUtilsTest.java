@@ -1,5 +1,7 @@
 package com.sqlrec.model.tzrec;
 
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -9,6 +11,22 @@ import static com.sqlrec.common.config.SqlRecConfigs.SQLREC_VERSION;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class TzrecK8sYamlUtilsTest {
+
+    @Test
+    public void testDistributedWorkersCanShareHostAndFailTogether() {
+        Job job = Serialization.unmarshal(TzrecK8sYamlUtils.createJobYaml(
+                "distributed", "config", "headless", 2, 1, 29500, Map.of()), Job.class);
+        assertEquals(2, job.getSpec().getCompletions());
+        assertEquals(2, job.getSpec().getParallelism());
+        assertEquals(0, job.getSpec().getBackoffLimit());
+        assertEquals("Never", job.getSpec().getTemplate().getSpec().getRestartPolicy());
+        assertNull(job.getSpec().getTemplate().getSpec().getAffinity());
+
+        Job single = Serialization.unmarshal(TzrecK8sYamlUtils.createJobYaml(
+                "single", "config", "headless", 1, 2, 29500, Map.of()), Job.class);
+        assertEquals(1, single.getSpec().getBackoffLimit());
+        assertNull(single.getSpec().getTemplate().getSpec().getAffinity());
+    }
 
     @Test
     public void testCreateConfigMapYamlWithSingleFile() {
@@ -255,7 +273,7 @@ kind: "Job"
 metadata:
   name: "custom-job"
 spec:
-  backoffLimit: 1
+  backoffLimit: 0
   completionMode: "Indexed"
   completions: 4
   parallelism: 4

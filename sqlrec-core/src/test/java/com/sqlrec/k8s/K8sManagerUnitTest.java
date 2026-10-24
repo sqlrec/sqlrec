@@ -6,6 +6,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.PodListBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatusBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -17,6 +18,8 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.JobList;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatusBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.GracePeriodConfigurable;
+import io.fabric8.kubernetes.client.dsl.Deletable;
 import io.fabric8.kubernetes.client.dsl.BatchAPIGroupDSL;
 import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
@@ -50,6 +53,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import org.mockito.InOrder;
 
@@ -101,17 +105,20 @@ public class K8sManagerUnitTest {
     public void testDeleteYamlAndWaitDeletesJobBeforeConfigMap() {
         NamespaceableResource<HasMetadata> jobHandle = mock(NamespaceableResource.class);
         NamespaceableResource<HasMetadata> configHandle = mock(NamespaceableResource.class);
+        GracePeriodConfigurable<? extends Deletable> foregroundDeletion = mock(GracePeriodConfigurable.class);
         when(mockClient.resource(any(HasMetadata.class))).thenAnswer(invocation ->
                 "Job".equals(((HasMetadata) invocation.getArgument(0)).getKind())
                         ? jobHandle : configHandle);
         // A user may already have deleted the Job; Fabric8 returns an empty result for 404.
-        when(jobHandle.delete()).thenReturn(List.of());
+        doReturn(foregroundDeletion).when(jobHandle).withPropagationPolicy(DeletionPropagation.FOREGROUND);
+        when(foregroundDeletion.delete()).thenReturn(List.of());
 
         K8sManager.deleteYamlAndWait("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n"
                 + "---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n");
 
-        InOrder order = inOrder(jobHandle, configHandle);
-        order.verify(jobHandle).delete();
+        InOrder order = inOrder(jobHandle, foregroundDeletion, configHandle);
+        order.verify(jobHandle).withPropagationPolicy(DeletionPropagation.FOREGROUND);
+        order.verify(foregroundDeletion).delete();
         order.verify(jobHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));
         order.verify(configHandle).delete();
         order.verify(configHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));

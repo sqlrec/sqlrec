@@ -105,11 +105,15 @@ public class ModelManager {
 
         Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
+            if (Consts.CHECKPOINT_TYPE_EXPORT.equals(existingCheckpoint.getCheckpointType())) {
+                throw new IllegalArgumentException("TRAIN MODEL target cannot be an export checkpoint; use a new checkpoint name");
+            }
             String status = existingCheckpoint.getStatus();
-            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)
-                    && canReuseCreatedCheckpoint(db, existingCheckpoint)) {
-                log.info("Model {} has checkpoint {} in progress, returning existing checkpoint info",
-                        modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
+            if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)
+                    || (Consts.CHECKPOINT_STATUS_CREATED.equals(status)
+                    && canReuseCreatedCheckpoint(db, existingCheckpoint))) {
+                log.info("Model {} reuses checkpoint {} with status {}",
+                        modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName(), status);
                 List<CheckpointInfo> checkpointInfos = new ArrayList<>();
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
@@ -130,7 +134,10 @@ public class ModelManager {
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
         if (existingCheckpoint != null) {
-            deleteCheckpoint(modelTrainConf.getModelName(), existingCheckpoint.getCheckpointName());
+            validateCheckpointDeletion(db, existingCheckpoint);
+            if (StringUtils.isNotEmpty(existingCheckpoint.getYaml())) {
+                K8sManager.deleteYamlAndWait(existingCheckpoint.getYaml());
+            }
         }
         Checkpoint checkpoint = createCheckpoint(
                 modelTrainConf.getModelName(),
@@ -141,7 +148,13 @@ public class ModelManager {
                 Consts.CHECKPOINT_TYPE_ORIGIN
         );
 
-        db.insertCheckpoint(checkpoint);
+        if (existingCheckpoint == null) {
+            db.insertCheckpoint(checkpoint);
+        } else {
+            checkpoint.setCreatedAt(existingCheckpoint.getCreatedAt());
+            checkpoint.setModelDdl(existingCheckpoint.getModelDdl());
+            db.upsertCheckpoint(checkpoint);
+        }
         K8sManager.applyYaml(k8sYaml);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();

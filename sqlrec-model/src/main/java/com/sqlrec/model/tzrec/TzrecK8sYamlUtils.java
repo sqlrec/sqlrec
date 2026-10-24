@@ -77,7 +77,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
                     .withCompletions(nnodes)
                     .withParallelism(nnodes)
                     .withCompletionMode("Indexed")
-                    .withBackoffLimit(1)
+                    .withBackoffLimit(nnodes > 1 ? 0 : 1)
                     .withNewTemplate()
                         .withNewSpec()
                             .withSubdomain(serviceName)

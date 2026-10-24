@@ -34,7 +34,7 @@ public class ShellUtils {
     }
 
     public static String genTrainModelShell(ModelConf model, ModelTrainConf trainConf) {
-        return torchrunShell("train", checkpointStructureArgs(model, trainConf.getParams()));
+        return torchrunShell("train", " --continue_train" + checkpointStructureArgs(model, trainConf.getParams()));
     }
 
     private static String checkpointStructureArgs(ModelConf model, Map<String, String> params) {

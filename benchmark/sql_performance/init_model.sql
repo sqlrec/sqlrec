@@ -23,7 +23,7 @@ with (
 'hidden_units'='64,32',
 'batch_size'='256',
 'num_workers'='1',
-'num_epochs'='6',
+'num_epochs'='3',
 'sparse_lr'='0.03',
 'column.age_years.normalizer'='method=minmax,min=0,max=100',
 'column.genre_count.normalizer'='method=minmax,min=0,max=18'
@@ -31,6 +31,8 @@ with (
 
 train model rank_model checkpoint='v1' on ml_sample
 with (
+'nnodes'='2',
+'nproc_per_node'='1',
 'use_tensorboard'='true',
 'enable_train_metrics'='true',
 'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
@@ -41,6 +43,8 @@ with (
 
 -- train model rank_model checkpoint='v2' on ml_sample from 'v1'
 -- with (
+-- 'nnodes'='2',
+-- 'nproc_per_node'='1',
 -- 'use_tensorboard'='true',
 -- 'enable_train_metrics'='true',
 -- 'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
@@ -115,6 +119,8 @@ with (
 
 train model recall_model_hdfs checkpoint='v1' on ml_recall_sample_hdfs
 with (
+'nnodes'='2',
+'nproc_per_node'='1',
 'use_tensorboard'='true',
 'enable_train_metrics'='true',
 'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',

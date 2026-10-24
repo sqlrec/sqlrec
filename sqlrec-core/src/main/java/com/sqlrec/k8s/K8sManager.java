@@ -1,6 +1,7 @@
 package com.sqlrec.k8s;
 
 import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -179,7 +180,12 @@ public class K8sManager {
                 }
 
                 Resource<HasMetadata> handle = client.resource(resource);
-                handle.delete();
+                if ("Job".equals(resource.getKind())) {
+                    // Keep the Job until its Pods are gone, so retries cannot share a writer.
+                    handle.withPropagationPolicy(DeletionPropagation.FOREGROUND).delete();
+                } else {
+                    handle.delete();
+                }
                 handle.waitUntilCondition(Objects::isNull, DELETE_WAIT_SECONDS, TimeUnit.SECONDS);
                 log.info("Deleted {} before checkpoint retry: {}/{}", resource.getKind(),
                         resource.getMetadata().getNamespace(), name);

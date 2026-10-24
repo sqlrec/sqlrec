@@ -34,6 +34,8 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
   python /tests/tzrec_pipeline_smoke.py
   python /tests/tzrec_events_integration.py
   python /tests/tzrec_summaries_integration.py
+  python /tests/tzrec_distributed_data_tests.py
+  python /tests/tzrec_distributed_integration.py
 ')"
 docker cp "$repo_root/sqlrec-model/src/test/python/." "$container:/tests"
 docker cp "$repo_root/sqlrec-model/src/test/resources/tzrec" "$container:/tests/configs"
