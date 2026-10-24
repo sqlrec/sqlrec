@@ -470,6 +470,8 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 API 请求体中 `params` 对象的键值也会作为执行变量。变量值为字符串；用作数字或布尔值时需要显式转换。
 
+读取不存在的执行变量时，默认回退到同名环境变量；显式空字符串不回退。通过服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭该行为。环境变量值不会写入执行变量集合。
+
 ### GET
 
 在 `CALL` 的动态函数名、Java 表函数的字符串参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 和 `GET_OR_DEFAULT` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。

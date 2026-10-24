@@ -1,6 +1,8 @@
 package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.utils.SilenceLoggers;
+import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.JsonUtils;
 import com.google.gson.JsonParseException;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -30,6 +32,50 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RestExecutorTest {
+    @Test
+    void excludesFunctionResultParamsWithoutChangingExecutionVariables() throws Exception {
+        boolean previous = SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getDefaultValue();
+        SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.setDefaultValue(false);
+        try (FunctionFixture fixture = new FunctionFixture()) {
+            when(fixture.proxy.bind(any(), any())).thenAnswer(call -> {
+                ExecuteContext context = call.getArgument(1);
+                assertEquals("value", context.getVariable("key"));
+                assertEquals("true", context.getVariable("EXECUTE_RESULT_INCLUDE_PARAMS"));
+                return Linq4j.asEnumerable(Collections.singletonList(new Object[]{"done"}));
+            });
+            ExecuteData result = RestFunctionExecutor.execute("example",
+                    "{\"params\":{\"key\":\"value\",\"EXECUTE_RESULT_INCLUDE_PARAMS\":\"true\"}}");
+            assertEquals(List.of(Map.of("value", "done")), result.getData());
+            assertNull(result.getParams());
+            assertFalse(JsonUtils.parseJsonToMap(JsonUtils.toJson(result)).containsKey("params"));
+        } finally {
+            SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.setDefaultValue(previous);
+        }
+    }
+
+    @Test
+    void excludesSqlResultParamsWithoutChangingExecutionInputsOrRows() throws Exception {
+        boolean previous = SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getDefaultValue();
+        SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.setDefaultValue(false);
+        try (var executors = mockConstruction(SqlExecutor.class, (executor, construction) -> {
+            when(executor.executeSql("ok")).thenReturn(new CacheTable("result",
+                    Linq4j.asEnumerable(Collections.singletonList(new Object[]{"done"})),
+                    DataTypeUtils.getStringTypeField("value")));
+            ExecuteContext context = mock(ExecuteContext.class);
+            when(context.getVariables()).thenReturn(Map.of("key", "value"));
+            when(executor.getExecuteContext()).thenReturn(context);
+        })) {
+            ExecuteData result = RestSqlExecutor.execute(
+                    "{\"sqls\":[\"ok\"],\"params\":{\"key\":\"value\"}}").getData().get(0);
+            verify(executors.constructed().get(0)).setExecuteParams(Map.of("key", "value"));
+            assertEquals(List.of(Map.of("value", "done")), result.getData());
+            assertNull(result.getParams());
+            assertFalse(JsonUtils.parseJsonToMap(JsonUtils.toJson(result)).containsKey("params"));
+        } finally {
+            SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.setDefaultValue(previous);
+        }
+    }
+
     @Test
     void keepsFunctionValidationOrderAndMessages() {
         assertEquals("API name is required", assertThrows(IllegalArgumentException.class,

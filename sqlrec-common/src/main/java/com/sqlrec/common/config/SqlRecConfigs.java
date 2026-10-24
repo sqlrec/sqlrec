@@ -115,6 +115,16 @@ public class SqlRecConfigs {
             "comma-separated node names with latency histograms enabled; empty disables node histograms",
             null, String.class);
 
+    // Process-wide execution behavior; never resolve these from request/session variables.
+    public static final ConfigOption<Boolean> ENABLE_VARIABLE_ENV_FALLBACK = new ConfigOption<>(
+            "ENABLE_VARIABLE_ENV_FALLBACK", true,
+            "fall back to the same-named environment variable when an execution variable is absent",
+            null, Boolean.class);
+    public static final ConfigOption<Boolean> EXECUTE_RESULT_INCLUDE_PARAMS = new ConfigOption<>(
+            "EXECUTE_RESULT_INCLUDE_PARAMS", true,
+            "include execution variables as params in REST execution results",
+            null, Boolean.class);
+
     // exec config
     public static final ConfigOption<Boolean> PARALLELISM_EXEC = new ConfigOption<>(
             "PARALLELISM_EXEC",

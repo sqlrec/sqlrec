@@ -270,7 +270,7 @@ Variable retrieval function that gets the value of a variable from the execution
 |-----------|------|-------------|
 | `key` | VARCHAR | Variable name |
 
-**Return Value**: Returns the variable value (`VARCHAR`), or `NULL` if the variable doesn't exist.
+**Return Value**: Returns the variable value (`VARCHAR`). An absent execution variable falls back to the same-named environment variable by default; returns `NULL` if neither exists. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
 
 ::: warning Note
 Since `get` is a SQL keyword, you need to wrap the function name with backticks when using it, written as `` `get` ``.
@@ -314,7 +314,7 @@ Variable retrieval function with default value that gets the value of a variable
 | `key` | VARCHAR | Variable name |
 | `defaultValue` | VARCHAR | Default value to return when variable doesn't exist |
 
-**Return Value**: Returns the variable value (`VARCHAR`), or `defaultValue` if the variable doesn't exist.
+**Return Value**: Returns the variable value (`VARCHAR`), resolving the execution variable, same-named environment variable, then `defaultValue` by default. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable environment fallback. Explicit empty strings still take precedence.
 
 **Usage Example**:
 

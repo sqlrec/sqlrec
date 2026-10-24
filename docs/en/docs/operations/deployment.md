@@ -205,6 +205,17 @@ To use dependencies managed by SRE teams, adjust the corresponding deployment st
 
 SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `edit` access through ClusterRoleBindings. For production, scope permissions to the required resources and namespaces using restricted Roles/RoleBindings.
 
+### Execution Variables and Result Parameters
+
+These options are read only from the server process environment and default to enabled. SQL `SET` and request `params` cannot override them.
+
+| Environment variable | Default | Description |
+| --- | --- | --- |
+| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | When an execution variable is absent (`null`), `getVariable()` reads the same-named environment variable; explicit empty strings do not trigger fallback |
+| `EXECUTE_RESULT_INCLUDE_PARAMS` | `true` | Include execution variables as `params` in SQL and function REST API results; disabling omits this JSON field without affecting variable use during execution |
+
+Set either environment variable to `false` and restart the service to disable it. Fallback values are never written into execution variables: `get_variables()` and response `params` contain only explicit execution variables. Removing an explicit variable restores environment fallback on subsequent reads. With fallback enabled, SQL can read server process environment settings by variable name.
+
 ### Entry Authentication
 
 These settings are defined in `SqlRecConfigs.java` and read from the server process environment. The table lists defaults for direct server startup. Repository deployment scripts override them through `deploy/env.sh` with `AUTH_ENABLED=true`, `AUTH_USERNAME=sqlrec`, and `AUTH_PASSWORD=abc123456`. These credentials are development defaults; edit `deploy/env.sh` or override them with environment variables:

@@ -470,6 +470,8 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 Keys and values in the API request's `params` object are also execution variables. Values are strings; cast them explicitly when using them as numbers or Booleans.
 
+Reading an absent execution variable falls back to the same-named environment variable by default. Explicit empty strings do not trigger fallback. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable this behavior. Environment values are never written into the execution variable map.
+
 ### GET
 
 Read an execution variable as a dynamic function name in `CALL`, a string argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` and `GET_OR_DEFAULT` are available in these positions; neither is a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.

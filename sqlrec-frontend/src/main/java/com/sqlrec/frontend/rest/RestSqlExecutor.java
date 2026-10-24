@@ -4,6 +4,7 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
@@ -61,7 +62,9 @@ public class RestSqlExecutor {
                     rows == null ? null : rows.toList(),
                     result.getDataFields()
             ));
-            executeData.setParams(sqlExecutor.getExecuteContext().getVariables());
+            if (SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getValue()) {
+                executeData.setParams(sqlExecutor.getExecuteContext().getVariables());
+            }
         } catch (Exception e) {
             outcome = MetricsUtils.outcome(e, sqlExecutor.getExecuteContext().isCancelled());
             executeData.setMsg("sqls[" + index + "] failed: "

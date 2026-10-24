@@ -81,7 +81,7 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 ## 读取响应
 
-调用成功时，`data` 是函数 `RETURN` 的结果行，`params` 是执行结束时的变量：
+调用成功时，`data` 是函数 `RETURN` 的结果行，默认包含的 `params` 是执行结束时的显式变量。设置服务环境变量 `EXECUTE_RESULT_INCLUDE_PARAMS=false` 并重启后，SQL 和函数 API 的 JSON 响应均省略 `params`：
 
 ```json
 {

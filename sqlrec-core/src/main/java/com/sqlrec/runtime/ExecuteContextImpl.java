@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConf;
@@ -57,7 +58,11 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     public String getVariable(String key) {
-        return variableMap.get(key);
+        String value = variableMap.get(key);
+        if (value == null && SqlRecConfigs.ENABLE_VARIABLE_ENV_FALLBACK.getValue()) {
+            return System.getenv(key);
+        }
+        return value;
     }
 
     public void setVariable(String key, String value) {

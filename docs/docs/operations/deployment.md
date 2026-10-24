@@ -205,6 +205,17 @@ SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlre
 
 SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 ClusterRoleBinding 授予集群级 `edit` 权限。生产环境应按所需资源和命名空间调整为受限 Role/RoleBinding。
 
+### 执行变量与结果参数
+
+以下配置仅从服务进程环境读取，均默认开启；SQL `SET` 和请求 `params` 不能覆盖它们。
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | `getVariable()` 在执行变量不存在（`null`）时读取同名环境变量；显式空字符串不回退 |
+| `EXECUTE_RESULT_INCLUDE_PARAMS` | `true` | SQL 和函数 REST API 的执行结果包含执行变量 `params`；关闭后 JSON 省略该字段，不影响执行变量的使用 |
+
+设置对应环境变量为 `false` 并重启服务即可关闭。环境变量回退不会将读取的值写入执行变量，`get_variables()` 和响应 `params` 仅包含显式执行变量。删除显式变量后，后续读取会再次回退到环境变量。开启回退时，SQL 可通过变量名读取服务进程中的环境配置。
+
 ### 入口认证
 
 以下配置统一定义在 `SqlRecConfigs.java`，从服务进程的环境变量读取。直接启动服务时使用下表默认值；仓库部署脚本通过 `deploy/env.sh` 将默认值覆盖为 `AUTH_ENABLED=true`、`AUTH_USERNAME=sqlrec`、`AUTH_PASSWORD=abc123456`。默认凭证用于开发环境，可修改 `deploy/env.sh` 或用同名环境变量覆盖：

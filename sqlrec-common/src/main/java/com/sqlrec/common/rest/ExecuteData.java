@@ -9,7 +9,8 @@ import java.util.Map;
  *
  * <p>{@code msg} carries a status/error message;
  * {@code data} holds the result rows (each row is a column-name to value map);
- * {@code params} echoes the execution variables after the call.
+ * {@code params} echoes the execution variables after the call when
+ * {@code EXECUTE_RESULT_INCLUDE_PARAMS} is enabled (the default).
  *
  * <p>This class is part of the external interface protocol shared between the
  * frontend REST layer and remote callers (e.g. {@code call_sqlrec_api} UDF).

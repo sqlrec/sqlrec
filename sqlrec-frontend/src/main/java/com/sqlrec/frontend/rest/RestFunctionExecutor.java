@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
@@ -82,7 +83,9 @@ public class RestFunctionExecutor {
         try {
             BindableInterface bindable = CompileManager.prepareSqlFunctionForExecution(function);
             Enumerable<Object[]> rows = bindable.bind(schema, context);
-            result.setParams(context.getVariables());
+            if (SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getValue()) {
+                result.setParams(context.getVariables());
+            }
             if (rows != null) {
                 List<Object[]> values = rows.toList();
                 result.setData(RowTransformUtils.convertToMapList(values, bindable.getReturnDataFields()));

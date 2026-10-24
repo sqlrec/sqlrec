@@ -81,6 +81,8 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
 
 ## Read the Response
 
+SQL and function API results include explicit execution variables as `params` by default. Set the server environment variable `EXECUTE_RESULT_INCLUDE_PARAMS=false` and restart to omit `params` from JSON responses.
+
 On success, `data` contains the rows returned by the function and `params` contains the final execution variables:
 
 ```json

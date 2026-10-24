@@ -270,7 +270,7 @@ LIMIT 300;
 |------|------|------|
 | `key` | VARCHAR | 变量名 |
 
-**返回值**：返回变量的值（`VARCHAR`），如果变量不存在则返回 `NULL`。
+**返回值**：返回变量的值（`VARCHAR`）。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
 
 ::: warning 注意
 由于 `get` 是 SQL 关键字，使用时需要用反引号包裹函数名，写作 `` `get` ``。
@@ -314,7 +314,7 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 | `key` | VARCHAR | 变量名 |
 | `defaultValue` | VARCHAR | 默认值，当变量不存在时返回 |
 
-**返回值**：返回变量的值（`VARCHAR`），如果变量不存在则返回 `defaultValue`。
+**返回值**：返回变量的值（`VARCHAR`）。默认按执行变量、同名环境变量、`defaultValue` 的顺序解析。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭环境变量回退；显式空字符串仍优先。
 
 **使用示例**：
 
