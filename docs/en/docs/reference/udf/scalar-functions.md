@@ -55,6 +55,7 @@ The Calcite reference may describe a newer version than the one used by SQLRec a
 | Vector operations | [`random_vec`](#random-vec), [`l2_norm`](#l2-norm), [`ip`](#ip) |
 | Request identifiers | [`uuid`](#uuid) |
 | Execution variables | [`get`](#get), [`get_or_default`](#get-or-default) |
+| Remote models | [`llm_embed_text`, `llm_complete`, `ark_embed_image`](#remote-model-functions) |
 
 ### array_contains
 
@@ -329,3 +330,63 @@ To select a function dynamically, use `GET_OR_DEFAULT(...)` as shown in [Writing
 - Dynamic function calls with fallback functions
 - Configuration retrieval with default settings
 - Parameterized SQL with default parameters
+
+
+### Remote model functions
+
+All three functions take five `VARCHAR` arguments:
+
+| Function | Signature | Result |
+|----------|-----------|--------|
+| `llm_embed_text` | `(endpoint, api_key, model, text, options_json)` | `ARRAY<DOUBLE>` |
+| `llm_complete` | `(endpoint, api_key, model, prompt, options_json)` | `VARCHAR` |
+| `ark_embed_image` | `(endpoint, api_key, model, image, options_json)` | `ARRAY<DOUBLE>` |
+
+Pass the complete HTTP(S) endpoint; paths are never appended. Model names are passed through. A nonempty key is sent as `Authorization: Bearer ...`; an empty key supports unauthenticated compatible services. Inject secrets through the execution context and use `` `get`('llm_api_key') `` rather than SQL literals, which can appear in SQL logs, plans and metadata. UDF exceptions omit credentials, input and response bodies.
+
+```sql
+SELECT llm_embed_text(
+    'https://api.openai.com/v1/embeddings',
+    `get`('llm_api_key'), 'text-embedding-3-small', title,
+    '{"request":{"dimensions":1024},"runtime":{"timeout_ms":10000}}'
+) AS embedding FROM items;
+
+SELECT llm_complete(
+    'https://api.openai.com/v1/chat/completions',
+    `get`('llm_api_key'), `get`('llm_model'), content,
+    '{"request":{"max_completion_tokens":128}}'
+) AS summary FROM articles;
+
+SELECT ark_embed_image(
+    'https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal',
+    `get`('ark_api_key'), 'doubao-embedding-vision-251215', image_url,
+    '{"request":{"dimensions":1024},"runtime":{"timeout_ms":10000}}'
+) AS embedding FROM items;
+```
+
+Options must be a strict JSON object. Use `'{}'` or SQL `NULL` for defaults. Unknown fields are rejected.
+
+| Section | Allowed fields |
+|---------|----------------|
+| `request`, text embedding | `dimensions` (positive integer), `user` |
+| `request`, completion | `temperature` (0–2), `top_p` (0–1), `max_completion_tokens` (positive integer), `reasoning_effort`, `user` |
+| `request`, Ark image embedding | `dimensions` (1024 or 2048), `instructions` |
+| `runtime` | `timeout_ms` (positive integer, default 30000, maximum 300000) |
+
+Only explicitly supplied model parameters are sent; they must be supported by the remote model. Runtime options are never sent to the API. The timeout covers waiting for a concurrency slot and receiving the complete HTTP response. Local validation errors, HTTP failures, timeouts, invalid remote responses and interruptions all throw exceptions. There is no option to return `NULL` on failure. A SQL `NULL` input returns `NULL` without validating other arguments or making a request. Empty text embedding inputs are rejected.
+
+Embedding requests force `encoding_format="float"`. Results are nonempty finite vectors returned as `List<Double>`, with an explicit dimension checked when supplied. They are not normalized locally. OpenAI results use `data[0].embedding`; Ark results use `data.embedding`. Images can be accessible HTTP(S) URLs or `data:image/...;base64,...` URIs. The Ark function exposes single-image dense vectors only; video, mixed content, sparse and multi-vector outputs are outside this interface. Text vectors from a different model cannot be assumed to align with these image vectors.
+
+Completions wrap the prompt in one user message and force `stream=false`, `n=1`, `store=false`. The result is `choices[0].message.content`. Refusals, content filtering and missing text are remote errors; a length-limited completion returns its partial text. Responses API, tools and conversation history are not supported.
+
+A shared JDK HTTP client reuses connections, limits in-flight requests to 32 per classloader, uses a 2-second connection timeout and does not follow redirects. There are no application retries or result caching. Functions are declared non-deterministic: SQLRec compilation and Flink planning do not call the API. Runtime calls are synchronous per row. Re-execution or task recovery can repeat calls; remote requests are not exactly-once.
+
+SQLRec registers these functions by default. In Flink, deploy the UDF JAR with Hive support (HiveCatalog/HiveModule) and register:
+
+```sql
+CREATE FUNCTION llm_embed_text AS 'com.sqlrec.udf.scalar.LlmEmbedTextFunction';
+CREATE FUNCTION llm_complete AS 'com.sqlrec.udf.scalar.LlmCompleteFunction';
+CREATE FUNCTION ark_embed_image AS 'com.sqlrec.udf.scalar.ArkEmbedImageFunction';
+```
+
+Protocol references: [OpenAI Embeddings](https://developers.openai.com/api/reference/resources/embeddings/methods/create), [OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create), [Ark multimodal embeddings](https://console.volcengine.com/ark/region:cn-beijing/docs/multimodal-vectorization-api).

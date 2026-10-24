@@ -55,6 +55,7 @@ Calcite 官方参考页可能对应比 SQLRec 依赖更新的版本，并且包�
 | 向量计算 | [`random_vec`](#random-vec)、[`l2_norm`](#l2-norm)、[`ip`](#ip) |
 | 请求标识 | [`uuid`](#uuid) |
 | 执行变量 | [`get`](#get)、[`get_or_default`](#get-or-default) |
+| 远程模型 | [`llm_embed_text`、`llm_complete`、`ark_embed_image`](#远程模型函数) |
 
 ### array_contains
 
@@ -329,3 +330,75 @@ SELECT CAST(`get_or_default`('limit_count', '50') AS INT) AS limit_count;
 - 动态函数调用，提供兜底函数
 - 配置项获取，提供默认配置
 - 参数化 SQL，提供默认参数
+
+
+### 远程模型函数
+
+三个函数均接收五个 `VARCHAR` 参数，连接参数直接传入：
+
+| 函数 | 签名 | 返回类型 |
+|------|------|----------|
+| `llm_embed_text` | `(endpoint, api_key, model, text, options_json)` | `ARRAY<DOUBLE>` |
+| `llm_complete` | `(endpoint, api_key, model, prompt, options_json)` | `VARCHAR` |
+| `ark_embed_image` | `(endpoint, api_key, model, image, options_json)` | `ARRAY<DOUBLE>` |
+
+`endpoint` 是完整 HTTP(S) 接口地址，不自动拼接路径。`model` 原样传给服务端。非空 `api_key` 通过 `Authorization: Bearer ...` 发送；空字符串用于无需鉴权的兼容服务。建议由执行上下文注入密钥并使用 `` `get`('llm_api_key') `` 读取，避免 SQL 字面量进入 SQL 日志、计划或元数据；UDF 自身的异常不包含密钥、输入和响应正文。
+
+```sql
+-- OpenAI 文本向量协议
+SELECT llm_embed_text(
+    'https://api.openai.com/v1/embeddings',
+    `get`('llm_api_key'),
+    'text-embedding-3-small',
+    title,
+    '{"request":{"dimensions":1024},"runtime":{"timeout_ms":10000}}'
+) AS embedding
+FROM items;
+
+-- OpenAI Chat Completions 协议，prompt 包装为一条 user 消息
+SELECT llm_complete(
+    'https://api.openai.com/v1/chat/completions',
+    `get`('llm_api_key'),
+    `get`('llm_model'),
+    CONCAT('请总结：', content),
+    '{"request":{"max_completion_tokens":128}}'
+) AS summary
+FROM articles;
+
+-- 方舟多模态协议：单张图片，支持图片 URL 或 data:image/...;base64,...
+SELECT ark_embed_image(
+    'https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal',
+    `get`('ark_api_key'),
+    'doubao-embedding-vision-251215',
+    image_url,
+    '{"request":{"dimensions":1024},"runtime":{"timeout_ms":10000}}'
+) AS embedding
+FROM items;
+```
+
+`options_json` 使用严格 JSON 对象；无额外参数传 `'{}'`，SQL `NULL` 也使用默认配置。只接受下面列出的字段，其他字段直接报错：
+
+| 位置 | 字段 | 说明 |
+|------|------|------|
+| `request`，文本 embedding | `dimensions`、`user` | 维度为正整数；是否支持降维由远端模型决定 |
+| `request`，文本生成 | `temperature`、`top_p`、`max_completion_tokens`、`reasoning_effort`、`user` | 只发送显式设置的参数；需与远端模型能力一致 |
+| `request`，方舟图片 embedding | `dimensions`、`instructions` | 维度为 1024 或 2048；提示词原样发送 |
+| `runtime` | `timeout_ms` | 默认 30000，正整数且不超过 300000；覆盖等待并发名额和完整 HTTP 响应 |
+
+本地参数错误、远端 HTTP 失败、超时、响应格式错误和执行中断均抛出异常，不提供失败时返回 `NULL` 的配置。输入内容为 SQL `NULL` 时直接返回 `NULL`，不校验其他参数，也不发送请求。空文本 embedding 报错。
+
+向量以 `float` 编码请求，转换为 Java `List<Double>`，校验非空、有限数值及显式指定的维度，不额外归一化。OpenAI 读取 `data[0].embedding`，方舟读取 `data.embedding`。方舟图片函数仅暴露单图稠密向量，不支持视频、混合内容、稀疏或多向量输出；不能用 OpenAI 文本 embedding 与另一个模型的图片向量直接做跨模态检索。
+
+文本生成固定 `stream=false`、`n=1`、`store=false`，读取 `choices[0].message.content`。拒绝、内容过滤和缺少文本按远端错误处理；因长度上限截断时返回已有文本。首版不支持 Responses API、工具调用或会话历史。
+
+客户端使用共享 JDK HTTP 连接池，连接超时 2 秒，每个类加载器最多 32 个在途请求，禁用重定向，无应用层自动重试或结果缓存。函数声明为非确定性，SQLRec 编译和 Flink 计划生成不会调用远端。运行时按行同步请求，查询重复执行或任务恢复可能再次调用服务，不提供远端请求的恰好一次保证。
+
+SQLRec 内置注册上述函数。Flink 使用 HiveCatalog/HiveModule，并部署包含 UDF 的 JAR 后注册：
+
+```sql
+CREATE FUNCTION llm_embed_text AS 'com.sqlrec.udf.scalar.LlmEmbedTextFunction';
+CREATE FUNCTION llm_complete AS 'com.sqlrec.udf.scalar.LlmCompleteFunction';
+CREATE FUNCTION ark_embed_image AS 'com.sqlrec.udf.scalar.ArkEmbedImageFunction';
+```
+
+协议参考：[OpenAI Embeddings](https://developers.openai.com/api/reference/resources/embeddings/methods/create)、[OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)、[方舟多模态向量化](https://console.volcengine.com/ark/region:cn-beijing/docs/multimodal-vectorization-api)。

@@ -13,11 +13,13 @@ import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.impl.ReflectiveFunctionBase;
+import org.apache.hadoop.hive.ql.udf.UDFType;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -113,7 +115,18 @@ public class SqlRecScalarFunctionImpl extends ReflectiveFunctionBase
 
     @Override
     public RelDataType getReturnType(RelDataTypeFactory typeFactory) {
+        if (List.class.isAssignableFrom(method.getReturnType())
+                && method.getGenericReturnType() instanceof ParameterizedType
+                && ((ParameterizedType) method.getGenericReturnType()).getActualTypeArguments()[0] == Double.class) {
+            return typeFactory.createTypeWithNullability(
+                    typeFactory.createArrayType(typeFactory.createJavaType(Double.class), -1), true);
+        }
         return typeFactory.createJavaType(method.getReturnType());
+    }
+
+    public boolean isDeterministic() {
+        UDFType type = method.getDeclaringClass().getAnnotation(UDFType.class);
+        return type == null || (type.deterministic() && !type.stateful());
     }
 
     @Override

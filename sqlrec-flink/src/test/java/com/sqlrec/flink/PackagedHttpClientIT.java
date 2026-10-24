@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Arrays;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -22,6 +23,44 @@ class PackagedHttpClientIT {
 
     @TempDir
     Path temporary;
+
+    @Test
+    void llmClientWorksWithLegacyOkioFirstOnTheClasspath() throws Exception {
+        URL sqlrec = Path.of(System.getProperty("sqlrec.shadedJar")).toUri().toURL();
+        URL legacy = legacyOkioJar().toUri().toURL();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        Map<String, String> responses = Map.of(
+                "/embed", "{\"data\":[{\"embedding\":[3,4]}]}",
+                "/ark", "{\"data\":{\"embedding\":[3,4]}}",
+                "/chat", "{\"choices\":[{\"message\":{\"content\":\"summary\"}}]}");
+        responses.forEach((path, body) -> server.createContext(path, exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(bytes);
+            }
+        }));
+        server.start();
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{legacy, sqlrec},
+                ClassLoader.getPlatformClassLoader())) {
+            assertEquals(legacy, loader.loadClass("okio.ByteString")
+                    .getProtectionDomain().getCodeSource().getLocation());
+            Class<?> client = loader.loadClass("com.sqlrec.udf.llm.LlmClient");
+            String url = "http://127.0.0.1:" + server.getAddress().getPort();
+            assertEquals(Arrays.asList(3.0, 4.0), client.getMethod("embedText", String.class,
+                    String.class, String.class, String.class, String.class)
+                    .invoke(null, url + "/embed", "key", "model", "text", "{}"));
+            assertEquals(Arrays.asList(3.0, 4.0), client.getMethod("embedImage", String.class,
+                    String.class, String.class, String.class, String.class)
+                    .invoke(null, url + "/ark", "key", "model", "https://example.com/image.png", "{}"));
+            assertEquals("summary", client.getMethod("complete", String.class,
+                    String.class, String.class, String.class, String.class)
+                    .invoke(null, url + "/chat", "key", "model", "prompt", "{}"));
+        } finally {
+            server.stop(0);
+        }
+    }
 
     @Test
     void defaultPredictionClientWorksWithLegacyOkioFirstOnTheClasspath() throws Exception {

@@ -3,10 +3,13 @@ package com.sqlrec.udf.config;
 import com.sqlrec.udf.scalar.ArrayContainsAllFunction;
 import com.sqlrec.udf.scalar.ArrayContainsAnyFunction;
 import com.sqlrec.udf.scalar.ArrayContainsFunction;
+import com.sqlrec.udf.scalar.ArkEmbedImageFunction;
 import com.sqlrec.udf.scalar.GetFunction;
 import com.sqlrec.udf.scalar.GetOrDefaultFunction;
 import com.sqlrec.udf.scalar.IpFunction;
 import com.sqlrec.udf.scalar.L2NormFunction;
+import com.sqlrec.udf.scalar.LlmCompleteFunction;
+import com.sqlrec.udf.scalar.LlmEmbedTextFunction;
 import com.sqlrec.udf.scalar.RandomVecFunction;
 import com.sqlrec.udf.scalar.UuidFunction;
 import com.sqlrec.udf.table.*;
@@ -35,6 +38,9 @@ public final class FunctionConfigs {
         configs.put("array_contains", ArrayContainsFunction.class.getName());
         configs.put("array_contains_all", ArrayContainsAllFunction.class.getName());
         configs.put("array_contains_any", ArrayContainsAnyFunction.class.getName());
+        configs.put("llm_embed_text", LlmEmbedTextFunction.class.getName());
+        configs.put("llm_complete", LlmCompleteFunction.class.getName());
+        configs.put("ark_embed_image", ArkEmbedImageFunction.class.getName());
         return Collections.unmodifiableMap(configs);
     }
 

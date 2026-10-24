@@ -14,11 +14,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
+import com.sun.net.httpserver.HttpServer;
 
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -87,6 +93,48 @@ class UdfTest {
     }
 
     // ---- IpFunction tests ----
+
+    @Test
+    void testRemoteLlmUdfs() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger requests = new AtomicInteger();
+        server.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            requests.incrementAndGet();
+            String path = exchange.getRequestURI().getPath();
+            String body = path.equals("/ark") ? "{\"data\":{\"embedding\":[3,4]}}"
+                    : path.equals("/chat") ? "{\"choices\":[{\"message\":{\"content\":\"summary\"}}]}"
+                    : "{\"data\":[{\"embedding\":[3,4]}]}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try {
+                exchange.getResponseBody().write(bytes);
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            StreamTableEnvironment tEnv = createTableEnvWithHive();
+            registerFunction(tEnv, "llm_embed_text", "com.sqlrec.udf.scalar.LlmEmbedTextFunction");
+            registerFunction(tEnv, "llm_complete", "com.sqlrec.udf.scalar.LlmCompleteFunction");
+            registerFunction(tEnv, "ark_embed_image", "com.sqlrec.udf.scalar.ArkEmbedImageFunction");
+            String url = "http://127.0.0.1:" + server.getAddress().getPort();
+            String sql = "SELECT llm_embed_text('" + url + "/embed', 'key', 'model', 'text', '{}'), "
+                    + "llm_complete('" + url + "/chat', 'key', 'model', 'prompt', '{}'), "
+                    + "ark_embed_image('" + url + "/ark', 'key', 'vision', 'https://example.com/image.png', '{}')";
+            assertNotNull(tEnv.explainSql(sql));
+            assertEquals(0, requests.get(), "Flink planning must not call remote services");
+            List<Row> rows = collectRows(tEnv.executeSql(sql));
+            assertEquals(1, rows.size());
+            assertArrayEquals(new Double[]{3.0, 4.0}, (Double[]) rows.get(0).getField(0));
+            assertEquals("summary", rows.get(0).getField(1));
+            assertArrayEquals(new Double[]{3.0, 4.0}, (Double[]) rows.get(0).getField(2));
+            assertEquals(3, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
 
     @Test
     void testIpBasicInnerProduct() throws Exception {
@@ -180,6 +228,39 @@ class UdfTest {
         assertEquals(1, values.size());
         assertEquals(0.0, values.get(0)[0], 0.0001);
         assertEquals(0.0, values.get(0)[1], 0.0001);
+    }
+
+    @Test
+    void testNonDeterministicScalarFunctionsWithConstantArguments() throws Exception {
+        StreamTableEnvironment tEnv = createTableEnvWithHive();
+        registerFunction(tEnv, "uuid", "com.sqlrec.udf.scalar.UuidFunction");
+        registerFunction(tEnv, "random_vec", "com.sqlrec.udf.scalar.RandomVecFunction");
+        String sql = "SELECT uuid(), random_vec('4') "
+                + "FROM (VALUES (1), (2), (3)) AS t(n)";
+        assertNotNull(tEnv.explainSql(sql));
+        Set<String> identifiers = new HashSet<>();
+        Set<List<Double>> vectors = new HashSet<>();
+        for (int run = 0; run < 2; run++) {
+            List<Row> rows = collectRows(tEnv.executeSql(sql));
+            assertEquals(3, rows.size());
+            for (Row row : rows) {
+                String identifier = (String) row.getField(0);
+                assertDoesNotThrow(() -> UUID.fromString(identifier));
+                assertTrue(identifiers.add(identifier), "uuid must be fresh for each row and execution");
+                Double[] vector = (Double[]) row.getField(1);
+                assertEquals(4, vector.length);
+                double squaredNorm = 0;
+                for (double value : vector) {
+                    assertTrue(Double.isFinite(value));
+                    squaredNorm += value * value;
+                }
+                assertEquals(1.0, squaredNorm, 1e-10);
+                assertTrue(vectors.add(java.util.Arrays.asList(vector)),
+                        "random_vec must be fresh for each row and execution");
+            }
+        }
+        assertEquals(6, identifiers.size());
+        assertEquals(6, vectors.size());
     }
 
     @Test
