@@ -55,6 +55,27 @@ public class RowJsonEncoderTest {
     }
 
     @Test
+    void projectionUsesTheFirstCaseInsensitiveMatchAndKeepsModelFieldOrder() {
+        List<RelDataTypeField> fields = List.of(
+                DataTypeUtils.getRelDataTypeField("NAME", 1, SqlTypeName.VARCHAR),
+                DataTypeUtils.getRelDataTypeField("name", 0, SqlTypeName.VARCHAR),
+                DataTypeUtils.getRelDataTypeField("score", 2, SqlTypeName.DOUBLE));
+        List<FieldSchema> modelFields = List.of(
+                new FieldSchema("score", "DOUBLE"), new FieldSchema("name", "STRING"),
+                new FieldSchema("missing", "STRING"));
+        List<Object[]> rows = List.of(new Object[]{"ignored", "first", 0.5},
+                new Object[]{"ignored", null});
+
+        assertEquals("[{\"score\":0.5,\"name\":\"first\"},{\"name\":null}]",
+                RowJsonEncoder.toJsonArray(rows, modelFields, fields));
+    }
+
+    @Test
+    void emptyBatchesDoNotRequireAProjectionSchema() {
+        assertEquals("[]", RowJsonEncoder.toJsonArray(List.of(), null, null));
+    }
+
+    @Test
     public void testToJsonArrayWithNull() {
         List<Object[]> data = new ArrayList<>();
         data.add(new Object[]{1, null, 20, null});

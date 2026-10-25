@@ -35,6 +35,19 @@ public class CallServiceFunctionTest {
     }
 
     @Test
+    public void testMergeNumericPredictionsIntoStringRows() {
+        String[] inputRow = {"item-a"};
+        List<Object[]> result = CallServiceFunction.mergePredictions(
+                Collections.singletonList(inputRow),
+                Map.of("score", List.of(0.9)),
+                List.of(new FieldSchema("score", "DOUBLE")));
+
+        assertEquals(1, result.size());
+        assertArrayEquals(new Object[]{"item-a", 0.9}, result.get(0));
+        assertArrayEquals(new String[]{"item-a"}, inputRow);
+    }
+
+    @Test
     public void testMergePredictionsScalarPrediction() {
         List<Object[]> inputData = new ArrayList<>();
         inputData.add(new Object[]{1, "A"});

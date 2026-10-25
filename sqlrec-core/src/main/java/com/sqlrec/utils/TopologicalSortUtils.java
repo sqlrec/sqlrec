@@ -143,41 +143,25 @@ public class TopologicalSortUtils {
                 continue;
             }
 
+            Set<Integer> dependencies = bindableDependency.get(i);
             for (String readTable : bindable.getReadTables()) {
                 readTable = NodeUtils.normalizeTableName(readTable);
-                Set<Integer> writeBindableSet = writeTableToBindableIndex.computeIfAbsent(readTable, k -> new HashSet<>());
-                for (Integer writeBindableIndex : writeBindableSet) {
-                    bindableDependency.get(i).add(writeBindableIndex);
-                }
+                dependencies.addAll(writeTableToBindableIndex.getOrDefault(readTable, Collections.emptySet()));
             }
 
             for (String writeTable : bindable.getWriteTables()) {
                 writeTable = NodeUtils.normalizeTableName(writeTable);
-                Set<Integer> readBindableSet = readTableToBindableIndex.computeIfAbsent(writeTable, k -> new HashSet<>());
-                Set<Integer> writeBindableSet = writeTableToBindableIndex.computeIfAbsent(writeTable, k -> new HashSet<>());
-
-                Set<Integer> totalDependSet = new HashSet<>();
-                totalDependSet.addAll(readBindableSet);
-                totalDependSet.addAll(writeBindableSet);
-
-                for (Integer dependBindableIndex : totalDependSet) {
-                    bindableDependency.get(i).add(dependBindableIndex);
-                }
+                dependencies.addAll(readTableToBindableIndex.getOrDefault(writeTable, Collections.emptySet()));
+                dependencies.addAll(writeTableToBindableIndex.getOrDefault(writeTable, Collections.emptySet()));
             }
 
             for (String readTable : bindable.getReadTables()) {
                 readTable = NodeUtils.normalizeTableName(readTable);
-                if (!readTableToBindableIndex.containsKey(readTable)) {
-                    readTableToBindableIndex.put(readTable, new HashSet<>());
-                }
-                readTableToBindableIndex.get(readTable).add(i);
+                readTableToBindableIndex.computeIfAbsent(readTable, k -> new HashSet<>()).add(i);
             }
             for (String writeTable : bindable.getWriteTables()) {
                 writeTable = NodeUtils.normalizeTableName(writeTable);
-                if (!writeTableToBindableIndex.containsKey(writeTable)) {
-                    writeTableToBindableIndex.put(writeTable, new HashSet<>());
-                }
-                writeTableToBindableIndex.get(writeTable).add(i);
+                writeTableToBindableIndex.computeIfAbsent(writeTable, k -> new HashSet<>()).add(i);
             }
         }
 
@@ -257,10 +241,8 @@ public class TopologicalSortUtils {
             Integer bindableIndex = entry.getKey();
             Set<Integer> dependBindableSet = entry.getValue();
             for (Integer dependBindableIndex : dependBindableSet) {
-                if (!reverseBindableDependency.containsKey(dependBindableIndex)) {
-                    reverseBindableDependency.put(dependBindableIndex, new HashSet<>());
-                }
-                reverseBindableDependency.get(dependBindableIndex).add(bindableIndex);
+                reverseBindableDependency.computeIfAbsent(dependBindableIndex, k -> new HashSet<>())
+                        .add(bindableIndex);
             }
         }
         return reverseBindableDependency;

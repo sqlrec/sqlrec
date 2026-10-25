@@ -8,6 +8,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class AddColFunction {
@@ -30,8 +31,7 @@ public class AddColFunction {
         List<Object[]> newData = new ArrayList<>();
         if (enumerable != null) {
             for (Object[] data : enumerable) {
-                Object[] newDataRow = new Object[data.length + 1];
-                System.arraycopy(data, 0, newDataRow, 0, data.length);
+                Object[] newDataRow = Arrays.copyOf(data, data.length + 1, Object[].class);
                 newDataRow[data.length] = value;
                 newData.add(newDataRow);
             }

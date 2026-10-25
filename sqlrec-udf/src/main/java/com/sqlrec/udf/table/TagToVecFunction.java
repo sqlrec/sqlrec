@@ -39,12 +39,9 @@ public class TagToVecFunction {
 
         // collect all unique tags, preserving insertion order
         Map<String, Integer> tagIndexMap = new LinkedHashMap<>();
-        int nextIndex = 0;
         for (Object[] row : rows) {
             for (String tagStr : extractTags(row[tagColIndex])) {
-                if (!tagIndexMap.containsKey(tagStr)) {
-                    tagIndexMap.put(tagStr, nextIndex++);
-                }
+                tagIndexMap.computeIfAbsent(tagStr, ignored -> tagIndexMap.size());
             }
         }
 
@@ -53,8 +50,7 @@ public class TagToVecFunction {
         // build new data with multihot vector column
         List<Object[]> newData = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            Object[] newRow = new Object[row.length + 1];
-            System.arraycopy(row, 0, newRow, 0, row.length);
+            Object[] newRow = Arrays.copyOf(row, row.length + 1, Object[].class);
 
             Double[] vec = new Double[vecSize];
             Arrays.fill(vec, 0.0d);

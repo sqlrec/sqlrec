@@ -124,12 +124,25 @@ class ProtobufRowCodecTest {
     }
 
     @Test
+    void acceptsExactIntegersAcrossJavaNumericTypes() throws Exception {
+        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
+        for (Number value : List.of((byte) 12, (short) 12, 12, 12L,
+                BigInteger.valueOf(12), new BigDecimal("12.000"), 12.0F, 12.0D,
+                new java.util.concurrent.atomic.AtomicLong(12))) {
+            byte[] encoded = codec.encode(new Object[]{value}, valueSchema("INTEGER"));
+            assertEquals(12, Int32Value.parseFrom(encoded).getValue(), value.getClass().getName());
+        }
+    }
+
+    @Test
     void rejectsIntegerOverflowAndFractionalValues() {
         ProtobufRowCodec int32Codec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
         assertThrows(IllegalArgumentException.class,
                 () -> int32Codec.encode(new Object[]{2_147_483_648L}, valueSchema("BIGINT")));
-        assertThrows(IllegalArgumentException.class,
-                () -> int32Codec.encode(new Object[]{1.5}, valueSchema("INTEGER")));
+        for (Number value : List.of(1.5D, new BigDecimal("1.5"), Float.NaN, Double.POSITIVE_INFINITY)) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> int32Codec.encode(new Object[]{value}, valueSchema("INTEGER")));
+        }
 
         ProtobufRowCodec uint32Codec = new ProtobufRowCodec("com.google.protobuf.UInt32Value");
         assertThrows(IllegalArgumentException.class,

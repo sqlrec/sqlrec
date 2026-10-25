@@ -121,41 +121,33 @@ public class HmsSchema extends AbstractSchema {
             List<org.apache.hadoop.hive.metastore.api.Function> functionMetas = metadataAccess.getFunctions(databaseName);
             Multimap<String, Function> functionMap = ArrayListMultimap.create();
             for (org.apache.hadoop.hive.metastore.api.Function functionMeta : functionMetas) {
-                String functionName = ResourceNames.normalize(functionMeta.getFunctionName());
-                if (functionMap.containsKey(functionName)) {
-                    continue;
-                }
-                try {
-                    ScalarFunction scalarFunction = UdfManager.createScalarFunction(functionMeta.getClassName());
-                    if (scalarFunction != null) {
-                        functionMap.put(functionName, scalarFunction);
-                    }
-                } catch (Exception | LinkageError e) {
-                    log.error("Failed to create scalar function {} from class {}",
-                            functionMeta.getFunctionName(), functionMeta.getClassName(), e);
-                }
+                registerScalarFunction(functionMap, functionMeta.getFunctionName(), functionMeta.getClassName());
             }
             // Successfully loaded HMS definitions take precedence. Registering both copies
             // makes Calcite resolve them as overloads, even when the implementations match.
             for (Map.Entry<String, String> entry : FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.entrySet()) {
-                String functionName = ResourceNames.normalize(entry.getKey());
-                if (functionMap.containsKey(functionName)) {
-                    continue;
-                }
-                try {
-                    ScalarFunction scalarFunction = UdfManager.createScalarFunction(entry.getValue());
-                    if (scalarFunction != null) {
-                        functionMap.put(functionName, scalarFunction);
-                    }
-                } catch (Exception | LinkageError e) {
-                    log.error("Failed to create scalar function {} from class {}",
-                            entry.getKey(), entry.getValue(), e);
-                }
+                registerScalarFunction(functionMap, entry.getKey(), entry.getValue());
             }
             return functionMap;
         } catch (Exception e) {
             log.error("Error while computing function map for schema {}", databaseName, e);
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void registerScalarFunction(
+            Multimap<String, Function> functionMap, String name, String className) {
+        String functionName = ResourceNames.normalize(name);
+        if (functionMap.containsKey(functionName)) {
+            return;
+        }
+        try {
+            ScalarFunction scalarFunction = UdfManager.createScalarFunction(className);
+            if (scalarFunction != null) {
+                functionMap.put(functionName, scalarFunction);
+            }
+        } catch (Exception | LinkageError e) {
+            log.error("Failed to create scalar function {} from class {}", name, className, e);
         }
     }
 }

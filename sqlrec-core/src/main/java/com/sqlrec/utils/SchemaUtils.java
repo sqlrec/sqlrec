@@ -162,7 +162,7 @@ public class SchemaUtils {
     }
 
     public static Table getTableObj(CalciteSchema schema, String defaultSchema, String tableName) {
-        tableName = tableName.replaceAll("`", "");
+        tableName = tableName.replace("`", "");
         if (tableName.contains(".")) {
             String[] tableNameParts = tableName.split("\\.");
             if (tableNameParts.length != 2) {
@@ -187,10 +187,7 @@ public class SchemaUtils {
         if (StringUtils.isEmpty(sql)) {
             return "";
         }
-        String[] parts = sql.trim().split("\\s+");
-        if (parts.length == 0) {
-            return "";
-        }
+        String[] parts = sql.trim().split("\\s+", 2);
         String firstWord = parts[0].replaceAll("[^a-zA-Z0-9_]", "");
         return firstWord.toLowerCase();
     }

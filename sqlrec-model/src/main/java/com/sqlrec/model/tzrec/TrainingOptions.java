@@ -3,9 +3,12 @@ package com.sqlrec.model.tzrec;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
+
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -14,30 +17,53 @@ final class TrainingOptions {
     private static final Set<String> SUMMARIES = Set.of(
             "loss", "learning_rate", "global_gradient_norm", "gradient_norm", "parameter", "gradient");
 
-    private TrainingOptions() {}
+    private TrainingOptions() {
+    }
 
     static void validate(ModelConf model, Map<String, String> params) {
-        validate(params);
+        validateObservationSettings(params);
         for (var option : List.of(Config.BATCH_SIZE, Config.NUM_EPOCHS, Config.NNODES, Config.NPROC_PER_NODE)) {
-            if (option.getValue(params) <= 0) throw new IllegalArgumentException(option.getKey() + " must be positive");
+            if (option.getValue(params) <= 0) {
+                throw new IllegalArgumentException(option.getKey() + " must be positive");
+            }
         }
-        if (Config.NUM_WORKERS.getValue(params) < 0) throw new IllegalArgumentException("num_workers must be nonnegative");
+        if (Config.NUM_WORKERS.getValue(params) < 0) {
+            throw new IllegalArgumentException("num_workers must be nonnegative");
+        }
         int port = Config.MASTER_PORT.getValue(params);
-        if (port < 1 || port > 65535) throw new IllegalArgumentException("master_port must be in [1,65535]");
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("master_port must be in [1,65535]");
+        }
         for (var option : List.of(Config.SPARSE_LR, Config.DENSE_LR)) {
             double value = option.getValue(params);
-            if (!Double.isFinite(value) || value <= 0) throw new IllegalArgumentException(option.getKey() + " must be finite and positive");
+            if (!Double.isFinite(value) || value <= 0) {
+                throw new IllegalArgumentException(option.getKey() + " must be finite and positive");
+            }
         }
         String precision = Config.MIXED_PRECISION.getValueOrNull(params);
-        if (precision != null && !precision.isEmpty() && !Set.of("BF16", "FP16").contains(precision.trim().toUpperCase(java.util.Locale.ROOT))) {
+        if (precision != null && !precision.isEmpty()
+                && !Set.of("BF16", "FP16").contains(precision.trim().toUpperCase(Locale.ROOT))) {
             throw new IllegalArgumentException("mixed_precision must be BF16 or FP16");
         }
-        if ("tzrec.mmoe".equals(model.getParams().get("model"))) MultiTaskOptions.parse(model, params);
-        if (!"tzrec.dssm".equals(model.getParams().get("model"))) return;
+        if ("tzrec.mmoe".equals(model.getParams().get("model"))) {
+            MultiTaskOptions.parse(model, params);
+        }
+        if (!"tzrec.dssm".equals(model.getParams().get("model"))) {
+            return;
+        }
         String mode = Config.NEGATIVE_SAMPLING.getValue(params);
-        if (!Set.of("in_batch", "pool").contains(mode)) throw new IllegalArgumentException("negative_sampling must be in_batch or pool");
-        if (!mode.equals("pool")) return;
-        if (Config.NEGATIVE_SAMPLE_COUNT.getValue(params) <= 0) throw new IllegalArgumentException("negative_sample_count must be positive");
+        if (!Set.of("in_batch", "pool").contains(mode)) {
+            throw new IllegalArgumentException("negative_sampling must be in_batch or pool");
+        }
+        if (mode.equals("pool")) {
+            validatePoolSampling(model, params);
+        }
+    }
+
+    private static void validatePoolSampling(ModelConf model, Map<String, String> params) {
+        if (Config.NEGATIVE_SAMPLE_COUNT.getValue(params) <= 0) {
+            throw new IllegalArgumentException("negative_sample_count must be positive");
+        }
         if (Config.NEGATIVE_POOL_SIZE.getValue(params) <= Config.BATCH_SIZE.getValue(params)) {
             throw new IllegalArgumentException("negative_pool_size must exceed batch_size");
         }
@@ -45,12 +71,21 @@ final class TrainingOptions {
         List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(model.getParams()));
         List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(model.getParams()));
         List<FieldSchema> features = FeatureOptions.features(model);
-        if (items.isEmpty()) items = features.stream().map(FieldSchema::getName).filter(name -> !users.contains(name)).toList();
-        if (!java.util.Collections.disjoint(users, items)) {
+        if (items.isEmpty()) {
+            items = features.stream()
+                    .map(FieldSchema::getName)
+                    .filter(name -> !users.contains(name))
+                    .toList();
+        }
+        if (!Collections.disjoint(users, items)) {
             throw new IllegalArgumentException("Pool sampling requires disjoint user_features and item_features");
         }
-        FieldSchema id = features.stream().filter(field -> field.getName().equals(itemId)).findFirst().orElse(null);
-        if (!items.contains(itemId) || id == null || !(FieldTypeUtils.isInteger(id.getType()) || FieldTypeUtils.isString(id.getType()))) {
+        FieldSchema id = features.stream()
+                .filter(field -> field.getName().equals(itemId))
+                .findFirst()
+                .orElse(null);
+        if (!items.contains(itemId) || id == null
+                || !(FieldTypeUtils.isInteger(id.getType()) || FieldTypeUtils.isString(id.getType()))) {
             throw new IllegalArgumentException("item_id_column must be a scalar STRING, INT or BIGINT item feature");
         }
     }
@@ -76,19 +111,23 @@ final class TrainingOptions {
         }
     }
 
-    private static void validate(Map<String, String> params) {
+    private static void validateObservationSettings(Map<String, String> params) {
         Config.USE_TENSORBOARD.getValue(params);
         Config.IS_PROFILING.getValue(params);
         summaries(params);
         boolean trainingMetrics = Config.ENABLE_TRAIN_METRICS.getValue(params);
         int logSteps = Config.LOG_STEP_COUNT_STEPS.getValue(params);
-        if (logSteps <= 0) throw new IllegalArgumentException("log_step_count_steps must be positive");
+        if (logSteps <= 0) {
+            throw new IllegalArgumentException("log_step_count_steps must be positive");
+        }
         int checkpointSteps = Config.SAVE_CHECKPOINTS_STEPS.getValue(params);
         if (checkpointSteps < 0) {
             throw new IllegalArgumentException("save_checkpoints_steps must be nonnegative");
         }
         Integer epochs = Config.SAVE_CHECKPOINTS_EPOCHS.getValueOrNull(params);
-        if (epochs != null && epochs < 0) throw new IllegalArgumentException("save_checkpoints_epochs must be nonnegative");
+        if (epochs != null && epochs < 0) {
+            throw new IllegalArgumentException("save_checkpoints_epochs must be nonnegative");
+        }
         if (Config.SAVE_CHECKPOINTS_STEPS.isSet(params) && checkpointSteps > 0 && epochs != null && epochs > 0) {
             throw new IllegalArgumentException("save_checkpoints_steps and save_checkpoints_epochs cannot both be positive");
         }
@@ -103,7 +142,9 @@ final class TrainingOptions {
     }
 
     static void addMetric(StringBuilder config, Map<String, String> params, String metric, String indent) {
-        if (!Config.ENABLE_TRAIN_METRICS.getValue(params)) return;
+        if (!Config.ENABLE_TRAIN_METRICS.getValue(params)) {
+            return;
+        }
         config.append(indent).append("train_metrics { ").append(metric);
         if (Config.TRAIN_METRIC_DECAY_STEP.isSet(params)) {
             config.append(" decay_step: ").append(decayStep(params));

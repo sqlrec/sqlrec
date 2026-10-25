@@ -42,8 +42,7 @@ final class PartitionExecutor {
     ) {
         CacheTable table = SchemaUtils.getCacheTable(tableName, schema);
         List<RelDataTypeField> fields = table.getDataFields();
-        List<Object[]> rows = new ArrayList<>();
-        table.scan(null).forEach(rows::add);
+        List<Object[]> rows = table.scan(null).into(new ArrayList<>());
 
         ExecuteContextImpl partitionContext = ((ExecuteContextImpl) context).clone();
         List<CompletableFuture<Enumerable<Object[]>>> futures = new ArrayList<>();

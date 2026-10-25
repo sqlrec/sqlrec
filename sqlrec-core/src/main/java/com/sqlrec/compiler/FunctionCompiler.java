@@ -38,7 +38,7 @@ public class FunctionCompiler {
     }
 
     private FunctionCompileStage stage;
-    private Boolean isOrReplace;
+    private boolean isOrReplace;
     private final CalciteSchema schema;
     private final SqlFunctionBindable sqlFunctionBindable;
     private final List<String> sqlList;
@@ -222,21 +222,21 @@ public class FunctionCompiler {
     private void addBodyBindable(BindableInterface bindable, String sql, boolean returnNode) {
         sqlFunctionBindable.getBindableList().add(bindable);
         int bindableIndex = sqlFunctionBindable.getBindableList().size();
+        String tableName = bindable.getCacheTableName();
         if (returnNode) {
             bindable.setName(sqlFunctionBindable.getFunName() + ":RETURN");
-        } else if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
+        } else if (StringUtils.isNotEmpty(tableName)) {
             CacheTable tmpTable = new CacheTable(
-                    bindable.getCacheTableName(),
+                    tableName,
                     null,
                     bindable.getCacheTableDataFields()
             );
-            schema.add(bindable.getCacheTableName(), tmpTable);
-            if (!cacheTableNames.contains(bindable.getCacheTableName())) {
-                cacheTableNames.add(bindable.getCacheTableName());
-                bindable.setName(sqlFunctionBindable.getFunName() + ":" + bindable.getCacheTableName());
+            schema.add(tableName, tmpTable);
+            if (cacheTableNames.add(tableName)) {
+                bindable.setName(sqlFunctionBindable.getFunName() + ":" + tableName);
             } else {
                 bindable.setName(sqlFunctionBindable.getFunName() +
-                        ":" + bindable.getCacheTableName() + ":" + bindableIndex);
+                        ":" + tableName + ":" + bindableIndex);
             }
         } else {
             bindable.setName(sqlFunctionBindable.getFunName() + ":" +

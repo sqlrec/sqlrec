@@ -8,6 +8,34 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
     @Test
+    void explicitDefaultsDoNotEvaluateTheGeneratedFallbackAndKeepNullValues() {
+        FieldSchema field = new FieldSchema("vector", "ARRAY<FLOAT>");
+        Map<String, String> params = new HashMap<>();
+        params.put("column.vector.value_dim", "invalid");
+        params.put("column.vector.default_value", "1|2");
+        assertEquals("1|2", FeatureOptions.defaultValue(field, params));
+
+        params.put("column.vector.default_value", "");
+        assertEquals("", FeatureOptions.defaultValue(field, params));
+        params.put("column.vector.default_value", null);
+        assertNull(FeatureOptions.defaultValue(field, params));
+
+        params.remove("column.vector.default_value");
+        params.put("column.vector.value_dim", "3");
+        params.put("column.vector.separator", "|");
+        assertEquals("0|0|0", FeatureOptions.defaultValue(field, params));
+    }
+
+    @Test
+    void explicitDefaultsStillRequireAValidFeatureDimension() {
+        ModelConf model = model("INT");
+        model.getParams().put("column.price.value_dim", "2");
+        model.getParams().put("column.price.default_value", "1|2");
+        assertEquals("column.price.value_dim must be 1 for scalar floats",
+                new WideAndDeepModel().checkModel(model));
+    }
+
+    @Test
     void idDefaultsAreSingleTokensAndSeparatorsMatchFg() {
         for (String value : List.of("1|2", "a||b", "|")) {
             ModelConf model = model("INT");

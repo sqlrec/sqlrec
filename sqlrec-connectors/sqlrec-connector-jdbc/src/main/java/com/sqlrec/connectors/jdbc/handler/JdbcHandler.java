@@ -110,7 +110,7 @@ public class JdbcHandler {
         try (Connection connection = getConnection();
              PreparedStatement statement = connection.prepareStatement(template.getSql())) {
             for (Object[] row : rows) {
-                template.withParameters(parameterMapper.apply(row)).addToBatch(statement);
+                template.addToBatch(statement, parameterMapper.apply(row));
             }
             statement.executeBatch();
             return true;

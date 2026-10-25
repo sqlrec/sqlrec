@@ -16,6 +16,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -138,8 +139,7 @@ public class CallServiceFunction {
 
         for (int i = 0; i < inputData.size(); i++) {
             Object[] inputRow = inputData.get(i);
-            Object[] newRow = new Object[inputRow.length + outputFields.size()];
-            System.arraycopy(inputRow, 0, newRow, 0, inputRow.length);
+            Object[] newRow = Arrays.copyOf(inputRow, inputRow.length + outputFields.size(), Object[].class);
 
             for (int j = 0; j < outputFields.size(); j++) {
                 FieldSchema field = outputFields.get(j);

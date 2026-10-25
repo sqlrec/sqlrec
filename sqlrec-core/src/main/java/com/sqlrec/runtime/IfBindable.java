@@ -13,7 +13,6 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -75,7 +74,7 @@ public class IfBindable extends BindableInterface {
     }
 
     private void checkReturnBranches(boolean thenReturns, boolean elseReturns) {
-        if ((thenReturns || elseReturns) && (!thenReturns || (elseClause != null && !elseReturns))) {
+        if (elseClause != null && (thenReturns != elseReturns)) {
             throw new RuntimeException(
                     "IF with RETURN must either omit ELSE or return from both THEN and ELSE branches"
             );
@@ -140,11 +139,7 @@ public class IfBindable extends BindableInterface {
     }
 
     private Object getSingleConditionValue(CalciteSchema schema, ExecuteContext context) {
-        Enumerable<Object[]> conditionResult = condition.bind(schema, context);
-        List<Object[]> conditionList = new ArrayList<>();
-        for (Object[] row : conditionResult) {
-            conditionList.add(row);
-        }
+        List<Object[]> conditionList = condition.bind(schema, context).toList();
 
         if (conditionList.size() != 1) {
             throw new RuntimeException("condition must return exactly one row");

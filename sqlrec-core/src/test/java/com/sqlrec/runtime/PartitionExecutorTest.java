@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -74,6 +75,35 @@ class PartitionExecutorTest {
         }
         assertNull(schema.getTable("partition_output", false));
         assertFalse(parent.isCancelled());
+    }
+
+    @Test
+    void partitionsRetainTheirInputSnapshotWhenTheOriginalListChanges() throws Exception {
+        List<Object[]> inputRows = new ArrayList<>(List.of(new Object[]{0}, new Object[]{1}));
+        schema.add("input", new CacheTable("input", Linq4j.asEnumerable(inputRows), FIELDS));
+        CountDownLatch started = new CountDownLatch(2), release = new CountDownLatch(1);
+        Source source = new Source() {
+            @Override public Enumerable<Object[]> bind(CalciteSchema s, ExecuteContext c) {
+                started.countDown();
+                await(release);
+                return Linq4j.singletonEnumerable(new Object[]{id(s)});
+            }
+        };
+        CompletableFuture<Enumerable<Object[]>> call = ExecutorServiceUtils.submit(
+                () -> executor.execute(schema, context(false), source));
+        try {
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            inputRows.clear();
+            release.countDown();
+
+            List<Object[]> rows = call.get(2, TimeUnit.SECONDS).toList();
+            assertEquals(2, rows.size());
+            assertArrayEquals(new Object[]{0}, rows.get(0));
+            assertArrayEquals(new Object[]{1}, rows.get(1));
+        } finally {
+            release.countDown();
+            call.get(5, TimeUnit.SECONDS);
+        }
     }
 
     @Test

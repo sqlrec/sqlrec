@@ -132,7 +132,7 @@ public class KvJoinUtils {
                 }
                 continue;
             }
-            List<Object[]> rightValues = stringKeyMap.getOrDefault(leftJoinKey.toString(), new ArrayList<>());
+            List<Object[]> rightValues = stringKeyMap.getOrDefault(leftJoinKey.toString(), Collections.emptyList());
             if (rightValues.isEmpty()) {
                 if (joinType == JoinRelType.LEFT) {
                     rowList.add(Collections.singletonList(copyValues(leftValue, null, leftSize, rightSize)));

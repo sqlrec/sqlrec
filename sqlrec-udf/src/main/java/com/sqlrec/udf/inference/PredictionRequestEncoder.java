@@ -33,19 +33,13 @@ public final class PredictionRequestEncoder {
     public static String encodeUserItems(
             List<Object[]> userRows, List<Object[]> itemRows, List<FieldSchema> modelFields,
             List<RelDataTypeField> userDataFields, List<RelDataTypeField> itemDataFields) {
-        List<FieldSchema> userFields = new ArrayList<>();
+        JsonObject request = new JsonObject();
         List<FieldSchema> itemFields = new ArrayList<>();
         for (FieldSchema field : modelFields) {
-            if (DataTypeUtils.findFieldIndex(userDataFields, field.getName()) >= 0) {
-                userFields.add(field);
-            } else {
-                itemFields.add(field);
-            }
-        }
-        JsonObject request = new JsonObject();
-        for (FieldSchema field : userFields) {
             int index = DataTypeUtils.findFieldIndex(userDataFields, field.getName());
-            if (index >= 0 && !userRows.isEmpty()) {
+            if (index < 0) {
+                itemFields.add(field);
+            } else if (!userRows.isEmpty()) {
                 JsonArray values = new JsonArray();
                 values.add(gson.toJsonTree(userRows.get(0)[index]));
                 request.add(field.getName(), values);

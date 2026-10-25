@@ -70,6 +70,27 @@ class JdbcStatementTest {
     }
 
     @Test
+    void immediateBatchBindingKeepsAnIsolatedRowSnapshotAndTheTemplateUnchanged() throws SQLException {
+        PreparedStatement stmt = mock(PreparedStatement.class);
+        JdbcStatement template = statement("a = ? AND b = ? AND c = ?");
+        List<Object> row = new java.util.ArrayList<>(Arrays.asList("first", null, "last"));
+        doAnswer(invocation -> {
+            row.clear();
+            return null;
+        }).when(stmt).setObject(1, "first");
+
+        template.addToBatch(stmt, row);
+
+        var order = inOrder(stmt);
+        order.verify(stmt).setObject(1, "first");
+        order.verify(stmt).setNull(2, Types.NULL);
+        order.verify(stmt).setObject(3, "last");
+        order.verify(stmt).addBatch();
+        verifyNoMoreInteractions(stmt);
+        assertTrue(template.getParameters().isEmpty());
+    }
+
+    @Test
     void testWithParametersCopiesAndIsolatesParameterList() {
         List<Object> params = new java.util.ArrayList<>(Collections.singletonList("v1"));
         JdbcStatement statement = statement("a = ?").withParameters(params);

@@ -287,6 +287,16 @@ public final class ProtobufRowCodec {
 
     private static BigInteger exactInteger(Descriptors.FieldDescriptor field, Number value) {
         try {
+            if (value instanceof BigInteger) {
+                return (BigInteger) value;
+            }
+            if (value instanceof BigDecimal) {
+                return ((BigDecimal) value).toBigIntegerExact();
+            }
+            if (value instanceof Byte || value instanceof Short
+                    || value instanceof Integer || value instanceof Long) {
+                return BigInteger.valueOf(value.longValue());
+            }
             return new BigDecimal(value.toString()).toBigIntegerExact();
         } catch (NumberFormatException | ArithmeticException e) {
             throw new IllegalArgumentException(
@@ -314,9 +324,11 @@ public final class ProtobufRowCodec {
         }
 
         if (field.isRepeated()) {
-            List<Object> result = new ArrayList<>();
-            for (Object value : (List<?>) message.getField(field)) {
-                result.add(fromProtobufValue(field, value, arrayElementType(sqlType)));
+            List<?> values = (List<?>) message.getField(field);
+            List<Object> result = new ArrayList<>(values.size());
+            String elementType = arrayElementType(sqlType);
+            for (Object value : values) {
+                result.add(fromProtobufValue(field, value, elementType));
             }
             return result;
         }

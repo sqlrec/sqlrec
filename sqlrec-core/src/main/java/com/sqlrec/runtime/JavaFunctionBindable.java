@@ -28,6 +28,8 @@ public class JavaFunctionBindable extends BindableInterface {
     private final List<SqlNode> inputTableList;
     private final List<RelDataTypeField> returnDataFields;
     private final Method evalMethod;
+    private final Class<?>[] parameterTypes;
+    private final boolean varArgs;
 
     public JavaFunctionBindable(
             String functionName,
@@ -40,6 +42,8 @@ public class JavaFunctionBindable extends BindableInterface {
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
         this.evalMethod = selectEvalMethod(tableFunction, inputTableList);
+        this.parameterTypes = evalMethod.getParameterTypes();
+        this.varArgs = evalMethod.isVarArgs();
 
         List<RelDataTypeField> resolvedReturnDataFields = returnDataFields;
         if (resolvedReturnDataFields == null) {
@@ -148,60 +152,56 @@ public class JavaFunctionBindable extends BindableInterface {
 
     private Object resolveVarArgs(
             Class<?> componentType, int startIndex, CalciteSchema schema, ExecuteContext context) {
-        List<Object> values = new ArrayList<>();
+        Object array = java.lang.reflect.Array.newInstance(componentType, inputTableList.size() - startIndex);
         for (int i = startIndex; i < inputTableList.size(); i++) {
             SqlNode input = inputTableList.get(i);
+            Object value;
             if (componentType.equals(String.class)) {
-                values.add(resolveStringInput(input, context, i));
+                value = resolveStringInput(input, context, i);
             } else if (componentType.equals(CacheTable.class)) {
-                values.add(resolveTableInput(input, schema, i));
+                value = resolveTableInput(input, schema, i);
             } else {
                 throw new RuntimeException("unsupported vararg type: " + componentType);
             }
-        }
-        Object array = java.lang.reflect.Array.newInstance(componentType, values.size());
-        for (int i = 0; i < values.size(); i++) {
-            java.lang.reflect.Array.set(array, i, values.get(i));
+            java.lang.reflect.Array.set(array, i - startIndex, value);
         }
         return array;
     }
 
     private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
-        Class<?>[] paramTypes = evalMethod.getParameterTypes();
-        List<Object> paramList = new ArrayList<>();
+        Object[] arguments = new Object[parameterTypes.length];
         int inputParamIndex = 0;
-        boolean isVarArgs = evalMethod.isVarArgs();
 
-        for (int i = 0; i < paramTypes.length; i++) {
-            Class<?> paramType = paramTypes[i];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            Class<?> paramType = parameterTypes[i];
 
-            if (isVarArgs && i == paramTypes.length - 1) {
-                paramList.add(resolveVarArgs(paramType.getComponentType(), inputParamIndex, schema, context));
+            if (varArgs && i == parameterTypes.length - 1) {
+                arguments[i] = resolveVarArgs(paramType.getComponentType(), inputParamIndex, schema, context);
             } else if (paramType.equals(CacheTable.class)) {
                 if (inputParamIndex >= inputTableList.size()) {
                     throw new RuntimeException("not enough input parameters");
                 }
-                paramList.add(resolveTableInput(inputTableList.get(inputParamIndex), schema, inputParamIndex));
+                arguments[i] = resolveTableInput(inputTableList.get(inputParamIndex), schema, inputParamIndex);
                 inputParamIndex++;
             } else if (paramType.equals(String.class)) {
                 if (inputParamIndex >= inputTableList.size()) {
                     throw new RuntimeException("not enough input parameters");
                 }
-                paramList.add(resolveStringInput(inputTableList.get(inputParamIndex), context, inputParamIndex));
+                arguments[i] = resolveStringInput(inputTableList.get(inputParamIndex), context, inputParamIndex);
                 inputParamIndex++;
             } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ReadonlyContext.class)) {
-                paramList.add(context);
+                arguments[i] = context;
             } else {
                 throw new RuntimeException("unsupported parameter type: " + paramType);
             }
         }
 
-        if (!isVarArgs && inputParamIndex != inputTableList.size()) {
+        if (!varArgs && inputParamIndex != inputTableList.size()) {
             throw new RuntimeException("input parameter count not match");
         }
 
         try {
-            return evalMethod.invoke(tableFunction, paramList.toArray());
+            return evalMethod.invoke(tableFunction, arguments);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -230,8 +230,7 @@ public class JavaFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        Class<?>[] paramTypes = evalMethod.getParameterTypes();
-        for (Class<?> paramType : paramTypes) {
+        for (Class<?> paramType : parameterTypes) {
             if (paramType.equals(ExecuteContext.class)) {
                 return false;
             }

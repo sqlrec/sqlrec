@@ -4,9 +4,6 @@ import com.sqlrec.common.schema.CacheTable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class WindowDiversify {
     public CacheTable evaluate(
             CacheTable input,
@@ -44,12 +41,9 @@ public class WindowDiversify {
                 1.0                         // weight
         };
 
-        List<Object[]> ruleRows = new ArrayList<>();
-        ruleRows.add(ruleRow);
-
         CacheTable ruleTable = new CacheTable(
                 "window_diversify_rule",
-                Linq4j.asEnumerable(ruleRows),
+                Linq4j.singletonEnumerable(ruleRow),
                 RuleDiversity.ruleTableFields()
         );
 

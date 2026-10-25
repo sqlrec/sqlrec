@@ -22,7 +22,7 @@ import java.util.Objects;
  * structurally, instead of depending on correct escaping at every call site.
  *
  * <p>A statement may also serve as a row template (e.g. upsert/delete): keep one
- * instance and call {@link #withParameters(List)} per row.
+ * instance and use {@link #addToBatch(PreparedStatement, List)} for immediate batch binding.
  */
 public final class JdbcStatement {
 
@@ -59,6 +59,10 @@ public final class JdbcStatement {
 
     /** Bind all parameters to the statement, in placeholder order. */
     public void bindTo(PreparedStatement stmt) throws SQLException {
+        bindParameters(stmt, parameters);
+    }
+
+    private static void bindParameters(PreparedStatement stmt, List<?> parameters) throws SQLException {
         for (int i = 0; i < parameters.size(); i++) {
             Object param = parameters.get(i);
             if (param == null) {
@@ -72,6 +76,12 @@ public final class JdbcStatement {
     /** Bind all parameters and add the statement to the batch. */
     public void addToBatch(PreparedStatement stmt) throws SQLException {
         bindTo(stmt);
+        stmt.addBatch();
+    }
+
+    /** Snapshot and bind one row without constructing another SQL execution unit. */
+    public void addToBatch(PreparedStatement stmt, List<?> parameters) throws SQLException {
+        bindParameters(stmt, new ArrayList<>(Objects.requireNonNull(parameters, "parameters")));
         stmt.addBatch();
     }
 

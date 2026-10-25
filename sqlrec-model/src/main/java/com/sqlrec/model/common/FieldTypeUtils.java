@@ -20,25 +20,19 @@ public final class FieldTypeUtils {
 
     /** Returns true for {@code float} / {@code double} (case-insensitive). */
     public static boolean isFloat(String fieldType) {
-        if (fieldType == null) {
-            return false;
-        }
-        String lower = fieldType.toLowerCase();
-        return lower.equals("float") || lower.equals("double");
+        return "float".equalsIgnoreCase(fieldType) || "double".equalsIgnoreCase(fieldType);
     }
 
     /** Returns true for scalar {@code int} / {@code integer} / {@code bigint} (case-insensitive). */
     public static boolean isInteger(String fieldType) {
-        if (fieldType == null) {
-            return false;
-        }
-        String lower = fieldType.toLowerCase();
-        return lower.equals("int") || lower.equals("integer") || lower.equals("bigint");
+        return "int".equalsIgnoreCase(fieldType)
+                || "integer".equalsIgnoreCase(fieldType)
+                || "bigint".equalsIgnoreCase(fieldType);
     }
 
     /** Returns true for {@code array<...>} types (case-insensitive prefix match). */
     public static boolean isArray(String fieldType) {
-        return fieldType != null && fieldType.toLowerCase().startsWith("array<");
+        return fieldType != null && fieldType.regionMatches(true, 0, "array<", 0, "array<".length());
     }
 
     /** Returns true for {@code string} (case-insensitive). */

@@ -48,12 +48,20 @@ public final class RowJsonEncoder {
 
     public static String toJsonArray(List<Object[]> data, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
         JsonArray jsonArray = new JsonArray();
+        if (data.isEmpty()) {
+            return requestGson.toJson(jsonArray);
+        }
+
+        int[] fieldIndexes = new int[inputFields.size()];
+        for (int i = 0; i < inputFields.size(); i++) {
+            fieldIndexes[i] = DataTypeUtils.findFieldIndex(dataFields, inputFields.get(i).getName());
+        }
 
         for (Object[] row : data) {
             JsonObject jsonObject = new JsonObject();
             for (int i = 0; i < inputFields.size(); i++) {
                 FieldSchema field = inputFields.get(i);
-                int fieldIndex = DataTypeUtils.findFieldIndex(dataFields, field.getName());
+                int fieldIndex = fieldIndexes[i];
                 if (fieldIndex >= 0 && fieldIndex < row.length) {
                     Object value = row[fieldIndex];
                     jsonObject.add(field.getName(), requestGson.toJsonTree(value));

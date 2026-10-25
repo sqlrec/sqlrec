@@ -6,11 +6,10 @@ import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
 import com.sqlrec.model.common.FieldTypeUtils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Shared {@link ModelController} implementation for GBDT models (CatBoost / LightGBM / XGBoost).
@@ -60,26 +59,14 @@ public abstract class GbdtModelBase implements ModelController {
         if (!isSupportedObjective(Config.OBJECTIVE.getValue(params))) {
             return "GBDT serving supports only binary or regression objectives";
         }
-        java.util.Set<String> labelNames = Arrays.stream(labelCol.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toSet());
-
-        // Validate that label columns exist in input fields.
-        java.util.Set<String> inputFieldNames = new java.util.HashSet<>();
-        for (FieldSchema f : model.getInputFields()) {
-            inputFieldNames.add(f.getName());
-        }
-        for (String label : labelNames) {
-            if (!inputFieldNames.contains(label)) {
-                return "Label column '" + label + "' not found in input_fields";
-            }
+        if (model.getInputFields().stream().noneMatch(field -> labelCol.equals(field.getName()))) {
+            return "Label column '" + labelCol + "' not found in input_fields";
         }
 
         // Validate feature field types.
         List<String> unsupported = new ArrayList<>();
         for (FieldSchema f : model.getInputFields()) {
-            if (labelNames.contains(f.getName())) {
+            if (labelCol.equals(f.getName())) {
                 continue;
             }
             String error = validateFeatureType(f.getName(), f.getType());
@@ -106,7 +93,7 @@ public abstract class GbdtModelBase implements ModelController {
         if (type == null) {
             return "Feature '" + name + "' has null type";
         }
-        String lower = type.toLowerCase();
+        String lower = type.toLowerCase(Locale.ROOT);
 
         // Array types are unsupported by both frameworks.
         if (lower.startsWith("array<")) {

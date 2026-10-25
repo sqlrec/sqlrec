@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,9 +58,12 @@ final class FeatureOptions {
     }
 
     static String defaultValue(FieldSchema field, Map<String, String> params) {
+        String key = "column." + field.getName() + ".default_value";
+        if (params.containsKey(key)) {
+            return params.get(key);
+        }
         String separator = params.getOrDefault("column." + field.getName() + ".separator", "\035");
-        return params.getOrDefault("column." + field.getName() + ".default_value",
-                String.join(separator, java.util.Collections.nCopies(valueDim(field, params), "0")));
+        return String.join(separator, Collections.nCopies(valueDim(field, params), "0"));
     }
 
     static List<Float> boundaries(String name, Map<String, String> params) {
@@ -124,100 +128,191 @@ final class FeatureOptions {
         try {
             Map<String, String> params = model.getParams() == null ? Map.of() : model.getParams();
             List<String> labels = FieldTypeUtils.parseCsvList(params.get("label_columns"));
-            if (multiTask) MultiTaskOptions.parse(model);
-            else if (labels.size() != 1) return "TZRec requires exactly one label_columns entry";
+            if (multiTask) {
+                MultiTaskOptions.parse(model);
+            } else if (labels.size() != 1) {
+                return "TZRec requires exactly one label_columns entry";
+            }
             Set<String> names = new HashSet<>();
-            if (model.getInputFields() == null) return "TZRec requires input fields";
+            if (model.getInputFields() == null) {
+                return "TZRec requires input fields";
+            }
             for (FieldSchema field : model.getInputFields()) {
-                if (field.getName() == null || field.getName().isEmpty() || field.getName().contains(":") || !names.add(field.getName())) {
+                if (field.getName() == null || field.getName().isEmpty()
+                        || field.getName().contains(":") || !names.add(field.getName())) {
                     return "Input field names must be nonempty, unique and contain no ':'";
                 }
             }
             List<FieldSchema> features = features(model);
-            if (features.isEmpty()) return "TZRec requires at least one non-label feature";
+            if (features.isEmpty()) {
+                return "TZRec requires at least one non-label feature";
+            }
             positive(Config.NUM_BUCKETS.getValue(params), "num_buckets");
             positive(Config.EMBEDDING_DIM.getValue(params), "embedding_dim");
             Set<Integer> fmDims = new HashSet<>();
             for (FieldSchema field : features) {
                 String type = compactType(field.getType());
-                String prefix = "column." + field.getName() + ".";
-                if (isRaw(type)) {
-                    int dim = valueDim(field, params);
-                    positive(dim, prefix + "value_dim");
-                    if (dim > 65536) return prefix + "value_dim must not exceed 65536";
-                    if (FieldTypeUtils.isArray(type) && !params.containsKey(prefix + "value_dim")) {
-                        return prefix + "value_dim is required for float vectors";
-                    }
-                    if (!FieldTypeUtils.isArray(type) && dim != 1) return prefix + "value_dim must be 1 for scalar floats";
-                    String separator = params.getOrDefault(prefix + "separator", "\035");
-                    if (separator.length() != 1 || separator.charAt(0) > 127) return prefix + "separator must be a single ASCII character";
-                    String defaults = defaultValue(field, params);
-                    List<Float> bounds = boundaries(field.getName(), params);
-                    if (defaults.isEmpty() && bounds.isEmpty()) return prefix + "default_value is required for dense features";
-                    if (defaults.isEmpty() && dim == 1 && FieldTypeUtils.isArray(type)) {
-                        return prefix + "default_value must be nonempty for one-dimensional bucket vectors; serving uses numeric scalars";
-                    }
-                    if (!defaults.isEmpty()) {
-                        String[] tokens = defaults.split(Pattern.quote(separator), -1);
-                        if (tokens.length != dim) return prefix + "default_value must match value_dim";
-                        for (String token : tokens) {
-                            finiteFloat(token);
-                        }
-                    }
-                    validateNormalizer(params.get(prefix + "normalizer"));
-                    String embedding = params.getOrDefault(prefix + "embedding", "none");
-                    if (!Set.of("none", "mlp", "autodis").contains(embedding)) return prefix + "embedding must be none, mlp or autodis";
-                    if (embedding.equals("autodis") && dim != 1) return prefix + "embedding=autodis requires value_dim=1";
-                    if (!bounds.isEmpty() && !embedding.equals("none")) return "boundaries and dense embedding cannot be combined";
-                    if (!bounds.isEmpty() || !embedding.equals("none")) positive(embeddingDim(field.getName(), params), prefix + "embedding_dim");
-                    if (bounds.isEmpty() && embedding.equals("none") && params.containsKey(prefix + "embedding_dim")) return prefix + "embedding_dim requires boundaries or embedding=mlp/autodis";
-                    if (embedding.equals("autodis")) positive(Integer.parseInt(params.getOrDefault(prefix + "autodis.num_channels", "3")), prefix + "autodis.num_channels");
-                    else if (params.containsKey(prefix + "autodis.num_channels")) return prefix + "autodis.num_channels requires embedding=autodis";
-                    if (!bounds.isEmpty()) fmDims.add(embeddingDim(field.getName(), params));
-                    if (!bounds.isEmpty() && embeddingDim(field.getName(), params) % 4 != 0) return "Sparse embedding_dim must be a multiple of 4";
-                } else {
-                    if (!FieldTypeUtils.isInteger(type) && !FieldTypeUtils.isString(type) && !"array<string>".equalsIgnoreCase(type)) {
-                        return "Unsupported TZRec feature type for " + field.getName() + ": " + type + "; use ARRAY<STRING> for multivalue IDs";
-                    }
-                    int buckets = Integer.parseInt(params.getOrDefault(prefix + "bucket_size", String.valueOf(Config.NUM_BUCKETS.getValue(params))));
-                    positive(buckets, prefix + "bucket_size");
-                    positive(embeddingDim(field.getName(), params), prefix + "embedding_dim");
-                    if (embeddingDim(field.getName(), params) % 4 != 0) return "Sparse embedding_dim must be a multiple of 4";
-                    String separator = params.getOrDefault(prefix + "separator", "\035");
-                    if (separator.length() != 1 || separator.charAt(0) > 127) return prefix + "separator must be a single ASCII character";
-                    String defaults = params.getOrDefault(prefix + "default_value", "");
-                    if (!defaults.isEmpty() && FieldTypeUtils.isInteger(type)) {
-                        long id = Long.parseLong(defaults.trim());
-                        if (id < 0 || id >= buckets) return prefix + "default_value is outside the bucket range";
-                    }
-                    if (!FieldTypeUtils.isInteger(type) && !Config.USE_FARM_HASH_TO_BUCKETIZE.getValue(params).equalsIgnoreCase("true")) return "Hash features require USE_FARM_HASH_TO_BUCKETIZE=true";
-                    fmDims.add(embeddingDim(field.getName(), params));
+                String error = isRaw(type)
+                        ? validateRawFeature(field, type, params, fmDims)
+                        : validateIdFeature(field, type, params, fmDims);
+                if (error != null) {
+                    return error;
                 }
             }
-            if (!dssm && !multiTask && !deepOnly && sparseFeatures(model).isEmpty()) return "Ranking models require at least one sparse feature for the wide group";
-            if (deepfm && fmDims.size() != 1) return "DeepFM sparse feature embedding dimensions must match";
+            if (!dssm && !multiTask && !deepOnly && sparseFeatures(model).isEmpty()) {
+                return "Ranking models require at least one sparse feature for the wide group";
+            }
+            if (deepfm && fmDims.size() != 1) {
+                return "DeepFM sparse feature embedding dimensions must match";
+            }
             if (dssm) {
-                Set<String> available = new HashSet<>();
-                for (FieldSchema field : features) available.add(field.getName());
-                List<String> user = FieldTypeUtils.parseCsvList(params.get("user_features"));
-                List<String> item = FieldTypeUtils.parseCsvList(params.get("item_features"));
-                if (user.isEmpty() && item.isEmpty()) return "At least one of user_features or item_features is required for DSSM model";
-                for (List<String> tower : List.of(user, item)) {
-                    if (new HashSet<>(tower).size() != tower.size() || !available.containsAll(tower)) return "DSSM tower features must be unique, declared and must not include labels";
+                String error = validateDssmTowers(features, params);
+                if (error != null) {
+                    return error;
                 }
-                if (!user.isEmpty() && !item.isEmpty()) {
-                    Set<String> assigned = new HashSet<>(user); assigned.addAll(item);
-                    if (!assigned.equals(available)) return "DSSM towers must cover all non-label input features";
-                }
-                if (user.isEmpty() && available.size() == item.size() || item.isEmpty() && available.size() == user.size()) return "Both DSSM towers require at least one feature";
-                positive(Config.OUTPUT_DIM.getValue(params), "output_dim");
-                hiddenUnits(Config.USER_HIDDEN_UNITS.getValue(params));
-                hiddenUnits(Config.ITEM_HIDDEN_UNITS.getValue(params));
-            } else if (!multiTask && !deepOnly) hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
+            } else if (!multiTask && !deepOnly) {
+                hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
+            }
             return null;
         } catch (IllegalArgumentException e) {
             return "Invalid TZRec configuration: " + e.getMessage();
         }
+    }
+
+    private static String validateRawFeature(
+            FieldSchema field, String type, Map<String, String> params, Set<Integer> fmDims) {
+        String prefix = "column." + field.getName() + ".";
+        int dim = valueDim(field, params);
+        positive(dim, prefix + "value_dim");
+        if (dim > 65536) {
+            return prefix + "value_dim must not exceed 65536";
+        }
+        boolean array = FieldTypeUtils.isArray(type);
+        if (array && !params.containsKey(prefix + "value_dim")) {
+            return prefix + "value_dim is required for float vectors";
+        }
+        if (!array && dim != 1) {
+            return prefix + "value_dim must be 1 for scalar floats";
+        }
+        String separator = params.getOrDefault(prefix + "separator", "\035");
+        if (separator.length() != 1 || separator.charAt(0) > 127) {
+            return prefix + "separator must be a single ASCII character";
+        }
+        String defaults = defaultValue(field, params);
+        List<Float> bounds = boundaries(field.getName(), params);
+        if (defaults.isEmpty() && bounds.isEmpty()) {
+            return prefix + "default_value is required for dense features";
+        }
+        if (defaults.isEmpty() && dim == 1 && array) {
+            return prefix + "default_value must be nonempty for one-dimensional bucket vectors; serving uses numeric scalars";
+        }
+        if (!defaults.isEmpty()) {
+            String[] tokens = defaults.split(Pattern.quote(separator), -1);
+            if (tokens.length != dim) {
+                return prefix + "default_value must match value_dim";
+            }
+            for (String token : tokens) {
+                finiteFloat(token);
+            }
+        }
+        validateNormalizer(params.get(prefix + "normalizer"));
+        String embedding = params.getOrDefault(prefix + "embedding", "none");
+        if (!Set.of("none", "mlp", "autodis").contains(embedding)) {
+            return prefix + "embedding must be none, mlp or autodis";
+        }
+        if (embedding.equals("autodis") && dim != 1) {
+            return prefix + "embedding=autodis requires value_dim=1";
+        }
+        if (!bounds.isEmpty() && !embedding.equals("none")) {
+            return "boundaries and dense embedding cannot be combined";
+        }
+        int featureEmbeddingDim = 0;
+        if (!bounds.isEmpty() || !embedding.equals("none")) {
+            featureEmbeddingDim = embeddingDim(field.getName(), params);
+            positive(featureEmbeddingDim, prefix + "embedding_dim");
+        }
+        if (bounds.isEmpty() && embedding.equals("none") && params.containsKey(prefix + "embedding_dim")) {
+            return prefix + "embedding_dim requires boundaries or embedding=mlp/autodis";
+        }
+        if (embedding.equals("autodis")) {
+            positive(Integer.parseInt(params.getOrDefault(prefix + "autodis.num_channels", "3")),
+                    prefix + "autodis.num_channels");
+        } else if (params.containsKey(prefix + "autodis.num_channels")) {
+            return prefix + "autodis.num_channels requires embedding=autodis";
+        }
+        if (!bounds.isEmpty()) {
+            fmDims.add(featureEmbeddingDim);
+            if (featureEmbeddingDim % 4 != 0) {
+                return "Sparse embedding_dim must be a multiple of 4";
+            }
+        }
+        return null;
+    }
+
+    private static String validateIdFeature(
+            FieldSchema field, String type, Map<String, String> params, Set<Integer> fmDims) {
+        String prefix = "column." + field.getName() + ".";
+        boolean integer = FieldTypeUtils.isInteger(type);
+        if (!integer && !FieldTypeUtils.isString(type) && !"array<string>".equalsIgnoreCase(type)) {
+            return "Unsupported TZRec feature type for " + field.getName() + ": " + type
+                    + "; use ARRAY<STRING> for multivalue IDs";
+        }
+        int buckets = Integer.parseInt(params.getOrDefault(prefix + "bucket_size",
+                String.valueOf(Config.NUM_BUCKETS.getValue(params))));
+        positive(buckets, prefix + "bucket_size");
+        int featureEmbeddingDim = embeddingDim(field.getName(), params);
+        positive(featureEmbeddingDim, prefix + "embedding_dim");
+        if (featureEmbeddingDim % 4 != 0) {
+            return "Sparse embedding_dim must be a multiple of 4";
+        }
+        String separator = params.getOrDefault(prefix + "separator", "\035");
+        if (separator.length() != 1 || separator.charAt(0) > 127) {
+            return prefix + "separator must be a single ASCII character";
+        }
+        String defaults = params.getOrDefault(prefix + "default_value", "");
+        if (!defaults.isEmpty() && integer) {
+            long id = Long.parseLong(defaults.trim());
+            if (id < 0 || id >= buckets) {
+                return prefix + "default_value is outside the bucket range";
+            }
+        }
+        if (!integer && !Config.USE_FARM_HASH_TO_BUCKETIZE.getValue(params).equalsIgnoreCase("true")) {
+            return "Hash features require USE_FARM_HASH_TO_BUCKETIZE=true";
+        }
+        fmDims.add(featureEmbeddingDim);
+        return null;
+    }
+
+    private static String validateDssmTowers(List<FieldSchema> features, Map<String, String> params) {
+        Set<String> available = new HashSet<>();
+        for (FieldSchema field : features) {
+            available.add(field.getName());
+        }
+        List<String> user = FieldTypeUtils.parseCsvList(params.get("user_features"));
+        List<String> item = FieldTypeUtils.parseCsvList(params.get("item_features"));
+        if (user.isEmpty() && item.isEmpty()) {
+            return "At least one of user_features or item_features is required for DSSM model";
+        }
+        for (List<String> tower : List.of(user, item)) {
+            if (new HashSet<>(tower).size() != tower.size() || !available.containsAll(tower)) {
+                return "DSSM tower features must be unique, declared and must not include labels";
+            }
+        }
+        if (!user.isEmpty() && !item.isEmpty()) {
+            Set<String> assigned = new HashSet<>(user);
+            assigned.addAll(item);
+            if (!assigned.equals(available)) {
+                return "DSSM towers must cover all non-label input features";
+            }
+        }
+        if (user.isEmpty() && available.size() == item.size()
+                || item.isEmpty() && available.size() == user.size()) {
+            return "Both DSSM towers require at least one feature";
+        }
+        positive(Config.OUTPUT_DIM.getValue(params), "output_dim");
+        hiddenUnits(Config.USER_HIDDEN_UNITS.getValue(params));
+        hiddenUnits(Config.ITEM_HIDDEN_UNITS.getValue(params));
+        return null;
     }
 
     private static void hiddenUnits(String value) {
