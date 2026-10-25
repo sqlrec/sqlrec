@@ -321,7 +321,7 @@ data:
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         /app/run.py --mode train \\
-        --pipeline_config_path /data/pipeline.config --continue_train
+        --pipeline_config_path /data/pipeline.config --continue_train --restore_optimizer true
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -539,7 +539,7 @@ data:
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         /app/run.py --mode train \\
-        --pipeline_config_path /data/pipeline.config --continue_train
+        --pipeline_config_path /data/pipeline.config --continue_train --restore_optimizer true
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -757,7 +757,7 @@ data:
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         /app/run.py --mode train \\
-        --pipeline_config_path /data/pipeline.config --continue_train
+        --pipeline_config_path /data/pipeline.config --continue_train --restore_optimizer true
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -861,7 +861,7 @@ data:
         dataset_type: ParquetDataset
         fg_mode: FG_NORMAL
         label_fields: "click"
-        num_workers: 8
+        num_workers: 1
     }
     feature_configs {
         id_feature {

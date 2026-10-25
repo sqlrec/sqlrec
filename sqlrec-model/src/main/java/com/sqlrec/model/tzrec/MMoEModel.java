@@ -6,7 +6,6 @@ import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.List;
-import java.util.Map;
 
 /** Multi-target ranking with one service and an ordered output for every task. */
 public class MMoEModel extends TzrecModelBase {
@@ -23,21 +22,6 @@ public class MMoEModel extends TzrecModelBase {
     @Override
     public String checkModel(ModelConf model) {
         return FeatureOptions.validate(model, false, false, true);
-    }
-
-    @Override
-    protected void checkOverrides(ModelConf model, Map<String, String> overrides) {
-        if (overrides == null || overrides.isEmpty()) return;
-        if (overrides.containsKey("model") && !getModelName().equals(overrides.get("model"))) {
-            throw new IllegalArgumentException("Operation cannot change the model type");
-        }
-        ModelConf effective = PipelineConfigUtils.effectiveModel(model, overrides);
-        String error = checkModel(effective);
-        if (error != null) throw new IllegalArgumentException(error);
-        if (!MultiTaskPipelineConfigUtils.modelConfig(model, false).equals(MultiTaskPipelineConfigUtils.modelConfig(effective, false))
-                || !PipelineConfigUtils.generateFeatureConfigs(model).equals(PipelineConfigUtils.generateFeatureConfigs(effective))) {
-            throw new IllegalArgumentException("MMoE task, network and feature configuration cannot be changed by operation overrides; create a new model");
-        }
     }
 
     @Override

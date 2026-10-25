@@ -18,19 +18,19 @@ with (
 'model'='tzrec.wide_and_deep',
 'MODEL_PATH'='jfs://myjfs/user/sqlrec/models/rank_model',
 'label_columns'='rating',
-'random_seed'='123',
 'embedding_dim'='16',
 'hidden_units'='64,32',
-'batch_size'='256',
-'num_workers'='1',
-'num_epochs'='3',
-'sparse_lr'='0.03',
 'column.age_years.normalizer'='method=minmax,min=0,max=100',
 'column.genre_count.normalizer'='method=minmax,min=0,max=18'
 );
 
 train model rank_model checkpoint='v1' on ml_sample
 with (
+'random_seed'='123',
+'batch_size'='256',
+'num_workers'='1',
+'num_epochs'='3',
+'sparse_lr'='0.03',
 'nnodes'='2',
 'nproc_per_node'='1',
 'use_tensorboard'='true',
@@ -43,6 +43,11 @@ with (
 
 -- train model rank_model checkpoint='v2' on ml_sample from 'v1'
 -- with (
+-- 'random_seed'='123',
+-- 'batch_size'='256',
+-- 'num_workers'='1',
+-- 'num_epochs'='3',
+-- 'sparse_lr'='0.03',
 -- 'nnodes'='2',
 -- 'nproc_per_node'='1',
 -- 'use_tensorboard'='true',
@@ -55,6 +60,7 @@ with (
 
 export model rank_model checkpoint='v1' on ml_sample
 with (
+'batch_size'='256',
 'NAMESPACE'='${NAMESPACE}',
 'pod_cpu_cores'='2',
 'pod_memory'='4Gi'
@@ -98,19 +104,10 @@ with (
 'model'='tzrec.dssm',
 'MODEL_PATH'='hdfs://myhdfs/user/sqlrec/models/recall_model_hdfs',
 'label_columns'='rating',
-'random_seed'='123',
 'embedding_dim'='16',
-'batch_size'='256',
-'num_workers'='1',
-'num_epochs'='3',
-'sparse_lr'='0.01',
 'user_hidden_units'='64,32',
 'item_hidden_units'='64,32',
 'output_dim'='32',
-'negative_sampling'='pool',
-'negative_sample_count'='256',
-'negative_pool_size'='4096',
-'item_id_column'='movie_id',
 'user_features'='user_id,gender,age,occupation,zip_code,age_years',
 'item_features'='movie_id,genres,genre_count',
 'column.age_years.normalizer'='method=minmax,min=0,max=100',
@@ -119,6 +116,15 @@ with (
 
 train model recall_model_hdfs checkpoint='v1' on ml_recall_sample_hdfs
 with (
+'random_seed'='123',
+'batch_size'='256',
+'num_workers'='1',
+'num_epochs'='3',
+'sparse_lr'='0.01',
+'negative_sampling'='pool',
+'negative_sample_count'='256',
+'negative_pool_size'='4096',
+'item_id_column'='movie_id',
 'nnodes'='2',
 'nproc_per_node'='1',
 'use_tensorboard'='true',
@@ -131,6 +137,7 @@ with (
 
 export model recall_model_hdfs checkpoint='v1' on ml_recall_sample_hdfs
 with (
+'batch_size'='256',
 'NAMESPACE'='${NAMESPACE}',
 'pod_cpu_cores'='2',
 'pod_memory'='4Gi'

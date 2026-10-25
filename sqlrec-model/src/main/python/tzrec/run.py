@@ -60,8 +60,7 @@ def main():
     parser.add_argument("--pipeline_config_path", required=True)
     parser.add_argument("--export_dir")
     parser.add_argument("--continue_train", action="store_true")
-    parser.add_argument("--check_checkpoint_structure", action="store_true")
-    parser.add_argument("--checkpoint_structure_options", default="{}")
+    parser.add_argument("--restore_optimizer", choices=("true", "false"), default="true")
     args = parser.parse_args()
     if args.continue_train and args.mode != "train":
         raise ValueError("--continue_train is only supported for training")
@@ -83,10 +82,7 @@ def main():
     saved = None
     if source:
         saved = text_format.Parse(common.read_text(source.rstrip("/") + "/pipeline.config"), pipeline_pb2.EasyRecConfig())
-    structure = json.loads(args.checkpoint_structure_options)
-    config = prepare_config(requested, saved, check_checkpoint_structure=args.check_checkpoint_structure,
-                            structure_options=structure.get("options"), structure_masks=structure.get("masked_features"),
-                            training=args.mode == "train")
+    config = prepare_config(requested, saved, training=args.mode == "train")
     if resume_checkpoint:
         config.train_config.ClearField("fine_tune_checkpoint")
     with tempfile.TemporaryDirectory(prefix="sqlrec-tzrec-") as temporary:
@@ -98,7 +94,11 @@ def main():
                 config.train_config.sparse_optimizer != saved.train_config.sparse_optimizer
                 or config.train_config.dense_optimizer != saved.train_config.dense_optimizer
             )
-            train_and_evaluate(path, continue_train=resume_checkpoint is not None, ignore_restore_optimizer=changed_optimizer)
+            restore_optimizer = args.restore_optimizer == "true"
+            if saved is not None and resume_checkpoint is None and changed_optimizer and restore_optimizer:
+                raise ValueError("FROM with different optimizer settings requires --restore_optimizer false")
+            train_and_evaluate(path, continue_train=resume_checkpoint is not None,
+                               ignore_restore_optimizer=saved is not None and resume_checkpoint is None and not restore_optimizer)
         else:
             if not args.export_dir:
                 raise ValueError("--export_dir is required")

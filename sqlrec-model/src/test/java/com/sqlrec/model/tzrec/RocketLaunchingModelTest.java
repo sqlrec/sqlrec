@@ -22,7 +22,7 @@ class RocketLaunchingModelTest {
         model.setInputFields(fields);
         Map<String, String> params = new HashMap<>(Map.of("model", "tzrec.rocket_launching", "label_columns", "label",
                 "booster_hidden_units", "16,8", "light_hidden_units", "8,4", "num_buckets", "32",
-                "embedding_dim", "8", "batch_size", "8", "num_workers", "0", "sparse_lr", "0.01", "dense_lr", "0.01"));
+                "embedding_dim", "8"));
         if (shared) params.put("share_hidden_units", "16");
         model.setParams(params);
         return model;
@@ -31,7 +31,11 @@ class RocketLaunchingModelTest {
     private ModelTrainConf train(Map<String, String> overrides) {
         ModelTrainConf train = new ModelTrainConf();
         train.setId("rocket-train"); train.setModelDir("/fixture/model");
-        train.setTrainDataPaths(List.of("/fixture/train.parquet")); train.setParams(overrides);
+        train.setTrainDataPaths(List.of("/fixture/train.parquet"));
+        Map<String, String> params = new HashMap<>(Map.of("batch_size", "8", "num_workers", "0", "sparse_lr", "0.01", "dense_lr", "0.01"));
+        params.put("task.watch_time.weight", "0.1");
+        params.putAll(overrides);
+        train.setParams(params);
         return train;
     }
 
@@ -53,9 +57,7 @@ class RocketLaunchingModelTest {
         for (Map<String, String> invalid : List.of(Map.of("light_hidden_units", "4,2"),
                 Map.of("booster_hidden_units", "16,0"), Map.of("light_hidden_units", "8,"),
                 Map.of("share_hidden_units", ""), Map.of("feature_based_distillation", "false"),
-                Map.of("feature_distillation_function", "EUCLID"), Map.of("hidden_units", "8"),
-                Map.of("user_features", "category"), Map.of("num_expert", "2"),
-                Map.of("task.label.weight", "1"), Map.of("loss", "binary_cross_entropy"),
+                Map.of("feature_distillation_function", "EUCLID"),
                 Map.of("label_columns", "label,price"), Map.of("label_columns", "missing"))) {
             ModelConf model = model(false, false);
             model.getParams().putAll(invalid);
@@ -81,9 +83,9 @@ class RocketLaunchingModelTest {
                 Map.of("column.category.bucket_size", "64"), Map.of("label_columns", "price"),
                 Map.of("model", "tzrec.dssm"), Map.of("feature_based_distillation", "false"))) {
             export.setParams(overrides); service.setParams(overrides);
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train(overrides)));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
-            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
+            assertDoesNotThrow(() -> controller.genModelTrainK8sYaml(model, train(overrides)));
+            assertDoesNotThrow(() -> controller.genModelExportK8sYaml(model, export));
+            assertDoesNotThrow(() -> controller.getServiceK8sYaml(model, service));
         }
         Map<String, String> runtime = Map.of("batch_size", "16", "dense_lr", "0.02", "booster_hidden_units", "16, 8",
                 "enable_train_metrics", "false", "train_metric_decay_rate", "0.8",

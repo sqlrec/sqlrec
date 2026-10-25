@@ -6,7 +6,7 @@
 
 Model、训练、导出和 Service 的 `WITH` 选项使用字符串键和值，例如 `'batch_size' = '8192'`；SQLRec 会按参数类型解析值。
 
-训练型模型按[模型指南](../../guides/model-lifecycle.md#训练型模型的完整流程)执行创建、训练、导出和服务部署。训练型模型的示例以 Model 定义为主，`training_sample` 等训练表需另行准备。训练配置可作为 Model 默认值，并在 `TRAIN MODEL ... WITH (...)` 中覆盖。
+训练型模型按[模型指南](../../guides/model-lifecycle.md#训练型模型的完整流程)执行创建、训练、导出和服务部署。训练型模型的示例以 Model 定义为主，`training_sample` 等训练表需另行准备。TZRec 的模型结构放在 MODEL，训练参数放在 TRAIN，导出及服务资源分别在对应操作中设置。
 
 下表的资源配置适用于 tzrec、GBDT 和 Hugging Face 自托管任务或服务；`replicas` 用于在线服务。
 
@@ -19,6 +19,36 @@ Model、训练、导出和 Service 的 `WITH` 选项使用字符串键和值，�
 | `replicas` | Integer | 1 | 服务副本数 |
 
 镜像默认值：tzrec 使用 `sqlrec/tzrec`，GBDT 使用 `sqlrec/gbdt`，版本为 `${SQLREC_VERSION}-cpu`；Hugging Face 使用 `sqlrec/transformers:${SQLREC_VERSION}`。可用 `image`、`version` 覆盖。
+
+### TZRec 配置阶段
+
+| 位置 | 参数职责 |
+| --- | --- |
+| CREATE MODEL WITH | 模型类型、路径、字段和标签、特征编码、网络结构、双塔分组、MMoE 任务类型及塔尺寸；也可声明训练及资源默认值 |
+| TRAIN MODEL WITH | 训练预算、优化器、读取并发、评估数据、负采样、任务权重和指标、观测及保存频率、训练拓扑 |
+| EXPORT MODEL WITH | `batch_size`（默认 8192）及导出任务资源；固定单进程、一个读取 worker |
+| CREATE SERVICE WITH | `replicas`、推理环境及服务资源 |
+
+训练及运行参数按本次操作 WITH > MODEL WITH > ConfigOption 默认值取值。`batch_size`、`num_workers`、学习率等可以在 MODEL 中作为默认值，在 TRAIN 中覆盖；EXPORT 和 SERVICE 同样可以覆盖模型声明的资源默认值。不读取的参数会被忽略；实际使用的参数仍须通过数值与相互约束校验。由系统生成的节点数、rank、seed 和哈希环境变量不能通过 `kubernetes.env.*` 覆盖。
+
+下面是常用训练参数，可在 MODEL 中声明默认值，在 TRAIN WITH 中覆盖：
+
+| 参数 | 默认值 | 含义 |
+| --- | --- | --- |
+| `batch_size` | 8192 | 每个 rank 的正样本 batch；全局规模约为 batch × nnodes × nproc_per_node，负采样候选另算 |
+| `num_workers` | 8 | 每个 rank 的数据读取 worker，0 表示在训练进程读取 |
+| `num_epochs` | 1 | 新任务的训练轮数；同名恢复时为累计目标轮数 |
+| `sparse_lr` / `dense_lr` | 0.001 / 0.001 | Adagrad / Adam 的学习率，当前使用常数学习率 |
+| `random_seed` | 不设置 | Torch 与 NumPy 的非负种子 |
+| `mixed_precision` | 不设置 | 可选 BF16 或 FP16 |
+| `restore_optimizer` | true | 新 FROM 任务是否恢复优化器；不同学习率需显式 false，重置全部优化器状态 |
+| `eval_input_path` | 不设置 | 验证数据路径 |
+| `nnodes` / `nproc_per_node` | 1 / 1 | torchrun 节点代理数及每节点进程数 |
+| `master_port` | 29500 | 分布式训练端口 |
+
+DSSM 的负采样模式、数量、池容量及 `item_id_column` 可在 MODEL 中声明，在 TRAIN 中覆盖；池是每个读取 worker 的本地缓存。MMoE 的 `task.<label>.weight/metrics` 同样支持 MODEL 默认值和 TRAIN 覆盖，任务类型及塔尺寸保留在 MODEL。新 FROM 可调整采样数量和容量、任务权重及指标，负采样模式保持与源 checkpoint 一致。
+
+同名运行中或成功任务直接返回已有 checkpoint。失败重试保留存储目录，按本次 TRAIN WITH、MODEL 默认值及 ConfigOption 默认值重新生成配置，需要重新提供 ON 和本次训练所需参数，不会自动恢复原 SQL 参数或检查是否与上次一致。已有保存点时由 TZRec 恢复模型、优化器状态及数据进度。`num_epochs` 表示同名恢复的累计目标轮数；新 FROM 任务使用新的训练轮数预算。运行中或成功任务不会因新的参数重新启动。
 
 ### TZRec 在线推理
 
@@ -40,7 +70,7 @@ kubectl -n sqlrec set env deployment/rank-service TZREC_SERVING_BACKEND=cpp
 
 ### TZRec 训练曲线
 
-SQLRec 仅生成 TZRec 原生的 `train_config`、`metrics` 和 `train_metrics` 配置，采集和写入由 TZRec 自身完成，无须修改 TZRec 源码。默认保存 TensorBoard loss、学习率、可用梯度的总范数和适合当前任务的训练指标曲线；配置 `eval_input_path` 后同时保存验证指标。下列参数适用于所有内置 TZRec 模型，可在 `CREATE MODEL WITH` 中设置，并由 `TRAIN MODEL WITH` 覆盖：
+SQLRec 仅生成 TZRec 原生的 `train_config`、`metrics` 和 `train_metrics` 配置，采集和写入由 TZRec 自身完成，无须修改 TZRec 源码。默认保存 TensorBoard loss、学习率、可用梯度的总范数和适合当前任务的训练指标曲线；配置 `eval_input_path` 后同时保存验证指标。下列参数适用于所有内置 TZRec 模型，在 `TRAIN MODEL WITH` 中设置：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -169,7 +199,7 @@ DSSM 原生损失把每行用户和物品的配对视为正例，标签值不用
 
 SQL 推理请求会保留已有字段的显式 null，全批次为空的特征仍可使用默认值。
 
-续训和导出时，WITH 显式覆盖的网络或特征结构参数会逐项与 checkpoint 比较，不一致时在执行前报错。连续特征默认值和 normalizer 按解析后的数值含义比较，等价数字写法或 normalizer 参数顺序变化不会被误判为结构改变；ID 默认值和分隔符仍严格比较。未覆盖的结构参数保留 checkpoint 的值，不参与默认值比较；列级参数仍优先于全局 `embedding_dim`、`num_buckets`。改变结构需新建模型并重新训练。
+续训和导出会检查 MODEL 声明的网络、特征和标签契约与 checkpoint 一致。连续特征默认值及 normalizer 按数值含义比较；ID 默认值和分隔符严格比较。TRAIN/EXPORT 中的结构参数被忽略，修改结构需新建模型并重新训练。
 
 连续特征的标量/向量默认值和 normalizer 数值参数按 float32 精度比较，向量元素顺序和维度必须一致。normalizer 参数顺序不影响比较；`log10` 未指定的 `threshold`、`default` 分别按 `1`、`0` 比较，与原版特征生成器一致。等价配置通过后仍沿用 checkpoint 中保存的原始配置。此规则同样适用于 MMoE 的特征比较；任务及网络结构仍须一致。
 
@@ -218,9 +248,9 @@ CREATE MODEL float_rec (
 
 普通连续特征、MLP/AutoDis 特征进入 Deep 分组，ID 和 boundaries 分桶特征同时进入 Wide 与 Deep；DeepFM 的 FM 分组只接收稀疏特征且嵌入维度须一致。WideAndDeep/DeepFM 至少需要一个 ID 或 boundaries 分桶特征；DSSM、MMoE、RocketLaunching 可使用纯连续特征，RocketLaunching 只生成一个 Deep 分组。
 
-`tzrec.wide_and_deep` 使用 WideAndDeep，`tzrec.deepfm` 使用 DeepFM。导出和继续训练要求 checkpoint 的架构与声明的模型一致，并保留 checkpoint 内保存的结构及特征。包含标签特征的 checkpoint 必须排除标签后重训。继续训练可以覆盖学习率、轮数、批次等运行设置；修改学习率时不会恢复旧 optimizer 状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
+`tzrec.wide_and_deep` 使用 WideAndDeep，`tzrec.deepfm` 使用 DeepFM。导出和继续训练要求 checkpoint 的架构与声明的模型一致，并保留 checkpoint 内保存的结构及特征。包含标签特征的 checkpoint 必须排除标签后重训。新 checkpoint FROM 可以设置新的学习率、轮数和批次。默认恢复优化器状态；修改学习率时必须显式设置 `restore_optimizer=false`，只恢复权重并重置全部优化器状态。改变特征或网络结构请新建并重训模型，TRAIN/EXPORT 不允许切换模型类型。
 
-Model 的 WITH 参数由 TRAIN、EXPORT 和 SERVICE 继承，对应操作的 WITH 参数优先。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动时所有模型都必须具备清单和完成标记，并通过文件校验和检查。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
+TZRec 的训练和资源参数支持 MODEL 默认值及操作 WITH 覆盖；导出使用相同的 `batch_size` 参数名，固定单进程及一个读取 worker。新导出先写独立 staging 目录，生成 SHA256 清单 `model_meta.json` 和 `_SUCCESS` 后发布到目标目录；目标目录已存在时拒绝覆盖。服务启动时所有模型都必须具备清单和完成标记，并通过文件校验和检查。HDFS/JuiceFS 上依赖目录 rename 的发布语义。
 
 本地构建和镜像发布均执行 `bin/verify_tzrec_image.sh`：检查依赖/动态库、C++ 算子加载、输出类型，并真实训练导出 WideAndDeep、DeepFM、DSSM、MMoE、RocketLaunching，再对照 Python/C++ 特征张量及 HTTP 预测。DSSM 覆盖 softmax 召回训练、续训及双塔导出；MMoE 覆盖混合任务、纯回归、连续特征、续训和双进程训练；RocketLaunching 覆盖梯度、仅 light 推理、共享层、连续特征、续训和双进程训练。ARM 兼容包另有单元测试及原生 x86 官方 pyfg 差分检查。
 
@@ -297,14 +327,19 @@ Wide & Deep 模型是基于 tzrec 框架实现的推荐模型，支持完整的�
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
+| `embedding_dim` | Integer | 16 | 嵌入维度 |
+| `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
+| `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
+
+训练参数（在 TRAIN MODEL WITH 中设置）：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
 | `sparse_lr` | Double | 0.001 | 稀疏特征学习率 |
 | `dense_lr` | Double | 0.001 | 稠密特征学习率 |
 | `num_epochs` | Integer | 1 | 训练轮数 |
 | `batch_size` | Integer | 8192 | 批次大小 |
 | `num_workers` | Integer | 8 | 数据加载工作进程数 |
-| `embedding_dim` | Integer | 16 | 嵌入维度 |
-| `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
-| `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
 | `mixed_precision` | String | - | 混合精度训练模式，可选 `BF16`/`FP16`，默认不开启 |
 
 **分布式训练参数**：
@@ -362,8 +397,12 @@ CREATE MODEL multi_rank (
 ) WITH (
     'model' = 'tzrec.mmoe',
     'label_columns' = 'click,like,watch_time',
+    'task.watch_time.type' = 'regression'
+);
+
+TRAIN MODEL multi_rank CHECKPOINT = 'v1' ON training_sample
+WITH (
     'task.like.weight' = '2.0',
-    'task.watch_time.type' = 'regression',
     'task.watch_time.weight' = '0.1'
 );
 ```
@@ -377,6 +416,11 @@ CREATE MODEL multi_rank (
 | `task_hidden_units` | `64,32` | 默认任务塔 MLP |
 | `task.<label>.hidden_units` | 继承任务塔默认值 | 单个任务塔 MLP |
 | `task.<label>.type` | `binary` | `binary` 使用 BCE，`regression` 使用 L2/MSE |
+
+训练参数（在 TRAIN MODEL WITH 中设置）：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
 | `task.<label>.weight` | `1.0` | 有限且大于零的 float32 训练损失权重 |
 | `task.<label>.metrics` | binary 为 `auc,normalized_entropy,accuracy`，regression 为 `mean_squared_error,mean_absolute_error` | 逗号分隔，可选当前任务默认列表中的子集；NE 仅用于验证，其余同步用于训练指标 |
 | `eval_input_path` | 不设置 | 独立 Parquet 验证集路径，可在 TRAIN 的 WITH 中覆盖 |
@@ -393,7 +437,7 @@ SELECT item_id, 0.6 * probs_click + 0.4 * probs_like AS rank_score
 FROM scored ORDER BY rank_score DESC;
 ```
 
-训练权重与线上融合系数分别配置；回归值需按业务尺度处理后再融合。所有目标共用一个 `<checkpoint>_export` 和一个服务。目标集合、类型、训练权重、网络和特征配置在 TRAIN/EXPORT/服务部署时不能改变；改变这些配置须新建模型。继续训练仍可覆盖 epoch、batch、学习率和验证集路径。
+训练权重与线上融合系数分别配置；回归值需按业务尺度处理后再融合。所有目标共用一个 `<checkpoint>_export` 和一个服务。目标集合、类型、网络和特征由 MODEL 定义，并与 checkpoint 保持一致。新 FROM 训练可以调整任务权重、指标、epoch、batch、学习率和验证集路径。
 
 当前不支持任务别名、多分类、缺失目标标签 mask 或任务样本空间配置。各目标须在同一训练样本空间上定义；仅点击样本定义的 CVR 需要另行设计损失与指标口径。
 
@@ -433,9 +477,9 @@ booster/light 至少有一个同宽层。特征蒸馏固定开启并使用 COSIN
 
 DSSM（Deep Structured Semantic Models）模型是基于 tzrec 框架实现的双塔召回模型，支持完整的训练、导出和服务部署流程。
 
-DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，数值标签建议统一为 1。标签值不参与正负样本筛选或样本加权；训练入口不拒绝或过滤零、负标签行，请在生成样本时先筛选正样本。具体格式见上文「TZRec 样本数据格式」。
+DSSM 默认使用批内负采样，也支持物品池负采样。训练和验证数据均须只包含正样本对，数值标签建议统一为 1。标签值不参与正负样本筛选或样本加权；训练入口不拒绝或过滤零、负标签行，请在生成样本时先筛选正样本。具体格式见上文「TZRec 样本数据格式」。
 
-当前 SQLRec DSSM 固定使用 `softmax_cross_entropy`，生成 Recall@1、Recall@5、Recall@10、Recall@20 验证指标；不提供训练目标选择。显式配置其他 loss，或恢复、导出保存了其他目标的 checkpoint 时会报错。训练和验证样本由用户提前准备，SQLRec 不自动过滤。
+当前 SQLRec DSSM 固定使用 `softmax_cross_entropy`，生成 Recall@1、Recall@5、Recall@10、Recall@20 验证指标；不提供训练目标选择，传入的 loss 选项会被忽略。恢复、导出保存了其他目标的 checkpoint 时会报错。训练和验证样本由用户提前准备，SQLRec 不自动过滤。
 
 **模型名称**：`tzrec.dssm`
 
@@ -467,17 +511,22 @@ DSSM 使用批内负采样，训练和验证数据均须只包含正样本对，
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `sparse_lr` | Double | 0.001 | 稀疏特征学习率 |
-| `dense_lr` | Double | 0.001 | 稠密特征学习率 |
-| `num_epochs` | Integer | 1 | 训练轮数 |
-| `batch_size` | Integer | 8192 | 批次大小 |
-| `num_workers` | Integer | 8 | 数据加载工作进程数 |
 | `embedding_dim` | Integer | 16 | 嵌入维度 |
 | `num_buckets` | Integer | 1000000 | 整数特征分桶数 |
 | `hidden_units` | String | "512,256,128" | 深度网络隐藏层单元数 |
 | `user_hidden_units` | String | "512,256,128" | 用户塔隐藏层单元数 |
 | `item_hidden_units` | String | "512,256,128" | 物品塔隐藏层单元数 |
 | `output_dim` | Integer | 64 | 输出嵌入维度 |
+
+训练参数（在 TRAIN MODEL WITH 中设置）：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `sparse_lr` | Double | 0.001 | 稀疏特征学习率 |
+| `dense_lr` | Double | 0.001 | 稠密特征学习率 |
+| `num_epochs` | Integer | 1 | 训练轮数 |
+| `batch_size` | Integer | 8192 | 批次大小 |
+| `num_workers` | Integer | 8 | 数据加载工作进程数 |
 | `negative_sampling` | String | `in_batch` | `in_batch` 批内负例，或 `pool` 物品池采样 |
 | `negative_sample_count` | Integer | 256 | 池采样每批共享的负例数 |
 | `negative_pool_size` | Integer | 4096 | 不同物品的容量上限，须大于 `batch_size` |
@@ -508,7 +557,7 @@ DSSM 训练时需要用负例作为对照，学习让正例物品获得更高的
 - `in_batch`（默认）：将同一批次中其他样本的物品作为负例，负例数量随批次大小变化。
 - `pool`（池采样）：将训练过程中出现的物品组成候选池，每批从池中随机抽取负例。候选物品可以来自其他批次，因此使用较小的训练批次时，也能获得更多负例。
 
-池采样直接使用现有训练数据，无需额外准备物品表。`negative_sample_count` 控制每批抽取的负例数，`negative_pool_size` 控制池中最多保留多少个不同物品，`item_id_column` 指定用于区分物品的 ID 列。池只包含训练中出现的物品，不代表完整物品目录；增大池容量也不一定提升效果，应以验证结果为准。
+池采样直接使用现有训练数据，无需额外准备物品表。`negative_sample_count` 控制每批抽取的负例数，`negative_pool_size` 控制池中最多保留多少个不同物品，`item_id_column` 指定用于区分物品的 ID 列。池采样要求 `user_features` 和 `item_features` 不重叠，采样器只扩展物品塔字段。池只包含训练中出现的物品，不代表完整物品目录；增大池容量也不一定提升效果，应以验证结果为准。
 
 **使用示例**：
 
@@ -526,14 +575,18 @@ CREATE MODEL dssm_model (
     'label_columns' = 'label',
     'user_features' = 'user_id,user_age',
     'item_features' = 'item_id,item_category',
+    'embedding_dim' = '64',
+    'user_hidden_units' = '256,128,64',
+    'item_hidden_units' = '256,128,64'
+);
+
+TRAIN MODEL dssm_model CHECKPOINT = 'v1' ON training_sample
+WITH (
     'batch_size' = '256',
     'negative_sampling' = 'pool',
     'negative_sample_count' = '256',
     'negative_pool_size' = '4096',
-    'item_id_column' = 'item_id',
-    'embedding_dim' = '64',
-    'user_hidden_units' = '256,128,64',
-    'item_hidden_units' = '256,128,64'
+    'item_id_column' = 'item_id'
 );
 
 -- 按模型指南完成训练和导出后，DSSM 生成两个 tower checkpoint：

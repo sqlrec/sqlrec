@@ -157,7 +157,7 @@ class RocketLaunchingTest(unittest.TestCase):
             elif change == "shared": requested.model_config.rocket_launching.share_mlp.hidden_units.append(8)
             elif change == "feature": requested.feature_configs[0].id_feature.embedding_dim = 16
             else: requested.model_config.wide_and_deep.deep.hidden_units.append(8)
-            message = "Checkpoint architecture" if change == "architecture" else "Checkpoint RocketLaunching"
+            message = "Checkpoint architecture" if change == "architecture" else "MODEL definition"
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
                 prepare_config(requested, saved)
             with self.subTest(change=change, reversed=True), self.assertRaisesRegex(ValueError, message):

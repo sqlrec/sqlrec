@@ -11,10 +11,6 @@ import java.util.stream.Collectors;
 
 /** Restricts RocketLaunching to the supported native distillation configuration. */
 final class RocketLaunchingOptions {
-    private static final Set<String> UNUSED = Set.of("hidden_units", "user_features", "item_features",
-            "user_hidden_units", "item_hidden_units", "output_dim", "num_expert", "expert_hidden_units",
-            "task_hidden_units", "loss", "num_class", "teacher_checkpoint", "export_type");
-
     private RocketLaunchingOptions() {}
 
     static String hiddenUnits(String value) {
@@ -27,12 +23,8 @@ final class RocketLaunchingOptions {
     }
 
     static void validate(ModelConf model) {
-        Map<String, String> params = model.getParams() == null ? Map.of() : model.getParams();
-        for (String key : params.keySet()) {
-            if (UNUSED.contains(key) || key.startsWith("task.")) {
-                throw new IllegalArgumentException("RocketLaunching does not support option " + key);
-            }
-        }
+
+        Map<String, String> params = model.getParams();
         if (params.containsKey("feature_based_distillation") && !"true".equals(params.get("feature_based_distillation"))) {
             throw new IllegalArgumentException("RocketLaunching requires feature_based_distillation=true");
         }

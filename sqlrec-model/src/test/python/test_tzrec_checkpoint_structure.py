@@ -35,14 +35,16 @@ def config_type():
     train_metric.field.add(name="decay_rate", number=3, label=1, type=2, default_value="0.9")
     train = message("Train", [("log_step_count_steps", 13, False), ("is_profiling", 8, False)])
     train.field[0].default_value = "100"
-    message("TaskTower", [("train_metrics", ".TrainMetric", True), ("metrics", ".Metric", True)])
+    tower = message("TaskTower", [("train_metrics", ".TrainMetric", True), ("metrics", ".Metric", True)])
+    tower.field.add(name="weight", number=3, label=1, type=2, default_value="1.0")
     message("Loss", [("softmax_cross_entropy", ".Empty", False),
                      ("binary_cross_entropy", ".Empty", False), ("l2_loss", ".Empty", False)], "loss")
     message("Mlp", [("hidden_units", 5, True)])
     message("Network", [("deep", ".Mlp", False), ("task_towers", ".TaskTower", True)])
     message("Tower", [("input", 9, False), ("mlp", ".Mlp", False)])
-    message("Dssm", [("user_tower", ".Tower", False), ("item_tower", ".Tower", False),
-                     ("output_dim", 5, False)])
+    dssm = message("Dssm", [("user_tower", ".Tower", False), ("item_tower", ".Tower", False),
+                            ("output_dim", 5, False)])
+    dssm.field.add(name="in_batch_negative", number=4, label=1, type=8, default_value="false")
     message("Group", [("group_name", 9, False), ("feature_names", 9, True)])
     model = message("Model", [("wide_and_deep", ".Network", False), ("deepfm", ".Network", False),
                               ("dssm", ".Dssm", False)], "model")
@@ -96,6 +98,7 @@ class CheckpointStructureTest(unittest.TestCase):
         if architecture == "dssm":
             config.model_config.dssm.user_tower.input = "user"
             config.model_config.dssm.item_tower.input = "item"
+            config.model_config.dssm.in_batch_negative = True
             config.model_config.losses.add().softmax_cross_entropy.SetInParent()
         else:
             getattr(config.model_config, architecture).deep.hidden_units.extend([8, 4])
@@ -116,39 +119,38 @@ class CheckpointStructureTest(unittest.TestCase):
                 requested.feature_configs[0].id_feature.num_buckets = 200
             else:
                 requested = self.config("deepfm")
-            message = "architecture" if change == "architecture" else "Explicit network and feature overrides"
+            message = "architecture" if change == "architecture" else "Checkpoint model, features and task types"
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
-                self.module.prepare_config(requested, saved, True)
+                self.module.prepare_config(requested, saved, training=True)
 
     def test_metrics_can_change_from_legacy_checkpoints_but_preserve_export_structure(self):
         for architecture in ("wide_and_deep", "deepfm", "dssm", "mmoe"):
             saved = self.config(architecture)
             if architecture == "mmoe":
-                saved.model_config.mmoe.task_towers.add()
+                saved.model_config.mmoe.task_towers.add(weight=1.0)
             requested = self.Config()
             requested.CopyFrom(saved)
             requested.train_config.log_step_count_steps = 5
             owner = requested.model_config.mmoe.task_towers[0] if architecture == "mmoe" else requested.model_config
+            if architecture == "mmoe":
+                owner.weight = .25
             owner.metrics.add().auc.SetInParent()
             owner.metrics.add().normalized_entropy.SetInParent()
             metric = owner.train_metrics.add(decay_step=10, decay_rate=.8)
             metric.auc.SetInParent()
             with self.subTest(architecture=architecture):
-                effective = self.module.prepare_config(requested, saved, training=True,
-                                                       check_checkpoint_structure=True)
+                effective = self.module.prepare_config(requested, saved, training=True)
                 self.assertEqual(effective.model_config, requested.model_config)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
-                exported = self.module.prepare_config(saved, effective, check_checkpoint_structure=True)
+                exported = self.module.prepare_config(saved, effective)
                 self.assertEqual(exported.model_config, effective.model_config)
-                disabled = self.module.prepare_config(saved, effective, training=True,
-                                                      check_checkpoint_structure=True)
+                disabled = self.module.prepare_config(saved, effective, training=True)
                 self.assertEqual(disabled.model_config, saved.model_config)
                 self.assertNotEqual(effective.model_config, saved.model_config)
                 if architecture != "mmoe":
                     getattr(requested.model_config, architecture).Clear()
                     with self.assertRaises(ValueError):
-                        self.module.prepare_config(requested, saved, training=True,
-                                                   check_checkpoint_structure=True)
+                        self.module.prepare_config(requested, saved, training=True)
 
     def test_training_metric_decay_is_validated_with_the_effective_log_interval(self):
         for steps, rate, log_steps in ((0, .9, 100), (150, .9, 100), (100, .9, 0),
@@ -175,10 +177,10 @@ class CheckpointStructureTest(unittest.TestCase):
     def test_matching_structure_and_runtime_changes_are_allowed(self):
         saved, requested = self.config(), self.config()
         requested.data_config.batch_size = 16
-        effective = self.module.prepare_config(requested, saved, True)
+        effective = self.module.prepare_config(requested, saved, training=True)
         self.assertEqual(effective.model_config, saved.model_config)
         self.assertEqual(effective.data_config.batch_size, 16)
-        self.module.prepare_config(requested, None, True)
+        self.module.prepare_config(requested, training=True)
 
     def test_strict_checks_accept_only_equivalent_raw_feature_format_changes(self):
         for architecture in ("wide_and_deep", "deepfm"):
@@ -192,7 +194,7 @@ class CheckpointStructureTest(unittest.TestCase):
             requested.feature_configs[1].raw_feature.default_value = "0.0"
             requested.feature_configs[1].raw_feature.normalizer = "standard_deviation=1.0,mean=0e0,method=zscore"
             with self.subTest(architecture=architecture):
-                effective = self.module.prepare_config(requested, saved, check_checkpoint_structure=True)
+                effective = self.module.prepare_config(requested, saved)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
                 self.assertEqual(effective.model_config, saved.model_config)
                 self.assertEqual(effective.data_config.batch_size, 16)
@@ -203,89 +205,101 @@ class CheckpointStructureTest(unittest.TestCase):
                 changed.CopyFrom(requested)
                 setattr(changed.feature_configs[1].raw_feature, field, value)
                 with self.subTest(architecture=architecture, field=field), self.assertRaisesRegex(
-                        ValueError, "Explicit network and feature overrides"):
-                    self.module.prepare_config(changed, saved, check_checkpoint_structure=True)
+                        ValueError, "Checkpoint model, features and task types"):
+                    self.module.prepare_config(changed, saved)
 
-    def test_checkpoint_architecture_must_match_with_or_without_structure_overrides(self):
+    def test_checkpoint_architecture_must_match_for_training_and_export(self):
         for requested_architecture, saved_architecture in (("wide_and_deep", "deepfm"),
                                                            ("deepfm", "wide_and_deep"),
                                                            ("wide_and_deep", "dssm")):
             requested, saved = self.config(requested_architecture), self.config(saved_architecture)
-            for options in ({}, {"check_checkpoint_structure": True},
-                            {"structure_options": {"embedding_dim": "16"}}):
-                with self.subTest(requested=requested_architecture, saved=saved_architecture, options=options):
+            for training in (False, True):
+                with self.subTest(requested=requested_architecture, saved=saved_architecture, training=training):
                     with self.assertRaisesRegex(ValueError, "Checkpoint architecture"):
-                        self.module.prepare_config(requested, saved, **options)
+                        self.module.prepare_config(requested, saved, training=training)
 
-    def test_checkpoint_feature_defaults_are_preserved_for_the_same_architecture(self):
+    def test_checkpoint_features_must_match_for_the_same_architecture(self):
         saved, requested = self.config("deepfm"), self.config("deepfm")
         saved.feature_configs[0].id_feature.embedding_dim = 8
+        with self.assertRaisesRegex(ValueError, "Checkpoint model, features and task types"):
+            self.module.prepare_config(requested, saved)
+        requested.feature_configs[0].id_feature.embedding_dim = 8
         effective = self.module.prepare_config(requested, saved)
         self.assertEqual(effective.model_config, saved.model_config)
-        self.assertEqual(effective.feature_configs[0].id_feature.embedding_dim, 8)
+        self.assertEqual(effective.feature_configs, saved.feature_configs)
 
-    def test_repeating_hidden_units_does_not_compare_unrelated_embedding_defaults(self):
+    def test_network_and_feature_contracts_are_both_compared(self):
         for architecture in ("wide_and_deep", "deepfm"):
             saved, requested = self.config(architecture), self.config(architecture)
             saved.feature_configs[0].id_feature.embedding_dim = 8
-            effective = self.module.prepare_config(requested, saved, structure_options={"hidden_units": "8, 4"})
-            self.assertEqual(effective.feature_configs[0].id_feature.embedding_dim, 8)
-            self.assertEqual(effective.model_config, saved.model_config)
-            with self.assertRaisesRegex(ValueError, "hidden_units"):
-                self.module.prepare_config(requested, saved, structure_options={"hidden_units": "16,8"})
+            requested.CopyFrom(saved)
+            self.assertEqual(self.module.prepare_config(requested, saved).model_config, saved.model_config)
+            requested.feature_configs[0].id_feature.embedding_dim = 16
+            with self.subTest(architecture=architecture, change="feature"), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
+            requested.CopyFrom(saved)
+            getattr(requested.model_config, architecture).deep.hidden_units[:] = [16, 8]
+            with self.subTest(architecture=architecture, change="network"), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
 
-    def test_feature_overrides_compare_only_the_named_option(self):
+    def test_each_id_feature_setting_must_match_checkpoint(self):
         saved, requested = self.config(), self.config()
         saved.feature_configs[0].id_feature.embedding_dim = 8
-        self.module.prepare_config(requested, saved, structure_options={"column.id.bucket_size": "100"})
-        for options in ({"column.id.bucket_size": "200"}, {"column.id.embedding_dim": "16"},
-                        {"column.missing.embedding_dim": "16"}):
-            with self.subTest(options=options), self.assertRaisesRegex(ValueError, "Explicit structure override"):
-                self.module.prepare_config(requested, saved, structure_options=options)
+        for field, value in (("num_buckets", 200), ("embedding_dim", 16),
+                             ("feature_name", "missing"), ("expression", "item:other")):
+            requested.CopyFrom(saved)
+            setattr(requested.feature_configs[0].id_feature, field, value)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Checkpoint model, features and task types"):
+                self.module.prepare_config(requested, saved)
 
-    def test_global_defaults_respect_per_column_precedence(self):
+    def test_effective_per_column_values_must_match_checkpoint(self):
         saved, requested = self.config(), self.config()
         saved.feature_configs[0].id_feature.embedding_dim = 8
-        options = {"embedding_dim": "16", "num_buckets": "200"}
-        masks = {"embedding_dim": ["id"], "num_buckets": ["id"]}
-        self.module.prepare_config(requested, saved, structure_options=options, structure_masks=masks)
-        with self.assertRaisesRegex(ValueError, "embedding_dim"):
-            self.module.prepare_config(requested, saved, structure_options=options)
-        with self.assertRaisesRegex(ValueError, "num_buckets"):
-            self.module.prepare_config(requested, saved, structure_options={"num_buckets": "200"})
+        requested.CopyFrom(saved)
+        self.module.prepare_config(requested, saved)
+        for field, value in (("embedding_dim", 16), ("num_buckets", 200)):
+            requested.CopyFrom(saved)
+            setattr(requested.feature_configs[0].id_feature, field, value)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
 
-    def test_raw_feature_options_preserve_unrelated_network_and_feature_defaults(self):
+    def test_raw_feature_settings_must_match_checkpoint(self):
         saved, requested = self.config(), self.config()
         raw = saved.feature_configs.add().raw_feature
         raw.feature_name, raw.expression = "vector", "item:vector"
         raw.value_dim, raw.embedding_dim, raw.default_value = 2, 8, "0\0350"
         raw.separator, raw.normalizer = "\035", "method=zscore,mean=0,standard_deviation=1"
         raw.mlp.SetInParent()
-        options = {"column.vector.value_dim": "2", "column.vector.embedding_dim": "8",
-                   "column.vector.default_value": "0\0350", "column.vector.separator": "\035",
-                   "column.vector.normalizer": raw.normalizer, "column.vector.embedding": "mlp"}
-        effective = self.module.prepare_config(requested, saved, structure_options=options)
-        self.assertEqual(effective.feature_configs, saved.feature_configs)
-        for key, value in (("value_dim", "3"), ("embedding_dim", "16"), ("embedding", "none"),
-                           ("normalizer", "method=log10"), ("separator", "|"), ("default_value", "1\0351")):
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError, key):
-                self.module.prepare_config(requested, saved, structure_options={"column.vector." + key: value})
-        raw.mlp.Clear()
+        requested.CopyFrom(saved)
+        self.assertEqual(self.module.prepare_config(requested, saved).feature_configs, saved.feature_configs)
+        for field, value in (("value_dim", 3), ("embedding_dim", 16),
+                             ("normalizer", "method=log10"), ("separator", "|"), ("default_value", "1\0351")):
+            requested.CopyFrom(saved)
+            setattr(requested.feature_configs[1].raw_feature, field, value)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
+        requested.CopyFrom(saved)
+        requested.feature_configs[1].raw_feature.ClearField("mlp")
+        with self.assertRaises(ValueError):
+            self.module.prepare_config(requested, saved)
+        raw.ClearField("mlp")
         raw.autodis.num_channels = 3
-        self.module.prepare_config(requested, saved, structure_options={"column.vector.autodis.num_channels": "3"})
-        with self.assertRaisesRegex(ValueError, "autodis.num_channels"):
-            self.module.prepare_config(requested, saved, structure_options={"column.vector.autodis.num_channels": "4"})
+        requested.CopyFrom(saved)
+        self.module.prepare_config(requested, saved)
+        requested.feature_configs[1].raw_feature.autodis.num_channels = 4
+        with self.assertRaises(ValueError):
+            self.module.prepare_config(requested, saved)
+        raw.ClearField("autodis")
         raw.boundaries.extend([.1, .5])
-        self.module.prepare_config(requested, saved, structure_options={"column.vector.boundaries": ".1, .5"})
-        with self.assertRaisesRegex(ValueError, "boundaries"):
-            self.module.prepare_config(requested, saved, structure_options={"column.vector.boundaries": ".2, .5"})
+        requested.CopyFrom(saved)
+        self.module.prepare_config(requested, saved)
+        requested.feature_configs[1].raw_feature.boundaries[0] = .2
+        with self.assertRaises(ValueError):
+            self.module.prepare_config(requested, saved)
 
-    def test_dssm_overrides_do_not_compare_the_other_tower_defaults(self):
+    def test_dssm_tower_dimensions_and_groups_must_match_checkpoint(self):
         saved, requested = self.config("dssm"), self.config("dssm")
-        saved.model_config.Clear()
         dssm = saved.model_config.dssm
-        saved.model_config.losses.add().softmax_cross_entropy.SetInParent()
-        dssm.user_tower.input, dssm.item_tower.input = "user", "item"
         dssm.user_tower.mlp.hidden_units.extend([8, 4])
         dssm.item_tower.mlp.hidden_units.extend([16, 8])
         dssm.output_dim = 8
@@ -294,23 +308,32 @@ class CheckpointStructureTest(unittest.TestCase):
         feature.embedding_dim, feature.num_buckets = 16, 100
         saved.model_config.feature_groups.add(group_name="user", feature_names=["id"])
         saved.model_config.feature_groups.add(group_name="item", feature_names=["other"])
-        options = {"user_hidden_units": "8,4", "item_hidden_units": "16,8", "output_dim": "8",
-                   "user_features": "id", "item_features": "other"}
-        effective = self.module.prepare_config(requested, saved, structure_options=options)
-        self.assertEqual(effective.model_config, saved.model_config)
-        self.module.prepare_config(requested, saved, structure_options={"user_features": ""})
-        for key in options:
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError, key):
-                self.module.prepare_config(requested, saved, structure_options={key: "32"})
+        requested.CopyFrom(saved)
+        self.assertEqual(self.module.prepare_config(requested, saved).model_config, saved.model_config)
+        for change in ("user_tower", "item_tower", "output_dim", "user_features", "item_features"):
+            requested.CopyFrom(saved)
+            if change in ("user_tower", "item_tower"):
+                getattr(requested.model_config.dssm, change).mlp.hidden_units[:] = [32]
+            elif change == "output_dim":
+                requested.model_config.dssm.output_dim = 32
+            else:
+                requested.model_config.feature_groups[0 if change == "user_features" else 1].feature_names[:] = ["other", "id"]
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
 
     def test_dssm_recall_checkpoint_and_runtime_overrides_are_preserved(self):
         saved, requested = self.config("dssm"), self.config("dssm")
         saved.model_config.dssm.output_dim = 8
+        requested.CopyFrom(saved)
         requested.data_config.batch_size = 16
-        effective = self.module.prepare_config(requested, saved)
+        requested.data_config.num_workers = 3
+        effective = self.module.prepare_config(requested, saved, training=True)
         self.assertEqual(effective.model_config, saved.model_config)
         self.assertEqual(effective.data_config.batch_size, 16)
-        self.assertEqual(requested.model_config.dssm.output_dim, 0)
+        self.assertEqual(effective.data_config.num_workers, 3)
+        exported = self.module.prepare_config(requested, saved)
+        self.assertEqual(exported.data_config.num_workers, 1)
+        self.assertEqual(requested.data_config.num_workers, 3)
 
     def test_dssm_unsupported_request_and_saved_objectives_cannot_be_hidden_by_merge(self):
         for objective in ("binary_cross_entropy", "l2_loss"):
@@ -341,17 +364,20 @@ class CheckpointStructureTest(unittest.TestCase):
         raw = saved.feature_configs.add().raw_feature
         raw.feature_name, raw.expression = "price", "item:price"
         for text in ("0.0", "+0e0", "-0", " 0 "):
+            requested.CopyFrom(saved)
+            requested.feature_configs[1].raw_feature.default_value = text
             with self.subTest(text=text):
-                effective = self.module.prepare_config(requested, saved,
-                    structure_options={"column.price.default_value": text})
+                effective = self.module.prepare_config(requested, saved)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
         raw.value_dim, raw.default_value = 2, "0\0350.1"
-        self.module.prepare_config(requested, saved,
-            structure_options={"column.price.default_value": "0.0\0350.10000000149"})
+        requested.CopyFrom(saved)
+        requested.feature_configs[1].raw_feature.default_value = "0.0\0350.10000000149"
+        self.module.prepare_config(requested, saved)
         for text in ("", "0", "0\0350.2", "0\035NaN", "0\0351e40"):
+            requested.CopyFrom(saved)
+            requested.feature_configs[1].raw_feature.default_value = text
             with self.subTest(text=text), self.assertRaises(ValueError):
-                self.module.prepare_config(requested, saved,
-                    structure_options={"column.price.default_value": text})
+                self.module.prepare_config(requested, saved)
 
     def test_normalizers_compare_parameter_values_and_effective_defaults(self):
         saved, requested = self.config(), self.config()
@@ -364,46 +390,42 @@ class CheckpointStructureTest(unittest.TestCase):
             ("method=minmax,min=0.1,max=1",
              "max=1e0,min=0.10000000149,method=minmax",
              "method=minmax,min=0.2,max=1"),
-            ("method=log10", "default=0e0,method=log10,threshold=1.0",
-             "method=log10,default=-4"),
+            ("method=log10", "default=0e0,method=log10,threshold=1.0", "method=log10,default=-4"),
             ("method=log10,threshold=0.05", "default=0,threshold=5e-2,method=log10",
              "method=log10,threshold=0.05,default=-10"),
             ("method=log10,default=-5", "threshold=1,default=-5.0,method=log10",
              "method=log10,default=-5,threshold=1e-10"),
         ):
             raw.normalizer = original
+            requested.CopyFrom(saved)
+            requested.feature_configs[1].raw_feature.normalizer = equivalent
             with self.subTest(original=original):
-                effective = self.module.prepare_config(requested, saved,
-                    structure_options={"column.price.normalizer": equivalent})
+                effective = self.module.prepare_config(requested, saved)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
-                with self.assertRaisesRegex(ValueError, "normalizer"):
-                    self.module.prepare_config(requested, saved,
-                        structure_options={"column.price.normalizer": changed})
-        raw.normalizer = "method=log10"
-        requested.CopyFrom(saved)
-        requested.feature_configs[1].raw_feature.normalizer = "method=log10,threshold=1,default=0"
-        effective = self.module.prepare_config(requested, saved, check_checkpoint_structure=True)
-        self.assertEqual(effective.feature_configs, saved.feature_configs)
-        requested.feature_configs[1].raw_feature.normalizer = "method=log10,threshold=1e-10,default=-10"
-        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
-            self.module.prepare_config(requested, saved, check_checkpoint_structure=True)
+                requested.feature_configs[1].raw_feature.normalizer = changed
+                with self.assertRaises(ValueError):
+                    self.module.prepare_config(requested, saved)
         raw.normalizer = "method=zscore,mean=0,standard_deviation=1"
         for invalid in ("method=zscore,mean=0,mean=0,standard_deviation=1",
                         "method=zscore,mean=0,standard_deviation=NaN",
                         "method=zscore,mean=0,standard_deviation=1,extra=0"):
+            requested.CopyFrom(saved)
+            requested.feature_configs[1].raw_feature.normalizer = invalid
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                self.module.prepare_config(requested, saved,
-                    structure_options={"column.price.normalizer": invalid})
+                self.module.prepare_config(requested, saved)
 
     def test_id_defaults_and_separators_still_require_exact_matches(self):
         saved, requested = self.config(), self.config()
         feature = saved.feature_configs[0].id_feature
         feature.ClearField("num_buckets")
         feature.hash_bucket_size, feature.default_value, feature.separator = 100, "0", "|"
-        self.module.prepare_config(requested, saved, structure_options={"column.id.default_value": "0"})
-        for option, value in (("default_value", "0.0"), ("default_value", "00"), ("separator", ",")):
-            with self.subTest(option=option, value=value), self.assertRaisesRegex(ValueError, option):
-                self.module.prepare_config(requested, saved, structure_options={"column.id." + option: value})
+        requested.CopyFrom(saved)
+        self.module.prepare_config(requested, saved)
+        for field, value in (("default_value", "0.0"), ("default_value", "00"), ("separator", ",")):
+            requested.CopyFrom(saved)
+            setattr(requested.feature_configs[0].id_feature, field, value)
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.module.prepare_config(requested, saved)
 
     def test_mmoe_accepts_only_equivalent_raw_feature_format_changes(self):
         saved = self.config("mmoe")
@@ -421,10 +443,10 @@ class CheckpointStructureTest(unittest.TestCase):
             changed = self.Config()
             changed.CopyFrom(requested)
             setattr(changed.feature_configs[1].raw_feature, field, value)
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Checkpoint MMoE"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Checkpoint model, features and task types"):
                 self.module.prepare_config(changed, saved)
         requested.feature_configs[0].id_feature.default_value = "0"
-        with self.assertRaisesRegex(ValueError, "Checkpoint MMoE"):
+        with self.assertRaisesRegex(ValueError, "Checkpoint model, features and task types"):
             self.module.prepare_config(requested, saved)
 
 

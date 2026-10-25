@@ -24,7 +24,12 @@ final class MultiTaskOptions {
     }
 
     static List<TaskSpec> parse(ModelConf model) {
-        Map<String, String> params = model.getParams() == null ? Map.of() : model.getParams();
+        return parse(model, Map.of());
+    }
+
+    static List<TaskSpec> parse(ModelConf model, Map<String, String> training) {
+
+        Map<String, String> params = model.getParams();
         List<String> labels = csv(Config.LABEL_COLUMNS.getValue(params), "label_columns");
         if (labels.size() < 2) throw new IllegalArgumentException("MMoE requires at least two labels");
         Set<String> folded = new HashSet<>();
@@ -43,17 +48,6 @@ final class MultiTaskOptions {
         positive(Config.NUM_EXPERT.getValue(params), "num_expert");
         hiddenUnits(Config.EXPERT_HIDDEN_UNITS.getValue(params));
         String defaultUnits = hiddenUnits(Config.TASK_HIDDEN_UNITS.getValue(params));
-        for (String key : params.keySet()) {
-            if (Set.of("hidden_units", "user_features", "item_features", "user_hidden_units", "item_hidden_units", "output_dim").contains(key)) {
-                throw new IllegalArgumentException("Inapplicable MMoE option: " + key);
-            }
-            if (!key.startsWith("task.")) continue;
-            String[] parts = key.split("\\.", -1);
-            if (parts.length != 3 || !labels.contains(parts[1])
-                    || !Set.of("type", "hidden_units", "weight", "metrics").contains(parts[2])) {
-                throw new IllegalArgumentException("Unknown MMoE task option: " + key);
-            }
-        }
         List<TaskSpec> tasks = new ArrayList<>();
         for (String label : labels) {
             FieldSchema field = model.getInputFields().stream().filter(f -> label.equals(f.getName())).findFirst()
@@ -67,10 +61,10 @@ final class MultiTaskOptions {
             if (type.equals("regression") && !FieldTypeUtils.isFloat(field.getType())) {
                 throw new IllegalArgumentException("Regression label must be FLOAT or DOUBLE: " + label);
             }
-            float weight = Float.parseFloat(params.getOrDefault(prefix + "weight", "1.0"));
+            float weight = Float.parseFloat(training.getOrDefault(prefix + "weight", "1.0"));
             if (!Float.isFinite(weight) || weight <= 0) throw new IllegalArgumentException(prefix + "weight must be finite and positive float32");
             List<String> defaults = type.equals("binary") ? MetricOptions.BINARY : MetricOptions.REGRESSION;
-            List<String> metrics = csv(params.getOrDefault(prefix + "metrics", String.join(",", defaults)), prefix + "metrics");
+            List<String> metrics = csv(training.getOrDefault(prefix + "metrics", String.join(",", defaults)), prefix + "metrics");
             Set<String> allowed = Set.copyOf(defaults);
             if (!allowed.containsAll(metrics) || new HashSet<>(metrics).size() != metrics.size()) throw new IllegalArgumentException("Metrics do not match task type or are duplicated: " + label);
             TaskSpec task = new TaskSpec(label, type, hiddenUnits(params.getOrDefault(prefix + "hidden_units", defaultUnits)), weight, List.copyOf(metrics));

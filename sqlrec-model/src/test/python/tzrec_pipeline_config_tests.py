@@ -27,7 +27,6 @@ class CheckpointConfigTest(unittest.TestCase):
             requested.model_dir = str(root / "model")
             requested.train_config.fine_tune_checkpoint = str(root / "missing-base")
             saved = self.config("wide_and_deep")
-            saved.feature_configs[0].id_feature.embedding_dim = 32
             saved.train_config.sparse_optimizer.adagrad_optimizer.lr = .03
             Path(requested.model_dir).mkdir()
             (Path(requested.model_dir) / "model.ckpt-0").mkdir()
@@ -44,7 +43,7 @@ class CheckpointConfigTest(unittest.TestCase):
             self.assertEqual(snapshots[0].model_dir, requested.model_dir)
             self.assertFalse(snapshots[0].train_config.HasField("fine_tune_checkpoint"))
             self.assertTrue(train.call_args.kwargs["continue_train"])
-            self.assertTrue(train.call_args.kwargs["ignore_restore_optimizer"])
+            self.assertFalse(train.call_args.kwargs["ignore_restore_optimizer"])
 
     def test_training_resume_without_checkpoint_starts_normally(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -83,7 +82,7 @@ class CheckpointConfigTest(unittest.TestCase):
             path = root / "request.config"
             config_util.save_message(requested, str(path))
             snapshots = []
-            with (patch.object(sys, "argv", ["run.py", "--mode", "train", "--continue_train",
+            with (patch.object(sys, "argv", ["run.py", "--mode", "train", "--continue_train", "--restore_optimizer", "false",
                                             "--pipeline_config_path", str(path)]),
                   patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
                         snapshots.append(config_util.load_pipeline_config(path))) as train):
@@ -135,11 +134,11 @@ class CheckpointConfigTest(unittest.TestCase):
                     train_metric = owner.train_metrics.add(decay_step=10, decay_rate=.8)
                     getattr(train_metric, kind).CopyFrom(getattr(metric, kind))
             with self.subTest(architecture=model.WhichOneof("model")):
-                effective = prepare_config(requested, saved, training=True, check_checkpoint_structure=True)
+                effective = prepare_config(requested, saved, training=True)
                 self.assertEqual(effective.model_config, requested.model_config)
-                exported = prepare_config(saved, effective, training=False, check_checkpoint_structure=True)
+                exported = prepare_config(saved, effective, training=False)
                 self.assertEqual(exported.model_config, effective.model_config)
-                disabled = prepare_config(saved, effective, training=True, check_checkpoint_structure=True)
+                disabled = prepare_config(saved, effective, training=True)
                 self.assertEqual(disabled.model_config, saved.model_config)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
 
@@ -165,28 +164,26 @@ class CheckpointConfigTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 prepare_config(requested, training=True)
 
-    def test_pool_checkpoint_preserves_settings_but_refreshes_training_source(self):
-        requested = text_format.Parse('data_config { label_fields: "label" } '
-                'model_config { dssm {} losses { softmax_cross_entropy {} } }', pipeline_pb2.EasyRecConfig())
-        saved = pipeline_pb2.EasyRecConfig()
-        saved.CopyFrom(requested)
+    def test_from_can_change_pool_size_and_negative_count_without_changing_network(self):
+        saved = text_format.Parse('data_config { label_fields: "label" } '
+                'model_config { dssm { in_batch_negative: false } losses { softmax_cross_entropy {} } }', pipeline_pb2.EasyRecConfig())
         saved.data_config.pool_negative_sampler.input_path = "/old/*.parquet"
         saved.data_config.pool_negative_sampler.num_sample = 256
         saved.data_config.pool_negative_sampler.pool_size = 4096
         saved.data_config.pool_negative_sampler.item_id_field = "id"
         saved.data_config.pool_negative_sampler.attr_fields.append("id")
+        requested = pipeline_pb2.EasyRecConfig()
+        requested.CopyFrom(saved)
         requested.train_input_path = "/new/*.parquet"
-        self.assertEqual(prepare_config(requested, saved).data_config.pool_negative_sampler.input_path,
-                         "/old/*.parquet")
+        requested.data_config.pool_negative_sampler.num_sample = 128
+        requested.data_config.pool_negative_sampler.pool_size = 8192
         effective = prepare_config(requested, saved, training=True)
         self.assertEqual(effective.data_config.pool_negative_sampler.input_path, "/new/*.parquet")
-        self.assertEqual(effective.data_config.pool_negative_sampler.pool_size, 4096)
-        for key, value in (("negative_sampling", "in_batch"), ("negative_sample_count", "512"),
-                           ("negative_pool_size", "2048"), ("item_id_column", "other")):
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "override"):
-                prepare_config(requested, saved, structure_options={key: value})
-        prepare_config(requested, saved, structure_options={"negative_sampling": "pool",
-                       "negative_sample_count": "256", "negative_pool_size": "4096", "item_id_column": "id"})
+        self.assertEqual(effective.data_config.pool_negative_sampler.num_sample, 128)
+        self.assertEqual(effective.data_config.pool_negative_sampler.pool_size, 8192)
+        requested.model_config.dssm.in_batch_negative = True
+        with self.assertRaisesRegex(ValueError, "negative sampling mode"):
+            prepare_config(requested, saved, training=True)
 
     def test_dssm_unsupported_objectives_are_rejected_before_checkpoint_merge(self):
         def recall():
@@ -282,47 +279,38 @@ class CheckpointConfigTest(unittest.TestCase):
         saved = self.config("wide_and_deep")
         requested = self.config("wide_and_deep")
         requested.data_config.batch_size = 16
-        self.assertEqual(prepare_config(requested, saved, True).data_config.batch_size, 16)
+        self.assertEqual(prepare_config(requested, saved, training=True).data_config.batch_size, 16)
         requested.feature_configs[0].id_feature.embedding_dim = 32
-        with self.assertRaisesRegex(ValueError, "Explicit network and feature overrides"):
-            prepare_config(requested, saved, True)
+        with self.assertRaisesRegex(ValueError, "MODEL definition"):
+            prepare_config(requested, saved, training=True)
         requested = self.config("deepfm")
         with self.assertRaisesRegex(ValueError, "Checkpoint architecture"):
-            prepare_config(requested, saved, True)
+            prepare_config(requested, saved, training=True)
 
-    def test_selective_overrides_preserve_checkpoint_defaults_with_real_protobufs(self):
-        saved = self.config("deepfm")
-        saved.feature_configs[0].id_feature.embedding_dim = 8
-        requested = self.config("deepfm")
-        effective = prepare_config(requested, saved, structure_options={"hidden_units": "8,4"})
-        self.assertEqual(effective.feature_configs, saved.feature_configs)
-        self.assertEqual(effective.model_config, saved.model_config)
-        with self.assertRaisesRegex(ValueError, "hidden_units"):
-            prepare_config(requested, saved, structure_options={"hidden_units": "16,8"})
-        with self.assertRaisesRegex(ValueError, "embedding_dim"):
-            prepare_config(requested, saved, structure_options={"column.id.embedding_dim": "16"})
 
-    def test_cli_applies_selective_checkpoint_validation_before_native_training(self):
+    def test_from_learning_rate_change_requires_explicit_optimizer_reset(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source"
             source.mkdir()
             saved = self.config("deepfm")
-            saved.feature_configs[0].id_feature.embedding_dim = 8
+            saved.train_config.sparse_optimizer.adagrad_optimizer.lr = .01
+            saved.train_config.dense_optimizer.adam_optimizer.lr = .01
             config_util.save_message(saved, str(source / "pipeline.config"))
-            requested = self.config("deepfm")
+            requested = pipeline_pb2.EasyRecConfig()
+            requested.CopyFrom(saved)
             requested.train_config.fine_tune_checkpoint = str(source)
+            requested.train_config.sparse_optimizer.adagrad_optimizer.lr = .02
             path = root / "requested.config"
             config_util.save_message(requested, str(path))
-            argv = ["run.py", "--mode", "train", "--pipeline_config_path", str(path),
-                    "--checkpoint_structure_options", json.dumps({"options": {"hidden_units": "8,4"}})]
-            snapshots = []
-            with (patch.object(sys, "argv", argv),
-                  patch("tzrec.main.train_and_evaluate", side_effect=lambda path, **kwargs:
-                        snapshots.append(config_util.load_pipeline_config(path)))):
+            argv = ["run.py", "--mode", "train", "--pipeline_config_path", str(path)]
+            with patch.object(sys, "argv", argv), patch("tzrec.main.train_and_evaluate") as train:
+                with self.assertRaisesRegex(ValueError, "restore_optimizer false"):
+                    main()
+                train.assert_not_called()
+            with patch.object(sys, "argv", argv + ["--restore_optimizer", "false"]), patch("tzrec.main.train_and_evaluate") as train:
                 main()
-            self.assertEqual(snapshots[0].model_config, saved.model_config)
-            self.assertEqual(snapshots[0].feature_configs, saved.feature_configs)
+                self.assertTrue(train.call_args.kwargs["ignore_restore_optimizer"])
 
     def mmoe(self, mixed=True):
         name = "mmoe_mixed" if mixed else "mmoe"
@@ -344,18 +332,12 @@ class CheckpointConfigTest(unittest.TestCase):
             index = 1
             requested.feature_configs[index].raw_feature.default_value = "0.0"
             requested.feature_configs[index].raw_feature.normalizer = "standard_deviation=1.0,mean=0e0,method=zscore"
-            options = {"column.price.default_value": "0.0",
-                       "column.price.normalizer": requested.feature_configs[index].raw_feature.normalizer}
             with self.subTest(architecture=architecture):
-                effective = prepare_config(requested, saved, structure_options=options)
-                self.assertEqual(effective.feature_configs, saved.feature_configs)
-                effective = prepare_config(requested, saved, check_checkpoint_structure=True)
+                effective = prepare_config(requested, saved)
                 self.assertEqual(effective.feature_configs, saved.feature_configs)
                 requested.feature_configs[index].raw_feature.default_value = "1"
                 with self.assertRaises(ValueError):
-                    prepare_config(requested, saved, structure_options={"column.price.default_value": "1"})
-                with self.assertRaises(ValueError):
-                    prepare_config(requested, saved, check_checkpoint_structure=True)
+                    prepare_config(requested, saved)
 
     def test_java_generated_mmoe_configs_parse_and_have_the_declared_outputs(self):
         for name in ("mmoe", "mmoe_mixed", "mmoe_dense"):
@@ -379,7 +361,7 @@ class CheckpointConfigTest(unittest.TestCase):
         self.assertEqual(effective.model_config, saved.model_config)
         self.assertEqual(effective.data_config.batch_size, 16)
         self.assertEqual(effective.eval_input_path, "/new/eval.parquet")
-        for change in ("order", "loss", "weight", "network", "features"):
+        for change in ("order", "loss", "network", "features"):
             requested = self.mmoe()
             if change == "order":
                 labels = list(requested.data_config.label_fields)
@@ -387,14 +369,21 @@ class CheckpointConfigTest(unittest.TestCase):
                 requested.data_config.label_fields.extend(reversed(labels))
             elif change == "loss":
                 requested.model_config.mmoe.task_towers[0].losses[0].l2_loss.SetInParent()
-            elif change == "weight":
-                requested.model_config.mmoe.task_towers[0].weight = 2
             elif change == "network":
                 requested.model_config.mmoe.num_expert = 4
             else:
                 requested.feature_configs[0].id_feature.embedding_dim = 16
             with self.subTest(change=change), self.assertRaises(ValueError):
                 prepare_config(requested, saved)
+
+    def test_new_from_can_change_task_weights_while_export_uses_checkpoint_weights(self):
+        saved, requested = self.mmoe(), self.mmoe()
+        requested.model_config.mmoe.task_towers[0].weight = 2
+        effective = prepare_config(requested, saved, training=True)
+        self.assertEqual(effective.model_config.mmoe.task_towers[0].weight, 2)
+        exported = prepare_config(requested, saved)
+        self.assertEqual(exported.model_config.mmoe.task_towers[0].weight,
+                         saved.model_config.mmoe.task_towers[0].weight)
 
     def test_mmoe_rejects_invalid_tasks_and_label_features(self):
         for change in ("duplicate", "name", "metric", "weight", "label_feature", "mask"):
@@ -584,7 +573,6 @@ class CheckpointConfigTest(unittest.TestCase):
         requested.data_config.batch_size = 32
         requested.model_dir = "/new/checkpoint"
         requested.train_config.num_epochs = 7
-        saved.feature_configs[0].id_feature.embedding_dim = 8
         effective = prepare_config(requested, saved)
         self.assertEqual(effective.model_config.WhichOneof("model"), "deepfm")
         self.assertEqual(effective.model_config, saved.model_config)
@@ -602,7 +590,7 @@ class CheckpointConfigTest(unittest.TestCase):
             prepare_config(requested, saved)
         saved.data_config.label_fields[0] = "label"
         saved.feature_configs[0].id_feature.expression = "item:label"
-        with self.assertRaisesRegex(ValueError, "label features"):
+        with self.assertRaisesRegex(ValueError, "label features|MODEL definition"):
             prepare_config(requested, saved)
 
 

@@ -29,6 +29,14 @@ run on a single-node Minikube cluster with enough available resources
 `nnodes=2` counts torchrun node agents, not physical Kubernetes nodes.
 Export remains single-process.
 
+This benchmark declares training hyperparameters and DSSM sampling in TRAIN WITH.
+MODEL may also provide defaults; operation WITH values override model defaults.
+EXPORT reuses batch_size and runs with one process and one loading worker.
+Unused options are ignored. Same-name failed retries
+preserve stored checkpoints and use the current SQL settings; supply the training
+input and options again. New FROM tasks that change learning rates must
+set restore_optimizer=false.
+
 Multi-node training fails the entire Job when any worker Pod fails; individual
 Pods are not retried against an existing process group. Recreate the whole Job
 from its generated YAML to resume the same output directory from its latest

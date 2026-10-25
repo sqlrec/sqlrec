@@ -88,7 +88,7 @@ LIKE external_rank_output;
 
 | 对象 | 作用 |
 |------|------|
-| Model | 保存模型类型、输入字段和默认配置 |
+| Model | 保存模型类型、输入字段、模型契约及默认配置 |
 | Checkpoint | 一次训练、下载或导出产生的版本化结果 |
 | Service | 将指定 Checkpoint 部署为可调用的在线服务 |
 
@@ -97,7 +97,7 @@ Checkpoint 有两种类型：
 - `origin`：训练或下载产生的原始结果。
 - `export`：由 `EXPORT MODEL` 生成、可供 tzrec 或 GBDT 在线服务加载的结果。
 
-Checkpoint 名称是用户自定义的版本标识。TRAIN/EXPORT 使用已有目标名称时，会在配置校验通过后清理旧 checkpoint 并重新创建，包括已成功的版本；正在执行的任务会复用，被服务引用的 checkpoint 仍不能删除覆盖。增量训练的源 checkpoint 必须与目标不同；EXPORT 的源 checkpoint 必须已成功且为 origin 类型。建议使用日期或发布版本等可追溯的名称。
+Checkpoint 名称是用户自定义的版本标识。TRAIN 同名运行中或成功任务直接复用，失败重试保留存储目录，并按本次 SQL 参数重新提交；需要重新提供训练数据和参数。EXPORT 同名目标在校验通过后清理并重新导出，被服务引用的目标不能覆盖。源和目标须不同，导出源须为成功的 origin checkpoint。
 
 ## 训练型模型的完整流程
 

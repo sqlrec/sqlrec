@@ -58,10 +58,12 @@ public class Config extends ModelConfigBase {
     // Data configuration
     public static final ConfigOption<Integer> BATCH_SIZE = new ConfigOption<>(
             "batch_size",
-            8192, "Batch size for training", null, Integer.class);
+            8192, "Batch size for training or export", null, Integer.class);
     public static final ConfigOption<Integer> NUM_WORKERS = new ConfigOption<>(
             "num_workers",
             8, "Number of data loading workers", null, Integer.class);
+    public static final ConfigOption<Boolean> RESTORE_OPTIMIZER = new ConfigOption<>(
+            "restore_optimizer", true, "Restore optimizer state when initializing a new FROM task", null, Boolean.class);
 
     // Feature configuration
     public static final ConfigOption<Integer> EMBEDDING_DIM = new ConfigOption<>(

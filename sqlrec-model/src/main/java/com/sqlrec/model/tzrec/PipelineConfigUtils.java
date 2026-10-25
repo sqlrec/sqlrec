@@ -5,22 +5,14 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.model.common.FieldTypeUtils;
-import com.sqlrec.model.common.ModelConfigUtils;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/** Config generators consume the model and merged options prepared by {@link TzrecModelBase}. */
 public class PipelineConfigUtils {
-
-    public static ModelConf effectiveModel(ModelConf model, Map<String, String> overrides) {
-        ModelConf effective = new ModelConf();
-        effective.setModelName(model.getModelName());
-        effective.setInputFields(model.getInputFields());
-        effective.setParams(ModelConfigUtils.mergeParams(model.getParams(), overrides));
-        return effective;
-    }
 
     public static String quoted(String value) {
         StringBuilder out = new StringBuilder("\"");
@@ -32,16 +24,14 @@ public class PipelineConfigUtils {
         return out.append('"').toString();
     }
 
-    public static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        model = effectiveModel(model, trainConf.getParams());
+    static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = generateTrainConfigPrefix(model, trainConf);
-        config.append(generateModelConfig(model));
+        config.append(generateModelConfig(model, trainConf.getParams()));
 
         return config.toString();
     }
 
-    public static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
-        model = effectiveModel(model, exportConf.getParams());
+    static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = generateExportConfigPrefix(model, exportConf);
         config.append(generateModelConfig(model));
 
@@ -49,21 +39,20 @@ public class PipelineConfigUtils {
     }
 
     static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
-        TrainingOptions.validateModelDir(model.getParams(), trainConf.getModelDir());
         StringBuilder config = new StringBuilder();
 
         addInputPaths(config, trainConf.getTrainDataPaths());
 
-        String evalPath = Config.EVAL_INPUT_PATH.getValueOrNull(model.getParams());
+        String evalPath = Config.EVAL_INPUT_PATH.getValueOrNull(trainConf.getParams());
         if (evalPath != null && !evalPath.isBlank()) {
             config.append("eval_input_path: ").append(quoted(parquetInputPaths(evalPath))).append("\neval_config {}\n");
         }
 
         addModelDir(config, trainConf.getModelDir());
 
-        config.append(generateTrainConfig(model, model.getParams(), trainConf.getBaseModelDir()));
+        config.append(generateTrainConfig(model, trainConf.getParams(), trainConf.getBaseModelDir()));
 
-        config.append(generateDataConfig(model, model.getParams(), trainConf.getTrainDataPaths()));
+        config.append(generateDataConfig(model, trainConf.getParams(), trainConf.getTrainDataPaths()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -77,7 +66,9 @@ public class PipelineConfigUtils {
 
         addModelDir(config, exportConf.getBaseModelDir());
 
-        config.append(generateDataConfig(model, model.getParams(), exportConf.getTrainDataPaths()));
+        int batch = Config.BATCH_SIZE.getValue(exportConf.getParams());
+        if (batch <= 0) throw new IllegalArgumentException("batch_size must be positive");
+        config.append(generateDataConfig(model, Map.of("batch_size", Integer.toString(batch), "num_workers", "1"), exportConf.getTrainDataPaths()));
 
         config.append(generateFeatureConfigs(model));
 
@@ -104,8 +95,7 @@ public class PipelineConfigUtils {
     }
 
     public static String generateTrainConfig(ModelConf model, Map<String, String> params, String baseModelDir) {
-        params = ModelConfigUtils.mergeParams(model.getParams(), params);
-        TrainingOptions.validate(params);
+        params = params == null ? Map.of() : params;
         StringBuilder config = new StringBuilder();
         double sparseLr = Config.SPARSE_LR.getValue(params);
         double denseLr = Config.DENSE_LR.getValue(params);
@@ -160,11 +150,11 @@ public class PipelineConfigUtils {
     }
 
     private static String generateDataConfig(ModelConf model, Map<String, String> params, List<String> trainPaths) {
-        params = ModelConfigUtils.mergeParams(model.getParams(), params);
+        params = params == null ? Map.of() : params;
         StringBuilder config = new StringBuilder();
         int batchSize = Config.BATCH_SIZE.getValue(params);
         int numWorkers = Config.NUM_WORKERS.getValue(params);
-        String labelFields = Config.LABEL_COLUMNS.getValue(params);
+        String labelFields = Config.LABEL_COLUMNS.getValue(model.getParams());
 
         config.append("data_config {\n");
         config.append("    batch_size: " + batchSize + "\n");
@@ -174,10 +164,11 @@ public class PipelineConfigUtils {
             config.append("    label_fields: ").append(quoted(label)).append("\n");
         }
         config.append("    num_workers: " + numWorkers + "\n");
-        if ("pool".equals(Config.NEGATIVE_SAMPLING.getValue(params))) {
-            List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(params));
+        if ("tzrec.dssm".equals(model.getParams().get("model"))
+                && "pool".equals(Config.NEGATIVE_SAMPLING.getValue(params))) {
+            List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(model.getParams()));
             if (items.isEmpty()) items = inferRemainingFeatures(getFeatures(model),
-                    FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(params)));
+                    FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(model.getParams())));
             config.append("    pool_negative_sampler {\n");
             String inputPath = trainPaths == null ? "" : parquetInputPaths(String.join(",", trainPaths));
             config.append("        input_path: ").append(quoted(inputPath)).append("\n");
@@ -266,6 +257,10 @@ public class PipelineConfigUtils {
     }
 
     public static String generateModelConfig(ModelConf model) {
+        return generateModelConfig(model, Map.of());
+    }
+
+    static String generateModelConfig(ModelConf model, Map<String, String> training) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
@@ -283,7 +278,7 @@ public class PipelineConfigUtils {
         config.append("        }\n");
         config.append("    }\n");
 
-        MetricOptions.addMetrics(config, model.getParams(), MetricOptions.BINARY, "    ");
+        MetricOptions.addMetrics(config, training, MetricOptions.BINARY, "    ");
 
         config.append("    losses {\n");
         config.append("        binary_cross_entropy {}\n");
@@ -311,16 +306,14 @@ public class PipelineConfigUtils {
         }
     }
 
-    public static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        model = effectiveModel(model, trainConf.getParams());
+    static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = generateTrainConfigPrefix(model, trainConf);
-        config.append(generateDSSMModelConfig(model));
+        config.append(generateDSSMModelConfig(model, trainConf.getParams()));
 
         return config.toString();
     }
 
-    public static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
-        model = effectiveModel(model, exportConf.getParams());
+    static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
         StringBuilder config = generateExportConfigPrefix(model, exportConf);
         config.append(generateDSSMModelConfig(model));
 
@@ -328,6 +321,10 @@ public class PipelineConfigUtils {
     }
 
     public static String generateDSSMModelConfig(ModelConf model) {
+        return generateDSSMModelConfig(model, Map.of());
+    }
+
+    static String generateDSSMModelConfig(ModelConf model, Map<String, String> training) {
         StringBuilder config = new StringBuilder();
         config.append("model_config {\n");
 
@@ -363,12 +360,12 @@ public class PipelineConfigUtils {
         addDssmTower(config, "item", itemHiddenUnits);
         config.append("        output_dim: " + outputDim + "\n");
         config.append("        in_batch_negative: ")
-                .append(!"pool".equals(Config.NEGATIVE_SAMPLING.getValue(model.getParams()))).append("\n");
+                .append(!"pool".equals(Config.NEGATIVE_SAMPLING.getValue(training))).append("\n");
         config.append("    }\n");
 
         for (int topK : MetricOptions.RECALL_TOP_K) addRecallMetric(config, topK);
         for (int topK : MetricOptions.RECALL_TOP_K) {
-            TrainingOptions.addMetric(config, model.getParams(), "recall_at_k { top_k: " + topK + " }", "    ");
+            TrainingOptions.addMetric(config, training, "recall_at_k { top_k: " + topK + " }", "    ");
         }
 
         config.append("    losses {\n");

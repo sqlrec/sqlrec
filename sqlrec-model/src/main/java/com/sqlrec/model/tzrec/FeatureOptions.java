@@ -135,48 +135,6 @@ final class FeatureOptions {
             }
             List<FieldSchema> features = features(model);
             if (features.isEmpty()) return "TZRec requires at least one non-label feature";
-            String sampling = Config.NEGATIVE_SAMPLING.getValue(params);
-            Set<String> samplingKeys = Set.of("negative_sampling", "negative_sample_count", "negative_pool_size", "item_id_column");
-            if (!dssm && params.keySet().stream().anyMatch(samplingKeys::contains)) {
-                return "Negative sampling options are only supported for DSSM";
-            }
-            if (!Set.of("in_batch", "pool").contains(sampling)) return "negative_sampling must be in_batch or pool";
-            if ("pool".equals(sampling)) {
-                positive(Config.NEGATIVE_SAMPLE_COUNT.getValue(params), "negative_sample_count");
-                if (Config.NEGATIVE_POOL_SIZE.getValue(params) <= Config.BATCH_SIZE.getValue(params)) {
-                    return "negative_pool_size must exceed batch_size";
-                }
-                String itemId = Config.ITEM_ID_COLUMN.getValueOrNull(params);
-                List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(params));
-                if (items.isEmpty()) {
-                    List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(params));
-                    items = features.stream().map(FieldSchema::getName)
-                            .filter(name -> !users.contains(name))
-                            .collect(java.util.stream.Collectors.toList());
-                }
-                if (itemId == null || !items.contains(itemId)) return "item_id_column must belong to item_features";
-                FieldSchema idField = features.stream().filter(f -> f.getName().equals(itemId)).findFirst().orElse(null);
-                if (idField == null || !(FieldTypeUtils.isString(compactType(idField.getType()))
-                        || FieldTypeUtils.isInteger(compactType(idField.getType())))) {
-                    return "item_id_column must be a scalar STRING, INT or BIGINT";
-                }
-            } else if (params.keySet().stream().anyMatch(key -> samplingKeys.contains(key) && !key.equals("negative_sampling"))) {
-                return "Pool options require negative_sampling=pool";
-            }
-            for (String key : params.keySet()) {
-                if (!key.startsWith("column.")) continue;
-                boolean recognized = false;
-                for (FieldSchema field : features) {
-                    String prefix = "column." + field.getName() + ".";
-                    if (!key.startsWith(prefix)) continue;
-                    Set<String> options = isRaw(field.getType())
-                            ? Set.of("embedding_dim", "value_dim", "separator", "default_value", "boundaries", "normalizer", "embedding", "autodis.num_channels")
-                            : Set.of("bucket_size", "embedding_dim", "default_value", "separator");
-                    recognized = options.contains(key.substring(prefix.length()));
-                    if (recognized) break;
-                }
-                if (!recognized) return "Unknown or inapplicable TZRec feature option: " + key;
-            }
             positive(Config.NUM_BUCKETS.getValue(params), "num_buckets");
             positive(Config.EMBEDDING_DIM.getValue(params), "embedding_dim");
             Set<Integer> fmDims = new HashSet<>();
@@ -258,20 +216,6 @@ final class FeatureOptions {
                 hiddenUnits(Config.USER_HIDDEN_UNITS.getValue(params));
                 hiddenUnits(Config.ITEM_HIDDEN_UNITS.getValue(params));
             } else if (!multiTask && !deepOnly) hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
-            positive(Config.BATCH_SIZE.getValue(params), "batch_size");
-            if (Config.NUM_WORKERS.getValue(params) < 0) return "num_workers must be nonnegative";
-            positive(Config.NUM_EPOCHS.getValue(params), "num_epochs");
-            TrainingOptions.validate(params);
-            positive(Config.NNODES.getValue(params), "nnodes");
-            positive(Config.NPROC_PER_NODE.getValue(params), "nproc_per_node");
-            positive(Config.POD_CPU_CORES.getValue(params), "pod_cpu_cores");
-            int port = Config.MASTER_PORT.getValue(params);
-            if (port < 1 || port > 65535) return "master_port must be in [1,65535]";
-            for (double lr : List.of(Config.SPARSE_LR.getValue(params), Config.DENSE_LR.getValue(params))) {
-                if (!Double.isFinite(lr) || lr <= 0) return "Learning rates must be finite and positive";
-            }
-            String precision = Config.MIXED_PRECISION.getValueOrNull(params);
-            if (precision != null && !precision.isEmpty() && !Set.of("BF16", "FP16").contains(precision.trim().toUpperCase(java.util.Locale.ROOT))) return "mixed_precision must be BF16 or FP16";
             return null;
         } catch (IllegalArgumentException e) {
             return "Invalid TZRec configuration: " + e.getMessage();

@@ -6,7 +6,7 @@ This document introduces SQLRec built-in model types and their usage.
 
 Model, training, export, and Service `WITH` options use string keys and values, such as `'batch_size' = '8192'`. SQLRec converts values to the declared option types.
 
-For trained models, follow [the model guide](../../guides/model-lifecycle.md#lifecycle-for-a-trained-model) to create, train, export, and deploy a service. Trained-model examples focus on Model definitions; prepare training tables such as `training_sample` separately. Training settings can be Model defaults and can be overridden in `TRAIN MODEL ... WITH (...)`.
+For trained models, follow [the model guide](../../guides/model-lifecycle.md#lifecycle-for-a-trained-model) to create, train, export, and deploy a service. Trained-model examples focus on Model definitions; prepare training tables such as `training_sample` separately. TZRec model structure belongs to MODEL, training settings to TRAIN, and export/service resources to their respective operations.
 
 These resource settings apply to self-hosted tzrec, GBDT, and Hugging Face jobs or services. `replicas` applies to online services.
 
@@ -19,6 +19,25 @@ These resource settings apply to self-hosted tzrec, GBDT, and Hugging Face jobs 
 | `replicas` | Integer | 1 | Service replica count |
 
 Default images are `sqlrec/tzrec` for tzrec and `sqlrec/gbdt` for GBDT, with version `${SQLREC_VERSION}-cpu`. Hugging Face uses `sqlrec/transformers:${SQLREC_VERSION}`. Override them with `image` and `version`.
+
+### TZRec configuration stages
+
+| Location | Options |
+| --- | --- |
+| CREATE MODEL WITH | Model type/path, fields/labels, feature encoding, networks, tower groups and MMoE task types/dimensions; optional training and resource defaults |
+| TRAIN MODEL WITH | Training budget/optimizers, loading, evaluation input, sampling, task weights/metrics, observation/checkpoints and topology |
+| EXPORT MODEL WITH | `batch_size` (default 8192) and export resources; fixed to one process and one loading worker |
+| CREATE SERVICE WITH | `replicas`, inference environment and serving resources |
+
+Training and runtime options use this precedence: operation WITH > MODEL WITH > ConfigOption default. MODEL may declare batch size, workers, learning rates and resource defaults; TRAIN overrides them for that task. EXPORT and SERVICE may also override model resource defaults. Unused options are ignored. Consumed values still undergo value and cross-option validation. Raw environment settings cannot override generated topology, rank, seed or hash settings.
+
+TRAIN options include `batch_size=8192` per rank, `num_workers=8` per rank (0 reads in the training process), `num_epochs=1`, `sparse_lr=0.001` (Adagrad), `dense_lr=0.001` (Adam), optional `random_seed`/`mixed_precision`/`eval_input_path`, and `nnodes=1`, `nproc_per_node=1`, `master_port=29500`. Learning rates are constant. Global positive batch size is approximately batch × nodes × processes; sampled negative candidates are additional.
+
+DSSM sampling settings and item ID binding support MODEL defaults and TRAIN overrides; pools are local to each loading worker. MMoE task weights/metrics also support MODEL defaults and TRAIN overrides, while task types and tower dimensions belong to MODEL. New FROM tasks may change sampling counts/capacity and task weights/metrics; the sampling mode must match the source checkpoint.
+
+`restore_optimizer=true` controls initialization of a new FROM task. Different learning rates require explicit false, restoring weights and resetting all optimizer state. Same-name recovery from this task's own checkpoint always restores its optimizer state.
+
+Running or succeeded same-name tasks return the existing checkpoint. Failed retries preserve the model directory and regenerate configuration from the current TRAIN WITH, MODEL defaults and ConfigOption defaults. Supply ON and the required training options again; previous SQL options are not restored or compared. TZRec restores model/optimizer state and data progress when a checkpoint exists. Epochs are a new FROM task's budget, or the cumulative target on same-name recovery. New options do not restart a running or succeeded task.
 
 ### TZRec Online Serving
 
@@ -67,7 +86,7 @@ The Python backend uses Torch and the Python FG parser. The ARM Python FG packag
 
 ### TZRec Training Curves
 
-SQLRec generates native TZRec `train_config`, `metrics`, and `train_metrics` settings; TZRec collects and writes summaries without source changes. Loss, learning rate, the total norm of available gradients, and task-appropriate online metrics are enabled by default. Set `eval_input_path` to collect validation metrics as well. These options apply to all built-in TZRec models in `CREATE MODEL WITH`, with overrides in `TRAIN MODEL WITH`:
+SQLRec generates native TZRec `train_config`, `metrics`, and `train_metrics` settings; TZRec collects and writes summaries without source changes. Loss, learning rate, the total norm of available gradients, and task-appropriate online metrics are enabled by default. Set `eval_input_path` to collect validation metrics as well. These options apply to all built-in TZRec models in `TRAIN MODEL WITH`:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -196,7 +215,7 @@ The native DSSM loss treats every row's user/item pair as positive. Label values
 
 SQL prediction requests preserve explicit nulls, allowing feature defaults even when the whole batch is null.
 
-During fine-tuning or export, explicit network or feature structure overrides are compared individually with the checkpoint and mismatches fail before execution. Continuous feature defaults and normalizers are compared by their parsed numeric meaning, so equivalent number formats or normalizer parameter order do not count as structure changes. ID defaults and separators still require exact matches. Structure options not overridden retain their checkpoint values without comparing generation defaults. Per-column options still take precedence over global `embedding_dim` and `num_buckets`. Create and train a new model to change its structure.
+Fine-tuning and export require the MODEL network, features and label contract to match the checkpoint. Raw defaults and normalizers compare by numeric meaning; ID defaults and separators compare exactly. Structure options in TRAIN/EXPORT are ignored. Create and train a new model to change its structure.
 
 Continuous scalar/vector defaults and numeric normalizer parameters are compared at float32 precision; vector element order and dimensions must match. Normalizer parameter order does not affect comparison. Omitted `log10` parameters use `threshold=1` and `default=0`, matching the original feature generator. Accepted equivalent configurations retain the original saved checkpoint configuration. These rules also apply to MMoE feature comparisons; tasks and network structure must still match.
 
@@ -227,9 +246,9 @@ Normalizer examples: `method=zscore,mean=10,standard_deviation=2`, `method=minma
 
 Plain raw, MLP, and AutoDis features enter the Deep group. ID and bucketized raw features enter both Wide and Deep; DeepFM's FM group contains sparse features with equal embedding dimensions. WideAndDeep/DeepFM require a sparse feature; DSSM, MMoE, and RocketLaunching support continuous-only features. RocketLaunching generates a single Deep group.
 
-`tzrec.wide_and_deep` uses WideAndDeep and `tzrec.deepfm` uses DeepFM. Export and fine-tuning require the checkpoint architecture to match the declared model. Checkpoints containing label features must be retrained with labels excluded. Fine-tuning preserves checkpoint structure, accepts runtime overrides, and skips optimizer restoration when learning rates change. Create a new model for feature or architecture changes; TRAIN/EXPORT cannot switch model types.
+`tzrec.wide_and_deep` uses WideAndDeep and `tzrec.deepfm` uses DeepFM. Export and fine-tuning require the checkpoint architecture to match the declared model. Checkpoints containing label features must be retrained with labels excluded. New FROM tasks preserve the model contract and accept new training settings. Optimizer state is restored by default; changing learning rates requires explicit `restore_optimizer=false`, which restores weights and resets all optimizer state. Create a new model for feature or architecture changes; TRAIN/EXPORT cannot switch model types.
 
-TRAIN, EXPORT, and SERVICE inherit Model WITH options; operation overrides take precedence. Exports use a private staging directory, SHA256 manifest `model_meta.json`, and `_SUCCESS` before publishing. Existing targets are never overwritten. Startup requires the manifest and completion marker and verifies file checksums for every model. HDFS/JuiceFS publication relies on directory rename semantics.
+TZRec stages have independent options; MODEL training/resource options are not inherited. Exports use a private staging directory, SHA256 manifest `model_meta.json`, and `_SUCCESS` before publishing. Existing targets are never overwritten. Startup requires the manifest and completion marker and verifies file checksums for every model. HDFS/JuiceFS publication relies on directory rename semantics.
 
 Local builds and image publication run `bin/verify_tzrec_image.sh`, including native operator/output checks and real train/export/HTTP Python-C++ comparisons for WideAndDeep, DeepFM, DSSM, MMoE, and RocketLaunching. DSSM coverage includes softmax retrieval training, fine-tuning, and both tower exports; MMoE coverage includes mixed tasks, regression-only tasks, continuous features, fine-tuning, and two-process training. RocketLaunching coverage includes gradients, light-only inference, shared layers, continuous features, fine-tuning, and two-process training. ARM FG also has unit tests and a native x86 differential gate against the original pyfg wheel.
 
@@ -306,14 +325,19 @@ Wide & Deep model is a recommendation model implemented based on the tzrec frame
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `embedding_dim` | Integer | 16 | Embedding dimension |
+| `num_buckets` | Integer | 1000000 | Integer feature bucket count |
+| `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
+
+Training options (set in TRAIN MODEL WITH):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
 | `sparse_lr` | Double | 0.001 | Sparse feature learning rate |
 | `dense_lr` | Double | 0.001 | Dense feature learning rate |
 | `num_epochs` | Integer | 1 | Number of training epochs |
 | `batch_size` | Integer | 8192 | Batch size |
 | `num_workers` | Integer | 8 | Data loader worker process count |
-| `embedding_dim` | Integer | 16 | Embedding dimension |
-| `num_buckets` | Integer | 1000000 | Integer feature bucket count |
-| `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
 | `mixed_precision` | String | - | Mixed precision training mode, `BF16` or `FP16`, disabled by default |
 
 **Distributed Training Parameters**:
@@ -367,8 +391,12 @@ CREATE MODEL multi_rank (
 ) WITH (
     'model' = 'tzrec.mmoe',
     'label_columns' = 'click,like,watch_time',
+    'task.watch_time.type' = 'regression'
+);
+
+TRAIN MODEL multi_rank CHECKPOINT = 'v1' ON training_sample
+WITH (
     'task.like.weight' = '2.0',
-    'task.watch_time.type' = 'regression',
     'task.watch_time.weight' = '0.1'
 );
 ```
@@ -382,6 +410,11 @@ CREATE MODEL multi_rank (
 | `task_hidden_units` | `64,32` | Default task tower dimensions |
 | `task.<label>.hidden_units` | Task tower default | Per-task dimensions |
 | `task.<label>.type` | `binary` | `binary` (BCE) or `regression` (L2/MSE) |
+
+Training options (set in TRAIN MODEL WITH):
+
+| Option | Default | Meaning |
+| --- | --- | --- |
 | `task.<label>.weight` | `1.0` | Finite positive float32 training loss weight |
 | `task.<label>.metrics` | Binary: `auc,normalized_entropy,accuracy`; regression: `mean_squared_error,mean_absolute_error` | Comma-separated subset of the task defaults; NE is evaluation-only and other selected metrics also collect online training statistics |
 | `eval_input_path` | Unset | Separate Parquet evaluation path; overridable in TRAIN WITH |
@@ -392,7 +425,7 @@ Training and evaluation labels must be present and non-null: binary labels are 0
 
 Binary outputs are `probs_<label> FLOAT`; regression outputs are `y_<label> FLOAT`. `call_service` appends these columns to the input table. Combine predictions in SQL, for example `0.6 * probs_click + 0.4 * probs_like`; training loss weights and serving fusion weights are separate. Normalize regression predictions to the appropriate business scale before fusion.
 
-One `<checkpoint>_export` and one service contain all tasks. TRAIN/EXPORT/service overrides cannot change targets, task types, loss weights, network or features; create a new model for these changes. Epochs, batch size, learning rates and evaluation paths remain overridable during training. Task aliases, multiclass targets, missing-label masks and conditional task sample spaces are not supported; every target must have valid labels over the same sample space.
+One `<checkpoint>_export` and one service contain all tasks. MODEL defines targets, task types, networks and features, which must match the checkpoint. New FROM training may change task weights/metrics, epochs, batch size, learning rates and evaluation inputs. Task aliases, multiclass targets, missing-label masks and conditional task sample spaces are not supported; every target must have valid labels over the same sample space.
 
 ### 2.3 RocketLaunching Pre-ranking {#rocket-launching}
 
@@ -428,11 +461,11 @@ Candidate requests must satisfy the 4096-row, 16 MiB, and feature-value limits. 
 
 ### 3. DSSM Model
 
-DSSM uses in-batch negative sampling and requires positive-only pairs for both training and evaluation, with numeric labels preferably set to 1. Labels do not filter pairs or act as sample weights. The training entry does not reject or filter zero or negative labels; filter positive pairs when preparing the datasets. See “TZRec Sample Data Formats” above.
+DSSM defaults to in-batch negative sampling and also supports item-pool sampling. It requires positive-only pairs for both training and evaluation, with numeric labels preferably set to 1. Labels do not filter pairs or act as sample weights. The training entry does not reject or filter zero or negative labels; filter positive pairs when preparing the datasets. See “TZRec Sample Data Formats” above.
 
 DSSM (Deep Structured Semantic Models) is a two-tower retrieval model implemented based on the tzrec framework, supporting complete training, export, and service deployment workflow.
 
-SQLRec DSSM uses a fixed `softmax_cross_entropy` objective with Recall@1, Recall@5, Recall@10, and Recall@20 evaluation metrics. It does not offer a choice of objectives. Explicitly configuring another loss, or restoring or exporting a checkpoint saved with another objective, is rejected. Users prepare both training and evaluation samples beforehand; SQLRec does not filter them automatically.
+SQLRec DSSM uses a fixed `softmax_cross_entropy` objective with Recall@1, Recall@5, Recall@10, and Recall@20 evaluation metrics. It does not offer a choice of objectives; supplied loss options are ignored. Restoring or exporting a checkpoint saved with another objective is rejected. Users prepare both training and evaluation samples beforehand; SQLRec does not filter them automatically.
 
 **Model Name**: `tzrec.dssm`
 
@@ -464,17 +497,22 @@ SQLRec DSSM uses a fixed `softmax_cross_entropy` objective with Recall@1, Recall
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `sparse_lr` | Double | 0.001 | Sparse feature learning rate |
-| `dense_lr` | Double | 0.001 | Dense feature learning rate |
-| `num_epochs` | Integer | 1 | Number of training epochs |
-| `batch_size` | Integer | 8192 | Batch size |
-| `num_workers` | Integer | 8 | Data loader worker process count |
 | `embedding_dim` | Integer | 16 | Embedding dimension |
 | `num_buckets` | Integer | 1000000 | Integer feature bucket count |
 | `hidden_units` | String | "512,256,128" | Deep network hidden layer unit count |
 | `user_hidden_units` | String | "512,256,128" | User tower hidden layer unit count |
 | `item_hidden_units` | String | "512,256,128" | Item tower hidden layer unit count |
 | `output_dim` | Integer | 64 | Output embedding dimension |
+
+Training options (set in TRAIN MODEL WITH):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sparse_lr` | Double | 0.001 | Sparse feature learning rate |
+| `dense_lr` | Double | 0.001 | Dense feature learning rate |
+| `num_epochs` | Integer | 1 | Number of training epochs |
+| `batch_size` | Integer | 8192 | Batch size |
+| `num_workers` | Integer | 8 | Data loader worker process count |
 | `negative_sampling` | String | `in_batch` | `in_batch` or `pool` |
 | `negative_sample_count` | Integer | 256 | Shared negatives per batch in pool mode |
 | `negative_pool_size` | Integer | 4096 | Maximum distinct cached items; must exceed `batch_size` |
@@ -505,7 +543,7 @@ DSSM uses negative examples as a contrast during training, learning to give posi
 - `in_batch` (default): Uses items from other examples in the same batch as negatives. The number of negatives depends on the batch size.
 - `pool`: Builds a candidate pool from items encountered during training and randomly draws negatives from it for each batch. Candidates can come from other batches, allowing more negatives even with a smaller training batch.
 
-Pool sampling uses existing training data, so no separate item table is needed. `negative_sample_count` controls how many negatives to draw per batch, `negative_pool_size` limits the number of distinct items in the pool, and `item_id_column` identifies the item ID column. The pool contains only items encountered during training, rather than the complete catalog. A larger pool does not necessarily improve quality; use validation results to choose its size.
+Pool sampling uses existing training data, so no separate item table is needed. `negative_sample_count` controls how many negatives to draw per batch, `negative_pool_size` limits the number of distinct items in the pool, and `item_id_column` identifies the item ID column. Pool mode requires disjoint `user_features` and `item_features`; the sampler expands only item-tower fields. The pool contains only items encountered during training, rather than the complete catalog. A larger pool does not necessarily improve quality; use validation results to choose its size.
 
 **Usage Example**:
 
@@ -523,14 +561,18 @@ CREATE MODEL dssm_model (
     'label_columns' = 'label',
     'user_features' = 'user_id,user_age',
     'item_features' = 'item_id,item_category',
+    'embedding_dim' = '64',
+    'user_hidden_units' = '256,128,64',
+    'item_hidden_units' = '256,128,64'
+);
+
+TRAIN MODEL dssm_model CHECKPOINT = 'v1' ON training_sample
+WITH (
     'batch_size' = '256',
     'negative_sampling' = 'pool',
     'negative_sample_count' = '256',
     'negative_pool_size' = '4096',
-    'item_id_column' = 'item_id',
-    'embedding_dim' = '64',
-    'user_hidden_units' = '256,128,64',
-    'item_hidden_units' = '256,128,64'
+    'item_id_column' = 'item_id'
 );
 
 -- After training and exporting as in the model guide, DSSM produces:

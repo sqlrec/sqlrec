@@ -6,6 +6,7 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.ModelConfigUtils;
+import java.util.Map;
 
 /**
  * Shared {@link ModelController} implementation for TZRec models (DSSM / WideAndDeep).
@@ -24,62 +25,63 @@ public abstract class TzrecModelBase implements ModelController {
         return "tzrec." + getModelNameSuffix();
     }
 
-    /** Generates the model-specific pipeline.config content for training. */
+    /** Generates training config from the prepared model and merged, validated training options. */
     protected abstract String generateTrainConfig(ModelConf model, ModelTrainConf trainConf);
 
-    /** Generates the model-specific pipeline.config content for export. */
+    /** Generates export config from the prepared model and merged export options. */
     protected abstract String generateExportConfig(ModelConf model, ModelExportConf exportConf);
-
-    /** Validate operation overrides before merging them into the model declaration. */
-    protected void checkOverrides(ModelConf model, java.util.Map<String, String> overrides) {}
 
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {
-        requireSameModel(trainConf.getParams());
-        checkOverrides(model, trainConf.getParams());
-        model = PipelineConfigUtils.effectiveModel(model, trainConf.getParams());
-        requireValid(model);
+        model = prepareModel(model);
+        trainConf.setParams(ModelConfigUtils.mergeParams(model.getParams(), trainConf.getParams()));
+        TzrecK8sYamlUtils.prepareRuntime(trainConf.getParams());
+        TrainingOptions.validate(model, trainConf.getParams());
+        TrainingOptions.validateModelDir(trainConf.getParams(), trainConf.getModelDir());
         String pipelineConfig = generateTrainConfig(model, trainConf);
-        String shell = ShellUtils.genTrainModelShell(model, trainConf);
-        return TzrecK8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), model.getParams());
+        String shell = ShellUtils.genTrainModelShell(trainConf);
+        return TzrecK8sYamlUtils.genJobYaml(pipelineConfig, shell, trainConf.getId(), trainConf.getParams());
     }
 
     @Override
     public String genModelExportK8sYaml(ModelConf model, ModelExportConf exportConf) {
-        requireSameModel(exportConf.getParams());
-        checkOverrides(model, exportConf.getParams());
-        if (Config.NNODES.getValue(exportConf.getParams()) != 1 || Config.NPROC_PER_NODE.getValue(exportConf.getParams()) != 1) {
-            throw new IllegalArgumentException("TZRec export requires a single process");
-        }
-        model = PipelineConfigUtils.effectiveModel(model, exportConf.getParams());
-        model = PipelineConfigUtils.effectiveModel(model, java.util.Map.of("nnodes", "1", "nproc_per_node", "1"));
-        requireValid(model);
+        model = prepareModel(model);
+        Map<String, String> params = ModelConfigUtils.mergeParams(model.getParams(), exportConf.getParams());
+        TzrecK8sYamlUtils.prepareRuntime(params);
+        params.put("nnodes", "1");
+        params.put("nproc_per_node", "1");
+        exportConf.setParams(params);
         String exportDir = exportConf.getBaseModelDir() + "_export";
         String pipelineConfig = generateExportConfig(model, exportConf);
-        String shell = ShellUtils.genExportModelShell(model, exportConf, exportDir);
-        return TzrecK8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), model.getParams());
+        String shell = ShellUtils.genExportModelShell(exportDir);
+        return TzrecK8sYamlUtils.genJobYaml(pipelineConfig, shell, exportConf.getId(), params);
     }
 
     @Override
     public String getServiceUrl(ModelConf model, ServiceConf serviceConf) {
+        serviceConf.setParams(ModelConfigUtils.mergeParams(model.getParams(), serviceConf.getParams()));
         return TzrecK8sYamlUtils.getServiceUrl(serviceConf);
     }
 
     @Override
     public String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf) {
-        checkOverrides(model, serviceConf.getParams());
-        return TzrecK8sYamlUtils.getServiceK8sYaml(serviceConf,
-                ModelConfigUtils.mergeParams(model.getParams(), serviceConf.getParams()));
+        Map<String, String> params = ModelConfigUtils.mergeParams(model.getParams(), serviceConf.getParams());
+        TzrecK8sYamlUtils.prepareRuntime(params);
+        if (Config.REPLICAS.getValue(params) < 1) throw new IllegalArgumentException("replicas must be positive");
+        serviceConf.setParams(params);
+        return TzrecK8sYamlUtils.getServiceK8sYaml(serviceConf, params);
     }
 
-    private void requireValid(ModelConf model) {
+    private ModelConf prepareModel(ModelConf source) {
+        ModelConf model = new ModelConf();
+        model.setModelName(source.getModelName());
+        model.setInputFields(source.getInputFields());
+        model.setPath(source.getPath());
+        model.setDdl(source.getDdl());
+        model.setParams(ModelConfigUtils.mergeParams(source.getParams(), Map.of("model", getModelName())));
         String error = checkModel(model);
         if (error != null) throw new IllegalArgumentException(error);
+        return model;
     }
 
-    private void requireSameModel(java.util.Map<String, String> params) {
-        if (params != null && params.containsKey("model") && !getModelName().equals(params.get("model"))) {
-            throw new IllegalArgumentException("Training/export cannot change the model type; create a new model instead");
-        }
-    }
 }

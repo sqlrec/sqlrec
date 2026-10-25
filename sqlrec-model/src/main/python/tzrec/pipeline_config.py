@@ -86,87 +86,6 @@ def _check_dssm_loss(config):
                          "other objectives and their checkpoints are unsupported")
 
 
-def _check_structure_options(saved, options, masks):
-    """Compare explicit SQL overrides with checkpoint values, ignoring other defaults."""
-    architecture = saved.model_config.WhichOneof("model")
-    network = getattr(saved.model_config, architecture)
-    features = {getattr(feature, feature.WhichOneof("feature")).feature_name: feature
-                for feature in saved.feature_configs}
-    for key, value in options.items():
-        if key in ("embedding_dim", "num_buckets"):
-            for name, feature in features.items():
-                if name in masks.get(key, []):
-                    continue
-                kind = feature.WhichOneof("feature")
-                spec = getattr(feature, kind)
-                if key == "embedding_dim" and spec.embedding_dim:
-                    actual = spec.embedding_dim
-                elif key == "num_buckets" and kind == "id_feature":
-                    actual = spec.num_buckets if spec.HasField("num_buckets") else spec.hash_bucket_size
-                else:
-                    continue
-                if actual != int(value):
-                    raise ValueError(f"Explicit structure override {key} does not match checkpoint feature {name}")
-            continue
-        if key.startswith("column."):
-            matches = [(name, feature) for name, feature in features.items() if key.startswith("column." + name + ".")]
-            if not matches:
-                raise ValueError(f"Explicit structure override {key} references a feature absent from the checkpoint")
-            name, feature = max(matches, key=lambda match: len(match[0]))
-            kind = feature.WhichOneof("feature")
-            spec = getattr(feature, kind)
-            option = key[len("column." + name + "."):]
-            if option == "bucket_size" and kind == "id_feature":
-                actual = spec.num_buckets if spec.HasField("num_buckets") else spec.hash_bucket_size
-                expected = int(value)
-            elif option in ("embedding_dim", "value_dim"):
-                actual, expected = getattr(spec, option), int(value)
-            elif option == "boundaries" and kind == "raw_feature":
-                actual = list(spec.boundaries)
-                expected = [_float32(part) for part in value.split(",")]
-            elif option == "embedding" and kind == "raw_feature":
-                actual, expected = spec.WhichOneof("dense_emb") or "none", value
-            elif option == "autodis.num_channels" and kind == "raw_feature" and spec.HasField("autodis"):
-                actual, expected = spec.autodis.num_channels, int(value)
-            elif option == "default_value" and kind == "raw_feature":
-                actual, expected = _raw_defaults(spec.default_value, spec.separator), _raw_defaults(value, spec.separator)
-            elif option == "normalizer" and kind == "raw_feature":
-                actual, expected = _normalizer_values(spec.normalizer), _normalizer_values(value)
-            elif option in ("default_value", "separator", "normalizer") and option in spec.DESCRIPTOR.fields_by_name:
-                actual, expected = getattr(spec, option), value
-            else:
-                raise ValueError(f"Explicit structure override {key} is incompatible with the checkpoint feature")
-        elif key == "hidden_units" and architecture in ("wide_and_deep", "deepfm"):
-            actual, expected = list(network.deep.hidden_units), [int(part) for part in value.split(",")]
-        elif key in ("user_hidden_units", "item_hidden_units") and architecture == "dssm":
-            tower = network.user_tower if key == "user_hidden_units" else network.item_tower
-            actual, expected = list(tower.mlp.hidden_units), [int(part) for part in value.split(",")]
-        elif key in ("user_features", "item_features") and architecture == "dssm":
-            tower = network.user_tower if key == "user_features" else network.item_tower
-            actual = next(list(group.feature_names) for group in saved.model_config.feature_groups if group.group_name == tower.input)
-            expected = [part.strip() for part in value.split(",") if part.strip()]
-            if not expected:
-                other = network.item_tower if key == "user_features" else network.user_tower
-                other_features = next(set(group.feature_names) for group in saved.model_config.feature_groups if group.group_name == other.input)
-                expected = [name for name in features if name not in other_features]
-        elif key == "output_dim" and architecture == "dssm":
-            actual, expected = network.output_dim, int(value)
-        elif key == "negative_sampling" and architecture == "dssm":
-            actual = "pool" if saved.data_config.HasField("pool_negative_sampler") else "in_batch"
-            expected = value
-        elif key in ("negative_sample_count", "negative_pool_size", "item_id_column") and architecture == "dssm":
-            if not saved.data_config.HasField("pool_negative_sampler"):
-                raise ValueError(f"Explicit structure override {key} requires a pool checkpoint")
-            field = {"negative_sample_count": "num_sample", "negative_pool_size": "pool_size",
-                     "item_id_column": "item_id_field"}[key]
-            actual = getattr(saved.data_config.pool_negative_sampler, field)
-            expected = value if key == "item_id_column" else int(value)
-        else:
-            raise ValueError(f"Explicit structure override {key} is incompatible with checkpoint model {architecture}")
-        if actual != expected:
-            raise ValueError(f"Explicit structure override {key} does not match the checkpoint; create a new model to change its structure")
-
-
 def _model_structure(model):
     """Compare checkpoint structure independently of runtime metrics."""
     structure = type(model)()
@@ -177,11 +96,13 @@ def _model_structure(model):
         for tower in structure.mmoe.task_towers:
             tower.ClearField("metrics")
             tower.ClearField("train_metrics")
+            tower.ClearField("weight")
+    if structure.WhichOneof("model") == "dssm":
+        structure.dssm.ClearField("in_batch_negative")
     return structure
 
 
-def prepare_config(requested, saved=None, check_checkpoint_structure=False, structure_options=None, structure_masks=None,
-                   training=False):
+def prepare_config(requested, saved=None, training=False):
     """Retain checkpoint structure and validate the effective label contract."""
     _check_dssm_loss(requested)
     rocket_contract(requested)
@@ -197,20 +118,11 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
             raise ValueError("Checkpoint architecture must match the declared model; create a new model")
         requested_structure = _model_structure(requested.model_config)
         saved_structure = _model_structure(saved.model_config)
-        if architecture == "rocket_launching":
-            if (requested_structure != saved_structure
-                    or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
-                raise ValueError("Checkpoint RocketLaunching model and features cannot change; create a new model")
-        elif architecture == "mmoe":
-            if (task_contract(requested) != task_contract(saved)
-                    or requested_structure != saved_structure
-                    or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
-                raise ValueError("Checkpoint MMoE task, model and feature configuration cannot be changed; create a new model")
-        elif structure_options:
-            _check_structure_options(saved, structure_options, structure_masks or {})
-        elif check_checkpoint_structure and (requested_structure != saved_structure
-                                            or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
-            raise ValueError("Explicit network and feature overrides must match the checkpoint; create a new model to change its structure")
+        if (requested_structure != saved_structure
+                or not _same_feature_configs(requested.feature_configs, saved.feature_configs)):
+            raise ValueError("Checkpoint model, features and task types must match the MODEL definition")
+        if training and architecture == "dssm" and requested.model_config.dssm.in_batch_negative != saved.model_config.dssm.in_batch_negative:
+            raise ValueError("FROM cannot change the DSSM negative sampling mode")
         config.model_config.CopyFrom(saved.model_config)
         if training:
             del config.model_config.metrics[:]
@@ -223,11 +135,14 @@ def prepare_config(requested, saved=None, check_checkpoint_structure=False, stru
                     tower.metrics.extend(current.metrics)
                     del tower.train_metrics[:]
                     tower.train_metrics.extend(current.train_metrics)
+                    tower.weight = current.weight
         del config.feature_configs[:]
         config.feature_configs.extend(saved.feature_configs)
-        batch_size, workers = config.data_config.batch_size, config.data_config.num_workers
-        config.data_config.CopyFrom(saved.data_config)
-        config.data_config.batch_size, config.data_config.num_workers = batch_size, workers
+        if not training:
+            batch_size = requested.data_config.batch_size
+            config.data_config.CopyFrom(saved.data_config)
+            config.data_config.batch_size = batch_size
+            config.data_config.num_workers = 1
     if training and config.data_config.HasField("pool_negative_sampler"):
         if not config.train_input_path:
             raise ValueError("Pool sampling requires a parquet training input")

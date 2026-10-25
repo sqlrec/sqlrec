@@ -35,7 +35,7 @@ class TrainingOptionsTest {
         assertTrue(config.contains("train_metrics { auc {} decay_rate: 0.8 }"), config);
         assertFalse(config.contains("decay_step:"), config);
         assertEquals("50", model.getParams().get("log_step_count_steps"));
-        assertTrue(PipelineConfigUtils.generateModelConfig(model).contains("train_metrics { auc {} }"));
+        assertTrue(PipelineConfigUtils.generateModelConfig(model, model.getParams()).contains("train_metrics { auc {} }"));
     }
 
     @Test
@@ -43,17 +43,17 @@ class TrainingOptionsTest {
         ModelConf model = model();
         model.getParams().putAll(Map.of("enable_train_metrics", "true", "log_step_count_steps", "5",
                 "train_metric_decay_step", "10"));
-        assertTrue(PipelineConfigUtils.generateModelConfig(model).contains("train_metrics { auc {} decay_step: 10"));
-        String ranking = PipelineConfigUtils.generateModelConfig(model);
+        assertTrue(PipelineConfigUtils.generateModelConfig(model, model.getParams()).contains("train_metrics { auc {} decay_step: 10"));
+        String ranking = PipelineConfigUtils.generateModelConfig(model, model.getParams());
         assertTrue(ranking.contains("metrics { normalized_entropy {} }"), ranking);
         assertTrue(ranking.contains("train_metrics { accuracy {}"), ranking);
         assertFalse(ranking.contains("train_metrics { normalized_entropy"), ranking);
         assertFalse(ranking.contains("mean_squared_error"), ranking);
         model.getParams().put("model", "tzrec.deepfm");
-        assertTrue(PipelineConfigUtils.generateModelConfig(model).contains("train_metrics { auc {}"));
-        assertTrue(RocketLaunchingPipelineConfigUtils.modelConfig(model).contains("train_metrics { auc {}"));
+        assertTrue(PipelineConfigUtils.generateModelConfig(model, model.getParams()).contains("train_metrics { auc {}"));
+        assertTrue(RocketLaunchingPipelineConfigUtils.modelConfig(model, model.getParams(), true).contains("train_metrics { auc {}"));
         model.getParams().put("user_features", "uid");
-        String retrieval = PipelineConfigUtils.generateDSSMModelConfig(model);
+        String retrieval = PipelineConfigUtils.generateDSSMModelConfig(model, model.getParams());
         assertTrue(retrieval.contains("train_metrics { recall_at_k { top_k: 1 }"), retrieval);
         assertTrue(retrieval.contains("train_metrics { recall_at_k { top_k: 5 }"), retrieval);
         assertTrue(retrieval.contains("train_metrics { recall_at_k { top_k: 10 }"), retrieval);
@@ -65,7 +65,7 @@ class TrainingOptionsTest {
         model.getParams().putAll(Map.of("label_columns", "label,watch_time", "task.watch_time.type", "regression"));
         model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("label", "INT"),
                 new FieldSchema("watch_time", "DOUBLE")));
-        String tasks = MultiTaskPipelineConfigUtils.modelConfig(model);
+        String tasks = MultiTaskPipelineConfigUtils.modelConfig(model, model.getParams(), true);
         assertTrue(tasks.contains("train_metrics { auc {}"), tasks);
         assertTrue(tasks.contains("train_metrics { mean_squared_error {}"), tasks);
         assertTrue(tasks.contains("train_metrics { mean_absolute_error {}"), tasks);
@@ -77,15 +77,16 @@ class TrainingOptionsTest {
     @Test
     void trainingMetricsUseNativeDefaultsUnlessExplicitlyOverridden() {
         ModelConf model = model();
-        String config = PipelineConfigUtils.generateModelConfig(model);
+        String config = PipelineConfigUtils.generateModelConfig(model, model.getParams());
         assertTrue(config.contains("train_metrics { auc {} }"), config);
         assertFalse(config.contains("decay_step:"), config);
         assertFalse(config.contains("decay_rate:"), config);
         model.getParams().put("log_step_count_steps", "200");
-        assertNotNull(new WideAndDeepModel().checkModel(model));
+        assertNull(new WideAndDeepModel().checkModel(model));
+        assertThrows(IllegalArgumentException.class, () -> TrainingOptions.validate(model, model.getParams()));
         model.getParams().put("enable_train_metrics", "false");
         assertNull(new WideAndDeepModel().checkModel(model));
-        String disabled = PipelineConfigUtils.generateModelConfig(model);
+        String disabled = PipelineConfigUtils.generateModelConfig(model, model.getParams());
         assertFalse(disabled.contains("train_metrics"), disabled);
         assertTrue(disabled.contains("metrics { normalized_entropy {} }"), disabled);
     }
@@ -102,9 +103,11 @@ class TrainingOptionsTest {
                 Map.of("train_metric_decay_rate", "-0.1"), Map.of("train_metric_decay_rate", "1"))) {
             ModelConf model = model();
             model.getParams().putAll(invalid);
-            assertNotNull(new WideAndDeepModel().checkModel(model), invalid.toString());
+            assertNull(new WideAndDeepModel().checkModel(model), invalid.toString());
+            ModelTrainConf train = new ModelTrainConf();
+            train.setParams(invalid);
             assertThrows(IllegalArgumentException.class,
-                    () -> PipelineConfigUtils.generateTrainConfig(model, Map.of(), null), invalid.toString());
+                    () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train), invalid.toString());
         }
     }
 
@@ -123,7 +126,7 @@ class TrainingOptionsTest {
             ModelConf model = model();
             model.getParams().putAll(test.params());
             assertNull(new WideAndDeepModel().checkModel(model), test.params().toString());
-            String config = PipelineConfigUtils.generateTrainConfig(model, Map.of(), null);
+            String config = PipelineConfigUtils.generateTrainConfig(model, test.params(), null);
             assertTrue(config.contains("save_checkpoints_steps: " + test.steps() + "\n"), config);
             if (test.epochs() == null) assertFalse(config.contains("save_checkpoints_epochs:"), config);
             else assertTrue(config.contains("save_checkpoints_epochs: " + test.epochs() + "\n"), config);
@@ -176,9 +179,11 @@ class TrainingOptionsTest {
                 "loss, loss", "unknown", "global_grad_norm", "Loss", "gradient\" {}")) {
             ModelConf model = model();
             model.getParams().put("tensorboard_summaries", value);
-            assertNotNull(new WideAndDeepModel().checkModel(model), value);
+            assertNull(new WideAndDeepModel().checkModel(model), value);
+            ModelTrainConf train = new ModelTrainConf();
+            train.setParams(Map.of("tensorboard_summaries", value));
             assertThrows(IllegalArgumentException.class,
-                    () -> PipelineConfigUtils.generateTrainConfig(model, Map.of(), null), value);
+                    () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train), value);
         }
     }
 
@@ -190,12 +195,12 @@ class TrainingOptionsTest {
         for (String path : List.of("jfs://myjfs/model", "hdfs://cluster/model", "s3://bucket/model")) {
             train.setModelDir(path);
             assertThrows(IllegalArgumentException.class,
-                    () -> PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train), path);
+                    () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train), path);
         }
         train.setModelDir("/mnt/models/profiling");
-        assertTrue(PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train).contains("is_profiling: true"));
+        assertTrue(new WideAndDeepModel().genModelTrainK8sYaml(model, train).contains("is_profiling: true"));
         train.setModelDir("jfs://myjfs/model");
         train.setParams(Map.of("is_profiling", "false"));
-        assertTrue(PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train).contains("is_profiling: false"));
+        assertTrue(new WideAndDeepModel().genModelTrainK8sYaml(model, train).contains("is_profiling: false"));
     }
 }

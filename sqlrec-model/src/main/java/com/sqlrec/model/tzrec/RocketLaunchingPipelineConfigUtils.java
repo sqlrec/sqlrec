@@ -4,18 +4,19 @@ import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
+import java.util.Map;
 
 /** Builds native RocketLaunching configs without modifying the TZRec model factory. */
 final class RocketLaunchingPipelineConfigUtils {
     private RocketLaunchingPipelineConfigUtils() {}
 
     static String train(ModelConf model, ModelTrainConf train) {
-        model = PipelineConfigUtils.effectiveModel(model, train.getParams());
-        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model)).toString();
+
+        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model, train.getParams(), true)).toString();
     }
 
     static String export(ModelConf model, ModelExportConf export) {
-        model = PipelineConfigUtils.effectiveModel(model, export.getParams());
+
         return PipelineConfigUtils.generateExportConfigPrefix(model, export).append(modelConfig(model)).toString();
     }
 
@@ -24,6 +25,10 @@ final class RocketLaunchingPipelineConfigUtils {
     }
 
     static String modelConfig(ModelConf model, boolean includeMetrics) {
+        return modelConfig(model, Map.of(), includeMetrics);
+    }
+
+    static String modelConfig(ModelConf model, Map<String, String> training, boolean includeMetrics) {
         StringBuilder config = new StringBuilder("model_config {\n");
         PipelineConfigUtils.addFeatureGroup(config, "deep", FeatureOptions.features(model).stream().map(FieldSchema::getName).toList(), "DEEP");
         config.append("    rocket_launching {\n");
@@ -34,7 +39,7 @@ final class RocketLaunchingPipelineConfigUtils {
         config.append("        feature_based_distillation: true\n")
                 .append("        feature_distillation_function: COSINE\n    }\n")
                 .append("    num_class: 1\n    losses { binary_cross_entropy {} }\n");
-        if (includeMetrics) MetricOptions.addMetrics(config, model.getParams(), MetricOptions.BINARY, "    ");
+        if (includeMetrics) MetricOptions.addMetrics(config, training, MetricOptions.BINARY, "    ");
         return config.append("}\n").toString();
     }
 

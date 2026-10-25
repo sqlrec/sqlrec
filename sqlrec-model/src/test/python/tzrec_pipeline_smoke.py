@@ -369,7 +369,7 @@ def main():
             requested.train_config.dense_optimizer.adam_optimizer.lr = .02
             finetune_path = root / "rocket_finetune.config"
             config_util.save_message(requested, str(finetune_path))
-            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "rocket-finetune.log", env)
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path), "--restore_optimizer", "false"], root / "rocket-finetune.log", env)
             saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
             assert saved.model_config == pipeline.model_config and saved.feature_configs == pipeline.feature_configs
             assert saved.data_config.batch_size == 16
@@ -398,7 +398,7 @@ def main():
             requested.train_config.dense_optimizer.adam_optimizer.lr = .02
             finetune_path = root / "dssm_finetune.config"
             config_util.save_message(requested, str(finetune_path))
-            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "dssm-finetune.log", env)
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path), "--restore_optimizer", "false"], root / "dssm-finetune.log", env)
             saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
             assert saved.model_config == pipeline.model_config
             assert saved.feature_configs == pipeline.feature_configs
@@ -428,7 +428,7 @@ def main():
             requested.train_config.dense_optimizer.adam_optimizer.lr = .02
             finetune_path = root / "mmoe_finetune.config"
             config_util.save_message(requested, str(finetune_path))
-            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "mmoe-finetune-train.log", env)
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path), "--restore_optimizer", "false"], root / "mmoe-finetune-train.log", env)
             saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
             assert saved.model_config == pipeline.model_config
             assert saved.feature_configs == pipeline.feature_configs
@@ -451,7 +451,7 @@ def main():
             requested.train_config.dense_optimizer.adam_optimizer.lr = 0.02
             finetune_path = root / "finetune.config"
             config_util.save_message(requested, str(finetune_path))
-            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path)], root / "finetune-train.log", env)
+            execute(launcher + ["--mode", "train", "--pipeline_config_path", str(finetune_path), "--restore_optimizer", "false"], root / "finetune-train.log", env)
             saved = config_util.load_pipeline_config(str(Path(requested.model_dir) / "pipeline.config"))
             assert saved.model_config == pipeline.model_config
             assert saved.feature_configs == pipeline.feature_configs

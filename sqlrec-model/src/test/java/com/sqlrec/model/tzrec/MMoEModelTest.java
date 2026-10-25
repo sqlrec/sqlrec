@@ -24,8 +24,8 @@ class MMoEModelTest {
         model.setInputFields(fields);
         Map<String, String> params = new HashMap<>(Map.of("model", "tzrec.mmoe", "label_columns", mixed ? "label,watch_time" : "label,label_like"));
         params.putAll(Map.of("num_expert", "2", "expert_hidden_units", "16,8", "task_hidden_units", "8,8",
-                "num_buckets", "32", "embedding_dim", "8", "batch_size", "8", "num_workers", "0", "sparse_lr", "0.01", "dense_lr", "0.01"));
-        if (mixed) params.putAll(Map.of("task.watch_time.type", "regression", "task.watch_time.weight", "0.1"));
+                "num_buckets", "32", "embedding_dim", "8"));
+        if (mixed) params.put("task.watch_time.type", "regression");
         model.setParams(params);
         return model;
     }
@@ -33,7 +33,11 @@ class MMoEModelTest {
     private ModelTrainConf train(Map<String, String> overrides) {
         ModelTrainConf train = new ModelTrainConf();
         train.setId("mmoe-train"); train.setModelDir("/fixture/model");
-        train.setTrainDataPaths(List.of("/fixture/train.parquet")); train.setParams(overrides);
+        train.setTrainDataPaths(List.of("/fixture/train.parquet"));
+        Map<String, String> params = new HashMap<>(Map.of("batch_size", "8", "num_workers", "0", "sparse_lr", "0.01", "dense_lr", "0.01"));
+        params.put("task.watch_time.weight", "0.1");
+        params.putAll(overrides);
+        train.setParams(params);
         return train;
     }
 
@@ -150,7 +154,7 @@ data:
     torchrun --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \\
         --nnodes=$NNODES --nproc-per-node=$NPROC_PER_NODE --node_rank=$NODE_RANK \\
         /app/run.py --mode train \\
-        --pipeline_config_path /data/pipeline.config --continue_train
+        --pipeline_config_path /data/pipeline.config --continue_train --restore_optimizer true
 ---
 apiVersion: "v1"
 kind: "Service"
@@ -240,7 +244,7 @@ data:
         fg_mode: FG_NORMAL
         label_fields: "label"
         label_fields: "watch_time"
-        num_workers: 0
+        num_workers: 1
     }
     feature_configs {
         id_feature {
@@ -286,7 +290,7 @@ data:
                 label_name: "watch_time"
                 num_class: 1
                 mlp { hidden_units: [8,8] }
-                weight: 0.1
+                weight: 1.0
                 losses { l2_loss {} }
                 metrics { mean_squared_error {} }
                 metrics { mean_absolute_error {} }
@@ -468,20 +472,20 @@ spec:
         for (Map<String, String> invalid : List.of(
                 Map.of("label_columns", "label"), Map.of("label_columns", "label,label"),
                 Map.of("label_columns", "label,LABEL"), Map.of("label_columns", "label,missing"),
-                Map.of("label_columns", "label,label_like,"), Map.of("task.missing.type", "binary"),
-                Map.of("task.label.foo", "1"), Map.of("task.label.type", "multi_class"),
-                Map.of("task.label.metrics", "mean_squared_error"), Map.of("task.label.metrics", "auc,auc"),
-                Map.of("task.label.weight", "NaN"), Map.of("task.label.weight", "0"),
-                Map.of("task.label.weight", "1e40"), Map.of("num_expert", "0"),
-                Map.of("expert_hidden_units", "16,0"), Map.of("task_hidden_units", "8,"),
-                Map.of("column.label.bucket_size", "3"), Map.of("hidden_units", "8"))) {
+                Map.of("label_columns", "label,label_like,"),
+                Map.of("task.label.type", "multi_class"),
+
+
+                Map.of("num_expert", "0"),
+                Map.of("expert_hidden_units", "16,0"), Map.of("task_hidden_units", "8,"))) {
             ModelConf model = model(false, false);
             model.getParams().putAll(invalid);
             assertNotNull(controller.checkModel(model), invalid.toString());
         }
         ModelConf model = model(true, false);
         model.getParams().put("task.watch_time.metrics", "auc");
-        assertNotNull(controller.checkModel(model));
+        assertNull(controller.checkModel(model));
+        assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model(true, false), train(Map.of("task.watch_time.metrics", "auc"))));
         model = model(false, false);
         model.getInputFields().get(2).setType("ARRAY<INT>");
         assertNotNull(controller.checkModel(model));
@@ -527,9 +531,9 @@ spec:
                 Map.of("expert_hidden_units", "32,8"), Map.of("num_expert", "4"),
                 Map.of("column.category.bucket_size", "64"))) {
             export.setParams(overrides); service.setParams(overrides);
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train(overrides)));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
-            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
+            assertDoesNotThrow(() -> controller.genModelTrainK8sYaml(model, train(overrides)));
+            assertDoesNotThrow(() -> controller.genModelExportK8sYaml(model, export));
+            assertDoesNotThrow(() -> controller.getServiceK8sYaml(model, service));
         }
         Map<String, String> runtime = Map.of("batch_size", "16", "dense_lr", "0.02", "eval_input_path", "/fixture/eval.parquet",
                 "task.label.weight", "1", "task_hidden_units", "8, 8", "enable_train_metrics", "false",
@@ -551,8 +555,8 @@ spec:
         model.setParams(new HashMap<>(Map.of("label_columns", "label,label_like")));
         assertNull(controller.checkModel(model));
         assertEquals(2, controller.getOutputFields(model).size());
-        model.getParams().putAll(Map.of("task.label_like.hidden_units", "32,16", "task.label_like.metrics", "auc,accuracy"));
-        String config = controller.generateTrainConfig(model, train(Map.of()));
+        model.getParams().put("task.label_like.hidden_units", "32,16");
+        String config = controller.generateTrainConfig(model, train(Map.of("task.label_like.metrics", "auc,accuracy")));
         assertTrue(config.contains("hidden_units: [32,16]"));
         assertTrue(config.contains("metrics { accuracy {} }"));
         assertTrue(ServiceLoader.load(ModelController.class).stream()

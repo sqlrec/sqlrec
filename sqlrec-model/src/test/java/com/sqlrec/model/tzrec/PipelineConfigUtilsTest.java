@@ -2,55 +2,38 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.client.utils.Serialization;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
+    private ModelConf model(String labelType) {
+        ModelConf model = new ModelConf();
+        model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("iid", "STRING"),
+                new FieldSchema("price", "DOUBLE"), new FieldSchema("label", labelType)));
+        model.setParams(new HashMap<>(Map.of("label_columns", "label")));
+        return model;
+    }
+
+
     @Test
     void poolSamplingUsesTheTrainingSourceAndNativeDssmPath() {
         ModelConf model = model("INT");
-        model.getParams().putAll(Map.of("item_features", "iid,price", "negative_sampling", "pool",
-                "item_id_column", "iid", "batch_size", "256"));
-        assertNull(new DSSMModel().checkModel(model));
+        model.getParams().put("model", "tzrec.dssm");
+        model.getParams().put("item_features", "iid,price");
         ModelTrainConf train = new ModelTrainConf();
-        train.setParams(Map.of());
+        train.setParams(Map.of("negative_sampling", "pool", "item_id_column", "iid", "batch_size", "256"));
         train.setTrainDataPaths(List.of("jfs://myjfs/train/*"));
         String config = PipelineConfigUtils.generateDSSMTrainConfig(model, train);
-        assertEquals(1, config.split("data_config \\{", -1).length - 1);
-        assertTrue(config.contains("pool_negative_sampler {\n        input_path: \"jfs://myjfs/train/*.parquet\""), config);
-        assertTrue(config.contains("num_sample: 256"));
+        assertTrue(config.contains("input_path: \"jfs://myjfs/train/*.parquet\""));
         assertTrue(config.contains("pool_size: 4096"));
         assertTrue(config.contains("attr_fields: \"price\""));
+        assertFalse(config.contains("attr_fields: \"uid\""));
         assertTrue(config.contains("in_batch_negative: false"));
+        assertTrue(config.contains("softmax_cross_entropy {}"));
         assertFalse(config.contains("logq"));
-        assertNotNull(new WideAndDeepModel().checkModel(model));
-        ModelConf inferred = model("INT");
-        inferred.getParams().putAll(model.getParams());
-        inferred.getParams().remove("item_features");
-        inferred.getParams().put("user_features", "uid");
-        assertNull(new DSSMModel().checkModel(inferred));
-        assertTrue(PipelineConfigUtils.generateDataConfig(inferred, Map.of()).contains("attr_fields: \"iid\""));
-        for (String type : List.of("string", "int", "integer", "bigint")) {
-            ModelConf candidate = model("INT");
-            candidate.getParams().putAll(model.getParams());
-            candidate.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("iid", type),
-                    new FieldSchema("price", "DOUBLE"), new FieldSchema("label", "INT")));
-            assertNull(new DSSMModel().checkModel(candidate), type);
-        }
-        for (Map<String, String> invalid : List.of(Map.of("negative_sample_count", "0"),
-                Map.of("negative_pool_size", "256"), Map.of("item_id_column", "price"),
-                Map.of("item_id_column", "uid"), Map.of("negative_sampling", "uniform"))) {
-            ModelConf candidate = model("INT");
-            candidate.getParams().putAll(model.getParams());
-            candidate.getParams().putAll(invalid);
-            assertNotNull(new DSSMModel().checkModel(candidate), invalid.toString());
-        }
-        model.getParams().put("negative_sampling", "in_batch");
-        assertNotNull(new DSSMModel().checkModel(model));
     }
+
 
     @Test
     void integerAliasUsesDirectBucketsRatherThanHashing() {
@@ -65,34 +48,7 @@ class PipelineConfigUtilsTest {
         }
     }
 
-    @Test
-    void explicitOperationStructureOverridesEnableCheckpointValidation() {
-        ModelConf model = model("INT");
-        ModelTrainConf train = new ModelTrainConf();
-        ModelExportConf export = new ModelExportConf();
-        for (String key : List.of("hidden_units", "num_buckets", "column.uid.embedding_dim", "user_features", "task.label.weight")) {
-            train.setParams(Map.of(key, "value"));
-            export.setParams(Map.of(key, "value"));
-            assertTrue(ShellUtils.genTrainModelShell(model, train).contains("--checkpoint_structure_options"));
-            assertTrue(ShellUtils.genExportModelShell(model, export, "/export").contains("--checkpoint_structure_options"));
-        }
-        train.setParams(Map.of("learning_rate", "0.01"));
-        assertFalse(ShellUtils.genTrainModelShell(model, train).contains("--checkpoint_structure_options"));
-    }
 
-    @Test
-    void globalDefaultsDoNotOverridePerColumnSettingsInCheckpointChecks() {
-        ModelConf model = model("INT");
-        model.getParams().put("column.uid.embedding_dim", "8");
-        model.getParams().put("column.iid.bucket_size", "100");
-        ModelTrainConf train = new ModelTrainConf();
-        train.setParams(Map.of("embedding_dim", "16", "num_buckets", "1000"));
-        String shell = ShellUtils.genTrainModelShell(model, train);
-        assertTrue(shell.contains("\"options\":{\"embedding_dim\":\"16\",\"num_buckets\":\"1000\"}"), shell);
-        assertTrue(shell.contains("\"embedding_dim\":[\"uid\"]"), shell);
-        assertTrue(shell.contains("\"num_buckets\":[\"iid\"]"), shell);
-        assertFalse(shell.contains("--check_checkpoint_structure"));
-    }
 
     @Test
     void directoryGlobsSelectParquetForTrainingEvaluationAndExport() {
@@ -135,33 +91,6 @@ class PipelineConfigUtilsTest {
         }
     }
 
-    @Test
-    void exportUsesOneProcessEvenWhenTrainingIsDistributed() {
-        ModelConf model = model("INT");
-        model.getParams().putAll(Map.of("nnodes", "2", "nproc_per_node", "2"));
-        ModelExportConf export = new ModelExportConf();
-        export.setId("export"); export.setBaseModelDir("/tmp/train"); export.setParams(Map.of());
-        String yaml = new WideAndDeepModel().genModelExportK8sYaml(model, export);
-        io.fabric8.kubernetes.api.model.batch.v1.Job job = Arrays.stream(yaml.split("\n---\n"))
-                .map(part -> Serialization.unmarshal(part))
-                .filter(resource -> resource instanceof io.fabric8.kubernetes.api.model.batch.v1.Job)
-                .map(resource -> (io.fabric8.kubernetes.api.model.batch.v1.Job) resource).findFirst().orElseThrow();
-        var container = job.getSpec().getTemplate().getSpec().getContainers().get(0);
-        Map<String, String> env = new HashMap<>();
-        container.getEnv().forEach(value -> env.put(value.getName(), value.getValue()));
-        assertEquals("1", env.get("NNODES"));
-        assertEquals("1", env.get("NPROC_PER_NODE"));
-        export.setParams(Map.of("nproc_per_node", "2"));
-        assertThrows(IllegalArgumentException.class, () -> new WideAndDeepModel().genModelExportK8sYaml(model, export));
-    }
-
-    private ModelConf model(String labelType) {
-        ModelConf model = new ModelConf();
-        model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("iid", "STRING"),
-                new FieldSchema("price", "DOUBLE"), new FieldSchema("label", labelType)));
-        model.setParams(new HashMap<>(Map.of("label_columns", "label")));
-        return model;
-    }
 
     @Test
     void labelsAreExcludedBeforeTypeSelectionAndFloatsArePreserved() {
@@ -208,40 +137,6 @@ class PipelineConfigUtilsTest {
         assertEquals(recall, PipelineConfigUtils.generateDSSMModelConfig(model));
     }
 
-    @Test
-    void dssmRejectsUnsupportedLossInDeclarationsAndOperations() {
-        ModelConf model = model("INT");
-        model.getParams().putAll(Map.of("model", "tzrec.dssm", "item_features", "iid"));
-        DSSMModel controller = new DSSMModel();
-        ModelTrainConf train = new ModelTrainConf();
-        train.setId("train"); train.setModelDir("/tmp/train"); train.setParams(Map.of());
-        ModelExportConf export = new ModelExportConf();
-        export.setId("export"); export.setCheckpointName("v1"); export.setBaseModelDir("/tmp/train");
-        ServiceConf service = new ServiceConf();
-        for (String invalid : List.of("binary_cross_entropy", "l2_loss", "")) {
-            model.getParams().put("loss", invalid);
-            assertTrue(controller.checkModel(model).contains("only supports softmax_cross_entropy"));
-            train.setParams(Map.of("loss", "softmax_cross_entropy"));
-            export.setParams(Map.of("loss", "softmax_cross_entropy"));
-            service.setParams(Map.of("loss", "softmax_cross_entropy"));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
-            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
-            model.getParams().remove("loss");
-            train.setParams(Map.of("loss", invalid));
-            export.setParams(Map.of("loss", invalid));
-            service.setParams(Map.of("loss", invalid));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelTrainK8sYaml(model, train));
-            assertThrows(IllegalArgumentException.class, () -> controller.genModelExportK8sYaml(model, export));
-            assertThrows(IllegalArgumentException.class, () -> controller.getServiceK8sYaml(model, service));
-        }
-        train.setParams(Map.of("loss", "softmax_cross_entropy"));
-        export.setParams(Map.of("loss", "softmax_cross_entropy"));
-        assertTrue(controller.genModelTrainK8sYaml(model, train).contains("softmax_cross_entropy {}"));
-        assertNotNull(controller.genModelExportK8sYaml(model, export));
-        assertFalse(ShellUtils.genTrainModelShell(model, train).contains("checkpoint_structure_options"));
-        assertFalse(ShellUtils.genExportModelShell(model, export, "/export").contains("checkpoint_structure_options"));
-    }
 
     @Test
     void explicitDeepfmKeepsAnEqualDimensionSparseFmGroup() {
@@ -255,40 +150,14 @@ class PipelineConfigUtilsTest {
         assertNull(new WideAndDeepModel().checkModel(model));
     }
 
-    @Test
-    void trainExportAndServiceInheritModelParamsAndOperationOverridesWin() {
-        ModelConf model = model("INT");
-        model.getParams().putAll(Map.of("sparse_lr", "0.25", "num_epochs", "7", "image", "custom/tzrec",
-                "version", "custom", "pod_cpu_cores", "3", "USE_SPAWN_MULTI_PROCESS", "0"));
-        ModelTrainConf train = new ModelTrainConf();
-        train.setId("train"); train.setModelDir("/tmp/train"); train.setParams(Map.of("dense_lr", "0.2"));
-        String config = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
-        assertTrue(config.contains("lr: 0.25")); assertTrue(config.contains("lr: 0.2")); assertTrue(config.contains("num_epochs: 7"));
-        String yaml = new WideAndDeepModel().genModelTrainK8sYaml(model, train);
-        assertTrue(yaml.contains("custom/tzrec:custom")); assertTrue(yaml.contains("cpu: \"3\""));
-        ServiceConf service = new ServiceConf();
-        service.setId("service"); service.setModelCheckpointDir("/tmp/export"); service.setParams(Map.of("pod_cpu_cores", "4"));
-        Deployment deployment = Serialization.unmarshal(new WideAndDeepModel().getServiceK8sYaml(model, service).split("\n---\n", 2)[0], Deployment.class);
-        var container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
-        assertEquals("custom/tzrec:custom", container.getImage());
-        assertEquals("4", container.getResources().getRequests().get("cpu").getAmount());
-        ModelExportConf export = new ModelExportConf();
-        export.setId("export"); export.setBaseModelDir("/tmp/train"); export.setParams(Map.of("batch_size", "2"));
-        String exportYaml = new WideAndDeepModel().genModelExportK8sYaml(model, export);
-        assertTrue(exportYaml.contains("custom/tzrec:custom")); assertTrue(exportYaml.contains("batch_size: 2"));
-        train.setParams(Map.of("batch_size", "0"));
-        assertThrows(IllegalArgumentException.class, () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train));
-        train.setParams(Map.of("model", "tzrec.deepfm"));
-        assertThrows(IllegalArgumentException.class, () -> new WideAndDeepModel().genModelTrainK8sYaml(model, train));
-    }
 
     @Test
     void invalidFeaturesAndNumericSettingsFailBeforeJobsAreCreated() {
         for (Map<String, String> invalid : List.of(Map.of("num_buckets", "0"), Map.of("embedding_dim", "-1"),
                 Map.of("label_columns", "a,b"), Map.of("column.price.normalizer", "method=zscore,mean=1,standard_deviation=0"),
                 Map.of("column.price.boundaries", "2,1"), Map.of("column.price.default_value", "NaN"),
-                Map.of("column.price.autodis.num_channels", "3"), Map.of("column.missing.embedding_dim", "8"),
-                Map.of("hidden_units", "16,0"), Map.of("mixed_precision", "garbage"))) {
+                Map.of("column.price.autodis.num_channels", "3"),
+                Map.of("hidden_units", "16,0"))) {
             ModelConf model = model("INT"); model.getParams().putAll(invalid);
             assertNotNull(new WideAndDeepModel().checkModel(model), invalid.toString());
         }
