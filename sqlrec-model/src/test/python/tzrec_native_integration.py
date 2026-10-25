@@ -18,6 +18,8 @@ import urllib.request
 
 import numpy as np
 
+from tzrec_feature_assertions import assert_feature_tensors
+
 
 def request(url, data=None):
     body = None if data is None else json.dumps(data).encode()
@@ -90,8 +92,9 @@ def main():
                     for feature in fg["features"]:
                         key = feature["feature_name"]
                         suffixes = ["values"] if feature["feature_type"] == "raw_feature" and not feature.get("boundaries") else ["values", "lengths"]
-                        for suffix in suffixes:
-                            np.testing.assert_allclose(native_features[key][suffix], expected_tensors[f"{key}.{suffix}"].tolist(), rtol=1e-6, atol=1e-6, err_msg=str((name, key, suffix)))
+                        assert_feature_tensors(native_features[key],
+                            {suffix: expected_tensors[f"{key}.{suffix}"].tolist() for suffix in suffixes},
+                            dense=len(suffixes) == 1, context=f"{name}/{key}")
                     expected = reference._forward(arrays)
                     status, actual = request(url + "/predict", payload)
                     assert status == 200, (name, actual)

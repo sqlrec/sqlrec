@@ -218,7 +218,7 @@ WideAndDeep、DeepFM 和 DSSM 的 `label_columns` 必须是单个标签列。标
 |----------|----------------|
 | `column.{name}.bucket_size` | ID 桶数量，正整数；字符串列表示哈希桶数量 |
 | `column.{name}.embedding_dim` | ID/分桶特征的嵌入维度须为正数且为 4 的倍数；MLP/AutoDis 须为正数 |
-| `column.{name}.default_value` | ID 默认空；连续特征默认 0，向量默认各维为 0；多值默认用 separator 分隔 |
+| `column.{name}.default_value` | ID 默认空，非空 ID 默认值始终是单个 token；连续特征默认 0，向量默认各维为 0，向量默认值用 separator 分隔 |
 | `column.{name}.separator` | 单个 ASCII 字符，默认 `\035`（ASCII 29）；用于分隔多值字符串与向量默认值 |
 | `column.{name}.value_dim` | 连续向量维度；连续标量必须为 1 |
 | `column.{name}.normalizer` | 连续特征支持 zscore、minmax、log10，见下例 |
@@ -226,7 +226,9 @@ WideAndDeep、DeepFM 和 DSSM 的 `label_columns` 必须是单个标签列。标
 | `column.{name}.embedding` | 连续特征 `none`（直接使用）、`mlp`（可学习线性投影）或 `autodis`（仅标量）；不可与 boundaries 同时使用 |
 | `column.{name}.autodis.num_channels` | AutoDis 通道数，默认 3 |
 
-Normalizer 示例：`method=zscore,mean=10,standard_deviation=2`、`method=minmax,min=0,max=100`、`method=log10,threshold=0.0001,default=-4`。统计量需从训练数据预先计算；默认值位于**归一化后的空间**，缺失值不会再次执行归一化。DOUBLE 会转换为 float32，不适合要求精确小数或完整 double 精度的特征。
+Normalizer 示例：`method=zscore,mean=10,standard_deviation=2`、`method=minmax,min=0,max=100`、`method=log10,threshold=0.0001,default=-4`。`log10` 省略的 threshold、default 分别为 1、0。统计量需从训练数据预先计算；默认值位于**归一化后的空间**，缺失值不会再次执行归一化。标量分桶特征使用空默认值时，在线缺失值按未归一化的零分桶；向量分桶特征保留空行。DOUBLE 会转换为 float32，不适合要求精确小数或完整 double 精度的特征。
+
+`ARRAY<FLOAT/DOUBLE>` 的 `value_dim=1` 分桶特征必须配置非空默认值：在线将这一维输入作为数值标量处理，空默认值的训练列表与在线标量缺失语义不同。
 
 ```sql
 CREATE MODEL float_rec (

@@ -13,10 +13,15 @@ if [[ -n "$expected_arch" ]]; then
 fi
 
 container=""
+oracle_context=""
 cleanup() {
   if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi
+  if [[ -n "$oracle_context" ]]; then rm -rf -- "$oracle_context"; fi
 }
 trap cleanup EXIT
+oracle_context="$(mktemp -d)"
+cp -R "$repo_root/submodules/compat-src/tests" "$oracle_context/tests"
+cp "$repo_root/submodules/compat-src/requirements-runtime.txt" "$repo_root/submodules/compat-src/requirements-oracle.txt" "$oracle_context/"
 container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPATH=/app \
   --entrypoint bash "$image" -euo pipefail -c '
   test -x /app/tzrec_server
@@ -31,6 +36,9 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
   python /tests/tzrec_pool_sampler_tests.py
   python /tests/tzrec_rocket_launching_tests.py
   python /tests/tzrec_native_smoke.py
+  python /tests/tzrec_feature_oracle.py --feature-parser /app/features_test --compat-source /fg-reference
+  python /tests/test_tzrec_feature_assertions.py
+  python /tests/tzrec_fg_contract_tests.py
   python /tests/tzrec_pipeline_smoke.py
   python /tests/tzrec_events_integration.py
   python /tests/tzrec_summaries_integration.py
@@ -39,6 +47,7 @@ container="$(docker create --env USE_FARM_HASH_TO_BUCKETIZE=true --env PYTHONPAT
 ')"
 docker cp "$repo_root/sqlrec-model/src/test/python/." "$container:/tests"
 docker cp "$repo_root/sqlrec-model/src/test/resources/tzrec" "$container:/tests/configs"
+docker cp "$oracle_context/." "$container:/fg-reference"
 docker start --attach "$container"
 exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container")"
 [[ "$exit_code" == 0 ]] || exit "$exit_code"

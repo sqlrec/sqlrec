@@ -234,7 +234,7 @@ Convert multivalue integer IDs to `ARRAY<STRING>`; `ARRAY<INT>` and `ARRAY<BIGIN
 |---------------|---------|
 | `column.{name}.bucket_size` | Positive ID/hash bucket count |
 | `column.{name}.embedding_dim` | Sparse embedding dimension: positive multiple of 4; MLP/AutoDis: positive |
-| `column.{name}.default_value` | ID default empty; raw default zero per dimension; separator-delimited vector defaults |
+| `column.{name}.default_value` | ID default empty; a nonempty ID default is one token; raw default zero per dimension; separator-delimited vector defaults |
 | `column.{name}.separator` | Single ASCII character; default ASCII 29 (`\035`); multivalue strings and vector defaults |
 | `column.{name}.value_dim` | Required for float arrays; scalar floats must use 1 |
 | `column.{name}.normalizer` | Raw zscore, minmax, or log10 normalization |
@@ -242,7 +242,9 @@ Convert multivalue integer IDs to `ARRAY<STRING>`; `ARRAY<INT>` and `ARRAY<BIGIN
 | `column.{name}.embedding` | Raw `none`, `mlp` (learned linear projection), or `autodis` (scalar only); cannot combine with boundaries |
 | `column.{name}.autodis.num_channels` | AutoDis channels; default 3 |
 
-Normalizer examples: `method=zscore,mean=10,standard_deviation=2`, `method=minmax,min=0,max=100`, or `method=log10,threshold=0.0001,default=-4`. Compute statistics from training data beforehand. Defaults are in the **normalized space** and bypass normalization. DOUBLE inputs use float32 precision.
+Normalizer examples: `method=zscore,mean=10,standard_deviation=2`, `method=minmax,min=0,max=100`, or `method=log10,threshold=0.0001,default=-4`. Omitted log10 parameters are threshold=1 and default=0. Compute statistics from training data beforehand. Defaults are in the **normalized space** and bypass normalization. Scalar bucketized raw features with an empty default bucketize missing online values as unnormalized zero; vectors retain empty rows. DOUBLE inputs use float32 precision.
+
+Bucketized `ARRAY<FLOAT/DOUBLE>` features with `value_dim=1` require a nonempty default: serving converts them to numeric scalars, whose missing-value semantics differ from training lists with an empty default.
 
 Plain raw, MLP, and AutoDis features enter the Deep group. ID and bucketized raw features enter both Wide and Deep; DeepFM's FM group contains sparse features with equal embedding dimensions. WideAndDeep/DeepFM require a sparse feature; DSSM, MMoE, and RocketLaunching support continuous-only features. RocketLaunching generates a single Deep group.
 

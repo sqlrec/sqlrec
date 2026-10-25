@@ -150,10 +150,13 @@ final class FeatureOptions {
                     }
                     if (!FieldTypeUtils.isArray(type) && dim != 1) return prefix + "value_dim must be 1 for scalar floats";
                     String separator = params.getOrDefault(prefix + "separator", "\035");
-                    if (separator.isEmpty()) return prefix + "separator must be nonempty";
+                    if (separator.length() != 1 || separator.charAt(0) > 127) return prefix + "separator must be a single ASCII character";
                     String defaults = defaultValue(field, params);
                     List<Float> bounds = boundaries(field.getName(), params);
                     if (defaults.isEmpty() && bounds.isEmpty()) return prefix + "default_value is required for dense features";
+                    if (defaults.isEmpty() && dim == 1 && FieldTypeUtils.isArray(type)) {
+                        return prefix + "default_value must be nonempty for one-dimensional bucket vectors; serving uses numeric scalars";
+                    }
                     if (!defaults.isEmpty()) {
                         String[] tokens = defaults.split(Pattern.quote(separator), -1);
                         if (tokens.length != dim) return prefix + "default_value must match value_dim";
@@ -181,16 +184,11 @@ final class FeatureOptions {
                     positive(embeddingDim(field.getName(), params), prefix + "embedding_dim");
                     if (embeddingDim(field.getName(), params) % 4 != 0) return "Sparse embedding_dim must be a multiple of 4";
                     String separator = params.getOrDefault(prefix + "separator", "\035");
-                    if (separator.isEmpty()) return prefix + "separator must be nonempty";
+                    if (separator.length() != 1 || separator.charAt(0) > 127) return prefix + "separator must be a single ASCII character";
                     String defaults = params.getOrDefault(prefix + "default_value", "");
-                    if (!defaults.isEmpty()) {
-                        for (String token : defaults.split(Pattern.quote(separator), -1)) {
-                            if (token.isEmpty()) return prefix + "default_value must not contain empty tokens";
-                            if (FieldTypeUtils.isInteger(type)) {
-                                long id = Long.parseLong(token.trim());
-                                if (id < 0 || id >= buckets) return prefix + "default_value is outside the bucket range";
-                            }
-                        }
+                    if (!defaults.isEmpty() && FieldTypeUtils.isInteger(type)) {
+                        long id = Long.parseLong(defaults.trim());
+                        if (id < 0 || id >= buckets) return prefix + "default_value is outside the bucket range";
                     }
                     if (!FieldTypeUtils.isInteger(type) && !Config.USE_FARM_HASH_TO_BUCKETIZE.getValue(params).equalsIgnoreCase("true")) return "Hash features require USE_FARM_HASH_TO_BUCKETIZE=true";
                     fmDims.add(embeddingDim(field.getName(), params));

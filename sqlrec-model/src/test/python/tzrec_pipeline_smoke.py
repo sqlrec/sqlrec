@@ -20,6 +20,8 @@ from google.protobuf import text_format
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
 
+from tzrec_feature_assertions import assert_feature_tensors
+
 
 def request(url, payload=None, content_type="application/json", body=None):
     if body is None and payload is not None:
@@ -128,12 +130,12 @@ def config(root, architecture):
         dense_optimizer { adam_optimizer { lr: 0.01 } constant_learning_rate {} }
       }
       feature_configs { id_feature { feature_name: "category" expression: "item:category" num_buckets: 32 embedding_dim: 8 } }
-      feature_configs { id_feature { feature_name: "tags" expression: "item:tags" hash_bucket_size: 64 embedding_dim: 8 } }
+      feature_configs { id_feature { feature_name: "tags" expression: "item:tags" hash_bucket_size: 64 embedding_dim: 8 separator: "|" default_value: "1|2" } }
       feature_configs { raw_feature { feature_name: "price" expression: "item:price" default_value: "0" normalizer: "method=zscore,mean=1,standard_deviation=2" } }
-      feature_configs { raw_feature { feature_name: "bucket_price" expression: "item:bucket_price" default_value: "0" boundaries: [0.1,0.5,1.0] embedding_dim: 8 } }
+      feature_configs { raw_feature { feature_name: "bucket_price" expression: "item:bucket_price" default_value: "" boundaries: [0.1,0.5,1.0] embedding_dim: 8 } }
       feature_configs { raw_feature { feature_name: "vector" expression: "item:vector" default_value: "0\0350" value_dim: 2 normalizer: "method=minmax,min=0,max=2" } }
       feature_configs { raw_feature { feature_name: "mlp_price" expression: "item:mlp_price" default_value: "0" mlp {} embedding_dim: 8 } }
-      feature_configs { raw_feature { feature_name: "mlp_vector" expression: "item:mlp_vector" default_value: "-2\035-2" value_dim: 2 normalizer: "method=log10,threshold=0.01,default=-2" mlp {} embedding_dim: 8 } }
+      feature_configs { raw_feature { feature_name: "mlp_vector" expression: "item:mlp_vector" default_value: "-2\035-2" value_dim: 2 normalizer: "method=log10" mlp {} embedding_dim: 8 } }
       feature_configs { raw_feature { feature_name: "autodis_price" expression: "item:autodis_price" default_value: "0" autodis { num_channels: 3 } embedding_dim: 8 } }
     '''
     result = text_format.Parse(text + "model_config {" + groups + model + "}", pipeline_pb2.EasyRecConfig())
@@ -233,22 +235,40 @@ def verify_backends(directory, root, env, index):
             changed[name] = 2.5
     cases = {"row": [row], "changed_float": [changed], "batch": [row, changed],
              "null": [{key: None for key in row}],
+             "empty": [{key: [] if isinstance(value, list) else "" for key, value in row.items()}],
              "partial_missing": [row, {key: value for key, value in changed.items() if key != next(iter(row))}],
              "extra_metadata": [{**row, "label": 1, "metadata": {}}, {**row, "label": 0, "metadata": "text"}],
              "numeric_strings": [{key: ("\x1d".join(map(str, value)) if isinstance(value, list) else str(value))
                                   if specs[key]["feature_type"] == "raw_feature" else value for key, value in row.items()}],
              "columnar": {key: [value] if value == changed[key] else [value, changed[key]] for key, value in row.items()}}
+    pipeline = config_util.load_pipeline_config(str(directory / "pipeline.config"), allow_unknown_field=True)
+    training = pq.read_table(pipeline.train_input_path, columns=list(specs))
+    training = training.take(pa.array([0, training.num_rows - 1]))
+    cases["training_rows"] = training.to_pylist()
+    if "mlp_vector" in row:
+        cases["log10_threshold"] = [{**row, "mlp_vector": [1.0, 0.0]}]
+    features = json.loads((directory / "fg.json").read_text())["features"]
     expected = {}
     for name, payload in cases.items():
         arrays = json_to_array_map(parse_request_data(payload), input_specs=specs)
         expected[name] = server._forward(arrays)
         tensors = server._data_parser.parse(arrays)
+        if name == "training_rows":
+            trained = server._data_parser.parse({key: training[key].combine_chunks() for key in specs})
+            for feature in features:
+                key = feature["feature_name"]
+                suffixes = ("values",) if feature["feature_type"] == "raw_feature" and not feature.get("boundaries") else ("values", "lengths")
+                assert_feature_tensors(
+                    {suffix: tensors[f"{key}.{suffix}"].tolist() for suffix in suffixes},
+                    {suffix: trained[f"{key}.{suffix}"].tolist() for suffix in suffixes},
+                    dense=len(suffixes) == 1, context=f"Parquet/HTTP/{key}")
+            expected[name] = server._run_model(trained)
         native = json.loads(subprocess.check_output(["/app/features_test", str(directory / "fg.json")], input=json.dumps(parse_request_data(payload)).encode()))
-        for feature in json.loads((directory / "fg.json").read_text())["features"]:
+        for feature in features:
             key = feature["feature_name"]
             suffixes = ("values",) if feature["feature_type"] == "raw_feature" and not feature.get("boundaries") else ("values", "lengths")
-            for suffix in suffixes:
-                np.testing.assert_allclose(native[key][suffix], tensors[f"{key}.{suffix}"].tolist(), rtol=1e-6, atol=1e-6)
+            assert_feature_tensors(native[key], {suffix: tensors[f"{key}.{suffix}"].tolist() for suffix in suffixes},
+                                   dense=len(suffixes) == 1, context=f"{name}/{key}")
     assert any(not np.allclose(expected["row"][key], expected["changed_float"][key], rtol=0, atol=1e-8) for key in expected["row"]), "Continuous inputs must affect predictions"
     errors = [[], {}, [1], [{key: value for key, value in row.items() if key != next(iter(row))}]]
     for name, spec in specs.items():
@@ -324,6 +344,7 @@ def main():
              "mlp_price": float(i)/8, "mlp_vector": [float(i)/8, float(i%4)/4],
              "autodis_price": float(i)/8, "label": i%2, "label_like": (i//2)%2,
              "watch_time": float(i)/4, "watch_aux": float(i)/8} for i in range(32)]
+    rows[-1].update(tags=None, bucket_price=None, mlp_vector=None)
     pq.write_table(pa.Table.from_pylist(rows), root / "data.parquet")
     pq.write_table(pa.Table.from_pylist([{**row, "price": row["price"] + .25} for row in rows[16:]]), root / "eval.parquet")
     summary = []

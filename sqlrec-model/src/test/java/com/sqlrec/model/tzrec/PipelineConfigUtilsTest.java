@@ -7,6 +7,51 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
+    @Test
+    void idDefaultsAreSingleTokensAndSeparatorsMatchFg() {
+        for (String value : List.of("1|2", "a||b", "|")) {
+            ModelConf model = model("INT");
+            model.getParams().put("column.iid.separator", "|");
+            model.getParams().put("column.iid.default_value", value);
+            assertNull(new WideAndDeepModel().checkModel(model), value);
+            assertTrue(PipelineConfigUtils.generateFeatureConfigs(model).contains("default_value: " + PipelineConfigUtils.quoted(value)));
+        }
+        ModelConf integer = model("INT");
+        integer.getParams().put("column.uid.separator", "|");
+        integer.getParams().put("column.uid.default_value", "1|2");
+        assertNotNull(new WideAndDeepModel().checkModel(integer));
+        integer.getParams().put("column.uid.separator", "1");
+        integer.getParams().put("column.uid.default_value", "1");
+        assertNull(new WideAndDeepModel().checkModel(integer));
+        for (String field : List.of("uid", "iid", "price")) {
+            for (String separator : List.of("", "||", "::", "中")) {
+                ModelConf model = model("INT");
+                model.getParams().put("column." + field + ".separator", separator);
+                assertNotNull(new WideAndDeepModel().checkModel(model), field + ":" + separator);
+            }
+        }
+    }
+
+    @Test
+    void emptyBucketDefaultsDistinguishScalarAndVectorInputs() {
+        for (String type : List.of("DOUBLE", "ARRAY<FLOAT>")) {
+            for (int dim : List.of(1, 2)) {
+                if (type.equals("DOUBLE") && dim == 2) continue;
+                ModelConf model = model("INT");
+                model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("price", type),
+                        new FieldSchema("label", "INT")));
+                model.getParams().put("column.price.value_dim", Integer.toString(dim));
+                model.getParams().put("column.price.boundaries", "0,1");
+                model.getParams().put("column.price.default_value", "");
+                if (type.startsWith("ARRAY") && dim == 1) {
+                    assertTrue(new WideAndDeepModel().checkModel(model).contains("one-dimensional bucket vectors"));
+                    model.getParams().put("column.price.default_value", "0");
+                }
+                assertNull(new WideAndDeepModel().checkModel(model), type + ":" + dim);
+            }
+        }
+    }
+
     private ModelConf model(String labelType) {
         ModelConf model = new ModelConf();
         model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("iid", "STRING"),

@@ -84,7 +84,8 @@ public:
                 const auto& dim = raw.contains("value_dim") ? raw.at("value_dim") : json(1);
                 if (!dim.is_number_integer() || dim.get<int64_t>() <= 0 || dim.get<uint64_t>() > 65536) fail(name, "invalid value_dim");
                 feature.value_dim = dim.get<size_t>();
-                if (feature.separator.empty()) fail(name, "separator must not be empty");
+                if (feature.separator.size() != 1 || static_cast<unsigned char>(feature.separator[0]) > 127)
+                    fail(name, "separator must be a single ASCII character");
                 if (raw.contains("boundaries")) {
                     if (!raw.at("boundaries").is_array()) fail(name, "boundaries must be an array");
                     for (const auto& boundary : raw.at("boundaries")) {
@@ -116,12 +117,13 @@ public:
                 fail(name, "bucket count must be a positive int64");
             }
             std::string separator = raw.value("separator", std::string(1, '\x1d'));
-            if (separator.empty()) fail(name, "separator must not be empty");
+            if (separator.size() != 1 || static_cast<unsigned char>(separator[0]) > 127)
+                fail(name, "separator must be a single ASCII character");
             features_.push_back({name, expression.substr(5), hashed, count.get<uint64_t>(),
                                  raw.value("default_value", std::string()), separator});
-            // Validate default tokenization and integer ranges before accepting the model.
+            // FG treats an ID default as one token, even if it contains the separator.
             std::vector<int64_t> defaults;
-            encode(features_.back(), features_.back().default_value, defaults);
+            if (!features_.back().default_value.empty()) token(features_.back(), features_.back().default_value, defaults);
         }
         if (util::Fingerprint64("1", 1) % 100 != 49 ||
             util::Fingerprint64("2", 1) % 100 != 59 ||
@@ -152,6 +154,9 @@ public:
                     bool missing = value.is_null() || (value.is_string() && value.get_ref<const std::string&>().empty()) ||
                                    (value.is_array() && value.empty());
                     auto numbers = numeric_values(feature, missing ? json(feature.default_value) : value, !missing);
+                    // HTTP scalar raw columns become float32 Arrow columns in Python FG.
+                    // Numeric nulls with an empty bucket default use unnormalized zero.
+                    if (missing && numbers.empty() && feature.value_dim == 1 && !feature.boundaries.empty()) numbers.push_back(0);
                     if (total_values + numbers.size() > 65536) fail(feature.name, "Feature value count exceeds 65536");
                     total_values += numbers.size();
                     if (feature.boundaries.empty()) {
@@ -165,7 +170,7 @@ public:
                 size_t before = parsed.values.size();
                 if (value.is_null() || (value.is_string() && value.get_ref<const std::string&>().empty()) ||
                     (value.is_array() && value.empty())) {
-                    encode(feature, feature.default_value, parsed.values);
+                    if (!feature.default_value.empty()) token(feature, feature.default_value, parsed.values);
                 } else {
                     encode(feature, value, parsed.values);
                 }
@@ -238,8 +243,8 @@ private:
         else if (feature.method == "minmax") required = {"min", "max"};
         else if (feature.method == "log10") {
             required = {"threshold", "default"};
-            feature.normalizer.emplace("threshold", 1e-10f);
-            feature.normalizer.emplace("default", -10.0f);
+            feature.normalizer.emplace("threshold", 1.0f);
+            feature.normalizer.emplace("default", 0.0f);
         } else fail(feature.name, "normalizer must use zscore, minmax or log10");
         if (feature.normalizer.size() != required.size()) fail(feature.name, "invalid normalizer parameters");
         for (const auto& key : required) if (!feature.normalizer.count(key)) fail(feature.name, "missing normalizer parameter: " + key);
