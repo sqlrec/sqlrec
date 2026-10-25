@@ -66,10 +66,9 @@ def rows_from_case(case):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feature-parser", required=True)
-    parser.add_argument("--compat-source", type=Path,
-                        default=Path(__file__).resolve().parents[4] / "submodules/compat-src")
+    parser.add_argument("--compat-source", type=Path)
     args = parser.parse_args()
-    reference = args.compat_source.resolve()
+    reference = (args.compat_source or Path(__file__).resolve().parents[4] / "submodules/compat-src").resolve()
     sys.path.insert(0, str(reference / "tests"))
     from oracle_cases import all_cases
     from oracle_support import assert_float_buckets, load_oracle
