@@ -233,16 +233,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build a cp310 wheel on the native runner against Bookworm glibc, which
-      # matches the Python 3.10 Bookworm GBDT runtime image.
-      - name: Build JuiceFS Python 3.10 wheel
+      # Build a cp311 wheel on the native runner against Bookworm glibc, which
+      # matches the Python 3.11 Bookworm GBDT runtime image.
+      - name: Build JuiceFS Python 3.11 wheel
         run: |
           docker buildx build --platform linux/${{ matrix.arch }} \
             --file "$GITHUB_WORKSPACE/docker/model-wheel-juicefs.Dockerfile" \
-            --build-arg PYTHON_VERSION=3.10 --target wheels \
+            --build-arg PYTHON_VERSION=3.11 --target wheels \
             --output "type=local,dest=$RUNNER_TEMP/juicefs-wheel" \
             ./submodules/juicefs-src
-          cp "$RUNNER_TEMP/juicefs-wheel"/juicefs-*-cp310-cp310-linux_*.whl ./
+          cp "$RUNNER_TEMP/juicefs-wheel"/juicefs-*-cp311-cp311-linux_*.whl ./
           ls -lh juicefs-*.whl
 
       - name: Login to DockerHub
@@ -497,10 +497,9 @@ jobs:
         run: |
           docker buildx build --platform linux/arm64 --target wheels \
             --output "type=local,dest=$RUNNER_TEMP/compat-wheels" ./submodules/compat-src
-          cp "$RUNNER_TEMP/compat-wheels"/pyfarmhash-*.whl ./
           cp "$RUNNER_TEMP/compat-wheels"/pyfg-*.whl ./
           cp "$RUNNER_TEMP/compat-wheels"/graphlearn-*.whl ./
-          ls -la pyfarmhash-*.whl pyfg-*.whl graphlearn-*.whl
+          ls -la pyfg-*.whl graphlearn-*.whl
 
       - name: Login to DockerHub
         if: inputs.publish_images

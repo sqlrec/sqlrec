@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.10-slim-bookworm AS wheelbuilder
+FROM python:3.11-slim-bookworm AS wheelbuilder
 WORKDIR /src
 RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
     python -m pip install 'grpcio-tools<1.63.0' setuptools wheel

@@ -13,20 +13,20 @@ if [[ ! -x "${venv_dir}/bin/python" ]]; then
     fi
     for candidate in "${candidates[@]}"; do
         if command -v "${candidate}" >/dev/null 2>&1 \
-            && "${candidate}" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+            && "${candidate}" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
             bootstrap_python="${candidate}"
             break
         fi
     done
     if [[ -z "${bootstrap_python}" ]]; then
-        echo "Python 3.10 or newer is required to create ${venv_dir}" >&2
+        echo "Python 3.11 or newer is required to create ${venv_dir}" >&2
         exit 1
     fi
     "${bootstrap_python}" -m venv "${venv_dir}"
 fi
 
-if ! "${venv_dir}/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
-    echo "${venv_dir} needs Python 3.10 or newer; remove it and rerun this script" >&2
+if ! "${venv_dir}/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+    echo "${venv_dir} needs Python 3.11 or newer; remove it and rerun this script" >&2
     exit 1
 fi
 

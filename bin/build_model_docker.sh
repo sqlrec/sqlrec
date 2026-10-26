@@ -122,7 +122,6 @@ build_compat_wheels() {
     "$repo_root/submodules/compat-src"
   require_one_wheel "$destination" 'pyfg-*-none-any.whl' >/dev/null
   require_one_wheel "$destination" 'graphlearn-*-none-any.whl' >/dev/null
-  require_one_wheel "$destination" 'pyfarmhash-*-cp311-cp311-linux_*.whl' >/dev/null
 }
 
 prepare_tzrec_context() {
@@ -133,7 +132,6 @@ prepare_tzrec_context() {
   if [[ "$arch" == arm64 ]]; then
     cp "$(require_one_wheel "$artifact_dir/compat" 'pyfg-*-none-any.whl')" "$context/"
     cp "$(require_one_wheel "$artifact_dir/compat" 'graphlearn-*-none-any.whl')" "$context/"
-    cp "$(require_one_wheel "$artifact_dir/compat" 'pyfarmhash-*-cp311-cp311-linux_*.whl')" "$context/"
   fi
   mkdir -p "$context/sqlrec-model/src/main/python/tzrec"
   cp "$repo_root"/sqlrec-model/src/main/python/tzrec/*.py \
@@ -149,7 +147,7 @@ prepare_tzrec_context() {
 prepare_gbdt_context() {
   local context="$1"
   mkdir -p "$context"
-  cp "$(require_one_wheel "$artifact_dir/juicefs-py3.10" 'juicefs-*-cp310-cp310-linux_*.whl')" "$context/"
+  cp "$(require_one_wheel "$artifact_dir/juicefs-py3.11" 'juicefs-*-cp311-cp311-linux_*.whl')" "$context/"
   mkdir -p "$context/sqlrec-model/src/main/cpp" "$context/sqlrec-model/src/main/python"
   cp -R "$repo_root/sqlrec-model/src/main/cpp/gbdt" "$repo_root/sqlrec-model/src/main/cpp/common" \
     "$context/sqlrec-model/src/main/cpp/"
@@ -215,7 +213,7 @@ build_tzrec() {
 
 build_gbdt() {
   local context="$work_dir/context-gbdt"
-  build_juicefs_wheel 3.10
+  build_juicefs_wheel 3.11
   prepare_gbdt_context "$context"
   build_and_verify_image "sqlrec/gbdt:${SQLREC_VERSION}-cpu" \
     "$repo_root/docker/sqlrec-model-gbdt.Dockerfile" "$context"

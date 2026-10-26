@@ -40,10 +40,10 @@ RUN --mount=type=cache,id=sqlrec-pip,target=/root/.cache/pip,sharing=locked \
         'pyarrow==17.0.0' safetensors scikit-learn tensorboard faiss-cpu
 
 # These wheels are built from the same sqlrec-arm-compat revision tested in CI.
-# pyfarmhash contains the native ARM extension used by pyfg ID hashing.
-COPY pyfarmhash-*.whl pyfg-*.whl graphlearn-*.whl /tmp/
-RUN pip install --no-cache-dir --no-deps \
-        /tmp/pyfarmhash-*.whl \
+# Require the prebuilt FarmHash binding rather than compiling it in the image.
+COPY pyfg-*.whl graphlearn-*.whl /tmp/
+RUN pip install --no-cache-dir --only-binary=:all: 'cityhash==0.4.10' \
+    && pip install --no-cache-dir --no-deps \
         /tmp/pyfg-*.whl \
         /tmp/graphlearn-*.whl \
     && rm -f /tmp/*.whl

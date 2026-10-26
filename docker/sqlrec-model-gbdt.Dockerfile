@@ -6,7 +6,7 @@
 #   virtualenv with all packages. Build-only tools (cmake/make/g++/wget) live
 #   here and are discarded — they never reach the runtime image.
 # ===========================================================================
-FROM python:3.10-slim-bookworm AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 ARG TARGETARCH
 ARG CATBOOST_VERSION=1.2.10
@@ -106,7 +106,7 @@ RUN mkdir -p /build/gbdt/build /app \
 #   Java and Hadoop are NOT installed here — they are injected into pods at
 #   runtime via volume mounts and env vars (see ModelManager.injectPodConfig).
 # ===========================================================================
-FROM python:3.10-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH=/opt/venv/bin:$PATH
