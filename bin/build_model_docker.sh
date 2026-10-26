@@ -181,9 +181,7 @@ prepare_sources() {
   fi
   if [[ "$target" == all || "$target" == tzrec ]]; then
     sources+=(submodules/tzrec-src)
-    if [[ "$arch" == arm64 ]]; then
-      sources+=(submodules/compat-src)
-    fi
+    sources+=(submodules/compat-src)
   fi
   if [[ "${#sources[@]}" -gt 0 ]]; then
     update_sources "${sources[@]}"
@@ -199,13 +197,20 @@ prepare_sources() {
   fi
 }
 
+prepare_wheels() {
+  if [[ "$target" == all || "$target" == tzrec || "$target" == gbdt ]]; then
+    build_juicefs_wheel 3.11
+  fi
+  if [[ "$target" == all || "$target" == tzrec ]]; then
+    build_tzrec_wheel
+    if [[ "$arch" == arm64 ]]; then
+      build_compat_wheels
+    fi
+  fi
+}
+
 build_tzrec() {
   local context="$work_dir/context-tzrec"
-  build_juicefs_wheel 3.11
-  build_tzrec_wheel
-  if [[ "$arch" == arm64 ]]; then
-    build_compat_wheels
-  fi
   prepare_tzrec_context "$context"
   build_and_verify_image "sqlrec/tzrec:${SQLREC_VERSION}-cpu" \
     "$repo_root/docker/sqlrec-model-tzrec.Dockerfile" "$context"
@@ -213,7 +218,6 @@ build_tzrec() {
 
 build_gbdt() {
   local context="$work_dir/context-gbdt"
-  build_juicefs_wheel 3.11
   prepare_gbdt_context "$context"
   build_and_verify_image "sqlrec/gbdt:${SQLREC_VERSION}-cpu" \
     "$repo_root/docker/sqlrec-model-gbdt.Dockerfile" "$context"
@@ -246,6 +250,7 @@ main() {
   work_dir="$(mktemp -d "$repo_root/build/model-image.XXXXXX")"
   trap 'rm -rf "$work_dir"' EXIT
   prepare_sources
+  prepare_wheels
 
   case "$target" in
     all) build_tzrec; build_gbdt; build_transformers ;;
@@ -255,4 +260,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

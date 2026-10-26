@@ -12,7 +12,7 @@ jobs:
   build-test-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -47,6 +47,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      - name: Test artifact and release helpers
+        run: python3 -m unittest discover -s .github/tests -v
+
       # Fail before any release is created when the tag (minus the v prefix)
       # does not match the root pom version.
       - name: Verify tag matches pom version
@@ -65,13 +68,17 @@ jobs:
       - name: Build and run unit tests
         run: mvn -B -DexcludedGroups=integration package
 
-      - name: Upload jars to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Save release JARs
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: release-jars
+          path: |
             sqlrec-flink/target/sqlrec-flink-*.jar
             sqlrec-frontend/target/sqlrec-frontend-*.jar
-          fail_on_unmatched_files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+          compression-level: 0
 
   publish-images:
     needs: build-test-release
@@ -93,3 +100,46 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish-release:
+    needs: [build-test-release, publish-images]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sqlrec-release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout sqlrec
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download shared wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: model-wheels-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: false
+
+      - name: Download release JARs
+        uses: actions/download-artifact@v4
+        with:
+          name: release-jars
+          path: ${{ runner.temp }}/release-input/release-jars
+
+      - name: Validate and collect release assets
+        run: |
+          python3 .github/scripts/model_wheel_artifacts.py assemble \
+            --artifacts-dir "$RUNNER_TEMP/release-input" \
+            --output-dir "$RUNNER_TEMP/release-assets" --sqlrec-commit "$GITHUB_SHA"
+
+      - name: Upload draft assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash .github/scripts/publish_release.sh "$RUNNER_TEMP/release-assets" "$RELEASE_TAG"

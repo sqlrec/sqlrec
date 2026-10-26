@@ -90,6 +90,129 @@ jobs:
           fi
           cat "$GITHUB_OUTPUT"
 
+  build-juicefs-wheels:
+    name: Build shared JuiceFS wheel (${{ matrix.arch }})
+    needs: resolve-model-sources
+    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'juicefs' || inputs.build_target == 'gbdt' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout sqlrec
+        uses: actions/checkout@v4
+
+      - name: Checkout resolved JuiceFS source
+        uses: actions/checkout@v4
+        with:
+          repository: sqlrec/juicefs
+          ref: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
+          path: submodules/juicefs-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and record JuiceFS wheel
+        env:
+          ARCH: ${{ matrix.arch }}
+          JUICEFS_COMMIT: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
+        run: |
+          docker buildx build --platform "linux/$ARCH" \
+            --file "$GITHUB_WORKSPACE/docker/model-wheel-juicefs.Dockerfile" \
+            --build-arg PYTHON_VERSION=3.11 --target wheels \
+            --output "type=local,dest=$RUNNER_TEMP/juicefs-wheel" \
+            ./submodules/juicefs-src
+          python3 .github/scripts/model_wheel_artifacts.py record \
+            --directory "$RUNNER_TEMP/juicefs-wheel" --group "juicefs-$ARCH" \
+            --sqlrec-commit "$GITHUB_SHA" --source "juicefs=$JUICEFS_COMMIT"
+
+      - name: Verify JuiceFS in Python 3.11 Bookworm
+        run: |
+          docker run --rm \
+            --mount "type=bind,source=$RUNNER_TEMP/juicefs-wheel,target=/wheels,readonly" \
+            python:3.11-slim-bookworm python -c \
+            'import ctypes, glob, pathlib, subprocess, sys; subprocess.check_call([sys.executable, "-m", "pip", "install", *glob.glob("/wheels/*.whl")]); import juicefs; ctypes.CDLL(str(pathlib.Path(juicefs.__file__).with_name("libjfs.so")))'
+
+      - name: Save shared JuiceFS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-wheels-juicefs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/juicefs-wheel/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+          compression-level: 0
+
+  build-python-wheels:
+    name: Build shared Python wheels
+    needs: resolve-model-sources
+    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout sqlrec
+        uses: actions/checkout@v4
+
+      - name: Checkout resolved TorchEasyRec source
+        uses: actions/checkout@v4
+        with:
+          repository: sqlrec/TorchEasyRec
+          ref: ${{ needs.resolve-model-sources.outputs.tzrec_commit }}
+          path: submodules/tzrec-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout resolved compatibility source
+        uses: actions/checkout@v4
+        with:
+          repository: sqlrec/sqlrec-arm-compat
+          ref: ${{ needs.resolve-model-sources.outputs.arm_compat_commit }}
+          path: submodules/compat-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and record pure Python wheels
+        env:
+          TZREC_COMMIT: ${{ needs.resolve-model-sources.outputs.tzrec_commit }}
+          COMPAT_COMMIT: ${{ needs.resolve-model-sources.outputs.arm_compat_commit }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            --file "$GITHUB_WORKSPACE/docker/model-wheel-tzrec.Dockerfile" \
+            --target wheels --output "type=local,dest=$RUNNER_TEMP/tzrec-wheel" \
+            ./submodules/tzrec-src
+          docker buildx build --platform linux/amd64 --target wheels \
+            --output "type=local,dest=$RUNNER_TEMP/compat-wheels" ./submodules/compat-src
+          mkdir -p "$RUNNER_TEMP/common-wheels"
+          cp "$RUNNER_TEMP/tzrec-wheel"/*.whl "$RUNNER_TEMP/compat-wheels"/*.whl \
+            "$RUNNER_TEMP/common-wheels/"
+          python3 .github/scripts/model_wheel_artifacts.py record \
+            --directory "$RUNNER_TEMP/common-wheels" --group common \
+            --sqlrec-commit "$GITHUB_SHA" \
+            --source "tzrec=$TZREC_COMMIT" --source "compat=$COMPAT_COMMIT"
+
+      - name: Save shared Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-wheels-common
+          path: ${{ runner.temp }}/common-wheels/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+          compression-level: 0
+
   docker-sqlrec:
     if: ${{ inputs.build_target == 'sqlrec' || inputs.build_target == 'all' }}
     runs-on: ubuntu-latest
@@ -198,11 +321,10 @@ jobs:
           cache-from: type=gha,scope=sqlrec-demo
           cache-to: type=gha,mode=max,scope=sqlrec-demo
 
-  # See the docker-sqlrec job for the `needs`/`if` dependency explanation.
   docker-gbdt:
-    name: Build GBDT / JuiceFS (${{ matrix.arch }})
-    needs: resolve-model-sources
-    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'juicefs' || inputs.build_target == 'gbdt' || inputs.build_target == 'all' }}
+    name: Build GBDT (${{ matrix.arch }})
+    needs: [resolve-model-sources, build-juicefs-wheels]
+    if: ${{ inputs.build_target == 'models' || inputs.build_target == 'gbdt' || inputs.build_target == 'all' }}
     strategy:
       fail-fast: false
       matrix:
@@ -221,39 +343,33 @@ jobs:
       - name: Checkout sqlrec
         uses: actions/checkout@v4
 
-      - name: Checkout juicefs fork
-        uses: actions/checkout@v4
+      - name: Download shared JuiceFS wheel
+        uses: actions/download-artifact@v4
         with:
-          repository: sqlrec/juicefs
-          ref: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
-          path: submodules/juicefs-src
-          fetch-depth: 1
-          persist-credentials: false
+          name: model-wheels-juicefs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/juicefs-wheel
+
+      - name: Verify and stage shared JuiceFS wheel
+        env:
+          ARCH: ${{ matrix.arch }}
+          JUICEFS_COMMIT: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
+        run: |
+          python3 .github/scripts/model_wheel_artifacts.py verify \
+            --directory "$RUNNER_TEMP/juicefs-wheel" --group "juicefs-$ARCH" \
+            --sqlrec-commit "$GITHUB_SHA" --source "juicefs=$JUICEFS_COMMIT" \
+            --copy-to "$GITHUB_WORKSPACE"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build a cp311 wheel on the native runner against Bookworm glibc, which
-      # matches the Python 3.11 Bookworm GBDT runtime image.
-      - name: Build JuiceFS Python 3.11 wheel
-        run: |
-          docker buildx build --platform linux/${{ matrix.arch }} \
-            --file "$GITHUB_WORKSPACE/docker/model-wheel-juicefs.Dockerfile" \
-            --build-arg PYTHON_VERSION=3.11 --target wheels \
-            --output "type=local,dest=$RUNNER_TEMP/juicefs-wheel" \
-            ./submodules/juicefs-src
-          cp "$RUNNER_TEMP/juicefs-wheel"/juicefs-*-cp311-cp311-linux_*.whl ./
-          ls -lh juicefs-*.whl
-
       - name: Login to DockerHub
-        if: inputs.publish_images && inputs.build_target != 'juicefs'
+        if: inputs.publish_images
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels)
-        if: inputs.build_target != 'juicefs'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -274,7 +390,6 @@ jobs:
       # Load the native single-platform image first so architecture and dynamic
       # library checks finish before any per-architecture tags are published.
       - name: Build GBDT image (${{ matrix.arch }})
-        if: inputs.build_target != 'juicefs'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -288,7 +403,6 @@ jobs:
           cache-to: type=gha,scope=gbdt-${{ matrix.arch }},mode=max
 
       - name: Verify GBDT image (${{ matrix.arch }})
-        if: inputs.build_target != 'juicefs'
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           EXPECTED_ARCH: ${{ matrix.arch }}
@@ -307,7 +421,7 @@ jobs:
             'set -eu; links="$(ldd /app/onnx_server /app/catboost_server 2>&1)"; printf "%s\n" "$links"; ! printf "%s\n" "$links" | grep -q "not found"'
 
       - name: Push GBDT image (${{ matrix.arch }})
-        if: inputs.publish_images && inputs.build_target != 'juicefs'
+        if: inputs.publish_images
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
@@ -321,7 +435,7 @@ jobs:
 
   docker-gbdt-manifest:
     needs: docker-gbdt
-    if: ${{ needs.docker-gbdt.result == 'success' && inputs.build_target != 'juicefs' && inputs.publish_images }}
+    if: ${{ needs.docker-gbdt.result == 'success' && inputs.publish_images }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -416,10 +530,9 @@ jobs:
           cache-from: type=gha,scope=transformers
           cache-to: type=gha,mode=max,scope=transformers
 
-  # See the docker-sqlrec job for the `needs`/`if` dependency explanation.
   docker-tzrec:
-    name: Build TZRec / JuiceFS (${{ matrix.arch }})
-    needs: resolve-model-sources
+    name: Build TZRec (${{ matrix.arch }})
+    needs: [resolve-model-sources, build-juicefs-wheels, build-python-wheels]
     if: ${{ inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
     strategy:
       fail-fast: false
@@ -439,26 +552,7 @@ jobs:
       - name: Checkout sqlrec
         uses: actions/checkout@v4
 
-      - name: Checkout juicefs fork
-        uses: actions/checkout@v4
-        with:
-          repository: sqlrec/juicefs
-          ref: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
-          path: submodules/juicefs-src
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout TorchEasyRec fork
-        uses: actions/checkout@v4
-        with:
-          repository: sqlrec/TorchEasyRec
-          ref: ${{ needs.resolve-model-sources.outputs.tzrec_commit }}
-          path: submodules/tzrec-src
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout the resolved compatibility revision
-        if: matrix.arch == 'arm64'
+      - name: Checkout compatibility test source
         uses: actions/checkout@v4
         with:
           repository: sqlrec/sqlrec-arm-compat
@@ -470,36 +564,34 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # TZRec uses Python 3.11 on both architectures. Keep its JuiceFS wheel
-      # specific to that interpreter and the native runner architecture.
-      - name: Build JuiceFS Python 3.11 wheel
-        run: |
-          docker buildx build --platform linux/${{ matrix.arch }} \
-            --file "$GITHUB_WORKSPACE/docker/model-wheel-juicefs.Dockerfile" \
-            --build-arg PYTHON_VERSION=3.11 --target wheels \
-            --output "type=local,dest=$RUNNER_TEMP/juicefs-wheel" \
-            ./submodules/juicefs-src
-          cp "$RUNNER_TEMP/juicefs-wheel"/juicefs-*-cp311-cp311-linux_*.whl ./
-          ls -lh juicefs-*.whl
+      - name: Download shared JuiceFS wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: model-wheels-juicefs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/juicefs-wheel
 
-      - name: Build tzrec Python wheel
-        run: |
-          docker buildx build --platform linux/${{ matrix.arch }} \
-            --file "$GITHUB_WORKSPACE/docker/model-wheel-tzrec.Dockerfile" \
-            --target wheels \
-            --output "type=local,dest=$RUNNER_TEMP/tzrec-wheel" \
-            ./submodules/tzrec-src
-          cp "$RUNNER_TEMP/tzrec-wheel"/tzrec-*-none-any.whl ./
-          ls -lh tzrec-*.whl
+      - name: Download shared Python wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: model-wheels-common
+          path: ${{ runner.temp }}/common-wheels
 
-      - name: Build ARM compatibility wheels
-        if: matrix.arch == 'arm64'
+      - name: Verify and stage shared wheels
+        env:
+          ARCH: ${{ matrix.arch }}
+          JUICEFS_COMMIT: ${{ needs.resolve-model-sources.outputs.juicefs_commit }}
+          TZREC_COMMIT: ${{ needs.resolve-model-sources.outputs.tzrec_commit }}
+          COMPAT_COMMIT: ${{ needs.resolve-model-sources.outputs.arm_compat_commit }}
         run: |
-          docker buildx build --platform linux/arm64 --target wheels \
-            --output "type=local,dest=$RUNNER_TEMP/compat-wheels" ./submodules/compat-src
-          cp "$RUNNER_TEMP/compat-wheels"/pyfg-*.whl ./
-          cp "$RUNNER_TEMP/compat-wheels"/graphlearn-*.whl ./
-          ls -la pyfg-*.whl graphlearn-*.whl
+          python3 .github/scripts/model_wheel_artifacts.py verify \
+            --directory "$RUNNER_TEMP/juicefs-wheel" --group "juicefs-$ARCH" \
+            --sqlrec-commit "$GITHUB_SHA" --source "juicefs=$JUICEFS_COMMIT" \
+            --copy-to "$GITHUB_WORKSPACE"
+          python3 .github/scripts/model_wheel_artifacts.py verify \
+            --directory "$RUNNER_TEMP/common-wheels" --group common \
+            --sqlrec-commit "$GITHUB_SHA" \
+            --source "tzrec=$TZREC_COMMIT" --source "compat=$COMPAT_COMMIT" \
+            --copy-to "$GITHUB_WORKSPACE"
 
       - name: Login to DockerHub
         if: inputs.publish_images

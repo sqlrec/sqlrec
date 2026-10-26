@@ -69,6 +69,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      - name: Test artifact and release helpers
+        run: python3 -m unittest discover -s .github/tests -v
+
       - name: Build and run unit tests
         run: mvn -B -DexcludedGroups=integration package
 
