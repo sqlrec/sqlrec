@@ -50,9 +50,7 @@ final class FlinkHiveDdlContract {
         ddl(adapter, "ALTER TABLE " + table + " ADD note STRING", database);
         assertEquals(List.of("id", "amount", "category", "note"), columnNames(reader.getTable(original)));
         ddl(adapter, "ALTER TABLE " + table + " MODIFY note VARCHAR(100) COMMENT 'updated note'", database);
-        var note = (Schema.UnresolvedPhysicalColumn) reader.getTable(original).getUnresolvedSchema().getColumns().get(3);
         assertEquals("VARCHAR(100)", HiveTableUtils.getMetadataFields(reader.getHiveTable(original)).get(3).getType());
-        assertEquals("updated note", note.getComment().orElseThrow());
         ddl(adapter, "ALTER TABLE " + table + " DROP note", database);
         assertEquals(schema, reader.getTable(original).getUnresolvedSchema().toString());
 

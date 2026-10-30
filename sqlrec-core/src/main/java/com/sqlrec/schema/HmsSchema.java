@@ -4,7 +4,6 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.MetadataAccess;
@@ -20,11 +19,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchema extends AbstractSchema {
     private static final Logger log = LoggerFactory.getLogger(HmsSchema.class);
@@ -33,7 +30,9 @@ public class HmsSchema extends AbstractSchema {
     private final MetadataAccess metadataAccess;
     private final CacheUtils.SingleValueCache<Map<String, Table>> tableMapCache;
     private final CacheUtils.SingleValueCache<Multimap<String, Function>> functionMapCache;
-    private volatile Map<String, Long> tableModificationTimes = Collections.emptyMap();
+    private Map<String, TableEntry> tableEntries = new HashMap<>();
+
+    private record TableEntry(org.apache.hadoop.hive.metastore.api.Table metadata, Table table) {}
 
     public HmsSchema(String databaseName, MetadataAccess metadataAccess) {
         this(
@@ -52,7 +51,7 @@ public class HmsSchema extends AbstractSchema {
         this.metadataAccess = metadataAccess;
         this.tableMapCache = CacheUtils.createSingleValueRefreshCache(
                 refreshInterval,
-                this::computeTableMap
+                ignored -> computeTableMap()
         );
         this.functionMapCache = CacheUtils.createSingleValueRefreshCache(
                 refreshInterval,
@@ -61,8 +60,29 @@ public class HmsSchema extends AbstractSchema {
     }
 
     public void invalidateCache() {
+        synchronized (this) {
+            tableEntries.keySet().forEach(this::unregisterTableMetrics);
+            tableEntries.clear();
+        }
+        invalidateMetadata();
+    }
+
+    /** Reload definitions while retaining execution objects whose metadata has not changed. */
+    public void invalidateMetadata() {
         tableMapCache.invalidate();
         functionMapCache.invalidate();
+    }
+
+    public void evictTable(String table) {
+        synchronized (this) {
+            tableEntries.keySet().removeIf(name -> {
+                if (!name.equalsIgnoreCase(table)) return false;
+                unregisterTableMetrics(name);
+                return true;
+            });
+        }
+        // Caffeine can call the loader while holding its own lock; never invalidate under this monitor.
+        tableMapCache.invalidate();
     }
 
     @Override
@@ -75,45 +95,37 @@ public class HmsSchema extends AbstractSchema {
         return functionMapCache.get();
     }
 
-    private Map<String, Table> computeTableMap(Map<String, Table> oldTableMap) {
+    private synchronized Map<String, Table> computeTableMap() {
         try {
             List<org.apache.hadoop.hive.metastore.api.Table> tableMetas = metadataAccess.getTables(databaseName);
-            Map<String, Table> tableMap = new ConcurrentHashMap<>();
-            Map<String, Long> oldModificationTimes = tableModificationTimes;
-            Map<String, Long> newModificationTimes = new HashMap<>();
+            Map<String, Table> tableMap = new HashMap<>();
+            Map<String, TableEntry> updated = new HashMap<>();
             for (org.apache.hadoop.hive.metastore.api.Table tableMeta : tableMetas) {
                 String tableName = tableMeta.getTableName();
-                long newModificationTime = HiveTableUtils.getTableModificationTime(tableMeta);
-                newModificationTimes.put(tableName, newModificationTime);
-
-                Long oldModificationTime = oldModificationTimes.get(tableName);
-                if (oldTableMap != null
-                        && oldTableMap.containsKey(tableName)
-                        && oldModificationTime != null
-                        && oldModificationTime >= newModificationTime) {
-                    tableMap.put(tableName, oldTableMap.get(tableName));
-                    continue;
+                TableEntry entry = tableEntries.get(tableName);
+                if (entry == null || !entry.metadata().equals(tableMeta)) {
+                    Table table = TableFactoryUtils.getTableFromHmsTable(tableMeta);
+                    if (table == null) continue;
+                    entry = new TableEntry(tableMeta.deepCopy(), table);
                 }
-                Table table = TableFactoryUtils.getTableFromHmsTable(tableMeta);
-                if (table != null) {
-                    tableMap.put(tableName, table);
-                }
+                updated.put(tableName, entry);
+                tableMap.put(tableName, entry.table());
             }
-            // Modification times survive explicit invalidation, when oldTableMap is unavailable.
-            for (String oldTableName : oldModificationTimes.keySet()) {
-                if (!newModificationTimes.containsKey(oldTableName)) {
-                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(databaseName)
-                            ? oldTableName
-                            : databaseName + "." + oldTableName;
-                    MetricsUtils.unregisterTableCacheMetrics(fullName);
-                }
+            for (String oldTableName : tableEntries.keySet()) {
+                if (!updated.containsKey(oldTableName)) unregisterTableMetrics(oldTableName);
             }
-            tableModificationTimes = Collections.unmodifiableMap(newModificationTimes);
-            return tableMap;
+            Map<String, Table> result = Map.copyOf(tableMap);
+            tableEntries = updated;
+            return result;
         } catch (Exception e) {
             log.error("Error while computing table map for schema {}", databaseName, e);
             throw new RuntimeException(e);
         }
+    }
+
+    private void unregisterTableMetrics(String table) {
+        String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(databaseName) ? table : databaseName + "." + table;
+        MetricsUtils.unregisterTableCacheMetrics(fullName);
     }
 
     private Multimap<String, Function> computeFunctionMap(Multimap<String, Function> oldFunctionMap) {

@@ -1,5 +1,7 @@
 package com.sqlrec.db.remote;
 
+import com.sqlrec.common.utils.HiveTableUtils;
+
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -31,7 +33,7 @@ class HmsSchemaAccessTest {
     }
 
     @Test
-    void newTableSnapshotRemovesDeletedModificationTimes() throws Exception {
+    void tableReadsPreserveUpdateTimesAndReflectDrops() throws Exception {
         try (var hms = mockStatic(HmsClient.class)) {
             Table table = new Table();
             table.setTableName("old");
@@ -39,10 +41,10 @@ class HmsSchemaAccessTest {
             hms.when(() -> HmsClient.getAllTables("db")).thenReturn(List.of("old"), List.of());
             hms.when(() -> HmsClient.getTableObj("db", "old")).thenReturn(table);
             HmsSchemaAccess access = new HmsSchemaAccess();
-            access.getTables("db");
-            assertTrue(access.getTableUpdateTime("db", "old") > 0);
-            access.getTables("db");
-            assertEquals(0, access.getTableUpdateTime("db", "old"));
+            var tables = access.getTables("db");
+            assertEquals(List.of(table), tables);
+            assertEquals(100000L, HiveTableUtils.getTableModificationTime(tables.get(0)));
+            assertTrue(access.getTables("db").isEmpty());
         }
     }
 }

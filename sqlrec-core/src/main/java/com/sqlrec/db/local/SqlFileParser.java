@@ -59,6 +59,7 @@ public class SqlFileParser {
         try (Stream<Path> walk = Files.walk(dir)) {
             walk.filter(Files::isRegularFile)
                     .filter(this::isSqlFile)
+                    .sorted()
                     .forEach(sqlFiles::add);
         }
         return sqlFiles;

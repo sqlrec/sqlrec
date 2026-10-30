@@ -953,19 +953,32 @@ DESCRIBE FORMATTED SERVICE `my-service`;
 
 In shared metadata mode, persistent table/database/UDF metadata DDL uses the Flink 1.19 default dialect and writes HMS through the official HiveCatalog's Hive client, without creating a TableEnvironment or planner or connecting to Gateway. Table DDL supports physical columns, metadata columns, primary keys, and partitions. Computed columns and watermarks are unsupported; queries and alterations that resolve an existing table schema also reject those definitions.
 
-`USE CATALOG` and temporary table creation, including temporary CTAS/RTAS, are unsupported. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. Temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode does not support these persistent metadata DDL statements or Gateway forwarding.
+`USE CATALOG` and temporary table creation, including temporary CTAS/RTAS, are unsupported. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. In remote metadata mode, temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode does not forward statements to Gateway.
+
+SQL-file metadata disables DDL by default. Set `SQL_SCHEMA_DDL_ENABLED=true` before startup to enable database `CREATE / ALTER ... SET / DROP`, table `CREATE / CREATE ... LIKE / ALTER / DROP`, persistent Java UDFs, SQL functions, and APIs, including replacement where supported by the syntax. Table alterations reuse existing column, primary-key, and option operations. Partition-key declarations are supported; partition instance changes, cross-database renames, computed columns, watermarks, CTAS/RTAS, temporary objects, and views are unsupported. Model, Service, Checkpoint, training, and export commands remain disabled. Java UDF registration stores class, language, and resource declarations without downloading JARs or loading classes; execution still requires the corresponding dependencies. Database drops support `RESTRICT / CASCADE`; the current and default databases cannot be dropped.
+
+Changes live only in the current process and are shared by its sessions. They never rewrite SQL files or synchronize across instances; restarting restores file definitions. Each SQL executor reads and fixes the option when created and checks it before DDL dispatch; session `SET` cannot change it. The option controls SQL execution, while internal metadata APIs perform reads and writes without this check. Successful database DDL updates only the executing session's compilation schema. Other existing sessions do not automatically synchronize database membership and need a new executor to query data in newly added databases. Commands such as `SHOW` and `DESCRIBE` still read shared definitions directly from metadata.
+
+```bash
+export SQL_SCHEMA_DIR=/app/sql
+export SQL_SCHEMA_DDL_ENABLED=true
+```
 
 ## Metadata Queries
 
 Both shared metadata and SQL-file mode support `SHOW DATABASES`, `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, `SHOW FUNCTIONS`, and `SHOW USER FUNCTIONS`. All run within SQLRec without Gateway forwarding. Table names accept `table`, `database.table`, and `hive.database.table`. Only unqualified names give session `CACHE TABLE` results precedence. Missing objects and unconfigured catalogs produce explicit errors.
 
-`SHOW TABLES` reads database and table lists directly from metadata. For the current database, it also includes session cache tables. Results are deduplicated and sorted, with `LIKE` and `NOT LIKE` support. Being able to list tables in a new database does not mean an existing session's local SQL compilation schema includes that database; see [Metadata Management](./architecture.md#metadata-management).
+`SHOW TABLES` reads database and table lists directly from metadata. For the current database, it also includes session cache tables. Results are deduplicated and sorted, with `LIKE` and `NOT LIKE` support. In remote mode, being able to list tables in a new database does not mean an existing session's local SQL compilation schema includes that database; see [Metadata Management](./architecture.md#metadata-management).
 
-SQL-file mode reads definitions loaded at startup. Inspecting a table or function does not require its connector or UDF class to be available and does not connect to HMS or Gateway. `SHOW CREATE TABLE` returns the saved declaration, preserving columns, primary keys, partitions, comments, and options; formatting may differ from the source file. For persistent tables, `DESCRIBE` returns `name`, `type`, `null`, `key`, `extras`, and `watermark` in both modes, with an additional `comment` column when column comments are present. Session cache tables retain the `name` and `type` columns. In SQL-file mode, `DESCRIBE` does not resolve computed columns, watermarks, or schemas inferred from CTAS or LIKE; `SHOW CREATE TABLE` can still display these declarations.
+SQL-file mode reads definitions loaded at startup and updated by in-memory DDL. Inspecting a table or function does not require its connector or UDF class to be available and does not connect to HMS or Gateway. File loading and runtime DDL use the same schema validation; unsupported definitions such as computed columns, watermarks, and CTAS fail during loading. SQL files load in path order, so a `CREATE TABLE ... LIKE` source must be defined first. The resolved schema supports subsequent description and alteration.
 
-`SHOW USER FUNCTIONS` lists UDFs declared in the requested database. `SHOW FUNCTIONS` also includes Flink built-ins. Results are sorted and deduplicated and support `LIKE`, `ILIKE`, and their `NOT` forms. Listing a function does not guarantee local execution support. SQLRec SQL functions remain available through `SHOW SQL FUNCTIONS`. SQL-file metadata remains read-only and file changes require a restart; `FLUSH` does not reload files.
+`SHOW CREATE TABLE` generates normalized SQL from the current definition, preserving columns, primary keys, partitions, table comments, and options; primary-key columns include `NOT NULL`. Column comments follow Flink 1.19's conversion behavior and are not guaranteed to survive serialization and subsequent resolution. For persistent tables, `DESCRIBE` returns `name`, `type`, `null`, `key`, `extras`, and `watermark` in both modes, with an additional `comment` column when column comments are present. Session cache tables retain the `name` and `type` columns.
+
+`SHOW USER FUNCTIONS` lists UDFs declared in the requested database. `SHOW FUNCTIONS` also includes Flink built-ins. Results are sorted and deduplicated and support `LIKE`, `ILIKE`, and their `NOT` forms. Listing a function does not guarantee local execution support. SQLRec SQL functions remain available through `SHOW SQL FUNCTIONS`. SQL-file metadata is read-only by default and supports in-memory DDL with the option above. File changes still require a restart; `FLUSH` does not reload files.
 
 ## Metadata Refresh
+
+Successful DDL refreshes preserve table objects whose metadata is unchanged, including their filesystem in-memory data. A no-op `CREATE TABLE IF NOT EXISTS` also preserves data. Actual ALTER or RENAME operations rebuild their target table and may reset its runtime in-memory writes. Dropping and recreating an identically named table uses a new object.
 
 ### FLUSH
 
@@ -979,9 +992,9 @@ FLUSH
 
 **Description:**
 
-`FLUSH` invalidates the current process's cached database and table definitions, Java/SQL functions, APIs, and model-service configuration. Later accesses reload their definitions.
+`FLUSH` invalidates the current process's cached database and table definitions, Java/SQL functions, APIs, and model-service configuration. Later accesses reload definitions and rebuild connector table objects, resetting filesystem runtime writes. Session `CACHE TABLE` results are preserved.
 
-In both modes, `FLUSH` does not add or remove database sub-schemas in existing sessions. After a database is added or removed in remote mode, create a new executor once the database-list cache has updated (Thrift clients can reconnect) to use the updated database list for local SQL compilation. Table and function caches within existing databases still refresh under their own policies.
+In both modes, `FLUSH` does not add or remove database sub-schemas in existing sessions. Successful database DDL updates only the executing session. Other existing sessions need a new executor once the database-list cache has updated (Thrift clients can reconnect) to use the updated database list for local SQL compilation. Table and function caches within existing databases still refresh under their own policies. In SQL-file mode, `FLUSH` preserves all in-memory DDL changes.
 
 It does not clear session `CACHE TABLE` results or guarantee immediate updates to existing connectors' business-data caches. Changes to local SQL files still require a process restart. See [Architecture](./architecture.md#connector-row-cache-and-query-paths) for exact cache coverage.
 

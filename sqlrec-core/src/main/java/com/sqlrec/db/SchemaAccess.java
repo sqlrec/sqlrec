@@ -19,12 +19,10 @@ public interface SchemaAccess {
 
     Function getFunction(String database, String funName) throws Exception;
 
-    long getTableUpdateTime(String database, String table);
-
-    /** Execute one persistent metadata DDL through the Hive client, never through a SQL gateway. */
+    /** Execute one metadata DDL in the configured storage, never through a SQL gateway. */
     default void executeMetadataDdl(SqlNode node, String database) throws Exception {
         throw new UnsupportedOperationException(
-                "Metadata DDL is not supported in local SQL file metadata mode; edit SQL_SCHEMA_DIR and restart");
+                "Metadata DDL is not supported by this storage: " + node.getClass().getSimpleName());
     }
 
     /** Describes stored definitions independently of whether the local query engine can execute them. */

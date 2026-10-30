@@ -59,10 +59,6 @@ public class MetadataAccess {
         return schemaAccess.getFunction(database, funName);
     }
 
-    public long getTableUpdateTime(String database, String table) {
-        return schemaAccess.getTableUpdateTime(database, table);
-    }
-
     public List<String> getPartitionPaths(String database, String table, String partitionFilter) throws Exception {
         return schemaAccess.getPartitionPaths(database, table, partitionFilter);
     }

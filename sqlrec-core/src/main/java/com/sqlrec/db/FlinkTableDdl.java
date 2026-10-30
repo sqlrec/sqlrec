@@ -42,13 +42,22 @@ public final class FlinkTableDdl {
 
     public static ResolvedCatalogTable createLike(SqlCreateTableLike sql, ResolvedCatalogTable source,
                                            DataTypeFactory types) throws Exception {
+        return createLike(sql, source, types::createDataType);
+    }
+
+    public static ResolvedCatalogTable createLike(SqlCreateTableLike sql, ResolvedCatalogTable source) throws Exception {
+        return createLike(sql, source, type -> TypeConversions.fromLogicalToDataType(LogicalTypeParser.parse(type)));
+    }
+
+    private static ResolvedCatalogTable createLike(SqlCreateTableLike sql, ResolvedCatalogTable source,
+                                                  Function<String, DataType> types) throws Exception {
         Objects.requireNonNull(source, "LIKE source table");
         requireSimpleSchema(sql.getColumnList(), sql.getWatermark().isPresent());
         sql.validate();
         Map<FeatureOption, MergingStrategy> strategies = likeStrategies(sql.getTableLike());
         TableDefinition definition = new TableDefinition();
         inheritSource(definition, source, strategies);
-        mergeDeclaredDefinition(definition, sql, strategies, types::createDataType);
+        mergeDeclaredDefinition(definition, sql, strategies, types);
         return definition.toCatalogTable();
     }
 
@@ -147,6 +156,16 @@ public final class FlinkTableDdl {
 
     public static ResolvedCatalogTable alter(SqlAlterTable sql, CatalogBaseTable previous, DataTypeFactory types) throws Exception {
         ResolvedCatalogTable old = resolve(previous, types);
+        return alterResolved(sql, old, types::createDataType);
+    }
+
+    public static ResolvedCatalogTable alter(SqlAlterTable sql, ResolvedCatalogTable previous) throws Exception {
+        return alterResolved(sql, previous,
+                type -> TypeConversions.fromLogicalToDataType(LogicalTypeParser.parse(type)));
+    }
+
+    private static ResolvedCatalogTable alterResolved(SqlAlterTable sql, ResolvedCatalogTable old,
+                                                      Function<String, DataType> types) throws Exception {
         if (sql instanceof SqlAlterTableOptions set) {
             Map<String, String> options = new HashMap<>(old.getOptions());
             options.putAll(properties(set.getPropertyList()));
@@ -163,7 +182,8 @@ public final class FlinkTableDdl {
         return alterSchema(sql, old, types);
     }
 
-    private static ResolvedCatalogTable alterSchema(SqlAlterTable sql, ResolvedCatalogTable old, DataTypeFactory types) throws Exception {
+    private static ResolvedCatalogTable alterSchema(SqlAlterTable sql, ResolvedCatalogTable old,
+                                                   Function<String, DataType> types) throws Exception {
         TableDefinition definition = new TableDefinition(old);
         if (sql instanceof SqlAlterTableSchema change) {
             requireSimpleSchema(change.getColumnPositions().getList().stream()
@@ -194,11 +214,11 @@ public final class FlinkTableDdl {
         return definition.toCatalogTable();
     }
 
-    private static void changeColumns(List<Column> columns, SqlAlterTableSchema change, DataTypeFactory types) {
+    private static void changeColumns(List<Column> columns, SqlAlterTableSchema change, Function<String, DataType> types) {
         boolean add = change instanceof SqlAlterTableAdd;
         for (SqlNode node : change.getColumnPositions()) {
             var position = (SqlTableColumnPosition) node;
-            Column column = column(position.getColumn(), types::createDataType);
+            Column column = column(position.getColumn(), types);
             int existing = indexOf(columns, column.getName());
             if (add && existing >= 0) throw invalid("Column already exists: " + column.getName());
             if (!add && existing < 0) throw invalid("Column does not exist: " + column.getName());

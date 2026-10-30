@@ -74,7 +74,8 @@ public final class JsonRows {
             case COERCE_SCALARS:
                 try {
                     return value.isJsonPrimitive()
-                            ? ScalarConversions.convert(value.getAsString(), type) : value.toString();
+                            ? ScalarConversions.convert(value.getAsString(),
+                                    DataTypeUtils.getRelDataType(type).getSqlTypeName()) : value.toString();
                 } catch (RuntimeException failure) {
                     return null;
                 }

@@ -177,7 +177,7 @@ KV Join 在右表关联列是主键时批量点查；非主键关联逐键扫描
 | `WHERE id = 1 AND status = 'active'` | 先按主键取候选行，再过滤 | 复合条件扫描，不使用主键缓存 |
 | `WHERE status = 'active'` | 无主键条件，无法全扫 | 按条件扫描，不使用主键缓存 |
 
-外部系统或 Flink 写入不会主动清除已有 Calcite 表对象的主键缓存。`FLUSH` 也不直接清除主键缓存、filesystem 快照或会话中的 `CACHE TABLE`；重新构建表对象才会得到新的缓存或重新读取文件。
+外部系统或 Flink 写入不会主动清除已有 Calcite 表对象的主键缓存。成功的 DDL 刷新会复用元数据未变化的表对象，保留其主键缓存和 filesystem 内存数据。显式 `FLUSH` 会使所有 Connector 表对象失效，后续访问重新构建对象并重新读取文件，filesystem 运行时写入会重置；会话中的 `CACHE TABLE` 保留。
 
 ## 元数据管理
 
@@ -187,16 +187,16 @@ KV Join 在右表关联列是主键时批量点查；非主键关联逐键扫描
 | --- | --- | --- |
 | 表和 Java UDF | 从 Hive Metastore（HMS）读取数据库、表结构和函数定义 | 启动时递归解析 `SQL_SCHEMA_DIR` 下的 `.sql` 文件，在进程内建立 schema |
 | SQL 函数、API、模型、Checkpoint、Service | 保存在 PostgreSQL，由 SQLRec 的管理命令读取或更新 | SQL 文件中的函数、API、模型和 Service 定义初始化为进程内对象；没有共享的元数据存储 |
-| 更新定义 | 资源命令更新 PostgreSQL；支持的持久表、库和 UDF 元数据 DDL 在本地通过 HiveCatalog 更新 HMS | 修改 SQL 文件并重启或重新部署实例；`FLUSH` 不重新解析文件 |
+| 更新定义 | 资源命令更新 PostgreSQL；支持的持久表、库和 UDF 元数据 DDL 在本地通过 HiveCatalog 更新 HMS | 默认修改 SQL 文件并重启；开启 `SQL_SCHEMA_DDL_ENABLED` 后，支持的 DDL 更新进程内定义，不回写文件 |
 | 依赖与用途 | 需要 HMS 和 PostgreSQL，适合多实例共享定义；Flink Gateway 只在需要转发语句时使用 | 适合 Demo、本地开发和线上 serving：SQL 文件可随镜像或部署配置纳入版本管理，省去 HMS、PostgreSQL 和 Flink Gateway；实际使用的 Connector、模型端点仍需可访问 |
 
-本地 SQL 文件模式**不允许执行 DDL**。定义只能通过 SQL 文件加载；查询、数据写入、`CACHE TABLE` 和调用已定义的函数仍可执行。线上 serving 可把完整 SQL 目录与应用版本一起发布，让每个实例启动时加载同一版本；修改定义后需重新部署或重启所有实例。
+本地 SQL 文件模式默认禁止执行 DDL。启动前设置环境变量 `SQL_SCHEMA_DDL_ENABLED=true`，可开放数据库、表、Java UDF、SQL 函数和 API 的内存 DDL。每个 SQL 执行器在创建时读取并固定开关，由 `SqlExecutor` 在 DDL 分发前统一检查；会话 `SET` 不会修改它。底层元数据存储只负责读写和定义校验，不检查该开关。文件定义作为初始状态，允许运行时修改或删除；同一进程的所有会话共享变更，不同实例互不共享。DDL 不回写 SQL 文件，重启后恢复文件定义。模型、Service、Checkpoint、训练和导出操作仍不可通过该开关执行。查询、数据写入、`CACHE TABLE` 和调用已定义的函数保持原有能力。线上 serving 可继续把完整 SQL 目录与应用版本一起发布。
 
-两种模式均支持[元数据查询](./sql.md#元数据查询)。`ResourceQueryExecutor` 统一处理查询入口和会话缓存表，表定义与 UDF 查询交由元数据访问层处理。SQL 文件模式直接读取启动时保存的建表声明和函数定义，查看它们不需要加载对应的 Connector 或 UDF 类；执行数据查询时才需要相应能力。
+两种模式均支持[元数据查询](./sql.md#元数据查询)。`ResourceQueryExecutor` 统一处理查询入口和会话缓存表，表定义与 UDF 查询交由元数据访问层处理。SQL 文件模式在加载时校验并保存解析后的表结构和函数定义，运行时 DDL 使用同一套表示；查看元数据不需要加载对应的 Connector 或 UDF 类，执行数据查询时才需要相应能力。
 
-SQLRec 缓存数据库列表、表结构和函数/API/服务定义。数据库列表主要依靠 `databaseListCache`：达到 `SCHEMA_CACHE_EXPIRE` 后，后续访问触发异步刷新，刷新完成前可能仍返回旧列表；DDL 或 `FLUSH` 也可使相关缓存失效。创建 Calcite schema 时使用缓存中的数据库列表，刻意不在每条 SQL 执行前同步已有 schema 的数据库成员。新增或删除数据库后，需在列表更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的列表；`SHOW DATABASES`、`SHOW TABLES` 直接查询元数据，不受该会话列表限制。
+SQLRec 缓存数据库列表、表结构和函数/API/服务定义。数据库列表主要依靠 `databaseListCache`：达到 `SCHEMA_CACHE_EXPIRE` 后，后续访问触发异步刷新，刷新完成前可能仍返回旧列表；DDL 或 `FLUSH` 也可使相关缓存失效。两种模式均在创建 Calcite schema 时使用缓存中的数据库列表，不在每条 SQL 执行前同步数据库成员。数据库 DDL 成功后，只更新执行该语句的会话，新建数据库可在该会话立即 `USE` 并查询；其他已有会话需在列表更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的数据库列表；`SHOW DATABASES`、`SHOW TABLES` 直接查询元数据，不受该会话列表限制。
 
-已有数据库内的表和函数缓存仍可独立刷新。HMS 表刷新会依据 `transient_lastDdlTime` 决定是否复用已有表对象，外部改表但未更新该时间时可能继续使用旧对象。本地模式的元数据只在启动初始化时从文件读取；`FLUSH` 只使进程内缓存失效，既不重新解析文件，也不增删已有会话的数据库子 schema。文件改动仍需重启才能生效。部署所需配置见[服务部署](../operations/deployment.md)，本地文件示例见[Docker 快速开始](../getting-started/docker.md)。
+已有数据库内的表和函数缓存仍可独立刷新。表刷新比较完整元数据快照，定义未变化时复用已有表对象，变化时重建对应对象。本地模式只在启动时读取文件；`FLUSH` 只清缓存，不重新解析文件、不撤销内存 DDL。文件改动仍需重启才能生效。数据库 DDL 保留会话缓存表和自定义子 schema。本地表与 HMS 表统一保存秒级的 `transient_lastDdlTime`；元数据快照比较也能识别同一秒内的结构变更。DROP 和 RENAME 会立即淘汰旧对象，即使删除后没有查询就重建同名表，也不会恢复旧内存数据。函数和 API DDL 保留未修改表的对象。部署所需配置见[服务部署](../operations/deployment.md)，本地文件示例见[Docker 快速开始](../getting-started/docker.md)。
 
 ## 模型与在线服务
 

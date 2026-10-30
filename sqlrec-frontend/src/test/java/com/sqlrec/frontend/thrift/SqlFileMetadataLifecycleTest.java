@@ -40,8 +40,10 @@ class SqlFileMetadataLifecycleTest {
         var metadata = new MetadataAccess(files, mock(StoreAccess.class), mock(HdfsAccess.class));
         String previousDirectory = SqlRecConfigs.SQL_SCHEMA_DIR.getDefaultValue();
         String previousGateway = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
+        boolean previousDdlFlag = SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.getDefaultValue();
         SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue(directory.toString());
         SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue("");
+        SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(false);
         CalciteSchemaFactory.setGlobalSchema(CalciteSchema.createRootSchema(false));
         TCLIServiceImpl service = new TCLIServiceImpl();
         try (var factory = mockStatic(MetadataAccessFactory.class);
@@ -91,6 +93,7 @@ class SqlFileMetadataLifecycleTest {
             CalciteSchemaFactory.setGlobalSchema(null);
             SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue(previousDirectory);
             SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(previousGateway);
+            SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(previousDdlFlag);
         }
     }
 }

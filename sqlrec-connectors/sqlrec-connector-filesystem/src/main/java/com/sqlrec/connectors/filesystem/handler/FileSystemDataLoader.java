@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.filesystem.handler;
 
 import com.google.gson.JsonObject;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
@@ -100,7 +101,8 @@ final class FileSystemDataLoader {
                 row[i] = null;
             } else {
                 try {
-                    row[i] = ScalarConversions.convert(value, fileSystemConfig.fieldSchemas.get(i).getType());
+                    row[i] = ScalarConversions.convert(value, DataTypeUtils.getRelDataType(
+                            fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName());
                 } catch (Exception e) {
                     row[i] = null;
                 }

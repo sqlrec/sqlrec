@@ -5,6 +5,7 @@ import com.google.gson.JsonSyntaxException;
 import com.sqlrec.common.schema.FieldSchema;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +40,22 @@ class JsonRowsTest {
         assertEquals(2, rows.size());
         assertArrayEquals(new Object[]{42, true, null}, rows.get(0));
         assertArrayEquals(new Object[]{null, "{\"x\":1}", null}, rows.get(1));
+    }
+
+    @Test
+    void coercionResolvesNullabilityAndParameterizedTypes() {
+        List<FieldSchema> fields = List.of(new FieldSchema("id", "BIGINT NOT NULL"),
+                new FieldSchema("name", "VARCHAR(16)"),
+                new FieldSchema("amount", "DECIMAL(12, 3) NOT NULL"));
+        assertArrayEquals(new Object[]{1L, "alice", new BigDecimal("42.125")},
+                JsonRows.decode("{\"id\":1,\"name\":\"alice\",\"amount\":\"42.125\"}",
+                        fields, JsonRows.Decoding.COERCE_SCALARS));
+        assertArrayEquals(new Object[]{2L, "bob", new BigDecimal("43.500")},
+                JsonRows.decode("{\"id\":\"2\",\"name\":\"bob\",\"amount\":43.500}",
+                        fields, JsonRows.Decoding.COERCE_SCALARS));
+        assertArrayEquals(new Object[]{null, null, null},
+                JsonRows.decode("{\"id\":\"bad\",\"amount\":\"bad\"}",
+                        fields, JsonRows.Decoding.COERCE_SCALARS));
     }
 
     @Test

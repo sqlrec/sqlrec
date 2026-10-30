@@ -46,6 +46,30 @@ class DataTypeUtilsTest {
     }
 
     @Test
+    void parsesParameterizedBinaryAndTemporalTypes() {
+        assertType("BINARY(1)", SqlTypeName.BINARY, 1);
+        assertType(" varbinary ( 16 ) not null ", SqlTypeName.VARBINARY, 16);
+        assertType("TIME(0)", SqlTypeName.TIME, 0);
+        assertType(" time ( 3 ) not null ", SqlTypeName.TIME, 3);
+        assertType("TIMESTAMP(3)", SqlTypeName.TIMESTAMP, 3);
+        // Calcite 1.32 represents timestamps with at most millisecond precision.
+        assertType("TIMESTAMP(6) NOT NULL", SqlTypeName.TIMESTAMP, 3);
+        assertType("timestamp ( 3 ) with local time zone not null",
+                SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, 3);
+    }
+
+    @Test
+    void parsesParameterizedTypesInsideArraysAndRejectsMalformedTypes() {
+        RelDataType element = DataTypeUtils.getRelDataType("ARRAY<TIMESTAMP(6) NOT NULL>").getComponentType();
+        assertNotNull(element);
+        assertEquals(SqlTypeName.TIMESTAMP, element.getSqlTypeName());
+        for (String invalid : List.of("BINARY(foo)", "TIME(-1)", "TIMESTAMP(3, 2)",
+                "BOOLEAN(1)", "BINARY(1) WITH LOCAL TIME ZONE")) {
+            assertThrows(RuntimeException.class, () -> DataTypeUtils.getRelDataType(invalid), invalid);
+        }
+    }
+
+    @Test
     public void testGetRelDataTypeNestedParameterizedArray() {
         RelDataType type = DataTypeUtils.getRelDataType("ARRAY<ARRAY<DECIMAL(10, 2)>>");
 
@@ -140,5 +164,11 @@ class DataTypeUtilsTest {
 
     private List<RelDataTypeField> fields(RelDataType type) {
         return List.of(new RelDataTypeFieldImpl("value", 0, type));
+    }
+
+    private void assertType(String sql, SqlTypeName expectedType, int precision) {
+        RelDataType type = DataTypeUtils.getRelDataType(sql);
+        assertEquals(expectedType, type.getSqlTypeName(), sql);
+        assertEquals(precision, type.getPrecision(), sql);
     }
 }

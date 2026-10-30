@@ -43,13 +43,12 @@ class SqlFileSchemaAccessTest {
     }
 
     @Test
-    void showCreatePreservesTheDeclarationEvenAfterDescribeValidation() throws Exception {
+    void showCreateRepresentsTheResolvedDefinitionAndRemainsStableAfterDescribe() throws Exception {
         var files = tables(TABLE);
         String before = (String) names(query(files, "SHOW CREATE TABLE items", "review")).get(0);
         query(files, "DESCRIBE items", "review");
         String after = (String) names(query(files, "SHOW CREATE TABLE review.items", "default")).get(0);
         assertEquals(before, after);
-        assertEquals(CompileManager.getSqlStr(CompileManager.parseSql(TABLE)), after);
         var roundTrip = (SqlCreateTable) CompileManager.parseSql(after);
         assertEquals(4, roundTrip.getColumnList().size());
         assertTrue(after.contains("METADATA"));
@@ -87,24 +86,21 @@ class SqlFileSchemaAccessTest {
     }
 
     @Test
-    void unsupportedSchemaFeaturesCanBeShownButAreNotSilentlyOmittedFromDescribe() throws Exception {
+    void unsupportedSchemaFeaturesFailAtInitialization() throws Exception {
         for (String ddl : List.of(
                 "CREATE TABLE review.items (id INT, extra AS id + 1)",
                 "CREATE TABLE review.items (ts TIMESTAMP(3), WATERMARK FOR ts AS ts)",
-                "CREATE TABLE review.items AS SELECT 1 AS id",
-                "CREATE TABLE review.items LIKE review.source")) {
-            var files = tables(ddl);
-            assertEquals(1, files.getTables("review").size());
-            assertFalse(names(query(files, "SHOW CREATE TABLE items", "review")).isEmpty());
-            assertThrows(UnsupportedOperationException.class, () -> query(files, "DESCRIBE items", "review"), ddl);
+                "CREATE TABLE review.items AS SELECT 1 AS id")) {
+            assertThrows(UnsupportedOperationException.class, () -> tables(ddl), ddl);
         }
+        assertThrows(NoSuchObjectException.class, () -> tables("CREATE TABLE review.items LIKE review.source"));
         var metadataOnly = tables("CREATE TABLE review.items (ts TIMESTAMP(3) METADATA FROM 'timestamp')");
         assertEquals(1, metadataOnly.getTables("review").size());
         assertEquals(List.of("ts"), names(query(metadataOnly, "DESCRIBE items", "review")));
     }
 
     @Test
-    void missingObjectsAndForeignCatalogsFailExplicitlyAndDdlRemainsReadOnly() throws Exception {
+    void missingObjectsAndForeignCatalogsFailExplicitly() throws Exception {
         var files = tables(TABLE);
         for (String sql : List.of("DESCRIBE missing", "SHOW CREATE TABLE missing", "SHOW FUNCTIONS IN missing")) {
             assertThrows(NoSuchObjectException.class, () -> query(files, sql, "review"), sql);
@@ -114,8 +110,6 @@ class SqlFileSchemaAccessTest {
             assertThrows(UnsupportedOperationException.class, () -> query(files, sql, "review"), sql);
         }
         assertThrows(UnsupportedOperationException.class, () -> query(files, "SELECT 1", "review"));
-        assertThrows(UnsupportedOperationException.class,
-                () -> files.executeMetadataDdl(CompileManager.parseSql("DROP TABLE items"), "review"));
     }
 
     @Test

@@ -7,16 +7,20 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlFunctionCache;
+import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.db.MetadataQueryUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDropSqlFunction;
+import com.sqlrec.sql.parser.SqlDropApi;
 import com.sqlrec.sql.parser.SqlFlush;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -25,6 +29,7 @@ import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlCreateTableAs;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
 import org.apache.flink.sql.parser.ddl.SqlAlterTable;
+import org.apache.flink.sql.parser.ddl.SqlAlterTableRename;
 import org.apache.flink.sql.parser.ddl.SqlCreateDatabase;
 import org.apache.flink.sql.parser.ddl.SqlAlterDatabase;
 import org.apache.flink.sql.parser.ddl.SqlDropDatabase;
@@ -46,14 +51,20 @@ import java.util.Map;
 public class SqlExecutor {
     private static final Logger logger = LoggerFactory.getLogger(SqlExecutor.class);
     private static final String MESSAGE_FIELD = "msg";
+    private static final String DDL_DISABLED_MESSAGE = "DDL is disabled in SQL file metadata mode; "
+            + "set SQL_SCHEMA_DDL_ENABLED=true before startup to allow in-memory changes";
 
     private final CalciteSchema schema;
     private final ExecuteContext context;
+    private final boolean fileMode;
+    private final boolean ddlEnabled;
     private String defaultSchema;
     private FunctionCompiler functionCompiler;
     private final java.util.LinkedHashMap<String, String> sessionSettings = new java.util.LinkedHashMap<>();
 
     public SqlExecutor() {
+        fileMode = SqlRecConfigs.isFileSystemMetadata();
+        ddlEnabled = !fileMode || SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.getValue();
         schema = CalciteSchemaFactory.createCalciteSchema();
         context = new ExecuteContextImpl(schema);
         defaultSchema = Consts.DEFAULT_SCHEMA_NAME;
@@ -93,12 +104,9 @@ public class SqlExecutor {
 
     /** Executes a parsed statement; null means it requires the remote route. */
     public synchronized SqlProcessResult executeSqlAsync(SqlNode node, String sql) throws Exception {
-        if (SqlRecConfigs.isFileSystemMetadata() && node instanceof SqlCreateSqlFunction) {
-            throw new UnsupportedOperationException(
-                    "SQL function DDL is not supported in local SQL file metadata mode; "
-                            + "define it under SQL_SCHEMA_DIR and restart");
+        if (!ddlEnabled && (node instanceof SqlCreateSqlFunction || isMetadataDdl(node) || isLocalResourceDdl(node))) {
+            throw new UnsupportedOperationException(DDL_DISABLED_MESSAGE);
         }
-
         SqlProcessResult result = tryCompileFunction(node, sql);
         if (result != null) {
             return result;
@@ -135,8 +143,9 @@ public class SqlExecutor {
         if (SqlTypeChecker.isFlinkSqlCompilable(node, schema, defaultSchema)) {
             return compileAndExecute(node, sql);
         }
-        if (SqlRecConfigs.isFileSystemMetadata()) {
-            throw new RuntimeException("sql can not exec in filesystem meta");
+        if (fileMode && !isLocalResourceDdl(node)) {
+            throw new UnsupportedOperationException("SQL is not supported in SQL file metadata mode: "
+                    + node.getClass().getSimpleName());
         }
 
         result = new ResourceCommandExecutor(MetadataAccessFactory.getInstance())
@@ -153,11 +162,30 @@ public class SqlExecutor {
         MetadataAccess metadata = MetadataAccessFactory.getInstance();
         try {
             metadata.executeMetadataDdl(node, defaultSchema);
+            applyMetadataDdlChanges(node, metadata);
         } finally {
-            // A failed DDL may have changed metadata partially or lost its response after committing.
-            CacheManager.invalidateAll();
+            // An HMS write may have committed; this refresh retains unchanged table objects.
+            CacheManager.invalidateMetadata();
         }
         return message("metadata DDL completed");
+    }
+
+    private void applyMetadataDdlChanges(SqlNode node, MetadataAccess metadata) {
+        if (node instanceof SqlCreateDatabase create) {
+            String database = MetadataQueryUtils.databaseName(create.fullDatabaseName(), defaultSchema);
+            CalciteSchemaFactory.addDatabase(schema, metadata, database);
+        } else if (node instanceof SqlDropDatabase drop) {
+            String database = MetadataQueryUtils.databaseName(drop.fullDatabaseName(), defaultSchema);
+            CalciteSchemaFactory.evictDatabase(database);
+            CalciteSchema child = schema.getSubSchema(database, false);
+            if (child != null && child.schema instanceof HmsSchema) schema.removeSubSchema(child.name);
+        } else if (node instanceof SqlDropTable drop) {
+            var path = MetadataQueryUtils.objectPath(drop.fullTableName(), defaultSchema);
+            CalciteSchemaFactory.evictTable(path.getDatabaseName(), path.getObjectName());
+        } else if (node instanceof SqlAlterTableRename rename) {
+            var path = MetadataQueryUtils.objectPath(rename.fullTableName(), defaultSchema);
+            CalciteSchemaFactory.evictTable(path.getDatabaseName(), path.getObjectName());
+        }
     }
 
     private SqlProcessResult useDatabase(SqlUseDatabase command) {
@@ -209,7 +237,7 @@ public class SqlExecutor {
                 if (!functionCompiler.isFunctionCompileFinish()) {
                     return message("add a sql to function");
                 }
-                saveSqlFunction(functionCompiler);
+                ResourceCommandExecutor.saveSqlFunction(MetadataAccessFactory.getInstance(), functionCompiler);
                 functionCompiler = null;
                 return message("function compile success");
             }
@@ -229,6 +257,8 @@ public class SqlExecutor {
     private static void invalidateCaches(SqlNode node) {
         if (node instanceof SqlDropSqlFunction) {
             SqlFunctionCache.invalidateAll();
+        } else if (node instanceof SqlCreateApi || node instanceof SqlDropApi) {
+            SqlApiCache.invalidateAll();
         } else {
             CacheManager.invalidateAll();
         }
@@ -258,6 +288,10 @@ public class SqlExecutor {
                 || node instanceof SqlAlterDatabase || node instanceof SqlDropDatabase;
     }
 
+    private static boolean isLocalResourceDdl(SqlNode node) {
+        return node instanceof SqlCreateApi || node instanceof SqlDropApi || node instanceof SqlDropSqlFunction;
+    }
+
     private static void waitForCompletion(SqlProcessResult result, String sql)
             throws InterruptedException {
         long timeout = SqlRecConfigs.SQL_SYNC_EXECUTE_TIMEOUT.getValue();
@@ -277,14 +311,5 @@ public class SqlExecutor {
 
     private static SqlProcessResult message(String text) {
         return SqlProcessResult.msg(text, MESSAGE_FIELD);
-    }
-
-    public static void saveSqlFunction(FunctionCompiler compiler) {
-        ResourceCommandExecutor.saveSqlFunction(
-                MetadataAccessFactory.getInstance(), compiler);
-    }
-
-    public static void saveSqlApi(SqlCreateApi api) {
-        ResourceCommandExecutor.saveSqlApi(MetadataAccessFactory.getInstance(), api);
     }
 }

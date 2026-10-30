@@ -10,13 +10,43 @@ import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SqlFileParserTest {
+
+    @Test
+    void loadsSqlFilesRecursivelyInPathOrderSoLikeSourcesResolve(@TempDir Path directory) throws Exception {
+        Path nested = Files.createDirectory(directory.resolve("tables"));
+        // Create the dependent file first to ensure filesystem traversal order cannot decide dependencies.
+        Files.writeString(nested.resolve("02_copy.SQL"), "CREATE TABLE copied LIKE source;");
+        Files.writeString(nested.resolve("01_source.sql"), "CREATE TABLE source (id INT);");
+        Files.writeString(nested.resolve("ignored.txt"), "invalid SQL must not be parsed");
+        var loaded = new SqlFileParser(directory.toString());
+        loaded.load();
+        assertEquals(List.of("source", "copied"), loaded.getTableNodes().stream()
+                .map(node -> ((SqlCreateTable) node).getTableName().getSimple()).toList());
+        var schema = new SqlFileSchemaAccess(loaded.getTableNodes(), loaded.getUdfFunctionNodes());
+        assertEquals(List.of("id"), schema.getTable("default", "copied").getSd().getCols().stream()
+                .map(column -> column.getName()).toList());
+    }
+
+    @Test
+    void loadingFailureIdentifiesTheInvalidFile(@TempDir Path directory) throws Exception {
+        Path invalid = directory.resolve("broken.sql");
+        Files.writeString(invalid, "CREATE TABLE broken (");
+        var error = assertThrows(RuntimeException.class, () -> new SqlFileParser(directory.toString()).load());
+        assertTrue(error.getMessage().contains(directory.toString()));
+        assertTrue(error.getCause().getMessage().contains(invalid.toString()));
+        assertNotNull(error.getCause().getCause());
+        assertThrows(RuntimeException.class, () -> new SqlFileParser(directory.resolve("missing").toString()).load());
+    }
 
     private SqlFileParser parser;
 

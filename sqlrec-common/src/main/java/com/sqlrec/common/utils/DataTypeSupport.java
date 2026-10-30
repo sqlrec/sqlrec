@@ -19,8 +19,10 @@ final class DataTypeSupport {
     static final class Parser {
         private static final Pattern DECIMAL = Pattern.compile(
                 "^DECIMAL\\s*\\(\\s*(\\d+)\\s*(?:,\\s*(\\d+)\\s*)?\\)$");
-        private static final Pattern CHARACTER = Pattern.compile(
-                "^(CHAR|VARCHAR)\\s*\\(\\s*(\\d+)\\s*\\)$");
+        private static final Pattern LENGTH_TYPE = Pattern.compile(
+                "^(CHAR|VARCHAR|BINARY|VARBINARY)\\s*\\(\\s*(\\d+)\\s*\\)$");
+        private static final Pattern TEMPORAL = Pattern.compile(
+                "^(TIME|TIMESTAMP)\\s*\\(\\s*(\\d+)\\s*\\)(\\s+WITH\\s+LOCAL\\s+TIME\\s+ZONE)?$");
 
         private Parser() {
         }
@@ -38,11 +40,17 @@ final class DataTypeSupport {
                 int scale = decimal.group(2) == null ? 0 : Integer.parseInt(decimal.group(2));
                 return factory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
             }
-            Matcher character = CHARACTER.matcher(type);
-            if (character.matches()) {
+            Matcher length = LENGTH_TYPE.matcher(type);
+            if (length.matches()) {
                 return factory.createSqlType(
-                        Objects.requireNonNull(SqlTypeName.get(character.group(1))),
-                        Integer.parseInt(character.group(2)));
+                        Objects.requireNonNull(SqlTypeName.get(length.group(1))),
+                        Integer.parseInt(length.group(2)));
+            }
+            Matcher temporal = TEMPORAL.matcher(type);
+            if (temporal.matches()) {
+                String name = temporal.group(1);
+                if (temporal.group(3) != null) name += "_WITH_LOCAL_TIME_ZONE";
+                return factory.createSqlType(SqlTypeName.valueOf(name), Integer.parseInt(temporal.group(2)));
             }
             SqlTypeName typeName = SqlTypeName.get(type);
             if (typeName == null) {

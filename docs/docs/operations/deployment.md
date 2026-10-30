@@ -317,6 +317,15 @@ bash ./deploy/sqlrec/deploy.sh
 
 SQL 执行范围见[架构说明](../reference/architecture.md#gateway-转发边界)，SET/RESET 行为见[SQL 参考](../reference/sql.md#set)。
 
+### 本地 SQL 文件元数据
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `SQL_SCHEMA_DIR` | 空字符串 | 非空时从该目录递归加载 SQL 定义；为空时使用远程元数据 |
+| `SQL_SCHEMA_DDL_ENABLED` | `false` | 仅在文件模式下开放库、表、Java UDF、SQL 函数和 API 的内存 DDL |
+
+在容器环境或 `SQLREC_ENV_CONF` 中配置，修改后重启服务。该开关不支持会话 `SET`。开启后所有会话共享当前进程的变更，SQL 文件保持不变，重启恢复文件定义；不同实例之间不共享变更。`FLUSH` 不撤销内存修改。模型和 Service 等生命周期命令保持原有限制。语句范围见[元数据 DDL](../reference/sql.md#元数据-ddl)。
+
 ### SQL 初始化
 
 `deploy/sqlrec/deploy.sh` 会先等待 PostgreSQL 可连接，再执行 `deploy/sql/master.sql`，成功后才应用 SQLRec Deployment。无需在正常脚本部署前手动导入 SQL。

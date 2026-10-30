@@ -89,8 +89,8 @@ class FlinkHiveDdlAdapterRuntimeTest {
                                 + "source STRING METADATA FROM 'origin' VIRTUAL, PRIMARY KEY (id) NOT ENFORCED) "
                                 + "COMMENT 'review' PARTITIONED BY (category) "
                                 + "WITH ('connector'='filesystem', 'path'='file:///tmp/review', 'format'='json')",
-                        "ALTER TABLE %s ADD note VARCHAR(20) COMMENT 'note' FIRST",
-                        "ALTER TABLE %s MODIFY note VARCHAR(100) COMMENT 'updated' AFTER amount",
+                        "ALTER TABLE %s ADD note VARCHAR(20) FIRST",
+                        "ALTER TABLE %s MODIFY note VARCHAR(100) AFTER amount",
                         "ALTER TABLE %s RENAME note TO memo",
                         "ALTER TABLE %s SET ('path'='file:///tmp/updated', 'review'='value')",
                         "ALTER TABLE %s RESET ('review')",

@@ -52,6 +52,35 @@ class FlinkTableDdlTest {
     }
 
     @Test
+    void fileLikeAndAlterConversionsMatchCatalogConversions() throws Exception {
+        var source = source();
+        String copy = "CREATE TABLE copied COMMENT 'copy' WITH ('path'='file:///copy') "
+                + "LIKE items (EXCLUDING ALL INCLUDING METADATA INCLUDING CONSTRAINTS INCLUDING PARTITIONS OVERWRITING OPTIONS)";
+        var catalog = like(copy, source);
+        var local = FlinkTableDdl.createLike((SqlCreateTableLike) CompileManager.parseSql(copy), source);
+        assertEquals(catalog.toProperties(), local.toProperties());
+        for (String change : List.of(
+                "ALTER TABLE copied ADD (amount DECIMAL(14, 4) FIRST, event_time TIMESTAMP_LTZ(3) AFTER id)",
+                "ALTER TABLE copied MODIFY amount DECIMAL(18, 6) AFTER category",
+                "ALTER TABLE copied RENAME id TO identity_id",
+                "ALTER TABLE copied ADD implicit_meta STRING METADATA VIRTUAL",
+                "ALTER TABLE copied RENAME implicit_meta TO renamed_meta",
+                "ALTER TABLE copied SET ('path'='file:///changed', 'extra'='value')",
+                "ALTER TABLE copied RESET ('extra')",
+                "ALTER TABLE copied DROP amount",
+                "ALTER TABLE copied DROP PRIMARY KEY",
+                "ALTER TABLE copied ADD CONSTRAINT new_pk PRIMARY KEY (identity_id) NOT ENFORCED",
+                "ALTER TABLE copied DROP CONSTRAINT new_pk")) {
+            catalog = alter(change, catalog);
+            local = FlinkTableDdl.alter((SqlAlterTable) CompileManager.parseSql(change), local);
+            assertEquals(catalog.toProperties(), local.toProperties(), change);
+            assertEquals(catalog.getResolvedSchema(), local.getResolvedSchema(), change);
+        }
+        assertEquals(List.of("id", "category", "origin"), source.getResolvedSchema().getColumnNames());
+        assertEquals("file:///tmp/items", source.getOptions().get("path"));
+    }
+
+    @Test
     void createValidatesAndAppliesPrimaryKeyNullabilityWithoutCallerPreparation() throws Exception {
         ResolvedCatalogTable table = create("CREATE TABLE items (id BIGINT, category STRING, "
                 + "PRIMARY KEY (id) NOT ENFORCED) COMMENT 'review' PARTITIONED BY (category) "

@@ -2,13 +2,17 @@ package com.sqlrec.executor;
 
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.remote.FlinkHiveDdlAdapter;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
 import org.apache.thrift.transport.TTransportException;
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,6 +41,28 @@ class SqlExecutorLocalMetadataTest {
     }
 
     @Test
+    void fileDdlFlagDoesNotChangeRemoteDdlRouting() throws Exception {
+        String previousDirectory = SqlRecConfigs.SQL_SCHEMA_DIR.getDefaultValue();
+        boolean previousFlag = SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.getDefaultValue();
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        try (var factory = mockStatic(MetadataAccessFactory.class);
+             var caches = mockStatic(CacheManager.class)) {
+            SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue("");
+            factory.when(MetadataAccessFactory::getInstance).thenReturn(metadata);
+            for (boolean enabled : new boolean[]{false, true}) {
+                SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(enabled);
+                assertNotNull(new SqlExecutor().executeSqlAsync("CREATE TABLE t (id INT)"));
+            }
+            verify(metadata, times(2)).executeMetadataDdl(any(SqlNode.class), eq("default"));
+            verify(metadata, never()).getDatabases();
+            caches.verify(CacheManager::invalidateMetadata, times(2));
+        } finally {
+            SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue(previousDirectory);
+            SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(previousFlag);
+        }
+    }
+
+    @Test
     void invalidatesCachesAfterSuccessfulMetadataDdl() throws Exception {
         MetadataAccess metadata = mock(MetadataAccess.class);
         try (var factory = mockStatic(MetadataAccessFactory.class);
@@ -44,7 +71,7 @@ class SqlExecutorLocalMetadataTest {
             var result = new SqlExecutor().executeSqlAsync("DROP TABLE t");
             assertEquals("metadata DDL completed", result.getEnumerable().toList().get(0)[0]);
             verify(metadata).executeMetadataDdl(isA(SqlDropTable.class), eq("default"));
-            caches.verify(CacheManager::invalidateAll);
+            caches.verify(CacheManager::invalidateMetadata);
         }
     }
 
@@ -60,7 +87,8 @@ class SqlExecutorLocalMetadataTest {
             assertSame(failure, assertThrows(IllegalArgumentException.class,
                     () -> executor.executeSqlAsync("CREATE TABLE t (id INT)")));
             verify(metadata).executeMetadataDdl(any(SqlNode.class), eq("default"));
-            caches.verify(CacheManager::invalidateAll);
+            caches.verify(CacheManager::invalidateMetadata);
+            caches.verifyNoMoreInteractions();
         }
     }
 
@@ -78,7 +106,45 @@ class SqlExecutorLocalMetadataTest {
             assertSame(failure, actual);
             assertSame(cause, actual.getCause());
             verify(metadata).executeMetadataDdl(any(SqlNode.class), eq("default"));
-            caches.verify(CacheManager::invalidateAll);
+            caches.verify(CacheManager::invalidateMetadata);
+            caches.verifyNoMoreInteractions();
+        }
+    }
+
+    @Test
+    void remoteDdlFailuresPreserveUnchangedTableObjects() throws Exception {
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        var definition = new org.apache.hadoop.hive.metastore.api.Table();
+        definition.setDbName("default");
+        definition.setTableName("preserved");
+        when(metadata.getDatabases()).thenReturn(List.of("default"));
+        when(metadata.getTables("default")).thenReturn(List.of(definition));
+        var validation = new IllegalArgumentException("table exists");
+        var uncertain = new IllegalStateException("METADATA_WRITE_OUTCOME_UNKNOWN",
+                new TTransportException("response lost"));
+        doThrow(validation, uncertain).when(metadata).executeMetadataDdl(any(SqlNode.class), eq("default"));
+        var fields = List.of(DataTypeUtils.getRelDataTypeField("id", 0, "INT"));
+        var original = new CacheTable("preserved", Linq4j.singletonEnumerable(new Object[]{42}), fields);
+        var rebuilt = new CacheTable("preserved", Linq4j.emptyEnumerable(), fields);
+        String previousDirectory = SqlRecConfigs.SQL_SCHEMA_DIR.getDefaultValue();
+        try (var factory = mockStatic(MetadataAccessFactory.class);
+             var tables = mockStatic(TableFactoryUtils.class)) {
+            SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue("");
+            factory.when(MetadataAccessFactory::getInstance).thenReturn(metadata);
+            tables.when(() -> TableFactoryUtils.getTableFromHmsTable(definition)).thenReturn(original, rebuilt);
+            CalciteSchemaFactory.setGlobalSchema(null);
+            var executor = new SqlExecutor();
+            assertEquals(42, executor.executeSql("SELECT * FROM preserved").scan(null).single()[0]);
+            for (var failure : List.of(validation, uncertain)) {
+                assertSame(failure, assertThrows(Exception.class,
+                        () -> executor.executeSql("CREATE TABLE extra (id INT)")));
+                var rows = executor.executeSql("SELECT * FROM preserved").scan(null).toList();
+                assertEquals(1, rows.size());
+                assertArrayEquals(new Object[]{42}, rows.get(0));
+            }
+            tables.verify(() -> TableFactoryUtils.getTableFromHmsTable(definition), times(1));
+        } finally {
+            SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue(previousDirectory);
         }
     }
 
@@ -123,7 +189,7 @@ class SqlExecutorLocalMetadataTest {
                 assertEquals(CompileManager.parseSql(sql).toString(), node.getValue().toString(), sql);
                 verifyNoMoreInteractions(metadata);
             }
-            caches.verify(CacheManager::invalidateAll, times(statements.length));
+            caches.verify(CacheManager::invalidateMetadata, times(statements.length));
         }
     }
 
@@ -184,7 +250,8 @@ class SqlExecutorLocalMetadataTest {
                 assertThrows(UnsupportedOperationException.class, () -> executor.executeSqlAsync(sql), sql);
             }
             verify(metadata, times(statements.length)).executeMetadataDdl(any(SqlNode.class), eq("default"));
-            caches.verify(CacheManager::invalidateAll, times(statements.length));
+            caches.verify(CacheManager::invalidateMetadata, times(statements.length));
+            caches.verifyNoMoreInteractions();
         }
     }
 

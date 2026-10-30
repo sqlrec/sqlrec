@@ -216,11 +216,6 @@ class JavaFunctionUtilsTest {
         }
 
         @Override
-        public long getTableUpdateTime(String database, String table) {
-            return 0;
-        }
-
-        @Override
         public List<String> getPartitionPaths(String database, String table, String partitionFilter) {
             return Collections.emptyList();
         }

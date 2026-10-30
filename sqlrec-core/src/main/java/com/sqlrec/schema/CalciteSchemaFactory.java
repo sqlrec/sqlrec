@@ -9,11 +9,11 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class CalciteSchemaFactory {
     private static CalciteSchema globalSchema;
-    private static final Map<String, HmsSchema> schemaMap = new ConcurrentHashMap<>();
+    private static final Map<String, HmsSchema> schemaMap = new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
     private static final CacheUtils.SingleValueCache<List<String>> databaseListCache =
             CacheUtils.createSingleValueRefreshCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
@@ -31,14 +31,37 @@ public class CalciteSchemaFactory {
         schemaMap.values().forEach(HmsSchema::invalidateCache);
     }
 
+    public static void invalidateMetadata() {
+        databaseListCache.invalidate();
+        schemaMap.values().forEach(HmsSchema::invalidateMetadata);
+    }
+
+    public static void evictTable(String database, String table) {
+        HmsSchema schema = schemaMap.get(database);
+        if (schema != null) schema.evictTable(table);
+    }
+
+    public static void evictDatabase(String database) {
+        HmsSchema schema = schemaMap.get(database);
+        if (schema != null) schema.invalidateCache();
+    }
+
     public static void setGlobalSchema(CalciteSchema schema) {
         globalSchema = schema;
+        databaseListCache.invalidate();
+        schemaMap.clear();
+    }
+
+    /** Register a metadata database in one session, preserving custom schemas with the same name. */
+    public static void addDatabase(CalciteSchema root, MetadataAccess metadata, String database) {
+        if (root.getSubSchema(database, false) == null) {
+            root.add(database, schemaMap.computeIfAbsent(database, name -> new HmsSchema(name, metadata)));
+        }
     }
 
     /**
-     * Database membership is deliberately fixed when a schema is created; existing schemas
-     * are not synchronized before each SQL statement. databaseListCache refreshes periodically
-     * on access (or after explicit invalidation), and newly created schemas use that cached list.
+     * Uses the cached database list at session creation. Database DDL updates only its executing
+     * session; other existing sessions keep their database membership.
      */
     public static CalciteSchema createCalciteSchema() {
         CalciteSchema rootSchema = ConcurrentCalciteSchema.createRootSchema();
@@ -53,9 +76,7 @@ public class CalciteSchemaFactory {
         try {
             List<String> databases = databaseListCache.get();
             for (String database : databases) {
-                HmsSchema hmsSchema = schemaMap.computeIfAbsent(database,
-                        db -> new HmsSchema(db, MetadataAccessFactory.getInstance()));
-                rootSchema.add(database, hmsSchema);
+                addDatabase(rootSchema, MetadataAccessFactory.getInstance(), database);
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

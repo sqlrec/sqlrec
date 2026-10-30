@@ -5,6 +5,8 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.local.SqlFileParser;
+import com.sqlrec.db.FlinkTableDdl;
+import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -15,7 +17,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.net.URISyntaxException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,13 +32,13 @@ public class TestMetadataQuery {
             "genre_hot_item", "global_hot_item", "item_embedding", "item_table", "itemcf_i2i",
             "rec_log_kafka", "user_exposure_item", "user_interest_genre", "user_recent_click_item", "user_table");
     private static final List<String> USER_FUNCTIONS = List.of("demo_scalar_udf", "demo_table_udf");
-    private static final Map<String, String> CREATE_TABLE_SQL = new HashMap<>();
+    private static final Map<String, ResolvedCatalogTable> CREATE_TABLE_DEFINITIONS = new HashMap<>();
     private static String previousSqlDir;
 
     private SqlExecutor sqlExecutor;
 
     @BeforeAll
-    static void setUpMetadata() throws URISyntaxException {
+    static void setUpMetadata() throws Exception {
         String moduleDir = Paths.get(TestMetadataQuery.class.getProtectionDomain()
                 .getCodeSource().getLocation().toURI()).getParent().getParent().toString();
         String sqlDir = Paths.get(moduleDir, "src", "main", "sql").toString();
@@ -49,7 +50,7 @@ public class TestMetadataQuery {
         parser.load();
         for (var node : parser.getTableNodes()) {
             var table = (SqlCreateTable) node;
-            CREATE_TABLE_SQL.put(table.getTableName().getSimple(), CompileManager.getSqlStr(table));
+            CREATE_TABLE_DEFINITIONS.put(table.getTableName().getSimple(), FlinkTableDdl.create(table));
         }
     }
 
@@ -111,16 +112,19 @@ public class TestMetadataQuery {
     @Test
     void testShowCreateTableMatchesFileDefinitions() throws Exception {
         for (String table : TABLES) {
-            String expected = CREATE_TABLE_SQL.get(table);
+            ResolvedCatalogTable expected = CREATE_TABLE_DEFINITIONS.get(table);
             assertNotNull(expected, table);
             for (String name : List.of(table, "`default`." + table, "hive.`default`." + table)) {
                 CacheTable before = sqlExecutor.executeSql("SHOW CREATE TABLE " + name);
                 assertEquals(List.of("result"), fields(before));
-                assertEquals(List.of(expected), names(before), name);
-
-                // DESCRIBE validates primary keys; it must not change the saved declaration.
+                String shown = names(before).get(0);
+                var roundTrip = FlinkTableDdl.create((SqlCreateTable) CompileManager.parseSql(shown));
+                assertEquals(expected.getResolvedSchema(), roundTrip.getResolvedSchema(), name);
+                assertEquals(expected.getOptions(), roundTrip.getOptions(), name);
+                assertEquals(expected.getPartitionKeys(), roundTrip.getPartitionKeys(), name);
+                assertEquals(expected.getComment(), roundTrip.getComment(), name);
                 sqlExecutor.executeSql("DESCRIBE " + name);
-                assertEquals(List.of(expected), names(sqlExecutor.executeSql("SHOW CREATE TABLE " + name)), name);
+                assertEquals(List.of(shown), names(sqlExecutor.executeSql("SHOW CREATE TABLE " + name)), name);
             }
         }
     }
@@ -173,8 +177,9 @@ public class TestMetadataQuery {
                 names(sqlExecutor.executeSql("SHOW CREATE TABLE genre_hot_item")));
         for (String name : List.of("`default`.genre_hot_item", "hive.`default`.genre_hot_item")) {
             assertEquals(List.of("genre", "movie_id", "score"), names(sqlExecutor.executeSql("DESCRIBE " + name)));
-            assertEquals(List.of(CREATE_TABLE_SQL.get("genre_hot_item")),
-                    names(sqlExecutor.executeSql("SHOW CREATE TABLE " + name)));
+            var shown = FlinkTableDdl.create((SqlCreateTable) CompileManager.parseSql(
+                    names(sqlExecutor.executeSql("SHOW CREATE TABLE " + name)).get(0)));
+            assertEquals(CREATE_TABLE_DEFINITIONS.get("genre_hot_item").getResolvedSchema(), shown.getResolvedSchema());
         }
 
         List<String> expectedTables = new ArrayList<>(TABLES);

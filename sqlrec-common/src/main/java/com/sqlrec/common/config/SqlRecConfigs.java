@@ -210,6 +210,13 @@ public class SqlRecConfigs {
             null,
             String.class
     );
+    public static final ConfigOption<Boolean> SQL_SCHEMA_DDL_ENABLED = new ConfigOption<>(
+            "SQL_SCHEMA_DDL_ENABLED",
+            false,
+            "allow database, table, UDF, SQL function and API DDL in SQL file metadata; changes are in memory only",
+            null,
+            Boolean.class
+    );
 
     public static final ConfigOption<Integer> DEFAULT_VECTOR_SEARCH_LIMIT = new ConfigOption<>(
             "DEFAULT_VECTOR_SEARCH_LIMIT",

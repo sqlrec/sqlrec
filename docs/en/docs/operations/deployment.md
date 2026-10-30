@@ -317,6 +317,15 @@ bash ./deploy/sqlrec/deploy.sh
 
 See [Architecture](../reference/architecture.md#gateway-forwarding-boundaries) for execution boundaries and the [SQL Reference](../reference/sql.md#set) for SET/RESET behavior.
 
+### Local SQL-File Metadata
+
+| Environment variable | Default | Description |
+|----------------------|---------|-------------|
+| `SQL_SCHEMA_DIR` | Empty string | Recursively load SQL definitions from this directory when nonempty; otherwise use remote metadata |
+| `SQL_SCHEMA_DDL_ENABLED` | `false` | Enable in-memory database, table, Java UDF, SQL function, and API DDL in file mode only |
+
+Configure these in the container environment or `SQLREC_ENV_CONF`, then restart the service. Session `SET` cannot change the option. Changes are shared by sessions in one process, never rewrite SQL files, and are lost on restart. Separate instances do not share changes. `FLUSH` preserves in-memory changes. Model and Service lifecycle commands retain their existing restrictions. See [Metadata DDL](../reference/sql.md#metadata-ddl) for supported statements.
+
 ### SQL Initialization
 
 `deploy/sqlrec/deploy.sh` waits until PostgreSQL is reachable, executes `deploy/sql/master.sql`, and applies the SQLRec Deployment only after success. Normal script deployment does not require a separate manual SQL import.

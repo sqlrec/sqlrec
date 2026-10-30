@@ -12,10 +12,19 @@ public class CacheManager {
     public static void invalidateAll() {
         log.info("Invalidating all caches");
         invalidate("CalciteSchemaFactory", CalciteSchemaFactory::invalidateCache);
-        invalidate("JavaFunctionUtils", JavaFunctionUtils::invalidateCache);
-        invalidate("SQL function", SqlFunctionCache::invalidateAll);
+        invalidateFunctions();
         invalidate("SqlApi", SqlApiCache::invalidateAll);
         invalidate("ServiceManager", ServiceManager::invalidateCache);
+    }
+
+    public static void invalidateMetadata() {
+        invalidate("CalciteSchemaFactory", CalciteSchemaFactory::invalidateMetadata);
+        invalidateFunctions();
+    }
+
+    private static void invalidateFunctions() {
+        invalidate("JavaFunctionUtils", JavaFunctionUtils::invalidateCache);
+        invalidate("SQL function", SqlFunctionCache::invalidateAll);
     }
 
     private static void invalidate(String name, Runnable action) {

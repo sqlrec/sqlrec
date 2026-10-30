@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -40,6 +41,49 @@ class FileSystemHandlerTest {
     }
 
     // ===== CSV Tests =====
+
+    @Test
+    void csvAndJsonKeepScalarValuesWithSerializedTemporalAndBinaryTypes() throws IOException {
+        fieldSchemas = List.of(new FieldSchema("id", "BIGINT NOT NULL"),
+                new FieldSchema("clock", "TIME(0)"), new FieldSchema("event_time", "TIMESTAMP(6)"),
+                new FieldSchema("fixed", "BINARY(1)"), new FieldSchema("varying", "VARBINARY(16)"));
+        Path csv = tempDir.resolve("serialized-types.csv");
+        Files.writeString(csv, "id,clock,event_time,fixed,varying\n1,12:34:56,2026-01-02 12:34:56,a,abc\n");
+        Path json = tempDir.resolve("serialized-types.json");
+        Files.writeString(json, "{\"id\":1,\"clock\":\"12:34:56\",\"event_time\":\"2026-01-02 12:34:56\","
+                + "\"fixed\":\"a\",\"varying\":\"abc\"}");
+        for (String format : List.of("csv", "json")) {
+            Path path = format.equals("csv") ? csv : json;
+            FileSystemHandler handler = new FileSystemHandler(createConfig(path.toString(), format));
+            List<Object[]> rows = handler.getByPrimaryKey(Set.of(1L)).get(1L);
+            assertNotNull(rows, format);
+            assertEquals(1, rows.size(), format);
+            assertArrayEquals(new Object[]{1L, "12:34:56", "2026-01-02 12:34:56", "a", "abc"}, rows.get(0), format);
+        }
+    }
+
+    @Test
+    void csvResolvesDeclaredTypesBeforeIndexingRows() throws IOException {
+        Path csvFile = tempDir.resolve("declared-types.csv");
+        Files.write(csvFile, List.of("user_id,category,score",
+                "1000001,pc,100.000", "1000001,phone,90.000", "1000001,book,80.000",
+                "1000002,sports,70.000"));
+        FileSystemConfig config = createConfig(csvFile.toString(), "csv");
+        config.fieldSchemas = List.of(new FieldSchema("user_id", "BIGINT NOT NULL"),
+                new FieldSchema("category", "VARCHAR(16)"),
+                new FieldSchema("score", "DECIMAL(12, 3) NOT NULL"));
+        config.primaryKey = "user_id";
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        List<Object[]> rows = handler.getByPrimaryKey(Set.of(1000001L)).get(1000001L);
+
+        assertNotNull(rows);
+        assertEquals(3, rows.size());
+        assertArrayEquals(new Object[]{1000001L, "book", new BigDecimal("80.000")}, rows.get(0));
+        assertArrayEquals(new Object[]{1000001L, "phone", new BigDecimal("90.000")}, rows.get(1));
+        assertArrayEquals(new Object[]{1000001L, "pc", new BigDecimal("100.000")}, rows.get(2));
+        assertEquals(4, handler.scan().size());
+    }
 
     @Test
     void testLoadCsvKeepsRowsWithInvalidCellsAndSkipsNullPrimaryKeys() throws IOException {

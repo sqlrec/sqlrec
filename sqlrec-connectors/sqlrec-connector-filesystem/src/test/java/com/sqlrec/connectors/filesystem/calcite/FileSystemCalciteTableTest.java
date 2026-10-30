@@ -13,7 +13,12 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -104,6 +109,31 @@ class FileSystemCalciteTableTest {
 
         List<Object[]> rows = table.scan(null, List.of(filter)).toList();
         assertEquals(2, rows.size());
+    }
+
+    @Test
+    void jsonPrimaryKeyLookupMatchesNumericAndStringValues(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("items.json");
+        Files.writeString(file, "[{\"id\":1,\"name\":\"alice\"},{\"id\":\"1\",\"name\":\"bob\"},"
+                + "{\"id\":2,\"name\":\"other\"}]");
+        config.path = file.toString();
+        config.format = "json";
+        config.fieldSchemas = List.of(new FieldSchema("id", "BIGINT NOT NULL"),
+                new FieldSchema("name", "VARCHAR(16)"));
+        table = new FileSystemCalciteTable(config);
+        SqlTypeFactoryImpl typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+        RelDataType rowType = table.getRowType(typeFactory);
+        RexBuilder rexBuilder = new RexBuilder(typeFactory);
+        RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeInputRef(rowType.getFieldList().get(0).getType(), 0),
+                rexBuilder.makeExactLiteral(BigDecimal.ONE));
+
+        List<Object[]> rows = table.scan(null, List.of(filter)).toList();
+
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1L, "bob"}, rows.get(0));
+        assertArrayEquals(new Object[]{1L, "alice"}, rows.get(1));
+        assertEquals(3, table.scan(null, List.of()).count());
     }
 
     @Test

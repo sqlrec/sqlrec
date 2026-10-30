@@ -1,6 +1,5 @@
 package com.sqlrec.db.remote;
 
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.SchemaAccess;
 import com.sqlrec.executor.SqlProcessResult;
 import org.apache.calcite.sql.SqlNode;
@@ -12,13 +11,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(HmsSchemaAccess.class);
 
-    private final Map<String, Map<String, Long>> tableUpdateTimesMap = new ConcurrentHashMap<>();
     private final FlinkHiveDdlAdapter ddlAdapter = new FlinkHiveDdlAdapter();
 
     @Override
@@ -28,11 +24,7 @@ public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
 
     @Override
     public void executeMetadataDdl(SqlNode node, String database) throws Exception {
-        try {
-            ddlAdapter.executeDdl(node, database);
-        } finally {
-            tableUpdateTimesMap.clear();
-        }
+        ddlAdapter.executeDdl(node, database);
     }
 
     @Override
@@ -48,7 +40,6 @@ public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
     @Override
     public List<Table> getTables(String database) throws Exception {
         List<Table> tables = new ArrayList<>();
-        Map<String, Long> tableUpdateTimes = new ConcurrentHashMap<>();
         try {
             List<String> tableNames = HmsClient.getAllTables(database);
             for (String tableName : tableNames) {
@@ -59,11 +50,8 @@ public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
                     continue; // The table was dropped after listing it.
                 }
                 if (tableObj == null) continue;
-                long modTime = HiveTableUtils.getTableModificationTime(tableObj);
-                tableUpdateTimes.put(tableName, modTime);
                 tables.add(tableObj);
             }
-            tableUpdateTimesMap.put(database, tableUpdateTimes);
         } catch (Exception e) {
             log.error("Error while getting table metas for schema {}", database, e);
             throw new RuntimeException(e);
@@ -102,15 +90,6 @@ public class HmsSchemaAccess implements SchemaAccess, AutoCloseable {
     @Override
     public Function getFunction(String database, String funName) throws Exception {
         return HmsClient.getFunctionObj(database, funName);
-    }
-
-    @Override
-    public long getTableUpdateTime(String database, String table) {
-        Map<String, Long> tableUpdateTimes = tableUpdateTimesMap.get(database);
-        if (tableUpdateTimes == null) {
-            return 0L;
-        }
-        return tableUpdateTimes.getOrDefault(table, 0L);
     }
 
     @Override
