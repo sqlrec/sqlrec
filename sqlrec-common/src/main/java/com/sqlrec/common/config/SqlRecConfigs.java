@@ -12,8 +12,8 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> DEFAULT_TEST_IP = new ConfigOption<>(
             "DEFAULT_TEST_IP",
-            "192.168.64.2",
-            "default test ip",
+            "",
+            "test/demo host; component endpoints are configured independently",
             null,
             String.class
     );
@@ -156,7 +156,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> TRACE_ENDPOINT = new ConfigOption<>(
             "TRACE_ENDPOINT",
-            "http://" + DEFAULT_TEST_IP.getValue() + ":4317",
+            "",
             "OTLP gRPC endpoint for trace export",
             null,
             String.class
@@ -229,7 +229,7 @@ public class SqlRecConfigs {
     // dependency service config
     public static final ConfigOption<String> DB_URL = new ConfigOption<>(
             "META_DB_URL",
-            "jdbc:postgresql://" + DEFAULT_TEST_IP.getValue() + ":30005/sqlrec?sslmode=disable",
+            "",
             "meta db url",
             null,
             String.class
@@ -257,7 +257,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> HIVE_METASTORE_URI = new ConfigOption<>(
             "HIVE_METASTORE_URI",
-            "thrift://" + DEFAULT_TEST_IP.getValue() + ":30008",
+            "",
             "hive metastore uri",
             null,
             String.class
@@ -271,7 +271,7 @@ public class SqlRecConfigs {
     );
     public static final ConfigOption<String> FLINK_SQL_GATEWAY_ADDRESS = new ConfigOption<>(
             "FLINK_SQL_GATEWAY_ADDRESS",
-            DEFAULT_TEST_IP.getValue(),
+            "",
             "optional Gateway host; blank disables SQL forwarding",
             null,
             String.class

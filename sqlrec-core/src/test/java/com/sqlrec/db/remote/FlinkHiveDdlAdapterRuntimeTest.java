@@ -8,6 +8,8 @@ import org.apache.flink.table.catalog.hive.client.HiveMetastoreClientWrapper;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
 
@@ -20,6 +22,19 @@ import static org.mockito.Mockito.*;
 
 /** Runs the metadata adapter and HiveCatalog with HMS I/O simulated; an independent Flink planner is the compatibility oracle. */
 class FlinkHiveDdlAdapterRuntimeTest {
+    private String previousMetastoreUri;
+
+    @BeforeEach
+    void configureMockMetastoreAddress() {
+        previousMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getDefaultValue();
+        SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue("thrift://metastore.invalid:9083");
+    }
+
+    @AfterEach
+    void restoreMetastoreAddress() {
+        SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue(previousMetastoreUri);
+    }
+
     @Test
     void persistsAndReadsFlinkTableDefinitionsWithoutGateway() throws Exception {
         try (var factory = mockStatic(HiveMetastoreClientFactory.class);

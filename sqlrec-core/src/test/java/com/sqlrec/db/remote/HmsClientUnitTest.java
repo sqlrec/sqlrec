@@ -1,6 +1,7 @@
 package com.sqlrec.db.remote;
 
 import com.sqlrec.common.utils.SilenceLoggers;
+import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -35,6 +37,21 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 public class HmsClientUnitTest {
+
+    @Test
+    void rejectsMissingAddressBeforeOpeningAnEmbeddedMetastore() {
+        String configuredUri = System.getenv("HIVE_METASTORE_URI");
+        assumeTrue(configuredUri == null || configuredUri.isBlank(), "The integration environment supplies an HMS address");
+        String previousUri = SqlRecConfigs.HIVE_METASTORE_URI.getDefaultValue();
+        HmsClient.invalidateClient();
+        try {
+            SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue("");
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class, HmsClient::getAllDatabases);
+            assertEquals("HIVE_METASTORE_URI is not set", error.getMessage());
+        } finally {
+            SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue(previousUri);
+        }
+    }
 
     @Mock
     private HiveMetaStoreClient mockClient;

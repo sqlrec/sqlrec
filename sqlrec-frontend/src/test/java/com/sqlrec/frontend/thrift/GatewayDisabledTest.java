@@ -6,10 +6,14 @@ import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class GatewayDisabledTest {
     @Test
     void rejectsRemoteSqlBeforeReadingEndpointConfiguration() throws Exception {
+        String configuredAddress = System.getenv("FLINK_SQL_GATEWAY_ADDRESS");
+        assumeTrue(configuredAddress == null || configuredAddress.isBlank(),
+                "This test exercises disabled defaults; the integration script explicitly enables the Gateway");
         String oldAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
         Integer oldPort = SqlRecConfigs.FLINK_SQL_GATEWAY_PORT.getDefaultValue();
         try {

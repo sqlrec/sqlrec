@@ -34,6 +34,9 @@ public class HmsClient {
 
     private static HiveMetaStoreClient createClient() {
         String hiveMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getValue();
+        if (hiveMetastoreUri.isBlank()) {
+            throw new IllegalArgumentException("HIVE_METASTORE_URI is not set");
+        }
         Configuration hiveConf = new Configuration();
         hiveConf.set(HiveConf.ConfVars.METASTOREURIS.toString(), hiveMetastoreUri);
         hiveConf.set(MetastoreConf.ConfVars.EXECUTE_SET_UGI.toString(), SqlRecConfigs.EXECUTE_SET_UGI.getValue());

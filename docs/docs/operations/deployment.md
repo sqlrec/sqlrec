@@ -203,6 +203,8 @@ bash ./deploy/deploy_components.sh
 
 SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
 
+直接启动 SQLRec 时，`META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 和 `TRACE_ENDPOINT` 默认均为空；使用远程元数据时需显式设置前两项，Gateway 转发和 Trace 在地址为空时关闭。开发集成测试通过 `bin/test.sh` 配置测试地址：可设置 `DEFAULT_TEST_IP`，未设置时从 Minikube 获取，也可覆盖各组件地址。`DEFAULT_TEST_IP` 配置默认也为空，供 Java 测试和示例 SQL 使用；组件地址不会根据它自动生成，仍需分别配置。
+
 使用 SRE 运维的已有依赖时，需要调整对应部署步骤和 YAML 中的连接配置。当前脚本没有“设置外部组件地址就自动跳过部署”的机制；仅导出 `META_DB_URL` 或 `HIVE_METASTORE_URI` 不会替换模板中的地址。单独运行 `deploy/sqlrec/deploy.sh` 也会先部署 PostgreSQL。
 
 SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 ClusterRoleBinding 授予集群级 `edit` 权限。生产环境应按所需资源和命名空间调整为受限 Role/RoleBinding。

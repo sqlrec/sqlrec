@@ -203,6 +203,8 @@ Keep namespace, version, path, and architecture settings consistent between reso
 
 The SQLRec container's `META_DB_URL` and `HIVE_METASTORE_URI` are generated in `deploy/sqlrec/sqlrec.yaml` from `NODE_IP` and the corresponding ports. `MODEL_BASE_PATH` is fixed to `/user/sqlrec/models` in that template.
 
+When starting SQLRec directly, `META_DB_URL`, `HIVE_METASTORE_URI`, `FLINK_SQL_GATEWAY_ADDRESS`, and `TRACE_ENDPOINT` default to empty strings. Set the first two explicitly for remote metadata; empty Gateway and Trace addresses disable those features. For development integration tests, `bin/test.sh` supplies test addresses from `DEFAULT_TEST_IP`, or discovers the IP from Minikube when unset. Individual component addresses can also be overridden. The `DEFAULT_TEST_IP` option also defaults to an empty string and is used by Java tests and demo SQL. Component endpoints are configured separately and are not derived from this option.
+
 To use dependencies managed by SRE teams, adjust the corresponding deployment steps and YAML connection settings. The scripts do not skip component deployment when an external address is set. Exporting `META_DB_URL` or `HIVE_METASTORE_URI` alone does not replace the template addresses. Even running `deploy/sqlrec/deploy.sh` alone deploys PostgreSQL first.
 
 SQLRec and Spark scripts create their ServiceAccounts and grant cluster-wide `edit` access through ClusterRoleBindings. For production, scope permissions to the required resources and namespaces using restricted Roles/RoleBindings.

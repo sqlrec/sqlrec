@@ -36,7 +36,9 @@ class LocalDdlLifecycleTest {
     @SilenceLoggers(SessionManager.class)
     void tableDdlAndJdbcMetadataWorkWithGatewayDisabled() throws Exception {
         String previousAddress = SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.getDefaultValue();
+        String previousMetastoreUri = SqlRecConfigs.HIVE_METASTORE_URI.getDefaultValue();
         SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue("");
+        SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue("thrift://metastore.invalid:9083");
         CalciteSchemaFactory.setGlobalSchema(CalciteSchema.createRootSchema(false));
         Map<String, Table> tables = new HashMap<>();
         Map<String, Database> databases = new HashMap<>();
@@ -123,6 +125,7 @@ class LocalDdlLifecycleTest {
             } finally {
                 CalciteSchemaFactory.setGlobalSchema(null);
                 SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(previousAddress);
+                SqlRecConfigs.HIVE_METASTORE_URI.setDefaultValue(previousMetastoreUri);
             }
         }
     }
