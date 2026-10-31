@@ -203,7 +203,21 @@ Keep namespace, version, path, and architecture settings consistent between reso
 
 The SQLRec container's `META_DB_URL` and `HIVE_METASTORE_URI` are generated in `deploy/sqlrec/sqlrec.yaml` from `NODE_IP` and the corresponding ports. `MODEL_BASE_PATH` is fixed to `/user/sqlrec/models` in that template.
 
-When starting SQLRec directly, `META_DB_URL`, `HIVE_METASTORE_URI`, `FLINK_SQL_GATEWAY_ADDRESS`, and `TRACE_ENDPOINT` default to empty strings. Set the first two explicitly for remote metadata; empty Gateway and Trace addresses disable those features. For development integration tests, `bin/test.sh` supplies test addresses from `DEFAULT_TEST_IP`, or discovers the IP from Minikube when unset. Individual component addresses can also be overridden. The `DEFAULT_TEST_IP` option also defaults to an empty string and is used by Java tests and demo SQL. Component endpoints are configured separately and are not derived from this option.
+When starting SQLRec directly, `META_DB_URL`, `HIVE_METASTORE_URI`, `FLINK_SQL_GATEWAY_ADDRESS`, and `TRACE_ENDPOINT` default to empty strings. Set the first two explicitly for remote metadata; empty Gateway and Trace addresses disable those features. For development integration tests, `bin/test.sh` supplies component defaults using `DEFAULT_TEST_IP`, `NODE_IP`, or Minikube discovery. Individual component addresses can also be overridden. The `DEFAULT_TEST_IP` option also defaults to an empty string and is used by Java tests and demo SQL. When starting the service directly, component endpoints are configured separately and are not derived from this option.
+
+Run integration tests from the repository root:
+
+```bash
+# Use an existing environment; remaining arguments pass through to Maven
+bash bin/test.sh -pl sqlrec-core -am
+
+# Validate deployment and run both benchmark suites (--all is also supported)
+bash bin/test.sh -all
+```
+
+`-all` first caches images from the existing `minikube` environment through `deploy/cache_images.sh save`. After that command succeeds, it runs `minikube -p minikube delete`, rebuilds the cluster through `deploy_minikube.sh`, and reloads the image cache. It then downloads deployment resources and deploys the default components plus MongoDB and Redis Cluster for integration tests. It waits for Flink and deployed workloads, verifies the SQLRec connection with `SELECT 1` through Beeline, and runs Maven integration tests. Finally, it initializes and runs the SQL performance benchmark, installs the model quality Python dependencies, prepares and uploads all datasets, and evaluates every applicable model combination on the full validation sets (`--model all --dataset all --full-eval`). Any failed stage stops the run; a failed cache command prevents deletion of the existing environment.
+
+This mode requires an accessible existing Minikube environment for image caching and deletes that cluster and its node-local dynamic volume data. Host-side image caches and client directories are retained. It uses the existing deployment scripts and configured release images without building local source images. Running it requires deployment permissions and external network access. Maven keeps the current shell's JDK; the Hive/Hadoop Java environment is configured in subprocesses. Model quality reports go to `benchmark/model_quality/runs/`; SQL load results print to the terminal. Without `-all`, the script only runs Maven tests. Address selection prefers `DEFAULT_TEST_IP`, then `NODE_IP`, then Minikube discovery. `HADOOP_CONF_DIR` can be overridden; its default path follows `BASE_DIR` and `HADOOP_VERSION`.
 
 To use dependencies managed by SRE teams, adjust the corresponding deployment steps and YAML connection settings. The scripts do not skip component deployment when an external address is set. Exporting `META_DB_URL` or `HIVE_METASTORE_URI` alone does not replace the template addresses. Even running `deploy/sqlrec/deploy.sh` alone deploys PostgreSQL first.
 

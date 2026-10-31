@@ -203,7 +203,21 @@ bash ./deploy/deploy_components.sh
 
 SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
 
-直接启动 SQLRec 时，`META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 和 `TRACE_ENDPOINT` 默认均为空；使用远程元数据时需显式设置前两项，Gateway 转发和 Trace 在地址为空时关闭。开发集成测试通过 `bin/test.sh` 配置测试地址：可设置 `DEFAULT_TEST_IP`，未设置时从 Minikube 获取，也可覆盖各组件地址。`DEFAULT_TEST_IP` 配置默认也为空，供 Java 测试和示例 SQL 使用；组件地址不会根据它自动生成，仍需分别配置。
+直接启动 SQLRec 时，`META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 和 `TRACE_ENDPOINT` 默认均为空；使用远程元数据时需显式设置前两项，Gateway 转发和 Trace 在地址为空时关闭。开发集成测试通过 `bin/test.sh` 根据 `DEFAULT_TEST_IP`、`NODE_IP` 或 Minikube 地址设置组件连接默认值，也可显式覆盖各组件地址。`DEFAULT_TEST_IP` 配置默认也为空，供 Java 测试和示例 SQL 使用；直接启动服务时，组件地址不会根据它自动生成，仍需分别配置。
+
+在仓库根目录运行集成测试：
+
+```bash
+# 使用已有环境；其余参数原样传递给 Maven
+bash bin/test.sh -pl sqlrec-core -am
+
+# 完整部署验证和两类 benchmark（也支持 --all）
+bash bin/test.sh -all
+```
+
+`-all` 首先通过 `deploy/cache_images.sh save` 缓存已有 `minikube` 环境的镜像，缓存命令成功后执行 `minikube -p minikube delete` 删除已有环境，再通过 `deploy_minikube.sh` 重建集群并加载镜像缓存。随后下载部署资源、部署默认组件，以及集成测试需要的 MongoDB 和 Redis Cluster；等待 Flink 和工作负载就绪，并通过 Beeline 执行 `SELECT 1` 验证 SQLRec 连接后，运行 Maven 集成测试。最后执行 SQL 性能 benchmark 的初始化和压测，再安装模型质量 benchmark 的 Python 依赖、准备并上传全部数据集，运行全部适用模型组合的完整验证集评估（`--model all --dataset all --full-eval`）。任一步骤失败立即停止；缓存命令失败时不会删除已有环境。
+
+此模式需要已有可访问的 Minikube 环境以保存镜像，并会删除该集群及其节点动态卷数据；宿主机的镜像缓存和客户端目录保留。它使用现有部署脚本和配置的发布镜像，不构建本地源码镜像。运行需要部署权限和外网访问；Maven 使用当前终端的 JDK，Hive/Hadoop 客户端的 Java 环境在子进程中配置。模型质量报告写入 `benchmark/model_quality/runs/`，SQL 压测结果输出到终端。不带 `-all` 时不部署环境，也不运行 benchmark。测试地址优先使用 `DEFAULT_TEST_IP`，其次使用 `NODE_IP`，均未设置时从 Minikube 获取；`HADOOP_CONF_DIR` 可显式覆盖，默认路径跟随 `BASE_DIR` 和 `HADOOP_VERSION`。
 
 使用 SRE 运维的已有依赖时，需要调整对应部署步骤和 YAML 中的连接配置。当前脚本没有“设置外部组件地址就自动跳过部署”的机制；仅导出 `META_DB_URL` 或 `HIVE_METASTORE_URI` 不会替换模板中的地址。单独运行 `deploy/sqlrec/deploy.sh` 也会先部署 PostgreSQL。
 
