@@ -187,9 +187,11 @@ def main():
     parser.add_argument('--task', choices=(*TASKS, 'all'), default='all')
     parser.add_argument('--repeats', type=positive_integer, default=3, help='Timed three-row requests per case')
     parser.add_argument('--output', type=Path, default=Path(__file__).parent / 'runs')
+    parser.add_argument('--run-dir', type=Path, help='Exact new run directory (used by bin/test.sh -all)')
     args = parser.parse_args()
     cases = [case for case in CASES if args.task in ('all', case.task)]
-    root = args.output.resolve() / (datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '_' + uuid.uuid4().hex[:8])
+    root = (args.run_dir.resolve() if args.run_dir else args.output.resolve() /
+            (datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '_' + uuid.uuid4().hex[:8]))
     root.mkdir(parents=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s',
                         handlers=[logging.FileHandler(root / 'run.log'), logging.StreamHandler()])

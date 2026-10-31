@@ -14,6 +14,8 @@ With -all, cache images from the existing Minikube environment, delete it,
 rebuild Minikube, download resources, and deploy all test dependencies.
 Run Maven tests, then SQL performance, GrowthBook, Hugging Face and model quality benchmarks.
 Remaining arguments are passed to Maven unchanged.
+With -all, a complete report and stage logs are saved under benchmark/runs/.
+Set TEST_REPORT_ROOT to change the parent directory. Failed runs also produce a report.
 EOF
 }
 
@@ -26,9 +28,41 @@ for arg in "$@"; do
 done
 
 run_stage() {
+    local stage="$1" status
     printf '\n[test] %s\n' "$1"
     shift
-    "$@"
+    "${REPORT_PYTHON}" "${REPORT_SCRIPT}" start "${REPORT_DIR}" "${stage}"
+    # Do not put the command/function in an `if`: that disables errexit inside
+    # shell functions. Capture its exit status after the independent subshell.
+    set +e
+    (set -e; "$@") 2>&1 | tee "${REPORT_DIR}/logs/${stage}.log"
+    local codes=("${PIPESTATUS[@]}")
+    set -e
+    status="${codes[0]}"
+    if [ "${status}" -eq 0 ]; then status="${codes[1]}"; fi
+    "${REPORT_PYTHON}" "${REPORT_SCRIPT}" finish "${REPORT_DIR}" "${stage}" "${status}"
+    return "${status}"
+}
+
+finish_report() {
+    local status="$1" report_status
+    trap - EXIT INT TERM
+    set +e
+    "${REPORT_PYTHON}" "${REPORT_SCRIPT}" finalize "${REPORT_DIR}" "${status}"
+    report_status=$?
+    if [ "${status}" -eq 0 ]; then status="${report_status}"; fi
+    printf '\n[test] Full report: %s/summary.md\n' "${REPORT_DIR}"
+    exit "${status}"
+}
+
+discover_cluster_address() {
+    local address
+    address="$(minikube -p minikube ip)"
+    if [ -z "${address}" ]; then
+        echo "ERROR: Minikube did not report a node IP." >&2
+        return 1
+    fi
+    printf '%s\n' "${address}" > "${REPORT_DIR}/node-ip.txt"
 }
 
 wait_for_workloads() {
@@ -60,46 +94,51 @@ wait_for_sqlrec() {
 deploy_test_environment() (
     # env.sh selects Java 8 for Hive/Hadoop clients. Keep Maven's host JDK intact.
     source "${PROJECT_DIR}/deploy/env.sh"
-    run_stage "Download deployment resources" bash "${PROJECT_DIR}/deploy/download_resource.sh"
-    run_stage "Deploy SQLRec and dependencies" bash "${PROJECT_DIR}/deploy/deploy_components.sh"
+    run_stage download-resources bash "${PROJECT_DIR}/deploy/download_resource.sh"
+    run_stage deploy-components bash "${PROJECT_DIR}/deploy/deploy_components.sh"
     # These connectors are covered by integration tests but are optional in the
     # standard component deployment.
-    run_stage "Deploy MongoDB" bash "${PROJECT_DIR}/deploy/mongodb/deploy_default.sh"
-    run_stage "Deploy Redis Cluster" bash "${PROJECT_DIR}/deploy/redis/deploy-cluster.sh"
-    run_stage "Deploy GrowthBook" bash "${PROJECT_DIR}/deploy/growthbook/deploy.sh"
-    run_stage "Wait for deployed workloads" wait_for_workloads
-    run_stage "Verify SQLRec connection" wait_for_sqlrec
+    run_stage deploy-mongodb bash "${PROJECT_DIR}/deploy/mongodb/deploy_default.sh"
+    run_stage deploy-redis bash "${PROJECT_DIR}/deploy/redis/deploy-cluster.sh"
+    run_stage deploy-growthbook bash "${PROJECT_DIR}/deploy/growthbook/deploy.sh"
+    run_stage wait-workloads wait_for_workloads
+    run_stage sqlrec-ready wait_for_sqlrec
 )
 
 run_benchmarks() (
     source "${PROJECT_DIR}/deploy/env.sh"
-    run_stage "Prepare SQL performance benchmark" bash "${PROJECT_DIR}/benchmark/sql_performance/init.sh"
-    run_stage "Run SQL performance benchmark" bash "${PROJECT_DIR}/benchmark/sql_performance/benchmark.sh"
-    run_stage "Install model benchmark dependencies" "${PROJECT_DIR}/.venv/bin/python" -m pip install \
+    run_stage sql-prepare bash "${PROJECT_DIR}/benchmark/sql_performance/init.sh"
+    run_stage sql-performance bash "${PROJECT_DIR}/benchmark/sql_performance/benchmark.sh"
+    run_stage python-dependencies "${PROJECT_DIR}/.venv/bin/python" -m pip install \
         -r "${PROJECT_DIR}/benchmark/model_quality/requirements.txt"
-    run_stage "Run GrowthBook UDF benchmark" "${PROJECT_DIR}/.venv/bin/python" \
-        -m benchmark.growthbook
-    run_stage "Run Hugging Face integration benchmark" "${PROJECT_DIR}/.venv/bin/python" \
-        -m benchmark.huggingface --task all
-    run_stage "Prepare all model quality datasets" "${PROJECT_DIR}/.venv/bin/python" \
+    run_stage growthbook "${PROJECT_DIR}/.venv/bin/python" \
+        -m benchmark.growthbook --run-dir "${REPORT_DIR}/growthbook"
+    run_stage huggingface "${PROJECT_DIR}/.venv/bin/python" \
+        -m benchmark.huggingface --task all --run-dir "${REPORT_DIR}/huggingface"
+    run_stage model-prepare "${PROJECT_DIR}/.venv/bin/python" \
         -m benchmark.model_quality.prepare --dataset all --upload
-    run_stage "Run all model quality benchmarks" "${PROJECT_DIR}/.venv/bin/python" \
-        -m benchmark.model_quality --model all --dataset all --full-eval
+    run_stage model-quality "${PROJECT_DIR}/.venv/bin/python" \
+        -m benchmark.model_quality --model all --dataset all --full-eval --run-dir "${REPORT_DIR}/model_quality"
 )
 
 cd "${PROJECT_DIR}"
 if [ "${RUN_ALL}" = true ]; then
-    run_stage "Cache existing Minikube images" bash "${PROJECT_DIR}/deploy/cache_images.sh" save
+    # The report works before the project venv/deployment has been prepared.
+    REPORT_PYTHON="$(command -v python3)"
+    REPORT_SCRIPT="${PROJECT_DIR}/benchmark/test_report.py"
+    REPORT_DIR="$("${REPORT_PYTHON}" "${REPORT_SCRIPT}" init "${PROJECT_DIR}" "${MAVEN_ARGS[@]}")"
+    trap 'finish_report "$?"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    printf '[test] Report directory: %s\n' "${REPORT_DIR}"
+    run_stage cache-images bash "${PROJECT_DIR}/deploy/cache_images.sh" save
     # Delete only after image caching succeeds. The rebuilt cluster reloads the
     # host-side cache through deploy_minikube.sh.
-    run_stage "Delete existing Minikube environment" minikube -p minikube delete
-    run_stage "Prepare Minikube" bash "${PROJECT_DIR}/deploy/deploy_minikube.sh"
+    run_stage delete-minikube minikube -p minikube delete
+    run_stage prepare-minikube bash "${PROJECT_DIR}/deploy/deploy_minikube.sh"
     # Discover addresses after cluster startup, including on a first deployment.
-    NODE_IP="$(minikube -p minikube ip)"
-    if [ -z "${NODE_IP}" ]; then
-        echo "ERROR: Minikube did not report a node IP." >&2
-        exit 1
-    fi
+    run_stage cluster-address discover_cluster_address
+    NODE_IP="$(cat "${REPORT_DIR}/node-ip.txt")"
     export NODE_IP
     export STORAGE_MODE=hostpath
     deploy_test_environment
@@ -126,7 +165,7 @@ run_maven_tests() {
 
 if [ "${RUN_ALL}" = true ]; then
     # Replace only the subshell so benchmarks can run after Maven succeeds.
-    (run_stage "Run Maven integration tests" run_maven_tests)
+    run_stage maven run_maven_tests
     run_benchmarks
     printf '\n[test] Deployment, integration tests, and benchmarks completed.\n'
 else

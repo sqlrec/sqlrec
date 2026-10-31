@@ -22,4 +22,4 @@ wrk -t1 -c1 -d${WARMUP_DURATION}s -s "${dir}/request.lua" "${auth_args[@]}" "${U
 printf '\nWarm-up completed, starting formal benchmark...\n'
 # Formal benchmark
 echo "Benchmark configuration: Concurrency=${CONCURRENCY}, Duration=${DURATION}s"
-wrk -t${CONCURRENCY} -c${CONCURRENCY} -d${DURATION}s -s "${dir}/request.lua" "${auth_args[@]}" "${URL}"
+wrk --latency -t${CONCURRENCY} -c${CONCURRENCY} -d${DURATION}s -s "${dir}/request.lua" "${auth_args[@]}" "${URL}"

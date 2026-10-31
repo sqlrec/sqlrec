@@ -28,6 +28,7 @@ def arguments():
     parser.add_argument('--save-predictions', action='store_true', help='Save one compact predictions.parquet per model')
     parser.add_argument('--data-root', type=Path, default=Path(os.environ.get('BENCH_DATA_ROOT', PACKAGE / 'data')))
     parser.add_argument('--output', type=Path, default=PACKAGE / 'runs', help='Parent directory for a new isolated run')
+    parser.add_argument('--run-dir', type=Path, help='Exact new run directory (used by bin/test.sh -all)')
     args = parser.parse_args()
     if args.dataset != 'all':
         try:
@@ -38,6 +39,10 @@ def arguments():
 
 
 def create_run_directory(args, datasets):
+    if getattr(args, 'run_dir', None) is not None:
+        root = args.run_dir.resolve()
+        root.mkdir(parents=True)
+        return root
     dataset = datasets[0] if len(datasets) == 1 else 'all-datasets'
     model = 'all-models' if args.model == 'all' else args.model
     name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + f'_{dataset}_{model}'
