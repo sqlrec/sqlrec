@@ -1,5 +1,6 @@
 package com.sqlrec.runtime;
 
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.UnionLikeTableFunction;
@@ -46,14 +47,17 @@ public class JavaFunctionBindable extends BindableInterface {
         this.varArgs = evalMethod.isVarArgs();
 
         List<RelDataTypeField> resolvedReturnDataFields = returnDataFields;
-        if (resolvedReturnDataFields == null) {
-            if (CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
-                Object outputTable = callEvalMethod(schema, new ExecuteContextImpl(schema));
-                if (outputTable == null) {
-                    throw new RuntimeException("table function return null");
-                }
-                resolvedReturnDataFields = ((CacheTable) outputTable).getDataFields();
+        if (resolvedReturnDataFields == null && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
+            if (!SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.getValue()) {
+                throw new IllegalArgumentException("Java function " + functionName
+                        + " requires an explicit return schema via LIKE table or LIKE FUNCTION when "
+                        + "ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE is false");
             }
+            Object outputTable = callEvalMethod(schema, new ExecuteContextImpl(schema));
+            if (outputTable == null) {
+                throw new RuntimeException("table function return null");
+            }
+            resolvedReturnDataFields = ((CacheTable) outputTable).getDataFields();
         }
         this.returnDataFields = resolvedReturnDataFields;
     }

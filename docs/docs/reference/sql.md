@@ -219,6 +219,8 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量，或通过 `GET()` / `GET_OR_DEFAULT()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
 
+未通过 `LIKE` 指定返回模式时，默认在编译期调用返回 `CacheTable` 的 Java 方法来推断模式。启动服务前设置环境变量 `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` 可关闭此调用；SQL `SET` 和请求 `params` 不能覆盖该配置。关闭后，调用返回 `CacheTable` 的 Java 方法必须通过 `LIKE table` 或 `LIKE FUNCTION` 显式指定模式，否则编译时直接报错，不调用方法。返回 `void` 的方法无需指定模式。
+
 **语法：**
 
 ```sql

@@ -126,6 +126,13 @@ public class SqlRecConfigs {
             null, Boolean.class);
 
     // exec config
+    public static final ConfigOption<Boolean> ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE = new ConfigOption<>(
+            "ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE",
+            true,
+            "invoke Java functions at compile time to infer the return schema when no schema is specified",
+            null,
+            Boolean.class
+    );
     public static final ConfigOption<Boolean> PARALLELISM_EXEC = new ConfigOption<>(
             "PARALLELISM_EXEC",
             true,

@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
@@ -27,9 +28,87 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class JavaFunctionBindableTest {
+    private final boolean originalSchemaInference =
+            SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.getDefaultValue();
+
     @AfterEach
     public void tearDown() {
+        SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.setDefaultValue(originalSchemaInference);
         CalciteSchemaFactory.setGlobalSchema(null);
+    }
+
+    @Test
+    public void schemaInferenceIsEnabledByDefault() {
+        assertTrue(SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.getDefaultValue());
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        TestCountingFun function = new TestCountingFun();
+        JavaFunctionBindable bindable = new JavaFunctionBindable(
+                "counting", function, List.of(), null, schema);
+
+        assertEquals(1, function.calls);
+        assertEquals(createStringField("result"), bindable.getReturnDataFields());
+        assertArrayEquals(new Object[]{"result"}, bindable.bind(schema, new ExecuteContextImpl(schema)).single());
+        assertEquals(2, function.calls);
+    }
+
+    @Test
+    public void disabledSchemaInferenceRejectsMissingSchemaWithoutCallingFunction() {
+        SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.setDefaultValue(false);
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        TestCountingFun function = new TestCountingFun();
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> new JavaFunctionBindable("counting", function, List.of(), null, schema));
+
+        assertEquals(0, function.calls);
+        assertEquals("Java function counting requires an explicit return schema via LIKE table or LIKE FUNCTION when "
+                + "ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE is false", error.getMessage());
+    }
+
+    @Test
+    public void disabledSchemaInferenceAllowsVoidFunctionsWithoutSchema() {
+        SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.setDefaultValue(false);
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        TestEmptyFun function = new TestEmptyFun();
+        JavaFunctionBindable bindable = new JavaFunctionBindable(
+                "empty", function, List.of(), null, schema);
+
+        assertEquals(0, function.calls);
+        assertNull(bindable.getReturnDataFields());
+        assertNull(bindable.bind(schema, new ExecuteContextImpl(schema)));
+        assertEquals(1, function.calls);
+    }
+
+    @Test
+    public void explicitSchemaSkipsCompileTimeInvocationWithEitherSetting() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        List<RelDataTypeField> fields = createStringField("result");
+        for (boolean enabled : List.of(true, false)) {
+            SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.setDefaultValue(enabled);
+            TestCountingFun function = new TestCountingFun();
+            JavaFunctionBindable bindable = new JavaFunctionBindable(
+                    "counting", function, List.of(), fields, schema);
+
+            assertEquals(0, function.calls);
+            assertSame(fields, bindable.getReturnDataFields());
+            assertArrayEquals(new Object[]{"result"}, bindable.bind(schema, new ExecuteContextImpl(schema)).single());
+            assertEquals(1, function.calls);
+        }
+    }
+
+    @Test
+    public void disabledSchemaInferenceSupportsCacheTableWithLike() throws Exception {
+        SqlRecConfigs.ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE.setDefaultValue(false);
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        CalciteSchemaFactory.setGlobalSchema(schema);
+        JavaFunctionUtils.registerTableFunction("default", "counting_fun", TestCountingFun.class);
+        ExecuteContext context = new ExecuteContextImpl(schema);
+
+        new SqlTestCase("cache table output as select 'template' as `result`")
+                .test(schema, context);
+        new SqlTestCase("cache table actual as call counting_fun() like output",
+                Collections.singletonList(new Object[]{"actual", 1L})).test(schema, context);
+        new SqlTestCase("select * from actual",
+                Collections.singletonList(new Object[]{"result"})).test(schema, context);
     }
 
     @Test
@@ -375,9 +454,21 @@ public class JavaFunctionBindableTest {
         assertArrayEquals(new Object[]{"varargs: []"}, bindable.bind(schema, context).single());
     }
 
-    public static class TestEmptyFun {
-        public void evaluate() {
+    public static class TestCountingFun {
+        private int calls;
 
+        public CacheTable evaluate() {
+            calls++;
+            return new CacheTable("output", Linq4j.singletonEnumerable(new Object[]{"result"}),
+                    createStringField("result"));
+        }
+    }
+
+    public static class TestEmptyFun {
+        private int calls;
+
+        public void evaluate() {
+            calls++;
         }
     }
 

@@ -219,6 +219,8 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()` / `GET_OR_DEFAULT()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
 
+When no return schema is specified with `LIKE`, Java methods returning `CacheTable` are invoked at compile time by default to infer the schema. Set the server environment variable `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` before startup to disable this invocation; SQL `SET` and request `params` cannot override it. With inference disabled, calls to Java methods returning `CacheTable` require an explicit schema through `LIKE table` or `LIKE FUNCTION`; otherwise compilation fails without invoking the method. Methods returning `void` do not require a schema.
+
 **Syntax:**
 
 ```sql
