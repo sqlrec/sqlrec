@@ -182,7 +182,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     private void writeResponse(ChannelHandlerContext ctx, FullHttpRequest request,
                                FullHttpResponse response, String path, long startNanos) {
-        Tags tags = Tags.of("path", path)
+        Tags tags = Tags.of("path", metricsPath(path))
                 .and("method", request.method().name())
                 .and("status", String.valueOf(response.status().code()));
 
@@ -197,6 +197,22 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         if (!keepAlive) {
             written.addListener(ChannelFutureListener.CLOSE);
         }
+    }
+
+    private static String metricsPath(String path) {
+        if (SQL_V1_PATH.equals(path) || METRICS_PATH.equals(path)) {
+            return path;
+        }
+        if (path.startsWith(API_V1_PREFIX)) {
+            return path;
+        }
+        if (path.startsWith(UI_STATIC_PREFIX)) {
+            return UI_STATIC_PREFIX + "*";
+        }
+        if (path.startsWith(UI_API_PREFIX)) {
+            return UI_API_PREFIX + "*";
+        }
+        return "unmatched";
     }
 
     // Connection lifecycle

@@ -209,6 +209,29 @@ class ModelManagerExportTest {
     }
 
     @Test
+    void reconcilesUnfinishedSourceBeforeExporting() throws Exception {
+        for (String actual : List.of("running", "succeeded", "failed")) {
+            try (ExportFixture fixture = new ExportFixture()) {
+                Checkpoint source = fixture.checkpoint("source", Consts.CHECKPOINT_STATUS_CREATED);
+                source.setYaml("shared-source-job");
+                fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(source.getYaml()))
+                        .thenReturn(new K8sManager.JobStatus(actual, null));
+
+                if (actual.equals("succeeded")) {
+                    assertEquals(2, fixture.export().size());
+                } else {
+                    assertThrows(IllegalArgumentException.class, fixture::export);
+                    assertTrue(fixture.events.isEmpty());
+                }
+                assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
+                        source.getStatus());
+                verify(fixture.db, times(actual.equals("running") ? 0 : 1)).upsertCheckpoint(source);
+                fixture.k8s.verify(() -> K8sManager.deleteYaml("shared-source-job"), never());
+            }
+        }
+    }
+
+    @Test
     void configurationGenerationFailurePreservesExistingExports() throws Exception {
         for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
             try (ExportFixture fixture = new ExportFixture()) {

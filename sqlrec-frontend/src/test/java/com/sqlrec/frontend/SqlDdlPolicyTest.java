@@ -109,19 +109,25 @@ class SqlDdlPolicyTest {
     @Test
     void batchCliUsesTheSameExecutorDdlPolicy() throws Exception {
         PrintStream previous = System.out;
+        PrintStream previousError = System.err;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        try (PrintStream captured = new PrintStream(output, true, StandardCharsets.UTF_8)) {
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+        try (PrintStream captured = new PrintStream(output, true, StandardCharsets.UTF_8);
+             PrintStream capturedError = new PrintStream(error, true, StandardCharsets.UTF_8)) {
             System.setOut(captured);
-            assertEquals(0, new CommandLine(new Cli()).execute("-e", "CREATE TABLE items (id INT)", "--outputformat", "json"));
-            assertTrue(output.toString(StandardCharsets.UTF_8).contains("SQL_SCHEMA_DDL_ENABLED=true"));
+            System.setErr(capturedError);
+            assertEquals(1, new CommandLine(new Cli()).execute("-e", "CREATE TABLE items (id INT)", "--outputformat", "json"));
+            assertTrue(error.toString(StandardCharsets.UTF_8).contains("SQL_SCHEMA_DDL_ENABLED=true"));
             assertTrue(metadata.getTables("default").isEmpty());
             SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(true);
             output.reset();
+            error.reset();
             assertEquals(0, new CommandLine(new Cli()).execute("-e", "CREATE TABLE items (id INT)", "--outputformat", "json"));
-            assertFalse(output.toString(StandardCharsets.UTF_8).contains("exec error"));
+            assertEquals("", error.toString(StandardCharsets.UTF_8));
             assertNotNull(metadata.getTable("default", "items"));
         } finally {
             System.setOut(previous);
+            System.setErr(previousError);
         }
     }
 }

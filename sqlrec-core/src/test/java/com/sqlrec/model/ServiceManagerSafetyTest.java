@@ -2,6 +2,7 @@ package com.sqlrec.model;
 
 import com.sqlrec.common.config.ConfigOption;
 import com.sqlrec.common.config.ModelConfigs;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.utils.ResourceNames;
@@ -9,6 +10,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
@@ -76,7 +78,7 @@ class ServiceManagerSafetyTest {
     }
 
     @Test
-    void failedUpdateKeepsTheDesiredConfigurationAndInvalidatesCache() throws Exception {
+    void failedUpdatePreservesSavedConfigurationAndCache() throws Exception {
         try (Fixture f = new Fixture()) {
             ServiceManager.createService(f.statement("rank-a"));
             Service before = f.services.get("rank-a");
@@ -86,63 +88,99 @@ class ServiceManagerSafetyTest {
             f.k8s.when(() -> K8sManager.applyYaml(any()))
                     .thenThrow(new RuntimeException("conflict"));
             assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
-            assertNotSame(before, f.services.get("rank-a"));
-            assertEquals(changedUrl, f.services.get("rank-a").getUrl());
+            assertSame(before, f.services.get("rank-a"));
             ServiceConf after = ServiceManager.getServiceConfig("rank-a");
-            assertNotSame(cached, after);
-            assertEquals(changedUrl, after.getUrl());
+            assertSame(cached, after);
+            assertEquals(before.getUrl(), after.getUrl());
         }
     }
 
     @Test
-    void failedInitialApplyKeepsMetadataAndCanBeRetriedWithoutIfNotExists() throws Exception {
+    void failedInitialApplyDoesNotSaveMetadataAndIfNotExistsRetries() throws Exception {
         try (Fixture f = new Fixture()) {
             f.k8s.when(() -> K8sManager.applyYaml(any()))
                     .thenThrow(new RuntimeException("partial apply failure"))
                     .thenAnswer(invocation -> null);
 
             assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
-            Service submitted = f.services.get("rank-a");
-            assertNotNull(submitted);
-            assertFalse(submitted.getYaml().isBlank());
-            assertEquals("rank-a", K8sYamlUtils.parseK8sYamlAndGetDeployments(submitted.getYaml())
-                    .getFirst().getMetadata().getName());
-            assertEquals(f.url("rank-a"), submitted.getUrl());
-            assertFalse(ServiceManager.isServiceOperationCompleted("rank-a"));
+            assertFalse(f.services.containsKey("rank-a"));
+            verify(f.db, never()).upsertService(any());
 
             var skip = (SqlCreateService) CompileManager.parseSql(
-                    "CREATE SERVICE IF NOT EXISTS `rank-a` ON MODEL `rank`");
+                    "CREATE SERVICE IF NOT EXISTS `rank-a` ON MODEL `rank` WITH ('NAMESPACE'='test')");
             assertEquals("rank-a", ServiceManager.createService(skip));
-            f.k8s.verify(() -> K8sManager.applyYaml(submitted.getYaml()));
-
-            assertEquals("rank-a", ServiceManager.createService(f.statement("rank-a")));
             Service service = f.services.get("rank-a");
             assertNotNull(service);
             assertEquals(f.url("rank-a"), service.getUrl());
-            f.k8s.verify(() -> K8sManager.applyYaml(service.getYaml()), times(2));
+            f.k8s.verify(() -> K8sManager.applyYaml(any()), times(2));
+            verify(f.db, times(1)).upsertService(any());
         }
     }
 
     @Test
-    void failedInitialApplyCanBeCleanedUpUsingTheSavedYaml() throws Exception {
+    void savesMetadataOnlyAfterKubernetesSubmission() throws Exception {
         try (Fixture f = new Fixture()) {
-            f.k8s.when(() -> K8sManager.applyYaml(any()))
-                    .thenThrow(new RuntimeException("partial apply failure"));
-            assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
-            String yaml = f.services.get("rank-a").getYaml();
-
-            ServiceManager.deleteService("rank-a");
-            f.k8s.verify(() -> K8sManager.deleteYaml(yaml));
-            assertFalse(f.services.containsKey("rank-a"));
+            doAnswer(invocation -> {
+                Service service = invocation.getArgument(0);
+                f.k8s.verify(() -> K8sManager.applyYaml(service.getYaml()));
+                f.services.put(service.getName(), service);
+                return null;
+            }).when(f.db).upsertService(any());
+            assertEquals("rank-a", ServiceManager.createService(f.statement("rank-a")));
+            assertNotNull(f.services.get("rank-a"));
         }
     }
 
     @Test
-    void metadataWriteFailurePreventsKubernetesSubmission() throws Exception {
+    void metadataWriteFailureHappensAfterKubernetesSubmissionAndCanBeRetried() throws Exception {
         try (Fixture f = new Fixture()) {
             doThrow(new RuntimeException("database unavailable")).when(f.db).upsertService(any());
             assertThrows(RuntimeException.class, () -> ServiceManager.createService(f.statement("rank-a")));
-            f.k8s.verifyNoInteractions();
+            f.k8s.verify(() -> K8sManager.applyYaml(any()));
+            assertFalse(f.services.containsKey("rank-a"));
+            doAnswer(invocation -> {
+                Service service = invocation.getArgument(0);
+                f.services.put(service.getName(), service);
+                return null;
+            }).when(f.db).upsertService(any());
+            var retry = (SqlCreateService) CompileManager.parseSql(
+                    "CREATE SERVICE IF NOT EXISTS `rank-a` ON MODEL `rank` WITH ('NAMESPACE'='test')");
+            assertEquals("rank-a", ServiceManager.createService(retry));
+            f.k8s.verify(() -> K8sManager.applyYaml(any()), times(2));
+            assertNotNull(f.services.get("rank-a"));
+        }
+    }
+
+    @Test
+    void reconcilesUnfinishedCheckpointBeforeCreatingService() throws Exception {
+        for (String actual : List.of("running", "succeeded", "failed")) {
+            try (Fixture f = new Fixture()) {
+                Checkpoint checkpoint = new Checkpoint();
+                checkpoint.setModelName("rank");
+                checkpoint.setCheckpointName("v1");
+                checkpoint.setModelDdl(Fixture.MODEL_DDL);
+                checkpoint.setCheckpointType(Consts.CHECKPOINT_TYPE_EXPORT);
+                checkpoint.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
+                checkpoint.setYaml("shared-export-job");
+                when(f.db.getCheckpoint("rank", "v1")).thenReturn(checkpoint);
+                f.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
+                        .thenReturn(new K8sManager.JobStatus(actual, null));
+                var statement = (SqlCreateService) CompileManager.parseSql(
+                        "CREATE SERVICE `rank-a` ON MODEL `rank` CHECKPOINT='v1' WITH ('NAMESPACE'='test')");
+
+                if (actual.equals("succeeded")) {
+                    assertEquals("rank-a", ServiceManager.createService(statement));
+                    assertNotNull(f.services.get("rank-a"));
+                } else {
+                    assertThrows(IllegalArgumentException.class, () -> ServiceManager.createService(statement));
+                    verify(f.db, never()).upsertService(any());
+                    f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+                }
+                assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
+                        checkpoint.getStatus());
+                verify(f.db, times(actual.equals("running") ? 0 : 1)).upsertCheckpoint(checkpoint);
+                f.k8s.verify(() -> K8sManager.deleteYaml(any()), never());
+            }
         }
     }
 

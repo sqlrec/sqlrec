@@ -99,6 +99,8 @@ Checkpoint types are:
 
 Checkpoint names identify versioned results. TRAIN reuses running/succeeded targets and preserves stored data on failed retries. Retries use the current SQL; supply training input and options again. EXPORT validates and recreates existing targets unless referenced by a service. Sources and targets must differ; export sources must be succeeded origin checkpoints.
 
+The database status `created` means submitted but not yet confirmed complete. Before service creation or model export, SQLRec checks the source checkpoint against Kubernetes and updates its stored status; running or failed checkpoints cannot be consumed. Service metadata is saved only after Kubernetes resource submission succeeds. A submission failure preserves the saved service configuration; if submission succeeds but the database write fails, retry creation.
+
 ## Lifecycle for a Trained Model
 
 Training, export, and self-hosted serving require the [full service environment](../operations/deployment.md), including Kubernetes and model storage. The Docker demo does not provide these components. Prepare an accessible `training_sample` table with fields compatible with the model before running the statements.

@@ -74,13 +74,11 @@ public class Cli implements Callable<Integer> {
         SqlExecutor sqlExecutor = new SqlExecutor();
 
         if (inlineSql != null) {
-            executeStatements(sqlExecutor, inlineSql);
-            return 0;
+            return executeStatements(sqlExecutor, inlineSql, true);
         }
         if (sqlFile != null) {
             String content = Files.readString(sqlFile);
-            executeStatements(sqlExecutor, content);
-            return 0;
+            return executeStatements(sqlExecutor, content, true);
         }
 
         return runInteractive(sqlExecutor);
@@ -88,13 +86,20 @@ public class Cli implements Callable<Integer> {
 
     // ===================== Batch / interactive execution =====================
 
-    private void executeStatements(SqlExecutor sqlExecutor, String text) {
+    private int executeStatements(SqlExecutor sqlExecutor, String text, boolean failFast) {
+        int exitCode = 0;
         for (String stmt : SqlStatementUtils.splitStatements(text)) {
-            runSql(sqlExecutor, stmt);
+            if (!runSql(sqlExecutor, stmt)) {
+                exitCode = 1;
+                if (failFast) {
+                    break;
+                }
+            }
         }
+        return exitCode;
     }
 
-    private void runSql(SqlExecutor sqlExecutor, String sql) {
+    private boolean runSql(SqlExecutor sqlExecutor, String sql) {
         long start = System.currentTimeMillis();
         try {
             CacheTable result = sqlExecutor.executeSql(sql);
@@ -105,8 +110,15 @@ public class Cli implements Callable<Integer> {
             List<String> lines = new ArrayList<>(SqlOutputFormatter.format(rows, fields, outputFormat));
             lines.add("Time: " + duration + " ms, " + rows.size() + " row(s)");
             printLines(lines);
+            return true;
         } catch (Exception e) {
-            printLines(List.of("exec error: ", ExceptionUtils.getStackTrace(e)));
+            if (reader == null) {
+                System.err.println("exec error: ");
+                System.err.println(ExceptionUtils.getStackTrace(e));
+            } else {
+                printLines(List.of("exec error: ", ExceptionUtils.getStackTrace(e)));
+            }
+            return false;
         }
     }
 
@@ -178,7 +190,7 @@ public class Cli implements Callable<Integer> {
             if (line == null || line.trim().isEmpty()) {
                 continue;
             }
-            executeStatements(sqlExecutor, line);
+            executeStatements(sqlExecutor, line, false);
         }
     }
 }

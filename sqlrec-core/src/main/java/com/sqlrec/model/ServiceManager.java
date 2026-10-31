@@ -68,13 +68,25 @@ public class ServiceManager {
             return serviceName;
         }
 
-        Service service = saveServiceInDb(sqlCreateService, db, false, false);
+        Service service = buildService(sqlCreateService, db, false, false);
         K8sManager.applyYaml(service.getYaml());
+        persistService(db, service);
 
         return service.getName();
     }
 
     public static Service saveServiceInDb(
+            SqlCreateService sqlCreateService,
+            MetadataAccess db,
+            boolean skipCheckpoint,
+            boolean skipK8sYaml
+    ) throws Exception {
+        Service service = buildService(sqlCreateService, db, skipCheckpoint, skipK8sYaml);
+        persistService(db, service);
+        return service;
+    }
+
+    private static Service buildService(
             SqlCreateService sqlCreateService,
             MetadataAccess db,
             boolean skipCheckpoint,
@@ -98,6 +110,7 @@ public class ServiceManager {
             if (checkpoint == null) {
                 throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }
+            ModelManager.refreshCheckpointStatus(db, checkpoint);
             if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
                 throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }
@@ -129,9 +142,12 @@ public class ServiceManager {
         service.setUpdatedAt(System.currentTimeMillis());
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
+        return service;
+    }
+
+    private static void persistService(MetadataAccess db, Service service) {
         db.upsertService(service);
         serviceConfigCache.invalidate(service.getName());
-        return service;
     }
 
     public static void deleteService(String serviceName) {

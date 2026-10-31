@@ -75,6 +75,8 @@ call demo_rec(quick_start_user);
 
 `quick_start_user` 是推荐函数的输入表。按 `Ctrl+D` 退出 SQL 命令行。
 
+使用 `cli.sh -e "SQL;"` 或 `cli.sh -f statements.sql` 批量执行时，任一 SQL 失败会停止后续语句并返回退出码 `1`，错误写入 stderr；全部成功返回 `0`。交互模式下，SQL 失败后仍可继续输入。
+
 ::: tip Demo 数据范围
 数据只保存在内存中。CLI 与 HTTP 服务使用各自的数据，CLI 中的修改不会影响 API；重新进入 CLI 会恢复初始数据，重启容器会重置 HTTP 服务的数据。
 

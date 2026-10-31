@@ -2,6 +2,9 @@ package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.frontend.utils.RestUtils;
 import com.sqlrec.frontend.utils.PrometheusMetricsUtils;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.buffer.Unpooled;
@@ -16,16 +19,65 @@ import io.netty.util.CharsetUtil;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class HttpServerHandlerTest {
+
+    @Test
+    void groupsUiAndUnknownPathsButPreservesApiPathsAndMethods() throws Exception {
+        UiHandler ui = mock(UiHandler.class);
+        when(ui.handleRequest(anyString(), anyMap())).thenAnswer(invocation -> RestUtils.ok("[]"));
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MetricsUtils.getCompositeMeterRegistry().add(registry);
+        EmbeddedChannel channel = new EmbeddedChannel(new HttpServerHandler(ui));
+        try {
+            for (int i = 0; i < 100; i++) {
+                for (String path : List.of("/unknown/" + i, "/api/v1/api_" + (i % 2) + "?trace=" + i,
+                        "/ui/api/models/model_" + i, "/ui/static/asset_" + i + ".js")) {
+                    channel.writeInbound(new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path));
+                    FullHttpResponse response = channel.readOutbound();
+                    assertNotNull(response);
+                    response.release();
+                }
+                channel.writeInbound(new DefaultFullHttpRequest(HttpVersion.HTTP_1_1,
+                        HttpMethod.valueOf("CUSTOM" + i), "/unknown/" + i));
+                FullHttpResponse response = channel.readOutbound();
+                assertNotNull(response);
+                response.release();
+            }
+            channel.runPendingTasks();
+            var timers = registry.find(Consts.METRICS_HTTP_REQUEST_DURATION).timers();
+            Set<String> paths = timers.stream().filter(timer -> timer.count() > 0)
+                    .map(timer -> timer.getId().getTag("path"))
+                    .collect(Collectors.toSet());
+            assertTrue(Set.of("/api/v1/api_0", "/api/v1/api_1", "/ui/static/*", "/ui/api/*", "unmatched")
+                    .containsAll(paths), paths.toString());
+            for (int i = 0; i < 100; i++) {
+                assertEquals(1, registry.find(Consts.METRICS_HTTP_REQUEST_DURATION)
+                        .tags("path", "unmatched", "method", "CUSTOM" + i, "status", "404").timer().count());
+            }
+            for (int i = 0; i < 2; i++) {
+                assertEquals(50, registry.find(Consts.METRICS_HTTP_REQUEST_DURATION)
+                        .tags("path", "/api/v1/api_" + i, "method", "GET", "status", "405").timer().count());
+            }
+        } finally {
+            channel.finishAndReleaseAll();
+            MetricsUtils.getCompositeMeterRegistry().remove(registry);
+            registry.close();
+        }
+    }
 
     @Test
     void routesMetricsRequestByPathWhenQueryStringIsPresent() {

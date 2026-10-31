@@ -176,6 +176,7 @@ public class ModelManager {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
 
+        refreshCheckpointStatus(db, sourceCheckpoint);
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(sourceCheckpoint.getStatus())) {
             throw new IllegalArgumentException("Export source checkpoint must be succeeded: "
                     + sourceCheckpoint.getCheckpointName());
@@ -371,19 +372,10 @@ public class ModelManager {
 
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
                 String k8sYaml = checkpoint.getYaml();
-                if (StringUtils.isEmpty(k8sYaml)) {
-                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
-                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName() + " (k8sYaml is empty)");
-                    continue;
-                }
-
-                K8sManager.JobStatus jobStatus = jobStatuses.computeIfAbsent(
-                        k8sYaml, K8sManager::checkJobsStatusDetailFromYaml);
+                K8sManager.JobStatus jobStatus = refreshCheckpointStatus(db, checkpoint, jobStatuses);
                 if ("succeeded".equals(jobStatus.state())) {
-                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
                     yamlsToDelete.add(k8sYaml);
                 } else if ("failed".equals(jobStatus.state())) {
-                    updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
                     failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName()
                             + (jobStatus.detail() == null ? "" : " (" + jobStatus.detail() + ")"));
                 } else {
@@ -403,6 +395,28 @@ public class ModelManager {
         }
 
         return allCompleted;
+    }
+
+    /** Reconcile an unfinished checkpoint before consuming it, without deleting shared Jobs. */
+    static void refreshCheckpointStatus(MetadataAccess db, Checkpoint checkpoint) {
+        refreshCheckpointStatus(db, checkpoint, new HashMap<>());
+    }
+
+    private static K8sManager.JobStatus refreshCheckpointStatus(
+            MetadataAccess db, Checkpoint checkpoint, Map<String, K8sManager.JobStatus> jobStatuses) {
+        if (!Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())) {
+            return new K8sManager.JobStatus(checkpoint.getStatus(), null);
+        }
+        String yaml = checkpoint.getYaml();
+        K8sManager.JobStatus status = StringUtils.isEmpty(yaml)
+                ? new K8sManager.JobStatus("failed", "k8sYaml is empty")
+                : jobStatuses.computeIfAbsent(yaml, K8sManager::checkJobsStatusDetailFromYaml);
+        if ("succeeded".equals(status.state())) {
+            updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
+        } else if ("failed".equals(status.state())) {
+            updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
+        }
+        return status;
     }
 
     static boolean canReuseCreatedCheckpoint(MetadataAccess db, Checkpoint checkpoint) {

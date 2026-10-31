@@ -12,20 +12,73 @@ import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
+import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CliTest {
+    @Test
+    void inlineBatchReturnsNonzeroAndStopsAfterFirstFailure() throws Exception {
+        assertBatchFailure("-e", "select 1; select 2;");
+    }
+
+    @Test
+    void fileBatchReturnsNonzeroAndStopsAfterFirstFailure(@TempDir Path directory) throws Exception {
+        Path sql = directory.resolve("batch.sql");
+        Files.writeString(sql, "select 1; select 2;");
+        assertBatchFailure("-f", sql.toString());
+    }
+
+    @Test
+    void successfulBatchReturnsZeroAndExecutesEveryStatement() throws Exception {
+        try (MockedConstruction<SqlExecutor> executors = mockConstruction(SqlExecutor.class,
+                (executor, context) -> when(executor.executeSql(anyString())).thenReturn(new CacheTable(
+                        "result", Linq4j.singletonEnumerable(new Object[]{"done"}),
+                        DataTypeUtils.getStringTypeField("value"))))) {
+            assertEquals(0, new CommandLine(new Cli()).execute("-e", "select 1; select 2;"));
+            var order = inOrder(executors.constructed().getFirst());
+            order.verify(executors.constructed().getFirst()).executeSql("select 1");
+            order.verify(executors.constructed().getFirst()).executeSql("select 2");
+        }
+    }
+
+    private static void assertBatchFailure(String... arguments) throws Exception {
+        PrintStream originalOutput = System.out;
+        PrintStream originalError = System.err;
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+        try (PrintStream capturedOutput = new PrintStream(output, true, StandardCharsets.UTF_8);
+             PrintStream capturedError = new PrintStream(error, true, StandardCharsets.UTF_8);
+             MockedConstruction<SqlExecutor> executors = mockConstruction(SqlExecutor.class,
+                     (executor, context) -> when(executor.executeSql("select 1"))
+                             .thenThrow(new IllegalArgumentException("batch SQL failed")))) {
+            System.setOut(capturedOutput);
+            System.setErr(capturedError);
+            assertEquals(1, new CommandLine(new Cli()).execute(arguments));
+            SqlExecutor executor = executors.constructed().getFirst();
+            verify(executor).executeSql("select 1");
+            verify(executor, never()).executeSql("select 2");
+            assertTrue(error.toString(StandardCharsets.UTF_8).contains("batch SQL failed"));
+            assertEquals("", output.toString(StandardCharsets.UTF_8));
+        } finally {
+            System.setOut(originalOutput);
+            System.setErr(originalError);
+        }
+    }
+
     @Test
     void preservesCommentsAsTokenSeparatorsAndQuotedSemicolonsInInteractiveInput() throws Throwable {
         try (InteractiveFixture fixture = new InteractiveFixture()) {

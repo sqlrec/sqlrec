@@ -168,7 +168,7 @@ sum by (name) (rate(sqlrec_node_exec_duration_seconds_sum[5m]))
 sum by (name) (rate(sqlrec_node_exec_duration_seconds_count[5m]))
 ```
 
-HTTP 指标的 `path` 使用实际请求路径，不包含查询参数，例如 `/api/v1/demo_rec?trace=true` 记为 `/api/v1/demo_rec`。API、UI、未知路径及查询参数解析失败的请求均保留实际路径，不使用模板或统一占位值。具体 API 的执行结果使用 `sqlrec_api_execution_duration_seconds_*{api="demo_rec",outcome="success"}`；SQL statement 使用 `sqlrec_sql_execution_duration_seconds_*`，可以观察 HTTP 200 内部的 SQL 失败。节点与表执行统一使用 `outcome` 标签，节点取消另有 `phase=before_start/running`，不能把取消事件与 Timer 的 cancelled 次数相加。
+HTTP 指标中，`/api/v1/` 开头的请求保留完整路径，仅去掉查询参数；例如 `/api/v1/demo_rec?trace=true` 记为 `/api/v1/demo_rec`。其他路径使用 `/sql/v1`、`/metrics`、`/ui/api/*`、`/ui/static/*` 和未知路径 `unmatched` 分组。`method` 保留请求的原始方法名，不进行转换。具体 API 的执行结果使用 `sqlrec_api_execution_duration_seconds_*{api="demo_rec",outcome="success"}`；SQL statement 使用 `sqlrec_sql_execution_duration_seconds_*`，可以观察 HTTP 200 内部的 SQL 失败。节点与表执行统一使用 `outcome` 标签，节点取消另有 `phase=before_start/running`，不能把取消事件与 Timer 的 cancelled 次数相加。
 
 在进程环境中配置 `METRICS_TAG_KEYS=scene,experiment`，统一打点 helper 会从当前执行变量提取同名值，直接导出为 `scene`、`experiment`。配置为空时不附加业务标签；解析时 trim、忽略空项并去重，配置在启动时固定，请求不能覆盖。缺失、null、空白值统一为空字符串；与当前指标的系统标签同名时，系统标签优先。未配置变量（包括 log_id）不会自动导出。HTTP 与表指标不继承业务维度，API/SQL/节点、分支/降级、特征覆盖指标支持它。打点时读取当前变量值，同一事件复用一份标签快照；不会更改业务原值。直方图与注册失败回调在实际 Prometheus registry 初始化时配置，composite 仅负责分发指标。
 

@@ -75,6 +75,8 @@ call demo_rec(quick_start_user);
 
 `quick_start_user` is the function's input table. Press `Ctrl+D` to exit.
 
+For batch execution with `cli.sh -e "SQL;"` or `cli.sh -f statements.sql`, a SQL failure stops subsequent statements and returns exit code `1`, with errors written to stderr. Successful batches return `0`. Interactive SQL errors still allow further input.
+
 ::: tip Demo Data Scope
 Data is held in memory. The CLI and HTTP service have separate data, so CLI changes do not affect the API. Reopening the CLI restores its initial data; restarting the container resets the HTTP service's data.
 
