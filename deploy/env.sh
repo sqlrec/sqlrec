@@ -1,4 +1,4 @@
-export SQLREC_VERSION="${SQLREC_VERSION:-0.1.18}"
+export SQLREC_VERSION="${SQLREC_VERSION:-0.1.19}"
 
 # Bootstrap
 # Resolve the sourced file without changing directories in zsh. An interactive
