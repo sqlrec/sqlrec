@@ -44,10 +44,10 @@ CASES = (
           'image_download_timeout_ms': 30000}, ('embedding',), 32),
 )
 
-IMAGE_REVISION = '9dd8e4710f6b2ddf5184d308639e0359bc7b55be'
-IMAGE_BASE = ('https://huggingface.co/datasets/huggingface/documentation-images/resolve/'
-              + IMAGE_REVISION)
-IMAGE_URLS = (IMAGE_BASE + '/coco_sample.png', IMAGE_BASE + '/hub/parrots.png')
+# Small, versioned fixtures served directly, avoiding Hub dataset CDN redirects.
+IMAGE_REVISION = '4.10.0'
+IMAGE_BASE = f'https://raw.githubusercontent.com/opencv/opencv/{IMAGE_REVISION}/samples/data'
+IMAGE_URLS = (IMAGE_BASE + '/lena.jpg', IMAGE_BASE + '/fruits.jpg')
 
 
 def input_rows(case):

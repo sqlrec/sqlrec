@@ -73,7 +73,7 @@ class DownloadContractTest(unittest.TestCase):
     def resource(self, directory, checkpoint_type):
         env = SimpleNamespace(kubectl='kubectl', train_resources={'NAMESPACE': 'test', 'pod_cpu_cores': 1})
         resource = HuggingFaceResources('hf_test', env, Path(directory), Mock())
-        resource.workloads = Mock()
+        resource.workloads = Mock(namespace=env.train_resources['NAMESPACE'])
         resource.workloads.get.return_value = None
         resource.execute = Mock()
         resource.checkpoint = Mock(return_value={'Status:': 'succeeded', 'Checkpoint Type:': checkpoint_type})

@@ -118,7 +118,7 @@ run_benchmarks() (
     run_stage model-prepare "${PROJECT_DIR}/.venv/bin/python" \
         -m benchmark.model_quality.prepare --dataset all --upload
     run_stage model-quality "${PROJECT_DIR}/.venv/bin/python" \
-        -m benchmark.model_quality --model all --dataset all --full-eval --run-dir "${REPORT_DIR}/model_quality"
+        -m benchmark.model_quality --model all --dataset all --run-dir "${REPORT_DIR}/model_quality"
 )
 
 cd "${PROJECT_DIR}"

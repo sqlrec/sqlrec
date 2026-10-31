@@ -22,9 +22,15 @@ Weights total about 1.15 MB across the three distinct checkpoints. Each case
 downloads its own snapshot; all five cases download about 2.2 MB of weights.
 Configuration, tokenizer files, test images and the runtime container are extra.
 Only the necessary safetensors and processor files are downloaded, excluding
-TensorFlow, pickle, ONNX and duplicate weight formats. Commit revisions are
-pinned in [`config.py`](config.py), including the public test image URLs.
+TensorFlow, pickle, ONNX and duplicate weight formats. Model commit revisions
+and versioned public test image URLs are fixed in [`config.py`](config.py).
 No Hub token or `trust_remote_code` is required.
+
+The image case uses OpenCV 4.10.0's `lena.jpg` (about 92 KB) and `fruits.jpg`
+(about 82 KB), served directly from `raw.githubusercontent.com`. These small
+fixtures avoid the Hugging Face dataset CDN redirect path. The three input
+rows use the first image, the second image, and the first image again to check
+consistency across internal batch boundaries.
 
 ## Run
 
