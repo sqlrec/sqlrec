@@ -860,4 +860,6 @@ GPU 推理可设置 `'device' = 'cuda', 'pod_gpu' = '1'`；还需要集群提供
 文本 embedding 可配置 `pooling`（默认 `mean`）和 `normalize`（默认 `true`）；文本分类可用 `text_pair_column` 指定第二个文本列。文本生成可配置 `max_new_tokens`（默认 `128`）、`do_sample`（默认 `false`）、`temperature` 和 `top_p`。
 
 图片 embedding 的 `image_column` 必须包含 HTTP/HTTPS URL。需要限制下载来源或大小时，可设置 `image_url_allowed_hosts`、`image_download_timeout_ms`（默认 `5000`）、`image_max_bytes`（默认 10 MiB）和 `image_max_pixels`（默认 2000 万）。
+
+图片下载不进行额外的 DNS 公网地址检查，DNS 解析和代理路由交由 HTTP 客户端及网络环境处理，可使用 Fake-IP 代理和内网图片 URL。`image_url_allowed_hosts` 默认空，允许任意 HTTP/HTTPS 主机；设置后按完整主机名匹配，并在每次重定向时重新检查。下载大小、像素数量、超时及重定向次数限制仍然生效。Python 运行时修改后需重新构建并使用最新的 Transformers 镜像。
 :::

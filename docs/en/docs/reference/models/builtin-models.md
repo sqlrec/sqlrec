@@ -846,4 +846,6 @@ For GPU inference, set `'device' = 'cuda', 'pod_gpu' = '1'`. The cluster also ne
 Text embeddings support `pooling` (default `mean`) and `normalize` (default `true`). Text classification can use `text_pair_column` for a second text column. Text generation supports `max_new_tokens` (default `128`), `do_sample` (default `false`), `temperature`, and `top_p`.
 
 For image embeddings, `image_column` must contain HTTP/HTTPS URLs. Limit downloads with `image_url_allowed_hosts`, `image_download_timeout_ms` (default `5000`), `image_max_bytes` (default 10 MiB), and `image_max_pixels` (default 20 million).
+
+Image downloads do not perform an additional public-IP DNS check. DNS resolution and proxy routing are handled by the HTTP client and network environment, allowing Fake-IP proxies and private image URLs. `image_url_allowed_hosts` defaults to empty, allowing any HTTP/HTTPS host. When configured, hosts must match exactly and every redirect is checked again. Download size, pixel count, timeout and redirect limits still apply. Rebuild and use the updated Transformers runtime image after changing the Python implementation.
 :::

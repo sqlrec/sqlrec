@@ -1,9 +1,7 @@
-"""Bounded, SSRF-resistant HTTP image loading."""
+"""Bounded HTTP image loading with optional host restrictions."""
 from __future__ import annotations
 
 import io
-import ipaddress
-import socket
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -26,16 +24,6 @@ class ImageUrlLoader:
         host = parsed.hostname.lower()
         if self.allowed_hosts and host not in self.allowed_hosts:
             raise ValueError(f"image URL host is not allowed: {host}")
-        try:
-            addresses = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
-        except socket.gaierror as exc:
-            raise ValueError(f"unable to resolve image URL host: {host}") from exc
-        if not addresses:
-            raise ValueError(f"unable to resolve image URL host: {host}")
-        for address in addresses:
-            ip = ipaddress.ip_address(address[4][0])
-            if not ip.is_global:
-                raise ValueError("image URL resolves to a non-public address")
 
     def load(self, url: str) -> Image.Image:
         current = url

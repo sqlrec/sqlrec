@@ -1,0 +1,2 @@
+# Reuse the public SQL clients and model lifecycle helpers; no local torch runtime.
+-r ../model_quality/requirements.txt

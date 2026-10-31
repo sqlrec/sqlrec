@@ -12,7 +12,7 @@ Usage: bash bin/test.sh [-all|--all] [Maven arguments...]
 Without -all, run Maven tests against an existing deployment.
 With -all, cache images from the existing Minikube environment, delete it,
 rebuild Minikube, download resources, and deploy all test dependencies.
-Run Maven tests, then run SQL performance and model quality benchmarks.
+Run Maven tests, then SQL performance, Hugging Face and model quality benchmarks.
 Remaining arguments are passed to Maven unchanged.
 EOF
 }
@@ -74,8 +74,10 @@ run_benchmarks() (
     source "${PROJECT_DIR}/deploy/env.sh"
     run_stage "Prepare SQL performance benchmark" bash "${PROJECT_DIR}/benchmark/sql_performance/init.sh"
     run_stage "Run SQL performance benchmark" bash "${PROJECT_DIR}/benchmark/sql_performance/benchmark.sh"
-    run_stage "Install model quality dependencies" "${PROJECT_DIR}/.venv/bin/python" -m pip install \
+    run_stage "Install model benchmark dependencies" "${PROJECT_DIR}/.venv/bin/python" -m pip install \
         -r "${PROJECT_DIR}/benchmark/model_quality/requirements.txt"
+    run_stage "Run Hugging Face integration benchmark" "${PROJECT_DIR}/.venv/bin/python" \
+        -m benchmark.huggingface --task all
     run_stage "Prepare all model quality datasets" "${PROJECT_DIR}/.venv/bin/python" \
         -m benchmark.model_quality.prepare --dataset all --upload
     run_stage "Run all model quality benchmarks" "${PROJECT_DIR}/.venv/bin/python" \
