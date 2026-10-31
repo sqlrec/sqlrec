@@ -654,6 +654,8 @@ CALL get_growthbook_features(
 SELECT `get`('new_recommendation_algo') AS algo;
 ```
 
+For an end-to-end check, run `bash benchmark/growthbook/test.sh`. It deploys GrowthBook, creates real experiments and linked features through its APIs, verifies assignments, tracking rows and execution variables, and cleans up the run's resources. See `benchmark/growthbook/README.md`.
+
 **Notes**:
 - `apiHost` and `clientKey` cannot be empty
 - `usertable` cannot be null

@@ -31,6 +31,13 @@ spec:
         ports:
         - containerPort: 3000
         - containerPort: 3100
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 3100
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
         env:
         - name: MONGODB_URI
           value: mongodb://${GROWTHBOOK_MONGODB_USER}:${GROWTHBOOK_MONGODB_PASSWORD}@${NODE_IP}:${GROWTHBOOK_MONGODB_PORT}/growthbook?authSource=admin

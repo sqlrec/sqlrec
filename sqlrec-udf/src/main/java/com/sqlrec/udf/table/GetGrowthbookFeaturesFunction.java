@@ -1,25 +1,39 @@
 package com.sqlrec.udf.table;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.github.benmanes.caffeine.cache.Scheduler;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.RowJsonEncoder;
+import growthbook.sdk.java.GrowthBook;
+import growthbook.sdk.java.callback.FeatureRefreshCallback;
+import growthbook.sdk.java.model.GBContext;
 import growthbook.sdk.java.model.ExperimentResult;
 import growthbook.sdk.java.model.FeatureResult;
-import growthbook.sdk.java.multiusermode.GrowthBookClient;
-import growthbook.sdk.java.multiusermode.configurations.Options;
-import growthbook.sdk.java.multiusermode.configurations.UserContext;
+import growthbook.sdk.java.repository.GBFeaturesRepository;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class GetGrowthbookFeaturesFunction {
 
-    private static final ConcurrentHashMap<String, GrowthBookClient> CLIENT_CACHE = new ConcurrentHashMap<>();
+    static final Cache<String, FeatureClient> CLIENT_CACHE = Caffeine.newBuilder()
+            .maximumSize(64)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .scheduler(Scheduler.systemScheduler())
+            .removalListener((String key, FeatureClient client, RemovalCause cause) -> {
+                if (client != null) {
+                    client.close();
+                }
+            })
+            .build();
 
     private static String cacheKey(String apiHost, String clientKey) {
         return apiHost + "|" + clientKey;
@@ -43,9 +57,6 @@ public class GetGrowthbookFeaturesFunction {
             throw new IllegalArgumentException("featureKeys cannot be null or empty");
         }
 
-        // Get or create shared GrowthBookClient
-        GrowthBookClient gb = getOrCreateClient(apiHost, clientKey);
-
         List<Object[]> trackingData = new ArrayList<>();
         List<RelDataTypeField> userFields = usertable.getDataFields();
         List<Object[]> userEnumerable = usertable.scan(null).toList();
@@ -56,12 +67,11 @@ public class GetGrowthbookFeaturesFunction {
 
         Object[] row = userEnumerable.get(0);
         String attributesJson = RowJsonEncoder.toJsonByFields(row, userFields);
-        UserContext userContext = UserContext.builder()
-                .attributesJson(attributesJson)
-                .build();
+        GrowthBook gb = CLIENT_CACHE.get(cacheKey(apiHost, clientKey),
+                key -> new FeatureClient(apiHost, clientKey)).forUser(attributesJson);
 
         for (String featureKey : featureKeys) {
-            FeatureResult<?> result = gb.evalFeature(featureKey, Object.class, userContext);
+            FeatureResult<?> result = gb.evalFeature(featureKey, Object.class);
 
             if (result != null && result.getExperimentResult() != null) {
                 ExperimentResult<?> expResult = result.getExperimentResult();
@@ -89,20 +99,57 @@ public class GetGrowthbookFeaturesFunction {
         return new CacheTable("growthbook_tracking", Linq4j.asEnumerable(trackingData), dataFields);
     }
 
-    private static GrowthBookClient getOrCreateClient(String apiHost, String clientKey) {
-        String key = cacheKey(apiHost, clientKey);
-        return CLIENT_CACHE.computeIfAbsent(key, k -> {
-            Options options = Options.builder()
+    // SDK 0.10.10's multi-user facade has a process-wide static repository.
+    // Own the repository here and keep mutable evaluation state request-local.
+    static final class FeatureClient {
+        private final GBFeaturesRepository repository;
+        private volatile GBContext snapshot;
+
+        FeatureClient(String apiHost, String clientKey) {
+            repository = GBFeaturesRepository.builder()
                     .apiHost(apiHost)
                     .clientKey(clientKey)
+                    // The SDK's default disk cache is shared across keys.
+                    .isCacheDisabled(true)
                     .build();
-            GrowthBookClient client = new GrowthBookClient(options);
-            boolean initialized = client.initialize();
-            if (!initialized) {
-                throw new RuntimeException("Failed to initialize GrowthBook client, " +
-                        "please check apiHost and clientKey");
+            repository.onFeaturesRefresh(new FeatureRefreshCallback() {
+                @Override
+                public void onRefresh(String featuresJson) {
+                    snapshot = GBContext.builder()
+                            .features(repository.getParsedFeatures())
+                            .savedGroups(repository.getParsedSavedGroups())
+                            .build();
+                }
+
+                @Override
+                public void onError(Throwable error) {
+                    // The repository logs refresh failures. Retain the last
+                    // successful snapshot for existing clients.
+                }
+            });
+            try {
+                repository.initialize();
+                if (snapshot == null) {
+                    throw new IllegalStateException("No GrowthBook feature payload received");
+                }
+            } catch (Exception error) {
+                close();
+                throw new RuntimeException("Failed to initialize GrowthBook client, "
+                        + "please check apiHost and clientKey", error);
             }
-            return client;
-        });
+        }
+
+        GrowthBook forUser(String attributesJson) {
+            GBContext current = snapshot;
+            return new GrowthBook(GBContext.builder()
+                    .features(current.getFeatures())
+                    .savedGroups(current.getSavedGroups())
+                    .attributesJson(attributesJson)
+                    .build());
+        }
+
+        void close() {
+            repository.shutdown();
+        }
     }
 }

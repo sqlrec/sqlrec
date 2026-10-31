@@ -1,5 +1,6 @@
 package com.sqlrec.udf.table;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
@@ -31,10 +32,10 @@ public class GetGrowthbookFeaturesFunctionTest {
     private static final String FEATURE_KEY = "test";
 
     @SuppressWarnings("unchecked")
-    private ConcurrentHashMap<String, ?> getClientCache() throws Exception {
+    private Cache<String, ?> getClientCache() throws Exception {
         Field field = GetGrowthbookFeaturesFunction.class.getDeclaredField("CLIENT_CACHE");
         field.setAccessible(true);
-        return (ConcurrentHashMap<String, ?>) field.get(null);
+        return (Cache<String, ?>) field.get(null);
     }
 
     private CacheTable createUserTable(List<Object[]> rows) {
@@ -58,9 +59,9 @@ public class GetGrowthbookFeaturesFunctionTest {
         func.evaluate(createContext(), API_HOST, CLIENT_KEY, usertable, FEATURE_KEY);
         func.evaluate(createContext(), API_HOST, CLIENT_KEY, usertable, FEATURE_KEY);
 
-        ConcurrentHashMap<String, ?> cache = getClientCache();
-        assertEquals(1, cache.size(), "Same apiHost+clientKey should reuse the same client instance");
-        assertTrue(cache.containsKey(API_HOST + "|" + CLIENT_KEY));
+        Cache<String, ?> cache = getClientCache();
+        assertEquals(1, cache.estimatedSize(), "Same apiHost+clientKey should reuse the same client instance");
+        assertNotNull(cache.getIfPresent(API_HOST + "|" + CLIENT_KEY));
     }
 
 //    @Test
@@ -103,8 +104,8 @@ public class GetGrowthbookFeaturesFunctionTest {
         assertEquals(threadCount * iterationsPerThread, successCount.get(), "All evaluations should succeed");
         assertEquals(0, errorCount.get(), "No errors should occur");
 
-        ConcurrentHashMap<String, ?> cache = getClientCache();
-        assertEquals(1, cache.size(), "Same key should create only one client instance");
+        Cache<String, ?> cache = getClientCache();
+        assertEquals(1, cache.estimatedSize(), "Same key should create only one client instance");
     }
 
 //    @Test

@@ -1,0 +1,2 @@
+# Share SQLRec's public SQL/HTTP clients; evaluation below uses an independent oracle.
+-r ../model_quality/requirements.txt

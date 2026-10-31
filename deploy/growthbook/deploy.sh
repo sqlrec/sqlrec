@@ -10,5 +10,5 @@ bash "${dir}/../mongodb/deploy.sh" "${GROWTHBOOK_MONGODB_NAME}" \
   "${GROWTHBOOK_MONGODB_PORT}" "${GROWTHBOOK_MONGODB_USER}" "${GROWTHBOOK_MONGODB_PASSWORD}"
 
 render_config "${dir}/growthbook.yaml"
-kubectl apply -f "${dir}/growthbook.yaml.tmp" -n ${NAMESPACE}
-kubectl wait --for=condition=Available deployment/${GROWTHBOOK_NAME} --timeout=${DEPLOY_TIMEOUT}s -n ${NAMESPACE}
+kubectl apply -f "${dir}/growthbook.yaml.tmp" -n "${NAMESPACE}"
+kubectl rollout status "deployment/${GROWTHBOOK_NAME}" --timeout="${DEPLOY_TIMEOUT}s" -n "${NAMESPACE}"

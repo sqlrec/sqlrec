@@ -654,6 +654,8 @@ CALL get_growthbook_features(
 SELECT `get`('new_recommendation_algo') AS algo;
 ```
 
+完整集成验证见 `benchmark/growthbook/README.md`：运行 `bash benchmark/growthbook/test.sh`，自动部署 GrowthBook，通过 API 创建真实实验及关联 feature，再验证分组、曝光记录和执行变量，并清理本轮测试资源。
+
 **注意事项**：
 - `apiHost` 和 `clientKey` 不能为空
 - `usertable` 不能为空
