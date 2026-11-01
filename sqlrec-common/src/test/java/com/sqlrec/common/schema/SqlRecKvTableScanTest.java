@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -112,6 +113,43 @@ class SqlRecKvTableScanTest {
         assertEquals(0, table.lookupCount);
     }
 
+    @Test
+    void uncachedLookupNormalizesBackendKeysAndRows() {
+        CandidateTable table = new CandidateTable(true);
+
+        Map<Object, List<Object[]>> rows = table.getByPrimaryKey(Set.of("1", BigDecimal.valueOf(2)));
+
+        assertEquals(Set.of(1, 2), table.requestedKeys);
+        assertEquals(Set.of(1, 2), rows.keySet());
+        assertEquals(1, rows.get(1).get(0)[0]);
+        assertEquals(2, rows.get(2).get(0)[0]);
+        assertEquals("Bob", rows.get(2).get(0)[1]);
+        table.getByPrimaryKey(Set.of(1));
+        assertEquals(2, table.lookupCount, "disabled caching must query the backend again");
+    }
+
+    @Test
+    void cachedLookupLoadsOnlyMissingKeysAndCachesNormalizedRows() {
+        CandidateTable table = new CandidateTable(true);
+        table.initCache(100, 60);
+        table.getByPrimaryKey(Set.of("1"));
+
+        Map<Object, List<Object[]>> rows = table.getByPrimaryKey(Set.of(1L, "2", 3));
+
+        assertEquals(Set.of(2, 3), table.requestedKeys);
+        assertEquals(Set.of(1, 2), rows.keySet(), "absent backend rows must remain absent");
+        assertEquals(1, rows.get(1).get(0)[0]);
+        assertEquals(2, rows.get(2).get(0)[0]);
+        assertSame(rows.get(2), table.getCachedByPrimaryKey(Set.of(2L)).get(2));
+        assertTrue(table.getCachedByPrimaryKey(Set.of(3)).isEmpty());
+
+        Map<Object, List<Object[]>> cached = table.getByPrimaryKey(Set.of("1", 2L));
+        assertEquals(Set.of(1, 2), cached.keySet());
+        assertSame(rows.get(1), cached.get(1));
+        assertSame(rows.get(2), cached.get(2));
+        assertEquals(2, table.lookupCount, "fully cached lookups must not query the backend");
+    }
+
     private static final class CandidateTable extends SqlRecKvTable {
         private final boolean primaryKeyOnly;
         private boolean scanImplCalled;
@@ -139,8 +177,16 @@ class SqlRecKvTableScanTest {
         public Map<Object, List<Object[]>> getByPrimaryKeyImpl(Set<Object> keySet) {
             lookupCount++;
             requestedKeys = keySet;
-            return Collections.singletonMap(1,
-                    Collections.singletonList(new Object[]{1, "Alice"}));
+            Map<Object, List<Object[]>> rows = new HashMap<>();
+            for (Object key : keySet) {
+                int id = (Integer) key;
+                if (id == 1 || id == 2) {
+                    // Backend key and cell representations differ from the declared INTEGER type.
+                    rows.put(String.valueOf(id),
+                            Collections.singletonList(new Object[]{(long) id, id == 1 ? "Alice" : "Bob"}));
+                }
+            }
+            return rows;
         }
 
         @Override

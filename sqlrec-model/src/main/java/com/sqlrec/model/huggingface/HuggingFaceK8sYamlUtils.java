@@ -71,7 +71,7 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
         }
         String name = serviceConf.getId();
         Map<String, String> params = PipelineConfigUtils.operationParams(model, serviceConf.getParams());
-        String serviceConfig = PipelineConfigUtils.generateServiceConfig(model, serviceConf.getParams());
+        String serviceConfig = PipelineConfigUtils.buildServiceConfig(model, params);
         String shell = ShellUtils.genServeShell(serviceConf.getModelCheckpointDir());
 
         ConfigMap configMap = new ConfigMapBuilder()

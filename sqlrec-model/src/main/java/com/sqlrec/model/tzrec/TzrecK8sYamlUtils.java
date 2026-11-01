@@ -5,7 +5,6 @@ import com.sqlrec.model.common.K8sYamlBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
-import io.fabric8.kubernetes.api.model.ProbeBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceBuilder;
@@ -151,7 +150,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
 
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
 
-        String yaml = createDeploymentYaml(
+        Deployment deployment = createDeployment(
                 deployName,
                 "tzrec-service",
                 image,
@@ -159,14 +158,7 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
                 buildRuntimeEnvVars(params),
                 params
         );
-        Deployment deployment = Serialization.unmarshal(yaml, Deployment.class);
-        var container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
-        container.setStartupProbe(new ProbeBuilder()
-                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
-                .withPeriodSeconds(5).withTimeoutSeconds(5).withFailureThreshold(120).build());
-        container.setReadinessProbe(new ProbeBuilder()
-                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
-                .withPeriodSeconds(5).withTimeoutSeconds(5).build());
+        addHealthProbes(deployment.getSpec().getTemplate().getSpec().getContainers().get(0));
         return Serialization.asYaml(deployment);
     }
 

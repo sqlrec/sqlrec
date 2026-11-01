@@ -3,7 +3,6 @@ package com.sqlrec.model.gbdt;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
 import com.sqlrec.model.gbdt.PipelineConfigUtils.ModelType;
-import io.fabric8.kubernetes.api.model.ProbeBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
@@ -53,7 +52,7 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
         // launches the C++ server binary (catboost_server / lightgbm_server).
         String serveShell = ShellUtils.genServeModelShell(modelType, modelCheckpointDir);
 
-        String yaml = createDeploymentYaml(
+        Deployment deployment = createDeployment(
                 deployName,
                 "gbdt-service",
                 image,
@@ -61,14 +60,7 @@ public class GbdtK8sYamlUtils extends K8sYamlBuilder {
                 null,
                 params
         );
-        Deployment deployment = Serialization.unmarshal(yaml, Deployment.class);
-        var container = deployment.getSpec().getTemplate().getSpec().getContainers().get(0);
-        container.setStartupProbe(new ProbeBuilder()
-                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
-                .withPeriodSeconds(5).withTimeoutSeconds(5).withFailureThreshold(120).build());
-        container.setReadinessProbe(new ProbeBuilder()
-                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
-                .withPeriodSeconds(5).withTimeoutSeconds(5).build());
+        addHealthProbes(deployment.getSpec().getTemplate().getSpec().getContainers().get(0));
         return Serialization.asYaml(deployment);
     }
 

@@ -4,8 +4,10 @@ import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.ServiceConf;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.ProbeBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
@@ -133,7 +135,7 @@ public class K8sYamlBuilder {
      *
      * @param envVars may be {@code null} to omit the env section entirely.
      */
-    protected static String createDeploymentYaml(
+    protected static Deployment createDeployment(
             String deployName,
             String containerName,
             String image,
@@ -141,7 +143,7 @@ public class K8sYamlBuilder {
             List<EnvVar> envVars,
             Map<String, String> params
     ) {
-        Deployment deployment = new DeploymentBuilder()
+        return new DeploymentBuilder()
                 .withNewMetadata()
                     .withName(deployName)
                 .endMetadata()
@@ -172,8 +174,15 @@ public class K8sYamlBuilder {
                     .endTemplate()
                 .endSpec()
                 .build();
+    }
 
-        return Serialization.asYaml(deployment);
+    protected static void addHealthProbes(Container container) {
+        container.setStartupProbe(new ProbeBuilder()
+                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
+                .withPeriodSeconds(5).withTimeoutSeconds(5).withFailureThreshold(120).build());
+        container.setReadinessProbe(new ProbeBuilder()
+                .withNewHttpGet().withPath("/health").withNewPort(80).endHttpGet()
+                .withPeriodSeconds(5).withTimeoutSeconds(5).build());
     }
 
     /**

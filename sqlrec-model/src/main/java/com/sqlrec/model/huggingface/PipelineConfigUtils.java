@@ -50,7 +50,11 @@ public final class PipelineConfigUtils {
     }
 
     public static String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        Map<String, String> params = operationParams(model, trainConf.getParams());
+        return buildTrainConfig(model, trainConf, operationParams(model, trainConf.getParams()));
+    }
+
+    /** Builds training JSON from merged, validated operation parameters. */
+    static String buildTrainConfig(ModelConf model, ModelTrainConf trainConf, Map<String, String> params) {
         JsonObject config = new JsonObject();
         config.addProperty("framework", "huggingface.transformers");
         config.addProperty("model_name", model.getModelName());
@@ -83,7 +87,11 @@ public final class PipelineConfigUtils {
     }
 
     public static String generateServiceConfig(ModelConf model, Map<String, String> serviceParams) {
-        Map<String, String> params = operationParams(model, serviceParams);
+        return buildServiceConfig(model, operationParams(model, serviceParams));
+    }
+
+    /** Builds serving JSON from merged, validated operation parameters. */
+    static String buildServiceConfig(ModelConf model, Map<String, String> params) {
         String alias = params.getOrDefault("served_model_name", model.getModelName());
         if (alias == null || alias.isBlank()) {
             throw new IllegalArgumentException("served_model_name must not be blank");

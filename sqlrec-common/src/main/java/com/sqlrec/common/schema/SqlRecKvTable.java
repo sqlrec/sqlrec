@@ -162,13 +162,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             totalCount = convertedKeySet.size();
 
             if (cache == null) {
-                Map<Object, List<Object[]>> result = RowTransformUtils.convertMapKeys(
-                        getByPrimaryKeyImpl(convertedKeySet), primaryKeyType);
-                List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
-                for (List<Object[]> rows : result.values()) {
-                    RowTransformUtils.convertRowTypes(rows, fields);
-                }
-                return result;
+                return loadRowsByPrimaryKey(convertedKeySet, primaryKeyType);
             }
 
             Map<Object, List<Object[]>> result = new HashMap<>(convertedKeySet.size());
@@ -182,14 +176,9 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 }
             }
             if (!missKeys.isEmpty()) {
-                Map<Object, List<Object[]>> missKeyResult = RowTransformUtils.convertMapKeys(
-                        getByPrimaryKeyImpl(missKeys), primaryKeyType);
-                List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
-                for (Map.Entry<Object, List<Object[]>> entry : missKeyResult.entrySet()) {
-                    RowTransformUtils.convertRowTypes(entry.getValue(), fields);
-                    result.put(entry.getKey(), entry.getValue());
-                    cache.put(entry.getKey(), entry.getValue());
-                }
+                Map<Object, List<Object[]>> missKeyResult = loadRowsByPrimaryKey(missKeys, primaryKeyType);
+                result.putAll(missKeyResult);
+                cache.putAll(missKeyResult);
             }
 
             return result;
@@ -207,6 +196,16 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                     .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_KEYS, tags)
                     .record(totalCount);
         }
+    }
+
+    private Map<Object, List<Object[]>> loadRowsByPrimaryKey(Set<Object> keys, SqlTypeName primaryKeyType) {
+        Map<Object, List<Object[]>> result = RowTransformUtils.convertMapKeys(
+                getByPrimaryKeyImpl(keys), primaryKeyType);
+        List<RelDataTypeField> fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
+        for (List<Object[]> rows : result.values()) {
+            RowTransformUtils.convertRowTypes(rows, fields);
+        }
+        return result;
     }
 
     /** Returns unexpired cached rows for the requested primary keys without querying the backend. */
