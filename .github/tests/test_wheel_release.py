@@ -220,7 +220,6 @@ class PublishReleaseTest(unittest.TestCase):
             f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
             for path in sorted(self.assets.iterdir())
         ))
-        (self.assets / "RELEASE_NOTES.md").write_text("Release notes")
         tools = self.root / "tools"
         tools.mkdir()
         gh = tools / "gh"

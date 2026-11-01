@@ -32,6 +32,9 @@ on:
       DOCKERHUB_TOKEN:
         required: false
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: docker.io
 
@@ -42,8 +45,6 @@ jobs:
   resolve-model-sources:
     if: ${{ inputs.build_target == 'models' || inputs.build_target == 'juicefs' || inputs.build_target == 'gbdt' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
       juicefs_commit: ${{ steps.revisions.outputs.juicefs_commit }}
       tzrec_commit: ${{ steps.revisions.outputs.tzrec_commit }}
@@ -103,8 +104,6 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
     steps:
       - name: Checkout sqlrec
         uses: actions/checkout@v4
@@ -157,8 +156,6 @@ jobs:
     needs: resolve-model-sources
     if: ${{ inputs.build_target == 'models' || inputs.build_target == 'tzrec' || inputs.build_target == 'all' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout sqlrec
         uses: actions/checkout@v4
@@ -218,8 +215,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image-version: ${{ steps.meta.outputs.version }}
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/sqlrec
 
@@ -273,8 +268,6 @@ jobs:
     # sense when the selected run publishes that base image.
     if: ${{ inputs.publish_images }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/sqlrec-demo
       BASE_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/sqlrec
@@ -334,8 +327,6 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/gbdt
 
@@ -429,16 +420,12 @@ jobs:
             if [ -n "$tag" ]; then
               docker push "$tag"
             fi
-          done <<EOF
-          $IMAGE_TAGS
-          EOF
+          done <<< "$IMAGE_TAGS"
 
   docker-gbdt-manifest:
     needs: docker-gbdt
-    if: ${{ needs.docker-gbdt.result == 'success' && inputs.publish_images }}
+    if: inputs.publish_images
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/gbdt
 
@@ -476,17 +463,13 @@ jobs:
                 "$tag-amd64" \
                 "$tag-arm64"
             fi
-          done <<EOF
-          $IMAGE_TAGS
-          EOF
+          done <<< "$IMAGE_TAGS"
 
   # The amd64 variant includes CUDA, while arm64 uses the PyTorch CPU wheel.
   # Buildx publishes both variants as one multi-architecture image manifest.
   docker-transformers:
     if: ${{ inputs.build_target == 'models' || inputs.build_target == 'transformers' || inputs.build_target == 'all' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/transformers
 
@@ -543,8 +526,6 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/tzrec
 
@@ -662,16 +643,12 @@ jobs:
             if [ -n "$tag" ]; then
               docker push "$tag"
             fi
-          done <<EOF
-          $IMAGE_TAGS
-          EOF
+          done <<< "$IMAGE_TAGS"
 
   docker-tzrec-manifest:
     needs: docker-tzrec
-    if: ${{ needs.docker-tzrec.result == 'success' && inputs.publish_images }}
+    if: inputs.publish_images
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME || 'sqlrec-build' }}/tzrec
 
@@ -708,6 +685,4 @@ jobs:
                 "$tag-amd64" \
                 "$tag-arm64"
             fi
-          done <<EOF
-          $IMAGE_TAGS
-          EOF
+          done <<< "$IMAGE_TAGS"

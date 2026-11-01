@@ -163,16 +163,6 @@ def assemble(artifacts, output, sqlrec_commit):
     (output / "sources.json").write_text(json.dumps(release, indent=2, sort_keys=True) + "\n")
     assets = sorted(output.iterdir())
     (output / "SHA256SUMS").write_text("".join(f"{sha256(path)}  {path.name}\n" for path in assets))
-    notes = [
-        "JARs and Python wheels built and tested together for this SQLRec release.", "",
-        "| Package | Version | Wheel tags |", "| --- | --- | --- |",
-        *[f"| {wheel['name']} | {wheel['version']} | {', '.join(wheel['tags'])} |" for wheel in release["wheels"]],
-        "", "JuiceFS wheels target CPython 3.11 on Debian Bookworm Linux (glibc 2.36).",
-        "The pyfg and graphlearn wheels provide the SQLRec ARM compatibility subset for Python 3.11.",
-        "Their cityhash dependency is installed from PyPI.",
-        "See sources.json for source revisions and SHA256SUMS for asset checksums.", "",
-    ]
-    (output / "RELEASE_NOTES.md").write_text("\n".join(notes))
     return release
 
 

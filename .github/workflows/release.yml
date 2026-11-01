@@ -1,8 +1,6 @@
 name: Release
 
-# Publishing is intentionally tag-only. There is no workflow_dispatch entry,
-# so GitHub Release, future Maven deploys, and image pushes cannot be started
-# from the Actions UI.
+# Only version tags can publish releases and images.
 on:
   push:
     tags:
@@ -10,75 +8,11 @@ on:
 
 jobs:
   build-test-release:
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Cache sqlrec-ui frontend build artifacts: frontend-maven-plugin
-      # downloads node/npm into sqlrec-ui/.node, and npm deps are installed
-      # in src/main/frontend/node_modules. The key pins the node/npm versions -
-      # if they are bumped in sqlrec-ui/pom.xml, update this key too so the
-      # cache is invalidated.
-      - name: Cache frontend node and npm deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            sqlrec-ui/.node
-            sqlrec-ui/src/main/frontend/node_modules
-          key: frontend-${{ runner.os }}-node-v22.12.0-npm-10.2.4-${{ hashFiles('sqlrec-ui/src/main/frontend/package-lock.json') }}
-          restore-keys: |
-            frontend-${{ runner.os }}-
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-          cache-dependency-path: requirements.txt
-
-      - name: Test artifact and release helpers
-        run: python3 -m unittest discover -s .github/tests -v
-
-      # Fail before any release is created when the tag (minus the v prefix)
-      # does not match the root pom version.
-      - name: Verify tag matches pom version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          POM_VERSION="$(mvn -B help:evaluate -Dexpression=project.version -q -DforceStdout)"
-          echo "Tag version: ${TAG_VERSION}"
-          echo "Pom version: ${POM_VERSION}"
-          if [ "${TAG_VERSION}" != "${POM_VERSION}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match pom version ${POM_VERSION}. Bump the pom version before tagging."
-            exit 1
-          fi
-
-      # The default Maven profile excludes integration tests. One package run
-      # avoids building the sqlrec-ui frontend twice.
-      - name: Build and run unit tests
-        run: mvn -B -DexcludedGroups=integration package
-
-      - name: Save release JARs
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-jars
-          path: |
-            sqlrec-flink/target/sqlrec-flink-*.jar
-            sqlrec-frontend/target/sqlrec-frontend-*.jar
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 14
-          compression-level: 0
+    uses: ./.github/workflows/_build-java.yml
+    with:
+      release: true
 
   publish-images:
     needs: build-test-release
@@ -94,9 +28,6 @@ jobs:
     with:
       build_target: all
       publish_images: true
-      juicefs_ref: feat/sqlrec
-      tzrec_ref: feat/sqlrec
-      arm_compat_ref: master
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
