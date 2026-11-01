@@ -54,8 +54,10 @@ public class PipelineConfigUtils {
         config.addProperty("base_model_dir", orEmpty(trainConf.getBaseModelDir()));
         config.addProperty("label_columns", orEmpty(Config.LABEL_COLUMNS.getValue(params)));
 
-        config.add("feature_columns", toJsonArray(getFeatureNames(model, modelType)));
-        config.add("categorical_features", toJsonArray(resolveCategoricalFeatures(model, modelType)));
+        List<String> labelColumns = FieldTypeUtils.parseCsvList(
+                model.getParams() == null ? null : model.getParams().get(Config.LABEL_COLUMNS.getKey()));
+        config.add("feature_columns", toJsonArray(getFeatureNames(model, modelType, labelColumns)));
+        config.add("categorical_features", toJsonArray(resolveCategoricalFeatures(model, modelType, labelColumns)));
 
         config.add("params", buildParams(params, modelType));
 
@@ -174,11 +176,11 @@ public class PipelineConfigUtils {
      * Unsupported types are rejected by {@link GbdtModelBase#checkModel} beforehand;
      * the type filters here are defensive.
      */
-    private static List<String> getFeatureNames(ModelConf model, ModelType modelType) {
+    private static List<String> getFeatureNames(ModelConf model, ModelType modelType, List<String> labelColumns) {
         List<String> features = new ArrayList<>();
         if (model.getInputFields() != null) {
             for (FieldSchema f : model.getInputFields()) {
-                if (isLabelColumn(model, f.getName())) {
+                if (labelColumns.contains(f.getName())) {
                     continue;
                 }
                 // Defensive: skip types that checkModel should have rejected.
@@ -199,7 +201,8 @@ public class PipelineConfigUtils {
      * CatBoost: int/bigint/string -> categorical; float/double -> numeric.
      * LightGBM: no categoricals (only float features are included).
      */
-    private static List<String> resolveCategoricalFeatures(ModelConf model, ModelType modelType) {
+    private static List<String> resolveCategoricalFeatures(ModelConf model, ModelType modelType,
+                                                           List<String> labelColumns) {
         if (modelType == ModelType.LIGHTGBM || modelType == ModelType.XGBOOST) {
             return Collections.emptyList();
         }
@@ -209,7 +212,7 @@ public class PipelineConfigUtils {
         // CatBoost: auto-detect int/bigint/string as categorical.
         if (model.getInputFields() != null) {
             for (FieldSchema f : model.getInputFields()) {
-                if (isLabelColumn(model, f.getName())) {
+                if (labelColumns.contains(f.getName())) {
                     continue;
                 }
                 if (FieldTypeUtils.isArray(f.getType())) {
@@ -227,14 +230,6 @@ public class PipelineConfigUtils {
     /** Returns true for CatBoost auto-categorical types: anything that is not float/double. */
     private static boolean isAutoCategoricalCatBoost(String fieldType) {
         return fieldType != null && !FieldTypeUtils.isFloat(fieldType);
-    }
-
-    private static boolean isLabelColumn(ModelConf model, String name) {
-        Map<String, String> params = model.getParams();
-        if (params == null) {
-            return false;
-        }
-        return FieldTypeUtils.parseCsvList(params.get(Config.LABEL_COLUMNS.getKey())).contains(name);
     }
 
     private static String joinPaths(List<String> paths) {

@@ -186,14 +186,17 @@ public class K8sYamlUtils {
             return yamlContent;
         }
 
-        return updateYaml(yamlContent, "namespace", resource -> {
-            if (resource.getMetadata() != null) {
-                String existingNamespace = resource.getMetadata().getNamespace();
-                if (existingNamespace == null || existingNamespace.isEmpty()) {
-                    resource.getMetadata().setNamespace(namespace);
-                }
-            }
-        });
+        return updateYaml(yamlContent, "namespace", resource -> injectNamespace(resource, namespace));
+    }
+
+    private static void injectNamespace(HasMetadata resource, String namespace) {
+        if (namespace == null || namespace.isEmpty() || resource.getMetadata() == null) {
+            return;
+        }
+        String existingNamespace = resource.getMetadata().getNamespace();
+        if (existingNamespace == null || existingNamespace.isEmpty()) {
+            resource.getMetadata().setNamespace(namespace);
+        }
     }
 
     public static String injectNodeSelectorIntoYaml(String yamlContent, Map<String, String> nodeSelectors) {
@@ -242,7 +245,8 @@ public class K8sYamlUtils {
     }
 
     private static void injectVolumeMount(PodSpec podSpec, String pvcName, String volumeName, String mountPath, String subPath) {
-        if (podSpec == null) {
+        if (podSpec == null || pvcName == null || pvcName.isEmpty()
+                || volumeName == null || volumeName.isEmpty() || mountPath == null || mountPath.isEmpty()) {
             return;
         }
 
@@ -312,8 +316,6 @@ public class K8sYamlUtils {
     public static String injectPodConfig(String k8sYaml, ModelConf model, Map<String, String> params) {
         String namespace = ModelConfigs.NAMESPACE.getValueWithEnvFallback(params);
 
-        k8sYaml = injectNamespaceIntoYaml(k8sYaml, namespace);
-
         Map<String, String> envVars = new HashMap<>();
         String javaHome = ModelConfigs.JAVA_HOME.getValue();
         if (javaHome != null) {
@@ -337,21 +339,25 @@ public class K8sYamlUtils {
         }
         envVars.putAll(parseEnvVars(params));
 
-        if (!envVars.isEmpty()) {
-            k8sYaml = injectEnvVarsIntoYaml(k8sYaml, envVars);
-        }
-
         String pvcName = ModelConfigs.CLIENT_PVC_NAME.getValue();
         String pvName = ModelConfigs.CLIENT_PV_NAME.getValue();
         String clientDirValue = ModelConfigs.CLIENT_DIR.getValue();
-        k8sYaml = injectVolumeMountIntoYaml(k8sYaml, pvcName, pvName, clientDirValue, null);
-
         Map<String, String> nodeSelectors = parseNodeSelectors(params);
-        if (!nodeSelectors.isEmpty()) {
-            k8sYaml = injectNodeSelectorIntoYaml(k8sYaml, nodeSelectors);
+        if (k8sYaml == null || k8sYaml.isEmpty()) {
+            return k8sYaml;
         }
 
-        return k8sYaml;
+        return updateYaml(k8sYaml, "pod config", resource -> {
+            injectNamespace(resource, namespace);
+            PodSpec podSpec = getPodSpec(resource);
+            if (podSpec != null) {
+                if (!envVars.isEmpty()) {
+                    injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
+                }
+                injectVolumeMount(podSpec, pvcName, pvName, clientDirValue, null);
+                injectNodeSelector(podSpec, nodeSelectors);
+            }
+        });
     }
 
     private static Map<String, String> parseNodeSelectors(Map<String, String> params) {

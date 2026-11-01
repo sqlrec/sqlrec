@@ -33,7 +33,7 @@ public class CallSqlFunctionBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        checkInputTable(schema);
+        List<CacheTable> resolvedInputs = resolveInputTables(schema);
 
         if (!(context instanceof ExecuteContextImpl)) {
             throw new RuntimeException("function call context must be ExecuteContextImpl");
@@ -41,15 +41,19 @@ public class CallSqlFunctionBindable extends BindableInterface {
         CalciteSchema tmpSchema = CalciteSchemaFactory.createCalciteSchema();
         ExecuteContextImpl finalContext = ((ExecuteContextImpl) context).clone(tmpSchema);
         finalContext.addFunNameToStack(funName);
-        for (int i = 0; i < tablePlaceholders.size(); i++) {
-            CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTables.get(i), false);
-            tmpSchema.add(tablePlaceholders.get(i).getKey(), inputTableEntry.getTable());
+        for (int i = 0; i < resolvedInputs.size(); i++) {
+            tmpSchema.add(tablePlaceholders.get(i).getKey(), resolvedInputs.get(i));
         }
 
         return sqlFunctionBindable.bind(tmpSchema, finalContext);
     }
 
     public void checkInputTable(CalciteSchema schema) {
+        resolveInputTables(schema);
+    }
+
+    private List<CacheTable> resolveInputTables(CalciteSchema schema) {
+        List<CacheTable> resolvedInputs = new ArrayList<>(tablePlaceholders.size());
         for (int i = 0; i < tablePlaceholders.size(); i++) {
             String inputTable = inputTables.get(i);
             CalciteSchema.TableEntry inputTableEntry = schema.getTable(inputTable, false);
@@ -64,11 +68,13 @@ public class CallSqlFunctionBindable extends BindableInterface {
                 List<RelDataTypeField> desiredFields = tablePlaceholders.get(i).getValue();
                 List<RelDataTypeField> givenFields = cacheTable.getDataFields();
                 DataTypeUtils.checkTableSchemaCompatible(desiredFields, givenFields);
+                resolvedInputs.add(cacheTable);
             } else {
                 throw new RuntimeException("only support cache table as function input table now, " +
                         "but got: " + inputTableObj.getClass().getName() + " for table: " + inputTable);
             }
         }
+        return resolvedInputs;
     }
 
     @Override

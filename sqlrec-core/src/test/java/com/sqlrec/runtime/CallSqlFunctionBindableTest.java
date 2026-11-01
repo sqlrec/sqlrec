@@ -202,6 +202,30 @@ class CallSqlFunctionBindableTest {
         return new CompileManager().compileSqlFunction(name, sql);
     }
 
+    @Test
+    void executionUsesCurrentInputsAndRevalidatesThemAfterCompilation() throws Exception {
+        SqlFunctionBindable child = compile("current_input_child",
+                "DEFINE INPUT TABLE input1(id integer)", "RETURN input1");
+        CallSqlFunctionBindable call = new CallSqlFunctionBindable("current_input_child", List.of("source"), child);
+        CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
+        schema.add("source", new CacheTable("source", Linq4j.singletonEnumerable(new Object[]{7}),
+                child.getReturnDataFields()));
+        call.checkInputTable(schema);
+
+        schema.add("source", new CacheTable("source", Linq4j.singletonEnumerable(new Object[]{9}),
+                child.getReturnDataFields()));
+        assertEquals(9, call.bind(schema, new ExecuteContextImpl(schema)).single()[0]);
+
+        schema.add("source", new CacheTable("source", null,
+                com.sqlrec.common.utils.DataTypeUtils.getStringTypeField("different_column")));
+        assertThrows(RuntimeException.class, () -> call.bind(schema, new ExecuteContextImpl(schema)));
+
+        schema.removeTable("source");
+        RuntimeException missing = assertThrows(RuntimeException.class,
+                () -> call.bind(schema, new ExecuteContextImpl(schema)));
+        assertEquals("function input table not found: source", missing.getMessage());
+    }
+
     private Object execute(SqlFunctionBindable function) {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         return function.bind(schema, new ExecuteContextImpl(schema))

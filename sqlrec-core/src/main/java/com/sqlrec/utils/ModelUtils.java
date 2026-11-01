@@ -27,24 +27,13 @@ public class ModelUtils {
     }
 
     public static void addModelInfo(List<List<String>> rows, ModelConf modelConfig, Model model) throws Exception {
-        ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
-        if (modelController == null) {
-            throw new IllegalArgumentException("model controller not found for model: " + model.getName());
-        }
-
-        List<FieldSchema> inputFields = modelConfig.getInputFields();
-        List<FieldSchema> outputFields = modelController.getOutputFields(modelConfig);
-        Map<String, String> params = modelConfig.getParams();
-
         rows.add(java.util.Arrays.asList("# Model Information", ""));
         rows.add(java.util.Arrays.asList("Model Name:", model.getName()));
         rows.add(java.util.Arrays.asList("Created At:", formatTimestamp(model.getCreatedAt())));
         rows.add(java.util.Arrays.asList("Updated At:", formatTimestamp(model.getUpdatedAt())));
         rows.add(java.util.Arrays.asList("", ""));
 
-        addFieldSection(rows, "# Input Fields", inputFields);
-        addFieldSection(rows, "# Output Fields", outputFields);
-        addParametersSection(rows, "# Model Parameters", params);
+        addModelDetails(rows, modelConfig, model.getName());
     }
 
     public static void addCheckpointInfo(List<List<String>> rows, Checkpoint checkpoint) {
@@ -75,19 +64,18 @@ public class ModelUtils {
 
         if (service.getModelDdl() != null) {
             ModelConf modelConfig = ModelEntityConverter.convertToModel(service.getModelDdl());
-            ModelController modelController = ModelControllerFactory.getModelController(modelConfig);
-            if (modelController == null) {
-                throw new IllegalArgumentException("model controller not found for model: " + service.getModelName());
-            }
-
-            List<FieldSchema> inputFields = modelConfig.getInputFields();
-            List<FieldSchema> outputFields = modelController.getOutputFields(modelConfig);
-            Map<String, String> params = modelConfig.getParams();
-
-            addFieldSection(rows, "# Input Fields", inputFields);
-            addFieldSection(rows, "# Output Fields", outputFields);
-            addParametersSection(rows, "# Model Parameters", params);
+            addModelDetails(rows, modelConfig, service.getModelName());
         }
+    }
+
+    private static void addModelDetails(List<List<String>> rows, ModelConf modelConfig, String modelName) {
+        ModelController controller = ModelControllerFactory.getModelController(modelConfig);
+        if (controller == null) {
+            throw new IllegalArgumentException("model controller not found for model: " + modelName);
+        }
+        addFieldSection(rows, "# Input Fields", modelConfig.getInputFields());
+        addFieldSection(rows, "# Output Fields", controller.getOutputFields(modelConfig));
+        addParametersSection(rows, "# Model Parameters", modelConfig.getParams());
     }
 
     private static void addFieldSection(List<List<String>> rows, String sectionTitle, List<FieldSchema> fields) {
