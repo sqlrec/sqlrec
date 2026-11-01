@@ -379,6 +379,8 @@ Embedding requests force `encoding_format="float"`. Results are nonempty finite 
 
 Completions wrap the prompt in one user message and force `stream=false`, `n=1`, `store=false`. The result is `choices[0].message.content`. Refusals, content filtering and missing text are remote errors; a length-limited completion returns its partial text. Responses API, tools and conversation history are not supported.
 
+Self-hosted `huggingface.transformers` services expose `/v1/chat/completions` and `/v1/embeddings` by default, directly usable as endpoints for the first two functions. `model` is the served alias, defaulting to the SQL Model name. No UDF changes or enable option are required. Chat requires the model's own template; embeddings retain native dimensions. See [Hugging Face OpenAI endpoints](../models/builtin-models.md#openai-compatible-endpoints) for configuration and SQL examples.
+
 A shared JDK HTTP client reuses connections, limits in-flight requests to 32 per classloader, uses a 2-second connection timeout and does not follow redirects. There are no application retries or result caching. Functions are declared non-deterministic: SQLRec compilation and Flink planning do not call the API. Runtime calls are synchronous per row. Re-execution or task recovery can repeat calls; remote requests are not exactly-once.
 
 SQLRec registers these functions by default. In Flink, deploy the UDF JAR with Hive support (HiveCatalog/HiveModule) and register:

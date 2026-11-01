@@ -5,7 +5,8 @@ models on CPU. The benchmark uses public SQL to create models, download pinned
 Hub snapshots with `TRAIN MODEL` (without `ON`), deploy origin checkpoints, and
 register SQL functions/APIs that call the model service.
 
-These are random testing checkpoints. A completed run proves the tested output
+Most cases use random testing checkpoints; the chat case uses a small pretrained
+instruction model with its own chat template. A completed run proves the tested output
 contracts and resource lifecycle; it does not measure sentiment accuracy,
 language quality, or embedding retrieval quality.
 
@@ -15,11 +16,12 @@ language quality, or embedding retrieval quality.
 | --- | --- | --- | --- |
 | `text-classification` | [tiny-random-bert](https://huggingface.co/hf-internal-testing/tiny-random-bert/tree/f171d7baecaf37b5da5a3616d8833b9969753535) | 520 KB | Single text and paired text |
 | `text-generation` | [tiny-random-gpt2](https://huggingface.co/hf-internal-testing/tiny-random-gpt2/tree/71034c5d8bde858ff824298bdedc65515b97d2b9) | 454 KB | Greedy generation, at most 8 new tokens |
+| `text-generation` (chat) | [SmolLM2-135M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct/tree/12fd25f77366fa6b3b4b768ec3050bf629380bac) | About 269 MB | Native chat template, Chat Completions and `llm_complete` |
 | `embedding` | [tiny-random-bert](https://huggingface.co/hf-internal-testing/tiny-random-bert/tree/f171d7baecaf37b5da5a3616d8833b9969753535) | 520 KB | Mean pooling, 32 dimensions, L2 normalization |
 | `image-embedding` | [tiny-random-vit](https://huggingface.co/hf-internal-testing/tiny-random-vit/tree/96e253fe90cfcededfa8edf8b7e6f230f87a63a1) | 176 KB | CLS pooling, 32 dimensions, L2 normalization |
 
-Weights total about 1.15 MB across the three distinct checkpoints. Each case
-downloads its own snapshot; all five cases download about 2.2 MB of weights.
+The five original cases download about 2.2 MB of weights in total; the sixth
+chat case adds about 269 MB. Each case downloads its own pinned snapshot.
 Configuration, tokenizer files, test images and the runtime container are extra.
 Only the necessary safetensors and processor files are downloaded, excluding
 TensorFlow, pickle, ONNX and duplicate weight formats. Model commit revisions
@@ -40,6 +42,9 @@ Hadoop/JuiceFS storage, and Kubernetes access are required. The configured
 cluster architecture. Download Pods need access to Hugging Face; image inference
 Pods also need public HTTPS image access. No local PyTorch/Transformers install,
 GPU, Kyuubi, Milvus, or training dataset is needed for this benchmark.
+Text protocol checks also require permission to `kubectl port-forward` to the
+owned service. The runner chooses an ephemeral loopback port and always releases
+the forwarder; SQL UDF calls use the service's cluster DNS address instead.
 
 Run from the repository root:
 
@@ -48,7 +53,7 @@ bash bin/setup_python_env.sh
 .venv/bin/python -m pip install -r benchmark/huggingface/requirements.txt
 source deploy/env.sh
 
-# All four task types, including two classification cases.
+# All four task types, including two classification and two generation cases.
 .venv/bin/python -m benchmark.huggingface --task all
 
 # One task type only.
@@ -106,10 +111,20 @@ bash bin/build_model_docker.sh transformers
   service and verify that its Kubernetes resources disappear and Jobs are quiet.
   Failure or Ctrl-C attempts cleanup and stops the run; unproven cleanup prevents
   the next case from starting. Submitted download mutations are not retried.
+- Text cases test the default-on `/v1/models`, `/v1/chat/completions` and
+  `/v1/embeddings` endpoints: model binding, wrong tasks, unsupported fields,
+  token limits, native dimensions, batch order, token usage and embedding
+  equivalence with `/predict`.
+- The chat model is called over HTTP and through a SQL API using `llm_complete`;
+  embedding uses `llm_embed_text`. HTTP and SQL UDF results must agree, including
+  reversed rows and recovery after errors. The plain GPT-2 case checks the
+  explicit `chat_template_missing` error while `/predict` remains usable.
 
 `runs/<timestamp>_<id>/summary.md` is the main report. `results.json` records
 status, stage timings, timed batch durations, throughput and rejected-input
-counts. Each case saves `config.json`, `statements.sql`, `resources.json`, and
+counts. Text cases include `metrics.openai` with HTTP/UDF check counts and save
+`openai-responses.json` (successful chat/embedding responses) and the forwarder
+log. Each case saves `config.json`, `statements.sql`, `resources.json`, and
 three baseline predictions in `predictions.json`. Latency includes public API
 transport and image downloads; download/deployment and correctness checks are
 outside the timed requests. These tiny workloads do not represent production

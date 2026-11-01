@@ -5,6 +5,7 @@ from typing import Any
 import torch
 import torch.nn.functional as functional
 from transformers import AutoModel, AutoTokenizer
+from huggingface.openai_api import APIError
 
 from .base import TaskAdapter, bool_value, int_value, text_values
 
@@ -16,16 +17,24 @@ class TextEmbeddingAdapter(TaskAdapter):
         self.pooling = config.get("pooling", "mean")
         self.normalize = bool_value(config, "normalize", True)
         self.max_length = int_value(config, "max_length", 512)
+        self.batch_size = max(1, int_value(config, "inference_batch_size", 8))
         common = {"local_files_only": True, "trust_remote_code": self.trust_remote_code}
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir, **common)
         self.model = AutoModel.from_pretrained(model_dir, **self._model_kwargs()).to(self.device).eval()
+        # Pooler output dimensions need not be identical to config.hidden_size.
+        self.embedding_dimension = len(self.embed(["dimension"], strict=False)["embedding"][0])
 
     def predict(self, rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
         texts = text_values(rows, self.text_column)
+        return {"embedding": self.embed(texts, strict=False)["embedding"]}
+
+    def embed(self, texts, strict=True):
         inputs = self.tokenizer(
-            texts, padding=True, truncation=True, max_length=self.max_length,
+            texts, padding=True, truncation=not strict, max_length=self.max_length if not strict else None,
             return_tensors="pt",
         ).to(self.device)
+        if strict and inputs["input_ids"].shape[1] > self.max_length:
+            raise APIError(400, "input exceeds max_length", "context_length_exceeded", "input")
         with torch.inference_mode():
             outputs = self.model(**inputs)
         hidden = outputs.last_hidden_state
@@ -47,4 +56,4 @@ class TextEmbeddingAdapter(TaskAdapter):
             raise ValueError(f"unsupported text pooling: {self.pooling}")
         if self.normalize:
             embeddings = functional.normalize(embeddings.float(), p=2, dim=1)
-        return {"embedding": embeddings.float().cpu().tolist()}
+        return {"embedding": embeddings.float().cpu().tolist(), "prompt_tokens": int(mask.sum().item())}

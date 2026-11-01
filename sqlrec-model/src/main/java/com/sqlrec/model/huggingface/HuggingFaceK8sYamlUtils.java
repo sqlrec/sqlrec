@@ -86,6 +86,15 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
 
     static String createServiceDeploymentYaml(String name, String configMapName, Map<String, String> params) {
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
+        List<EnvVar> env = new ArrayList<>();
+        String secretName = Config.OPENAI_API_KEY_SECRET.getValueOrNull(params);
+        if (StringUtils.isNotBlank(secretName)) {
+            env.add(new EnvVarBuilder().withName("SQLREC_OPENAI_API_KEY")
+                    .withNewValueFrom().withNewSecretKeyRef()
+                        .withName(secretName).withKey(Config.OPENAI_API_KEY_SECRET_KEY.getValue(params))
+                        .withOptional(false)
+                    .endSecretKeyRef().endValueFrom().build());
+        }
         Deployment deployment = new DeploymentBuilder()
                 .withNewMetadata().withName(name).endMetadata()
                 .withNewSpec()
@@ -98,6 +107,7 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
                                 .withName("transformers-service")
                                 .withImage(image)
                                 .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
+                                .withEnv(env)
                                 .withPorts(new ContainerPortBuilder().withName("http").withContainerPort(80).build())
                                 .withResources(buildServiceResources(params))
                                 .withReadinessProbe(new ProbeBuilder()

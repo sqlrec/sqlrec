@@ -12,6 +12,9 @@ import java.util.Map;
 
 /** Builds the JSON consumed by the snapshot download job. */
 public final class PipelineConfigUtils {
+    private static final List<String> SERVICE_ONLY_PARAMS = List.of(
+            "served_model_name", "openai_api_key_secret", "openai_api_key_secret_key",
+            "openai_max_request_bytes", "openai_max_batch_inputs");
     private PipelineConfigUtils() {
     }
 
@@ -72,15 +75,30 @@ public final class PipelineConfigUtils {
         config.add("input_fields", inputFields);
 
         JsonObject modelParams = new JsonObject();
-        params.forEach(modelParams::addProperty);
+        params.forEach((key, value) -> {
+            if (!SERVICE_ONLY_PARAMS.contains(key)) modelParams.addProperty(key, value);
+        });
         config.add("model_params", modelParams);
         return ModelConfigUtils.toPrettyJson(config);
     }
 
     public static String generateServiceConfig(ModelConf model, Map<String, String> serviceParams) {
         Map<String, String> params = operationParams(model, serviceParams);
+        String alias = params.getOrDefault("served_model_name", model.getModelName());
+        if (alias == null || alias.isBlank()) {
+            throw new IllegalArgumentException("served_model_name must not be blank");
+        }
+        if (Config.OPENAI_MAX_REQUEST_BYTES.getValue(params) <= 0
+                || Config.OPENAI_MAX_BATCH_INPUTS.getValue(params) <= 0) {
+            throw new IllegalArgumentException("OpenAI request limits must be positive");
+        }
+        String secret = Config.OPENAI_API_KEY_SECRET.getValueOrNull(params);
+        if (secret != null && (secret.isBlank() || Config.OPENAI_API_KEY_SECRET_KEY.getValue(params).isBlank())) {
+            throw new IllegalArgumentException("OpenAI Secret name and key must not be blank");
+        }
         JsonObject config = new JsonObject();
         params.forEach(config::addProperty);
+        config.addProperty("served_model_name", alias);
         return ModelConfigUtils.toPrettyJson(config);
     }
 

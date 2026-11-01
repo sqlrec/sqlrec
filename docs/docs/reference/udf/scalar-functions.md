@@ -391,6 +391,8 @@ FROM items;
 
 文本生成固定 `stream=false`、`n=1`、`store=false`，读取 `choices[0].message.content`。拒绝、内容过滤和缺少文本按远端错误处理；因长度上限截断时返回已有文本。首版不支持 Responses API、工具调用或会话历史。
 
+自托管 `huggingface.transformers` 服务默认提供 `/v1/chat/completions` 和 `/v1/embeddings`，可直接作为前两个函数的 endpoint；`model` 使用该服务的别名，默认等于 SQL Model 名。无需修改 UDF 或开启服务参数。聊天模型需要自带 chat template，embedding 保持原始维度。配置和 SQL 示例见 [Hugging Face OpenAI 接口](../models/builtin-models.md#openai-兼容接口)。
+
 客户端使用共享 JDK HTTP 连接池，连接超时 2 秒，每个类加载器最多 32 个在途请求，禁用重定向，无应用层自动重试或结果缓存。函数声明为非确定性，SQLRec 编译和 Flink 计划生成不会调用远端。运行时按行同步请求，查询重复执行或任务恢复可能再次调用服务，不提供远端请求的恰好一次保证。
 
 SQLRec 内置注册上述函数。Flink 使用 HiveCatalog/HiveModule，并部署包含 UDF 的 JAR 后注册：

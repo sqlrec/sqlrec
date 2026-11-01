@@ -1,2 +1,5 @@
 # Reuse the public SQL clients and model lifecycle helpers; no local torch runtime.
 -r ../model_quality/requirements.txt
+# In-process protocol regression tests, without torch or a listening socket.
+fastapi
+httpx==0.28.1

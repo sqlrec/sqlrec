@@ -19,6 +19,45 @@ class HuggingFaceTransformersModelTest {
     private final HuggingFaceTransformersModel controller = new HuggingFaceTransformersModel();
 
     @Test
+    void openAiIsAlwaysAvailableWithAServiceAliasAndSecretReference() {
+        ModelConf model = model("embedding", "text", "STRING");
+        model.getParams().put("text_column", "text");
+        var defaults = JsonParser.parseString(PipelineConfigUtils.generateServiceConfig(model, Map.of())).getAsJsonObject();
+        assertEquals("test_model", defaults.get("served_model_name").getAsString());
+        assertFalse(defaults.has("enable_openai_api"));
+        ServiceConf service = new ServiceConf();
+        service.setId("embedding-service");
+        service.setModelCheckpointDir("hdfs://namenode/models/embedding/v1");
+        service.setParams(Map.of("served_model_name", "public-alias", "openai_api_key_secret", "api-key",
+                "openai_api_key_secret_key", "value", "NAMESPACE", "test"));
+        String yaml = controller.getServiceK8sYaml(model, service);
+        assertTrue(yaml.contains("SQLREC_OPENAI_API_KEY"));
+        assertTrue(yaml.contains("secretKeyRef:"));
+        assertTrue(yaml.contains("name: \"api-key\""));
+        assertTrue(yaml.contains("key: \"value\""));
+        assertTrue(yaml.contains("public-alias"));
+        assertTrue(controller.getServiceUrl(model, service).endsWith(":80/predict"));
+        for (Map<String, String> invalid : List.of(Map.of("served_model_name", " "),
+                Map.of("openai_max_request_bytes", "0"), Map.of("openai_max_batch_inputs", "-1"),
+                Map.of("openai_api_key_secret", ""),
+                Map.of("openai_api_key_secret", "api-key", "openai_api_key_secret_key", ""))) {
+            assertThrows(IllegalArgumentException.class, () -> PipelineConfigUtils.generateServiceConfig(model, invalid));
+        }
+    }
+
+    @Test
+    void servingOnlyOptionsDoNotLeakIntoCheckpointParameters() {
+        ModelConf model = model("embedding", "text", "STRING");
+        model.getParams().putAll(Map.of("text_column", "text", "served_model_name", "public-alias",
+                "openai_api_key_secret", "api-key", "openai_max_request_bytes", "2048"));
+        var train = JsonParser.parseString(PipelineConfigUtils.generateTrainConfig(model, new ModelTrainConf()))
+                .getAsJsonObject().getAsJsonObject("model_params");
+        assertFalse(train.has("served_model_name"));
+        assertFalse(train.has("openai_api_key_secret"));
+        assertFalse(train.has("openai_max_request_bytes"));
+    }
+
+    @Test
     void inputOptionsUseDeclaredFieldSpellingInTrainingAndServing() {
         for (String task : List.of("text-classification", "text-generation", "image-embedding")) {
             String key = task.equals("text-generation") ? "prompt_column"

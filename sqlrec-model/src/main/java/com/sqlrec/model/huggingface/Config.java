@@ -62,6 +62,16 @@ public class Config extends ModelConfigBase {
             "temperature", 1.0, "Generation temperature", null, Double.class);
     public static final ConfigOption<Double> TOP_P = new ConfigOption<>(
             "top_p", 1.0, "Generation top-p", null, Double.class);
+    public static final ConfigOption<String> SERVED_MODEL_NAME = new ConfigOption<>(
+            "served_model_name", null, "OpenAI API model alias (defaults to SQL model name)", null, String.class);
+    public static final ConfigOption<String> OPENAI_API_KEY_SECRET = new ConfigOption<>(
+            "openai_api_key_secret", null, "Optional Kubernetes Secret for the OpenAI API key", null, String.class);
+    public static final ConfigOption<String> OPENAI_API_KEY_SECRET_KEY = new ConfigOption<>(
+            "openai_api_key_secret_key", "token", "Key in the OpenAI API Secret", null, String.class);
+    public static final ConfigOption<Integer> OPENAI_MAX_REQUEST_BYTES = new ConfigOption<>(
+            "openai_max_request_bytes", 1048576, "Maximum OpenAI request body bytes", null, Integer.class);
+    public static final ConfigOption<Integer> OPENAI_MAX_BATCH_INPUTS = new ConfigOption<>(
+            "openai_max_batch_inputs", 32, "Maximum texts per OpenAI embedding request", null, Integer.class);
     public static final ConfigOption<Integer> POD_GPU = new ConfigOption<>(
             "pod_gpu", 0, "Number of GPUs requested by the serving pod", null, Integer.class);
     public static final ConfigOption<String> POD_GPU_RESOURCE = new ConfigOption<>(

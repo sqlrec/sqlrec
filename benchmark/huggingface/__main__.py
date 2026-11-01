@@ -18,6 +18,7 @@ from benchmark.model_quality.resources import RunResources, kubernetes_name
 
 from .checks import check_equivalent, check_predictions
 from .config import ALLOW_PATTERNS, CASES, TASKS, input_rows
+from .openai_checks import exercise_openai
 
 
 class HuggingFaceResources(RunResources):
@@ -107,15 +108,17 @@ def exercise(case, resources, api, function, repeats):
 def write_report(root, results):
     write_json(root / 'results.json', {'scope': 'integration', 'results': results})
     lines = ['# Hugging Face integration benchmark', '',
-             'Tiny random models; output contracts and lifecycle checks, without quality thresholds.', '',
-             '| Case | Task | Status | Download (s) | Deploy (s) | Median batch (ms) | Rows/s |',
-             '| --- | --- | --- | --- | --- | --- | --- |']
+             'Small checkpoints; output contracts and lifecycle checks, without quality thresholds.', '',
+             '| Case | Task | Status | Download (s) | Deploy (s) | Median batch (ms) | Rows/s | OpenAI HTTP/UDF checks |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- |']
     for result in results:
         timings = result.get('stage_seconds', {})
         metrics = result.get('metrics', {})
+        protocol = metrics.get('openai', {})
+        protocol_checks = f'{protocol["http_checks"]}/{protocol.get("udf_requests", 0)}' if protocol else '-'
         lines.append(f'| {result["case"]} | {result["task"]} | {result["status"]} | '
                      f'{timings.get("download", 0):.2f} | {timings.get("deploy", 0):.2f} | '
-                     f'{metrics.get("median_batch_ms", 0):.2f} | {metrics.get("rows_per_second", 0):.2f} |')
+                     f'{metrics.get("median_batch_ms", 0):.2f} | {metrics.get("rows_per_second", 0):.2f} | {protocol_checks} |')
     lines.extend(['', 'Latency includes public SQL API transport and, for images, HTTP image downloads.', ''])
     for result in results:
         for key in ('error', 'cleanup_error'):
@@ -147,6 +150,8 @@ def run_case(case, env, root, result, repeats):
         service = resources.deploy(['v1'])['scalar']
         function = register_api(resources, case, service)
         result['metrics'] = exercise(case, resources, api, function, repeats)
+        if case.task in ('text-generation', 'embedding'):
+            result['metrics']['openai'] = exercise_openai(case, resources, api, service)
     except BaseException as failure:
         error = failure
     finally:

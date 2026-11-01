@@ -14,6 +14,7 @@ class Case:
     parameters: dict
     output_columns: tuple[str, ...]
     embedding_dimension: int | None = None
+    chat_template: bool = False
 
 
 BERT = 'hf-internal-testing/tiny-random-bert'
@@ -23,7 +24,7 @@ TASKS = ('text-classification', 'text-generation', 'embedding', 'image-embedding
 # In particular, exclude TensorFlow, pickle, ONNX and duplicate weight formats.
 ALLOW_PATTERNS = ','.join((
     'config.json', 'generation_config.json', 'model.safetensors',
-    'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json',
+    'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', 'chat_template.jinja',
     'vocab.txt', 'vocab.json', 'merges.txt', 'preprocessor_config.json',
 ))
 CASES = (
@@ -35,6 +36,10 @@ CASES = (
     Case('generation', 'text-generation', 'hf-internal-testing/tiny-random-gpt2',
          '71034c5d8bde858ff824298bdedc65515b97d2b9', (Feature('prompt', 'STRING'),),
          {'prompt_column': 'PROMPT', 'max_new_tokens': 8, 'do_sample': 'false'}, ('generated_text',)),
+    Case('generation_chat', 'text-generation', 'HuggingFaceTB/SmolLM2-135M-Instruct',
+         '12fd25f77366fa6b3b4b768ec3050bf629380bac', (Feature('prompt', 'STRING'),),
+         {'prompt_column': 'PROMPT', 'max_new_tokens': 8, 'do_sample': 'false'},
+         ('generated_text',), chat_template=True),
     Case('embedding', 'embedding', BERT, BERT_REVISION,
          (Feature('body', 'STRING'),),
          {'text_column': 'BODY', 'pooling': 'mean', 'normalize': 'true'}, ('embedding',), 32),

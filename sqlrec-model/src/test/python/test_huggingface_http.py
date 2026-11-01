@@ -58,7 +58,7 @@ class HuggingFaceHttpTest(unittest.TestCase):
             root = Path(directory)
             (root / "_SUCCESS").touch()
             (root / "sqlrec_manifest.json").write_text(json.dumps({
-                "task": "embedding", "model_params": {"text_column": "text"},
+                "task": "embedding", "model_name": "test_model", "model_params": {"text_column": "text"},
             }))
             config = root / "service.config"
             config.write_text(json.dumps({"task": "text-classification"}))
@@ -76,7 +76,7 @@ class HuggingFaceHttpTest(unittest.TestCase):
             root = Path(directory)
             (root / "_SUCCESS").touch()
             (root / "sqlrec_manifest.json").write_text(json.dumps({
-                "task": "embedding", "model_params": {"text_column": "text"},
+                "task": "embedding", "model_name": "test_model", "model_params": {"text_column": "text"},
             }))
             config = root / "service.config"
             config.write_text(json.dumps({"task": "embedding", "inference_batch_size": 3}))
@@ -93,6 +93,7 @@ class HuggingFaceHttpTest(unittest.TestCase):
             (root / "_SUCCESS").touch()
             (root / "sqlrec_manifest.json").write_text(json.dumps({
                 "task": "text-classification",
+                "model_name": "test_model",
                 "input_fields": [{"name": "Body", "type": "STRING"}, {"name": "Title", "type": "STRING"}],
                 "model_params": {"text_column": "Title", "text_pair_column": "Title"},
             }))
