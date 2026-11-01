@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -51,17 +52,8 @@ public class CalciteBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        Enumerable rawData = bindable.bind(new SqlRecDataContextImpl(parameters, schema, context));
-
-        List<Object[]> objArrayList = new ArrayList<>();
-        for (Object obj : rawData) {
-            if (obj instanceof Object[]) {
-                objArrayList.add((Object[]) obj);
-            } else {
-                objArrayList.add(new Object[]{obj});
-            }
-        }
-        return Linq4j.asEnumerable(objArrayList);
+        Enumerable<?> rawData = bindable.bind(new SqlRecDataContextImpl(parameters, schema, context));
+        return Linq4j.asEnumerable(RowTransformUtils.materializeArrayRows(rawData));
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.sqlrec.utils;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.MergeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.runtime.SqlRecDataContext;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -41,7 +42,7 @@ public class KvJoinUtils {
         if (left == null) {
             throw new IllegalArgumentException("left table is null");
         }
-        List<Object[]> leftValues = materializeLeftRows(left);
+        List<Object[]> leftValues = RowTransformUtils.materializeArrayRows(left);
         if (leftValues.isEmpty()) {
             return Linq4j.emptyEnumerable();
         }
@@ -64,18 +65,6 @@ public class KvJoinUtils {
 
         List<Object[]> merged = MergeUtils.snakeMerge(rowList.toArray(new Iterable[0]));
         return Linq4j.asEnumerable(merged);
-    }
-
-    private static List<Object[]> materializeLeftRows(Enumerable left) {
-        List<Object[]> leftValues = new ArrayList<>();
-        for (Object obj : left) {
-            if (obj instanceof Object[]) {
-                leftValues.add((Object[]) obj);
-            } else {
-                leftValues.add(new Object[]{obj});
-            }
-        }
-        return leftValues;
     }
 
     private static Set<Object> collectJoinKeys(List<Object[]> leftValues, int joinKeyIndex) {

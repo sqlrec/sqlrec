@@ -1,5 +1,7 @@
 package com.sqlrec.common.utils;
 
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
@@ -8,10 +10,34 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class RowTransformUtilsTest {
+    @Test
+    void materializationPreservesOrderAndArrayReferencesAndReadsSourceOnce() {
+        Object[] row = {7, "value"};
+        int[] arrayCell = {1, 2};
+        AtomicInteger reads = new AtomicInteger();
+        Enumerable<Object> source = Linq4j.asEnumerable(Arrays.asList("scalar", row, null, arrayCell))
+                .select(value -> {
+                    reads.incrementAndGet();
+                    return value;
+                });
+
+        List<Object[]> rows = RowTransformUtils.materializeArrayRows(source);
+
+        assertEquals(4, reads.get());
+        assertEquals(4, rows.size());
+        assertArrayEquals(new Object[]{"scalar"}, rows.get(0));
+        assertSame(row, rows.get(1));
+        assertArrayEquals(new Object[]{null}, rows.get(2));
+        assertArrayEquals(new Object[]{arrayCell}, rows.get(3));
+        assertSame(arrayCell, rows.get(3)[0]);
+        assertTrue(RowTransformUtils.materializeArrayRows(Linq4j.emptyEnumerable()).isEmpty());
+    }
+
     // --- getMsgEnumerable ---
 
     @Test

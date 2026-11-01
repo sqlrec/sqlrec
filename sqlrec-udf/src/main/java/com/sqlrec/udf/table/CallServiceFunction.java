@@ -45,12 +45,7 @@ public class CallServiceFunction {
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
         String jsonData = PredictionRequestEncoder.encodeRows(inputData, inputFields, input.getDataFields());
 
-        Map<String, Object> predictions = predictionClient.predict(
-                serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
-
-        List<Object[]> newData = mergePredictions(inputData, predictions, modelOutputFields);
-
-        return resultTable(newData, newDataFields);
+        return predictAndMerge(service, jsonData, inputData, newDataFields);
     }
 
     public CacheTable evaluate(ReadonlyContext context, String serviceName, CacheTable user, CacheTable item) {
@@ -64,26 +59,22 @@ public class CallServiceFunction {
         }
 
         List<Object[]> itemData = RowTransformUtils.materializeRows(item);
+        List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(item.getDataFields(), modelOutputFields);
         if (itemData.isEmpty()) {
-            List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
-                    item.getDataFields(),
-                    modelOutputFields
-            );
             return resultTable(itemData, newDataFields);
         }
 
         String jsonData = PredictionRequestEncoder.encodeUserItems(userData, itemData,
                 serviceConfig.getModelConfig().getInputFields(), user.getDataFields(), item.getDataFields());
 
-        Map<String, Object> predictions = predictionClient.predict(
-                serviceConfig.getUrl(), jsonData, serviceConfig.getParams());
-        List<Object[]> newData = mergePredictions(itemData, predictions, modelOutputFields);
-        List<RelDataTypeField> newDataFields = DataTypeUtils.addTypeFields(
-                item.getDataFields(),
-                modelOutputFields
-        );
+        return predictAndMerge(service, jsonData, itemData, newDataFields);
+    }
 
-        return resultTable(newData, newDataFields);
+    private CacheTable predictAndMerge(ResolvedService service, String jsonData,
+                                       List<Object[]> inputData, List<RelDataTypeField> resultFields) {
+        Map<String, Object> predictions = predictionClient.predict(
+                service.config.getUrl(), jsonData, service.config.getParams());
+        return resultTable(mergePredictions(inputData, predictions, service.outputFields), resultFields);
     }
 
     private static ResolvedService resolveService(ReadonlyContext context, String serviceName) {

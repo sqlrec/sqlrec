@@ -29,6 +29,15 @@ public final class RowTransformUtils {
         return enumerable == null ? new ArrayList<>() : enumerable.toList();
     }
 
+    /** Materializes once, retaining row arrays and wrapping scalar values as single-column rows. */
+    public static List<Object[]> materializeArrayRows(Enumerable<?> source) {
+        List<Object[]> rows = new ArrayList<>();
+        for (Object value : source) {
+            rows.add(value instanceof Object[] ? (Object[]) value : new Object[]{value});
+        }
+        return rows;
+    }
+
     public static List<Map<String, Object>> convertToMapList(List<Object[]> results, List<RelDataTypeField> fields) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object[] row : results) {
