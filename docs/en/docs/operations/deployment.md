@@ -205,6 +205,8 @@ The SQLRec container's `META_DB_URL` and `HIVE_METASTORE_URI` are generated in `
 
 When starting SQLRec directly, `META_DB_URL`, `HIVE_METASTORE_URI`, `FLINK_SQL_GATEWAY_ADDRESS`, and `TRACE_ENDPOINT` default to empty strings. Set the first two explicitly for remote metadata; empty Gateway and Trace addresses disable those features. For development integration tests, `bin/test.sh` supplies component defaults using `DEFAULT_TEST_IP`, `NODE_IP`, or Minikube discovery. Individual component addresses can also be overridden. The `DEFAULT_TEST_IP` option also defaults to an empty string and is used by Java tests and demo SQL. When starting the service directly, component endpoints are configured separately and are not derived from this option.
 
+When running `bash bin/cli.sh` from a source checkout, remote metadata mode uses the same component defaults. Minikube is not required when `HIVE_METASTORE_URI` is configured or `SQL_SCHEMA_DIR` selects SQL-file mode. Explicit settings, including empty values, are preserved. CLI logs default to `sqlrec-frontend/target/logs` in source mode. Inside Docker, the CLI uses the container environment and packaged JARs without Minikube discovery.
+
 Run integration tests from the repository root:
 
 ```bash

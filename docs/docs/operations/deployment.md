@@ -205,6 +205,8 @@ SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlre
 
 直接启动 SQLRec 时，`META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 和 `TRACE_ENDPOINT` 默认均为空；使用远程元数据时需显式设置前两项，Gateway 转发和 Trace 在地址为空时关闭。开发集成测试通过 `bin/test.sh` 根据 `DEFAULT_TEST_IP`、`NODE_IP` 或 Minikube 地址设置组件连接默认值，也可显式覆盖各组件地址。`DEFAULT_TEST_IP` 配置默认也为空，供 Java 测试和示例 SQL 使用；直接启动服务时，组件地址不会根据它自动生成，仍需分别配置。
 
+在源码目录下运行 `bash bin/cli.sh` 时，远程元数据模式使用同样的组件连接默认值。已配置 `HIVE_METASTORE_URI` 或使用 `SQL_SCHEMA_DIR` 文件模式时，无需 Minikube；显式设置的值（包括空值）会保留。源码模式的 CLI 日志默认写入 `sqlrec-frontend/target/logs`。Docker 中的 CLI 继续使用容器环境配置和镜像内的 JAR，不进行 Minikube 地址发现。
+
 在仓库根目录运行集成测试：
 
 ```bash
