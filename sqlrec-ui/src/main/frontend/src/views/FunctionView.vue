@@ -21,6 +21,7 @@ import Sidebar from '../components/Sidebar.vue'
 import ContentState from '../components/ContentState.vue'
 import DagPanel from '../components/DagPanel.vue'
 import NodeDrawer from '../components/NodeDrawer.vue'
+import { fetchJson } from '../utils/http.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,9 +42,7 @@ const fetchFunctions = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await fetch('/ui/api/functions', { signal: controller.signal })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
+    const data = await fetchJson('/ui/api/functions', controller.signal)
     if (!controller.signal.aborted) functions.value = data
   } catch (reason) {
     if (!controller.signal.aborted) error.value = 'Failed to load functions. Please retry.'

@@ -5,61 +5,23 @@ import ApiView from '../views/ApiView.vue'
 import ModelView from '../views/ModelView.vue'
 import ServiceView from '../views/ServiceView.vue'
 
+const catalogRoutes = [
+  { path: '/table', name: 'Table', component: TableView },
+  { path: '/function', name: 'Function', component: FunctionView },
+  { path: '/api', name: 'Api', component: ApiView },
+  { path: '/model', name: 'Model', component: ModelView },
+  { path: '/service', name: 'Service', component: ServiceView }
+].flatMap(route => [
+  route,
+  { ...route, path: `${route.path}/:id`, name: `${route.name}Detail` }
+])
+
 const routes = [
   {
     path: '/',
     redirect: '/table'
   },
-  {
-    path: '/table',
-    name: 'Table',
-    component: TableView
-  },
-  {
-    path: '/table/:id',
-    name: 'TableDetail',
-    component: TableView
-  },
-  {
-    path: '/function',
-    name: 'Function',
-    component: FunctionView
-  },
-  {
-    path: '/function/:id',
-    name: 'FunctionDetail',
-    component: FunctionView
-  },
-  {
-    path: '/api',
-    name: 'Api',
-    component: ApiView
-  },
-  {
-    path: '/api/:id',
-    name: 'ApiDetail',
-    component: ApiView
-  },
-  {
-    path: '/model',
-    name: 'Model',
-    component: ModelView
-  },
-  {
-    path: '/model/:id',
-    name: 'ModelDetail',
-    component: ModelView
-  },
-  {
-    path: '/service',
-    name: 'Service',
-    component: ServiceView
-  },
-  {
-    path: '/service/:id',
-    name: 'ServiceDetail',
-    component: ServiceView
-  },
+  ...catalogRoutes,
   {
     path: '/:pathMatch(.*)*',
     redirect: '/table'

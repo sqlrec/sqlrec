@@ -15,10 +15,6 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  selected: {
-    type: Boolean,
-    default: false
-  },
   zScore: {
     type: Number,
     default: 0

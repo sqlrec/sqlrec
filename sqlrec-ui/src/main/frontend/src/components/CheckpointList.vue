@@ -65,7 +65,7 @@
         >
           Next
         </button>
-        <select v-model="localPageSize" class="page-size-select" aria-label="Items per page" @change="handlePageSizeChange">
+        <select v-model="pageSize" class="page-size-select" aria-label="Items per page" @change="handlePageSizeChange">
           <option :value="10">10/page</option>
           <option :value="20">20/page</option>
           <option :value="50">50/page</option>
@@ -79,6 +79,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { encodePathSegment } from '../utils/url.js'
+import { fetchJson } from '../utils/http.js'
 
 const props = defineProps({
   modelName: {
@@ -91,7 +92,6 @@ const checkpoints = ref([])
 const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
-const localPageSize = ref(10)
 const total = ref(0)
 const totalPages = ref(0)
 const error = ref('')
@@ -107,12 +107,10 @@ const fetchCheckpoints = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await fetch(
+    const data = await fetchJson(
       `/ui/api/models/${encodePathSegment(props.modelName)}/checkpoints?page=${page.value}&pageSize=${pageSize.value}`,
-      { signal: currentController.signal }
+      currentController.signal
     )
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
     if (!currentController.signal.aborted) {
       checkpoints.value = data.items
       total.value = data.total
@@ -133,7 +131,6 @@ const changePage = (newPage) => {
 }
 
 const handlePageSizeChange = () => {
-  pageSize.value = localPageSize.value
   page.value = 1
   fetchCheckpoints()
 }
@@ -150,9 +147,7 @@ watch(() => props.modelName, () => {
   fetchCheckpoints()
 })
 
-onMounted(() => {
-  fetchCheckpoints()
-})
+onMounted(fetchCheckpoints)
 onUnmounted(() => controller?.abort())
 </script>
 

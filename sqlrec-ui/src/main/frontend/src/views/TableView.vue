@@ -62,6 +62,7 @@ import { useRoute, useRouter } from 'vue-router'
 import DetailPanel from '../components/DetailPanel.vue'
 import ContentState from '../components/ContentState.vue'
 import { encodePathSegment } from '../utils/url.js'
+import { fetchJson } from '../utils/http.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,9 +98,7 @@ const fetchDatabases = async () => {
   databaseLoading.value = true
   databaseError.value = ''
   try {
-    const response = await fetch('/ui/api/tables/databases', { signal: controller.signal })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
+    const data = await fetchJson('/ui/api/tables/databases', controller.signal)
     if (!controller.signal.aborted) databases.value = data
   } catch (error) {
     if (!controller.signal.aborted) databaseError.value = 'Failed to load databases. Please retry.'
@@ -123,9 +122,7 @@ const loadTables = async dbName => {
   tableError.value = ''
   detailError.value = ''
   try {
-    const response = await fetch(`/ui/api/tables/${encodePathSegment(dbName)}/`, { signal: controller.signal })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
+    const data = await fetchJson(`/ui/api/tables/${encodePathSegment(dbName)}/`, controller.signal)
     if (!controller.signal.aborted) tables.value = data
   } catch (error) {
     if (!controller.signal.aborted) tableError.value = 'Failed to load tables. Please retry.'
@@ -155,12 +152,10 @@ const loadTableDetail = async (dbName, item) => {
   detailLoading.value = true
   detailError.value = ''
   try {
-    const response = await fetch(
+    const data = await fetchJson(
       `/ui/api/tables/${encodePathSegment(dbName)}/${encodePathSegment(item.name)}`,
-      { signal: controller.signal }
+      controller.signal
     )
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
     if (!controller.signal.aborted) selectedTable.value = { ...item, tableData: data.tableData }
   } catch (error) {
     if (!controller.signal.aborted) detailError.value = 'Failed to load table details. Please retry.'

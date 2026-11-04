@@ -1,6 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { encodePathSegment } from '../utils/url.js'
+import { fetchJson } from '../utils/http.js'
 
 export function useCatalogDetail({ listUrl, detailUrl, routeName, mapDetail }) {
   const route = useRoute()
@@ -33,9 +34,7 @@ export function useCatalogDetail({ listUrl, detailUrl, routeName, mapDetail }) {
     detailController = controller
     detailLoading.value = true
     try {
-      const response = await fetch(detailUrl(encodePathSegment(item.name)), { signal: controller.signal })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = await response.json()
+      const data = await fetchJson(detailUrl(encodePathSegment(item.name)), controller.signal)
       if (!controller.signal.aborted) detail.value = mapDetail(item, data)
     } catch (error) {
       if (!controller.signal.aborted) detailError.value = 'Failed to load details. Please retry.'
@@ -51,9 +50,7 @@ export function useCatalogDetail({ listUrl, detailUrl, routeName, mapDetail }) {
     listLoading.value = true
     listError.value = ''
     try {
-      const response = await fetch(listUrl, { signal: controller.signal })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = await response.json()
+      const data = await fetchJson(listUrl, controller.signal)
       if (controller.signal.aborted) return
       items.value = data
     } catch (error) {

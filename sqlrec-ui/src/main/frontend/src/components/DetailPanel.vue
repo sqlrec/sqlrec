@@ -33,7 +33,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
   item: {
@@ -42,15 +42,7 @@ const props = defineProps({
   }
 })
 
-const tableData = ref([])
-
-watch(() => props.item, (newItem) => {
-  if (newItem && newItem.tableData) {
-    tableData.value = newItem.tableData
-  } else {
-    tableData.value = []
-  }
-}, { immediate: true })
+const tableData = computed(() => props.item?.tableData || [])
 
 const getRowClass = (row) => {
   if (isSectionRow(row)) {

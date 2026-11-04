@@ -17,14 +17,8 @@
   --border: #e6e8ef;
   --radius-card: 8px;
   --radius-control: 6px;
-  --code-bg: #f4f3ec;
-  --accent: var(--brand);
-  --accent-bg: var(--brand-soft);
-  --accent-border: rgba(82, 100, 195, 0.45);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
 
   font: 16px/1.5 var(--sans);
   letter-spacing: 0.08px;
@@ -47,44 +41,8 @@ body {
   background: var(--page-bg);
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
 p {
   margin: 0;
-}
-
-code {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
 }
 
 #app {

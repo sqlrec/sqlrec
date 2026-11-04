@@ -21,7 +21,7 @@
         <Controls />
         
         <template #node-dag="nodeProps">
-          <DagNode :data="nodeProps.data" :selected="nodeProps.selected" :z-score="nodeProps.data.zScore" />
+          <DagNode :data="nodeProps.data" :z-score="nodeProps.data.zScore" />
         </template>
       </VueFlow>
     </div>
@@ -39,6 +39,8 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import DagNode from './DagNode.vue'
 import { encodePathSegment } from '../utils/url.js'
+import { fetchJson } from '../utils/http.js'
+import { calculateZScores } from '../utils/statistics.js'
 
 const props = defineProps({
   functionName: {
@@ -63,73 +65,19 @@ const defaultEdgeOptions = {
   style: { stroke: '#aab0bd', strokeWidth: 1.5 }
 }
 
-const calculateZScores = (nodesData) => {
-  const validTimes = nodesData
-    .map(n => n.avgExecTimeMs)
-    .filter(t => t !== null && t !== undefined && t >= 0)
-  
-  if (validTimes.length < 2) {
-    return nodesData.map(n => ({ ...n, zScore: 0, dataCountZScore: 0 }))
-  }
-  
-  const mean = validTimes.reduce((a, b) => a + b, 0) / validTimes.length
-  const variance = validTimes.reduce((sum, t) => sum + Math.pow(t - mean, 2), 0) / validTimes.length
-  const stdDev = Math.sqrt(variance)
-  
-  if (stdDev === 0) {
-    return nodesData.map(n => ({ ...n, zScore: 0, dataCountZScore: 0 }))
-  }
-  
-  return nodesData.map(n => {
-    const time = n.avgExecTimeMs
-    if (time === null || time === undefined || time < 0) {
-      return { ...n, zScore: 0, dataCountZScore: 0 }
-    }
-    const zScore = (time - mean) / stdDev
-    return { ...n, zScore }
-  })
-}
-
-const calculateDataCountZScores = (nodesData) => {
-  const validCounts = nodesData
-    .map(n => n.avgDataCount)
-    .filter(c => c !== null && c !== undefined && c >= 0)
-  
-  if (validCounts.length < 2) {
-    return nodesData.map(n => ({ ...n, dataCountZScore: 0 }))
-  }
-  
-  const mean = validCounts.reduce((a, b) => a + b, 0) / validCounts.length
-  const variance = validCounts.reduce((sum, c) => sum + Math.pow(c - mean, 2), 0) / validCounts.length
-  const stdDev = Math.sqrt(variance)
-  
-  if (stdDev === 0) {
-    return nodesData.map(n => ({ ...n, dataCountZScore: 0 }))
-  }
-  
-  return nodesData.map(n => {
-    const count = n.avgDataCount
-    if (count === null || count === undefined || count < 0) {
-      return { ...n, dataCountZScore: 0 }
-    }
-    const dataCountZScore = (count - mean) / stdDev
-    return { ...n, dataCountZScore }
-  })
-}
-
 const getEdgeWidth = (dataCountZScore) => {
   const clampedZ = Math.max(-2, Math.min(2, dataCountZScore))
   // Z = -2 → 0.5px, Z = 0 → 4.25px, Z = +2 → 8px
   return 4.25 + clampedZ * 1.875
 }
 
-const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
+const layoutGraph = (nodesData, edgesData) => {
   const dagreGraph = new dagre.graphlib.Graph()
   
   dagreGraph.setDefaultEdgeLabel(() => ({}))
   
   dagreGraph.setGraph({
-    rankdir: direction,
+    rankdir: 'LR',
     nodesep: 35,
     ranksep: 80,
     marginx: 30,
@@ -146,8 +94,6 @@ const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
   
   dagre.layout(dagreGraph)
   
-  const isHorizontal = direction === 'LR'
-  
   return nodesData.map(node => {
     const nodeWithPosition = dagreGraph.node(node.id)
     
@@ -158,8 +104,8 @@ const layoutGraph = (nodesData, edgesData, direction = 'LR') => {
         x: nodeWithPosition.x - 90,
         y: nodeWithPosition.y - 25
       },
-      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-      targetPosition: isHorizontal ? Position.Left : Position.Top,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: {
         label: node.label,
         type: node.type,
@@ -189,17 +135,14 @@ const fetchDagData = async () => {
   error.value = null
   
   try {
-    const response = await fetch(`/ui/api/functions-dag/${encodePathSegment(props.functionName)}`, {
-      signal: currentController.signal
-    })
-    if (!response.ok) {
-      throw new Error('Failed to fetch DAG data')
-    }
-    const data = await response.json()
+    const data = await fetchJson(
+      `/ui/api/functions-dag/${encodePathSegment(props.functionName)}`,
+      currentController.signal
+    )
     if (currentController.signal.aborted) return
     
-    const nodesWithZScore = calculateZScores(data.nodes)
-    const nodesWithDataCountZScore = calculateDataCountZScores(nodesWithZScore)
+    const nodesWithZScore = calculateZScores(data.nodes, 'avgExecTimeMs', 'zScore')
+    const nodesWithDataCountZScore = calculateZScores(nodesWithZScore, 'avgDataCount', 'dataCountZScore')
     nodes.value = layoutGraph(nodesWithDataCountZScore, data.edges)
     
     const nodeMap = new Map(nodesWithDataCountZScore.map(n => [n.id, n]))
