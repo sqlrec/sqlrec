@@ -28,7 +28,11 @@ final class DataTypeSupport {
         }
 
         static RelDataType parse(RelDataTypeFactory factory, String text) {
-            String type = normalize(text);
+            boolean nullable = !text.trim().toUpperCase(Locale.ROOT).endsWith(" NOT NULL");
+            return factory.createTypeWithNullability(parseType(factory, normalize(text)), nullable);
+        }
+
+        private static RelDataType parseType(RelDataTypeFactory factory, String type) {
             if (type.startsWith("ARRAY<") && type.endsWith(">")) {
                 return factory.createArrayType(
                         parse(factory, type.substring("ARRAY<".length(), type.length() - 1)), -1);

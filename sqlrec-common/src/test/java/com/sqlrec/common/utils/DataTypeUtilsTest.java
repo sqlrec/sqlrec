@@ -17,6 +17,19 @@ class DataTypeUtilsTest {
     private final RelDataTypeFactory factory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
     @Test
+    void preservesNullabilityForScalarAndNestedTypes() {
+        for (String type : List.of("INTEGER", "VARCHAR(20)", "DECIMAL(12,2)", "TIMESTAMP(3)",
+                "ARRAY<INTEGER>")) {
+            assertTrue(DataTypeUtils.getRelDataType(type).isNullable(), type);
+            assertFalse(DataTypeUtils.getRelDataType(type + " NOT NULL").isNullable(), type);
+        }
+        RelDataType array = DataTypeUtils.getRelDataType("ARRAY<ARRAY<INTEGER NOT NULL> NOT NULL>");
+        assertTrue(array.isNullable());
+        assertFalse(array.getComponentType().isNullable());
+        assertFalse(array.getComponentType().getComponentType().isNullable());
+    }
+
+    @Test
     public void testGetRelDataTypeDecimalWithPrecisionAndScale() {
         RelDataType type = DataTypeUtils.getRelDataType("decimal(18, 6)");
 

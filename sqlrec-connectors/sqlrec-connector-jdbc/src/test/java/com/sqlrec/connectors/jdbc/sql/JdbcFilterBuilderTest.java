@@ -1,6 +1,11 @@
 package com.sqlrec.connectors.jdbc.sql;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.google.common.collect.ImmutableRangeSet;
+import com.google.common.collect.Range;
+import org.apache.calcite.rex.RexUnknownAs;
+import org.apache.calcite.util.NlsString;
+import org.apache.calcite.util.Sarg;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
@@ -313,16 +318,17 @@ class JdbcFilterBuilderTest {
     }
 
     @Test
-    public void testBuildSqlFilter_RejectsUnsupportedOperandKind() {
-        // a nested arithmetic call is not a supported operand and must fail fast
+    public void testBuildSqlFilter_LeavesUnsupportedOperandToCalcite() {
+        // A nested arithmetic call is evaluated by the residual Calcite filter.
         RexInputRef ref0 = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
         RexNode plus = rexBuilder.makeCall(SqlStdOperatorTable.PLUS, ref0,
                 rexBuilder.makeExactLiteral(new java.math.BigDecimal(1)));
         RexNode filter = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, plus,
                 rexBuilder.makeExactLiteral(new java.math.BigDecimal(2)));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> JdbcFilterBuilder.build(Collections.singletonList(filter), sqlFieldSchemas, PG_URL));
+        JdbcStatement result = JdbcFilterBuilder.build(List.of(filter), sqlFieldSchemas, PG_URL);
+        assertEquals("", result.getSql());
+        assertTrue(result.getParameters().isEmpty());
     }
 
     @Test
@@ -335,6 +341,47 @@ class JdbcFilterBuilderTest {
         assertEquals("NOT (id)", result.getSql());
     }
 
+
+    @Test
+    void dropsUnsupportedCompositeWithoutLeakingParameters() {
+        RexNode id = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        RexNode one = rexBuilder.makeExactLiteral(java.math.BigDecimal.ONE);
+        RexNode supported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, id, one);
+        RexNode unsupported = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeCall(SqlStdOperatorTable.PLUS, id, one), one);
+        for (SqlOperator operator : List.of(SqlStdOperatorTable.AND, SqlStdOperatorTable.OR)) {
+            RexNode composite = rexBuilder.makeCall(operator, supported, unsupported);
+            JdbcStatement result = JdbcFilterBuilder.build(List.of(composite, supported), sqlFieldSchemas, PG_URL);
+            assertEquals("id = ?", result.getSql());
+            assertEquals(List.of(java.math.BigDecimal.ONE), result.getParameters());
+        }
+    }
+
+    @Test
+    void expandsSearchRangesAndComplementsIntoBoundComparisons() {
+        RexInputRef id = rexBuilder.makeInputRef(typeFactory.createSqlType(SqlTypeName.INTEGER), 0);
+        var range = ImmutableRangeSet.of(Range.closed(java.math.BigDecimal.ONE, java.math.BigDecimal.TEN));
+        for (var ranges : List.of(range, range.complement())) {
+            RexNode search = rexBuilder.makeCall(SqlStdOperatorTable.SEARCH, id,
+                    rexBuilder.makeSearchArgumentLiteral(Sarg.of(RexUnknownAs.UNKNOWN, ranges), id.getType()));
+            JdbcStatement result = JdbcFilterBuilder.build(List.of(search), sqlFieldSchemas, PG_URL);
+            assertFalse(result.getSql().isEmpty());
+            assertEquals(List.of(java.math.BigDecimal.ONE, java.math.BigDecimal.TEN), result.getParameters());
+        }
+    }
+
+    @Test
+    void bindsStringSearchEndpointsAsJavaStrings() {
+        RexInputRef name = rexBuilder.makeInputRef(rexBuilder.makeLiteral("Alice").getType(), 1);
+        var points = ImmutableRangeSet.<NlsString>builder()
+                .add(Range.singleton(rexBuilder.makeLiteral("Alice").getValueAs(NlsString.class)))
+                .add(Range.singleton(rexBuilder.makeLiteral("Bob").getValueAs(NlsString.class))).build();
+        RexNode search = rexBuilder.makeCall(SqlStdOperatorTable.SEARCH, name,
+                rexBuilder.makeSearchArgumentLiteral(Sarg.of(RexUnknownAs.UNKNOWN, points), name.getType()));
+        JdbcStatement result = JdbcFilterBuilder.build(List.of(search), sqlFieldSchemas, PG_URL);
+        assertFalse(result.getSql().isEmpty());
+        assertEquals(List.of("Alice", "Bob"), result.getParameters());
+    }
 
     private static final SqlOperator ARRAY_CONTAINS = new SqlFunction(
             "ARRAY_CONTAINS",
