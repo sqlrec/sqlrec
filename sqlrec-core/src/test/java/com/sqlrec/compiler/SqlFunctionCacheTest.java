@@ -44,6 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -139,9 +141,30 @@ class SqlFunctionCacheTest {
     }
 
     @Test
+    void refreshEvictsDeletedFunction() throws Exception {
+        putFunction("deleted", 1);
+        ManualTicker ticker = new ManualTicker();
+        QueuedExecutor executor = new QueuedExecutor();
+        Cache<String, SqlFunctionBindable> cache = newRefreshCache(ticker, executor);
+        CompileManager manager = new CompileManager(cache);
+
+        SqlFunctionBindable original = manager.getSqlFunction("deleted");
+        executor.runAll();
+        metadataAccess.deleteSqlFunction("deleted");
+        ticker.advance(Duration.ofMillis(1100));
+
+        assertSame(original, manager.getSqlFunction("deleted"));
+        executor.runAll();
+
+        assertNull(cache.getIfPresent("deleted"));
+        Exception failure = assertThrows(Exception.class, () -> manager.getSqlFunction("deleted"));
+        assertTrue(failure.getMessage().contains("function not fund"));
+    }
+
+    @Test
     @SilenceLoggers(CacheUtils.class)
     void failedRefreshKeepsOldValueAndRecordsFailure() throws Exception {
-        putFunction("deleted", 1);
+        putFunction("invalid", 1);
         ManualTicker ticker = new ManualTicker();
         QueuedExecutor executor = new QueuedExecutor();
         Cache<String, SqlFunctionBindable> cache = newRefreshCache(ticker, executor);
@@ -149,21 +172,21 @@ class SqlFunctionCacheTest {
         SimpleMeterRegistry metrics = new SimpleMeterRegistry();
         MetricsUtils.getCompositeMeterRegistry().add(metrics);
         try {
-            SqlFunctionBindable original = manager.getSqlFunction("deleted");
+            SqlFunctionBindable original = manager.getSqlFunction("invalid");
             executor.runAll();
-            metadataAccess.deleteSqlFunction("deleted");
+            putFunction("invalid", List.of("not valid SQL"));
             ticker.advance(Duration.ofMillis(1100));
 
-            assertSame(original, manager.getSqlFunction("deleted"));
+            assertSame(original, manager.getSqlFunction("invalid"));
             executor.runAll();
-            assertSame(original, cache.getIfPresent("deleted"));
+            assertSame(original, cache.getIfPresent("invalid"));
 
             ticker.advance(Duration.ofMillis(500));
-            assertSame(original, manager.getSqlFunction("deleted"));
+            assertSame(original, manager.getSqlFunction("invalid"));
             assertEquals(0, executor.size());
 
             ticker.advance(Duration.ofMillis(600));
-            assertSame(original, manager.getSqlFunction("deleted"));
+            assertSame(original, manager.getSqlFunction("invalid"));
             assertEquals(1, executor.size());
 
             Timer duration = metrics.find(Consts.METRICS_FUNCTION_UPDATE_DURATION)

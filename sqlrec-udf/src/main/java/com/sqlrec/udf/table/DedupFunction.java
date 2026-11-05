@@ -27,7 +27,7 @@ public class DedupFunction {
             throw new IllegalArgumentException("col1 not found in input table: " + col1);
         }
 
-        Set<String> existingKeys = new HashSet<>();
+        Set<Object> existingKeys = new HashSet<>();
         if (dedupTable != null) {
             int dedupColIndex = findColumnPosition(dedupTable.getDataFields(), col2);
             if (dedupColIndex == -1) {
@@ -38,7 +38,7 @@ public class DedupFunction {
             if (dedupEnumerable != null) {
                 for (Object[] row : dedupEnumerable) {
                     Object value = row[dedupColIndex];
-                    existingKeys.add(value == null ? "null" : value.toString());
+                    existingKeys.add(value);
                 }
             }
         }
@@ -49,8 +49,7 @@ public class DedupFunction {
         if (inputEnumerable != null) {
             for (Object[] row : inputEnumerable) {
                 Object value = row[inputColIndex];
-                String key = value == null ? "null" : value.toString();
-                if (!existingKeys.contains(key)) {
+                if (!existingKeys.contains(value)) {
                     newData.add(row);
                 }
             }

@@ -25,7 +25,7 @@ public class WeightedMergeFunction implements UnionLikeTableFunction {
                 weightArray,
                 limitNum,
                 dedupEnabled
-                        ? row -> row[primaryKeyIndex] == null ? "null" : row[primaryKeyIndex].toString()
+                        ? row -> row[primaryKeyIndex]
                         : null,
                 scanTables(tables)
         );

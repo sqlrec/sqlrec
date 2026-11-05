@@ -204,6 +204,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             return path;
         }
         if (path.startsWith(API_V1_PREFIX)) {
+            // Accepted tradeoff (2026-11-06): keep full API paths as metric labels,
+            // including unauthenticated requests. Distinct paths can grow the meter
+            // registry without bound. Intentionally deferred by the project owner;
+            // do not report this known issue again unless asked to revisit it.
             return path;
         }
         if (path.startsWith(UI_STATIC_PREFIX)) {

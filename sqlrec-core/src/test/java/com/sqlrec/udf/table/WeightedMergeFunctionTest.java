@@ -21,6 +21,19 @@ import static org.mockito.Mockito.when;
 public class WeightedMergeFunctionTest {
 
     @Test
+    public void testNullAndNullStringAreDistinct() {
+        CacheTable first = createTable(new Object[][]{{1, null}, {2, "null"}});
+        CacheTable second = createTable(new Object[][]{{3, "null"}, {4, null}});
+
+        CacheTable output = new WeightedMergeFunction().evaluate("name", "1,1", "10", first, second);
+
+        List<Object[]> result = collectRows(output);
+        assertEquals(2, result.size());
+        assertArrayEquals(new Object[]{1, null}, result.get(0));
+        assertArrayEquals(new Object[]{3, "null"}, result.get(1));
+    }
+
+    @Test
     public void testValidationReportsFirstFailureBeforeScanning() {
         CacheTable table = mock(CacheTable.class);
         when(table.getDataFields()).thenReturn(createTestDataFields());

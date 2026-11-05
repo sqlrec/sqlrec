@@ -5,7 +5,10 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
+import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.utils.CacheUtils;
 import com.sqlrec.utils.ExecutorServiceUtils;
@@ -68,9 +71,15 @@ public final class SqlFunctionCache {
         long startTime = System.nanoTime();
         String status = "success";
         try {
+            SqlFunction function = MetadataAccessFactory.getInstance().getSqlFunction(functionName);
+            if (function == null) {
+                // A null refresh result removes the deleted function from Caffeine.
+                return null;
+            }
             Cache<String, SqlFunctionBindable> temporaryCache = Caffeine.newBuilder().build();
             SqlFunctionBindable bindable =
-                    new CompileManager(temporaryCache).getSqlFunction(functionName);
+                    new CompileManager(temporaryCache).compileSqlFunction(
+                            functionName, JsonUtils.parseStringList(function.getSqlList()));
             log.info("SQL function cache refreshed: {}", functionName);
             return bindable;
         } catch (Exception | Error e) {

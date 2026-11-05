@@ -16,6 +16,24 @@ import static org.junit.jupiter.api.Assertions.*;
 public class DedupFunctionTest {
 
     @Test
+    public void testNullAndNullStringAreDistinct() {
+        CacheTable input = createTable(new Object[][]{{1, null}, {2, "null"}, {3, "other"}});
+        DedupFunction function = new DedupFunction();
+
+        List<Object[]> withoutNull = collectRows(function.evaluate(input,
+                createTable(new Object[][]{{4, null}}), "name", "name"));
+        assertEquals(2, withoutNull.size());
+        assertArrayEquals(new Object[]{2, "null"}, withoutNull.get(0));
+        assertArrayEquals(new Object[]{3, "other"}, withoutNull.get(1));
+
+        List<Object[]> withoutString = collectRows(function.evaluate(input,
+                createTable(new Object[][]{{4, "null"}}), "name", "name"));
+        assertEquals(2, withoutString.size());
+        assertArrayEquals(new Object[]{1, null}, withoutString.get(0));
+        assertArrayEquals(new Object[]{3, "other"}, withoutString.get(1));
+    }
+
+    @Test
     public void testBasicDedup() {
         CacheTable input = createTable(new Object[][]{{1, "A"}, {2, "B"}, {3, "C"}});
         CacheTable dedup = createTable(new Object[][]{{2, "X"}});
