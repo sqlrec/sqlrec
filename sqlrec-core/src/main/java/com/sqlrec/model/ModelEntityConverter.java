@@ -79,7 +79,7 @@ public class ModelEntityConverter {
             ));
         }
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
-        modelTrainConf.setId(K8sYamlUtils.convertToValidK8sName(modelTrainConf.getModelName() + "-" + modelTrainConf.getCheckpointName()));
+        modelTrainConf.setId(K8sYamlUtils.checkpointJobId("train", modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         if (sqlTrainModel.getDataSource() == null) {
             modelTrainConf.setTrainDataPaths(Collections.emptyList());
         } else {
@@ -99,7 +99,7 @@ public class ModelEntityConverter {
         modelExportConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         modelExportConf.setParams(SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList()));
-        modelExportConf.setId(K8sYamlUtils.convertToValidK8sName(modelExportConf.getModelName() + "-" + modelExportConf.getCheckpointName() + "-export"));
+        modelExportConf.setId(K8sYamlUtils.checkpointJobId("export", modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         if (sqlExportModel.getDataSource() == null) {
             modelExportConf.setTrainDataPaths(Collections.emptyList());
         } else {

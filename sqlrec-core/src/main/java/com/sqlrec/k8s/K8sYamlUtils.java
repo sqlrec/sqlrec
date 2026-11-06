@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -21,23 +23,33 @@ public class K8sYamlUtils {
     private K8sYamlUtils() {
     }
 
-    public static String convertToValidK8sName(String name) {
-        if (name == null || name.isEmpty()) {
-            return name;
+    /** Readable names plus a digest of the full logical names, leaving room for -job-headless. */
+    public static String checkpointJobId(String operation, String modelName, String checkpointName) {
+        if (!Set.of("train", "export").contains(operation)) {
+            throw new IllegalArgumentException("Unsupported checkpoint operation: " + operation);
         }
-
-        String validName = name.toLowerCase(Locale.ROOT);
-        validName = validName.replace('_', '-');
-        validName = validName.replaceAll("[^a-z0-9.-]", "-");
-        validName = validName.trim().replaceAll("^[.-]+|[.-]+$", "");
-        validName = validName.replaceAll("[.-]+", "-");
-
-        if (validName.length() > 63) {
-            validName = validName.substring(0, 63);
-            validName = validName.replaceAll("[.-]+$", "");
+        String key = operation + "\0" + modelName + "\0" + checkpointName;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
+            String hash = HexFormat.of().formatHex(digest, 0, 8);
+            String prefix = operation + "-";
+            String model = jobNamePart(modelName);
+            String checkpoint = jobNamePart(checkpointName);
+            int nameBudget = 63 - "-job-headless".length() - prefix.length() - hash.length() - 2;
+            // Share the readable space, letting the longer name use any remainder.
+            int modelLength = Math.min(model.length(), nameBudget / 2);
+            int checkpointLength = Math.min(checkpoint.length(), nameBudget - modelLength);
+            modelLength = Math.min(model.length(), nameBudget - checkpointLength);
+            return prefix + model.substring(0, modelLength).replaceAll("-+$", "") + "-"
+                    + checkpoint.substring(0, checkpointLength).replaceAll("-+$", "") + "-" + hash;
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
         }
+    }
 
-        return validName;
+    private static String jobNamePart(String name) {
+        String part = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        return part.isEmpty() ? "x" : part;
     }
 
     /** Kubernetes Service RFC 1035 DNS labels, without normalization or suffixes. */

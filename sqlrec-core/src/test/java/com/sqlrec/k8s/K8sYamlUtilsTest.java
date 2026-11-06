@@ -246,14 +246,49 @@ spec:
     }
 
     @Test
-    public void testConvertToValidK8sName() {
-        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("Test_Name"));
-        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("test@name"));
-        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("  test-name  "));
-        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("test--name"));
-        assertEquals("test-name", K8sYamlUtils.convertToValidK8sName("-test-name-"));
-        assertNull(K8sYamlUtils.convertToValidK8sName(null));
-        assertEquals("", K8sYamlUtils.convertToValidK8sName(""));
+    void checkpointJobIdsAreStableAndPreserveDistinctLogicalNames() {
+        String id = K8sYamlUtils.checkpointJobId("train", "rank", "v1.0");
+        assertTrue(id.matches("train-rank-v1-0-[0-9a-f]{16}"), id);
+        assertEquals(id, K8sYamlUtils.checkpointJobId("train", "rank", "v1.0"));
+        assertNotEquals(id, K8sYamlUtils.checkpointJobId("train", "rank", "v1_0"));
+        assertNotEquals(K8sYamlUtils.checkpointJobId("train", "rank", "v1--a"),
+                K8sYamlUtils.checkpointJobId("train", "rank", "v1-a"));
+        assertNotEquals(K8sYamlUtils.checkpointJobId("train", "a-b", "c"),
+                K8sYamlUtils.checkpointJobId("train", "a", "b-c"));
+        assertNotEquals(K8sYamlUtils.checkpointJobId("train", "rank", "v1-export"),
+                K8sYamlUtils.checkpointJobId("export", "rank", "v1"));
+        assertThrows(IllegalArgumentException.class,
+                () -> K8sYamlUtils.checkpointJobId("other", "rank", "v1"));
+    }
+
+    @Test
+    void checkpointJobIdsKeepReadablePartsAndHandleNonDnsCharacters() {
+        String export = K8sYamlUtils.checkpointJobId("export", "Rank_Model", "v1.0/user");
+        assertTrue(export.matches("export-rank-model-v1-0-user-[0-9a-f]{16}"), export);
+        String fallback = K8sYamlUtils.checkpointJobId("train", "推荐", "版本");
+        assertTrue(fallback.matches("train-x-x-[0-9a-f]{16}"), fallback);
+        assertNotEquals(fallback, K8sYamlUtils.checkpointJobId("train", "推荐", "其他"));
+        assertTrue(K8sYamlUtils.checkpointJobId("train", "very-long-model-name", "v1")
+                .startsWith("train-very-long-model-name-v1-"));
+        assertTrue(K8sYamlUtils.checkpointJobId("export", "rank", "checkpoint-with-long-name")
+                .startsWith("export-rank-checkpoint-with-long-"));
+    }
+
+    @Test
+    void checkpointJobIdsFitAllResourceSuffixesAndHashFullLogicalNames() {
+        String model = "model".repeat(100);
+        String checkpoint = "version".repeat(100);
+        for (String operation : java.util.List.of("train", "export")) {
+            String id = K8sYamlUtils.checkpointJobId(operation, model, checkpoint);
+            assertTrue(id.matches(operation + "-model[a-z]*-version[a-z]*-[0-9a-f]{16}"), id);
+            assertNotEquals(id, K8sYamlUtils.checkpointJobId(operation, model + "x", checkpoint));
+            assertNotEquals(id, K8sYamlUtils.checkpointJobId(operation, model, checkpoint + "x"));
+            for (String suffix : java.util.List.of("-cm", "-job", "-job-headless")) {
+                String name = id + suffix;
+                assertTrue(name.length() <= 63);
+                assertTrue(name.matches("[a-z]([-a-z0-9]*[a-z0-9])?"), name);
+            }
+        }
     }
 
     @Test

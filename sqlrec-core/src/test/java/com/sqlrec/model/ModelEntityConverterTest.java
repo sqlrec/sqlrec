@@ -4,6 +4,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Model;
+import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.model.tzrec.PipelineConfigUtils;
 import com.sqlrec.common.model.ModelConf;
@@ -56,6 +57,27 @@ class ModelEntityConverterTest {
             }
             assertEquals("/models/rank/v1_export/item",
                     ModelEntityConverter.getModelCheckpointPath("rank", "v1_export/item"));
+        }
+    }
+
+    @Test
+    void taskIdsUseOperationAndLogicalNamesWithoutChangingCheckpointPaths() throws Exception {
+        MetadataAccess db = mock(MetadataAccess.class);
+        Model model = new Model();
+        model.setDdl("CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')");
+        when(db.getModel("rank")).thenReturn(model);
+        try (var metadata = mockStatic(MetadataAccessFactory.class)) {
+            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
+            var train = ModelEntityConverter.convertToModelTrainConf((SqlTrainModel) CompileManager.parseSql(
+                    "TRAIN MODEL `rank` CHECKPOINT='v1.0'"), "default");
+            var export = ModelEntityConverter.convertToModelExportConf(
+                    (SqlExportModel) CompileManager.parseSql(
+                            "EXPORT MODEL `rank` CHECKPOINT='v1.0'"), "default");
+            assertEquals("v1.0", train.getCheckpointName());
+            assertEquals("/models/rank/v1.0", train.getModelDir());
+            assertEquals("/models/rank/v1.0", export.getBaseModelDir());
+            assertEquals("train-rank-v1-0-642e9358bcfc1d4d", train.getId());
+            assertEquals("export-rank-v1-0-270fbb523004f1f5", export.getId());
         }
     }
 

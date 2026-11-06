@@ -115,12 +115,44 @@ class ModelManagerExportTest {
         }
     }
 
+    @Test
+    void originExportTargetsAreRejectedBeforeAnyJobChecksOrChanges() throws Exception {
+        for (String status : List.of(Consts.CHECKPOINT_STATUS_CREATED,
+                Consts.CHECKPOINT_STATUS_SUCCEEDED, Consts.CHECKPOINT_STATUS_FAILED)) {
+            try (ExportFixture fixture = new ExportFixture()) {
+                fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_CREATED).setYaml("running-job");
+                fixture.checkpoint("export_b", status).setCheckpointType(Consts.CHECKPOINT_TYPE_ORIGIN);
+                var error = assertThrows(IllegalArgumentException.class, fixture::export);
+                assertTrue(error.getMessage().contains("not an export checkpoint"));
+                assertTrue(fixture.events.isEmpty());
+                verify(fixture.db, never()).upsertCheckpoint(any());
+                fixture.k8s.verifyNoInteractions();
+            }
+        }
+    }
+
+    @Test
+    void dssmOutputsCanBeReplacedTogetherUnderTheirSharedDirectory() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            List<String> outputs = List.of("source_export/item", "source_export/user");
+            when(fixture.controller.getExportCheckpoints(fixture.export)).thenReturn(outputs);
+            when(fixture.controller.getExportCleanPath(fixture.export)).thenReturn("/models/rank/source_export");
+            outputs.forEach(name -> fixture.checkpoint(name, Consts.CHECKPOINT_STATUS_SUCCEEDED));
+            assertEquals(outputs, fixture.export().stream().map(CheckpointInfo::getCheckpointName).toList());
+            verify(fixture.db).hdfsDeletePath("/models/rank/source_export/item");
+            verify(fixture.db).hdfsDeletePath("/models/rank/source_export/user");
+            verify(fixture.db).hdfsDeletePath("/models/rank/source_export");
+            assertEquals(2, fixture.inserted.size());
+        }
+    }
+
     private static final class ExportFixture implements AutoCloseable {
         private final MetadataAccess db = mock(MetadataAccess.class);
         private final SqlExportModel statement = mock(SqlExportModel.class);
         private final ModelController controller = mock(ModelController.class);
         private final List<String> events = new ArrayList<>();
         private final List<Checkpoint> inserted = new ArrayList<>();
+        private final ModelExportConf export = new ModelExportConf();
         private final MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
         private final MockedStatic<ModelEntityConverter> converter = mockStatic(ModelEntityConverter.class);
         private final MockedStatic<ModelControllerFactory> controllers = mockStatic(ModelControllerFactory.class);
@@ -132,7 +164,6 @@ class ModelManagerExportTest {
             modelEntity.setDdl("model-ddl");
             ModelConf model = new ModelConf();
             model.setPath("/models/rank");
-            ModelExportConf export = new ModelExportConf();
             export.setModelName("rank");
             export.setCheckpointName("source");
             export.setParams(Map.of());
@@ -177,6 +208,7 @@ class ModelManagerExportTest {
             checkpoint.setModelName("rank");
             checkpoint.setCheckpointName(name);
             checkpoint.setStatus(status);
+            checkpoint.setCheckpointType(name.equals("source") ? Consts.CHECKPOINT_TYPE_ORIGIN : Consts.CHECKPOINT_TYPE_EXPORT);
             checkpoint.setModelDdl("model-ddl");
             converter.when(() -> ModelEntityConverter.getModelCheckpointPath(checkpoint)).thenCallRealMethod();
             when(db.getCheckpoint("rank", name)).thenReturn(checkpoint);

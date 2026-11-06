@@ -134,7 +134,7 @@ public class ModelManager {
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
         if (existingCheckpoint != null) {
-            validateCheckpointDeletion(db, existingCheckpoint);
+            validateCheckpointModification(db, existingCheckpoint);
             if (StringUtils.isNotEmpty(existingCheckpoint.getYaml())) {
                 K8sManager.deleteYamlAndWait(existingCheckpoint.getYaml());
             }
@@ -237,10 +237,16 @@ public class ModelManager {
             if (checkpoint == null) {
                 continue;
             }
+            if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
+                throw new IllegalArgumentException("Export target is not an export checkpoint: " + name);
+            }
             existing.add(checkpoint);
+        }
+        // Validate every target's type before consulting Jobs or changing checkpoint status.
+        for (Checkpoint checkpoint : existing) {
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())
                     && canReuseCreatedCheckpoint(db, checkpoint)) {
-                log.info("Model {} has export checkpoint {} in progress", modelName, name);
+                log.info("Model {} has export checkpoint {} in progress", modelName, checkpoint.getCheckpointName());
                 inProgress.add(new CheckpointInfo(checkpoint.getModelName(), checkpoint.getCheckpointName()));
             }
         }
@@ -251,12 +257,12 @@ public class ModelManager {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         // Preflight every output before deleting the first one.
         for (Checkpoint checkpoint : checkpoints) {
-            validateCheckpointDeletion(db, checkpoint);
+            validateCheckpointModification(db, checkpoint);
         }
         for (Checkpoint checkpoint : checkpoints) {
             log.info("Model {} re export checkpoint {}, deleting old first",
                     modelName, checkpoint.getCheckpointName());
-            deleteCheckpoint(modelName, checkpoint.getCheckpointName());
+            deleteCheckpoint(db, checkpoint);
         }
     }
 
@@ -291,8 +297,11 @@ public class ModelManager {
             return;
         }
 
-        String checkpointPath = validateCheckpointDeletion(db, checkpoint);
+        deleteCheckpoint(db, checkpoint);
+    }
 
+    private static void deleteCheckpoint(MetadataAccess db, Checkpoint checkpoint) throws Exception {
+        String checkpointPath = validateCheckpointModification(db, checkpoint);
         String status = checkpoint.getStatus();
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
             String k8sYaml = checkpoint.getYaml();
@@ -303,15 +312,15 @@ public class ModelManager {
 
         db.hdfsDeletePath(checkpointPath);
 
-        db.deleteCheckpoint(modelName, checkpointName);
+        db.deleteCheckpoint(checkpoint.getModelName(), checkpoint.getCheckpointName());
     }
 
-    private static String validateCheckpointDeletion(MetadataAccess db, Checkpoint checkpoint) throws Exception {
+    private static String validateCheckpointModification(MetadataAccess db, Checkpoint checkpoint) throws Exception {
         String modelName = checkpoint.getModelName();
         String checkpointName = checkpoint.getCheckpointName();
         List<Service> services = db.getServiceListByCheckpoint(modelName, checkpointName);
         if (!services.isEmpty()) {
-            throw new IllegalArgumentException("Cannot delete checkpoint " + checkpointName + " for model " + modelName +
+            throw new IllegalArgumentException("Cannot modify checkpoint " + checkpointName + " for model " + modelName +
                     " because it is being used by " + services.size() + " service(s): " +
                     String.join(", ", services.stream().map(Service::getName).toList()));
         }
@@ -335,7 +344,7 @@ public class ModelManager {
 
         List<Checkpoint> checkpoints = db.getCheckpointListByModelName(modelName);
         for (Checkpoint checkpoint : checkpoints) {
-            deleteCheckpoint(modelName, checkpoint.getCheckpointName());
+            deleteCheckpoint(db, checkpoint);
         }
 
         ModelConf modelConfig = ModelEntityConverter.convertToModel(model.getDdl());
