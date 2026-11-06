@@ -365,13 +365,74 @@ spec:
         CatBoostModel modelController = new CatBoostModel();
         String k8sYaml = modelController.getServiceK8sYaml(model, serviceConf);
 
-        // Serving now uses bash -c with an inline script that downloads model
-        // from HDFS and runs the C++ catboost_server binary (not server.sh).
-        assertTrue(k8sYaml.contains("catboost_server"), "YAML should contain catboost_server binary");
-        assertFalse(k8sYaml.contains("/app/server.sh"), "YAML should not contain old server.sh path");
-        assertTrue(k8sYaml.contains("cb-service-id"));
-        assertTrue(k8sYaml.contains("replicas: 3"));
-        assertTrue(k8sYaml.contains("/model/checkpoint/v1"));
+        String expectedYaml = """
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "cb-service-id"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: "cb-service-id"
+  template:
+    metadata:
+      labels:
+        app: "cb-service-id"
+    spec:
+      containers:
+      - command:
+        - "bash"
+        - "-c"
+        - |
+          #!/bin/bash
+          set -ex
+
+          LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
+          rm -rf "$LOCAL_CACHE_DIR"
+          ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/v1' "$LOCAL_CACHE_DIR"
+
+          exec /app/catboost_server "$LOCAL_CACHE_DIR" 80
+        image: "sqlrec/gbdt:%s-cpu"
+        name: "gbdt-service"
+        ports:
+        - containerPort: 80
+          name: "http"
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: "8"
+            memory: "32Gi"
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+        startupProbe:
+          failureThreshold: 120
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: "cb-service-id"
+spec:
+  ports:
+  - name: "server"
+    port: 80
+    targetPort: 80
+  selector:
+    app: "cb-service-id"
+""".formatted(SQLREC_VERSION.getValue());
+        assertEquals(expectedYaml, k8sYaml);
     }
 
     @Test
@@ -386,12 +447,70 @@ spec:
         CatBoostModel modelController = new CatBoostModel();
         String k8sYaml = modelController.getServiceK8sYaml(model, serviceConf);
 
-        // Serving now uses bash -c with an inline script that downloads model
-        // from HDFS and runs the C++ catboost_server binary (not server.sh).
-        assertTrue(k8sYaml.contains("catboost_server"), "YAML should contain catboost_server binary");
-        assertFalse(k8sYaml.contains("/app/server.sh"), "YAML should not contain old server.sh path");
-        assertTrue(k8sYaml.contains("cb-default-service-id"));
-        assertTrue(k8sYaml.contains("replicas: 1"));
-        assertTrue(k8sYaml.contains("/model/checkpoint/default"));
+        String expectedYaml = """
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "cb-default-service-id"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "cb-default-service-id"
+  template:
+    metadata:
+      labels:
+        app: "cb-default-service-id"
+    spec:
+      containers:
+      - command:
+        - "bash"
+        - "-c"
+        - |
+          #!/bin/bash
+          set -ex
+
+          LOCAL_CACHE_DIR=${LOCAL_CACHE_DIR:-/tmp/gbdt_model_cache}
+          rm -rf "$LOCAL_CACHE_DIR"
+          ${HADOOP_HOME}/bin/hadoop fs -get '/model/checkpoint/default' "$LOCAL_CACHE_DIR"
+
+          exec /app/catboost_server "$LOCAL_CACHE_DIR" 80
+        image: "sqlrec/gbdt:%s-cpu"
+        name: "gbdt-service"
+        ports:
+        - containerPort: 80
+          name: "http"
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        startupProbe:
+          failureThreshold: 120
+          httpGet:
+            path: "/health"
+            port: 80
+          periodSeconds: 5
+          timeoutSeconds: 5
+---
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: "cb-default-service-id"
+spec:
+  ports:
+  - name: "server"
+    port: 80
+    targetPort: 80
+  selector:
+    app: "cb-default-service-id"
+""".formatted(SQLREC_VERSION.getValue());
+        assertEquals(expectedYaml, k8sYaml);
     }
 }

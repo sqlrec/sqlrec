@@ -21,7 +21,11 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -73,18 +77,28 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
         Map<String, String> params = PipelineConfigUtils.operationParams(model, serviceConf.getParams());
         String serviceConfig = PipelineConfigUtils.buildServiceConfig(model, params);
         String shell = ShellUtils.genServeShell(serviceConf.getModelCheckpointDir());
-
         ConfigMap configMap = new ConfigMapBuilder()
                 .withNewMetadata().withName(name + "-cm").endMetadata()
                 .addToData("service.config", serviceConfig)
                 .addToData(ModelConfigBase.START_SHELL_NAME, shell)
                 .build();
         String configMapYaml = Serialization.asYaml(configMap);
-        String deploymentYaml = createServiceDeploymentYaml(name, name + "-cm", params);
+        String deploymentYaml = createServiceDeploymentYaml(
+                name, name + "-cm", params, configChecksum(serviceConfig, shell));
         return mergeK8sYamls(configMapYaml, createServingResourcesYaml(name, deploymentYaml));
     }
 
-    static String createServiceDeploymentYaml(String name, String configMapName, Map<String, String> params) {
+    private static String configChecksum(String serviceConfig, String shell) {
+        try {
+            byte[] content = (serviceConfig + "\n" + shell).getBytes(StandardCharsets.UTF_8);
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    static String createServiceDeploymentYaml(String name, String configMapName,
+                                             Map<String, String> params, String configChecksum) {
         String image = Config.IMAGE.getValue(params) + ":" + Config.VERSION.getValue(params);
         List<EnvVar> env = new ArrayList<>();
         String secretName = Config.OPENAI_API_KEY_SECRET.getValueOrNull(params);
@@ -101,7 +115,11 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
                     .withReplicas(Config.REPLICAS.getValue(params))
                     .withNewSelector().withMatchLabels(Map.of("app", name)).endSelector()
                     .withNewTemplate()
-                        .withNewMetadata().withLabels(Map.of("app", name)).endMetadata()
+                        .withNewMetadata()
+                            .withLabels(Map.of("app", name))
+                            // ConfigMap updates alone do not restart the model process.
+                            .addToAnnotations("sqlrec.io/config-checksum", configChecksum)
+                        .endMetadata()
                         .withNewSpec()
                             .addNewContainer()
                                 .withName("transformers-service")

@@ -8,6 +8,10 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.schema.FieldSchema;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.utils.Serialization;
 
 import java.util.HashMap;
 import java.util.List;
@@ -151,6 +155,51 @@ class HuggingFaceTransformersModelTest {
         assertTrue(yaml.contains("nvidia.com/gpu"));
         assertTrue(yaml.contains("huggingface.server"));
         assertTrue(yaml.contains("hadoop fs -get"));
+        for (Object resource : (Iterable<?>) Serialization.unmarshal(yaml)) {
+            if (resource instanceof ConfigMap configMap) {
+                assertEquals("image-embedding-service-cm", configMap.getMetadata().getName());
+                assertTrue(configMap.getData().containsKey("service.config"));
+                assertTrue(configMap.getData().containsKey("start.sh"));
+            }
+        }
+        var pod = servicePodTemplate(model, service).getSpec();
+        assertEquals("image-embedding-service-cm", pod.getVolumes().get(0).getConfigMap().getName());
+        var container = pod.getContainers().get(0);
+        assertEquals("/data", container.getVolumeMounts().get(0).getMountPath());
+        assertEquals(List.of("bash", "/data/start.sh"), container.getCommand());
+    }
+
+    @Test
+    void checkpointAndInferenceConfigChangesUpdateThePodTemplate() {
+        ModelConf model = model("embedding", "text", "STRING");
+        model.getParams().put("text_column", "text");
+        ServiceConf service = new ServiceConf();
+        service.setId("embedding-service");
+        service.setParams(Map.of());
+        service.setModelCheckpointDir("hdfs://namenode/models/embedding/v1");
+
+        PodTemplateSpec original = servicePodTemplate(model, service);
+        assertTrue(original.getMetadata().getAnnotations().get("sqlrec.io/config-checksum")
+                .matches("[0-9a-f]{64}"));
+        assertEquals(original, servicePodTemplate(model, service));
+        service.setModelCheckpointDir("hdfs://namenode/models/embedding/v2");
+        PodTemplateSpec nextCheckpoint = servicePodTemplate(model, service);
+        assertNotEquals(original, nextCheckpoint);
+
+        service.setParams(Map.of("inference_batch_size", "16"));
+        PodTemplateSpec nextConfig = servicePodTemplate(model, service);
+        assertNotEquals(nextCheckpoint, nextConfig);
+        assertEquals(nextConfig, servicePodTemplate(model, service));
+    }
+
+    private PodTemplateSpec servicePodTemplate(ModelConf model, ServiceConf service) {
+        String yaml = controller.getServiceK8sYaml(model, service);
+        for (Object resource : (Iterable<?>) Serialization.unmarshal(yaml)) {
+            if (resource instanceof Deployment deployment) {
+                return deployment.getSpec().getTemplate();
+            }
+        }
+        throw new AssertionError("Deployment is missing");
     }
 
     @Test
