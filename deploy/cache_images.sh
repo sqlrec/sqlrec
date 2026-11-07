@@ -10,7 +10,32 @@ manifest="${cache_arch_dir}/images.tsv"
 
 mkdir -p "${cache_arch_dir}"
 
+cache_created_time() {
+  local created
+  # GNU stat uses %W for birth time; BSD/macOS stat uses %B.
+  created="$(stat -c %W "$1" 2>/dev/null || stat -f %B "$1" 2>/dev/null)" || created=""
+  if ! [[ "${created}" =~ ^[0-9]+$ ]] || [ "${created}" -le 0 ]; then
+    # Some Linux filesystems do not expose birth time. Use the archive's last
+    # write time rather than ctime, which also changes when permissions change.
+    created="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null)" || return 1
+  fi
+  [[ "${created}" =~ ^[0-9]+$ ]] && [ "${created}" -gt 0 ] || return 1
+  printf '%s\n' "${created}"
+}
+
+image_created_time() {
+  local quoted_image
+  printf -v quoted_image '%q' "$1"
+  # Inspect the Docker daemon inside Minikube, where image save reads from.
+  # Convert RFC3339 timestamps on the Linux node to avoid host date differences.
+  # SSH must not consume the image list supplied to the surrounding read loop.
+  minikube -p minikube ssh -- \
+    "created=\$(sudo docker image inspect --format '{{.Created}}' ${quoted_image}) && date -d \"\${created}\" +%s" < /dev/null |
+    tr -d '\r'
+}
+
 load_images() {
+  local quoted_image loaded_count=0
   if [ ! -s "${manifest}" ]; then
     echo "No cached ${DEPLOY_ARCH} workload images found."
     return 0
@@ -20,17 +45,27 @@ load_images() {
   while IFS="$(printf '\t')" read -r image archive_name; do
     [ -n "${image}" ] || continue
     archive="${cache_arch_dir}/${archive_name}"
-    if [ ! -f "${archive}" ]; then
-      echo "WARNING: cached archive is missing for ${image}: ${archive}" >&2
+    if [ ! -s "${archive}" ]; then
+      echo "WARNING: cached archive is missing or empty for ${image}: ${archive}" >&2
       continue
     fi
     echo "Loading ${image}"
-    minikube -p minikube image load "${archive}" --overwrite=true
+    minikube -p minikube image load "${archive}" --overwrite=true < /dev/null
+    # A successful load must make the exact workload image reference available.
+    # This also catches archives containing an outdated or different image tag.
+    printf -v quoted_image '%q' "${image}"
+    if ! minikube -p minikube ssh -- \
+      "sudo docker image inspect -- ${quoted_image} >/dev/null" < /dev/null; then
+      echo "ERROR: cached archive did not provide ${image}: ${archive}" >&2
+      return 1
+    fi
+    loaded_count=$((loaded_count + 1))
   done < "${manifest}"
+  echo "Loaded ${loaded_count} cached workload images."
 }
 
 save_images() {
-  require_commands kubectl minikube
+  require_commands kubectl minikube stat
 
   images_file="$(mktemp "${TMPDIR:-/tmp}/sqlrec-images.XXXXXX")"
   manifest_tmp="$(mktemp "${cache_arch_dir}/images.tsv.XXXXXX")"
@@ -63,16 +98,26 @@ save_images() {
     archive_tmp="${archive}.tmp"
 
     if [ -s "${archive}" ]; then
-      echo "Using existing cache for ${image}"
-      printf '%s\t%s\n' "${image}" "${archive_name}" >> "${manifest_tmp}"
-      continue
+      if cache_created="$(cache_created_time "${archive}")" &&
+        image_created="$(image_created_time "${image}")" &&
+        [[ "${image_created}" =~ ^[0-9]+$ ]]; then
+        if [ "${image_created}" -le "${cache_created}" ]; then
+          echo "Using existing cache for ${image}"
+          printf '%s\t%s\n' "${image}" "${archive_name}" >> "${manifest_tmp}"
+          continue
+        fi
+        echo "Image ${image} is newer than its cache; refreshing cache."
+      else
+        echo "WARNING: unable to compare creation times for ${image}; refreshing cache." >&2
+      fi
+      rm -f "${archive}"
     fi
 
     echo "Saving ${image}"
     rm -f "${archive_tmp}"
     # `minikube image save` can exit successfully without creating an archive
     # when a Pod declares an image that has not actually been pulled yet.
-    if minikube -p minikube image save "${image}" "${archive_tmp}" && [ -s "${archive_tmp}" ]; then
+    if minikube -p minikube image save "${image}" "${archive_tmp}" < /dev/null && [ -s "${archive_tmp}" ]; then
       mv "${archive_tmp}" "${archive}"
       printf '%s\t%s\n' "${image}" "${archive_name}" >> "${manifest_tmp}"
     else
