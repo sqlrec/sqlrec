@@ -1,0 +1,16 @@
+name: Java Unit Tests
+
+on:
+  # A merged PR updates master and triggers this workflow, as does a direct push.
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  java-unit-tests:
+    uses: ./.github/workflows/_build-java.yml
+    with:
+      unit_tests_only: true
