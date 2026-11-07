@@ -157,7 +157,7 @@ export META_DB_PASSWORD="${META_DB_PASSWORD-${SQLREC_POSTGRESQL_PASSWORD:-abc123
 export HIVE_METASTORE_URI="${HIVE_METASTORE_URI-thrift://${DEFAULT_TEST_IP}:${HMS_PORT:-30008}}"
 export FLINK_SQL_GATEWAY_ADDRESS="${FLINK_SQL_GATEWAY_ADDRESS-${DEFAULT_TEST_IP}}"
 export TRACE_ENDPOINT="${TRACE_ENDPOINT-http://${DEFAULT_TEST_IP}:${JAEGER_OTLP_GRPC_PORT:-30038}}"
-export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${BASE_DIR:-${PROJECT_DIR}/deploy}/data/client/hadoop-${HADOOP_VERSION:-3.4.0}/etc/hadoop}"
+export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${BASE_DIR:-${PROJECT_DIR}/deploy}/data/client/hadoop-${HADOOP_VERSION:-3.4.3}/etc/hadoop}"
 
 run_maven_tests() {
     exec mvn test -Prun-integration-tests "-Dmaven.test.additionalClasspath=${HADOOP_CONF_DIR}" "${MAVEN_ARGS[@]}"

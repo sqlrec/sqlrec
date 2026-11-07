@@ -4,6 +4,7 @@ dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 helm upgrade --install milvus \
+  --version "${MILVUS_CHART_VERSION}" \
   --namespace "${NAMESPACE}-milvus" \
   --set image.all.tag=${MILVUS_VERSION} \
   --set cluster.enabled=false \

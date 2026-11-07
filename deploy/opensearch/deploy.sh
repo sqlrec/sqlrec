@@ -9,8 +9,11 @@ source "${dir}/../env.sh"
 # Deploy OpenSearch
 render_config "${dir}/opensearch.yaml"
 helm upgrade --install opensearch opensearch/opensearch \
+  --version "${OPENSEARCH_CHART_VERSION}" \
   --namespace ${NAMESPACE} \
   --set image.tag=${OPENSEARCH_VERSION} \
+  --set-string persistence.imageTag="${BUSYBOX_VERSION}" \
+  --set-string sysctlInit.imageTag="${BUSYBOX_VERSION}" \
   --set service.nodePort=${OPENSEARCH_HTTP_PORT} \
   -f "${dir}/opensearch.yaml.tmp" \
   --wait \
@@ -19,6 +22,7 @@ helm upgrade --install opensearch opensearch/opensearch \
 # Deploy OpenSearch Dashboards
 render_config "${dir}/opensearch-dashboards.yaml"
 helm upgrade --install opensearch-dashboards opensearch/opensearch-dashboards \
+  --version "${OPENSEARCH_DASHBOARDS_CHART_VERSION}" \
   --namespace ${NAMESPACE} \
   -f "${dir}/opensearch-dashboards.yaml.tmp" \
   --wait \

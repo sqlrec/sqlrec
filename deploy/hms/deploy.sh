@@ -31,3 +31,4 @@ if ! kubectl get job hms-init -n "${NAMESPACE}" >/dev/null 2>&1 || ! wait_for_jo
 fi
 
 kubectl apply -f "${dir}/hms.yaml.tmp" -n "${NAMESPACE}"
+kubectl rollout status deployment/hms -n "${NAMESPACE}" --timeout="${DEPLOY_TIMEOUT}s"

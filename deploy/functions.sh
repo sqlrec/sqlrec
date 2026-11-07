@@ -59,7 +59,7 @@ require_commands() {
 # services or uploading resources. A directory alone is not a complete client.
 validate_runtime_resources() {
     local name resource_path
-    local libraries=("${JUICEFS_HADOOP_JAR_NAME}" "${POSTGRESQL_CONNECTOR_JAR_NAME}")
+    local libraries=("${JUICEFS_HADOOP_JAR_NAME}" "${POSTGRESQL_CONNECTOR_JAR_NAME}" "${HIVE_COMMONS_COLLECTIONS_JAR_NAME}")
     local executables=("${HADOOP_HOME}/bin/hadoop" "${HIVE_HOME}/bin/hive" \
         "${HIVE_HOME}/bin/schematool" "${CONTAINER_JAVA_HOME}/bin/java")
     local config_directories=("${HADOOP_HOME}/etc/hadoop" "${HIVE_HOME}/conf")
@@ -91,6 +91,10 @@ validate_runtime_resources() {
             return 1
         fi
     done
+    if [ ! -s "${HIVE_HOME}/lib/${HIVE_COMMONS_COLLECTIONS_JAR_NAME}" ]; then
+        echo "ERROR: missing Hive runtime dependency ${HIVE_COMMONS_COLLECTIONS_JAR_NAME}; run deploy/hms/init.sh first." >&2
+        return 1
+    fi
 }
 
 # Render a configuration template while keeping the generated file available

@@ -4,6 +4,8 @@ dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n ${NAMESPACE} \
+  --version "${PROMETHEUS_STACK_CHART_VERSION}" \
+  --set-string crds.upgradeJob.image.busybox.tag="${BUSYBOX_VERSION}" \
   --set grafana.service.type=NodePort \
   --set grafana.service.nodePort=${GRAFANA_PORT} \
   --set prometheus.service.type=NodePort \

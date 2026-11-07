@@ -52,7 +52,7 @@ if [ "${LOCAL_MODE}" = true ]; then
         fi
     fi
     if [ -z "${HADOOP_HOME}" ]; then
-        export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${BASE_DIR:-${PROJECT_DIR}/deploy}/data/client/hadoop-${HADOOP_VERSION:-3.4.0}/etc/hadoop}"
+        export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${BASE_DIR:-${PROJECT_DIR}/deploy}/data/client/hadoop-${HADOOP_VERSION:-3.4.3}/etc/hadoop}"
     fi
     export LOG_DIR="${LOG_DIR:-${PROJECT_DIR}/sqlrec-frontend/target/logs}"
 fi

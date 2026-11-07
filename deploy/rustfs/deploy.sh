@@ -11,6 +11,7 @@ helm upgrade --install rustfs rustfs/rustfs \
   --version "${RUSTFS_VERSION}" \
   --namespace "${NAMESPACE}" \
   --set-string fullnameOverride=rustfs \
+  --set-string image.initImage.tag="${BUSYBOX_VERSION}" \
   --set replicaCount=1 \
   --set mode.standalone.enabled=true \
   --set mode.distributed.enabled=false \

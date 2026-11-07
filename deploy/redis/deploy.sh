@@ -4,6 +4,7 @@ dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 helm upgrade --install valkey valkey/valkey \
+  --version "${VALKEY_CHART_VERSION}" \
   --namespace "${NAMESPACE}" \
   --set image.tag=${VALKEY_VERSION} \
   --set service.type=NodePort \

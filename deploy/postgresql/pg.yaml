@@ -13,6 +13,7 @@ metadata:
   name: ${POSTGRESQL_DB}-postgresql
 spec:
   instances: 1
+  imageName: ${POSTGRESQL_IMAGE}
   bootstrap:
     initdb:
       database: ${POSTGRESQL_DB}

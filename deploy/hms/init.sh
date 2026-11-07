@@ -15,3 +15,10 @@ fi
 if [ ! -e "${CLIENT_DIR}/${HIVE_CLIENT_DIR_NAME}" ]; then
   tar -xzf "${CLIENT_DIR}/${HIVE_CLIENT_ARCH_NAME}" -C "${CLIENT_DIR}"
 fi
+
+if [ ! -f "${LIB_DIR}/${HIVE_COMMONS_COLLECTIONS_JAR_NAME}" ]; then
+  download_file "${HIVE_COMMONS_COLLECTIONS_JAR_URL}" "${LIB_DIR}/${HIVE_COMMONS_COLLECTIONS_JAR_NAME}"
+fi
+# Keep Hive's legacy dependency in its own classpath rather than depending on
+# the Hadoop distribution to provide it. The client PVC also carries this JAR.
+cp "${LIB_DIR}/${HIVE_COMMONS_COLLECTIONS_JAR_NAME}" "${HIVE_HOME}/lib/"

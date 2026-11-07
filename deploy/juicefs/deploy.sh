@@ -4,6 +4,7 @@ dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 source "${dir}/../env.sh"
 
 helm upgrade --install juicefs-valkey valkey/valkey \
+  --version "${VALKEY_CHART_VERSION}" \
   --namespace "${NAMESPACE}" \
   --set image.tag="${VALKEY_VERSION}" \
   --set service.type=NodePort \
@@ -14,7 +15,7 @@ helm upgrade --install juicefs-valkey valkey/valkey \
   --wait \
   --timeout "${DEPLOY_TIMEOUT}s"
 
-AWS_REGION="${RUSTFS_REGION}" AWS_DEFAULT_REGION="${RUSTFS_REGION}" juicefs format \
+AWS_REGION="${RUSTFS_REGION}" AWS_DEFAULT_REGION="${RUSTFS_REGION}" "${CLIENT_DIR}/juicefs" format \
     --no-update \
     --storage s3 \
     --bucket "http://${NODE_IP}:${RUSTFS_PORT}/${RUSTFS_JUICEFS_BUCKET}" \

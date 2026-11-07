@@ -8,12 +8,12 @@ if [ ! -f "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}" ]; then
   download_file "${JUICEFS_URL}" "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}"
 fi
 
-if [ ! -f "${CLIENT_DIR}/juicefs" ]; then
-  tar -xzf "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}" -C "${CLIENT_DIR}"
-fi
+# The CLI has an unversioned filename; replace it from the selected archive
+# on every init so changing JFS_LATEST_TAG also upgrades an existing client.
+tar -xzf "${CLIENT_DIR}/${JUICEFS_ARCH_NAME}" -C "${CLIENT_DIR}"
 
-if command -v juicefs >/dev/null 2>&1; then
-  echo "using JuiceFS CLI from $(command -v juicefs)"
+if [ -x "${CLIENT_DIR}/juicefs" ]; then
+  "${CLIENT_DIR}/juicefs" version
 else
   echo "ERROR: downloaded JuiceFS CLI is not executable: ${CLIENT_DIR}/juicefs" >&2
   exit 1
