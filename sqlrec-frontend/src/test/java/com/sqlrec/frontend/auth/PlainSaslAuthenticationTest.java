@@ -56,6 +56,24 @@ class PlainSaslAuthenticationTest {
     }
 
     @Test
+    void authenticatesEachConfiguredAccountButRejectsSwappedPasswords() throws Exception {
+        SqlRecConfigs.AUTH_USERNAME.setDefaultValue("用户,alice");
+        SqlRecConfigs.AUTH_PASSWORD.setDefaultValue("secret:密码,second");
+        Authentication.validateConfig();
+        TSaslServerTransport.Factory factory = PlainSaslAuthentication.transportFactory();
+        for (String[] account : List.of(new String[]{"用户", "secret:密码"}, new String[]{"alice", "second"})) {
+            TSaslServerTransport transport = (TSaslServerTransport) factory.getTransport(
+                    handshake("PLAIN", "\0" + account[0] + "\0" + account[1]));
+            assertTrue(transport.getSaslServer().isComplete());
+            assertEquals(account[0], transport.getSaslServer().getAuthorizationID());
+            transport.close();
+        }
+        for (String response : List.of("\0用户\0second", "\0alice\0secret:密码")) {
+            assertThrows(RuntimeException.class, () -> factory.getTransport(handshake("PLAIN", response)));
+        }
+    }
+
+    @Test
     void refusesOtherSaslMechanisms() throws Exception {
         TSaslServerTransport.Factory factory = PlainSaslAuthentication.transportFactory();
         assertThrows(RuntimeException.class, () -> factory.getTransport(handshake("ANONYMOUS", "")));

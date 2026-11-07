@@ -243,13 +243,17 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 | 环境变量 | 服务默认值 | 说明 |
 |----------|--------|------|
 | `AUTH_ENABLED` | `false` | 开启 HTTP Basic 和 Thrift/JDBC SASL PLAIN 认证 |
-| `AUTH_USERNAME` | 空字符串 | 共享用户名，开启认证时必填，不能包含冒号或控制字符 |
-| `AUTH_PASSWORD` | 空字符串 | 共享密码，开启认证时必填，不能包含控制字符 |
+| `AUTH_USERNAME` | 空字符串 | 用户名列表，用英文逗号分隔；每项非空白、不能重复，不能包含冒号或控制字符 |
+| `AUTH_PASSWORD` | 空字符串 | 密码列表，用英文逗号分隔，与用户名按位置对应；每项非空白，不能包含控制字符 |
 
 普通部署和 demo 部署都将这三个配置直接写入容器环境变量；渲染后的 YAML 包含账号密码。修改配置后重新运行部署脚本，Deployment 会根据环境变量变更自动更新 Pod。凭证合法性由服务端在启动时校验。`AUTH_ENABLED` 使用 `true` 或 `false`。
 
+单账号配置保持原用法。多账号时，两份列表长度必须一致，例如 `AUTH_USERNAME=alice,bob`、`AUTH_PASSWORD=alice-secret,bob-secret` 分别配置 alice 和 bob 的密码。逗号只作分隔符，不支持转义，因此用户名和密码都不能包含逗号；此前含逗号的单账号凭证需先更换。分隔后的内容不自动去除空格，空格属于凭证。开启认证时，数量不一致、空项（包括末尾逗号）或重复用户名都会导致启动失败。
+
 ```bash
 AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
+# 两个账号，用户名和密码按位置配对
+AUTH_USERNAME=alice,bob AUTH_PASSWORD='alice-secret,bob-secret' bash deploy/sqlrec/deploy.sh
 # 兼容旧的匿名环境；客户端也需设置 AUTH_ENABLED=false
 AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
 ```
@@ -268,6 +272,8 @@ export AUTH_PASSWORD='replace-with-your-password'
 - **指标**：`GET /metrics` 始终匿名放行，包括开启认证时。Prometheus 无需增加账号密码配置。
 - **Thrift/JDBC**：开启认证时使用 `jdbc:hive2://<host>:<port>/default` 和 SASL PLAIN；关闭时使用 `;auth=noSasl`。`bin/beeline.sh` 自动读取 `deploy/env.sh` 的地址、认证开关和凭证，通过同名环境变量覆盖配置。脚本将 `-e`、`-f` 等执行参数原样传给 Beeline，不解析命令行连接或凭证参数；连接设置使用 `NODE_IP`、`SQLREC_THRIFT_PORT`、`AUTH_USERNAME` 和 `AUTH_PASSWORD`。脚本不读取 `SQLREC_ENV_CONF`。错误凭证在 SASL 握手阶段被拒绝，本地凭证不会转发给 Flink Gateway。
 - **本地 CLI**：直接运行引擎，继续依赖操作系统的访问控制。
+
+客户端每次只发送一组用户名和密码，不发送逗号列表。如果 `deploy/env.sh` 或当前环境配置的是服务端账号列表，运行 Beeline 或 benchmark 时需用同名环境变量覆盖为其中一组凭证。
 
 Beeline 示例：
 
@@ -302,7 +308,7 @@ curl http://localhost:30001/metrics
 pip install 'PyHive[hive_pure_sasl]'
 ```
 
-开启认证后，使用 `auth="CUSTOM"`，账号密码对应服务端的 `AUTH_USERNAME` 和 `AUTH_PASSWORD`：
+开启认证后，使用 `auth="CUSTOM"`，账号密码对应服务端 `AUTH_USERNAME` 和 `AUTH_PASSWORD` 中的一组凭证：
 
 ```python
 from pyhive import hive

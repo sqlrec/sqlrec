@@ -243,13 +243,17 @@ These settings are defined in `SqlRecConfigs.java` and read from the server proc
 | Environment variable | Server default | Description |
 |----------------------|---------|-------------|
 | `AUTH_ENABLED` | `false` | Enable HTTP Basic and Thrift/JDBC SASL PLAIN authentication |
-| `AUTH_USERNAME` | Empty string | Required when enabled; cannot contain colons or control characters |
-| `AUTH_PASSWORD` | Empty string | Required when enabled; cannot contain control characters |
+| `AUTH_USERNAME` | Empty string | Comma-separated usernames; entries must be non-blank and unique, without colons or control characters |
+| `AUTH_PASSWORD` | Empty string | Comma-separated passwords paired with usernames by position; entries must be non-blank, without control characters |
 
 Both regular and demo deployments write these settings directly into container environment variables; rendered YAML contains the credentials. Rerun deployment after configuration changes; the Deployment updates Pods when environment variables change. The server validates credentials at startup. Use `true` or `false` for `AUTH_ENABLED`.
 
+Single-account settings keep their existing form. For multiple accounts, both lists must have the same number of entries. For example, `AUTH_USERNAME=alice,bob` and `AUTH_PASSWORD=alice-secret,bob-secret` configure a password for each user by position. Commas are delimiters with no escaping, so neither usernames nor passwords can contain commas; replace any existing single-account credentials containing commas before upgrading. Entries are not trimmed: spaces remain part of the credentials. With authentication enabled, mismatched counts, empty entries (including trailing commas), or duplicate usernames prevent startup.
+
 ```bash
 AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
+# Two accounts, with usernames and passwords paired by position
+AUTH_USERNAME=alice,bob AUTH_PASSWORD='alice-secret,bob-secret' bash deploy/sqlrec/deploy.sh
 # Legacy anonymous deployments; clients must also set AUTH_ENABLED=false
 AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
 ```
@@ -268,6 +272,8 @@ Set `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env` before startup; `bin/server.
 - **Metrics**: `GET /metrics` always permits anonymous access, including when authentication is enabled. Prometheus needs no additional credentials.
 - **Thrift/JDBC**: Use `jdbc:hive2://<host>:<port>/default` with SASL PLAIN when authentication is enabled, and `;auth=noSasl` when disabled. `bin/beeline.sh` reads addresses, authentication mode, and credentials from `deploy/env.sh`, with environment variable overrides. Execution arguments such as `-e` and `-f` are passed through unchanged; the script does not parse connection or credential options. Configure the connection with `NODE_IP`, `SQLREC_THRIFT_PORT`, `AUTH_USERNAME`, and `AUTH_PASSWORD`. The script does not read `SQLREC_ENV_CONF`. Incorrect credentials are rejected during SASL negotiation. Local credentials are not forwarded to Flink Gateway.
 - **Local CLI**: Runs the engine directly and continues to rely on operating system access control.
+
+Clients send only one username/password pair per connection, never the comma-separated lists. If `deploy/env.sh` or the current environment contains server account lists, override these environment variables with one configured pair when running Beeline or benchmarks.
 
 Beeline examples:
 
@@ -302,7 +308,7 @@ Install the pure Python SASL dependencies without requiring system `libsasl`:
 pip install 'PyHive[hive_pure_sasl]'
 ```
 
-With authentication enabled, use `auth="CUSTOM"` and credentials matching the server's `AUTH_USERNAME` and `AUTH_PASSWORD`:
+With authentication enabled, use `auth="CUSTOM"` and one credential pair from the server's `AUTH_USERNAME` and `AUTH_PASSWORD`:
 
 ```python
 from pyhive import hive

@@ -46,7 +46,7 @@ curl -X POST http://localhost:30001/api/v1/recommend \
   }'
 ```
 
-服务开启 `AUTH_ENABLED` 后，在 curl 中增加 `--user sqlrec`，按提示输入密码；账号取实际的 `AUTH_USERNAME`。缺少或错误凭证返回 HTTP `401`。配置和 JDBC 接入见[入口认证](../operations/deployment.md#入口认证)。
+服务开启 `AUTH_ENABLED` 后，在 curl 中增加 `--user sqlrec`，按提示输入密码；使用 `AUTH_USERNAME` 中的一个账号及其对应密码，不发送逗号列表。缺少或错误凭证返回 HTTP `401`。配置和 JDBC 接入见[入口认证](../operations/deployment.md#入口认证)。
 
 函数有多个输入表时，把它们分别放入 `data`：
 

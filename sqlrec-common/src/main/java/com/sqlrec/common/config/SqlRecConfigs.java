@@ -25,11 +25,11 @@ public class SqlRecConfigs {
             null, Boolean.class);
     public static final ConfigOption<String> AUTH_USERNAME = new ConfigOption<>(
             "AUTH_USERNAME", "",
-            "shared username for HTTP and Thrift authentication",
+            "comma-separated usernames for HTTP and Thrift authentication, paired with AUTH_PASSWORD",
             null, String.class);
     public static final ConfigOption<String> AUTH_PASSWORD = new ConfigOption<>(
             "AUTH_PASSWORD", "",
-            "shared password for HTTP and Thrift authentication",
+            "comma-separated passwords for HTTP and Thrift authentication, paired with AUTH_USERNAME",
             null, String.class);
 
     // service network config

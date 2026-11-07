@@ -5,8 +5,10 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.HashSet;
+import java.util.Set;
 
-/** One process-wide account shared by HTTP Basic and Thrift SASL PLAIN. */
+/** Process-wide accounts shared by HTTP Basic and Thrift SASL PLAIN. */
 public final class Authentication {
     private Authentication() {
     }
@@ -16,13 +18,24 @@ public final class Authentication {
         if (!isEnabled()) {
             return;
         }
-        String username = SqlRecConfigs.AUTH_USERNAME.getValue();
-        String password = SqlRecConfigs.AUTH_PASSWORD.getValue();
-        if (username.isBlank() || username.contains(":") || username.chars().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException("AUTH_USERNAME must be non-blank and contain no colon or control characters");
+        String[] usernames = SqlRecConfigs.AUTH_USERNAME.getValue().split(",", -1);
+        String[] passwords = SqlRecConfigs.AUTH_PASSWORD.getValue().split(",", -1);
+        if (usernames.length != passwords.length) {
+            throw new IllegalArgumentException("AUTH_USERNAME and AUTH_PASSWORD must contain the same number of entries");
         }
-        if (password.isBlank() || password.chars().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException("AUTH_PASSWORD must be non-blank and contain no control characters");
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < usernames.length; i++) {
+            String username = usernames[i];
+            String password = passwords[i];
+            if (username.isBlank() || username.contains(":") || username.chars().anyMatch(Character::isISOControl)) {
+                throw new IllegalArgumentException("AUTH_USERNAME must be non-blank and contain no colon or control characters");
+            }
+            if (!seen.add(username)) {
+                throw new IllegalArgumentException("AUTH_USERNAME must not contain duplicate usernames");
+            }
+            if (password.isBlank() || password.chars().anyMatch(Character::isISOControl)) {
+                throw new IllegalArgumentException("AUTH_PASSWORD must be non-blank and contain no control characters");
+            }
         }
     }
 
@@ -34,9 +47,22 @@ public final class Authentication {
         if (!isEnabled()) {
             return true;
         }
-        return username != null && password != null
-                && (MessageDigest.isEqual(bytes(SqlRecConfigs.AUTH_USERNAME.getValue()), bytes(username))
-                & MessageDigest.isEqual(bytes(SqlRecConfigs.AUTH_PASSWORD.getValue()), bytes(password)));
+        if (username == null || password == null) {
+            return false;
+        }
+        String[] usernames = SqlRecConfigs.AUTH_USERNAME.getValue().split(",", -1);
+        String[] passwords = SqlRecConfigs.AUTH_PASSWORD.getValue().split(",", -1);
+        if (usernames.length != passwords.length) {
+            return false;
+        }
+        byte[] suppliedUsername = bytes(username);
+        byte[] suppliedPassword = bytes(password);
+        boolean authenticated = false;
+        for (int i = 0; i < usernames.length; i++) {
+            authenticated |= MessageDigest.isEqual(bytes(usernames[i]), suppliedUsername)
+                    & MessageDigest.isEqual(bytes(passwords[i]), suppliedPassword);
+        }
+        return authenticated;
     }
 
     public static boolean authenticateBasic(String authorization) {
@@ -52,8 +78,16 @@ public final class Authentication {
         }
         try {
             byte[] credentials = Base64.getDecoder().decode(authorization.substring(separator + 1).trim());
-            byte[] expected = bytes(SqlRecConfigs.AUTH_USERNAME.getValue() + ":" + SqlRecConfigs.AUTH_PASSWORD.getValue());
-            return MessageDigest.isEqual(expected, credentials);
+            String[] usernames = SqlRecConfigs.AUTH_USERNAME.getValue().split(",", -1);
+            String[] passwords = SqlRecConfigs.AUTH_PASSWORD.getValue().split(",", -1);
+            if (usernames.length != passwords.length) {
+                return false;
+            }
+            boolean authenticated = false;
+            for (int i = 0; i < usernames.length; i++) {
+                authenticated |= MessageDigest.isEqual(bytes(usernames[i] + ":" + passwords[i]), credentials);
+            }
+            return authenticated;
         } catch (IllegalArgumentException e) {
             return false;
         }

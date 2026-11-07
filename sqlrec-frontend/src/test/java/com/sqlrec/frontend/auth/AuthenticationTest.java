@@ -55,6 +55,52 @@ class AuthenticationTest {
     }
 
     @Test
+    void authenticatesOnlyMatchingPairsAndPreservesWhitespace() {
+        SqlRecConfigs.AUTH_USERNAME.setDefaultValue("sqlrec,用户, alice ");
+        SqlRecConfigs.AUTH_PASSWORD.setDefaultValue("secret:with:colons,密码: Secret , spaced ");
+        assertDoesNotThrow(Authentication::validateConfig);
+        for (String[] account : List.of(new String[]{"sqlrec", "secret:with:colons"},
+                new String[]{"用户", "密码: Secret "}, new String[]{" alice ", " spaced "})) {
+            assertTrue(Authentication.authenticate(account[0], account[1]));
+            assertTrue(Authentication.authenticateBasic(basic(account[0] + ":" + account[1])));
+        }
+        for (String[] account : List.of(new String[]{"sqlrec", "密码: Secret "},
+                new String[]{"用户", "secret:with:colons"}, new String[]{"alice", " spaced "},
+                new String[]{" alice ", "spaced"}, new String[]{"SQLREC", "secret:with:colons"},
+                new String[]{"sqlrec,用户, alice ", "secret:with:colons,密码: Secret , spaced "})) {
+            assertFalse(Authentication.authenticate(account[0], account[1]));
+            assertFalse(Authentication.authenticateBasic(basic(account[0] + ":" + account[1])));
+        }
+    }
+
+    @Test
+    void rejectsMismatchedCountsEmptyEntriesAndDuplicateUsernamesWithoutEchoingSecrets() {
+        for (String[] config : List.of(new String[]{"alice,bob", "secret"},
+                new String[]{"alice", "secret,second"}, new String[]{"alice,", "secret,second"},
+                new String[]{",bob", "secret,second"}, new String[]{"alice,,bob", "secret,middle,second"},
+                new String[]{"alice,bob", "secret,"}, new String[]{"alice,bob", ",second"},
+                new String[]{"alice,bob,carol", "secret,,third"}, new String[]{"alice, ", "secret,second"},
+                new String[]{"alice,bob", "secret, "}, new String[]{"alice,b:ob", "secret,second"},
+                new String[]{"alice,bo\nb", "secret,second"}, new String[]{"alice,bob", "secret,sec\nond"},
+                new String[]{"alice,alice", "secret,second"})) {
+            SqlRecConfigs.AUTH_USERNAME.setDefaultValue(config[0]);
+            SqlRecConfigs.AUTH_PASSWORD.setDefaultValue(config[1]);
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class, Authentication::validateConfig);
+            assertFalse(error.getMessage().contains("secret"));
+            assertFalse(error.getMessage().contains("second"));
+        }
+    }
+
+    @Test
+    void distinctUsernamesMayShareAPassword() {
+        SqlRecConfigs.AUTH_USERNAME.setDefaultValue("alice,Alice");
+        SqlRecConfigs.AUTH_PASSWORD.setDefaultValue("secret,secret");
+        assertDoesNotThrow(Authentication::validateConfig);
+        assertTrue(Authentication.authenticate("alice", "secret"));
+        assertTrue(Authentication.authenticate("Alice", "secret"));
+    }
+
+    @Test
     void disabledAuthenticationKeepsAnonymousAccess() {
         SqlRecConfigs.AUTH_ENABLED.setDefaultValue(false);
         SqlRecConfigs.AUTH_USERNAME.setDefaultValue("");

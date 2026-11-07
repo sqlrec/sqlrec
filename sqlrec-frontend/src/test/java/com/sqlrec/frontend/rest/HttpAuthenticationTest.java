@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -152,6 +153,35 @@ class HttpAuthenticationTest {
             } finally {
                 channel.finishAndReleaseAll();
             }
+        }
+    }
+
+    @Test
+    void acceptsEachConfiguredAccountAndRejectsSwappedPasswords() throws Exception {
+        SqlRecConfigs.AUTH_USERNAME.setDefaultValue("sqlrec,用户");
+        SqlRecConfigs.AUTH_PASSWORD.setDefaultValue("secret,密码:second");
+        UiHandler ui = mock(UiHandler.class);
+        when(ui.handleRequest(eq("/ui/api/functions"), anyMap())).thenAnswer(ignored -> RestUtils.ok("[]"));
+        EmbeddedChannel channel = new EmbeddedChannel(new HttpServerHandler(ui));
+        try {
+            for (String credentials : List.of("sqlrec:secret", "用户:密码:second",
+                    "sqlrec:密码:second", "用户:secret")) {
+                DefaultFullHttpRequest request = request(HttpMethod.GET, "/ui/api/functions", "");
+                request.headers().set(HttpHeaderNames.AUTHORIZATION,
+                        "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(CharsetUtil.UTF_8)));
+                channel.writeInbound(request);
+                FullHttpResponse response = channel.readOutbound();
+                assertNotNull(response);
+                try {
+                    assertEquals(credentials.equals("sqlrec:secret") || credentials.equals("用户:密码:second")
+                            ? HttpResponseStatus.OK : HttpResponseStatus.UNAUTHORIZED, response.status());
+                } finally {
+                    response.release();
+                }
+            }
+            verify(ui, times(2)).handleRequest("/ui/api/functions", Map.of());
+        } finally {
+            channel.finishAndReleaseAll();
         }
     }
 
