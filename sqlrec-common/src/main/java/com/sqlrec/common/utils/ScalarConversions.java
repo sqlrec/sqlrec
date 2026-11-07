@@ -39,9 +39,10 @@ public final class ScalarConversions {
                 return value instanceof Integer ? value : number(value, target).intValue();
             case BIGINT:
                 return value instanceof Long ? value : number(value, target).longValue();
-            case FLOAT:
             case REAL:
                 return value instanceof Float ? value : number(value, target).floatValue();
+            // Calcite's generated code represents SQL FLOAT as double, and REAL as float.
+            case FLOAT:
             case DOUBLE:
                 return value instanceof Double ? value : number(value, target).doubleValue();
             case DECIMAL:
@@ -71,8 +72,8 @@ public final class ScalarConversions {
                 case SMALLINT: return Short.valueOf(text);
                 case INTEGER: return Integer.valueOf(text);
                 case BIGINT: return Long.valueOf(text);
-                case FLOAT:
                 case REAL: return Float.valueOf(text);
+                case FLOAT:
                 case DOUBLE: return Double.valueOf(text);
                 case DECIMAL: return new BigDecimal(text);
                 default: return Double.valueOf(text);

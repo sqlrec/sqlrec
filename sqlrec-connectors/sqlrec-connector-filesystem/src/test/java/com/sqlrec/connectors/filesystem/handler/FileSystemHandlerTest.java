@@ -583,7 +583,7 @@ class FileSystemHandlerTest {
         Map<Object, List<Object[]>> result = handler.getByPrimaryKey(Collections.singleton(1L));
         assertEquals(1, result.get(1L).size());
         assertEquals(1L, result.get(1L).get(0)[0]);
-        assertEquals(100.0F, result.get(1L).get(0)[1]);
+        assertEquals(100.0D, result.get(1L).get(0)[1]);
     }
 
     // ===== file:// URI Tests =====

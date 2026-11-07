@@ -6,6 +6,16 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.runtime.ExecuteContextImpl;
+import com.sqlrec.runtime.JavaFunctionBindable;
+import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.utils.SqlTestCase;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -38,6 +48,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doReturn;
 
 /**
  * HTTP mock unit tests for CallServiceFunction.
@@ -57,6 +70,58 @@ public class CallServiceFunctionUnitTest {
 
     @Mock
     private ResponseBody mockBody;
+
+    @Test
+    void floatModelScoresCanBeSortedAfterJavaFunctionSchemaAdaptation() throws Exception {
+        ModelConf model = new ModelConf();
+        model.setInputFields(List.of(new FieldSchema("movie_id", "BIGINT")));
+        ServiceConf service = new ServiceConf();
+        service.setModelConfig(model);
+        service.setUrl("http://test");
+        ModelController controller = mock(ModelController.class);
+        when(controller.getOutputFields(model)).thenReturn(List.of(new FieldSchema("probs", "FLOAT")));
+        when(mockHttpClient.newCall(any(Request.class))).thenReturn(mockCall);
+        when(mockCall.execute()).thenReturn(mockResponse);
+        when(mockResponse.isSuccessful()).thenReturn(true);
+        when(mockResponse.body()).thenReturn(mockBody);
+        when(mockBody.string()).thenReturn("{\"probs\":[0.25,0.875,null]}");
+
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add("default", new AbstractSchema());
+        List<RelDataTypeField> inputFields = List.of(
+                DataTypeUtils.getRelDataTypeField("movie_id", 0, "BIGINT"),
+                DataTypeUtils.getRelDataTypeField("title", 1, "STRING"));
+        schema.add("items", new CacheTable("items", Linq4j.asEnumerable(Arrays.asList(
+                new Object[]{11L, "low"}, new Object[]{12L, "high"}, new Object[]{13L, "missing"})), inputFields));
+        ExecuteContextImpl context = spy(new ExecuteContextImpl(schema));
+        doReturn(service).when(context).getServiceConfig("rank-service");
+        doReturn(controller).when(context).getModelController(model);
+        List<RelDataTypeField> outputFields = DataTypeUtils.addTypeFields(
+                inputFields, List.of(new FieldSchema("probs", "FLOAT")));
+
+        // Use the real runtime wrapper: evaluate() alone never exercises schema conversion.
+        JavaFunctionBindable call = new JavaFunctionBindable("call_service",
+                new CallServiceFunction(mockHttpClient), List.of(
+                        SqlLiteral.createCharString("rank-service", SqlParserPos.ZERO),
+                        new SqlIdentifier("items", SqlParserPos.ZERO)), outputFields, schema);
+        List<Object[]> rankedRows = call.bind(schema, context).toList();
+        schema.add("ranked_item", new CacheTable("ranked_item", Linq4j.asEnumerable(rankedRows), outputFields));
+
+        CalciteSchemaFactory.setGlobalSchema(schema);
+        try {
+            // Keep probs outside SELECT, as rank_fun does; materialize the actual generated sort.
+            new SqlTestCase("select r.movie_id, i.title from ranked_item r "
+                    + "join items i on r.movie_id = i.movie_id order by r.probs desc nulls last",
+                    Arrays.asList(new Object[]{12L, "high"}, new Object[]{11L, "low"},
+                            new Object[]{13L, "missing"})).test(schema, context);
+            assertEquals(Double.class, rankedRows.get(0)[2].getClass());
+            assertEquals(0.25d, rankedRows.get(0)[2]);
+            assertEquals(0.875d, rankedRows.get(1)[2]);
+            assertNull(rankedRows.get(2)[2]);
+        } finally {
+            CalciteSchemaFactory.setGlobalSchema(null);
+        }
+    }
 
     /**
      * Test successful prediction service call: HTTP 200 + valid JSON response.

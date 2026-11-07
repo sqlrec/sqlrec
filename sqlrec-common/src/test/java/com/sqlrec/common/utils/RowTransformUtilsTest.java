@@ -10,11 +10,81 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class RowTransformUtilsTest {
+    @Test
+    void normalizesJsonArraysAtNamedRowInputBoundary() {
+        List<Long> ids = Arrays.asList(2L, null);
+        Map<String, Object> input = Map.of("ids", ids, "count", 3L);
+        List<RelDataTypeField> fields = List.of(
+                DataTypeUtils.getRelDataTypeField("count", 0, "INTEGER"),
+                DataTypeUtils.getRelDataTypeField("ids", 1, "ARRAY<INTEGER>"),
+                DataTypeUtils.getRelDataTypeField("missing", 2, "ARRAY<FLOAT>"));
+
+        Object[] row = RowTransformUtils.convertDataToEnumerable(List.of(input), fields).single();
+
+        assertArrayEquals(new Object[]{3, Arrays.asList(2, null), null}, row);
+        assertEquals(Long.class, ids.get(0).getClass());
+    }
+
+    @Test
+    void convertsArrayElementsRecursivelyWithoutMutatingInputs() {
+        List<RelDataTypeField> given = List.of(
+                DataTypeUtils.getRelDataTypeField("nested", 0, "ARRAY<ARRAY<REAL>>"),
+                DataTypeUtils.getRelDataTypeField("ints", 1, "ARRAY<BIGINT>"));
+        List<RelDataTypeField> desired = List.of(
+                DataTypeUtils.getRelDataTypeField("ints", 0, "ARRAY<INTEGER>"),
+                DataTypeUtils.getRelDataTypeField("nested", 1, "ARRAY<ARRAY<FLOAT>>"));
+        List<Float> inner = Arrays.asList(0.25f, null);
+        List<List<Float>> nested = Arrays.asList(inner, null, Collections.emptyList());
+        List<Long> ints = Arrays.asList(2L, null);
+        Object[] source = {nested, ints};
+
+        Object[] row = RowTransformUtils.adaptRowsToSchema(
+                Collections.singletonList(source), desired, given).get(0);
+
+        assertEquals(Arrays.asList(2, null), row[0]);
+        assertEquals(Arrays.asList(Arrays.asList(0.25d, null), null, Collections.emptyList()), row[1]);
+        assertEquals(Float.class, inner.get(0).getClass());
+        assertEquals(Long.class, ints.get(0).getClass());
+        assertSame(nested, source[0]);
+    }
+
+    @Test
+    void tableRowConversionNormalizesListsAndJavaArrays() {
+        List<RelDataTypeField> fields = List.of(
+                DataTypeUtils.getRelDataTypeField("scores", 0, "ARRAY<FLOAT>"),
+                DataTypeUtils.getRelDataTypeField("ids", 1, "ARRAY<BIGINT>"));
+        float[] scores = {0.25f, 0.5f};
+        List<Object[]> rows = new ArrayList<>();
+        rows.add(new Object[]{scores, new Integer[]{2, null}});
+        rows.add(new Object[]{Collections.emptyList(), null});
+        rows.add(null);
+
+        RowTransformUtils.convertRowTypes(rows, fields);
+
+        assertEquals(List.of(0.25d, 0.5d), rows.get(0)[0]);
+        assertEquals(Arrays.asList(2L, null), rows.get(0)[1]);
+        assertEquals(Collections.emptyList(), rows.get(1)[0]);
+        assertNull(rows.get(1)[1]);
+        assertNull(rows.get(2));
+        assertArrayEquals(new float[]{0.25f, 0.5f}, scores);
+    }
+
+    @Test
+    void rejectsIncompatibleArrayElementSchemasEvenWhenRowsAreEmpty() {
+        List<RelDataTypeField> desired = List.of(
+                DataTypeUtils.getRelDataTypeField("xs", 0, "ARRAY<ARRAY<INTEGER>>"));
+        List<RelDataTypeField> given = List.of(
+                DataTypeUtils.getRelDataTypeField("xs", 0, "ARRAY<ARRAY<VARCHAR>>"));
+        assertThrows(RuntimeException.class,
+                () -> RowTransformUtils.adaptRowsToSchema(Collections.emptyList(), desired, given));
+    }
+
     @Test
     void materializationPreservesOrderAndArrayReferencesAndReadsSourceOnce() {
         Object[] row = {7, "value"};

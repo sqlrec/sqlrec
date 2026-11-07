@@ -116,6 +116,19 @@ public class FlinkSchemaUtils {
             return null;
         }
         switch (type.getTypeRoot()) {
+            case TINYINT:
+                return ((Number) value).byteValue();
+            case SMALLINT:
+                return ((Number) value).shortValue();
+            case INTEGER:
+                return ((Number) value).intValue();
+            case BIGINT:
+                return ((Number) value).longValue();
+            // Flink FLOAT uses Float, unlike Calcite's SQL FLOAT representation.
+            case FLOAT:
+                return ((Number) value).floatValue();
+            case DOUBLE:
+                return ((Number) value).doubleValue();
             case CHAR:
             case VARCHAR:
                 return StringData.fromString(value.toString());

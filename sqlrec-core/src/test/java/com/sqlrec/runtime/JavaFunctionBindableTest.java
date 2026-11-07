@@ -149,9 +149,9 @@ public class JavaFunctionBindableTest {
         ).test(schema, executeContext);
         new SqlTestCase("select * from t3",
                 Arrays.asList(
-                        new Object[]{1, 1L, 1.0d, 1.0f, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value"},
-                        new Object[]{2, 2L, 2.0d, 2.0f, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value"},
-                        new Object[]{3, 3L, 3.0d, 3.0f, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value"}
+                        new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value"},
+                        new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value"},
+                        new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value"}
                 )
         ).test(schema, executeContext);
         new SqlTestCase("set col_name=new_col_test").test(schema, executeContext);
@@ -164,17 +164,17 @@ public class JavaFunctionBindableTest {
         ).test(schema, executeContext);
         new SqlTestCase("select * from t4",
                 Arrays.asList(
-                        new Object[]{1, 1L, 1.0d, 1.0f, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
-                        new Object[]{2, 2L, 2.0d, 2.0f, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
-                        new Object[]{3, 3L, 3.0d, 3.0f, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
+                        new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
+                        new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
+                        new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
                 )
         ).test(schema, executeContext);
 
         new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4",
                 Arrays.asList(
-                        new Object[]{1, 1L, 1.0d, 1.0f, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
-                        new Object[]{2, 2L, 2.0d, 2.0f, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
-                        new Object[]{3, 3L, 3.0d, 3.0f, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
+                        new Object[]{1, 1L, 1.0d, 1.0d, "1", true, "abc", Arrays.asList(1, 2, 3), Arrays.asList("a", "b", "c"), Arrays.asList(1.0d, 2.0d, 3.0d), Arrays.asList(1.0d, 2.0d, 3.0d), "new_col_value_test"},
+                        new Object[]{2, 2L, 2.0d, 2.0d, "2", false, "bcd", Arrays.asList(4, 5, 6), Arrays.asList("d", "e", "f"), Arrays.asList(4.0d, 5.0d, 6.0d), Arrays.asList(4.0d, 5.0d, 6.0d), "new_col_value_test"},
+                        new Object[]{3, 3L, 3.0d, 3.0d, "3", true, "cde", Arrays.asList(7, 8, 9), Arrays.asList("g", "h", "i"), Arrays.asList(7.0d, 8.0d, 9.0d), Arrays.asList(7.0d, 8.0d, 9.0d), "new_col_value_test"}
                 )
         ).test(schema, executeContext);
         new SqlTestCase("call get('func_name')(t1, 'new_col', get('col_value')) like t4 async").test(schema, executeContext);

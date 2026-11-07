@@ -30,6 +30,49 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FlinkSchemaUtilsTest {
     @Test
+    void normalizesDecodedNumbersBeforeFlinkReadsThem() {
+        List<DataType> types = Arrays.asList(DataTypes.TINYINT(), DataTypes.SMALLINT(), DataTypes.INT(),
+                DataTypes.BIGINT(), DataTypes.FLOAT(), DataTypes.DOUBLE());
+        for (Number source : Arrays.<Number>asList(7L, 7, 7.0d, 7.0f, new BigDecimal("7"))) {
+            GenericRowData row = FlinkSchemaUtils.toRowData(
+                    new Object[]{source, source, source, source, source, source}, types);
+            assertEquals((byte) 7, row.getByte(0));
+            assertEquals((short) 7, row.getShort(1));
+            assertEquals(7, row.getInt(2));
+            assertEquals(7L, row.getLong(3));
+            assertEquals(7.0f, row.getFloat(4));
+            assertEquals(7.0d, row.getDouble(5));
+        }
+        GenericRowData nulls = FlinkSchemaUtils.toRowData(new Object[types.size()], types);
+        for (int i = 0; i < types.size(); i++) {
+            assertTrue(nulls.isNullAt(i));
+        }
+    }
+
+    @Test
+    void normalizesNumbersInsideNestedCollections() {
+        List<Long> ints = Arrays.asList(7L, null);
+        List<List<Double>> floats = Arrays.asList(Arrays.asList(0.25d, null), null, Collections.emptyList());
+        Map<Long, Map<String, Object>> children = Collections.singletonMap(3L,
+                Collections.singletonMap("score", 0.5d));
+        GenericRowData row = FlinkSchemaUtils.toRowData(new Object[]{ints, floats, children}, Arrays.asList(
+                DataTypes.ARRAY(DataTypes.INT()),
+                DataTypes.ARRAY(DataTypes.ARRAY(DataTypes.FLOAT())),
+                DataTypes.MAP(DataTypes.INT(), DataTypes.ROW(DataTypes.FIELD("score", DataTypes.FLOAT())))));
+
+        assertEquals(7, row.getArray(0).getInt(0));
+        assertTrue(row.getArray(0).isNullAt(1));
+        assertEquals(0.25f, row.getArray(1).getArray(0).getFloat(0));
+        assertTrue(row.getArray(1).getArray(0).isNullAt(1));
+        assertTrue(row.getArray(1).isNullAt(1));
+        assertEquals(0, row.getArray(1).getArray(2).size());
+        assertEquals(3, row.getMap(2).keyArray().getInt(0));
+        assertEquals(0.5f, row.getMap(2).valueArray().getRow(0, 1).getFloat(0));
+        assertEquals(Long.class, ints.get(0).getClass());
+        assertEquals(Double.class, floats.get(0).get(0).getClass());
+    }
+
+    @Test
     void retainsCollectionElementTypesWithoutChangingScalarTypeNames() {
         ResolvedSchema schema = ResolvedSchema.of(
                 Column.physical("amount", DataTypes.DECIMAL(12, 2)),

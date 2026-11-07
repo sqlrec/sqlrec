@@ -3,9 +3,11 @@ package com.sqlrec.common.utils;
 import com.sqlrec.common.schema.CacheTable;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,7 +61,8 @@ public final class RowTransformUtils {
     ) {
         List<Object[]> list = new ArrayList<>();
         for (Map<String, Object> map : data) {
-            list.add(projectRow(dataFields, field -> map.get(field.getName())));
+            list.add(projectRow(dataFields,
+                    field -> convertValue(map.get(field.getName()), field.getType())));
         }
 
         return Linq4j.asEnumerable(list);
@@ -120,7 +123,7 @@ public final class RowTransformUtils {
         return result;
     }
 
-    /** Converts scalar cells in place, retaining null rows and complex values. */
+    /** Normalizes scalar and array cells in place, retaining null rows. */
     public static void convertRowTypes(List<Object[]> rows, List<RelDataTypeField> fields) {
         if (rows == null || fields == null) {
             return;
@@ -134,7 +137,7 @@ public final class RowTransformUtils {
                         + ", fields size is " + fields.size());
             }
             for (int i = 0; i < fields.size(); i++) {
-                row[i] = ScalarConversions.convert(row[i], fields.get(i).getType().getSqlTypeName());
+                row[i] = convertValue(row[i], fields.get(i).getType());
             }
         }
     }
@@ -189,22 +192,58 @@ public final class RowTransformUtils {
         for (int i = 0; i < desired.size(); i++) {
             int sourceIndex = mapping[i];
             if (sourceIndex < row.length) {
-                result[i] = ScalarConversions.convert(row[sourceIndex], desired.get(i).getType().getSqlTypeName());
+                result[i] = convertValue(row[sourceIndex], desired.get(i).getType());
             }
         }
         return result;
     }
 
+    /** Calcite arrays use Lists whose elements must also match the declared Java types. */
+    private static Object convertValue(Object value, RelDataType target) {
+        if (value == null) {
+            return null;
+        }
+        if (target.getSqlTypeName() != SqlTypeName.ARRAY) {
+            return ScalarConversions.convert(value, target.getSqlTypeName());
+        }
+        RelDataType elementType = target.getComponentType();
+        List<Object> converted;
+        if (value instanceof List) {
+            List<?> elements = (List<?>) value;
+            converted = new ArrayList<>(elements.size());
+            for (Object element : elements) {
+                converted.add(convertValue(element, elementType));
+            }
+        } else if (value.getClass().isArray()) {
+            int length = Array.getLength(value);
+            converted = new ArrayList<>(length);
+            for (int i = 0; i < length; i++) {
+                converted.add(convertValue(Array.get(value, i), elementType));
+            }
+        } else {
+            throw new IllegalArgumentException("Cannot convert " + value.getClass().getName()
+                    + " to " + target + ": expected a List or Java array");
+        }
+        return converted;
+    }
+
     private static void checkCompatible(RelDataTypeField desired, RelDataTypeField given) {
-        SqlTypeName desiredType = desired.getType().getSqlTypeName();
-        SqlTypeName givenType = given.getType().getSqlTypeName();
-        if (desiredType.equals(givenType)
-                || SqlTypeName.STRING_TYPES.contains(desiredType)
-                || SqlTypeName.NUMERIC_TYPES.contains(desiredType)
-                && SqlTypeName.NUMERIC_TYPES.contains(givenType)) {
+        if (compatibleTypes(desired.getType(), given.getType())) {
             return;
         }
         throw new RuntimeException("adaptRowsToSchema failed, incompatible field type for '"
-                + desired.getName() + "': desired " + desiredType + ", given " + givenType);
+                + desired.getName() + "': desired " + desired.getType() + ", given " + given.getType());
+    }
+
+    private static boolean compatibleTypes(RelDataType desired, RelDataType given) {
+        SqlTypeName desiredType = desired.getSqlTypeName();
+        SqlTypeName givenType = given.getSqlTypeName();
+        if (desiredType == SqlTypeName.ARRAY && givenType == SqlTypeName.ARRAY) {
+            return compatibleTypes(desired.getComponentType(), given.getComponentType());
+        }
+        return desiredType == givenType
+                || SqlTypeName.STRING_TYPES.contains(desiredType)
+                || SqlTypeName.NUMERIC_TYPES.contains(desiredType)
+                && SqlTypeName.NUMERIC_TYPES.contains(givenType);
     }
 }
