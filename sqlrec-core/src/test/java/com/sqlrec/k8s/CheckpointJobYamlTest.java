@@ -644,6 +644,10 @@ class CheckpointJobYamlTest {
                 "$HADOOP" fs -rm -r -f "$STAGING_DIR"
                 "$HADOOP" fs -put -f "$LOCAL_MODEL_DIR" "$STAGING_DIR"
                 "$HADOOP" fs -touchz "$STAGING_DIR/_SUCCESS"
+                if "$HADOOP" fs -test -e "$MODEL_DIR"; then
+                    echo "Checkpoint directory already exists: $MODEL_DIR" >&2
+                    exit 1
+                fi
                 "$HADOOP" fs -mv "$STAGING_DIR" "$MODEL_DIR"
             ---
             apiVersion: "batch/v1"
@@ -707,6 +711,42 @@ class CheckpointJobYamlTest {
                     try (Fixture f = new Fixture(backend, "rank_model")) {
                         assertTaskResources(f.export("v1.0"),
                                 "export-rank-model-v1-0-7ecfdfa7c6e2a66f", backend.startsWith("tzrec."));
+                    }
+                }));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> trainingSqlRejectsUnregisteredPathsForEveryBackend() {
+        return BACKENDS.stream().map(backend -> DynamicTest.dynamicTest(backend, () -> {
+            try (Fixture f = new Fixture(backend, "rank_model")) {
+                String path = "file:///fixtures/models/rank_model/v1.0";
+                when(f.files.pathExists(path)).thenReturn(true);
+
+                var error = assertThrows(IllegalArgumentException.class, () -> f.train("v1.0"));
+
+                assertTrue(error.getMessage().contains(path));
+                assertNull(f.db.getCheckpoint("rank_model", "v1.0"));
+                verify(f.files, never()).deletePath(any());
+                f.k8s.verifyNoInteractions();
+            }
+        }));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> exportSqlRejectsUnregisteredPathsForEveryBackend() {
+        return BACKENDS.stream().filter(backend -> !backend.equals("huggingface.transformers"))
+                .map(backend -> DynamicTest.dynamicTest(backend, () -> {
+                    try (Fixture f = new Fixture(backend, "rank_model")) {
+                        String checkpoint = backend.equals("tzrec.dssm") ? "v1.0_export/item" : "v1.0_export";
+                        String path = "file:///fixtures/models/rank_model/" + checkpoint;
+                        when(f.files.pathExists(path)).thenReturn(true);
+
+                        var error = assertThrows(IllegalArgumentException.class, () -> f.export("v1.0"));
+
+                        assertTrue(error.getMessage().contains(path));
+                        assertNull(f.db.getCheckpoint("rank_model", checkpoint));
+                        verify(f.files, never()).deletePath(any());
+                        f.k8s.verifyNoInteractions();
                     }
                 }));
     }
@@ -776,7 +816,8 @@ class CheckpointJobYamlTest {
     private static class Fixture implements AutoCloseable {
         final InMemoryStoreAccess store = new InMemoryStoreAccess(List.of(), List.of(), List.of());
         final SchemaAccess schema = mock(SchemaAccess.class);
-        final MetadataAccess db = new MetadataAccess(schema, store, mock(HdfsAccess.class));
+        final HdfsAccess files = mock(HdfsAccess.class);
+        final MetadataAccess db = new MetadataAccess(schema, store, files);
         final MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
         final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
         final Map<ConfigOption<String>, String> defaults = new HashMap<>();

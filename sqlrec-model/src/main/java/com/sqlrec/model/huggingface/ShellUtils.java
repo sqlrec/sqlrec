@@ -25,6 +25,10 @@ public final class ShellUtils {
                 "\"$HADOOP\" fs -rm -r -f \"$STAGING_DIR\"\n" +
                 "\"$HADOOP\" fs -put -f \"$LOCAL_MODEL_DIR\" \"$STAGING_DIR\"\n" +
                 "\"$HADOOP\" fs -touchz \"$STAGING_DIR/_SUCCESS\"\n" +
+                "if \"$HADOOP\" fs -test -e \"$MODEL_DIR\"; then\n" +
+                "    echo \"Checkpoint directory already exists: $MODEL_DIR\" >&2\n" +
+                "    exit 1\n" +
+                "fi\n" +
                 "\"$HADOOP\" fs -mv \"$STAGING_DIR\" \"$MODEL_DIR\"\n";
     }
 

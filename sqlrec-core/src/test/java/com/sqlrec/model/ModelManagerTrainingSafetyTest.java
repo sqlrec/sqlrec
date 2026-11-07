@@ -22,6 +22,7 @@ class ModelManagerTrainingSafetyTest {
             Checkpoint old = f.db.getCheckpoint("model", "v1");
             old.setYaml("old-yaml");
             old.setCreatedAt(123L);
+            when(f.db.hdfsPathExists("/models/model/v1")).thenReturn(true);
             List<String> events = new ArrayList<>();
             when(f.controller.genModelTrainK8sYaml(f.model, f.train)).thenAnswer(invocation -> {
                 events.add("generate");
@@ -53,6 +54,7 @@ class ModelManagerTrainingSafetyTest {
                             && "model-ddl".equals(checkpoint.getModelDdl())
                             && checkpoint.getCreatedAt() == 123L));
             verify(f.db, never()).insertCheckpoint(any());
+            verify(f.db, never()).hdfsPathExists(any());
             f.verifyNoDeletion();
         }
     }
@@ -181,8 +183,43 @@ class ModelManagerTrainingSafetyTest {
             verify(f.db).insertCheckpoint(argThat(checkpoint ->
                     Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())));
             verify(f.db, never()).upsertCheckpoint(any());
+            verify(f.db).hdfsPathExists("/models/model/v1");
             f.k8s.verify(() -> K8sManager.applyYaml("injected-yaml"));
             f.verifyNoDeletion();
+        }
+    }
+
+    @Test
+    void unregisteredTrainingPathIsRejectedBeforeGeneratingOrSubmittingResources() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            when(f.db.getCheckpoint("model", "v1")).thenReturn(null);
+            when(f.db.hdfsPathExists("/models/model/v1")).thenReturn(true);
+
+            var error = assertThrows(IllegalArgumentException.class,
+                    () -> ModelManager.trainModel(f.statement, "default"));
+
+            assertTrue(error.getMessage().contains("/models/model/v1"));
+            verify(f.controller, never()).genModelTrainK8sYaml(any(), any());
+            verify(f.db, never()).insertCheckpoint(any());
+            verify(f.db, never()).upsertCheckpoint(any());
+            f.verifyNoDeletion();
+            f.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void trainingStorageCheckFailurePreventsSubmission() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            when(f.db.getCheckpoint("model", "v1")).thenReturn(null);
+            RuntimeException failure = new RuntimeException("storage unavailable");
+            when(f.db.hdfsPathExists("/models/model/v1")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(RuntimeException.class,
+                    () -> ModelManager.trainModel(f.statement, "default")));
+
+            verify(f.db, never()).insertCheckpoint(any());
+            f.verifyNoDeletion();
+            f.k8s.verifyNoInteractions();
         }
     }
     @Test

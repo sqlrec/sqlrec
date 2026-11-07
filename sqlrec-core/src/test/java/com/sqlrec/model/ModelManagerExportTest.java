@@ -50,14 +50,14 @@ class ModelManagerExportTest {
     void validatesBeforeReplacingExportsAndPersistsBeforeApplyingYaml() throws Exception {
         for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
             try (ExportFixture fixture = new ExportFixture()) {
-                fixture.checkpoint("export_a", status);
+                fixture.checkpoint("export_a", status).setYaml("old-job");
 
                 List<CheckpointInfo> result = fixture.export();
 
                 assertEquals(List.of("export_a", "export_b"),
                         result.stream().map(CheckpointInfo::getCheckpointName).toList());
                 assertEquals(List.of(
-                        "generate", "remove:/models/rank/export_a", "delete:export_a",
+                        "generate", "stop:old-job", "remove:/models/rank/export_a", "delete:export_a",
                         "remove:/models/rank/export",
                         "insert:export_a", "insert:export_b", "apply"), fixture.events);
                 assertEquals(2, fixture.inserted.size());
@@ -68,6 +68,44 @@ class ModelManagerExportTest {
                     assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
                 }
             }
+        }
+    }
+
+    @Test
+    void reconciledSucceededJobIsStoppedBeforeReplacingExportData() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            Checkpoint old = fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_CREATED);
+            old.setYaml("injected-yaml");
+            fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("injected-yaml"))
+                    .thenReturn(new K8sManager.JobStatus("succeeded", null));
+            ModelManager.refreshCheckpointStatus(fixture.db, old);
+            assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, old.getStatus());
+
+            fixture.export();
+
+            assertEquals(List.of("generate", "stop:injected-yaml",
+                    "remove:/models/rank/export_a", "delete:export_a", "remove:/models/rank/export",
+                    "insert:export_a", "insert:export_b", "apply"), fixture.events);
+            assertEquals(old.getYaml(), fixture.inserted.getFirst().getYaml());
+            fixture.k8s.verify(() -> K8sManager.deleteYamlAndWait("injected-yaml"), times(1));
+        }
+    }
+
+    @Test
+    void oldJobCleanupFailurePreservesAllExportDataAndMetadata() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("old-job-a");
+            fixture.checkpoint("export_b", Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("old-job-b");
+            RuntimeException failure = new RuntimeException("old Job still terminating");
+            fixture.k8s.when(() -> K8sManager.deleteYamlAndWait("old-job-b")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(RuntimeException.class, fixture::export));
+
+            fixture.k8s.verify(() -> K8sManager.deleteYamlAndWait("old-job-a"));
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            verify(fixture.db, never()).insertCheckpoint(any());
+            fixture.k8s.verify(() -> K8sManager.applyYaml(any()), never());
         }
     }
 
@@ -87,8 +125,8 @@ class ModelManagerExportTest {
     @Test
     void laterReferencedExportPreventsAnyEarlierDeletion() throws Exception {
         try (ExportFixture fixture = new ExportFixture()) {
-            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED);
-            fixture.checkpoint("export_b", Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("old-job");
+            fixture.checkpoint("export_b", Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("old-job");
             com.sqlrec.entity.Service service = new com.sqlrec.entity.Service();
             service.setName("live-serving");
             when(fixture.db.getServiceListByCheckpoint("rank", "export_b")).thenReturn(List.of(service));
@@ -132,17 +170,76 @@ class ModelManagerExportTest {
     }
 
     @Test
+    void unregisteredExportPathIsRejectedBeforeCheckingRunningJobs() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_CREATED).setYaml("running-job");
+            when(fixture.db.hdfsPathExists("/models/rank/export_b")).thenReturn(true);
+
+            var error = assertThrows(IllegalArgumentException.class, fixture::export);
+
+            assertTrue(error.getMessage().contains("/models/rank/export_b"));
+            assertTrue(fixture.events.isEmpty());
+            verify(fixture.db, never()).upsertCheckpoint(any());
+            verify(fixture.db, never()).insertCheckpoint(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            fixture.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void firstDssmExportRejectsAnUnregisteredSharedDirectory() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            when(fixture.controller.getExportCheckpoints(fixture.export))
+                    .thenReturn(List.of("source_export/item", "source_export/user"));
+            when(fixture.controller.getExportCleanPath(fixture.export)).thenReturn("/models/rank/source_export");
+            when(fixture.db.hdfsPathExists("/models/rank/source_export")).thenReturn(true);
+
+            var error = assertThrows(IllegalArgumentException.class, fixture::export);
+
+            assertTrue(error.getMessage().contains("/models/rank/source_export"));
+            assertTrue(fixture.events.isEmpty());
+            verify(fixture.db, never()).insertCheckpoint(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            fixture.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void exportStorageCheckFailurePreservesExistingOutputs() throws Exception {
+        try (ExportFixture fixture = new ExportFixture()) {
+            fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("old-job");
+            RuntimeException failure = new RuntimeException("storage unavailable");
+            when(fixture.db.hdfsPathExists("/models/rank/export_b")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(RuntimeException.class, fixture::export));
+
+            assertTrue(fixture.events.isEmpty());
+            verify(fixture.db, never()).insertCheckpoint(any());
+            verify(fixture.db, never()).deleteCheckpoint(any(), any());
+            verify(fixture.db, never()).hdfsDeletePath(any());
+            fixture.k8s.verifyNoInteractions();
+        }
+    }
+
+    @Test
     void dssmOutputsCanBeReplacedTogetherUnderTheirSharedDirectory() throws Exception {
         try (ExportFixture fixture = new ExportFixture()) {
             List<String> outputs = List.of("source_export/item", "source_export/user");
             when(fixture.controller.getExportCheckpoints(fixture.export)).thenReturn(outputs);
             when(fixture.controller.getExportCleanPath(fixture.export)).thenReturn("/models/rank/source_export");
-            outputs.forEach(name -> fixture.checkpoint(name, Consts.CHECKPOINT_STATUS_SUCCEEDED));
+            fixture.checkpoint(outputs.get(0), Consts.CHECKPOINT_STATUS_SUCCEEDED).setYaml("shared-job");
+            fixture.checkpoint(outputs.get(1), Consts.CHECKPOINT_STATUS_FAILED).setYaml("shared-job");
+            when(fixture.db.hdfsPathExists(anyString())).thenReturn(true);
             assertEquals(outputs, fixture.export().stream().map(CheckpointInfo::getCheckpointName).toList());
+            fixture.k8s.verify(() -> K8sManager.deleteYamlAndWait("shared-job"), times(1));
+            assertEquals("stop:shared-job", fixture.events.get(1));
             verify(fixture.db).hdfsDeletePath("/models/rank/source_export/item");
             verify(fixture.db).hdfsDeletePath("/models/rank/source_export/user");
             verify(fixture.db).hdfsDeletePath("/models/rank/source_export");
             assertEquals(2, fixture.inserted.size());
+            verify(fixture.db, never()).hdfsPathExists(anyString());
         }
     }
 
@@ -199,6 +296,10 @@ class ModelManagerExportTest {
             }).when(db).insertCheckpoint(any());
             k8s.when(() -> K8sManager.applyYaml("injected-yaml")).thenAnswer(invocation -> {
                 events.add("apply");
+                return null;
+            });
+            k8s.when(() -> K8sManager.deleteYamlAndWait(any())).thenAnswer(invocation -> {
+                events.add("stop:" + invocation.getArgument(0));
                 return null;
             });
         }

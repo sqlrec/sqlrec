@@ -70,6 +70,10 @@ data:
     "$HADOOP" fs -rm -r -f "$STAGING_DIR"
     "$HADOOP" fs -put -f "$LOCAL_MODEL_DIR" "$STAGING_DIR"
     "$HADOOP" fs -touchz "$STAGING_DIR/_SUCCESS"
+    if "$HADOOP" fs -test -e "$MODEL_DIR"; then
+        echo "Checkpoint directory already exists: $MODEL_DIR" >&2
+        exit 1
+    fi
     "$HADOOP" fs -mv "$STAGING_DIR" "$MODEL_DIR"
 ---
 apiVersion: "batch/v1"

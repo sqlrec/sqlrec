@@ -99,6 +99,8 @@ Checkpoint types are:
 
 Checkpoint names identify versioned results. TRAIN reuses running/succeeded targets and preserves stored data on failed retries. Retries use the current SQL; supply training input and options again. EXPORT validates and recreates existing targets unless referenced by a service. Sources and targets must differ; export sources must be succeeded origin checkpoints.
 
+Before submitting TRAIN or EXPORT, SQLRec checks new checkpoint destinations. If checkpoint metadata is absent but the path already exists, including an empty directory, the operation is rejected to protect unregistered data. The first DSSM export also checks the shared publication directory for both towers. Existing checkpoints retain their reuse, retry or re-export behavior. This preflight does not replace checks performed when publishing artifacts.
+
 The database status `created` means submitted but not yet confirmed complete. Before service creation or model export, SQLRec checks the source checkpoint against Kubernetes and updates its stored status; running or failed checkpoints cannot be consumed. Service metadata is saved only after Kubernetes resource submission succeeds. A submission failure preserves the saved service configuration; if submission succeeds but the database write fails, retry creation.
 
 ## Lifecycle for a Trained Model

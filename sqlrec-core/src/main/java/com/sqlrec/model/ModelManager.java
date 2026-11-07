@@ -118,6 +118,8 @@ public class ModelManager {
                 checkpointInfos.add(new CheckpointInfo(existingCheckpoint.getModelName(), existingCheckpoint.getCheckpointName()));
                 return checkpointInfos;
             }
+        } else {
+            validateNewCheckpointPath(db, modelTrainConf.getModelDir());
         }
 
         if (modelController.requiresTrainingData()
@@ -188,11 +190,8 @@ public class ModelManager {
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
-        for (String name : exportCheckpointNames) {
-            PathUtils.checkpointPath(modelConfig.getPath(), name);
-        }
         ExportCheckpoints checkpoints = findExportCheckpoints(
-                db, modelExportConf.getModelName(), exportCheckpointNames);
+                db, modelExportConf.getModelName(), modelConfig.getPath(), exportCheckpointNames);
 
         if (!checkpoints.inProgress().isEmpty()) {
             log.info("Model {} has {} export checkpoints in progress, returning existing checkpoint infos",
@@ -200,11 +199,17 @@ public class ModelManager {
             return checkpoints.inProgress();
         }
 
+        String cleanPath = modelController.getExportCleanPath(modelExportConf);
+        if (StringUtils.isNotEmpty(cleanPath)) {
+            PathUtils.validateModelPath(cleanPath, modelConfig.getPath());
+            if (checkpoints.existing().isEmpty()) {
+                validateNewCheckpointPath(db, cleanPath);
+            }
+        }
+
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
 
-        String cleanPath = modelController.getExportCleanPath(modelExportConf);
-        if (StringUtils.isNotEmpty(cleanPath)) PathUtils.validateModelPath(cleanPath, modelConfig.getPath());
         deleteExportCheckpoints(modelExportConf.getModelName(), checkpoints.existing());
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
@@ -229,12 +234,14 @@ public class ModelManager {
     }
 
     private static ExportCheckpoints findExportCheckpoints(
-            MetadataAccess db, String modelName, List<String> checkpointNames) {
+            MetadataAccess db, String modelName, String modelPath, List<String> checkpointNames) {
         List<Checkpoint> existing = new ArrayList<>();
         List<CheckpointInfo> inProgress = new ArrayList<>();
         for (String name : checkpointNames) {
+            String path = PathUtils.checkpointPath(modelPath, name);
             Checkpoint checkpoint = db.getCheckpoint(modelName, name);
             if (checkpoint == null) {
+                validateNewCheckpointPath(db, path);
                 continue;
             }
             if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpoint.getCheckpointType())) {
@@ -253,16 +260,31 @@ public class ModelManager {
         return new ExportCheckpoints(existing, inProgress);
     }
 
+    private static void validateNewCheckpointPath(MetadataAccess db, String path) {
+        if (db.hdfsPathExists(path)) {
+            throw new IllegalArgumentException("Checkpoint metadata does not exist, but path already exists: " + path);
+        }
+    }
+
     private static void deleteExportCheckpoints(String modelName, List<Checkpoint> checkpoints) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
+        Set<String> oldYamls = new LinkedHashSet<>();
         // Preflight every output before deleting the first one.
         for (Checkpoint checkpoint : checkpoints) {
             validateCheckpointModification(db, checkpoint);
+            if (StringUtils.isNotEmpty(checkpoint.getYaml())) {
+                oldYamls.add(checkpoint.getYaml());
+            }
+        }
+        // Succeeded Jobs may still exist; stop shared Jobs once before removing any artifacts.
+        for (String yaml : oldYamls) {
+            K8sManager.deleteYamlAndWait(yaml);
         }
         for (Checkpoint checkpoint : checkpoints) {
             log.info("Model {} re export checkpoint {}, deleting old first",
                     modelName, checkpoint.getCheckpointName());
-            deleteCheckpoint(db, checkpoint);
+            db.hdfsDeletePath(validateCheckpointModification(db, checkpoint));
+            db.deleteCheckpoint(checkpoint.getModelName(), checkpoint.getCheckpointName());
         }
     }
 
