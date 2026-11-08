@@ -16,6 +16,25 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SchemaInferenceTest {
     @Test
+    void mixedNumericResponsesWidenAcrossRowsAndArrayElements() {
+        List<RelDataTypeField> fields = SchemaInference.inferFields(List.of(
+                Map.of("score", 1L, "scores", List.of(1L)),
+                Map.of("score", 0.75d, "scores", List.of(1L, 0.5d))));
+        assertEquals(SqlTypeName.DOUBLE, fields.stream().filter(f -> f.getName().equals("score"))
+                .findFirst().orElseThrow().getType().getSqlTypeName());
+        assertEquals(SqlTypeName.DOUBLE, fields.stream().filter(f -> f.getName().equals("scores"))
+                .findFirst().orElseThrow().getType().getComponentType().getSqlTypeName());
+    }
+
+    @Test
+    void jsonArrayInferenceUsesLaterRowsAndRecognizesNestedArrays() {
+        List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+                "[{\"xs\":[],\"matrix\":[]},{\"xs\":[1,0.75],\"matrix\":[[1],[2.5]]}]"));
+        assertEquals("ARRAY<DOUBLE>", fields.get(0).getType());
+        assertEquals("ARRAY<ARRAY<DOUBLE>>", fields.get(1).getType());
+    }
+
+    @Test
     void javaResponsesUseFirstRowKeysAndPreserveIntegralAndArrayPolicies() {
         Map<String, Object> first = new LinkedHashMap<>();
         first.put("id", null);

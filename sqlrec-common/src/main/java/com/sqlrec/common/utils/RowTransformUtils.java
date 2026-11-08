@@ -123,23 +123,23 @@ public final class RowTransformUtils {
         return result;
     }
 
-    /** Normalizes scalar and array cells in place, retaining null rows. */
+    /** Normalizes cells for Calcite in place, retaining null rows. */
     public static void convertRowTypes(List<Object[]> rows, List<RelDataTypeField> fields) {
         if (rows == null || fields == null) {
             return;
         }
         for (Object[] row : rows) {
-            if (row == null) {
-                continue;
-            }
-            if (fields.size() > row.length) {
-                throw new RuntimeException("convertRowTypes failed, row length is " + row.length
-                        + ", fields size is " + fields.size());
-            }
-            for (int i = 0; i < fields.size(); i++) {
-                row[i] = convertValue(row[i], fields.get(i).getType());
-            }
+            convertRowTypes(row, fields);
         }
+    }
+
+    private static void convertRowTypes(Object[] row, List<RelDataTypeField> fields) {
+        if (row == null || fields == null) return;
+        if (fields.size() > row.length) {
+            throw new RuntimeException("convertRowTypes failed, row length is " + row.length
+                    + ", fields size is " + fields.size());
+        }
+        for (int i = 0; i < fields.size(); i++) row[i] = convertValue(row[i], fields.get(i).getType());
     }
 
     /** Reorders and copies rows, allowing numeric conversions and conversion to string fields. */
@@ -198,10 +198,28 @@ public final class RowTransformUtils {
         return result;
     }
 
-    /** Calcite arrays use Lists whose elements must also match the declared Java types. */
+    /** Calcite uses Object[] for SQL ROW and Lists for ARRAY, including nested values. */
     private static Object convertValue(Object value, RelDataType target) {
         if (value == null) {
             return null;
+        }
+        if (target.getSqlTypeName() == SqlTypeName.ROW) {
+            if (value instanceof Map) {
+                return projectRow(target.getFieldList(),
+                        field -> convertValue(((Map<?, ?>) value).get(field.getName()), field.getType()));
+            }
+            if (value instanceof Object[] || value instanceof List) {
+                Object[] row = value instanceof List ? ((List<?>) value).toArray() : ((Object[]) value).clone();
+                convertRowTypes(row, target.getFieldList());
+                return row;
+            }
+            return value;
+        }
+        if (target.getSqlTypeName() == SqlTypeName.MAP && value instanceof Map) {
+            Map<Object, Object> converted = new LinkedHashMap<>();
+            ((Map<?, ?>) value).forEach((key, entry) -> converted.put(
+                    convertValue(key, target.getKeyType()), convertValue(entry, target.getValueType())));
+            return converted;
         }
         if (target.getSqlTypeName() != SqlTypeName.ARRAY) {
             return ScalarConversions.convert(value, target.getSqlTypeName());

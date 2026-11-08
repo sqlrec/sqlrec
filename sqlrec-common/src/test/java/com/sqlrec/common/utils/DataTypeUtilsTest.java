@@ -17,6 +17,63 @@ class DataTypeUtilsTest {
     private final RelDataTypeFactory factory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
     @Test
+    void libraryParserKeepsCalciteDefaultsAndNumericRepresentations() {
+        for (String name : List.of("DECIMAL", "VARCHAR", "TIMESTAMP", "REAL", "FLOAT", "ANY", "NULL", "UNKNOWN",
+                "TIMESTAMP_WITH_LOCAL_TIME_ZONE")) {
+            RelDataType expected = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.get(name)), true);
+            assertEquals(expected, DataTypeUtils.getRelDataType(factory, name), name);
+        }
+        RelDataType varchar = DataTypeUtils.getRelDataType("VARCHAR");
+        assertEquals(varchar, DataTypeUtils.getRelDataType("STRING"));
+        assertEquals(varchar, DataTypeUtils.getRelDataType("TEXT"));
+        assertEquals(factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.UNKNOWN), false),
+                DataTypeUtils.getRelDataType("UNKNOWN NOT NULL"));
+    }
+
+    @Test
+    void nestedAliasesAndMixedQuotedNamesPreserveTheirOriginalMeaning() {
+        RelDataType row = DataTypeUtils.getRelDataType(
+                "ROW<Text ARRAY<STRING NOT NULL>, \"Mixed \"\"Name`\" MAP<TEXT, REAL>, `Back``Tick\"` FLOAT>");
+        assertEquals(List.of("Text", "Mixed \"Name`", "Back`Tick\""), row.getFieldNames());
+        RelDataType element = row.getFieldList().get(0).getType().getComponentType();
+        assertEquals(DataTypeUtils.getRelDataType("VARCHAR NOT NULL"), element);
+        RelDataType map = row.getFieldList().get(1).getType();
+        assertEquals(DataTypeUtils.getRelDataType("VARCHAR"), map.getKeyType());
+        assertEquals(SqlTypeName.REAL, map.getValueType().getSqlTypeName());
+        assertEquals(SqlTypeName.FLOAT, row.getFieldList().get(2).getType().getSqlTypeName());
+    }
+
+    @Test
+    void libraryParserRejectsBrokenNestingAndTrailingContent() {
+        for (String invalid : List.of("MAP<INTEGER>", "ROW<id>", "ARRAY<INTEGER", "ARRAY<INTEGER>>",
+                "ROW<id INTEGER,, name STRING>", "ROW<\"unclosed INTEGER>", "INTEGER trailing")) {
+            assertThrows(IllegalArgumentException.class, () -> DataTypeUtils.getRelDataType(invalid), invalid);
+        }
+    }
+
+    @Test
+    void sqlReservedWordsAreAcceptedAsQuotedRowFieldNames() {
+        RelDataType row = DataTypeUtils.getRelDataType("ROW<`value` INT, \"year\" STRING>");
+        assertEquals(List.of("value", "year"), row.getFieldNames());
+        assertThrows(IllegalArgumentException.class, () -> DataTypeUtils.getRelDataType("ROW<value INT>"));
+    }
+
+    @Test
+    void parsesMapAndRowSchemasWithoutLosingNamesOrNestedBounds() {
+        RelDataType type = DataTypeUtils.getRelDataType(
+                "MAP<INTEGER NOT NULL, ARRAY<ROW<`Mixed, Name` VARCHAR(12), Amount DECIMAL(8, 2)>>> NOT NULL");
+        assertEquals(SqlTypeName.MAP, type.getSqlTypeName());
+        assertFalse(type.isNullable());
+        assertFalse(type.getKeyType().isNullable());
+        RelDataType row = type.getValueType().getComponentType();
+        assertEquals(List.of("Mixed, Name", "Amount"), row.getFieldNames());
+        assertEquals(8, row.getFieldList().get(1).getType().getPrecision());
+        assertEquals(2, row.getFieldList().get(1).getType().getScale());
+        assertThrows(RuntimeException.class, () -> DataTypeUtils.getRelDataType("MAP<INTEGER>"));
+        assertThrows(RuntimeException.class, () -> DataTypeUtils.getRelDataType("ROW<id>"));
+    }
+
+    @Test
     void preservesNullabilityForScalarAndNestedTypes() {
         for (String type : List.of("INTEGER", "VARCHAR(20)", "DECIMAL(12,2)", "TIMESTAMP(3)",
                 "ARRAY<INTEGER>")) {

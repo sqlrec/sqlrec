@@ -5,6 +5,7 @@ import io.lettuce.core.cluster.RedisClusterClient;
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection;
 import io.lettuce.core.cluster.api.async.RedisAdvancedClusterAsyncCommands;
 import io.lettuce.core.codec.ByteArrayCodec;
+import io.lettuce.core.resource.ClientResources;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
@@ -27,7 +28,7 @@ class RedisClusterWrapperUnitTest {
         byte[] secondKey = "{two}:key".getBytes(StandardCharsets.UTF_8);
         byte[] value = "value".getBytes(StandardCharsets.UTF_8);
         try (MockedStatic<RedisClusterClient> factory = mockStatic(RedisClusterClient.class)) {
-            factory.when(() -> RedisClusterClient.create(url)).thenReturn(client);
+            factory.when(() -> RedisClusterClient.create(any(ClientResources.class), eq(url))).thenReturn(client);
             try {
                 RedisClusterWrapper first = new RedisClusterWrapper();
                 RedisClusterWrapper second = new RedisClusterWrapper();
@@ -48,7 +49,7 @@ class RedisClusterWrapperUnitTest {
                 verify(connection).close();
                 verify(client).shutdown();
                 second.get(secondKey);
-                factory.verify(() -> RedisClusterClient.create(url), times(2));
+                factory.verify(() -> RedisClusterClient.create(any(ClientResources.class), eq(url)), times(2));
                 verify(client, times(2)).connect(any(ByteArrayCodec.class));
             } finally {
                 RedisClusterWrapper.invalidateAll();

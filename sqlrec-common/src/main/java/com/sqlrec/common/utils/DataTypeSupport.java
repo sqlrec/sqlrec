@@ -1,15 +1,37 @@
 package com.sqlrec.common.utils;
 
+import org.apache.calcite.avatica.util.Casing;
+import org.apache.calcite.config.CalciteConnectionConfigImpl;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.SqlAlienSystemTypeNameSpec;
+import org.apache.calcite.sql.SqlBasicTypeNameSpec;
+import org.apache.calcite.sql.SqlDataTypeSpec;
+import org.apache.calcite.sql.SqlTypeNameSpec;
+import org.apache.calcite.sql.SqlUserDefinedTypeNameSpec;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.SqlAbstractParserImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
+import org.apache.flink.sql.parser.impl.FlinkSqlParserImplConstants;
+import org.apache.flink.sql.parser.impl.ParseException;
+import org.apache.flink.sql.parser.impl.TokenMgrError;
+import org.apache.flink.sql.parser.type.ExtendedSqlCollectionTypeNameSpec;
+import org.apache.flink.sql.parser.type.ExtendedSqlRowTypeNameSpec;
+import org.apache.flink.sql.parser.type.SqlMapTypeNameSpec;
 
+import java.io.StringReader;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Internal implementation grouped behind the public {@link DataTypeUtils} facade. */
 final class DataTypeSupport {
@@ -17,62 +39,77 @@ final class DataTypeSupport {
     }
 
     static final class Parser {
-        private static final Pattern DECIMAL = Pattern.compile(
-                "^DECIMAL\\s*\\(\\s*(\\d+)\\s*(?:,\\s*(\\d+)\\s*)?\\)$");
-        private static final Pattern LENGTH_TYPE = Pattern.compile(
-                "^(CHAR|VARCHAR|BINARY|VARBINARY)\\s*\\(\\s*(\\d+)\\s*\\)$");
-        private static final Pattern TEMPORAL = Pattern.compile(
-                "^(TIME|TIMESTAMP)\\s*\\(\\s*(\\d+)\\s*\\)(\\s+WITH\\s+LOCAL\\s+TIME\\s+ZONE)?$");
+        // Accept both identifier quoting styles without interpreting the type grammar ourselves.
+        private static final Pattern QUOTED_NAME = Pattern.compile(
+                "`(?:[^`]|``)*`|\"((?:[^\"]|\"\")*)\"");
 
         private Parser() {
         }
 
         static RelDataType parse(RelDataTypeFactory factory, String text) {
-            boolean nullable = !text.trim().toUpperCase(Locale.ROOT).endsWith(" NOT NULL");
-            return factory.createTypeWithNullability(parseType(factory, normalize(text)), nullable);
+            // Calcite exposes internal scalar names that are not SQL declaration syntax.
+            String name = text.trim().toUpperCase(Locale.ROOT);
+            boolean nullable = !name.endsWith(" NOT NULL");
+            if (!nullable) name = name.substring(0, name.length() - " NOT NULL".length()).trim();
+            if (name.equals("NULL") || name.equals("UNKNOWN")) {
+                return factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.get(name)), nullable);
+            }
+            String source = QUOTED_NAME.matcher(text).replaceAll(match -> Matcher.quoteReplacement(
+                    match.group(1) == null ? match.group() : "`"
+                            + match.group(1).replace("\"\"", "\"").replace("`", "``") + "`"));
+            FlinkSqlParserImpl parser = new FlinkSqlParserImpl(new StringReader(source));
+            parser.switchTo(SqlAbstractParserImpl.LexicalState.BTID);
+            parser.setQuotedCasing(Casing.UNCHANGED);
+            parser.setUnquotedCasing(Casing.UNCHANGED);
+            parser.setIdentifierMaxLength(Integer.MAX_VALUE);
+            try {
+                SqlDataTypeSpec type = normalize(parser.ExtendedDataType());
+                if (parser.getNextToken().kind != FlinkSqlParserImplConstants.EOF) {
+                    throw new IllegalArgumentException("Unexpected content after type: " + text);
+                }
+                CalciteCatalogReader catalog = new CalciteCatalogReader(CalciteSchema.createRootSchema(false),
+                        List.of(), factory, new CalciteConnectionConfigImpl(new Properties()));
+                SqlValidator validator = SqlValidatorUtil.newValidator(
+                        SqlStdOperatorTable.instance(), catalog, factory, SqlValidator.Config.DEFAULT);
+                return type.deriveType(validator, true);
+            } catch (ParseException | TokenMgrError invalidType) {
+                throw new IllegalArgumentException("Invalid SQL type: " + text, invalidType);
+            }
         }
 
-        private static RelDataType parseType(RelDataTypeFactory factory, String type) {
-            if (type.startsWith("ARRAY<") && type.endsWith(">")) {
-                return factory.createArrayType(
-                        parse(factory, type.substring("ARRAY<".length(), type.length() - 1)), -1);
-            }
-
-            Matcher decimal = DECIMAL.matcher(type);
-            if (decimal.matches()) {
-                int precision = Integer.parseInt(decimal.group(1));
-                int scale = decimal.group(2) == null ? 0 : Integer.parseInt(decimal.group(2));
-                return factory.createSqlType(SqlTypeName.DECIMAL, precision, scale);
-            }
-            Matcher length = LENGTH_TYPE.matcher(type);
-            if (length.matches()) {
-                return factory.createSqlType(
-                        Objects.requireNonNull(SqlTypeName.get(length.group(1))),
-                        Integer.parseInt(length.group(2)));
-            }
-            Matcher temporal = TEMPORAL.matcher(type);
-            if (temporal.matches()) {
-                String name = temporal.group(1);
-                if (temporal.group(3) != null) name += "_WITH_LOCAL_TIME_ZONE";
-                return factory.createSqlType(SqlTypeName.valueOf(name), Integer.parseInt(temporal.group(2)));
-            }
-            SqlTypeName typeName = SqlTypeName.get(type);
-            if (typeName == null) {
-                throw new RuntimeException("sql type name not found: " + type);
-            }
-            return factory.createSqlType(typeName);
+        private static SqlDataTypeSpec normalize(SqlDataTypeSpec type) {
+            return new SqlDataTypeSpec(normalize(type.getTypeNameSpec()), type.getParserPosition())
+                    .withNullable(type.getNullable());
         }
 
-        private static String normalize(String text) {
-            String type = text.trim().toUpperCase(Locale.ROOT);
-            if (type.endsWith(" NOT NULL")) {
-                type = type.substring(0, type.length() - " NOT NULL".length()).trim();
+        /** Preserve SQLRec's aliases while leaving parsing and type derivation to the libraries. */
+        private static SqlTypeNameSpec normalize(SqlTypeNameSpec type) {
+            if (type instanceof SqlAlienSystemTypeNameSpec
+                    && type.getTypeName().getSimple().equals("VARCHAR")) {
+                // Flink STRING has a length bound; SQLRec STRING uses Calcite's unbounded VARCHAR.
+                return new SqlBasicTypeNameSpec(SqlTypeName.VARCHAR, type.getParserPos());
             }
-            if (type.equals("INT")) {
-                return "INTEGER";
+            if (type instanceof SqlUserDefinedTypeNameSpec) {
+                String name = type.getTypeName().getSimple().toUpperCase(Locale.ROOT);
+                SqlTypeName scalar = name.equals("TEXT") ? SqlTypeName.VARCHAR : SqlTypeName.get(name);
+                if (scalar == null) throw new IllegalArgumentException("Unknown SQL type: " + name);
+                return new SqlBasicTypeNameSpec(scalar, type.getParserPos());
             }
-            if (type.equals("STRING")) {
-                return "VARCHAR";
+            if (type instanceof SqlMapTypeNameSpec) {
+                SqlMapTypeNameSpec map = (SqlMapTypeNameSpec) type;
+                return new SqlMapTypeNameSpec(normalize(map.getKeyType()), normalize(map.getValType()), type.getParserPos());
+            }
+            if (type instanceof ExtendedSqlRowTypeNameSpec) {
+                ExtendedSqlRowTypeNameSpec row = (ExtendedSqlRowTypeNameSpec) type;
+                return new ExtendedSqlRowTypeNameSpec(type.getParserPos(), row.getFieldNames(),
+                        row.getFieldTypes().stream().map(Parser::normalize).collect(Collectors.toList()),
+                        row.getComments(), row.unparseAsStandard());
+            }
+            if (type instanceof ExtendedSqlCollectionTypeNameSpec) {
+                ExtendedSqlCollectionTypeNameSpec collection = (ExtendedSqlCollectionTypeNameSpec) type;
+                return new ExtendedSqlCollectionTypeNameSpec(normalize(collection.getElementTypeName()),
+                        collection.elementNullable(), collection.getCollectionTypeName(),
+                        collection.unparseAsStandard(), type.getParserPos());
             }
             return type;
         }

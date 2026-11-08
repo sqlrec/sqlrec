@@ -4,12 +4,13 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.SqlRecApiClient;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
-import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.SchemaInference;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -69,17 +70,11 @@ public class CallSqlRecApiFunction {
         // infer output fields from response rows
         List<RelDataTypeField> dataFields = SchemaInference.inferFields(dataRows);
 
-        // build output rows (ARRAY values kept as List object; Map/complex values serialized to JSON string)
+        // Decode inferred and explicitly declared schemas with the same conversion policy.
+        var outputSchema = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT).createStructType(dataFields);
         List<Object[]> outRows = new ArrayList<>(dataRows.size());
         for (Map<String, Object> rowMap : dataRows) {
-            outRows.add(RowTransformUtils.projectRow(dataFields, field -> {
-                Object value = rowMap.get(field.getName());
-                if (field.getType().getSqlTypeName() != SqlTypeName.ARRAY
-                        && (value instanceof List || value instanceof Map)) {
-                    return JsonUtils.toJson(value);
-                }
-                return value;
-            }));
+            outRows.add(JsonRows.decode(rowMap, outputSchema));
         }
 
         return new CacheTable("output", Linq4j.asEnumerable(outRows), dataFields);

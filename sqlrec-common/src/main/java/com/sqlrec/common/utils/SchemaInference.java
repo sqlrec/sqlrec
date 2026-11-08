@@ -20,12 +20,16 @@ public final class SchemaInference {
     private SchemaInference() {
     }
 
-    /** Uses the first row's columns and the first non-null value in each column. */
+    /** Uses the first row's columns, widening mixed integral/floating values across rows. */
     public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
         if (rows == null || rows.isEmpty()) {
             return new ArrayList<>();
         }
-        List<FieldSchema> schema = fields(rows.get(0).keySet(), name -> inferColumnTypeName(rows, name));
+        List<FieldSchema> schema = fields(rows.get(0).keySet(), name -> {
+            List<Object> values = new ArrayList<>(rows.size());
+            for (Map<String, Object> row : rows) values.add(row.get(name));
+            return inferJavaType(values);
+        });
         return new ArrayList<>(DataTypeUtils.getRelDataType(
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), schema).getFieldList());
     }
@@ -37,13 +41,11 @@ public final class SchemaInference {
             names.addAll(object.keySet());
         }
         return fields(names, name -> {
+            List<JsonElement> values = new ArrayList<>();
             for (JsonObject object : objects) {
-                JsonElement value = object.get(name);
-                if (value != null && !value.isJsonNull()) {
-                    return inferJsonType(value);
-                }
+                values.add(object.get(name));
             }
-            return "VARCHAR";
+            return inferJsonValues(values);
         });
     }
 
@@ -56,52 +58,55 @@ public final class SchemaInference {
         return fields;
     }
 
-    private static String inferColumnTypeName(List<Map<String, Object>> rows, String name) {
-        for (Map<String, Object> row : rows) {
-            Object value = row.get(name);
-            if (value != null) {
-                return inferTypeName(value);
-            }
-        }
-        return "VARCHAR";
-    }
-
-    private static String inferTypeName(Object value) {
-        if (value instanceof Long || value instanceof Integer) {
-            return "BIGINT";
-        }
-        if (value instanceof Number) {
-            return "DOUBLE";
-        }
-        if (value instanceof Boolean) {
-            return "BOOLEAN";
-        }
-        if (value instanceof List) {
-            String elementType = inferListElementType((List<?>) value);
-            return elementType == null ? "VARCHAR" : "ARRAY<" + elementType + ">";
-        }
-        return "VARCHAR";
-    }
-
-    private static String inferListElementType(List<?> values) {
+    private static String inferJavaType(List<?> values) {
         for (Object value : values) {
-            if (value != null) {
-                // Java responses with empty or nested lists remain JSON text columns.
-                return value instanceof Map || value instanceof List ? null : inferTypeName(value);
+            if (value == null) continue;
+            if (value instanceof List) {
+                List<Object> elements = new ArrayList<>();
+                for (Object candidate : values) {
+                    if (candidate instanceof List) elements.addAll((List<?>) candidate);
+                }
+                // Empty and nested Java lists retain their JSON-text fallback.
+                for (Object element : elements) {
+                    if (element == null) continue;
+                    return element instanceof Map || element instanceof List ? "VARCHAR"
+                            : "ARRAY<" + inferJavaType(elements) + ">";
+                }
+                return "VARCHAR";
             }
+            if (value instanceof Number) {
+                for (Object candidate : values) {
+                    if (candidate instanceof Number && !(candidate instanceof Byte || candidate instanceof Short
+                            || candidate instanceof Integer || candidate instanceof Long)) return "DOUBLE";
+                }
+                return "BIGINT";
+            }
+            return value instanceof Boolean ? "BOOLEAN" : "VARCHAR";
         }
-        return null;
+        return "VARCHAR";
+    }
+
+    private static String inferJsonValues(List<JsonElement> values) {
+        for (JsonElement value : values) {
+            if (value == null || value.isJsonNull()) continue;
+            if (!value.isJsonArray()) return inferJsonType(value);
+            List<JsonElement> elements = new ArrayList<>();
+            for (JsonElement candidate : values) {
+                if (candidate != null && candidate.isJsonArray()) {
+                    candidate.getAsJsonArray().forEach(elements::add);
+                }
+            }
+            for (JsonElement element : elements) {
+                if (element.isJsonPrimitive()) return "ARRAY<" + inferJsonType(element) + ">";
+            }
+            List<JsonElement> nested = new ArrayList<>();
+            for (JsonElement element : elements) if (element.isJsonArray()) nested.add(element);
+            return "ARRAY<" + (nested.isEmpty() ? "VARCHAR" : inferJsonValues(nested)) + ">";
+        }
+        return "VARCHAR";
     }
 
     private static String inferJsonType(JsonElement value) {
-        if (value.isJsonArray()) {
-            for (JsonElement element : value.getAsJsonArray()) {
-                if (element.isJsonPrimitive()) {
-                    return "ARRAY<" + inferJsonType(element) + ">";
-                }
-            }
-            return "ARRAY<VARCHAR>";
-        }
         if (value.isJsonPrimitive()) {
             JsonPrimitive primitive = value.getAsJsonPrimitive();
             if (primitive.isNumber()) {

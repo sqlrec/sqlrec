@@ -9,7 +9,7 @@ import io.lettuce.core.codec.ByteArrayCodec;
 public class RedisWrapper extends BaseRedisWrapper<RedisClient, StatefulRedisConnection<byte[], byte[]>> {
     private static final RedisConnectionRegistry<RedisClient, StatefulRedisConnection<byte[], byte[]>> CONNECTIONS =
             new RedisConnectionRegistry<>("RedisWrapper",
-                    url -> RedisClient.create(RedisURI.create(url)),
+                    (resources, url) -> RedisClient.create(resources, RedisURI.create(url)),
                     client -> client.connect(new ByteArrayCodec()));
 
     static {

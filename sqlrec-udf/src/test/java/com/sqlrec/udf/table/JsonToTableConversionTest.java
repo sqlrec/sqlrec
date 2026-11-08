@@ -32,7 +32,7 @@ class JsonToTableConversionTest {
         List<Object[]> rows = table.scan(null).toList();
         assertEquals(2, rows.size());
         assertArrayEquals(new Object[]{null, 1.0d, true, "first", null}, rows.get(0));
-        assertArrayEquals(new Object[]{true, null, null, "{\"name\":\"nested\"}", false}, rows.get(1));
+        assertArrayEquals(new Object[]{true, 2.0d, false, "{\"name\":\"nested\"}", false}, rows.get(1));
     }
 
     @Test
@@ -44,20 +44,20 @@ class JsonToTableConversionTest {
                         + "\"empty\":[],\"nestedOnly\":[{},[1],null],\"nulls\":[null,null]}");
 
         assertEquals(Arrays.asList(SqlTypeName.DOUBLE, SqlTypeName.BOOLEAN, SqlTypeName.VARCHAR,
-                        SqlTypeName.VARCHAR, SqlTypeName.VARCHAR, SqlTypeName.VARCHAR),
+                        SqlTypeName.VARCHAR, SqlTypeName.ARRAY, SqlTypeName.VARCHAR),
                 table.getDataFields().stream()
                         .map(field -> field.getType().getComponentType().getSqlTypeName())
                         .collect(Collectors.toList()));
         assertArrayEquals(new Object[]{
-                Arrays.asList(null, null, null, 2.0d, null, null),
-                Arrays.asList(false, null, null, null, null),
+                Arrays.asList(null, null, null, 2.0d, 3.0d, null),
+                Arrays.asList(false, false, true, null, null),
                 Arrays.asList("first", "2", "true", "{\"x\":1}", "[3]", null),
-                Collections.emptyList(), Arrays.asList("{}", "[1]", null), Arrays.asList(null, null)
+                Collections.emptyList(), Arrays.asList(null, List.of(1.0d), null), Arrays.asList(null, null)
         }, table.scan(null).toList().get(0));
     }
 
     @Test
-    void keepsArrayColumnTypeFromFirstValueAndSkipsNonObjectRows() {
+    void infersArrayElementsAcrossRowsAndSkipsNonObjectRows() {
         CacheTable table = function.evaluate(
                 "[null,1,[],{\"array\":[],\"absent\":null},{\"array\":[1,true,{}]},"
                         + "{\"array\":\"scalar\"}]");
@@ -65,9 +65,9 @@ class JsonToTableConversionTest {
         List<Object[]> rows = table.scan(null).toList();
         assertEquals(3, rows.size());
         assertArrayEquals(new Object[]{Collections.emptyList(), null}, rows.get(0));
-        assertArrayEquals(new Object[]{Arrays.asList("1", "true", "{}"), null}, rows.get(1));
+        assertArrayEquals(new Object[]{Arrays.asList(1.0d, null, null), null}, rows.get(1));
         assertArrayEquals(new Object[]{null, null}, rows.get(2));
-        assertEquals(SqlTypeName.VARCHAR,
+        assertEquals(SqlTypeName.DOUBLE,
                 table.getDataFields().get(0).getType().getComponentType().getSqlTypeName());
         assertEquals(SqlTypeName.VARCHAR, table.getDataFields().get(1).getType().getSqlTypeName());
     }

@@ -25,7 +25,7 @@ public class JsonToTableFunction {
         List<FieldSchema> fields = SchemaInference.inferJsonFields(objects);
         List<RelDataTypeField> dataFields = DataTypeUtils.getRelDataType(
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), fields).getFieldList();
-        List<Object[]> rows = JsonRows.decodeRows(objects, fields, JsonRows.Decoding.MATCH_SCHEMA);
+        List<Object[]> rows = JsonRows.decodeRows(objects, fields);
         return new CacheTable("output", Linq4j.asEnumerable(rows), dataFields);
     }
 }

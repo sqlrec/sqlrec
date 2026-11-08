@@ -5,6 +5,7 @@ import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -76,6 +77,14 @@ final class FileSystemDataLoader {
     }
 
     private List<Object[]> loadCsv(Path filePath) throws IOException {
+        SqlTypeName[] types = new SqlTypeName[fileSystemConfig.fieldSchemas.size()];
+        for (int i = 0; i < types.length; i++) {
+            try {
+                types[i] = DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName();
+            } catch (Exception invalidType) {
+                // Preserve the existing behavior: an invalid column type produces null cells.
+            }
+        }
         List<Object[]> rows = new ArrayList<>();
         try (Reader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8);
              CSVParser parser = CSVFormat.DEFAULT.parse(reader)) {
@@ -87,22 +96,21 @@ final class FileSystemDataLoader {
                     header = false;
                     continue;
                 }
-                rows.add(parseCsvRecord(record));
+                rows.add(parseCsvRecord(record, types));
             }
         }
         return rows;
     }
 
-    private Object[] parseCsvRecord(CSVRecord record) {
+    private Object[] parseCsvRecord(CSVRecord record, SqlTypeName[] types) {
         Object[] row = new Object[fileSystemConfig.fieldSchemas.size()];
         for (int i = 0; i < fileSystemConfig.fieldSchemas.size() && i < record.size(); i++) {
             String value = record.get(i);
-            if (value.isEmpty()) {
+            if (value.isEmpty() || types[i] == null) {
                 row[i] = null;
             } else {
                 try {
-                    row[i] = ScalarConversions.convert(value, DataTypeUtils.getRelDataType(
-                            fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName());
+                    row[i] = ScalarConversions.convert(value, types[i]);
                 } catch (Exception e) {
                     row[i] = null;
                 }
@@ -120,6 +128,6 @@ final class FileSystemDataLoader {
             logger.warn("Invalid JSON input: {}, initializing as empty table", failure.getMessage());
             return new ArrayList<>();
         }
-        return JsonRows.decodeRows(objects, fileSystemConfig.fieldSchemas, JsonRows.Decoding.COERCE_SCALARS);
+        return JsonRows.decodeRows(objects, fileSystemConfig.fieldSchemas);
     }
 }

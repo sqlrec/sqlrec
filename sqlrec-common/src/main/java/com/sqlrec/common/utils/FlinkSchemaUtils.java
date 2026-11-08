@@ -43,7 +43,14 @@ public class FlinkSchemaUtils {
                 case ARRAY:
                 case MAP:
                 case ROW:
+                case DECIMAL:
+                case TIME_WITHOUT_TIME_ZONE:
+                case TIMESTAMP_WITHOUT_TIME_ZONE:
                     typeName = type.asSummaryString();
+                    break;
+                case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+                    typeName = "TIMESTAMP(" + ((LocalZonedTimestampType) type).getPrecision()
+                            + ") WITH LOCAL TIME ZONE";
                     break;
                 default:
                     typeName = type.getTypeRoot().name();

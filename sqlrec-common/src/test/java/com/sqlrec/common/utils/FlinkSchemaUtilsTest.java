@@ -73,7 +73,7 @@ class FlinkSchemaUtilsTest {
     }
 
     @Test
-    void retainsCollectionElementTypesWithoutChangingScalarTypeNames() {
+    void retainsCollectionElementTypesAndDecimalBounds() {
         ResolvedSchema schema = ResolvedSchema.of(
                 Column.physical("amount", DataTypes.DECIMAL(12, 2)),
                 Column.physical("label", DataTypes.STRING()),
@@ -84,7 +84,8 @@ class FlinkSchemaUtilsTest {
 
         List<FieldSchema> fields = FlinkSchemaUtils.getFieldSchemas(schema);
 
-        assertEquals("DECIMAL", fields.get(0).getType());
+        assertEquals(12, DataTypeUtils.getRelDataType(fields.get(0).getType()).getPrecision());
+        assertEquals(2, DataTypeUtils.getRelDataType(fields.get(0).getType()).getScale());
         assertEquals("VARCHAR", fields.get(1).getType());
         assertTrue(fields.get(2).getType().startsWith("ARRAY<"));
         assertTrue(fields.get(2).getType().contains("STRING"));
