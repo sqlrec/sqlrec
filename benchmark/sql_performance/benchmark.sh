@@ -4,6 +4,7 @@ set -eo pipefail
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 
 source "${dir}/../../deploy/env.sh"
+bash "${dir}/../../bin/beeline.sh" -f "${dir}/test_rec.sql"
 
 CONCURRENCY=10
 DURATION=30
