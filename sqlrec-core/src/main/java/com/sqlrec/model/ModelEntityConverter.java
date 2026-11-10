@@ -7,10 +7,7 @@ import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
-import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateModel;
@@ -19,7 +16,6 @@ import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.PathUtils;
 import com.sqlrec.utils.SchemaUtils;
-import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -30,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/** Converts SQL and stored entities; managers resolve metadata and execution paths. */
 public class ModelEntityConverter {
     private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
 
@@ -63,49 +60,21 @@ public class ModelEntityConverter {
         return modelConfig;
     }
 
-    public static ModelTrainConf convertToModelTrainConf(
-            SqlTrainModel sqlTrainModel,
-            String defaultSchema
-    ) throws Exception {
+    public static ModelTrainConf convertToModelTrainConf(SqlTrainModel sqlTrainModel) {
         ModelTrainConf modelTrainConf = new ModelTrainConf();
         modelTrainConf.setModelName(ResourceNames.of(sqlTrainModel.getModelName()));
-        modelTrainConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlTrainModel.getCheckpoint().toString())));
-        modelTrainConf.setModelDir(ModelEntityConverter.getModelCheckpointPath(
-                modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
-        if (sqlTrainModel.getExistingCheckpoint() != null) {
-            modelTrainConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
-                    modelTrainConf.getModelName(),
-                    ResourceNames.normalize(SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString()))
-            ));
-        }
+        modelTrainConf.setCheckpointName(checkpointName(sqlTrainModel.getCheckpoint()));
         modelTrainConf.setParams(SchemaUtils.convertPropertyList(sqlTrainModel.getPropertyList()));
         modelTrainConf.setId(K8sYamlUtils.checkpointJobId("train", modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
-        if (sqlTrainModel.getDataSource() == null) {
-            modelTrainConf.setTrainDataPaths(Collections.emptyList());
-        } else {
-            modelTrainConf.setTrainDataPaths(getHivePartitionPaths(
-                    sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
-        }
         return modelTrainConf;
     }
 
-    public static ModelExportConf convertToModelExportConf(
-            SqlExportModel sqlExportModel,
-            String defaultSchema
-    ) throws Exception {
+    public static ModelExportConf convertToModelExportConf(SqlExportModel sqlExportModel) {
         ModelExportConf modelExportConf = new ModelExportConf();
         modelExportConf.setModelName(ResourceNames.of(sqlExportModel.getModelName()));
-        modelExportConf.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlExportModel.getCheckpoint().toString())));
-        modelExportConf.setBaseModelDir(ModelEntityConverter.getModelCheckpointPath(
-                modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
+        modelExportConf.setCheckpointName(checkpointName(sqlExportModel.getCheckpoint()));
         modelExportConf.setParams(SchemaUtils.convertPropertyList(sqlExportModel.getPropertyList()));
         modelExportConf.setId(K8sYamlUtils.checkpointJobId("export", modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
-        if (sqlExportModel.getDataSource() == null) {
-            modelExportConf.setTrainDataPaths(Collections.emptyList());
-        } else {
-            modelExportConf.setTrainDataPaths(getHivePartitionPaths(
-                    sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema));
-        }
         return modelExportConf;
     }
 
@@ -116,11 +85,16 @@ public class ModelEntityConverter {
         serviceConfig.setId(serviceName);
         serviceConfig.setModelName(ResourceNames.of(sqlCreateService.getModelName()));
         if (sqlCreateService.getCheckpoint() != null) {
-            serviceConfig.setCheckpointName(ResourceNames.normalize(SchemaUtils.removeQuotes(sqlCreateService.getCheckpoint().toString())));
-            serviceConfig.setModelCheckpointDir(getModelCheckpointPath(serviceConfig.getModelName(), serviceConfig.getCheckpointName()));
+            serviceConfig.setCheckpointName(checkpointName(sqlCreateService.getCheckpoint()));
         }
         serviceConfig.setParams(SchemaUtils.convertPropertyList(sqlCreateService.getPropertyList()));
         return serviceConfig;
+    }
+
+    private static String checkpointName(SqlNode node) {
+        String name = ResourceNames.normalize(SchemaUtils.removeQuotes(node.toString()));
+        PathUtils.validateCheckpointName(name);
+        return name;
     }
 
     public static ServiceConf convertToServiceConfig(Service service) throws Exception {
@@ -132,25 +106,6 @@ public class ModelEntityConverter {
         serviceConfig.setUrl(service.getUrl());
         serviceConfig.setModelConfig(convertToModel(service.getModelDdl()));
         return serviceConfig;
-    }
-
-    public static List<String> getHivePartitionPaths(
-            SqlIdentifier dataSource,
-            SqlNode whereCondition,
-            String defaultSchema
-    ) throws Exception {
-        String db = defaultSchema;
-        String table;
-        String partitionFilter = whereCondition == null ? "" : whereCondition.toString();
-        if (dataSource.isSimple()) {
-            table = dataSource.toString();
-        } else {
-            db = dataSource.getComponent(0).toString();
-            table = dataSource.getComponent(1).toString();
-        }
-        List<String> partitionPaths = MetadataAccessFactory.getInstance().getPartitionPaths(db, table, partitionFilter);
-        partitionPaths = fixPathProtocol(partitionPaths);
-        return partitionPaths.stream().map(path -> path + "/*").toList();
     }
 
     public static String getModelPath(ModelConf modelConfig) {
@@ -170,24 +125,6 @@ public class ModelEntityConverter {
 
         List<String> fixedPaths = fixPathProtocol(Collections.singletonList(fullPath));
         return fixedPaths.get(0);
-    }
-
-    public static String getModelCheckpointPath(String modelName, String checkpoint) throws Exception {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
-        String modelDdl;
-        Checkpoint checkpointEntity = db.getCheckpoint(modelName, checkpoint);
-        if (checkpointEntity != null) {
-            modelDdl = checkpointEntity.getModelDdl();
-        } else {
-            Model model = db.getModel(modelName);
-            if (model == null) {
-                throw new IllegalArgumentException("model not exists: " + modelName);
-            }
-            modelDdl = model.getDdl();
-        }
-
-        ModelConf modelConfig = convertToModel(modelDdl);
-        return PathUtils.checkpointPath(modelConfig.getPath(), checkpoint);
     }
 
     public static String getModelCheckpointPath(Checkpoint checkpointEntity) throws Exception {

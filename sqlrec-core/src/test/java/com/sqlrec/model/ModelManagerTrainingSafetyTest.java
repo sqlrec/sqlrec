@@ -7,6 +7,9 @@ import com.sqlrec.entity.*;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlTrainModel;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import java.util.ArrayList;
@@ -65,7 +68,9 @@ class ModelManagerTrainingSafetyTest {
             when(f.controller.requiresTrainingData()).thenReturn(true);
             assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
             f.verifyNoDeletion();
-            f.train.setTrainDataPaths(List.of("/data"));
+            when(f.statement.getDataSource()).thenReturn(new SqlIdentifier("data", SqlParserPos.ZERO));
+            when(f.db.getPartitionPaths("default", "data", "")).thenReturn(List.of("hdfs:///data"));
+            f.converter.when(() -> ModelEntityConverter.fixPathProtocol(List.of("hdfs:///data"))).thenCallRealMethod();
             when(f.controller.genModelTrainK8sYaml(f.model, f.train)).thenThrow(new IllegalArgumentException("bad configuration"));
             assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
             f.verifyNoDeletion();
@@ -225,7 +230,7 @@ class ModelManagerTrainingSafetyTest {
     @Test
     void targetCannotAlsoBeTheIncrementalSource() throws Exception {
         try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
-            f.train.setBaseModelDir("/models/model/v1");
+            when(f.statement.getExistingCheckpoint()).thenReturn(SqlLiteral.createCharString("v1", SqlParserPos.ZERO));
             assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
             f.verifyNoDeletion();
             verify(f.controller, never()).genModelTrainK8sYaml(any(), any());
@@ -279,7 +284,7 @@ class ModelManagerTrainingSafetyTest {
             model.setPath("/models/model"); model.setParams(Map.of("model", "gbdt.lightgbm"));
             train.setModelName("model"); train.setCheckpointName("v1"); train.setModelDir("/models/model/v1"); train.setTrainDataPaths(List.of());
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
-            converter.when(() -> ModelEntityConverter.convertToModelTrainConf(statement, "default")).thenReturn(train);
+            converter.when(() -> ModelEntityConverter.convertToModelTrainConf(statement)).thenReturn(train);
             converter.when(() -> ModelEntityConverter.convertToModel("model-ddl")).thenReturn(model);
             converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old)).thenCallRealMethod();
             controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);

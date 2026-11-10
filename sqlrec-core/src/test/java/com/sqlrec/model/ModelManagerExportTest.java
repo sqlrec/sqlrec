@@ -266,7 +266,7 @@ class ModelManagerExportTest {
             export.setParams(Map.of());
 
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
-            converter.when(() -> ModelEntityConverter.convertToModelExportConf(statement, "default"))
+            converter.when(() -> ModelEntityConverter.convertToModelExportConf(statement))
                     .thenReturn(export);
             converter.when(() -> ModelEntityConverter.convertToModel("model-ddl")).thenReturn(model);
             controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);

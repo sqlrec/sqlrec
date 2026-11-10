@@ -14,11 +14,13 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+/** Built during compilation; init seals the function structure before it is shared. */
 public class SqlFunctionBindable extends BindableInterface {
     private String funName;
-    private List<Map.Entry<String, List<RelDataTypeField>>> inputTables;
-    private List<BindableInterface> bindableList;
+    private final List<Map.Entry<String, List<RelDataTypeField>>> inputTables = new ArrayList<>();
+    private final List<BindableInterface> bindableList;
     private List<RelDataTypeField> returnDataFields;
+    private boolean initialized;
 
     private Set<String> readTables;
     private Set<String> writeTables;
@@ -32,24 +34,26 @@ public class SqlFunctionBindable extends BindableInterface {
             List<BindableInterface> bindableList,
             List<RelDataTypeField> returnDataFields
     ) {
-        this.inputTables = inputTables;
-        this.bindableList = bindableList;
-        this.returnDataFields = returnDataFields;
+        inputTables.forEach(input -> addInputTable(input.getKey(), input.getValue()));
+        this.bindableList = new ArrayList<>(bindableList);
+        setReturnDataFields(returnDataFields);
     }
 
     public void init() throws Exception {
-        this.readTables = getAccessTables(bindableList, BindableInterface::getReadTables);
-        this.writeTables = getAccessTables(bindableList, BindableInterface::getWriteTables);
-        Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> topologicalSortIndex = TopologicalSortUtils
-                .topologicalSort(bindableList);
-        this.bindableDependency = topologicalSortIndex.getValue();
-        this.sortedBindableList = topologicalSortIndex.getKey();
+        ensureCompiling();
+        this.readTables = Set.copyOf(getAccessTables(bindableList, BindableInterface::getReadTables));
+        this.writeTables = Set.copyOf(getAccessTables(bindableList, BindableInterface::getWriteTables));
+        TopologicalSortUtils.DependencyPlan plan = TopologicalSortUtils.topologicalSort(bindableList);
+        this.bindableDependency = plan.dependencies();
+        this.sortedBindableList = plan.executionOrder();
 
         initAllDependSqlFunctionMap();
+        allDependSqlFunctionMap = Map.copyOf(allDependSqlFunctionMap);
 
         // Mark structural UNION sources at compile time. Whether recovery is enabled is
         // evaluated from the execution context, so request-level SET values take effect.
         initExceptionIgnore();
+        initialized = true;
     }
 
     @Override
@@ -173,31 +177,30 @@ public class SqlFunctionBindable extends BindableInterface {
     }
 
     public List<Map.Entry<String, List<RelDataTypeField>>> getInputTables() {
-        return inputTables;
+        return Collections.unmodifiableList(inputTables);
     }
 
     public void addInputTable(String tableName, List<RelDataTypeField> dataFields) {
-        inputTables.add(new AbstractMap.SimpleEntry<>(tableName, dataFields));
+        ensureCompiling();
+        inputTables.add(Map.entry(tableName, List.copyOf(dataFields)));
     }
 
-    public void setInputTables(List<Map.Entry<String, List<RelDataTypeField>>> inputTables) {
-        this.inputTables = inputTables;
+    public void addBindable(BindableInterface bindable) {
+        ensureCompiling();
+        bindableList.add(Objects.requireNonNull(bindable, "bindable"));
     }
 
     public List<BindableInterface> getBindableList() {
-        return bindableList;
+        return Collections.unmodifiableList(bindableList);
     }
 
     public Map<Integer, Set<Integer>> getBindableDependency() {
         return bindableDependency;
     }
 
-    public void setBindableList(List<BindableInterface> bindableList) {
-        this.bindableList = bindableList;
-    }
-
     public void setReturnDataFields(List<RelDataTypeField> returnDataFields) {
-        this.returnDataFields = returnDataFields;
+        ensureCompiling();
+        this.returnDataFields = returnDataFields == null ? null : List.copyOf(returnDataFields);
     }
 
     public String getFunName() {
@@ -205,7 +208,14 @@ public class SqlFunctionBindable extends BindableInterface {
     }
 
     public void setFunName(String funName) {
+        ensureCompiling();
         this.funName = funName;
+    }
+
+    private void ensureCompiling() {
+        if (initialized) {
+            throw new IllegalStateException("SQL function structure is already initialized: " + funName);
+        }
     }
 
     public Set<String> getDependencySqlFunctions() {

@@ -173,7 +173,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN"
         ));
 
-        assertEquals(List.of(0), TopologicalSortUtils.topologicalSort(function.getBindableList()).getKey());
+        assertEquals(List.of(0), TopologicalSortUtils.topologicalSort(function.getBindableList()).executionOrder());
         assertEquals(Set.of(), function.getBindableDependency().get(0));
     }
 
@@ -418,7 +418,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -438,7 +438,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -456,7 +456,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -473,7 +473,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -493,7 +493,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -514,7 +514,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -536,7 +536,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -556,7 +556,7 @@ public class TopologicalSortUtilsTest {
                 "RETURN result_table"
         ));
         List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).getKey();
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
 
         Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
 
@@ -644,19 +644,19 @@ public class TopologicalSortUtilsTest {
                 "RETURN"
         ));
 
-        Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> result =
+        TopologicalSortUtils.DependencyPlan result =
                 TopologicalSortUtils.topologicalSort(function.getBindableList());
 
         assertNotNull(result);
-        assertNotNull(result.getKey());
-        assertNotNull(result.getValue());
-        assertEquals(4, result.getKey().size());
-        assertTrue(result.getKey().indexOf(0) < result.getKey().indexOf(1));
-        assertTrue(result.getKey().indexOf(1) < result.getKey().indexOf(2));
-        assertEquals(Set.of(), result.getValue().get(0));
-        assertEquals(Set.of(0), result.getValue().get(1));
-        assertEquals(Set.of(1), result.getValue().get(2));
-        assertEquals(Set.of(2), result.getValue().get(3));
+        assertNotNull(result.executionOrder());
+        assertNotNull(result.dependencies());
+        assertEquals(4, result.executionOrder().size());
+        assertTrue(result.executionOrder().indexOf(0) < result.executionOrder().indexOf(1));
+        assertTrue(result.executionOrder().indexOf(1) < result.executionOrder().indexOf(2));
+        assertEquals(Set.of(), result.dependencies().get(0));
+        assertEquals(Set.of(0), result.dependencies().get(1));
+        assertEquals(Set.of(1), result.dependencies().get(2));
+        assertEquals(Set.of(2), result.dependencies().get(3));
     }
 
     @Test

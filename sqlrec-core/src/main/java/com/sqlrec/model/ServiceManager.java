@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.model.ModelController;
+import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.CompileManager;
@@ -32,7 +33,7 @@ public class ServiceManager {
                             if (service == null) {
                                 return Optional.empty();
                             }
-                            return Optional.of(ModelEntityConverter.convertToServiceConfig(service));
+                            return Optional.of(loadServiceConfig(db, service));
                         } catch (Exception e) {
                             throw new RuntimeException(
                                     "Failed to get service config for service: " + serviceName,
@@ -41,6 +42,20 @@ public class ServiceManager {
                         }
                     }
             );
+
+    private static ServiceConf loadServiceConfig(MetadataAccess db, Service service) throws Exception {
+        ServiceConf config = ModelEntityConverter.convertToServiceConfig(service);
+        if (config.getCheckpointName() != null) {
+            Checkpoint checkpoint = db.getCheckpoint(config.getModelName(), config.getCheckpointName());
+            ModelConf model = config.getModelConfig();
+            if (checkpoint == null) {
+                Model currentModel = ModelManager.getRequiredModel(db, config.getModelName());
+                model = ModelEntityConverter.convertToModel(currentModel.getDdl());
+            }
+            config.setModelCheckpointDir(ModelManager.checkpointPath(model, checkpoint, config.getCheckpointName()));
+        }
+        return config;
+    }
 
     public static void invalidateCache() {
         serviceConfigCache.invalidateAll();
@@ -94,11 +109,14 @@ public class ServiceManager {
     ) throws Exception {
         ServiceConf serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
-        Model modelEntity = db.getModel(serviceConfig.getModelName());
-        if (modelEntity == null) {
-            throw new IllegalArgumentException("model not exists: " + serviceConfig.getModelName());
-        }
+        Model modelEntity = ModelManager.getRequiredModel(db, serviceConfig.getModelName());
         serviceConfig.setModelConfig(ModelEntityConverter.convertToModel(modelEntity.getDdl()));
+        Checkpoint checkpoint = null;
+        if (serviceConfig.getCheckpointName() != null) {
+            checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
+            serviceConfig.setModelCheckpointDir(ModelManager.checkpointPath(
+                    serviceConfig.getModelConfig(), checkpoint, serviceConfig.getCheckpointName()));
+        }
 
         ModelController modelController = ModelControllerFactory.getRequiredModelController(
                 serviceConfig.getModelConfig()
@@ -106,7 +124,6 @@ public class ServiceManager {
 
         String modelDdl = modelEntity.getDdl();
         if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && !skipCheckpoint) {
-            Checkpoint checkpoint = db.getCheckpoint(serviceConfig.getModelName(), serviceConfig.getCheckpointName());
             if (checkpoint == null) {
                 throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }

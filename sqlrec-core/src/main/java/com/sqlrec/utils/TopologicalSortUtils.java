@@ -7,12 +7,24 @@ import com.sqlrec.runtime.ProxyAllBindable;
 import java.util.*;
 
 public class TopologicalSortUtils {
-    public static Map.Entry<List<Integer>, Map<Integer, Set<Integer>>> topologicalSort(List<BindableInterface> bindableList) {
+    public record DependencyPlan(
+            List<Integer> executionOrder,
+            Map<Integer, Set<Integer>> dependencies
+    ) {
+        public DependencyPlan {
+            executionOrder = List.copyOf(executionOrder);
+            Map<Integer, Set<Integer>> snapshot = new HashMap<>();
+            dependencies.forEach((node, parents) -> snapshot.put(node, Set.copyOf(parents)));
+            dependencies = Map.copyOf(snapshot);
+        }
+    }
+
+    public static DependencyPlan topologicalSort(List<BindableInterface> bindableList) {
         Map<Integer, Set<Integer>> bindableDependency = buildBindableDependency(bindableList);
         bindableDependency = optimizeDependency(bindableDependency);
         List<Integer> sortedBindableList = topologicalSort(bindableDependency);
 
-        return Map.entry(sortedBindableList, bindableDependency);
+        return new DependencyPlan(sortedBindableList, bindableDependency);
     }
 
     /** Removes redundant execution edges from a DAG without modifying the input. */

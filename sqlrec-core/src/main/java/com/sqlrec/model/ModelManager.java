@@ -17,6 +17,9 @@ import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.PathUtils;
+import com.sqlrec.utils.SchemaUtils;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
@@ -96,14 +99,24 @@ public class ModelManager {
 
     public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel, defaultSchema);
+        ModelTrainConf modelTrainConf = ModelEntityConverter.convertToModelTrainConf(sqlTrainModel);
 
-        Model modelEntity = db.getModel(modelTrainConf.getModelName());
+        Model modelEntity = getRequiredModel(db, modelTrainConf.getModelName());
         ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
+        Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
+        modelTrainConf.setModelDir(checkpointPath(modelConfig, existingCheckpoint, modelTrainConf.getCheckpointName()));
+        if (sqlTrainModel.getExistingCheckpoint() != null) {
+            String sourceName = ResourceNames.normalize(
+                    SchemaUtils.removeQuotes(sqlTrainModel.getExistingCheckpoint().toString()));
+            Checkpoint source = sourceName.equals(modelTrainConf.getCheckpointName())
+                    ? existingCheckpoint : db.getCheckpoint(modelTrainConf.getModelName(), sourceName);
+            modelTrainConf.setBaseModelDir(checkpointPath(modelConfig, source, sourceName));
+        }
+        modelTrainConf.setTrainDataPaths(loadTrainingDataPaths(
+                db, sqlTrainModel.getDataSource(), sqlTrainModel.getWhereCondition(), defaultSchema));
         PathUtils.validateModelPath(modelTrainConf.getModelDir(), modelConfig.getPath());
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
-        Checkpoint existingCheckpoint = db.getCheckpoint(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName());
         if (existingCheckpoint != null) {
             if (Consts.CHECKPOINT_TYPE_EXPORT.equals(existingCheckpoint.getCheckpointType())) {
                 throw new IllegalArgumentException("TRAIN MODEL target cannot be an export checkpoint; use a new checkpoint name");
@@ -166,17 +179,17 @@ public class ModelManager {
 
     public static List<CheckpointInfo> exportModel(SqlExportModel sqlExportModel, String defaultSchema) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        ModelExportConf modelExportConf = ModelEntityConverter.convertToModelExportConf(sqlExportModel, defaultSchema);
+        ModelExportConf modelExportConf = ModelEntityConverter.convertToModelExportConf(sqlExportModel);
 
-        Model modelEntity = db.getModel(modelExportConf.getModelName());
-        if (modelEntity == null) {
-            throw new IllegalArgumentException("model not exists: " + modelExportConf.getModelName());
-        }
-
+        Model modelEntity = getRequiredModel(db, modelExportConf.getModelName());
+        ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         Checkpoint sourceCheckpoint = db.getCheckpoint(modelExportConf.getModelName(), modelExportConf.getCheckpointName());
         if (sourceCheckpoint == null) {
             throw new IllegalArgumentException("checkpoint not exists: " + modelExportConf.getCheckpointName() + " for model " + modelExportConf.getModelName());
         }
+        modelExportConf.setBaseModelDir(checkpointPath(modelConfig, sourceCheckpoint, modelExportConf.getCheckpointName()));
+        modelExportConf.setTrainDataPaths(loadTrainingDataPaths(
+                db, sqlExportModel.getDataSource(), sqlExportModel.getWhereCondition(), defaultSchema));
 
         refreshCheckpointStatus(db, sourceCheckpoint);
         if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(sourceCheckpoint.getStatus())) {
@@ -186,7 +199,6 @@ public class ModelManager {
         if (Consts.CHECKPOINT_TYPE_EXPORT.equals(sourceCheckpoint.getCheckpointType())) {
             throw new IllegalArgumentException("Export source must be an origin checkpoint");
         }
-        ModelConf modelConfig = ModelEntityConverter.convertToModel(modelEntity.getDdl());
         ModelController modelController = ModelControllerFactory.getRequiredModelController(modelConfig);
 
         List<String> exportCheckpointNames = modelController.getExportCheckpoints(modelExportConf);
@@ -210,7 +222,7 @@ public class ModelManager {
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
 
-        deleteExportCheckpoints(modelExportConf.getModelName(), checkpoints.existing());
+        deleteExportCheckpoints(db, modelExportConf.getModelName(), checkpoints.existing());
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
@@ -231,6 +243,33 @@ public class ModelManager {
         K8sManager.applyYaml(k8sYaml);
 
         return checkpointInfos;
+    }
+
+    static Model getRequiredModel(MetadataAccess db, String modelName) {
+        Model model = db.getModel(modelName);
+        if (model == null) {
+            throw new IllegalArgumentException("model not exists: " + modelName);
+        }
+        return model;
+    }
+
+    /** Existing checkpoints retain the model path recorded when they were created. */
+    static String checkpointPath(ModelConf model, Checkpoint checkpoint, String checkpointName) throws Exception {
+        return checkpoint == null ? PathUtils.checkpointPath(model.getPath(), checkpointName)
+                : ModelEntityConverter.getModelCheckpointPath(checkpoint);
+    }
+
+    private static List<String> loadTrainingDataPaths(
+            MetadataAccess metadata, SqlIdentifier dataSource, SqlNode whereCondition, String defaultSchema
+    ) throws Exception {
+        if (dataSource == null) {
+            return List.of();
+        }
+        String database = dataSource.isSimple() ? defaultSchema : dataSource.getComponent(0).toString();
+        String table = dataSource.isSimple() ? dataSource.toString() : dataSource.getComponent(1).toString();
+        String filter = whereCondition == null ? "" : whereCondition.toString();
+        List<String> paths = metadata.getPartitionPaths(database, table, filter);
+        return ModelEntityConverter.fixPathProtocol(paths).stream().map(path -> path + "/*").toList();
     }
 
     private static ExportCheckpoints findExportCheckpoints(
@@ -266,8 +305,7 @@ public class ModelManager {
         }
     }
 
-    private static void deleteExportCheckpoints(String modelName, List<Checkpoint> checkpoints) throws Exception {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
+    private static void deleteExportCheckpoints(MetadataAccess db, String modelName, List<Checkpoint> checkpoints) throws Exception {
         Set<String> oldYamls = new LinkedHashSet<>();
         // Preflight every output before deleting the first one.
         for (Checkpoint checkpoint : checkpoints) {

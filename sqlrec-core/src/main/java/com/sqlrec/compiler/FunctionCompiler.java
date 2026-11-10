@@ -220,7 +220,7 @@ public class FunctionCompiler {
     }
 
     private void addBodyBindable(BindableInterface bindable, String sql, boolean returnNode) {
-        sqlFunctionBindable.getBindableList().add(bindable);
+        sqlFunctionBindable.addBindable(bindable);
         int bindableIndex = sqlFunctionBindable.getBindableList().size();
         String tableName = bindable.getCacheTableName();
         if (returnNode) {

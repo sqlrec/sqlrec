@@ -3,7 +3,7 @@ package com.sqlrec.model;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
-import com.sqlrec.entity.Model;
+import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.model.tzrec.PipelineConfigUtils;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Model names are normalized; new Service names must already be valid lowercase
@@ -44,40 +44,40 @@ class ModelEntityConverterTest {
     @Test
     void trainingSqlRejectsTraversalButSupportsNestedCheckpointNames() throws Exception {
         MetadataAccess db = mock(MetadataAccess.class);
-        Model model = new Model();
-        model.setDdl("CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')");
-        when(db.getModel("rank")).thenReturn(model);
         try (var metadata = mockStatic(MetadataAccessFactory.class)) {
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
             for (String name : List.of("../other/v1", ".", "v1/..")) {
                 SqlTrainModel sql = (SqlTrainModel) CompileManager.parseSql(
                         "TRAIN MODEL `rank` CHECKPOINT='" + name + "'");
                 assertThrows(IllegalArgumentException.class,
-                        () -> ModelEntityConverter.convertToModelTrainConf(sql, "default"));
+                        () -> ModelEntityConverter.convertToModelTrainConf(sql));
             }
+            Checkpoint checkpoint = new Checkpoint();
+            checkpoint.setModelDdl("CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')");
+            checkpoint.setCheckpointName("v1_export/item");
             assertEquals("/models/rank/v1_export/item",
-                    ModelEntityConverter.getModelCheckpointPath("rank", "v1_export/item"));
+                    ModelEntityConverter.getModelCheckpointPath(checkpoint));
+            metadata.verifyNoInteractions();
+            verifyNoInteractions(db);
         }
     }
 
     @Test
-    void taskIdsUseOperationAndLogicalNamesWithoutChangingCheckpointPaths() throws Exception {
-        MetadataAccess db = mock(MetadataAccess.class);
-        Model model = new Model();
-        model.setDdl("CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')");
-        when(db.getModel("rank")).thenReturn(model);
+    void taskIdsAndLogicalNamesAreConvertedWithoutMetadataQueries() throws Exception {
         try (var metadata = mockStatic(MetadataAccessFactory.class)) {
-            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
             var train = ModelEntityConverter.convertToModelTrainConf((SqlTrainModel) CompileManager.parseSql(
-                    "TRAIN MODEL `rank` CHECKPOINT='v1.0'"), "default");
+                    "TRAIN MODEL `rank` CHECKPOINT='v1.0'"));
             var export = ModelEntityConverter.convertToModelExportConf(
                     (SqlExportModel) CompileManager.parseSql(
-                            "EXPORT MODEL `rank` CHECKPOINT='v1.0'"), "default");
+                            "EXPORT MODEL `rank` CHECKPOINT='v1.0'"));
+            var service = ModelEntityConverter.convertToServiceConf((SqlCreateService) CompileManager.parseSql(
+                    "CREATE SERVICE `rank-service` ON MODEL `rank` CHECKPOINT='v1.0'"));
             assertEquals("v1.0", train.getCheckpointName());
-            assertEquals("/models/rank/v1.0", train.getModelDir());
-            assertEquals("/models/rank/v1.0", export.getBaseModelDir());
+            assertEquals("v1.0", export.getCheckpointName());
+            assertEquals("v1.0", service.getCheckpointName());
             assertEquals("train-rank-v1-0-642e9358bcfc1d4d", train.getId());
             assertEquals("export-rank-v1-0-270fbb523004f1f5", export.getId());
+            metadata.verifyNoInteractions();
         }
     }
 
