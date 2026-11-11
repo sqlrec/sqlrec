@@ -42,10 +42,14 @@ import org.apache.flink.sql.parser.ddl.SqlUseDatabase;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.apache.flink.sql.parser.ddl.SqlReset;
 import com.sqlrec.utils.SchemaUtils;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Coordinates parsing, routing and execution of one SQL session. */
 public class SqlExecutor {
@@ -295,18 +299,20 @@ public class SqlExecutor {
     private static void waitForCompletion(SqlProcessResult result, String sql)
             throws InterruptedException {
         long timeout = SqlRecConfigs.SQL_SYNC_EXECUTE_TIMEOUT.getValue();
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         logger.info("executeSql start, timeout: {}ms, sql: {}", timeout, sql);
-        while (!result.isCompleted()) {
-            long elapsed = System.currentTimeMillis() - start;
-            if (elapsed > timeout) {
-                throw new RuntimeException("sql execution timeout after " + timeout + "ms");
-            }
-            logger.info("executeSql duration {}ms, sql: {}", elapsed, sql);
-            Thread.sleep(1000);
+        try {
+            result.awaitCompletion(timeout);
+        } catch (TimeoutException failure) {
+            throw new RuntimeException("sql execution timeout after " + timeout + "ms", failure);
+        } catch (ExecutionException failure) {
+            throw new RuntimeException("SQL operation failed", ExecutorServiceUtils.unwrap(failure));
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw failure;
         }
         logger.info("executeSql completed in {}ms, sql: {}",
-                System.currentTimeMillis() - start, sql);
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), sql);
     }
 
     private static SqlProcessResult message(String text) {

@@ -246,6 +246,19 @@ spec:
     }
 
     @Test
+    void retryJobIdsKeepAttemptsResourcesSeparateAndFitResourceNames() {
+        for (String operation : List.of("train", "export")) {
+            String first = K8sYamlUtils.checkpointJobId(operation, "rank", "v1");
+            String retry = K8sYamlUtils.checkpointAttemptJobId(operation, "rank", "v1");
+            String next = K8sYamlUtils.checkpointAttemptJobId(operation, "rank", "v1");
+            assertNotEquals(first, retry);
+            assertNotEquals(retry, next);
+            assertTrue(retry.startsWith(operation + "-rank-v1-"));
+            assertTrue((retry + "-job-headless").length() <= 63);
+        }
+    }
+
+    @Test
     void checkpointJobIdsAreStableAndPreserveDistinctLogicalNames() {
         String id = K8sYamlUtils.checkpointJobId("train", "rank", "v1.0");
         assertTrue(id.matches("train-rank-v1-0-[0-9a-f]{16}"), id);

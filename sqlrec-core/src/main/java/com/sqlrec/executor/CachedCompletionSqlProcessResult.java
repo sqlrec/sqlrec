@@ -6,6 +6,8 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 abstract class CachedCompletionSqlProcessResult extends SqlProcessResult {
     private volatile long lastCheckTime;
@@ -28,10 +30,21 @@ abstract class CachedCompletionSqlProcessResult extends SqlProcessResult {
                 < SqlRecConfigs.COMPLETION_CHECK_CACHE_INTERVAL.getValue()) {
             return cachedCompleted;
         }
-        lastCheckTime = currentTime;
-
         boolean completed = completionCheck.getAsBoolean();
         cachedCompleted = completed;
+        lastCheckTime = System.currentTimeMillis();
         return completed;
+    }
+
+    @Override
+    public void awaitCompletion(long timeoutMillis) throws InterruptedException, TimeoutException {
+        // Deployment readiness still uses on-demand polling; Job results use an informer-backed Future.
+        long budget = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        long start = System.nanoTime();
+        while (!isCompleted()) {
+            long remaining = budget - (System.nanoTime() - start);
+            if (remaining <= 0) throw new TimeoutException("Operation completion timed out");
+            TimeUnit.NANOSECONDS.sleep(Math.min(TimeUnit.SECONDS.toNanos(1), remaining));
+        }
     }
 }

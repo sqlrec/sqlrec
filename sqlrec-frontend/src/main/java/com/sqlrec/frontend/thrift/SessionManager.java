@@ -137,7 +137,11 @@ public class SessionManager {
         if (!sessions.remove(session.id, session)) {
             return new TCloseSessionResp(invalidHandleStatus());
         }
-        operations.entrySet().removeIf(entry -> entry.getValue().session() == session);
+        operations.entrySet().removeIf(entry -> {
+            if (entry.getValue().session() != session) return false;
+            if (entry.getValue().isLocal()) entry.getValue().local().close();
+            return true;
+        });
         try {
             return session.gateway.closeSession();
         } finally {
@@ -207,6 +211,7 @@ public class SessionManager {
 
     private void removeOperation(THandleIdentifier id, OperationEntry entry) {
         if (operations.remove(id, entry)) {
+            if (entry.isLocal()) entry.local().close();
             MetricsUtils.getCompositeMeterRegistry().counter(Consts.METRICS_OPERATION_CLOSE_COUNT).increment();
         }
     }

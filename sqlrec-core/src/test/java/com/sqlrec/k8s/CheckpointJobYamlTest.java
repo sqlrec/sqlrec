@@ -48,6 +48,26 @@ class CheckpointJobYamlTest {
             "huggingface.transformers");
 
     @Test
+    void retriesAndRecreationUseDisjointResourcesWithRealModelControllers() throws Exception {
+        try (Fixture f = new Fixture("gbdt.lightgbm", "rank_model", false)) {
+            String previous = f.train("v1.0");
+            assertTrue(f.db.completeCheckpoint(f.db.getCheckpoint("rank_model", "v1.0"), Consts.CHECKPOINT_STATUS_FAILED));
+            String retried = f.train("v1.0");
+            f.db.deleteCheckpoint("rank_model", "v1.0");
+            String recreated = f.train("v1.0");
+            Set<String> names = new java.util.HashSet<>();
+            for (String yaml : List.of(previous, retried, recreated)) {
+                var job = K8sYamlUtils.parseK8sYamlAndGetJobs(yaml).getFirst();
+                String jobName = job.getMetadata().getName();
+                assertTaskResources(yaml, jobName.substring(0, jobName.length() - "-job".length()), false);
+                for (HasMetadata resource : K8sYamlUtils.parseK8sYaml(yaml)) {
+                    assertTrue(names.add(resource.getMetadata().getName()), "Attempts must not share resource names");
+                }
+            }
+        }
+    }
+
+    @Test
     void lightgbmTrainingSqlMatchesCompleteYaml() throws Exception {
         String expectedYaml = """
             ---
@@ -820,12 +840,23 @@ class CheckpointJobYamlTest {
         final MetadataAccess db = new MetadataAccess(schema, store, files);
         final MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
         final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
+        final MockedStatic<K8sYamlUtils> yamls = mockStatic(K8sYamlUtils.class, CALLS_REAL_METHODS);
         final Map<ConfigOption<String>, String> defaults = new HashMap<>();
         final String backend;
         final ModelConf model;
 
         Fixture(String backend, String modelName) throws Exception {
+            this(backend, modelName, true);
+        }
+
+        Fixture(String backend, String modelName, boolean stableNames) throws Exception {
             this.backend = backend;
+            // Snapshot the full YAML deterministically; real attempt uniqueness has its own test.
+            if (stableNames) {
+                yamls.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString()))
+                        .thenAnswer(call -> K8sYamlUtils.checkpointJobId(
+                                call.getArgument(0), call.getArgument(1), call.getArgument(2)));
+            }
             for (ConfigOption<String> option : List.of(ModelConfigs.JAVA_HOME, ModelConfigs.HADOOP_HOME,
                     ModelConfigs.CLASSPATH, ModelConfigs.HADOOP_CONF_DIR, ModelConfigs.CLIENT_DIR,
                     ModelConfigs.CLIENT_PV_NAME, ModelConfigs.CLIENT_PVC_NAME)) {
@@ -888,6 +919,7 @@ class CheckpointJobYamlTest {
         @Override
         public void close() {
             defaults.forEach(ConfigOption::setDefaultValue);
+            yamls.close();
             k8s.close();
             metadata.close();
         }

@@ -185,6 +185,15 @@ public class DbStoreAccess implements StoreAccess {
     }
 
     @Override
+    public boolean completeCheckpoint(Checkpoint expected, String status, long updatedAt) {
+        try (SqlSession session = getSqlSessionFactory().openSession()) {
+            int changed = session.getMapper(DbMapper.class).completeCheckpoint(expected, status, updatedAt);
+            session.commit();
+            return changed == 1;
+        }
+    }
+
+    @Override
     public void insertCheckpoint(Checkpoint checkpoint) {
         executeVoid(dbMapper -> dbMapper.insertCheckpoint(checkpoint));
     }

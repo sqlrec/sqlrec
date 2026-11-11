@@ -25,10 +25,19 @@ public class K8sYamlUtils {
 
     /** Readable names plus a digest of the full logical names, leaving room for -job-headless. */
     public static String checkpointJobId(String operation, String modelName, String checkpointName) {
+        return checkpointJobId(operation, modelName, checkpointName, "");
+    }
+
+    /** Old completion callbacks must only be able to clean up their own attempt's resources. */
+    public static String checkpointAttemptJobId(String operation, String modelName, String checkpointName) {
+        return checkpointJobId(operation, modelName, checkpointName, "\0" + UUID.randomUUID());
+    }
+
+    private static String checkpointJobId(String operation, String modelName, String checkpointName, String attempt) {
         if (!Set.of("train", "export").contains(operation)) {
             throw new IllegalArgumentException("Unsupported checkpoint operation: " + operation);
         }
-        String key = operation + "\0" + modelName + "\0" + checkpointName;
+        String key = operation + "\0" + modelName + "\0" + checkpointName + attempt;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
             String hash = HexFormat.of().formatHex(digest, 0, 8);

@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -89,6 +90,13 @@ public interface DbMapper {
             "VALUES (#{modelName}, #{checkpointName}, #{modelDdl}, #{ddl}, #{yaml}, #{checkpointType}, #{status}, #{createdAt}, #{updatedAt}) " +
             "ON CONFLICT (model_name, checkpoint_name) DO UPDATE SET model_ddl = #{modelDdl}, ddl = #{ddl}, yaml = #{yaml}, checkpoint_type = #{checkpointType}, status = #{status}, updated_at = #{updatedAt}")
     void upsertCheckpoint(Checkpoint checkpoint);
+
+    @Update("UPDATE checkpoint SET status = #{status}, updated_at = #{updatedAt} " +
+            "WHERE model_name = #{expected.modelName} AND checkpoint_name = #{expected.checkpointName} " +
+            "AND status = 'created' AND updated_at = #{expected.updatedAt} " +
+            "AND yaml IS NOT DISTINCT FROM #{expected.yaml}")
+    int completeCheckpoint(@Param("expected") Checkpoint expected, @Param("status") String status,
+                           @Param("updatedAt") long updatedAt);
 
     @Insert("INSERT INTO checkpoint " +
             "(model_name, checkpoint_name, model_ddl, ddl, yaml, checkpoint_type, status, created_at, updated_at) " +

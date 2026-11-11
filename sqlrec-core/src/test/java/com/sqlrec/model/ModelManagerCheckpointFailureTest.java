@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,8 +25,9 @@ import static org.mockito.Mockito.times;
 
 class ModelManagerCheckpointFailureTest {
     @Test
-    void sharedExportJobUsesOneStatusSnapshotPerPoll() {
+    void sharedExportJobUsesOneObservationForAllOutputs() {
         MetadataAccess db = mock(MetadataAccess.class);
+        CheckpointTestSupport.stubCompletion(db);
         String yaml = "kind: Job\nmetadata:\n  name: export\n";
         Checkpoint user = new Checkpoint();
         user.setModelName("recall_model");
@@ -46,29 +48,30 @@ class ModelManagerCheckpointFailureTest {
         try (MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
              MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
-            k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml))
-                    .thenReturn(new K8sManager.JobStatus("running", null),
-                            new K8sManager.JobStatus("succeeded", null));
+            CompletableFuture<K8sManager.JobStatus> observation = new CompletableFuture<>();
+            k8s.when(() -> K8sManager.watchJobsFromYaml(yaml)).thenReturn(observation);
 
-            assertFalse(ModelManager.isCheckpointOperationCompleted(checkpoints));
+            var completion = ModelManager.watchCheckpointCompletion(checkpoints, Runnable::run);
+            assertFalse(completion.isDone());
             assertEquals(Consts.CHECKPOINT_STATUS_CREATED, user.getStatus());
             assertEquals(Consts.CHECKPOINT_STATUS_CREATED, item.getStatus());
-            k8s.verify(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml), times(1));
+            k8s.verify(() -> K8sManager.watchJobsFromYaml(yaml), times(1));
             k8s.verify(() -> K8sManager.deleteYaml(yaml), never());
 
-            assertTrue(ModelManager.isCheckpointOperationCompleted(checkpoints));
+            observation.complete(new K8sManager.JobStatus("succeeded", null));
+            completion.join();
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, user.getStatus());
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, item.getStatus());
-            k8s.verify(() -> K8sManager.checkJobsStatusDetailFromYaml(yaml), times(2));
             k8s.verify(() -> K8sManager.deleteYaml(yaml), times(1));
-            verify(db).upsertCheckpoint(user);
-            verify(db).upsertCheckpoint(item);
+            verify(db).completeCheckpoint(user, Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            verify(db).completeCheckpoint(item, Consts.CHECKPOINT_STATUS_SUCCEEDED);
         }
     }
 
     @Test
     void imagePullFailureMarksCheckpointFailedAndReachesSqlCaller() {
         MetadataAccess db = mock(MetadataAccess.class);
+        CheckpointTestSupport.stubCompletion(db);
         Checkpoint checkpoint = new Checkpoint();
         checkpoint.setModelName("rank_model");
         checkpoint.setCheckpointName("v1");
@@ -79,17 +82,17 @@ class ModelManagerCheckpointFailureTest {
         try (MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
              MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
-            k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
-                    .thenReturn(new K8sManager.JobStatus("failed",
-                            "Pod train-abc: container trainer is waiting: ErrImagePull"));
+            k8s.when(() -> K8sManager.watchJobsFromYaml(checkpoint.getYaml()))
+                    .thenReturn(CompletableFuture.completedFuture(new K8sManager.JobStatus("failed",
+                            "Pod train-abc: container trainer is waiting: ErrImagePull")));
 
             RuntimeException error = assertThrows(RuntimeException.class,
-                    () -> ModelManager.isCheckpointOperationCompleted(
-                            List.of(new CheckpointInfo("rank_model", "v1"))));
+                    () -> ModelManager.watchCheckpointCompletion(
+                            List.of(new CheckpointInfo("rank_model", "v1")), Runnable::run).join());
 
             assertTrue(error.getMessage().contains("ErrImagePull"));
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, checkpoint.getStatus());
-            verify(db).upsertCheckpoint(checkpoint);
+            verify(db).completeCheckpoint(checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
         }
     }
 
@@ -123,6 +126,7 @@ class ModelManagerCheckpointFailureTest {
     @Test
     void missingJobMakesCreatedCheckpointEligibleForImmediateRetry() {
         MetadataAccess db = mock(MetadataAccess.class);
+        CheckpointTestSupport.stubCompletion(db);
         Checkpoint checkpoint = new Checkpoint();
         checkpoint.setModelName("rank_model");
         checkpoint.setCheckpointName("v1");
@@ -135,7 +139,7 @@ class ModelManagerCheckpointFailureTest {
 
             assertFalse(ModelManager.canReuseCreatedCheckpoint(db, checkpoint));
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, checkpoint.getStatus());
-            verify(db).upsertCheckpoint(checkpoint);
+            verify(db).completeCheckpoint(checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
         }
     }
 

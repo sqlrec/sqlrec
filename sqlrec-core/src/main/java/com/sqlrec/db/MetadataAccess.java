@@ -157,6 +157,17 @@ public class MetadataAccess {
         storeAccess.upsertCheckpoint(checkpoint);
     }
 
+    /** Only completes the observed attempt; never inserts a deleted checkpoint or overwrites a retry. */
+    public boolean completeCheckpoint(Checkpoint expected, String status) {
+        expected.setModelName(ResourceNames.normalize(expected.getModelName()));
+        expected.setCheckpointName(ResourceNames.normalize(expected.getCheckpointName()));
+        long updatedAt = Math.max(System.currentTimeMillis(), expected.getUpdatedAt() + 1);
+        if (!storeAccess.completeCheckpoint(expected, status, updatedAt)) return false;
+        expected.setStatus(status);
+        expected.setUpdatedAt(updatedAt);
+        return true;
+    }
+
     public void insertCheckpoint(Checkpoint checkpoint) {
         checkpoint.setModelName(ResourceNames.normalize(checkpoint.getModelName()));
         checkpoint.setCheckpointName(ResourceNames.normalize(checkpoint.getCheckpointName()));

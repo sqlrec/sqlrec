@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -106,7 +105,6 @@ class BatchCallServiceUdtfTest {
                 os.write(bytes);
             }
         });
-        server.setExecutor(Executors.newSingleThreadExecutor());
         server.start();
         serviceUrl = "http://localhost:" + server.getAddress().getPort() + "/predict";
     }

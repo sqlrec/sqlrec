@@ -76,10 +76,8 @@ public class HmsSchemaUpdateTest {
         assertNotNull(first);
         assertEquals(List.of("id"), first.getRowType(typeFactory).getFieldNames());
 
-        // A refresh without an HMS change must continue to reuse the cached Calcite table.
-        Thread.sleep(5L);
-        schema.getTable(tableName);
-        Thread.sleep(50L);
+        // Reload the definitions synchronously to verify reuse without timing-dependent sleeps.
+        schema.invalidateMetadata();
         Table unchanged = schema.getTable(tableName);
         assertSame(first, unchanged);
 
@@ -92,8 +90,10 @@ public class HmsSchemaUpdateTest {
         parameters.put("transient_lastDdlTime", Long.toString(previousDdlTime + 1));
         altered.setParameters(parameters);
         hmsClient.alter_table(DATABASE, tableName, altered);
+        assertEquals(List.of("id", "name"), hmsClient.getTable(DATABASE, tableName)
+                .getSd().getCols().stream().map(FieldSchema::getName).toList(),
+                "HMS must persist the altered columns before checking the schema cache");
 
-        Thread.sleep(5L);
         Table refreshed = waitForTableRefresh(schema, first);
         assertNotNull(refreshed);
         assertNotSame(first, refreshed);
@@ -105,7 +105,7 @@ public class HmsSchemaUpdateTest {
         Table currentTable;
         do {
             currentTable = schema.getTable(tableName);
-            if (currentTable != previousTable) {
+            if (currentTable != null && currentTable != previousTable) {
                 return currentTable;
             }
             Thread.sleep(10L);

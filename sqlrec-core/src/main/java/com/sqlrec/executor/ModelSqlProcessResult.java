@@ -7,15 +7,18 @@ import com.sqlrec.model.ModelManager;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-public class ModelSqlProcessResult extends CachedCompletionSqlProcessResult {
-    private List<CheckpointInfo> checkpointInfos;
+public class ModelSqlProcessResult extends SqlProcessResult {
+    private List<CheckpointInfo> checkpointInfos = List.of();
+    private volatile CompletableFuture<Void> completion = CompletableFuture.completedFuture(null);
 
     public ModelSqlProcessResult() {
         super();
-        this.checkpointInfos = new ArrayList<>();
     }
 
     public ModelSqlProcessResult(
@@ -24,7 +27,7 @@ public class ModelSqlProcessResult extends CachedCompletionSqlProcessResult {
             List<CheckpointInfo> checkpointInfos
     ) {
         super(enumerable, fields);
-        this.checkpointInfos = checkpointInfos != null ? checkpointInfos : new ArrayList<>();
+        setCheckpointInfos(checkpointInfos);
     }
 
     public static ModelSqlProcessResult msg(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
@@ -39,18 +42,27 @@ public class ModelSqlProcessResult extends CachedCompletionSqlProcessResult {
         return checkpointInfos;
     }
 
-    public void setCheckpointInfos(List<CheckpointInfo> checkpointInfos) {
-        this.checkpointInfos = checkpointInfos;
+    public synchronized void setCheckpointInfos(List<CheckpointInfo> checkpointInfos) {
+        close();
+        this.checkpointInfos = checkpointInfos == null ? List.of() : List.copyOf(checkpointInfos);
+        completion = ModelManager.watchCheckpointCompletion(this.checkpointInfos);
     }
 
     @Override
     public boolean isCompleted() {
-        if (checkpointInfos.isEmpty()) {
-            return true;
-        }
+        CompletableFuture<Void> current = completion;
+        if (!current.isDone()) return false;
+        current.join();
+        return true;
+    }
 
-        return checkCompletion(
-                () -> ModelManager.isCheckpointOperationCompleted(checkpointInfos)
-        );
+    @Override
+    public void awaitCompletion(long timeoutMillis) throws InterruptedException, ExecutionException, TimeoutException {
+        completion.get(Math.max(0, timeoutMillis), TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public synchronized void close() {
+        completion.cancel(false);
     }
 }

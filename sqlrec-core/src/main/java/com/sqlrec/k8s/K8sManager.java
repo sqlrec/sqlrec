@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
@@ -37,14 +39,17 @@ public class K8sManager {
     }
 
     private static KubernetesClient getKubernetesClient() {
-        if (kubernetesClient == null) {
+        KubernetesClient current = kubernetesClient;
+        if (current == null) {
             synchronized (K8sManager.class) {
-                if (kubernetesClient == null) {
-                    kubernetesClient = new KubernetesClientBuilder().build();
+                current = kubernetesClient;
+                if (current == null) {
+                    current = new KubernetesClientBuilder().build();
+                    kubernetesClient = current;
                 }
             }
         }
-        return kubernetesClient;
+        return current;
     }
 
     /**
@@ -52,14 +57,22 @@ public class K8sManager {
      * Called after a client-level failure (API server blip, token expiry, broken state)
      * so subsequent calls recover instead of failing forever on the broken client.
      */
-    public static synchronized void resetClient() {
-        if (kubernetesClient != null) {
-            try {
-                kubernetesClient.close();
-            } catch (Exception e) {
-                log.warn("Failed to close stale KubernetesClient during reset: {}", e.getMessage());
-            }
+    public static void resetClient() {
+        resetClient(kubernetesClient);
+    }
+
+    private static void resetClient(KubernetesClient stale) {
+        if (stale == null) return;
+        synchronized (K8sManager.class) {
+            // A late failure from an old request must not close a recovered client's watches.
+            if (kubernetesClient != stale) return;
             kubernetesClient = null;
+        }
+        // Closing may wait for SDK callbacks. Never hold the client-factory lock while doing so.
+        try {
+            stale.close();
+        } catch (Exception e) {
+            log.warn("Failed to close stale KubernetesClient during reset: {}", e.getMessage());
         }
     }
 
@@ -100,13 +113,15 @@ public class K8sManager {
         if (yamlContent == null || yamlContent.isEmpty()) {
             return;
         }
+        KubernetesClient client = null;
         try {
+            client = getKubernetesClient();
             InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8));
-            getKubernetesClient().load(inputStream).serverSideApply();
+            client.load(inputStream).serverSideApply();
         } catch (Exception e) {
             log.error("Failed to apply YAML: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
-                resetClient();
+                resetClient(client);
             }
             throw new RuntimeException("Failed to apply YAML: " + e.getMessage(), e);
         }
@@ -117,8 +132,9 @@ public class K8sManager {
             return;
         }
 
+        KubernetesClient client = null;
         try {
-            KubernetesClient client = getKubernetesClient();
+            client = getKubernetesClient();
             List<HasMetadata> resources = K8sYamlUtils.parseK8sYaml(yamlContent);
 
             for (HasMetadata resource : resources) {
@@ -152,14 +168,14 @@ public class K8sManager {
         } catch (Exception e) {
             log.error("Failed to delete YAML: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
-                resetClient();
+                resetClient(client);
             }
             throw new RuntimeException("Failed to delete YAML: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Delete resources before recreating a checkpoint with the same Kubernetes names.
+     * Delete resources before retrying a checkpoint.
      * Unlike best-effort cleanup, a retry must not apply new YAML while the old Job
      * or ConfigMap is still terminating.
      */
@@ -168,8 +184,9 @@ public class K8sManager {
             return;
         }
 
+        KubernetesClient client = null;
         try {
-            KubernetesClient client = getKubernetesClient();
+            client = getKubernetesClient();
             List<HasMetadata> resources = K8sYamlUtils.parseK8sYaml(yamlContent);
             // Stop the old workload before removing the resources it depends on.
             resources.sort(Comparator.comparingInt(resource -> "Job".equals(resource.getKind()) ? 0 : 1));
@@ -191,9 +208,13 @@ public class K8sManager {
                         resource.getMetadata().getNamespace(), name);
             }
         } catch (Exception e) {
+            // Fabric8 restores the interrupt flag when its blocking wait is interrupted.
+            if (Thread.currentThread().isInterrupted()) {
+                throw new RuntimeException("Interrupted while deleting old checkpoint resources", e);
+            }
             log.error("Failed to delete old checkpoint resources: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
-                resetClient();
+                resetClient(client);
             }
             throw new RuntimeException("Failed to delete old checkpoint resources: " + e.getMessage(), e);
         }
@@ -222,9 +243,11 @@ public class K8sManager {
     }
 
     private static JobStatus checkJobStatusByName(String jobName, String namespace) {
+        KubernetesClient client = null;
         try {
+            client = getKubernetesClient();
             String resolvedNamespace = namespace != null ? namespace : "default";
-            Job job = getKubernetesClient().batch().v1().jobs()
+            Job job = client.batch().v1().jobs()
                     .inNamespace(resolvedNamespace)
                     .withName(jobName)
                     .get();
@@ -234,21 +257,21 @@ public class K8sManager {
                 return knownStatus;
             }
 
-            String imagePullFailure = findImagePullFailure(job, resolvedNamespace);
+            String imagePullFailure = findImagePullFailure(client, job, resolvedNamespace);
             return imagePullFailure == null
                     ? new JobStatus("running", null)
                     : new JobStatus("failed", imagePullFailure);
         } catch (Exception e) {
             log.error("Failed to check job status: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
-                resetClient();
+                resetClient(client);
             }
             return new JobStatus("running", null);
         }
     }
 
     /** Returns a status determined by the Job itself, or null when its Pods need checking. */
-    private static JobStatus knownJobStatus(Job job, String jobName, String resolvedNamespace) {
+    static JobStatus knownJobStatus(Job job, String jobName, String resolvedNamespace) {
         if (job == null) {
             String detail = "Job not found: " + resolvedNamespace + "/" + jobName;
             log.error(detail);
@@ -287,18 +310,18 @@ public class K8sManager {
         return null;
     }
 
-    private static String findImagePullFailure(Job job, String namespace) {
+    private static String findImagePullFailure(KubernetesClient client, Job job, String namespace) {
         String jobName = job.getMetadata().getName();
         Map<String, String> labels = job.getSpec() != null && job.getSpec().getSelector() != null
                 ? job.getSpec().getSelector().getMatchLabels() : null;
         PodList podList = labels != null && !labels.isEmpty()
-                ? getKubernetesClient().pods().inNamespace(namespace).withLabels(labels).list()
-                : getKubernetesClient().pods().inNamespace(namespace)
+                ? client.pods().inNamespace(namespace).withLabels(labels).list()
+                : client.pods().inNamespace(namespace)
                         .withLabel("batch.kubernetes.io/job-name", jobName).list();
         // Older Kubernetes versions use the unprefixed Job label.
         if ((podList == null || podList.getItems() == null || podList.getItems().isEmpty())
                 && (labels == null || labels.isEmpty())) {
-            podList = getKubernetesClient().pods().inNamespace(namespace)
+            podList = client.pods().inNamespace(namespace)
                     .withLabel("job-name", jobName).list();
         }
         if (podList == null || podList.getItems() == null) {
@@ -340,8 +363,10 @@ public class K8sManager {
     }
 
     private static boolean isDeploymentReadyByName(String deploymentName, String namespace) {
+        KubernetesClient client = null;
         try {
-            Deployment deployment = getKubernetesClient().apps().deployments()
+            client = getKubernetesClient();
+            Deployment deployment = client.apps().deployments()
                     .inNamespace(namespace != null ? namespace : "default")
                     .withName(deploymentName)
                     .get();
@@ -350,7 +375,7 @@ public class K8sManager {
         } catch (Exception e) {
             log.error("Failed to check deployment status: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
-                resetClient();
+                resetClient(client);
             }
             return false;
         }
@@ -393,6 +418,30 @@ public class K8sManager {
 
     public static String checkJobsStatusFromYaml(String k8sYaml) {
         return checkJobsStatusDetailFromYaml(k8sYaml).state();
+    }
+
+    /** Completes once all Jobs succeed, or immediately when any Job fails. Cancellation only stops observation. */
+    public static CompletableFuture<JobStatus> watchJobsFromYaml(String yaml) {
+        CompletableFuture<JobStatus> completion = new CompletableFuture<>();
+        try {
+            List<Job> jobs = yaml == null || yaml.isEmpty() ? List.of() : K8sYamlUtils.parseK8sYamlAndGetJobs(yaml);
+            if (jobs.isEmpty()) return CompletableFuture.completedFuture(new JobStatus("succeeded", null));
+            AtomicInteger remaining = new AtomicInteger(jobs.size());
+            KubernetesClient client = getKubernetesClient();
+            for (Job job : jobs) {
+                if (completion.isDone()) break;
+                CompletableFuture<JobStatus> observation = JobCompletionWatcher.watch(client, job);
+                completion.whenComplete((result, failure) -> observation.cancel(false));
+                observation.whenComplete((status, failure) -> {
+                    if (failure != null) completion.completeExceptionally(failure);
+                    else if ("failed".equals(status.state())) completion.complete(status);
+                    else if (remaining.decrementAndGet() == 0) completion.complete(new JobStatus("succeeded", null));
+                });
+            }
+        } catch (Exception failure) {
+            completion.completeExceptionally(failure);
+        }
+        return completion;
     }
 
     public static JobStatus checkJobsStatusDetailFromYaml(String k8sYaml) {

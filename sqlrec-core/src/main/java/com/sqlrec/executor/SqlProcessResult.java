@@ -8,8 +8,10 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
-public class SqlProcessResult {
+public class SqlProcessResult implements AutoCloseable {
     private Enumerable<Object[]> enumerable;
     private List<RelDataTypeField> fields;
 
@@ -62,5 +64,14 @@ public class SqlProcessResult {
 
     public boolean isCompleted() {
         return true;
+    }
+
+    public void awaitCompletion(long timeoutMillis) throws InterruptedException, ExecutionException, TimeoutException {
+        // Ordinary SQL has already completed when its result is returned.
+    }
+
+    @Override
+    public void close() {
+        // Only asynchronous results own observations that need releasing.
     }
 }

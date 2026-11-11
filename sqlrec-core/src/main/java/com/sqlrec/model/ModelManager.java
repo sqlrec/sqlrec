@@ -18,6 +18,7 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.PathUtils;
 import com.sqlrec.utils.SchemaUtils;
+import com.sqlrec.utils.ExecutorServiceUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
@@ -26,6 +27,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ModelManager {
     private static final Logger log = LoggerFactory.getLogger(ModelManager.class);
@@ -145,6 +149,8 @@ public class ModelManager {
                 && new Path(modelTrainConf.getBaseModelDir()).equals(new Path(modelTrainConf.getModelDir()))) {
             throw new IllegalArgumentException("Training source checkpoint must differ from target checkpoint");
         }
+        modelTrainConf.setId(K8sYamlUtils.checkpointAttemptJobId("train",
+                modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
 
@@ -219,6 +225,8 @@ public class ModelManager {
             }
         }
 
+        modelExportConf.setId(K8sYamlUtils.checkpointAttemptJobId("export",
+                modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
 
@@ -413,57 +421,83 @@ public class ModelManager {
         db.deleteModel(modelName);
     }
 
-    public static boolean isCheckpointOperationCompleted(List<CheckpointInfo> checkpointInfos) {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
-        if (checkpointInfos == null || checkpointInfos.isEmpty()) {
-            return true;
-        }
+    public static CompletableFuture<Void> watchCheckpointCompletion(List<CheckpointInfo> checkpointInfos) {
+        return watchCheckpointCompletion(checkpointInfos, ExecutorServiceUtils.getExecutorService());
+    }
 
-        boolean allCompleted = true;
-        Map<String, K8sManager.JobStatus> jobStatuses = new HashMap<>();
-        Set<String> yamlsToDelete = new HashSet<>();
-        List<String> failedCheckpoints = new ArrayList<>();
-
-        for (CheckpointInfo info : checkpointInfos) {
-            Checkpoint checkpoint = db.getCheckpoint(info.getModelName(), info.getCheckpointName());
-            if (checkpoint == null) {
-                throw new IllegalArgumentException("Checkpoint not found: " + info.getCheckpointName() + " for model " + info.getModelName());
-            }
-
-            String status = checkpoint.getStatus();
-            if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(status)) {
-                continue;
-            }
-            if (Consts.CHECKPOINT_STATUS_FAILED.equals(status)) {
-                failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName());
-                continue;
-            }
-
-            if (Consts.CHECKPOINT_STATUS_CREATED.equals(status)) {
-                String k8sYaml = checkpoint.getYaml();
-                K8sManager.JobStatus jobStatus = refreshCheckpointStatus(db, checkpoint, jobStatuses);
-                if ("succeeded".equals(jobStatus.state())) {
-                    yamlsToDelete.add(k8sYaml);
-                } else if ("failed".equals(jobStatus.state())) {
-                    failedCheckpoints.add(info.getCheckpointName() + " for model " + info.getModelName()
-                            + (jobStatus.detail() == null ? "" : " (" + jobStatus.detail() + ")"));
-                } else {
-                    allCompleted = false;
+    static CompletableFuture<Void> watchCheckpointCompletion(List<CheckpointInfo> checkpointInfos, Executor executor) {
+        CompletableFuture<Void> completion = new CompletableFuture<>();
+        try {
+            if (checkpointInfos == null || checkpointInfos.isEmpty()) return CompletableFuture.completedFuture(null);
+            MetadataAccess db = MetadataAccessFactory.getInstance();
+            Map<String, List<CheckpointAttempt>> groups = new HashMap<>();
+            for (CheckpointInfo info : checkpointInfos) {
+                Checkpoint checkpoint = db.getCheckpoint(info.getModelName(), info.getCheckpointName());
+                if (checkpoint == null) throw new IllegalArgumentException("Checkpoint not found: " + info.getCheckpointName());
+                if (Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) continue;
+                if (Consts.CHECKPOINT_STATUS_FAILED.equals(checkpoint.getStatus())) {
+                    throw new IllegalStateException("Checkpoint failed: " + info.getCheckpointName());
                 }
+                if (!Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())) {
+                    throw new IllegalStateException("Unknown checkpoint status: " + checkpoint.getStatus());
+                }
+                groups.computeIfAbsent(Objects.requireNonNullElse(checkpoint.getYaml(), ""), ignored -> new ArrayList<>())
+                        .add(new CheckpointAttempt(info.getModelName(), info.getCheckpointName(), checkpoint.getUpdatedAt()));
             }
-        }
-
-        for (String yaml : yamlsToDelete) {
-            if (!StringUtils.isEmpty(yaml)) {
-                K8sManager.deleteYaml(yaml);
+            if (groups.isEmpty()) return CompletableFuture.completedFuture(null);
+            AtomicInteger remaining = new AtomicInteger(groups.size());
+            for (var group : groups.entrySet()) {
+                if (completion.isDone()) break;
+                String yaml = group.getKey();
+                CompletableFuture<K8sManager.JobStatus> observation = yaml.isEmpty()
+                        ? CompletableFuture.completedFuture(new K8sManager.JobStatus("failed", "k8sYaml is empty"))
+                        : K8sManager.watchJobsFromYaml(yaml);
+                completion.whenComplete((result, failure) -> observation.cancel(false));
+                observation.thenAcceptAsync(status -> {
+                    if (completion.isDone()) return;
+                    finishCheckpointGroup(db, yaml, group.getValue(), status);
+                    if (remaining.decrementAndGet() == 0) completion.complete(null);
+                }, executor).whenComplete((ignored, failure) -> {
+                    // Includes failure to submit the callback, not just failures inside it.
+                    if (failure != null) completion.completeExceptionally(ExecutorServiceUtils.unwrap(failure));
+                });
             }
+        } catch (Exception failure) {
+            completion.completeExceptionally(failure);
         }
+        return completion;
+    }
 
-        if (!failedCheckpoints.isEmpty()) {
-            throw new RuntimeException("Checkpoints failed: " + String.join(", ", failedCheckpoints));
+    private record CheckpointAttempt(String modelName, String checkpointName, long updatedAt) {}
+
+    private static void finishCheckpointGroup(
+            MetadataAccess db, String yaml, List<CheckpointAttempt> attempts, K8sManager.JobStatus status) {
+        List<Checkpoint> checkpoints = new ArrayList<>();
+        for (CheckpointAttempt attempt : attempts) {
+            Checkpoint checkpoint = db.getCheckpoint(attempt.modelName(), attempt.checkpointName());
+            if (checkpoint == null) throw new IllegalStateException("Checkpoint was deleted: " + attempt.checkpointName());
+            if (!yaml.equals(Objects.requireNonNullElse(checkpoint.getYaml(), ""))
+                    || (Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())
+                    && checkpoint.getUpdatedAt() != attempt.updatedAt())) {
+                throw new IllegalStateException("Checkpoint was replaced: " + attempt.checkpointName());
+            }
+            checkpoints.add(checkpoint);
         }
-
-        return allCompleted;
+        List<String> failures = new ArrayList<>();
+        boolean updated = false;
+        for (Checkpoint checkpoint : checkpoints) {
+            if (Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())) {
+                updated |= updateCheckpointStatus(db, checkpoint, "succeeded".equals(status.state())
+                        ? Consts.CHECKPOINT_STATUS_SUCCEEDED : Consts.CHECKPOINT_STATUS_FAILED);
+            }
+            if (Consts.CHECKPOINT_STATUS_FAILED.equals(checkpoint.getStatus())) failures.add(checkpoint.getCheckpointName());
+        }
+        if (!failures.isEmpty()) {
+            throw new IllegalStateException("Checkpoints failed: " + String.join(", ", failures)
+                    + (status.detail() == null ? "" : " (" + status.detail() + ")"));
+        }
+        // One shared Job may produce multiple checkpoints. Persist every status before cleanup.
+        if (updated) K8sManager.deleteYaml(yaml);
     }
 
     /** Reconcile an unfinished checkpoint before consuming it, without deleting shared Jobs. */
@@ -495,16 +529,25 @@ public class ModelManager {
             return true;
         }
         updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
-        return false;
+        return Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus());
     }
 
-    private static void updateCheckpointStatus(
+    private static boolean updateCheckpointStatus(
             MetadataAccess db,
             Checkpoint checkpoint,
             String status
     ) {
-        checkpoint.setStatus(status);
-        checkpoint.setUpdatedAt(System.currentTimeMillis());
-        db.upsertCheckpoint(checkpoint);
+        if (db.completeCheckpoint(checkpoint, status)) return true;
+        Checkpoint current = db.getCheckpoint(checkpoint.getModelName(), checkpoint.getCheckpointName());
+        if (current == null) throw new IllegalStateException("Checkpoint was deleted: " + checkpoint.getCheckpointName());
+        if (!Objects.equals(current.getYaml(), checkpoint.getYaml())
+                || (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(current.getStatus())
+                && !Consts.CHECKPOINT_STATUS_FAILED.equals(current.getStatus()))) {
+            throw new IllegalStateException("Checkpoint was replaced: " + checkpoint.getCheckpointName());
+        }
+        // Another observer may already have persisted this attempt's terminal state.
+        checkpoint.setStatus(current.getStatus());
+        checkpoint.setUpdatedAt(current.getUpdatedAt());
+        return false;
     }
 }

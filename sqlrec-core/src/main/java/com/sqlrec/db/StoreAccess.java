@@ -52,6 +52,8 @@ public interface StoreAccess {
 
     void upsertCheckpoint(Checkpoint checkpoint);
 
+    boolean completeCheckpoint(Checkpoint expected, String status, long updatedAt);
+
     void insertCheckpoint(Checkpoint checkpoint);
 
     void deleteCheckpoint(String modelName, String checkpointName);

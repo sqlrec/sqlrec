@@ -18,6 +18,7 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.JobList;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatusBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.GracePeriodConfigurable;
 import io.fabric8.kubernetes.client.dsl.Deletable;
 import io.fabric8.kubernetes.client.dsl.BatchAPIGroupDSL;
@@ -40,12 +41,16 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -55,6 +60,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import org.mockito.InOrder;
 
 /**
@@ -80,6 +87,41 @@ public class K8sManagerUnitTest {
     public void tearDown() {
         // Clean up cached client to avoid polluting other tests
         K8sManager.resetClient();
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    public void testLateFailureFromAReplacedClientDoesNotCloseItsReplacement() {
+        String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n";
+        for (String action : List.of("apply", "delete", "deleteAndWait", "job", "deployment")) {
+            KubernetesClient failing = mock(KubernetesClient.class);
+            KubernetesClient replacement = mock(KubernetesClient.class);
+            K8sManager.setKubernetesClientForTest(failing);
+            org.mockito.stubbing.Answer<Object> lateFailure = call -> {
+                // Another request recovered the shared client before this request reported its failure.
+                K8sManager.setKubernetesClientForTest(replacement);
+                throw new RuntimeException(new IOException("old connection failed"));
+            };
+            switch (action) {
+                case "apply" -> doAnswer(lateFailure).when(failing).load(any(InputStream.class));
+                case "deleteAndWait" -> doAnswer(lateFailure).when(failing).resource(any(HasMetadata.class));
+                case "deployment" -> doAnswer(lateFailure).when(failing).apps();
+                default -> doAnswer(lateFailure).when(failing).batch();
+            }
+            Runnable request = switch (action) {
+                case "apply" -> () -> K8sManager.applyYaml(yaml);
+                case "delete" -> () -> K8sManager.deleteYaml(yaml);
+                case "deleteAndWait" -> () -> K8sManager.deleteYamlAndWait(yaml);
+                case "job" -> () -> assertEquals("running", K8sManager.checkJobsStatusFromYaml(yaml));
+                default -> () -> assertFalse(K8sManager.isDeploymentReadyFromYaml(
+                        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
+            };
+            if (action.equals("job") || action.equals("deployment")) request.run();
+            else assertThrows(RuntimeException.class, request::run);
+            assertSame(replacement, K8sManager.kubernetesClient, action);
+            verify(replacement, never()).close();
+            verify(failing).close();
+        }
     }
 
     @Test
@@ -122,6 +164,52 @@ public class K8sManagerUnitTest {
         order.verify(jobHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));
         order.verify(configHandle).delete();
         order.verify(configHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testDeletionWaitPreservesInterruption() {
+        NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
+        when(resource.waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS))).thenAnswer(call -> {
+            Thread.currentThread().interrupt();
+            throw new KubernetesClientException("interrupted", new InterruptedException());
+        });
+
+        try {
+            RuntimeException error = assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(
+                    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n"));
+            assertInstanceOf(InterruptedException.class, error.getCause().getCause());
+            assertTrue(Thread.currentThread().isInterrupted());
+            verify(mockClient, never()).close();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    public void testSlowClientCloseDoesNotBlockReplacementOrDiscardTheNewClient() throws Exception {
+        CountDownLatch closing = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        doAnswer(call -> {
+            closing.countDown();
+            assertTrue(release.await(15, TimeUnit.SECONDS));
+            return null;
+        }).when(mockClient).close();
+        KubernetesClient replacement = mock(KubernetesClient.class);
+        var resetting = CompletableFuture.runAsync(K8sManager::resetClient);
+        CompletableFuture<Void> installing = null;
+        try {
+            assertTrue(closing.await(5, TimeUnit.SECONDS));
+            installing = CompletableFuture.runAsync(() -> K8sManager.setKubernetesClientForTest(replacement));
+            installing.get(5, TimeUnit.SECONDS);
+            assertSame(replacement, K8sManager.kubernetesClient);
+        } finally {
+            release.countDown();
+            resetting.get(5, TimeUnit.SECONDS);
+            if (installing != null) installing.get(5, TimeUnit.SECONDS);
+        }
+        assertSame(replacement, K8sManager.kubernetesClient);
     }
 
     @Test

@@ -271,6 +271,25 @@ class SessionManagerRoutingTest {
         return new TStatus(TStatusCode.SUCCESS_STATUS);
     }
 
+    @Test
+    void closingOrCancellingLocalOperationsReleasesTheirObservations() throws Exception {
+        for (String action : java.util.List.of("operation", "cancel", "session")) {
+            try (Session session = new Session()) {
+                SqlProcessResult result = mock(SqlProcessResult.class);
+                when(session.executor.executeSqlAsync(any(SqlNode.class), eq("SELECT 1"))).thenReturn(result);
+                TOperationHandle handle = session.manager.executeStatement(
+                        new TExecuteStatementReq(session.handle, "SELECT 1")).getOperationHandle();
+                switch (action) {
+                    case "operation" -> session.manager.closeOperation(new TCloseOperationReq(handle));
+                    case "cancel" -> session.manager.cancelOperation(new TCancelOperationReq(handle));
+                    case "session" -> session.manager.closeSession(new TCloseSessionReq(session.handle));
+                }
+                verify(result, times(1)).close();
+                assertThrows(TException.class, () -> session.manager.getOperationStatus(new TGetOperationStatusReq(handle)));
+            }
+        }
+    }
+
     private static final class Session implements AutoCloseable {
         private final TSessionHandle handle;
         private final MockedConstruction<SqlExecutor> executors = mockConstruction(SqlExecutor.class, (mock, context) -> {

@@ -20,6 +20,29 @@ import static org.mockito.Mockito.*;
 
 class ModelManagerTrainingSafetyTest {
     @Test
+    void submissionsAfterCheckpointDeletionAlsoUseDifferentResourceNames() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            when(f.db.getCheckpoint("model", "v1")).thenReturn(null);
+            ModelManager.trainModel(f.statement, "default");
+            String previous = f.train.getId();
+            ModelManager.trainModel(f.statement, "default");
+            assertNotNull(previous);
+            assertNotEquals(previous, f.train.getId());
+        }
+    }
+
+    @Test
+    void repeatedRetriesUseDifferentKubernetesResourceNames() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            ModelManager.trainModel(f.statement, "default");
+            String previous = f.train.getId();
+            ModelManager.trainModel(f.statement, "default");
+            assertNotNull(previous);
+            assertNotEquals(previous, f.train.getId());
+        }
+    }
+
+    @Test
     void failedTrainingRetryPreservesCheckpointAndStopsOldJobBeforeSubmitting() throws Exception {
         try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
             Checkpoint old = f.db.getCheckpoint("model", "v1");
@@ -121,7 +144,8 @@ class ModelManagerTrainingSafetyTest {
     void createdCheckpointWithoutJobMetadataCanBeRetriedWithoutDeletingData() throws Exception {
         try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_CREATED)) {
             ModelManager.trainModel(f.statement, "default");
-            verify(f.db, times(2)).upsertCheckpoint(any());
+            verify(f.db).completeCheckpoint(any(), eq(Consts.CHECKPOINT_STATUS_FAILED));
+            verify(f.db).upsertCheckpoint(any());
             f.k8s.verify(() -> K8sManager.deleteYamlAndWait(any()), never());
             f.k8s.verify(() -> K8sManager.applyYaml("injected-yaml"));
             verify(f.db, never()).insertCheckpoint(any());
@@ -275,6 +299,8 @@ class ModelManagerTrainingSafetyTest {
         final MockedStatic<K8sYamlUtils> yaml = mockStatic(K8sYamlUtils.class);
         final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
         Fixture(String status) throws Exception {
+            CheckpointTestSupport.stubCompletion(db);
+            yaml.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString())).thenCallRealMethod();
             Model entity = new Model(); entity.setDdl("model-ddl"); when(db.getModel("model")).thenReturn(entity);
             Checkpoint old = new Checkpoint(); old.setModelName("model"); old.setCheckpointName("v1"); old.setStatus(status);
             old.setModelDdl("model-ddl");

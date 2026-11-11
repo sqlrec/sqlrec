@@ -2,6 +2,7 @@ package com.sqlrec.db.local;
 
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.StoreAccess;
 import com.sqlrec.entity.*;
@@ -16,7 +17,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class InMemoryStoreAccess implements StoreAccess {
@@ -211,6 +214,22 @@ public class InMemoryStoreAccess implements StoreAccess {
     @Override
     public void upsertCheckpoint(Checkpoint checkpoint) {
         checkpointMap.put(checkpointKey(checkpoint.getModelName(), checkpoint.getCheckpointName()), checkpoint);
+    }
+
+    @Override
+    public boolean completeCheckpoint(Checkpoint expected, String status, long updatedAt) {
+        AtomicBoolean updated = new AtomicBoolean();
+        checkpointMap.computeIfPresent(checkpointKey(expected.getModelName(), expected.getCheckpointName()), (key, current) -> {
+            if (Consts.CHECKPOINT_STATUS_CREATED.equals(current.getStatus())
+                    && current.getUpdatedAt() == expected.getUpdatedAt()
+                    && Objects.equals(current.getYaml(), expected.getYaml())) {
+                current.setStatus(status);
+                current.setUpdatedAt(updatedAt);
+                updated.set(true);
+            }
+            return current;
+        });
+        return updated.get();
     }
 
     @Override

@@ -15,7 +15,7 @@ import org.apache.hive.service.rpc.thrift.TRowSet;
 import java.util.List;
 
 /** Local execution result and its fetch cursor. */
-public class SqlOperation {
+public class SqlOperation implements AutoCloseable {
     private final SqlProcessResult coreResult;
     private final String queryId;
     private final boolean metadataOperation;
@@ -109,5 +109,10 @@ public class SqlOperation {
     public synchronized void fail(Exception failure) {
         exception = failure;
         msg = "exec error: " + ExceptionUtils.getStackTrace(failure);
+    }
+
+    @Override
+    public void close() {
+        coreResult.close();
     }
 }

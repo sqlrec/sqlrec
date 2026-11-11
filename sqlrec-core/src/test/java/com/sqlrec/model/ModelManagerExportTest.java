@@ -25,6 +25,18 @@ import static org.mockito.Mockito.*;
 
 class ModelManagerExportTest {
     @Test
+    void repeatedExportsUseDifferentKubernetesResourceNames() throws Exception {
+        try (ExportFixture f = new ExportFixture()) {
+            f.checkpoint("export_a", Consts.CHECKPOINT_STATUS_FAILED);
+            f.export();
+            String previous = f.export.getId();
+            f.export();
+            assertNotNull(previous);
+            assertNotEquals(previous, f.export.getId());
+        }
+    }
+
+    @Test
     void reusesRunningExportButStillChecksEveryRequestedCheckpoint() throws Exception {
         try (ExportFixture fixture = new ExportFixture()) {
             Checkpoint running = fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_CREATED);
@@ -38,7 +50,7 @@ class ModelManagerExportTest {
             assertEquals(1, result.size());
             assertEquals("export_a", result.get(0).getCheckpointName());
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, missingYaml.getStatus());
-            verify(fixture.db).upsertCheckpoint(missingYaml);
+            verify(fixture.db).completeCheckpoint(missingYaml, Consts.CHECKPOINT_STATUS_FAILED);
             assertTrue(fixture.events.isEmpty(), "Reusing an export must not delete, create or submit resources");
             verify(fixture.controller, never()).getExportCleanPath(any());
             verify(fixture.db, never()).deleteCheckpoint(any(), any());
@@ -257,6 +269,8 @@ class ModelManagerExportTest {
         private final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
 
         private ExportFixture() throws Exception {
+            CheckpointTestSupport.stubCompletion(db);
+            yaml.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString())).thenCallRealMethod();
             Model modelEntity = new Model();
             modelEntity.setDdl("model-ddl");
             ModelConf model = new ModelConf();
@@ -358,7 +372,7 @@ class ModelManagerExportTest {
                 }
                 assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
                         source.getStatus());
-                verify(fixture.db, times(actual.equals("running") ? 0 : 1)).upsertCheckpoint(source);
+                verify(fixture.db, times(actual.equals("running") ? 0 : 1)).completeCheckpoint(eq(source), anyString());
                 fixture.k8s.verify(() -> K8sManager.deleteYaml("shared-source-job"), never());
             }
         }

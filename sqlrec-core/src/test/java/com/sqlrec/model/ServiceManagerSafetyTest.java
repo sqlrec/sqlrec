@@ -178,7 +178,7 @@ class ServiceManagerSafetyTest {
                 }
                 assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
                         checkpoint.getStatus());
-                verify(f.db, times(actual.equals("running") ? 0 : 1)).upsertCheckpoint(checkpoint);
+                verify(f.db, times(actual.equals("running") ? 0 : 1)).completeCheckpoint(eq(checkpoint), anyString());
                 f.k8s.verify(() -> K8sManager.deleteYaml(any()), never());
             }
         }
@@ -242,6 +242,7 @@ class ServiceManagerSafetyTest {
         static final String MODEL_DDL = "CREATE MODEL `rank` (x FLOAT) WITH ('MODEL_PATH'='/models/rank')";
 
         Fixture() throws Exception {
+            CheckpointTestSupport.stubCompletion(db);
             for (ConfigOption<String> option : List.of(ModelConfigs.JAVA_HOME, ModelConfigs.HADOOP_HOME,
                     ModelConfigs.CLASSPATH, ModelConfigs.HADOOP_CONF_DIR, ModelConfigs.CLIENT_DIR,
                     ModelConfigs.CLIENT_PV_NAME, ModelConfigs.CLIENT_PVC_NAME)) {
