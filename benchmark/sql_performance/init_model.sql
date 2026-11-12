@@ -41,22 +41,22 @@ with (
 'pod_memory'='4Gi'
 );
 
--- train model rank_model checkpoint='v2' on ml_sample from 'v1'
--- with (
--- 'random_seed'='123',
--- 'batch_size'='256',
--- 'num_workers'='1',
--- 'num_epochs'='3',
--- 'sparse_lr'='0.03',
--- 'nnodes'='2',
--- 'nproc_per_node'='1',
--- 'use_tensorboard'='true',
--- 'enable_train_metrics'='true',
--- 'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
--- 'NAMESPACE'='${NAMESPACE}',
--- 'pod_cpu_cores'='2',
--- 'pod_memory'='4Gi'
--- );
+train model rank_model checkpoint='v2' on ml_sample from 'v1'
+with (
+'random_seed'='123',
+'batch_size'='256',
+'num_workers'='1',
+'num_epochs'='1',
+'sparse_lr'='0.03',
+'nnodes'='2',
+'nproc_per_node'='1',
+'use_tensorboard'='true',
+'enable_train_metrics'='true',
+'tensorboard_summaries'='loss,learning_rate,global_gradient_norm,gradient_norm,parameter,gradient',
+'NAMESPACE'='${NAMESPACE}',
+'pod_cpu_cores'='2',
+'pod_memory'='4Gi'
+);
 
 export model rank_model checkpoint='v1' on ml_sample
 with (
