@@ -78,6 +78,31 @@ class ServiceManagerSafetyTest {
     }
 
     @Test
+    void validationFailureSkipsDeploymentAndPreservesSavedConfigurationAndCache() throws Exception {
+        for (boolean existing : List.of(false, true)) {
+            try (Fixture f = new Fixture()) {
+                if (existing) ServiceManager.createService(f.statement("rank-a"));
+                Service before = f.services.get("rank-a");
+                ServiceConf cached = ServiceManager.getServiceConfig("rank-a");
+                clearInvocations(f.db);
+                f.k8s.clearInvocations();
+                doReturn("http://changed-endpoint/predict").when(f.controller).getServiceUrl(any(), any());
+                RuntimeException rejection = new RuntimeException("Failed to validate YAML: admission denied");
+                f.k8s.when(() -> K8sManager.validateYaml(anyString())).thenThrow(rejection);
+
+                assertSame(rejection, assertThrows(RuntimeException.class,
+                        () -> ServiceManager.createService(f.statement("rank-a"))));
+
+                assertSame(before, f.services.get("rank-a"));
+                assertSame(cached, ServiceManager.getServiceConfig("rank-a"));
+                verify(f.db, never()).upsertService(any());
+                f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+                f.k8s.verify(() -> K8sManager.deleteYaml(any()), never());
+            }
+        }
+    }
+
+    @Test
     void failedUpdatePreservesSavedConfigurationAndCache() throws Exception {
         try (Fixture f = new Fixture()) {
             ServiceManager.createService(f.statement("rank-a"));
@@ -118,8 +143,13 @@ class ServiceManagerSafetyTest {
     }
 
     @Test
-    void savesMetadataOnlyAfterKubernetesSubmission() throws Exception {
+    void validatesThenSubmitsBeforeSavingMetadata() throws Exception {
         try (Fixture f = new Fixture()) {
+            f.k8s.when(() -> K8sManager.applyYaml(anyString())).thenAnswer(invocation -> {
+                String yaml = invocation.getArgument(0);
+                f.k8s.verify(() -> K8sManager.validateYaml(yaml));
+                return null;
+            });
             doAnswer(invocation -> {
                 Service service = invocation.getArgument(0);
                 f.k8s.verify(() -> K8sManager.applyYaml(service.getYaml()));

@@ -84,6 +84,7 @@ public class ServiceManager {
         }
 
         Service service = buildService(sqlCreateService, db, false, false);
+        K8sManager.validateYaml(service.getYaml());
         K8sManager.applyYaml(service.getYaml());
         persistService(db, service);
 
