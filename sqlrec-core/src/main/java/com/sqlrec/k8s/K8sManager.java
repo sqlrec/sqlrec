@@ -110,6 +110,15 @@ public class K8sManager {
     }
 
     public static void applyYaml(String yamlContent) {
+        applyYaml(yamlContent, false);
+    }
+
+    /** Run the same API validation and admission as apply, without creating resources. */
+    public static void validateYaml(String yamlContent) {
+        applyYaml(yamlContent, true);
+    }
+
+    private static void applyYaml(String yamlContent, boolean dryRun) {
         if (yamlContent == null || yamlContent.isEmpty()) {
             return;
         }
@@ -117,13 +126,14 @@ public class K8sManager {
         try {
             client = getKubernetesClient();
             InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8));
-            client.load(inputStream).serverSideApply();
+            client.load(inputStream).dryRun(dryRun).serverSideApply();
         } catch (Exception e) {
-            log.error("Failed to apply YAML: {}", e.getMessage(), e);
+            String action = dryRun ? "validate" : "apply";
+            log.error("Failed to {} YAML: {}", action, e.getMessage(), e);
             if (isK8sClientFailure(e)) {
                 resetClient(client);
             }
-            throw new RuntimeException("Failed to apply YAML: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to " + action + " YAML: " + e.getMessage(), e);
         }
     }
 
@@ -266,7 +276,8 @@ public class K8sManager {
             if (isK8sClientFailure(e)) {
                 resetClient(client);
             }
-            return new JobStatus("running", null);
+            throw new IllegalStateException("Cannot determine Job status: "
+                    + (namespace != null ? namespace : "default") + "/" + jobName, e);
         }
     }
 

@@ -25,6 +25,22 @@ import static org.mockito.Mockito.*;
 
 class ModelManagerExportTest {
     @Test
+    void submissionFailureMarksAllExportOutputsFailed() throws Exception {
+        try (ExportFixture f = new ExportFixture()) {
+            RuntimeException failure = new RuntimeException("submit failed");
+            f.k8s.when(() -> K8sManager.applyYaml("injected-yaml")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(RuntimeException.class, f::export));
+            assertEquals(2, f.inserted.size());
+            for (Checkpoint checkpoint : f.inserted) {
+                assertEquals(Consts.CHECKPOINT_STATUS_FAILED, checkpoint.getStatus());
+                assertEquals("injected-yaml", checkpoint.getYaml());
+                verify(f.db).completeCheckpoint(checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
+            }
+        }
+    }
+
+    @Test
     void repeatedExportsUseDifferentKubernetesResourceNames() throws Exception {
         try (ExportFixture f = new ExportFixture()) {
             f.checkpoint("export_a", Consts.CHECKPOINT_STATUS_FAILED);
@@ -63,13 +79,17 @@ class ModelManagerExportTest {
         for (String status : List.of(Consts.CHECKPOINT_STATUS_FAILED, Consts.CHECKPOINT_STATUS_SUCCEEDED)) {
             try (ExportFixture fixture = new ExportFixture()) {
                 fixture.checkpoint("export_a", status).setYaml("old-job");
+                fixture.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenAnswer(call -> {
+                    fixture.events.add("validate");
+                    return null;
+                });
 
                 List<CheckpointInfo> result = fixture.export();
 
                 assertEquals(List.of("export_a", "export_b"),
                         result.stream().map(CheckpointInfo::getCheckpointName).toList());
                 assertEquals(List.of(
-                        "generate", "stop:old-job", "remove:/models/rank/export_a", "delete:export_a",
+                        "generate", "validate", "stop:old-job", "remove:/models/rank/export_a", "delete:export_a",
                         "remove:/models/rank/export",
                         "insert:export_a", "insert:export_b", "apply"), fixture.events);
                 assertEquals(2, fixture.inserted.size());
@@ -80,6 +100,26 @@ class ModelManagerExportTest {
                     assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
                 }
             }
+        }
+    }
+
+    @Test
+    void apiValidationFailurePreservesExportsAndTheirFiles() throws Exception {
+        try (ExportFixture f = new ExportFixture()) {
+            Checkpoint old = f.checkpoint("export_a", Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            old.setYaml("old-job");
+            RuntimeException failure = new RuntimeException("Failed to validate YAML: admission denied");
+            f.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(RuntimeException.class, f::export));
+            assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, old.getStatus());
+            assertTrue(f.inserted.isEmpty());
+            verify(f.db, never()).insertCheckpoint(any());
+            verify(f.db, never()).upsertCheckpoint(any());
+            verify(f.db, never()).deleteCheckpoint(any(), any());
+            verify(f.db, never()).hdfsDeletePath(any());
+            f.k8s.verify(() -> K8sManager.deleteYamlAndWait(any()), never());
+            f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
         }
     }
 
@@ -146,7 +186,8 @@ class ModelManagerExportTest {
             verify(fixture.db, never()).hdfsDeletePath(any());
             verify(fixture.db, never()).deleteCheckpoint(any(), any());
             verify(fixture.db, never()).insertCheckpoint(any());
-            fixture.k8s.verifyNoInteractions();
+            fixture.k8s.verify(() -> K8sManager.validateYaml("injected-yaml"));
+            fixture.k8s.verifyNoMoreInteractions();
         }
     }
 
@@ -161,7 +202,8 @@ class ModelManagerExportTest {
             assertThrows(IllegalArgumentException.class, fixture::export);
             verify(fixture.db, never()).hdfsDeletePath(any());
             verify(fixture.db, never()).deleteCheckpoint(any(), any());
-            fixture.k8s.verifyNoInteractions();
+            fixture.k8s.verify(() -> K8sManager.validateYaml("injected-yaml"));
+            fixture.k8s.verifyNoMoreInteractions();
         }
     }
 

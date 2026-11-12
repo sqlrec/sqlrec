@@ -93,7 +93,7 @@ public class K8sManagerUnitTest {
     @SilenceLoggers(K8sManager.class)
     public void testLateFailureFromAReplacedClientDoesNotCloseItsReplacement() {
         String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n";
-        for (String action : List.of("apply", "delete", "deleteAndWait", "job", "deployment")) {
+        for (String action : List.of("apply", "validate", "delete", "deleteAndWait", "job", "deployment")) {
             KubernetesClient failing = mock(KubernetesClient.class);
             KubernetesClient replacement = mock(KubernetesClient.class);
             K8sManager.setKubernetesClientForTest(failing);
@@ -103,20 +103,21 @@ public class K8sManagerUnitTest {
                 throw new RuntimeException(new IOException("old connection failed"));
             };
             switch (action) {
-                case "apply" -> doAnswer(lateFailure).when(failing).load(any(InputStream.class));
+                case "apply", "validate" -> doAnswer(lateFailure).when(failing).load(any(InputStream.class));
                 case "deleteAndWait" -> doAnswer(lateFailure).when(failing).resource(any(HasMetadata.class));
                 case "deployment" -> doAnswer(lateFailure).when(failing).apps();
                 default -> doAnswer(lateFailure).when(failing).batch();
             }
             Runnable request = switch (action) {
                 case "apply" -> () -> K8sManager.applyYaml(yaml);
+                case "validate" -> () -> K8sManager.validateYaml(yaml);
                 case "delete" -> () -> K8sManager.deleteYaml(yaml);
                 case "deleteAndWait" -> () -> K8sManager.deleteYamlAndWait(yaml);
-                case "job" -> () -> assertEquals("running", K8sManager.checkJobsStatusFromYaml(yaml));
+                case "job" -> () -> K8sManager.checkJobsStatusFromYaml(yaml);
                 default -> () -> assertFalse(K8sManager.isDeploymentReadyFromYaml(
                         "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
             };
-            if (action.equals("job") || action.equals("deployment")) request.run();
+            if (action.equals("deployment")) request.run();
             else assertThrows(RuntimeException.class, request::run);
             assertSame(replacement, K8sManager.kubernetesClient, action);
             verify(replacement, never()).close();
@@ -131,6 +132,27 @@ public class K8sManagerUnitTest {
         K8sManager.applyYaml(null);
 
         verifyNoInteractions(mockClient);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @SilenceLoggers(K8sManager.class)
+    void validationPreservesApiRejectionDetails() {
+        io.fabric8.kubernetes.client.dsl.NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable<HasMetadata> loaded =
+                mock(io.fabric8.kubernetes.client.dsl.NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable.class);
+        io.fabric8.kubernetes.client.dsl.ListVisitFromServerWritable<HasMetadata> dryRun =
+                mock(io.fabric8.kubernetes.client.dsl.ListVisitFromServerWritable.class);
+        when(mockClient.load(any(InputStream.class))).thenReturn(loaded);
+        when(loaded.dryRun(true)).thenReturn(dryRun);
+        String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n";
+
+        KubernetesClientException rejection = new KubernetesClientException("spec.template.spec: invalid", 422, null);
+        when(dryRun.serverSideApply()).thenThrow(rejection);
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> K8sManager.validateYaml(yaml));
+        assertSame(rejection, failure.getCause());
+        assertTrue(failure.getMessage().contains("Failed to validate YAML"));
+        assertTrue(failure.getMessage().contains("spec.template.spec: invalid"));
+        verify(mockClient, never()).close();
     }
 
     @Test
@@ -233,9 +255,9 @@ public class K8sManagerUnitTest {
     @Test
     @SilenceLoggers(K8sManager.class)
     public void testApplyYamlUsesInjectedClient() {
-        // Non-empty YAML will call client.load(...).serverSideApply().
+        // Non-empty YAML will call client.load(...).dryRun(false).serverSideApply().
         // The fluent chain is not stubbed, so mock's load() returns null,
-        // then serverSideApply() throws NPE which applyYaml catches and wraps as RuntimeException.
+        // then dryRun() throws NPE which applyYaml catches and wraps as RuntimeException.
         // The main purpose is to verify the mockClient is actually used (injection point works).
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> K8sManager.applyYaml("apiVersion: v1\nkind: ConfigMap"));
@@ -299,12 +321,14 @@ public class K8sManagerUnitTest {
 
     @Test
     @SilenceLoggers(K8sManager.class)
-    public void testJobTransportFailureResetsClientAndKeepsRunningFallback() {
+    public void testJobTransportFailureResetsClientAndReportsUnknownStatus() {
         when(jobResource().get())
                 .thenThrow(new RuntimeException(new IOException("connection reset")));
 
-        assertEquals("running", K8sManager.checkJobsStatusFromYaml(
-                "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n"));
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> K8sManager.checkJobsStatusFromYaml(
+                        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n"));
+        assertTrue(failure.getMessage().contains("Cannot determine Job status: default/train"));
 
         verify(mockClient).close();
         assertNull(K8sManager.kubernetesClient);

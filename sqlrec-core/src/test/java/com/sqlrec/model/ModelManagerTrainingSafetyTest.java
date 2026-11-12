@@ -54,6 +54,10 @@ class ModelManagerTrainingSafetyTest {
                 events.add("generate");
                 return "generated-yaml";
             });
+            f.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenAnswer(invocation -> {
+                events.add("validate");
+                return null;
+            });
             f.k8s.when(() -> K8sManager.deleteYamlAndWait("old-yaml")).thenAnswer(invocation -> {
                 events.add("stop");
                 return null;
@@ -71,7 +75,7 @@ class ModelManagerTrainingSafetyTest {
 
             assertEquals(1, result.size());
             assertEquals("v1", result.get(0).getCheckpointName());
-            assertEquals(List.of("generate", "stop", "persist", "apply"), events);
+            assertEquals(List.of("generate", "validate", "stop", "persist", "apply"), events);
             verify(f.db).upsertCheckpoint(argThat(checkpoint ->
                     "v1".equals(checkpoint.getCheckpointName())
                             && Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())
@@ -99,6 +103,27 @@ class ModelManagerTrainingSafetyTest {
             f.verifyNoDeletion();
             f.k8s.verifyNoInteractions();
             verify(f.db, never()).upsertCheckpoint(any());
+        }
+    }
+
+    @Test
+    void apiValidationFailureDoesNotSaveCheckpointOrStopPreviousAttempt() throws Exception {
+        for (boolean existing : List.of(false, true)) {
+            try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+                f.db.getCheckpoint("model", "v1").setYaml("old-yaml");
+                if (!existing) when(f.db.getCheckpoint("model", "v1")).thenReturn(null);
+                RuntimeException failure = new RuntimeException("Failed to validate YAML: invalid CPU request");
+                f.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenThrow(failure);
+
+                assertSame(failure, assertThrows(RuntimeException.class,
+                        () -> ModelManager.trainModel(f.statement, "default")));
+                verify(f.db, never()).insertCheckpoint(any());
+                verify(f.db, never()).upsertCheckpoint(any());
+                verify(f.db, never()).completeCheckpoint(any(), anyString());
+                f.k8s.verify(() -> K8sManager.deleteYamlAndWait(any()), never());
+                f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+                f.verifyNoDeletion();
+            }
         }
     }
 
@@ -154,6 +179,22 @@ class ModelManagerTrainingSafetyTest {
     }
 
     @Test
+    void unknownJobStatusReportsFailureWithoutReusingOrReplacingCheckpoint() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_CREATED)) {
+            f.db.getCheckpoint("model", "v1").setYaml("old-yaml");
+            IllegalStateException failure = new IllegalStateException("Cannot determine Job status");
+            f.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("old-yaml")).thenThrow(failure);
+
+            assertSame(failure, assertThrows(IllegalStateException.class,
+                    () -> ModelManager.trainModel(f.statement, "default")));
+            verify(f.db, never()).completeCheckpoint(any(), anyString());
+            verify(f.db, never()).upsertCheckpoint(any());
+            f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
+            f.k8s.verify(() -> K8sManager.deleteYamlAndWait(any()), never());
+        }
+    }
+
+    @Test
     void cleanupFailurePreservesCheckpointAndPreventsSubmission() throws Exception {
         try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
             f.db.getCheckpoint("model", "v1").setYaml("old-yaml");
@@ -168,14 +209,30 @@ class ModelManagerTrainingSafetyTest {
     }
 
     @Test
-    void submissionFailureLeavesUpdatedRetryMetadataAndStoredData() throws Exception {
+    void submissionFailureMarksAttemptFailedAndPreservesItsYamlAndStoredData() throws Exception {
         try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
             f.k8s.when(() -> K8sManager.applyYaml("injected-yaml"))
                     .thenThrow(new RuntimeException("submit failed"));
             assertThrows(RuntimeException.class, () -> ModelManager.trainModel(f.statement, "default"));
             verify(f.db).upsertCheckpoint(argThat(checkpoint ->
-                    Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())
+                    Consts.CHECKPOINT_STATUS_FAILED.equals(checkpoint.getStatus())
                             && "injected-yaml".equals(checkpoint.getYaml())));
+            verify(f.db).completeCheckpoint(any(), eq(Consts.CHECKPOINT_STATUS_FAILED));
+            f.verifyNoDeletion();
+        }
+    }
+
+    @Test
+    void statusWriteFailureDoesNotHideSubmissionFailure() throws Exception {
+        try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_FAILED)) {
+            RuntimeException submissionFailure = new RuntimeException("submit failed");
+            RuntimeException statusFailure = new RuntimeException("metadata unavailable");
+            f.k8s.when(() -> K8sManager.applyYaml("injected-yaml")).thenThrow(submissionFailure);
+            when(f.db.completeCheckpoint(any(), eq(Consts.CHECKPOINT_STATUS_FAILED))).thenThrow(statusFailure);
+
+            assertSame(submissionFailure, assertThrows(RuntimeException.class,
+                    () -> ModelManager.trainModel(f.statement, "default")));
+            assertArrayEquals(new Throwable[]{statusFailure}, submissionFailure.getSuppressed());
             f.verifyNoDeletion();
         }
     }
@@ -188,7 +245,8 @@ class ModelManagerTrainingSafetyTest {
             when(f.db.getServiceListByCheckpoint("model", "v1")).thenReturn(List.of(service));
             assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
             verify(f.db, never()).upsertCheckpoint(any());
-            f.k8s.verifyNoInteractions();
+            f.k8s.verify(() -> K8sManager.validateYaml("injected-yaml"));
+            f.k8s.verifyNoMoreInteractions();
             f.verifyNoDeletion();
         }
     }

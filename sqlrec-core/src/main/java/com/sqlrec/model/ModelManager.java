@@ -153,6 +153,7 @@ public class ModelManager {
                 modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelTrainConf.getParams());
+        K8sManager.validateYaml(k8sYaml);
 
         if (existingCheckpoint != null) {
             validateCheckpointModification(db, existingCheckpoint);
@@ -176,7 +177,7 @@ public class ModelManager {
             checkpoint.setModelDdl(existingCheckpoint.getModelDdl());
             db.upsertCheckpoint(checkpoint);
         }
-        K8sManager.applyYaml(k8sYaml);
+        submitCheckpoints(db, k8sYaml, List.of(checkpoint));
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
         checkpointInfos.add(new CheckpointInfo(modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
@@ -229,11 +230,13 @@ public class ModelManager {
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelConfig, modelExportConf.getParams());
+        K8sManager.validateYaml(k8sYaml);
 
         deleteExportCheckpoints(db, modelExportConf.getModelName(), checkpoints.existing());
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
         List<CheckpointInfo> checkpointInfos = new ArrayList<>();
+        List<Checkpoint> submitted = new ArrayList<>();
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint checkpoint = createCheckpoint(
                     modelExportConf.getModelName(),
@@ -245,12 +248,30 @@ public class ModelManager {
             );
 
             db.insertCheckpoint(checkpoint);
+            submitted.add(checkpoint);
             checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
         }
 
-        K8sManager.applyYaml(k8sYaml);
+        submitCheckpoints(db, k8sYaml, submitted);
 
         return checkpointInfos;
+    }
+
+    private static void submitCheckpoints(MetadataAccess db, String yaml, List<Checkpoint> checkpoints) {
+        try {
+            K8sManager.applyYaml(yaml);
+        } catch (RuntimeException failure) {
+            for (Checkpoint checkpoint : checkpoints) {
+                try {
+                    // A partial submission still needs cleanup on retry. Keep its YAML and
+                    // artifacts, and only fail this attempt, never a concurrent replacement.
+                    db.completeCheckpoint(checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
+                } catch (RuntimeException statusFailure) {
+                    failure.addSuppressed(statusFailure);
+                }
+            }
+            throw failure;
+        }
     }
 
     static Model getRequiredModel(MetadataAccess db, String modelName) {

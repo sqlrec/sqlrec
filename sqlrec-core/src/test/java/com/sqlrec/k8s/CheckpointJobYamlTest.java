@@ -48,6 +48,83 @@ class CheckpointJobYamlTest {
             "huggingface.transformers");
 
     @Test
+    void namespaceInSqlIsPassedToDryRunAndRejectionDoesNotSaveCheckpoint() throws Exception {
+        try (Fixture f = new Fixture("tzrec.wide_and_deep", "rank_model", false)) {
+            var statement = (SqlTrainModel) CompileManager.parseSql(
+                    "TRAIN MODEL rank_model CHECKPOINT='v4' ON training WITH ("
+                            + TASK_OPTIONS.replace("'NAMESPACE'='test'", "'NAMESPACE'='${NAMESPACE}'") + ")");
+
+            RuntimeException rejection = new RuntimeException("Failed to validate YAML: invalid namespace");
+            f.k8s.when(() -> K8sManager.validateYaml(anyString())).thenAnswer(call -> {
+                assertTrue(K8sYamlUtils.parseK8sYaml(call.getArgument(0)).stream()
+                        .allMatch(resource -> "${NAMESPACE}".equals(resource.getMetadata().getNamespace())));
+                throw rejection;
+            });
+
+            var failure = assertThrows(RuntimeException.class,
+                    () -> ModelManager.trainModel(statement, "default"));
+
+            assertSame(rejection, failure);
+            assertNull(f.db.getCheckpoint("rank_model", "v4"));
+            f.k8s.verify(() -> K8sManager.validateYaml(anyString()));
+            f.k8s.verifyNoMoreInteractions();
+        }
+    }
+
+    @Test
+    void failedSubmissionIsMarkedFailedAndRetryUsesNewSqlAndJob() throws Exception {
+        try (Fixture f = new Fixture("gbdt.lightgbm", "rank_model", false)) {
+            RuntimeException submissionFailure = new RuntimeException("apply failed");
+            f.k8s.when(() -> K8sManager.applyYaml(anyString())).thenThrow(submissionFailure);
+            var statement = (SqlTrainModel) CompileManager.parseSql(
+                    "TRAIN MODEL rank_model CHECKPOINT='v4' ON training WITH (" + TASK_OPTIONS + ")");
+
+            assertSame(submissionFailure, assertThrows(RuntimeException.class,
+                    () -> ModelManager.trainModel(statement, "default")));
+            Checkpoint failed = f.db.getCheckpoint("rank_model", "v4");
+            assertEquals(Consts.CHECKPOINT_STATUS_FAILED, failed.getStatus());
+            assertNotNull(failed.getYaml());
+
+            f.k8s.when(() -> K8sManager.applyYaml(anyString())).thenAnswer(call -> null);
+            var corrected = (SqlTrainModel) CompileManager.parseSql(
+                    "TRAIN MODEL rank_model CHECKPOINT='v4' ON training WITH (" + TASK_OPTIONS
+                            + ", 'learning_rate'='0.03')");
+            ModelManager.trainModel(corrected, "default");
+
+            Checkpoint retried = f.db.getCheckpoint("rank_model", "v4");
+            assertEquals(Consts.CHECKPOINT_STATUS_CREATED, retried.getStatus());
+            assertEquals(CompileManager.getSqlStr(corrected), retried.getDdl());
+            assertTrue(retried.getYaml().contains("\"learning_rate\": 0.03"));
+            assertNotEquals(K8sYamlUtils.parseK8sYamlAndGetJobs(failed.getYaml()).getFirst().getMetadata().getName(),
+                    K8sYamlUtils.parseK8sYamlAndGetJobs(retried.getYaml()).getFirst().getMetadata().getName());
+            f.k8s.verify(() -> K8sManager.deleteYamlAndWait(failed.getYaml()));
+            f.k8s.verify(() -> K8sManager.applyYaml(retried.getYaml()));
+            verify(f.files, never()).deletePath(anyString());
+        }
+    }
+
+    @Test
+    void submissionFailureDoesNotFailAConcurrentReplacement() throws Exception {
+        try (Fixture f = new Fixture("gbdt.lightgbm", "rank_model", false)) {
+            Checkpoint replacement = new Checkpoint();
+            replacement.setModelName("rank_model");
+            replacement.setCheckpointName("v4");
+            replacement.setStatus(Consts.CHECKPOINT_STATUS_CREATED);
+            replacement.setYaml("replacement-yaml");
+            replacement.setUpdatedAt(999L);
+            RuntimeException failure = new RuntimeException("old submission failed late");
+            f.k8s.when(() -> K8sManager.applyYaml(anyString())).thenAnswer(call -> {
+                f.db.upsertCheckpoint(replacement);
+                throw failure;
+            });
+
+            assertSame(failure, assertThrows(RuntimeException.class, () -> f.train("v4")));
+            assertSame(replacement, f.db.getCheckpoint("rank_model", "v4"));
+            assertEquals(Consts.CHECKPOINT_STATUS_CREATED, replacement.getStatus());
+        }
+    }
+
+    @Test
     void retriesAndRecreationUseDisjointResourcesWithRealModelControllers() throws Exception {
         try (Fixture f = new Fixture("gbdt.lightgbm", "rank_model", false)) {
             String previous = f.train("v1.0");
