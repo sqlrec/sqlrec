@@ -62,8 +62,9 @@ class KubernetesClientLifecycleHttpTest {
                 completion.get(5, TimeUnit.SECONDS);
             } finally {
                 waiter.interrupt();
-                // An interrupted SDK wait leaves the watch active. End its HTTP stream before closing the client.
+                // The interrupted SDK wait leaves a watch active. Close its TCP connection before client cleanup.
                 api.shutdown.countDown();
+                api.server.stop(0);
             }
         }
     }
