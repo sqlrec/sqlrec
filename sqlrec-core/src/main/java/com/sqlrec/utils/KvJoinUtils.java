@@ -113,26 +113,20 @@ public class KvJoinUtils {
         List<List<Object[]>> rowList = new ArrayList<>();
         for (Object[] leftValue : leftValues) {
             Object leftJoinKey = leftValue[leftJoinKeyColIndex];
-            if (leftJoinKey == null) {
-                // SQL LEFT JOIN preserves the left row when its join key is NULL; it simply has
-                // no matching right row because NULL never equals NULL in the join predicate.
+            // A NULL join key never matches; LEFT JOIN preserves it like any other unmatched row.
+            List<Object[]> rightValues = leftJoinKey == null ? Collections.emptyList()
+                    : stringKeyMap.getOrDefault(leftJoinKey.toString(), Collections.emptyList());
+            if (rightValues.isEmpty()) {
                 if (joinType == JoinRelType.LEFT) {
                     rowList.add(Collections.singletonList(copyValues(leftValue, null, leftSize, rightSize)));
                 }
                 continue;
             }
-            List<Object[]> rightValues = stringKeyMap.getOrDefault(leftJoinKey.toString(), Collections.emptyList());
-            if (rightValues.isEmpty()) {
-                if (joinType == JoinRelType.LEFT) {
-                    rowList.add(Collections.singletonList(copyValues(leftValue, null, leftSize, rightSize)));
-                }
-            } else {
-                List<Object[]> rightRows = new ArrayList<>(rightValues.size());
-                for (Object[] rightValue : rightValues) {
-                    rightRows.add(copyValues(leftValue, rightValue, leftSize, rightSize));
-                }
-                rowList.add(rightRows);
+            List<Object[]> rightRows = new ArrayList<>(rightValues.size());
+            for (Object[] rightValue : rightValues) {
+                rightRows.add(copyValues(leftValue, rightValue, leftSize, rightSize));
             }
+            rowList.add(rightRows);
         }
 
         return rowList;

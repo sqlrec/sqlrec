@@ -40,9 +40,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
         this.funcNameVariable = funcNameVariable;
         this.returnDataFields = returnDataFields;
         this.async = isAsync;
-        PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
-        this.partitionExecutor = partitionSpec.tableName() == null ? null
-                : new PartitionExecutor(partitionSpec.tableName(), partitionSpec.sizeNode());
+        this.partitionExecutor = createPartitionExecutor(callSqlFunction, inputList);
     }
 
     public FunctionProxyBindable(
@@ -56,12 +54,10 @@ public class FunctionProxyBindable extends ForwardingBindable {
         this.funcNameVariable = null;
         this.returnDataFields = delegate.getReturnDataFields();
         this.async = isAsync;
-        PartitionSpec partitionSpec = extractPartitionInfo(callSqlFunction, inputList);
-        this.partitionExecutor = partitionSpec.tableName() == null ? null
-                : new PartitionExecutor(partitionSpec.tableName(), partitionSpec.sizeNode());
+        this.partitionExecutor = createPartitionExecutor(callSqlFunction, inputList);
     }
 
-    private static PartitionSpec extractPartitionInfo(
+    private static PartitionExecutor createPartitionExecutor(
             SqlCallSqlFunction callSqlFunction,
             List<SqlNode> inputList
     ) {
@@ -98,7 +94,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
                 throw new RuntimeException("SIZE must be an integer literal, get(), or get_or_default()");
             }
         }
-        return new PartitionSpec(partitionTable, sizeNode);
+        return partitionTable == null ? null : new PartitionExecutor(partitionTable, sizeNode);
     }
 
     public static BindableInterface getFunctionBindable(
@@ -240,8 +236,5 @@ public class FunctionProxyBindable extends ForwardingBindable {
             return delegate.getCacheTableDataFields();
         }
         return null;
-    }
-
-    private record PartitionSpec(String tableName, SqlNode sizeNode) {
     }
 }
