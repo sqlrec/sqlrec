@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.model.common.FieldTypeUtils;
 import com.sqlrec.model.common.ModelConfigUtils;
 
 import java.util.List;
@@ -112,12 +113,8 @@ public final class PipelineConfigUtils {
 
     private static void addCsv(JsonObject target, String key, String value) {
         JsonArray array = new JsonArray();
-        if (value != null) {
-            for (String part : value.split(",")) {
-                if (!part.trim().isEmpty()) {
-                    array.add(part.trim());
-                }
-            }
+        for (String part : FieldTypeUtils.parseCsvList(value)) {
+            array.add(part);
         }
         target.add(key, array);
     }

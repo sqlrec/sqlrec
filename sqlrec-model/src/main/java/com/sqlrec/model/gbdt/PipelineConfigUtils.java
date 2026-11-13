@@ -89,9 +89,9 @@ public class PipelineConfigUtils {
 
         if (modelType == ModelType.CATBOOST) {
             // CatBoost uses its own param names; CB_* overrides generic GBDT params.
-            int iterations = resolveInt(Config.CB_ITERATIONS, Config.NUM_ITERATIONS, params);
-            int depth = resolveInt(Config.CB_DEPTH, Config.MAX_DEPTH, params);
-            double l2LeafReg = resolveDouble(Config.CB_L2_LEAF_REG, Config.L2_REGULARIZATION, params);
+            int iterations = resolveOption(Config.CB_ITERATIONS, Config.NUM_ITERATIONS, params);
+            int depth = resolveOption(Config.CB_DEPTH, Config.MAX_DEPTH, params);
+            double l2LeafReg = resolveOption(Config.CB_L2_LEAF_REG, Config.L2_REGULARIZATION, params);
             json.addProperty("iterations", iterations);
             json.addProperty("depth", depth);
             json.addProperty("l2_leaf_reg", l2LeafReg);
@@ -148,20 +148,8 @@ public class PipelineConfigUtils {
     }
 
     /** Three-tier precedence: primary if set -> fallback if set -> primary default. */
-    private static int resolveInt(ConfigOption<Integer> primary, ConfigOption<Integer> fallback,
-                                  Map<String, String> params) {
-        if (primary.isSet(params)) {
-            return primary.getValue(params);
-        }
-        if (fallback.isSet(params)) {
-            return fallback.getValue(params);
-        }
-        return primary.getDefaultValue();
-    }
-
-    /** Same three-tier precedence as {@link #resolveInt}. */
-    private static double resolveDouble(ConfigOption<Double> primary, ConfigOption<Double> fallback,
-                                        Map<String, String> params) {
+    private static <T> T resolveOption(ConfigOption<T> primary, ConfigOption<T> fallback,
+                                      Map<String, String> params) {
         if (primary.isSet(params)) {
             return primary.getValue(params);
         }

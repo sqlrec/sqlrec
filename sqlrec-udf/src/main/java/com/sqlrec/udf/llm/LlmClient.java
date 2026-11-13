@@ -174,20 +174,7 @@ public final class LlmClient {
             pending = Transport.CLIENT.sendAsync(builder.build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             HttpResponse<String> response = pending.get(remaining(deadline), TimeUnit.NANOSECONDS);
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new RuntimeException("LLM HTTP request failed (status " + response.statusCode() + ")");
-            }
-            JsonElement parsed;
-            try {
-                parsed = JsonParser.parseString(response.body());
-            } catch (JsonParseException e) {
-                throw invalidResponse();
-            }
-            JsonObject result = object(parsed);
-            if (result.has("error")) {
-                throw invalidResponse();
-            }
-            return result;
+            return parseResponse(response);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("LLM request interrupted");
@@ -206,6 +193,23 @@ public final class LlmClient {
                 Transport.SLOTS.release();
             }
         }
+    }
+
+    private static JsonObject parseResponse(HttpResponse<String> response) {
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new RuntimeException("LLM HTTP request failed (status " + response.statusCode() + ")");
+        }
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(response.body());
+        } catch (JsonParseException e) {
+            throw invalidResponse();
+        }
+        JsonObject result = object(parsed);
+        if (result.has("error")) {
+            throw invalidResponse();
+        }
+        return result;
     }
 
     private static long remaining(long deadline) throws TimeoutException {

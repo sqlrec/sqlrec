@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from common import filesystem as common
+from common.training_data import resolve_feature_columns
 
 logger = logging.getLogger("gbdt.train_catboost")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -94,16 +95,7 @@ def train(config: dict) -> None:
     df: pd.DataFrame = common.to_pandas(table)
     logger.info("Loaded %d rows, columns=%s", len(df), list(df.columns))
 
-    if label_col not in df.columns:
-        raise ValueError(f"Label column '{label_col}' not found in training data")
-    if not feature_cols:
-        feature_cols = [c for c in df.columns if c != label_col]
-    missing = [c for c in feature_cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"Feature columns missing in data: {missing}")
-
-    if label_col in feature_cols:
-        raise ValueError("Label column must not be included in feature_columns")
+    feature_cols = resolve_feature_columns(df.columns, label_col, feature_cols)
 
     X = df[feature_cols].copy()
     y = df[label_col]

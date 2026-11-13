@@ -50,13 +50,7 @@ public final class ProtobufRowCodec {
                 continue;
             }
 
-            String fieldName = fieldSchemas.get(i).getName();
-            Descriptors.FieldDescriptor field = descriptor.findFieldByName(fieldName);
-            if (field == null) {
-                throw new IllegalArgumentException(
-                        "Table field '" + fieldName + "' does not exist in Protobuf message "
-                                + descriptor.getFullName());
-            }
+            Descriptors.FieldDescriptor field = requireField(descriptor, fieldSchemas.get(i).getName());
             setField(builder, field, value);
         }
         return builder.build().toByteArray();
@@ -82,15 +76,20 @@ public final class ProtobufRowCodec {
         Descriptors.Descriptor descriptor = message.getDescriptorForType();
         for (int i = 0; i < fieldSchemas.size(); i++) {
             FieldSchema fieldSchema = fieldSchemas.get(i);
-            Descriptors.FieldDescriptor field = descriptor.findFieldByName(fieldSchema.getName());
-            if (field == null) {
-                throw new IllegalArgumentException(
-                        "Table field '" + fieldSchema.getName()
-                                + "' does not exist in Protobuf message " + descriptor.getFullName());
-            }
+            Descriptors.FieldDescriptor field = requireField(descriptor, fieldSchema.getName());
             row[i] = readField(message, field, fieldSchema.getType());
         }
         return row;
+    }
+
+    private static Descriptors.FieldDescriptor requireField(Descriptors.Descriptor descriptor, String fieldName) {
+        Descriptors.FieldDescriptor field = descriptor.findFieldByName(fieldName);
+        if (field == null) {
+            throw new IllegalArgumentException(
+                    "Table field '" + fieldName + "' does not exist in Protobuf message "
+                            + descriptor.getFullName());
+        }
+        return field;
     }
 
     private static Message loadDefaultInstance(String messageClassName) {
