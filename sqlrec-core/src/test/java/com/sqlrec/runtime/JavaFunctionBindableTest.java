@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.runtime.ExecuteContextImpl;
@@ -206,6 +207,30 @@ public class JavaFunctionBindableTest {
         new SqlTestCase("call string_arg_fun('test_arg')").test(schema, executeContext);
         new SqlTestCase("call string_arg_fun(get('col_name'))").test(schema, executeContext);
         new SqlTestCase("call context_fun('col_name')").test(schema, executeContext);
+    }
+
+    @Test
+    public void injectedContextsDoNotConsumeInputsAndVarArgsPreserveVariableDefaults() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        CacheTable input = new CacheTable("input", Linq4j.emptyEnumerable(), createStringField("value"));
+        schema.add("input", input);
+        ExecuteContext context = new ExecuteContextImpl(schema);
+        context.setVariable("empty", "");
+        SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
+                "CALL context_args(get_or_default('empty', 'fallback'), input, "
+                        + "get('missing'), get_or_default('empty', 'fallback'), "
+                        + "get_or_default('missing', 'fallback'))");
+        TestContextAndVarArgsFun function = new TestContextAndVarArgsFun();
+        JavaFunctionBindable bindable = new JavaFunctionBindable(
+                "context_args", function, call.getInputTableList(), null, schema);
+
+        assertNull(bindable.bind(schema, context));
+
+        assertEquals("", function.first);
+        assertSame(context, function.readonlyContext);
+        assertSame(input, function.table);
+        assertSame(context, function.executeContext);
+        assertArrayEquals(new String[]{null, "", "fallback"}, function.rest);
     }
 
     @Test
@@ -484,6 +509,23 @@ public class JavaFunctionBindableTest {
             if (argValue != null) {
                 System.out.println(argValue);
             }
+        }
+    }
+
+    public static class TestContextAndVarArgsFun {
+        private String first;
+        private ReadonlyContext readonlyContext;
+        private CacheTable table;
+        private ExecuteContext executeContext;
+        private String[] rest;
+
+        public void evaluate(String first, ReadonlyContext readonlyContext, CacheTable table,
+                             ExecuteContext executeContext, String... rest) {
+            this.first = first;
+            this.readonlyContext = readonlyContext;
+            this.table = table;
+            this.executeContext = executeContext;
+            this.rest = rest;
         }
     }
 

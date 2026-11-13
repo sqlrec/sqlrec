@@ -23,6 +23,11 @@ import java.time.Duration;
 import java.util.Optional;
 
 public class ServiceManager {
+    private enum BuildMode {
+        DEFINITION,
+        DEPLOYMENT
+    }
+
     private static final LoadingCache<String, Optional<ServiceConf>> serviceConfigCache =
             CacheUtils.createRefreshCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
@@ -83,7 +88,7 @@ public class ServiceManager {
             return serviceName;
         }
 
-        Service service = buildService(sqlCreateService, db, false, false);
+        Service service = buildService(sqlCreateService, db, BuildMode.DEPLOYMENT);
         K8sManager.validateYaml(service.getYaml());
         K8sManager.applyYaml(service.getYaml());
         persistService(db, service);
@@ -91,13 +96,12 @@ public class ServiceManager {
         return service.getName();
     }
 
-    public static Service saveServiceInDb(
+    /** Loads a file-defined service without deploying it or checking checkpoint readiness. */
+    public static Service loadServiceDefinition(
             SqlCreateService sqlCreateService,
-            MetadataAccess db,
-            boolean skipCheckpoint,
-            boolean skipK8sYaml
+            MetadataAccess db
     ) throws Exception {
-        Service service = buildService(sqlCreateService, db, skipCheckpoint, skipK8sYaml);
+        Service service = buildService(sqlCreateService, db, BuildMode.DEFINITION);
         persistService(db, service);
         return service;
     }
@@ -105,8 +109,7 @@ public class ServiceManager {
     private static Service buildService(
             SqlCreateService sqlCreateService,
             MetadataAccess db,
-            boolean skipCheckpoint,
-            boolean skipK8sYaml
+            BuildMode mode
     ) throws Exception {
         ServiceConf serviceConfig = ModelEntityConverter.convertToServiceConf(sqlCreateService);
 
@@ -124,11 +127,11 @@ public class ServiceManager {
         );
 
         String modelDdl = modelEntity.getDdl();
-        if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && !skipCheckpoint) {
+        if (StringUtils.isNotEmpty(serviceConfig.getCheckpointName()) && mode == BuildMode.DEPLOYMENT) {
             if (checkpoint == null) {
                 throw new IllegalArgumentException("checkpoint not exists: " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }
-            ModelManager.refreshCheckpointStatus(db, checkpoint);
+            CheckpointCompletion.refresh(db, checkpoint);
             if (!Consts.CHECKPOINT_STATUS_SUCCEEDED.equals(checkpoint.getStatus())) {
                 throw new IllegalArgumentException("checkpoint status is not succeeded: " + checkpoint.getStatus() + " for checkpoint " + serviceConfig.getCheckpointName() + " for model " + serviceConfig.getModelName());
             }
@@ -141,7 +144,7 @@ public class ServiceManager {
 
         String serviceUrl = modelController.getServiceUrl(serviceConfig.getModelConfig(), serviceConfig);
         String k8sYaml = "";
-        if (!skipK8sYaml) {
+        if (mode == BuildMode.DEPLOYMENT) {
             k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
             if (!StringUtils.isEmpty(k8sYaml)) {
                 k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());

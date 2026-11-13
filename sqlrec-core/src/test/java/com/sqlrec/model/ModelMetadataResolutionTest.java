@@ -118,15 +118,21 @@ class ModelMetadataResolutionTest {
     @Test
     void fileServiceLoadingUsesTheSuppliedMetadata() throws Exception {
         try (Fixture f = new Fixture()) {
-            f.checkpoint("v1", "/archive/rank", Consts.CHECKPOINT_STATUS_SUCCEEDED);
+            f.checkpoint("v1", "/archive/rank", Consts.CHECKPOINT_STATUS_FAILED);
             f.metadata.when(MetadataAccessFactory::getInstance).thenThrow(new AssertionError("global metadata lookup"));
 
-            Service service = ServiceManager.saveServiceInDb(f.serviceStatement(), f.db, true, true);
+            Service service = ServiceManager.loadServiceDefinition(f.serviceStatement(), f.db);
 
             assertEquals("rank-service", service.getName());
+            assertEquals("", service.getYaml());
+            assertEquals("http://rank-service/predict", service.getUrl());
+            assertEquals(f.modelDdl("/models/rank"), service.getModelDdl());
             f.metadata.verifyNoInteractions();
             verify(f.db).getModel("rank");
             verify(f.db).getCheckpoint("rank", "v1");
+            verify(f.db).upsertService(service);
+            verify(f.controller, never()).validateServiceCheckpointType(any());
+            verify(f.controller, never()).getServiceK8sYaml(any(), any());
             f.k8s.verifyNoInteractions();
         }
     }

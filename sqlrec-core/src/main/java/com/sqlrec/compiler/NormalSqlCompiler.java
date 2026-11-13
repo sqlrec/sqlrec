@@ -79,24 +79,7 @@ public class NormalSqlCompiler {
 
         // Convert the SQL query to a relational expression
         VolcanoPlanner planner = RuleManager.createPlanner(containKvTable);
-        RelOptCluster cluster = RelOptCluster.create(planner, new RexBuilder(new JavaTypeFactoryImpl()));
-        final SqlToRelConverter.Config config =
-                SqlToRelConverter.config()
-                        .withTrimUnusedFields(true)
-                        .withExpand(THREAD_EXPAND.get())
-                        .withInSubQueryThreshold(castNonNull(THREAD_INSUBQUERY_THRESHOLD.get()))
-                        .withExplain(false);
-        SqlToRelConverter converter = new SqlToRelConverter(
-                (rowType, queryString, schemaPath, viewPath) -> {
-                    throw new UnsupportedOperationException("cannot expand view");
-                },
-                validator,
-                catalogReader,
-                cluster,
-                StandardConvertletTable.INSTANCE,
-                config
-        );
-
+        SqlToRelConverter converter = createSqlToRelConverter(validator, catalogReader, planner);
         RelRoot root = converter.convertQuery(validatedSqlNode, false, true);
         String logicalPlan = RelOptUtil.toString(root.rel);
         log.info("compile rel: {}", logicalPlan);
@@ -105,19 +88,7 @@ public class NormalSqlCompiler {
         Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
         RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
-        // Calcite may append hidden ORDER BY fields. Keep them for sorting, then
-        // project only the SELECT fields, with their validated names and types.
-        if (!root.isRefTrivial()) {
-            RexBuilder rexBuilder = cluster.getRexBuilder();
-            List<RexNode> projects = new ArrayList<>();
-            for (var field : root.fields) {
-                projects.add(rexBuilder.makeInputRef(bestExp, field.left));
-            }
-            List<String> names = SqlValidatorUtil.uniquify(root.validatedRowType.getFieldNames(),
-                    catalogReader.nameMatcher().isCaseSensitive());
-            bestExp = EnumerableCalc.create(bestExp, RexProgram.create(
-                    bestExp.getRowType(), projects, null, names, rexBuilder));
-        }
+        bestExp = restoreVisibleProjection(root, bestExp, catalogReader);
         String physicalPlan = RelOptUtil.toString(bestExp);
         log.info("compile bestExp: {}", physicalPlan);
 
@@ -134,6 +105,44 @@ public class NormalSqlCompiler {
         );
 
         return new CalciteBindable(parameters, bindable, bestExp, sqlNode, logicalPlan, physicalPlan, javaExpression);
+    }
+
+    private static SqlToRelConverter createSqlToRelConverter(
+            SqlValidator validator, CalciteCatalogReader catalogReader, VolcanoPlanner planner) {
+        RelOptCluster cluster = RelOptCluster.create(planner, new RexBuilder(new JavaTypeFactoryImpl()));
+        SqlToRelConverter.Config config = SqlToRelConverter.config()
+                .withTrimUnusedFields(true)
+                .withExpand(THREAD_EXPAND.get())
+                .withInSubQueryThreshold(castNonNull(THREAD_INSUBQUERY_THRESHOLD.get()))
+                .withExplain(false);
+        return new SqlToRelConverter(
+                (rowType, queryString, schemaPath, viewPath) -> {
+                    throw new UnsupportedOperationException("cannot expand view");
+                },
+                validator,
+                catalogReader,
+                cluster,
+                StandardConvertletTable.INSTANCE,
+                config
+        );
+    }
+
+    private static RelNode restoreVisibleProjection(
+            RelRoot root, RelNode optimized, CalciteCatalogReader catalogReader) {
+        if (root.isRefTrivial()) {
+            return optimized;
+        }
+        // Calcite may append hidden ORDER BY fields. Keep them for sorting, then
+        // project only the SELECT fields, with their validated names and types.
+        RexBuilder rexBuilder = root.rel.getCluster().getRexBuilder();
+        List<RexNode> projects = new ArrayList<>();
+        for (var field : root.fields) {
+            projects.add(rexBuilder.makeInputRef(optimized, field.left));
+        }
+        List<String> names = SqlValidatorUtil.uniquify(root.validatedRowType.getFieldNames(),
+                catalogReader.nameMatcher().isCaseSensitive());
+        return EnumerableCalc.create(optimized, RexProgram.create(
+                optimized.getRowType(), projects, null, names, rexBuilder));
     }
 
     public static Program getProgram() {

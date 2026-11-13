@@ -154,19 +154,23 @@ public class JavaFunctionBindable extends BindableInterface {
         return SchemaUtils.getCacheTable(identifier.getSimple(), schema);
     }
 
+    private Object resolveInput(
+            Class<?> paramType, int inputIndex, CalciteSchema schema, ExecuteContext context) {
+        SqlNode input = inputTableList.get(inputIndex);
+        if (paramType.equals(CacheTable.class)) {
+            return resolveTableInput(input, schema, inputIndex);
+        }
+        if (paramType.equals(String.class)) {
+            return resolveStringInput(input, context, inputIndex);
+        }
+        throw new RuntimeException("unsupported parameter type: " + paramType);
+    }
+
     private Object resolveVarArgs(
             Class<?> componentType, int startIndex, CalciteSchema schema, ExecuteContext context) {
         Object array = java.lang.reflect.Array.newInstance(componentType, inputTableList.size() - startIndex);
         for (int i = startIndex; i < inputTableList.size(); i++) {
-            SqlNode input = inputTableList.get(i);
-            Object value;
-            if (componentType.equals(String.class)) {
-                value = resolveStringInput(input, context, i);
-            } else if (componentType.equals(CacheTable.class)) {
-                value = resolveTableInput(input, schema, i);
-            } else {
-                throw new RuntimeException("unsupported vararg type: " + componentType);
-            }
+            Object value = resolveInput(componentType, i, schema, context);
             java.lang.reflect.Array.set(array, i - startIndex, value);
         }
         return array;
@@ -181,22 +185,14 @@ public class JavaFunctionBindable extends BindableInterface {
 
             if (varArgs && i == parameterTypes.length - 1) {
                 arguments[i] = resolveVarArgs(paramType.getComponentType(), inputParamIndex, schema, context);
-            } else if (paramType.equals(CacheTable.class)) {
-                if (inputParamIndex >= inputTableList.size()) {
-                    throw new RuntimeException("not enough input parameters");
-                }
-                arguments[i] = resolveTableInput(inputTableList.get(inputParamIndex), schema, inputParamIndex);
-                inputParamIndex++;
-            } else if (paramType.equals(String.class)) {
-                if (inputParamIndex >= inputTableList.size()) {
-                    throw new RuntimeException("not enough input parameters");
-                }
-                arguments[i] = resolveStringInput(inputTableList.get(inputParamIndex), context, inputParamIndex);
-                inputParamIndex++;
             } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ReadonlyContext.class)) {
                 arguments[i] = context;
             } else {
-                throw new RuntimeException("unsupported parameter type: " + paramType);
+                if (inputParamIndex >= inputTableList.size()) {
+                    throw new RuntimeException("not enough input parameters");
+                }
+                arguments[i] = resolveInput(paramType, inputParamIndex, schema, context);
+                inputParamIndex++;
             }
         }
 

@@ -130,7 +130,7 @@ class ModelManagerExportTest {
             old.setYaml("injected-yaml");
             fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("injected-yaml"))
                     .thenReturn(new K8sManager.JobStatus("succeeded", null));
-            ModelManager.refreshCheckpointStatus(fixture.db, old);
+            CheckpointCompletion.refresh(fixture.db, old);
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, old.getStatus());
 
             fixture.export();

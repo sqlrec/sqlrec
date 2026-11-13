@@ -41,7 +41,7 @@ class CheckpointCompletionRaceTest {
             f.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("old-yaml"))
                     .thenReturn(new K8sManager.JobStatus("failed", "Job not found"));
 
-            assertTrue(ModelManager.canReuseCreatedCheckpoint(f.db, stale));
+            assertTrue(CheckpointCompletion.canReuseCreated(f.db, stale));
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, stale.getStatus());
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, f.store.getCheckpoint("rank", "v1").getStatus());
         }

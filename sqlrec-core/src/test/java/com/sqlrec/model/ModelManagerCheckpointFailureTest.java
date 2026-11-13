@@ -137,7 +137,7 @@ class ModelManagerCheckpointFailureTest {
             k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
                     .thenReturn(new K8sManager.JobStatus("failed", "Job not found"));
 
-            assertFalse(ModelManager.canReuseCreatedCheckpoint(db, checkpoint));
+            assertFalse(CheckpointCompletion.canReuseCreated(db, checkpoint));
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, checkpoint.getStatus());
             verify(db).completeCheckpoint(checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
         }
@@ -154,7 +154,7 @@ class ModelManagerCheckpointFailureTest {
             k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
                     .thenReturn(new K8sManager.JobStatus("running", null));
 
-            assertTrue(ModelManager.canReuseCreatedCheckpoint(db, checkpoint));
+            assertTrue(CheckpointCompletion.canReuseCreated(db, checkpoint));
             assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
             verify(db, never()).upsertCheckpoint(checkpoint);
         }

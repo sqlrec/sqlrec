@@ -47,7 +47,7 @@ public class MetadataAccessFactory {
             );
             instance = new MetadataAccess(schemaAccess, storeAccess, new LocalHdfsAccess());
             for (SqlNode node : parser.getServiceNodes()) {
-                ServiceManager.saveServiceInDb((SqlCreateService) node, instance, true, true);
+                ServiceManager.loadServiceDefinition((SqlCreateService) node, instance);
             }
         } else {
             HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
