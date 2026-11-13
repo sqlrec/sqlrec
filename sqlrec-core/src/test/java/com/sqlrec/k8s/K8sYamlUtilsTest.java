@@ -396,6 +396,49 @@ spec:
     }
 
     @Test
+    void volumeInjectionPreservesExistingSettingsAndAddsMissingContainerMountsOnlyOnce() {
+        String yaml = """
+                apiVersion: batch/v1
+                kind: Job
+                metadata:
+                  name: existing-volume
+                spec:
+                  template:
+                    spec:
+                      volumes:
+                      - name: data
+                        persistentVolumeClaim:
+                          claimName: original-pvc
+                      containers:
+                      - name: main
+                        image: busybox
+                        volumeMounts:
+                        - name: data
+                          mountPath: /original
+                          subPath: original-subdir
+                      - name: sidecar
+                        image: busybox
+                """;
+
+        String result = K8sYamlUtils.injectVolumeMountIntoYaml(yaml, "new-pvc", "data", "/new", "new-subdir");
+        PodSpec pod = K8sYamlUtils.parseK8sYamlAndGetJobs(result).get(0).getSpec().getTemplate().getSpec();
+        assertEquals(1, pod.getVolumes().size());
+        assertEquals("original-pvc", pod.getVolumes().get(0).getPersistentVolumeClaim().getClaimName());
+        assertEquals(1, pod.getContainers().get(0).getVolumeMounts().size());
+        var originalMount = pod.getContainers().get(0).getVolumeMounts().get(0);
+        assertEquals("/original", originalMount.getMountPath());
+        assertEquals("original-subdir", originalMount.getSubPath());
+        assertEquals(1, pod.getContainers().get(1).getVolumeMounts().size());
+        var addedMount = pod.getContainers().get(1).getVolumeMounts().get(0);
+        assertEquals("data", addedMount.getName());
+        assertEquals("/new", addedMount.getMountPath());
+        assertEquals("new-subdir", addedMount.getSubPath());
+
+        String repeated = K8sYamlUtils.injectVolumeMountIntoYaml(result, "other-pvc", "data", "/other", null);
+        assertEquals(K8sYamlUtils.parseK8sYaml(result), K8sYamlUtils.parseK8sYaml(repeated));
+    }
+
+    @Test
     public void testInjectVolumeMountIntoYamlWithEmptyInput() {
         assertNull(K8sYamlUtils.injectVolumeMountIntoYaml(null, "pvc", "volume", "/path", "subpath"));
         assertEquals("", K8sYamlUtils.injectVolumeMountIntoYaml("", "pvc", "volume", "/path", "subpath"));

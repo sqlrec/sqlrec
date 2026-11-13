@@ -155,29 +155,35 @@ public class TopologicalSortUtils {
                 continue;
             }
 
+            Set<String> readTables = normalizeTableNames(bindable.getReadTables());
+            Set<String> writeTables = normalizeTableNames(bindable.getWriteTables());
             Set<Integer> dependencies = bindableDependency.get(i);
-            for (String readTable : bindable.getReadTables()) {
-                readTable = NodeUtils.normalizeTableName(readTable);
+            for (String readTable : readTables) {
                 dependencies.addAll(writeTableToBindableIndex.getOrDefault(readTable, Collections.emptySet()));
             }
 
-            for (String writeTable : bindable.getWriteTables()) {
-                writeTable = NodeUtils.normalizeTableName(writeTable);
+            for (String writeTable : writeTables) {
                 dependencies.addAll(readTableToBindableIndex.getOrDefault(writeTable, Collections.emptySet()));
                 dependencies.addAll(writeTableToBindableIndex.getOrDefault(writeTable, Collections.emptySet()));
             }
 
-            for (String readTable : bindable.getReadTables()) {
-                readTable = NodeUtils.normalizeTableName(readTable);
+            for (String readTable : readTables) {
                 readTableToBindableIndex.computeIfAbsent(readTable, k -> new HashSet<>()).add(i);
             }
-            for (String writeTable : bindable.getWriteTables()) {
-                writeTable = NodeUtils.normalizeTableName(writeTable);
+            for (String writeTable : writeTables) {
                 writeTableToBindableIndex.computeIfAbsent(writeTable, k -> new HashSet<>()).add(i);
             }
         }
 
         return bindableDependency;
+    }
+
+    private static Set<String> normalizeTableNames(Set<String> tableNames) {
+        Set<String> normalized = new HashSet<>();
+        for (String name : tableNames) {
+            normalized.add(NodeUtils.normalizeTableName(name));
+        }
+        return normalized;
     }
 
     /**

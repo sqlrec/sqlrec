@@ -272,66 +272,56 @@ public class K8sYamlUtils {
         }
 
         try {
-            List<Volume> volumes = podSpec.getVolumes();
-
-            if (volumes == null) {
-                volumes = new ArrayList<>();
-            }
-
-            boolean volumeExists = false;
-            for (Volume volume : volumes) {
-                if (volumeName.equals(volume.getName())) {
-                    volumeExists = true;
-                    break;
-                }
-            }
-
-            if (!volumeExists) {
-                Volume volume = new Volume();
-                volume.setName(volumeName);
-
-                PersistentVolumeClaimVolumeSource pvcSource = new PersistentVolumeClaimVolumeSource();
-                pvcSource.setClaimName(pvcName);
-                volume.setPersistentVolumeClaim(pvcSource);
-
-                volumes.add(volume);
-
-                podSpec.setVolumes(volumes);
-            }
-
-            List<Container> containers = podSpec.getContainers();
-
-            for (Container container : containers) {
-                List<VolumeMount> volumeMounts = container.getVolumeMounts();
-
-                if (volumeMounts == null) {
-                    volumeMounts = new ArrayList<>();
-                }
-
-                boolean volumeMountExists = false;
-                for (VolumeMount volumeMount : volumeMounts) {
-                    if (volumeName.equals(volumeMount.getName())) {
-                        volumeMountExists = true;
-                        break;
-                    }
-                }
-
-                if (!volumeMountExists) {
-                    VolumeMount volumeMount = new VolumeMount();
-                    volumeMount.setName(volumeName);
-                    volumeMount.setMountPath(mountPath);
-                    if (subPath != null && !subPath.isEmpty()) {
-                        volumeMount.setSubPath(subPath);
-                    }
-
-                    volumeMounts.add(volumeMount);
-
-                    container.setVolumeMounts(volumeMounts);
-                }
+            ensureVolume(podSpec, pvcName, volumeName);
+            for (Container container : podSpec.getContainers()) {
+                ensureVolumeMount(container, volumeName, mountPath, subPath);
             }
         } catch (Exception e) {
             log.error("Failed to inject volume mount: {}", e.getMessage(), e);
         }
+    }
+
+    private static void ensureVolume(PodSpec podSpec, String pvcName, String volumeName) {
+        List<Volume> volumes = podSpec.getVolumes();
+        if (volumes == null) {
+            volumes = new ArrayList<>();
+        }
+
+        for (Volume volume : volumes) {
+            if (volumeName.equals(volume.getName())) {
+                return;
+            }
+        }
+
+        Volume volume = new Volume();
+        volume.setName(volumeName);
+        PersistentVolumeClaimVolumeSource pvcSource = new PersistentVolumeClaimVolumeSource();
+        pvcSource.setClaimName(pvcName);
+        volume.setPersistentVolumeClaim(pvcSource);
+        volumes.add(volume);
+        podSpec.setVolumes(volumes);
+    }
+
+    private static void ensureVolumeMount(Container container, String volumeName, String mountPath, String subPath) {
+        List<VolumeMount> volumeMounts = container.getVolumeMounts();
+        if (volumeMounts == null) {
+            volumeMounts = new ArrayList<>();
+        }
+
+        for (VolumeMount volumeMount : volumeMounts) {
+            if (volumeName.equals(volumeMount.getName())) {
+                return;
+            }
+        }
+
+        VolumeMount volumeMount = new VolumeMount();
+        volumeMount.setName(volumeName);
+        volumeMount.setMountPath(mountPath);
+        if (subPath != null && !subPath.isEmpty()) {
+            volumeMount.setSubPath(subPath);
+        }
+        volumeMounts.add(volumeMount);
+        container.setVolumeMounts(volumeMounts);
     }
 
     public static String injectPodConfig(String k8sYaml, ModelConf model, Map<String, String> params) {
