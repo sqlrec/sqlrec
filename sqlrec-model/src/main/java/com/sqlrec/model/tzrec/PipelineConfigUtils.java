@@ -185,75 +185,72 @@ public class PipelineConfigUtils {
 
     public static String generateFeatureConfigs(ModelConf model) {
         StringBuilder config = new StringBuilder();
-
         if (model.getInputFields() == null) {
             return config.toString();
         }
         for (FieldSchema fieldSchema : FeatureOptions.features(model)) {
-            String featureName = fieldSchema.getName();
-            String fieldType = fieldSchema.getType();
-            if (FeatureOptions.isRaw(fieldType)) {
-                String prefix = "column." + featureName + ".";
-                Map<String, String> params = model.getParams();
-                config.append("feature_configs {\n    raw_feature {\n");
-                config.append("        feature_name: ").append(quoted(featureName)).append("\n");
-                config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
-                int valueDim = FeatureOptions.valueDim(fieldSchema, params);
-                config.append("        value_dim: ").append(valueDim).append("\n");
-                if (params.containsKey(prefix + "separator")) config.append("        separator: ").append(quoted(params.get(prefix + "separator"))).append("\n");
-                config.append("        default_value: ").append(quoted(FeatureOptions.defaultValue(fieldSchema, params))).append("\n");
-                if (params.containsKey(prefix + "normalizer")) {
-                    config.append("        normalizer: ").append(quoted(params.get(prefix + "normalizer"))).append("\n");
-                }
-                List<Float> boundaries = FeatureOptions.boundaries(featureName, params);
-                String embedding = params.getOrDefault(prefix + "embedding", "none");
-                if (!boundaries.isEmpty()) {
-                    config.append("        boundaries: ").append(boundaries).append("\n");
-                }
-                if (!boundaries.isEmpty() || !embedding.equals("none")) {
-                    config.append("        embedding_dim: ").append(FeatureOptions.embeddingDim(featureName, params)).append("\n");
-                }
-                if (embedding.equals("mlp")) config.append("        mlp {}\n");
-                if (embedding.equals("autodis")) {
-                    config.append("        autodis { num_channels: ").append(Integer.parseInt(params.getOrDefault(prefix + "autodis.num_channels", "3"))).append(" }\n");
-                }
-                config.append("    }\n}\n");
-                continue;
-            }
-            int defaultNumBuckets = Config.NUM_BUCKETS.getValue(model.getParams());
-            int defaultEmbeddingDim = Config.EMBEDDING_DIM.getValue(model.getParams());
-
-            int numBuckets = defaultNumBuckets;
-            String bucketSizeKey = "column." + featureName + ".bucket_size";
-            if (model.getParams() != null && model.getParams().containsKey(bucketSizeKey)) {
-                numBuckets = Integer.parseInt(model.getParams().get(bucketSizeKey));
-            }
-
-            int embeddingDim = defaultEmbeddingDim;
-            String embeddingDimKey = "column." + featureName + ".embedding_dim";
-            if (model.getParams() != null && model.getParams().containsKey(embeddingDimKey)) {
-                embeddingDim = Integer.parseInt(model.getParams().get(embeddingDimKey));
-            }
-
-            config.append("feature_configs {\n");
-            config.append("    id_feature {\n");
-            config.append("        feature_name: ").append(quoted(featureName)).append("\n");
-            config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
-            String idDefault = model.getParams().get("column." + featureName + ".default_value");
-            if (idDefault != null) config.append("        default_value: ").append(quoted(idDefault)).append("\n");
-            String separator = model.getParams().get("column." + featureName + ".separator");
-            if (separator != null) config.append("        separator: ").append(quoted(separator)).append("\n");
-            if (isIntFeature(fieldType)) {
-                config.append("        num_buckets: ").append(numBuckets).append("\n");
+            if (FeatureOptions.isRaw(fieldSchema.getType())) {
+                appendRawFeature(config, fieldSchema, model.getParams());
             } else {
-                config.append("        hash_bucket_size: ").append(numBuckets).append("\n");
+                appendIdFeature(config, fieldSchema, model.getParams());
             }
-            config.append("        embedding_dim: ").append(embeddingDim).append("\n");
-            config.append("    }\n");
-            config.append("}\n");
         }
-
         return config.toString();
+    }
+
+    private static void appendRawFeature(
+            StringBuilder config, FieldSchema fieldSchema, Map<String, String> params) {
+        String featureName = fieldSchema.getName();
+        String prefix = "column." + featureName + ".";
+        config.append("feature_configs {\n    raw_feature {\n");
+        config.append("        feature_name: ").append(quoted(featureName)).append("\n");
+        config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
+        int valueDim = FeatureOptions.valueDim(fieldSchema, params);
+        config.append("        value_dim: ").append(valueDim).append("\n");
+        if (params.containsKey(prefix + "separator")) config.append("        separator: ").append(quoted(params.get(prefix + "separator"))).append("\n");
+        config.append("        default_value: ").append(quoted(FeatureOptions.defaultValue(fieldSchema, params))).append("\n");
+        if (params.containsKey(prefix + "normalizer")) {
+            config.append("        normalizer: ").append(quoted(params.get(prefix + "normalizer"))).append("\n");
+        }
+        List<Float> boundaries = FeatureOptions.boundaries(featureName, params);
+        String embedding = params.getOrDefault(prefix + "embedding", "none");
+        if (!boundaries.isEmpty()) {
+            config.append("        boundaries: ").append(boundaries).append("\n");
+        }
+        if (!boundaries.isEmpty() || !embedding.equals("none")) {
+            config.append("        embedding_dim: ").append(FeatureOptions.embeddingDim(featureName, params)).append("\n");
+        }
+        if (embedding.equals("mlp")) config.append("        mlp {}\n");
+        if (embedding.equals("autodis")) {
+            config.append("        autodis { num_channels: ").append(Integer.parseInt(params.getOrDefault(prefix + "autodis.num_channels", "3"))).append(" }\n");
+        }
+        config.append("    }\n}\n");
+    }
+
+    private static void appendIdFeature(
+            StringBuilder config, FieldSchema fieldSchema, Map<String, String> params) {
+        String featureName = fieldSchema.getName();
+        String prefix = "column." + featureName + ".";
+        int numBuckets = Integer.parseInt(params.getOrDefault(prefix + "bucket_size",
+                String.valueOf(Config.NUM_BUCKETS.getValue(params))));
+        int embeddingDim = FeatureOptions.embeddingDim(featureName, params);
+
+        config.append("feature_configs {\n");
+        config.append("    id_feature {\n");
+        config.append("        feature_name: ").append(quoted(featureName)).append("\n");
+        config.append("        expression: ").append(quoted("item:" + featureName)).append("\n");
+        String idDefault = params.get(prefix + "default_value");
+        if (idDefault != null) config.append("        default_value: ").append(quoted(idDefault)).append("\n");
+        String separator = params.get(prefix + "separator");
+        if (separator != null) config.append("        separator: ").append(quoted(separator)).append("\n");
+        if (isIntFeature(fieldSchema.getType())) {
+            config.append("        num_buckets: ").append(numBuckets).append("\n");
+        } else {
+            config.append("        hash_bucket_size: ").append(numBuckets).append("\n");
+        }
+        config.append("        embedding_dim: ").append(embeddingDim).append("\n");
+        config.append("    }\n");
+        config.append("}\n");
     }
 
     public static String generateModelConfig(ModelConf model) {

@@ -8,6 +8,48 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineConfigUtilsTest {
     @Test
+    void mixedFeatureConfigKeepsExactTextOrderAndColumnOverrides() {
+        ModelConf model = new ModelConf();
+        model.setInputFields(List.of(new FieldSchema("uid", "INT"),
+                new FieldSchema("score", "DOUBLE"), new FieldSchema("label", "INT"),
+                new FieldSchema("tags", "STRING")));
+        model.setParams(Map.of("label_columns", "label", "num_buckets", "64", "embedding_dim", "8",
+                "column.uid.bucket_size", "16", "column.uid.embedding_dim", "4",
+                "column.score.boundaries", "0,1", "column.tags.default_value", "unknown",
+                "column.tags.separator", "|"));
+
+        assertEquals(String.join("\n",
+                "feature_configs {",
+                "    id_feature {",
+                "        feature_name: \"uid\"",
+                "        expression: \"item:uid\"",
+                "        num_buckets: 16",
+                "        embedding_dim: 4",
+                "    }",
+                "}",
+                "feature_configs {",
+                "    raw_feature {",
+                "        feature_name: \"score\"",
+                "        expression: \"item:score\"",
+                "        value_dim: 1",
+                "        default_value: \"0\"",
+                "        boundaries: [0.0, 1.0]",
+                "        embedding_dim: 8",
+                "    }",
+                "}",
+                "feature_configs {",
+                "    id_feature {",
+                "        feature_name: \"tags\"",
+                "        expression: \"item:tags\"",
+                "        default_value: \"unknown\"",
+                "        separator: \"|\"",
+                "        hash_bucket_size: 64",
+                "        embedding_dim: 8",
+                "    }",
+                "}", ""), PipelineConfigUtils.generateFeatureConfigs(model));
+    }
+
+    @Test
     void explicitDefaultsDoNotEvaluateTheGeneratedFallbackAndKeepNullValues() {
         FieldSchema field = new FieldSchema("vector", "ARRAY<FLOAT>");
         Map<String, String> params = new HashMap<>();

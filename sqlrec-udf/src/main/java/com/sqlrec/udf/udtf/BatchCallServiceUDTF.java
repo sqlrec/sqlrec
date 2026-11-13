@@ -56,6 +56,24 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     }
 
     public void eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object... args) {
+        configureBatch(args);
+        Map<String, Object> row = parseInputRow(args);
+
+        // Delayed outputs retain their original fields in these maps, but not
+        // their original Flink lateral association. See the class usage restrictions.
+        buffer.add(row);
+
+        if (buffer.size() >= batchSize) {
+            processBatch();
+        }
+    }
+
+    @Override
+    public void finish() {
+        processBatch();
+    }
+
+    private void configureBatch(Object[] args) {
         if (args == null || args.length < 3) {
             throw new IllegalArgumentException(
                     "At least 3 arguments required: serviceUrl, batchSize, "
@@ -88,7 +106,9 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         } else if (this.batchSize != requestedBatchSize) {
             throw new IllegalArgumentException("batchSize must remain constant for one function instance");
         }
+    }
 
+    private static Map<String, Object> parseInputRow(Object[] args) {
         int pairCount = args.length - 2;
         if (pairCount % 2 != 0) {
             throw new IllegalArgumentException("fieldNameValuePairs must be in pairs of (fieldName, value)");
@@ -107,18 +127,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
             row.put(fieldName, value);
         }
 
-        // Delayed outputs retain their original fields in these maps, but not
-        // their original Flink lateral association. See the class usage restrictions.
-        buffer.add(row);
-
-        if (buffer.size() >= this.batchSize) {
-            processBatch();
-        }
-    }
-
-    @Override
-    public void finish() {
-        processBatch();
+        return row;
     }
 
     private void processBatch() {

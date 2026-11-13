@@ -187,10 +187,13 @@ public class MilvusHandler {
     }
 
     public List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {
+        List<String> fieldNames = milvusConfig.fieldSchemas.stream()
+                .map(FieldSchema::getName)
+                .collect(Collectors.toList());
         String filterExpression = MilvusFilterBuilder.buildJoinFilter(
                 request.getFilterCondition(),
                 request.getLeftRow(),
-                milvusConfig.fieldSchemas.stream().map(FieldSchema::getName).collect(Collectors.toList())
+                fieldNames
         );
 
         SearchReq.SearchReqBuilder<?, ?> builder = SearchReq.builder()
@@ -198,9 +201,7 @@ public class MilvusHandler {
                 .databaseName(milvusConfig.database)
                 .annsField(request.getVectorField())
                 .data(Collections.singletonList(new FloatVec(request.getEmbedding())))
-                .outputFields(milvusConfig.fieldSchemas.stream()
-                        .map(FieldSchema::getName)
-                        .collect(Collectors.toList()))
+                .outputFields(fieldNames)
                 .topK(request.getTopK());
         if (filterExpression != null && !filterExpression.isEmpty()) {
             builder.filter(filterExpression);
