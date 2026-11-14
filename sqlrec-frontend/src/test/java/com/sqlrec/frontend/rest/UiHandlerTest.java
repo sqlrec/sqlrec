@@ -5,9 +5,11 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,6 +24,38 @@ import static org.mockito.Mockito.when;
 
 class UiHandlerTest {
     private static final Pattern SCRIPT_PATH = Pattern.compile("/ui/static/[^\"]+\\.js");
+
+    @Test
+    void cachedAssetsAreLoadedOnceAndResponsesHaveIndependentContent() throws Exception {
+        byte[] content = "export default 1;".getBytes(StandardCharsets.UTF_8);
+        AtomicInteger reads = new AtomicInteger();
+        ClassLoader loader = new ClassLoader(null) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if (!name.equals("ui/static/app-12345678.js")) return null;
+                reads.incrementAndGet();
+                return new ByteArrayInputStream(content);
+            }
+        };
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        UiHandler handler = new UiHandler(metadata, loader);
+        FullHttpResponse first = handler.handleRequest("/ui/static/app-12345678.js");
+        try {
+            assertEquals(HttpResponseStatus.OK, first.status());
+            assertEquals("public, max-age=31536000, immutable", first.headers().get("Cache-Control"));
+            first.content().setByte(0, 'X');
+        } finally {
+            first.release();
+        }
+        FullHttpResponse second = handler.handleRequest("/ui/static/app-12345678.js?v=2");
+        try {
+            assertEquals("export default 1;", second.content().toString(StandardCharsets.UTF_8));
+            assertEquals(1, reads.get());
+        } finally {
+            second.release();
+        }
+        verifyNoInteractions(metadata);
+    }
 
     @Test
     void servesStaticAssetWhenCacheBustingQueryStringIsPresent() throws Exception {

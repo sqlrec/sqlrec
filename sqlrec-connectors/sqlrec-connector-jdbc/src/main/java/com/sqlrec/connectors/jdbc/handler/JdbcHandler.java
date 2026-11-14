@@ -3,30 +3,17 @@ package com.sqlrec.connectors.jdbc.handler;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.sqlrec.connectors.jdbc.sql.JdbcSqlBuilder;
 import com.sqlrec.connectors.jdbc.sql.JdbcStatement;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
+import com.sqlrec.connectors.jdbc.utils.JdbcDataSourceUtils;
 import org.apache.calcite.rex.RexNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public class JdbcHandler {
-    private static final Logger logger = LoggerFactory.getLogger(JdbcHandler.class);
-    private static final Map<List<Object>, HikariDataSource> dataSources = new ConcurrentHashMap<>();
-
-    static {
-        // Ensure every pooled HikariDataSource is closed on JVM exit so that
-        // underlying DB connections are not leaked when the process terminates.
-        Runtime.getRuntime().addShutdownHook(new Thread(JdbcHandler::closeAllDataSources, "JdbcHandler-shutdown"));
-    }
-
     private final JdbcConfig jdbcConfig;
 
     public JdbcHandler(JdbcConfig jdbcConfig) {
@@ -169,120 +156,13 @@ public class JdbcHandler {
     }
 
     private Connection getConnection() throws SQLException {
-        Connection conn = getOrCreateDataSource().getConnection();
+        Connection conn = JdbcDataSourceUtils.getOrCreate(jdbcConfig).getConnection();
         conn.setAutoCommit(true);
         return conn;
     }
 
-    private HikariDataSource getOrCreateDataSource() {
-        List<Object> key = dataSourceKey();
-        HikariDataSource ds = dataSources.get(key);
-        if (ds != null) {
-            return ds;
-        }
-        synchronized (dataSources) {
-            ds = dataSources.get(key);
-            if (ds == null) {
-                ds = createDataSource();
-                dataSources.put(key, ds);
-            }
-            return ds;
-        }
-    }
-
-    /**
-     * Cache key for a pooled DataSource. Handlers with different connection or pool
-     * settings must not accidentally share a pool.
-     */
-    List<Object> dataSourceKey() {
-        Map<String, String> properties = jdbcConfig.jdbcProperties == null
-                ? Collections.emptyMap()
-                : Collections.unmodifiableMap(new HashMap<>(jdbcConfig.jdbcProperties));
-        return Collections.unmodifiableList(Arrays.asList(
-                jdbcConfig.url,
-                jdbcConfig.username,
-                jdbcConfig.password,
-                jdbcConfig.driver,
-                jdbcConfig.schema,
-                jdbcConfig.connectionPoolSize,
-                jdbcConfig.connectionPoolMinIdle,
-                jdbcConfig.connectionPoolIdleTimeout,
-                jdbcConfig.connectionPoolMaxLifetime,
-                jdbcConfig.connectionPoolConnectionTimeout,
-                jdbcConfig.connectionPoolValidationTimeout,
-                jdbcConfig.connectionPoolKeepaliveTime,
-                jdbcConfig.connectionPoolName,
-                properties
-        ));
-    }
-
-    /**
-     * Close every cached HikariDataSource and clear the cache. Registered as a JVM
-     * shutdown hook so pooled DB connections are released on process exit.
-     */
+    /** Closes all shared connection pools and clears the cache. */
     public static synchronized void closeAllDataSources() {
-        for (Map.Entry<List<Object>, HikariDataSource> entry : dataSources.entrySet()) {
-            try {
-                entry.getValue().close();
-            } catch (Exception e) {
-                // The map key contains the password because credentials identify a pool;
-                // never include it in logs.
-                logger.warn("Failed to close JDBC connection pool on shutdown: {}", e.getMessage());
-            }
-        }
-        dataSources.clear();
-        logger.info("Closed all JDBC connection pools on shutdown");
-    }
-
-    private HikariDataSource createDataSource() {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(jdbcConfig.url);
-        if (jdbcConfig.username != null && !jdbcConfig.username.isEmpty()) {
-            hikariConfig.setUsername(jdbcConfig.username);
-        }
-        if (jdbcConfig.password != null && !jdbcConfig.password.isEmpty()) {
-            hikariConfig.setPassword(jdbcConfig.password);
-        }
-        if (jdbcConfig.driver != null && !jdbcConfig.driver.isEmpty()) {
-            hikariConfig.setDriverClassName(jdbcConfig.driver);
-        }
-        if (jdbcConfig.connectionPoolSize != null && jdbcConfig.connectionPoolSize > 0) {
-            hikariConfig.setMaximumPoolSize(jdbcConfig.connectionPoolSize);
-        }
-        if (jdbcConfig.connectionPoolMinIdle != null && jdbcConfig.connectionPoolMinIdle > 0) {
-            hikariConfig.setMinimumIdle(jdbcConfig.connectionPoolMinIdle);
-        }
-        if (jdbcConfig.connectionPoolIdleTimeout != null && jdbcConfig.connectionPoolIdleTimeout > 0) {
-            hikariConfig.setIdleTimeout(jdbcConfig.connectionPoolIdleTimeout * 1000);
-        }
-        if (jdbcConfig.connectionPoolMaxLifetime != null && jdbcConfig.connectionPoolMaxLifetime > 0) {
-            hikariConfig.setMaxLifetime(jdbcConfig.connectionPoolMaxLifetime * 1000);
-        }
-        if (jdbcConfig.connectionPoolConnectionTimeout != null && jdbcConfig.connectionPoolConnectionTimeout > 0) {
-            hikariConfig.setConnectionTimeout(jdbcConfig.connectionPoolConnectionTimeout * 1000);
-        }
-        if (jdbcConfig.connectionPoolValidationTimeout != null && jdbcConfig.connectionPoolValidationTimeout > 0) {
-            hikariConfig.setValidationTimeout(jdbcConfig.connectionPoolValidationTimeout * 1000);
-        }
-        if (jdbcConfig.connectionPoolKeepaliveTime != null && jdbcConfig.connectionPoolKeepaliveTime > 0) {
-            hikariConfig.setKeepaliveTime(jdbcConfig.connectionPoolKeepaliveTime * 1000);
-        }
-        if (jdbcConfig.connectionPoolName != null && !jdbcConfig.connectionPoolName.isEmpty()) {
-            hikariConfig.setPoolName(jdbcConfig.connectionPoolName);
-        }
-
-        // set jdbc custom properties
-        if (jdbcConfig.jdbcProperties != null) {
-            for (Map.Entry<String, String> entry : jdbcConfig.jdbcProperties.entrySet()) {
-                hikariConfig.addDataSourceProperty(entry.getKey(), entry.getValue());
-            }
-        }
-
-        // set schema if specified (for PostgreSQL etc.)
-        if (jdbcConfig.schema != null) {
-            hikariConfig.setSchema(jdbcConfig.schema);
-        }
-
-        return new HikariDataSource(hikariConfig);
+        JdbcDataSourceUtils.closeAll();
     }
 }
