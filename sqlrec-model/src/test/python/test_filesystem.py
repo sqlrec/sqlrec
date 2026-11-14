@@ -68,6 +68,23 @@ class FilesystemTest(unittest.TestCase):
             filesystem.copy_file(remote, str(destination))
             self.assertEqual(destination.read_bytes(), contents)
 
+    def test_temporary_file_can_be_reopened_and_is_removed_after_use(self):
+        with filesystem.temporary_file(".ubj") as path:
+            temporary = Path(path)
+            self.assertTrue(temporary.is_file())
+            self.assertEqual(temporary.suffix, ".ubj")
+            temporary.write_bytes(b"model")
+            self.assertEqual(temporary.read_bytes(), b"model")
+        self.assertFalse(temporary.exists())
+
+    def test_temporary_file_is_removed_when_the_operation_fails(self):
+        failure = RuntimeError("model loading failed")
+        with self.assertRaises(RuntimeError) as raised:
+            with filesystem.temporary_file(".cbm") as path:
+                raise failure
+        self.assertIs(raised.exception, failure)
+        self.assertFalse(Path(path).exists())
+
     def test_download_rejects_files_outside_remote_directory(self):
         class RemoteFS:
             @staticmethod

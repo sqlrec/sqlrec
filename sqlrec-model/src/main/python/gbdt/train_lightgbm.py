@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from common import filesystem as common
-from common.training_data import resolve_feature_columns
+from common.training_data import resolve_feature_columns, validate_float_features
 
 logger = logging.getLogger("gbdt.train_lightgbm")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -70,17 +70,7 @@ def train(config: dict) -> None:
     X = df[feature_cols]
     y = df[label_col]
 
-    # Validate feature types: LightGBM only accepts float/double columns.
-    non_float_cols = [
-        c for c in feature_cols
-        if not pd.api.types.is_float_dtype(X[c])
-    ]
-    if non_float_cols:
-        raise ValueError(
-            f"LightGBM only supports float/double features, but columns {non_float_cols} "
-            f"have non-float dtypes: {', '.join(f'{c}={X[c].dtype}' for c in non_float_cols)}. "
-            f"Consider using CatBoost for categorical/integer features."
-        )
+    validate_float_features(X, feature_cols, "LightGBM")
 
     # ONNX and the serving engine consume float32; train on the same values.
     with np.errstate(over="ignore", invalid="ignore"):

@@ -10,8 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import tempfile
 
 import catboost as cb
 import numpy as np
@@ -64,14 +62,10 @@ def _load_base_model(path: str) -> cb.CatBoost:
         model.load_model(path)
         return model
 
-    fd, tmp_path = tempfile.mkstemp(suffix=".cbm")
-    os.close(fd)
-    try:
+    with common.temporary_file(".cbm") as tmp_path:
         common.copy_file(path, tmp_path)
         model.load_model(tmp_path)
         return model
-    finally:
-        os.remove(tmp_path)
 
 
 def train(config: dict) -> None:
@@ -145,13 +139,9 @@ def train(config: dict) -> None:
     native_model_path = f"{model_dir}/model.cbm"
     logger.info("Saving CatBoost model to %s", native_model_path)
     # save_model only accepts a file path, not a file-like object.
-    fd, tmp_path = tempfile.mkstemp(suffix=".cbm")
-    os.close(fd)
-    try:
+    with common.temporary_file(".cbm") as tmp_path:
         model.save_model(tmp_path)
         common.copy_file(tmp_path, native_model_path)
-    finally:
-        os.remove(tmp_path)
 
     schema = {
         "feature_columns": feature_cols,

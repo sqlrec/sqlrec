@@ -15,8 +15,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import tempfile
 
 import onnx
 import onnxmltools
@@ -83,14 +81,10 @@ def export(config: dict) -> None:
     # a local temp file first because xgb.Booster.load_model() uses C-level I/O
     # that bypasses Python's open().
     logger.info("Loading XGBoost model from %s/model.ubj", base_model_dir)
-    fd, tmp_model = tempfile.mkstemp(suffix=".ubj")
-    os.close(fd)
-    try:
+    with common.temporary_file(".ubj") as tmp_model:
         common.copy_file(f"{base_model_dir}/model.ubj", tmp_model)
         booster = xgb.Booster()
         booster.load_model(tmp_model)
-    finally:
-        os.remove(tmp_model)
 
     n_features = len(feature_cols)
     initial_types = [("input", FloatTensorType([None, n_features]))]

@@ -27,7 +27,9 @@ import glob as glob_module
 import json
 import os
 import shutil
-from typing import Any, Iterable
+import tempfile
+from contextlib import contextmanager
+from typing import Any, Iterable, Iterator
 
 import fsspec
 import pyarrow as pa
@@ -175,6 +177,17 @@ def download_dir(remote_dir: str, local_dir: str) -> None:
                 shutil.copyfileobj(src, dst)
     else:
         shutil.copytree(full, local_dir, dirs_exist_ok=True)
+
+
+@contextmanager
+def temporary_file(suffix: str) -> Iterator[str]:
+    """Yield a local file path, removing the file when the operation finishes."""
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    try:
+        yield path
+    finally:
+        os.remove(path)
 
 
 def copy_file(src_path: str, dst_path: str) -> None:

@@ -10,14 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import tempfile
 
 import pandas as pd
 import xgboost as xgb
 
 from common import filesystem as common
-from common.training_data import resolve_feature_columns
+from common.training_data import resolve_feature_columns, validate_float_features
 
 logger = logging.getLogger("gbdt.train_xgboost")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -81,17 +79,7 @@ def train(config: dict) -> None:
     X = df[feature_cols]
     y = df[label_col]
 
-    # Validate feature types: XGBoost only accepts float/double columns.
-    non_float_cols = [
-        c for c in feature_cols
-        if not pd.api.types.is_float_dtype(X[c])
-    ]
-    if non_float_cols:
-        raise ValueError(
-            f"XGBoost only supports float/double features, but columns {non_float_cols} "
-            f"have non-float dtypes: {', '.join(f'{c}={X[c].dtype}' for c in non_float_cols)}. "
-            f"Consider using CatBoost for categorical/integer features."
-        )
+    validate_float_features(X, feature_cols, "XGBoost")
 
     params = _build_xgb_params(params_block)
     num_iterations = int(params_block.get("num_iterations", 100))
@@ -101,14 +89,10 @@ def train(config: dict) -> None:
     if base_model_dir:
         base_path = f"{base_model_dir}/model.ubj"
         logger.info("Loading base model from %s for incremental training", base_path)
-        fd, tmp_base = tempfile.mkstemp(suffix=".ubj")
-        os.close(fd)
-        try:
+        with common.temporary_file(".ubj") as tmp_base:
             common.copy_file(base_path, tmp_base)
             init_model = xgb.Booster()
             init_model.load_model(tmp_base)
-        finally:
-            os.remove(tmp_base)
 
     if params.get("objective") == "multi:softprob":
         num_class = int(y.nunique())
@@ -131,13 +115,9 @@ def train(config: dict) -> None:
     # cross-platform binary format, directly loadable by onnxmltools for export.
     native_model_path = f"{model_dir}/model.ubj"
     logger.info("Saving XGBoost model to %s", native_model_path)
-    fd, tmp_path = tempfile.mkstemp(suffix=".ubj")
-    os.close(fd)
-    try:
+    with common.temporary_file(".ubj") as tmp_path:
         booster.save_model(tmp_path)
         common.copy_file(tmp_path, native_model_path)
-    finally:
-        os.remove(tmp_path)
 
     schema = {
         "feature_columns": feature_cols,
