@@ -470,7 +470,7 @@ SELECT `get`('rank_fun');
 SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
-Keys and values in the API request's `params` object are also execution variables. Values are strings; cast them explicitly when using them as numbers or Booleans.
+Keys and values in the API request's `params` object are also execution variables. Values are strings; use a typed default in the scalar function `get`, or cast them explicitly, when using them as numbers or Booleans.
 
 Reading an absent execution variable falls back to the same-named environment variable by default. Explicit empty strings do not trigger fallback. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable this behavior. Environment values are never written into the execution variable map.
 

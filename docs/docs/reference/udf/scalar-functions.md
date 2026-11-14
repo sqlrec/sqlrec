@@ -269,9 +269,11 @@ LIMIT 300;
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `key` | VARCHAR | 变量名 |
-| `defaultValue` | VARCHAR | 可选，变量不存在时返回的默认值 |
+| `defaultValue` | VARCHAR / INT / BIGINT / DOUBLE / BOOLEAN | 可选，变量不存在时返回的默认值，也决定返回类型 |
 
-**返回值**：返回变量的值（`VARCHAR`）。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `defaultValue`，未指定默认值时返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
+**返回值**：未指定默认值时返回 `VARCHAR`；提供默认值时，将变量字符串转换为默认值对应的类型。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `defaultValue`，未指定默认值时返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
+
+变量存在但无法转换为目标类型时直接报错，不使用默认值；整数溢出同样报错。布尔值只接受不区分大小写的 `true` 和 `false`。需要 `DOUBLE` 时显式转换默认值；本函数不提供 `DECIMAL` 重载。默认值为 `NULL` 时，使用 `CAST(NULL AS 类型)` 指定类型。
 
 ::: warning 注意
 由于 `get` 是 SQL 关键字，使用时需要用反引号包裹函数名，写作 `` `get` ``。
@@ -289,8 +291,13 @@ SELECT `get`('user_id') AS user_id;
 -- 在表达式中使用
 SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
 
--- 指定默认值
-SELECT `get`('limit_count', '50') AS limit_count;
+-- 默认值决定返回类型
+SELECT `get`('limit_count', 50) AS limit_count; -- INT
+SELECT `get`('timeout', CAST(1000 AS BIGINT)) AS timeout; -- BIGINT
+SELECT `get`('weight', CAST(0.5 AS DOUBLE)) AS weight; -- DOUBLE
+SELECT `get`('enabled', false) AS enabled; -- BOOLEAN
+SELECT `get`('name', 'anonymous') AS name; -- VARCHAR
+SELECT `get`('optional_count', CAST(NULL AS INT)) AS optional_count;
 
 -- 类型转换
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;

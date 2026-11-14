@@ -269,9 +269,11 @@ Variable retrieval function that gets the value of a variable from the execution
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `key` | VARCHAR | Variable name |
-| `defaultValue` | VARCHAR | Optional default value when the variable is absent |
+| `defaultValue` | VARCHAR / INT / BIGINT / DOUBLE / BOOLEAN | Optional default when the variable is absent; also determines the return type |
 
-**Return Value**: Returns the variable value (`VARCHAR`). An absent execution variable falls back to the same-named environment variable by default; returns `defaultValue` if neither exists, or `NULL` when the default is omitted. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
+**Return Value**: Returns `VARCHAR` when no default is provided. With a default, converts the variable string to the corresponding type. An absent execution variable falls back to the same-named environment variable by default; returns `defaultValue` if neither exists, or `NULL` when the default is omitted. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
+
+An existing value that cannot be converted raises an error instead of using the default; integer overflow also raises an error. Boolean values accept only case-insensitive `true` and `false`. Cast the default explicitly for `DOUBLE`; this function has no `DECIMAL` overload. For a `NULL` default, specify its type with `CAST(NULL AS type)`.
 
 ::: warning Note
 Since `get` is a SQL keyword, you need to wrap the function name with backticks when using it, written as `` `get` ``.
@@ -289,8 +291,13 @@ SELECT `get`('user_id') AS user_id;
 -- Use in expressions
 SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
 
--- Default value
-SELECT `get`('limit_count', '50') AS limit_count;
+-- The default determines the return type
+SELECT `get`('limit_count', 50) AS limit_count; -- INT
+SELECT `get`('timeout', CAST(1000 AS BIGINT)) AS timeout; -- BIGINT
+SELECT `get`('weight', CAST(0.5 AS DOUBLE)) AS weight; -- DOUBLE
+SELECT `get`('enabled', false) AS enabled; -- BOOLEAN
+SELECT `get`('name', 'anonymous') AS name; -- VARCHAR
+SELECT `get`('optional_count', CAST(NULL AS INT)) AS optional_count;
 
 -- Type conversion
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;

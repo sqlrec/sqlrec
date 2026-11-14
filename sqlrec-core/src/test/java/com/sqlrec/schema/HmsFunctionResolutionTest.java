@@ -21,13 +21,14 @@ class HmsFunctionResolutionTest {
     @Test
     void hmsRegistersAllOverloadsWithoutDuplicatingBuiltin() throws Exception {
         CalciteSchema root = schema("get", GetFunction.class.getName());
-        assertEquals(2, root.getSubSchema("default", false).getFunctions("get", false).size());
+        assertEquals(6, root.getSubSchema("default", false).getFunctions("get", false).size());
         ExecuteContextImpl context = new ExecuteContextImpl(root);
         context.setVariable("present", "value");
-        String sql = "SELECT `get`('present'), `get`('missing', 'fallback')";
+        context.setVariable("number", "123");
+        String sql = "SELECT `get`('present'), `get`('missing', 'fallback'), `get`('number', 0)";
         List<Object[]> rows = NormalSqlCompiler.getNormalSqlBindable(sql, root, "default")
                 .bind(root, context).toList();
-        assertArrayEquals(new Object[]{"value", "fallback"}, rows.get(0));
+        assertArrayEquals(new Object[]{"value", "fallback", 123}, rows.get(0));
     }
 
     @Test

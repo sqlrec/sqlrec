@@ -48,6 +48,6 @@ public class GetFunctionTest {
 
     @Test
     public void testNullDefaultValue() {
-        assertNull(GetFunction.evaluate(dataContext, "nonexistent", null));
+        assertNull(GetFunction.evaluate(dataContext, "nonexistent", (String) null));
     }
 }
