@@ -382,7 +382,7 @@ The ASSERT statement executes the specified SELECT query and validates the resul
 
 **Notes:**
 - The ASSERT operator does not support parallel execution
-- On assertion failure, a `RuntimeException` is thrown containing the specific row and column index of the failure
+- On assertion failure, a `RuntimeException` is thrown containing the row index, column name and column index of the failure
 
 **Examples:**
 
@@ -392,6 +392,12 @@ ASSERT SELECT COUNT(*) > 0 FROM source_table;
 ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
 
 ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
+```
+
+Use aliases to name assertions. Failure messages include the column alias and its index:
+
+```sql
+ASSERT SELECT COUNT(*) > 0 AS has_candidates FROM items;
 ```
 
 ### RETURN

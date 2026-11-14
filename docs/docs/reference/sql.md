@@ -382,7 +382,7 @@ ASSERT 语句执行指定的 SELECT 查询，并对返回结果进行断言校�
 
 **注意：**
 - ASSERT 算子不支持并发执行
-- 断言失败时会抛出 `RuntimeException`，包含失败的具体行号和列号信息
+- 断言失败时会抛出 `RuntimeException`，包含失败的具体行号、列名和列号信息
 
 **示例：**
 
@@ -392,6 +392,12 @@ ASSERT SELECT COUNT(*) > 0 FROM source_table;
 ASSERT SELECT COUNT(*) > 100 FROM source_table WHERE status = 'active';
 
 ASSERT SELECT COUNT(*) > 0, COUNT(*) >= 10 FROM source_table;
+```
+
+可以使用列别名标识断言。失败信息会包含对应列名和位置，便于定位：
+
+```sql
+ASSERT SELECT COUNT(*) > 0 AS has_candidates FROM items;
 ```
 
 ### RETURN

@@ -39,7 +39,7 @@ public class RuleDiversityTest {
                     {3, 1, 1, "category", "A", "=", 0, weight}
             });
 
-            List<Object[]> result = collectRows(greedy.evaluate(target, rules, "3"));
+            List<Object[]> result = collectRows(greedy.evaluate(target, rules, 3));
 
             assertEquals(3, result.size());
             for (int i = 0; i < result.size(); i++) {
@@ -55,7 +55,7 @@ public class RuleDiversityTest {
                 {6, 1, 1, "category", "A", ">", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "10");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 10);
         List<Object[]> result = collectRows(output);
         assertEquals(0, result.size());
     }
@@ -69,7 +69,7 @@ public class RuleDiversityTest {
         });
         CacheTable ruleTable = createRuleTable(new Object[][]{});
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "10");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 10);
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
         // Without rules, greedy preserves original order
@@ -89,7 +89,7 @@ public class RuleDiversityTest {
         });
         CacheTable ruleTable = createRuleTable(new Object[][]{});
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "3");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 3);
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
     }
@@ -102,7 +102,7 @@ public class RuleDiversityTest {
         });
         CacheTable ruleTable = createRuleTable(new Object[][]{});
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "100");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 100);
         List<Object[]> result = collectRows(output);
         assertEquals(2, result.size());
     }
@@ -117,7 +117,7 @@ public class RuleDiversityTest {
 
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
-                () -> greedy.evaluate(targetTable, ruleTable, "1"));
+                () -> greedy.evaluate(targetTable, ruleTable, 1));
 
         assertEquals("rule table missing column: diversity_value", error.getMessage());
     }
@@ -136,7 +136,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "A", "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -162,7 +162,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "A", ">", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -187,7 +187,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "A", "=", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "6");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 6);
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
 
@@ -209,7 +209,7 @@ public class RuleDiversityTest {
                 {4, 1, 3, "category", "A", "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "10");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 10);
         List<Object[]> result = collectRows(output);
         assertEquals(10, result.size());
 
@@ -238,7 +238,7 @@ public class RuleDiversityTest {
                 {6, 1, 1, "category", null, "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "9");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 9);
         List<Object[]> result = collectRows(output);
         assertEquals(9, result.size());
 
@@ -267,7 +267,7 @@ public class RuleDiversityTest {
                 {6, 1, 1, "category", null, "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -296,7 +296,7 @@ public class RuleDiversityTest {
                 {3, 1, 1, "category", "A", "unknown_op", 1, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "3");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 3);
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
         // Unknown op skipped, greedy preserves original order
@@ -317,7 +317,7 @@ public class RuleDiversityTest {
                 {6, 1, 1, "category", "A", "gt", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -342,7 +342,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "B", ">", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -374,7 +374,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "A", "<", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -406,7 +406,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", null, "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "6");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 6);
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
 
@@ -436,7 +436,7 @@ public class RuleDiversityTest {
                 {3, 1, 1, "category", "A", "<", 2, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "6");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 6);
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
 
@@ -462,7 +462,7 @@ public class RuleDiversityTest {
                 {4, 1, 1, "category", "B", "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "12");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 12);
         List<Object[]> result = collectRows(output);
         assertEquals(12, result.size());
 
@@ -492,7 +492,7 @@ public class RuleDiversityTest {
                 {4, 3, 1, "category", "A", "<", 3, 1.0}
         });
 
-        CacheTable output = greedy.evaluate(targetTable, ruleTable, "8");
+        CacheTable output = greedy.evaluate(targetTable, ruleTable, 8);
         List<Object[]> result = collectRows(output);
         assertEquals(8, result.size());
 
@@ -558,14 +558,14 @@ public class RuleDiversityTest {
 
             // Warmup
             for (int r = 0; r < warmupRuns; r++) {
-                greedy.evaluate(targetTable, ruleTable, String.valueOf(maxReturn));
+                greedy.evaluate(targetTable, ruleTable, maxReturn);
             }
 
             // Measure
             long[] times = new long[measureRuns];
             for (int r = 0; r < measureRuns; r++) {
                 long start = System.nanoTime();
-                CacheTable output = greedy.evaluate(targetTable, ruleTable, String.valueOf(maxReturn));
+                CacheTable output = greedy.evaluate(targetTable, ruleTable, maxReturn);
                 times[r] = System.nanoTime() - start;
 
                 if (r == 0) {

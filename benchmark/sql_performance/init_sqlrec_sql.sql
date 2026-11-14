@@ -200,7 +200,7 @@ define input table rec_item(
   rec_reason string
 );
 
-cache table diversify_rec_item as call window_diversify(rec_item, 'genres', '3', '1', '10');
+cache table diversify_rec_item as call window_diversify(rec_item, 'genres', 3, 1, 10);
 
 return diversify_rec_item;
 

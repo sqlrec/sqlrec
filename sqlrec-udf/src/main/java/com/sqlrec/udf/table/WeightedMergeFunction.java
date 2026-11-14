@@ -13,17 +13,19 @@ import java.util.List;
 
 public class WeightedMergeFunction implements UnionLikeTableFunction {
 
-    public CacheTable evaluate(String primaryKey, String weights, String limit, CacheTable... tables) {
+    public CacheTable evaluate(String primaryKey, String weights, Integer limit, CacheTable... tables) {
         checkArguments(weights, limit, tables);
         List<RelDataTypeField> fields = checkSchemas(tables);
         boolean dedupEnabled = StringUtils.isNotEmpty(primaryKey);
         int primaryKeyIndex = resolvePrimaryKeyIndex(primaryKey, fields);
-        int limitNum = parseLimit(limit);
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be positive, got: " + limit);
+        }
         int[] weightArray = parseWeights(weights, tables.length);
 
         List<Object[]> merged = MergeUtils.weightedMerge(
                 weightArray,
-                limitNum,
+                limit,
                 dedupEnabled
                         ? row -> row[primaryKeyIndex]
                         : null,
@@ -32,15 +34,15 @@ public class WeightedMergeFunction implements UnionLikeTableFunction {
         return new CacheTable("weighted_merge_output", Linq4j.asEnumerable(merged), fields);
     }
 
-    private static void checkArguments(String weights, String limit, CacheTable[] tables) {
+    private static void checkArguments(String weights, Integer limit, CacheTable[] tables) {
         if (tables == null || tables.length == 0) {
             throw new IllegalArgumentException("At least one table is required");
         }
         if (weights == null || weights.isEmpty()) {
             throw new IllegalArgumentException("weights cannot be null or empty");
         }
-        if (limit == null || limit.isEmpty()) {
-            throw new IllegalArgumentException("limit cannot be null or empty");
+        if (limit == null) {
+            throw new IllegalArgumentException("limit cannot be null");
         }
     }
 
@@ -61,18 +63,6 @@ public class WeightedMergeFunction implements UnionLikeTableFunction {
             throw new IllegalArgumentException("primaryKey field not found: " + primaryKey);
         }
         return index;
-    }
-
-    private static int parseLimit(String limit) {
-        try {
-            int limitNum = Integer.parseInt(limit.trim());
-            if (limitNum <= 0) {
-                throw new IllegalArgumentException("limit must be positive, got: " + limitNum);
-            }
-            return limitNum;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid limit: " + limit);
-        }
     }
 
     private static int[] parseWeights(String weights, int tableCount) {

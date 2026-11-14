@@ -110,7 +110,7 @@ Built-in Java table functions such as `dedup`, `weighted_merge`, and `window_div
 
 ```sql
 CACHE TABLE final_result AS
-CALL window_diversify(ranked_item, 'category', '3', '1', '10');
+CALL window_diversify(ranked_item, 'category', 3, 1, 10);
 ```
 
 Pass a cached table name directly and quote string arguments. See [Table Functions](../reference/udf/table-functions.md) for the complete list.

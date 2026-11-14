@@ -102,7 +102,7 @@ public class ExceptionIgnoreTest {
                 "define input table input1(id int)",
                 "cache table healthy as select * from input1",
                 "cache table failed as call test_fun(input1)",
-                "cache table merged as call weighted_merge('', '1,1', '10', healthy, failed)",
+                "cache table merged as call weighted_merge('', '1,1', 10, healthy, failed)",
                 "return merged"
         );
         new CompileManager().compileSqlFunction("sql_fun8", sqlFun8);

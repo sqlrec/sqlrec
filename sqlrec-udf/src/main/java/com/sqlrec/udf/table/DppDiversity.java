@@ -32,15 +32,16 @@ public final class DppDiversity {
             CacheTable input,
             String embeddingColumnName,
             String scoreColumnName,
-            String theta,
-            String maxLength
+            Double theta,
+            Integer maxLength
     ) {
-        double thetaVal = Double.parseDouble(theta);
-        int maxLengthVal = Integer.parseInt(maxLength);
-        if (!Double.isFinite(thetaVal) || thetaVal < 0 || thetaVal >= 1) {
+        if (theta == null || maxLength == null) {
+            throw new IllegalArgumentException("theta and maxLength cannot be null");
+        }
+        if (!Double.isFinite(theta) || theta < 0 || theta >= 1) {
             throw new IllegalArgumentException("theta must be in [0, 1), got: " + theta);
         }
-        if (maxLengthVal <= 0) {
+        if (maxLength <= 0) {
             throw new IllegalArgumentException("maxLength must be positive, got: " + maxLength);
         }
 
@@ -70,7 +71,7 @@ public final class DppDiversity {
 
         // Clip negative scores and apply exponential transform: exp(alpha * r)
         // where alpha = theta / (2 * (1 - theta)), theta in [0, 1)
-        double[] scores = expTransform(rawScores, thetaVal);
+        double[] scores = expTransform(rawScores, theta);
 
         // Build kernel matrix: L = Diag(scores) * S * Diag(scores)
         // where S[i][j] = (1 + dot(embeddings[i], embeddings[j])) / 2
@@ -78,7 +79,7 @@ public final class DppDiversity {
         double[][] kernelData = buildKernelMatrix(embeddings, scores, itemSize);
 
         // Run DPP greedy MAP inference
-        List<Integer> selectedIndices = dppGreedyMap(kernelData, maxLengthVal, itemSize);
+        List<Integer> selectedIndices = dppGreedyMap(kernelData, maxLength, itemSize);
 
         // Build result
         List<Object[]> resultRows = new ArrayList<>();

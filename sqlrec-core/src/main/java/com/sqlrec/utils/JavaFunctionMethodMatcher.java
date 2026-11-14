@@ -16,13 +16,15 @@ import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
+import java.util.stream.Collectors;
 
 /** Selects an evaluate overload from the static types of SQLRec CALL arguments. */
 public final class JavaFunctionMethodMatcher {
     private JavaFunctionMethodMatcher() {
     }
 
-    public static Method selectEvalMethod(Class<?> functionClass, List<SqlNode> inputs) {
+    public static Method selectEvalMethod(String functionName, Class<?> functionClass, List<SqlNode> inputs) {
         List<Method> evalMethods = getEvalMethods(functionClass);
         List<Method> matchedMethods = new ArrayList<>();
 
@@ -39,8 +41,13 @@ public final class JavaFunctionMethodMatcher {
         }
 
         if (matchedMethods.size() != 1) {
-            int inputCount = inputs != null ? inputs.size() : 0;
-            throw new RuntimeException("found " + matchedMethods.size() + " evaluate method(s) for " + inputCount + " parameters, expected exactly 1");
+            StringJoiner actual = new StringJoiner(", ", functionName + "(", ")");
+            if (inputs != null) inputs.forEach(input -> actual.add(typeName(inputType(input))));
+            List<Method> candidates = matchedMethods.isEmpty() ? evalMethods : matchedMethods;
+            String signatures = candidates.stream().map(method -> signature(functionName, method))
+                    .sorted().collect(Collectors.joining(", "));
+            throw new IllegalArgumentException((matchedMethods.isEmpty() ? "No matching overload for " : "Ambiguous overload for ")
+                    + actual + "; candidates: " + (signatures.isEmpty() ? "none" : signatures));
         }
 
         return matchedMethods.get(0);
@@ -72,21 +79,45 @@ public final class JavaFunctionMethodMatcher {
         if (paramType == CacheTable.class) {
             return input instanceof SqlIdentifier ? 0 : -1;
         }
-        Class<?> inputType;
-        if (input instanceof SqlGetVariable variable) {
-            inputType = variable.hasDefaultValue()
-                    ? literalType((SqlLiteral) variable.getDefaultValue()) : String.class;
-        } else if (input instanceof SqlLiteral literal) {
-            inputType = literalType(literal);
-        } else {
-            return -1;
-        }
+        Class<?> inputType = inputType(input);
         Class<?> target = Primitives.wrap(paramType);
         if (target == inputType) return 0;
         // Only widen numeric arguments; strings are never implicitly parsed during overload selection.
         if (inputType == Integer.class && target == Long.class) return 1;
         if ((inputType == Integer.class || inputType == Long.class) && target == Double.class) return 2;
         return -1;
+    }
+
+    private static Class<?> inputType(SqlNode input) {
+        if (input instanceof SqlIdentifier) return CacheTable.class;
+        if (input instanceof SqlGetVariable variable) {
+            return variable.hasDefaultValue()
+                    ? literalType((SqlLiteral) variable.getDefaultValue()) : String.class;
+        }
+        return input instanceof SqlLiteral literal ? literalType(literal) : Void.class;
+    }
+
+    private static String signature(String functionName, Method method) {
+        StringJoiner signature = new StringJoiner(", ", functionName + "(", ")");
+        Class<?>[] parameters = method.getParameterTypes();
+        for (int i = 0; i < parameters.length; i++) {
+            Class<?> type = parameters[i];
+            if (type == ExecuteContext.class || type == ReadonlyContext.class) continue;
+            boolean varArg = method.isVarArgs() && i == parameters.length - 1;
+            signature.add(varArg ? typeName(type.getComponentType()) + "..." : typeName(type));
+        }
+        return signature.toString();
+    }
+
+    private static String typeName(Class<?> type) {
+        Class<?> boxed = Primitives.wrap(type);
+        if (boxed == Integer.class) return "INT";
+        if (boxed == Long.class) return "BIGINT";
+        if (boxed == Double.class) return "DOUBLE";
+        if (boxed == Boolean.class) return "BOOLEAN";
+        if (boxed == String.class) return "VARCHAR";
+        if (boxed == CacheTable.class) return "TABLE";
+        return boxed == Void.class ? "UNKNOWN" : boxed.getSimpleName();
     }
 
     private static Class<?> literalType(SqlLiteral literal) {
@@ -111,9 +142,6 @@ public final class JavaFunctionMethodMatcher {
             if (method.getName().equals("evaluate") && !method.isBridge() && Modifier.isPublic(method.getModifiers())) {
                 evalMethods.add(method);
             }
-        }
-        if (evalMethods.isEmpty()) {
-            throw new RuntimeException("table function must have at least one evaluate method");
         }
         return evalMethods;
     }

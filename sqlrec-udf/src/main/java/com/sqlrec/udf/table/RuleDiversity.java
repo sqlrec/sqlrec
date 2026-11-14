@@ -70,10 +70,13 @@ public final class RuleDiversity {
     public CacheTable evaluate(
             CacheTable targetTable,
             CacheTable ruleTable,
-            String maxReturn
+            Integer maxReturn
     ) {
+        if (maxReturn == null) {
+            throw new IllegalArgumentException("maxReturn cannot be null");
+        }
         List<Object[]> targetRows = RowTransformUtils.materializeRows(targetTable);
-        int limit = Math.min(Integer.parseInt(maxReturn), targetRows.size());
+        int limit = Math.min(maxReturn, targetRows.size());
         if (limit <= 0) {
             return resultTable(targetTable, Collections.emptyList());
         }

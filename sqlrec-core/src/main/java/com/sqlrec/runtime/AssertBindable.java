@@ -52,16 +52,17 @@ public class AssertBindable extends BindableInterface {
             Object[] row = rows.get(i);
             for (int j = 0; j < row.length; j++) {
                 Object value = row[j];
+                String column = "column '" + selectBindable.getReturnDataFields().get(j).getName() + "' (index " + j + ")";
                 if (value == null) {
-                    throw new RuntimeException("assert failed: row " + i + " column " + j
+                    throw new RuntimeException("assert failed: row " + i + " " + column
                             + " returned null");
                 }
                 if (!(value instanceof Boolean)) {
-                    throw new RuntimeException("assert failed: row " + i + " column " + j
+                    throw new RuntimeException("assert failed: row " + i + " " + column
                             + " returned non-boolean value: " + value);
                 }
                 if (!(Boolean) value) {
-                    throw new RuntimeException("assert failed: row " + i + " column " + j
+                    throw new RuntimeException("assert failed: row " + i + " " + column
                             + " returned false");
                 }
             }

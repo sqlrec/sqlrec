@@ -13,17 +13,19 @@ SQLRec table functions are called with `CALL`. They accept one or more cached ta
 | Variables and observability | [`get_variables`](#get-variables), [`set_variables`](#set-variables), [`feature_coverage_metrics`](#feature-coverage-metrics) |
 | Testing utility | [`sleep`](#sleep) |
 
+Column-name arguments are case-insensitive. Numeric parameters use numeric literals or typed `GET` defaults, for example `GET('limit', 100)`.
+
 ### dedup
 
-Deduplication function that excludes records from the input table that already exist in the deduplication table based on specified columns.
+`dedup(input, column)` keeps the first row per key in input order. Null keys form one group. `dedup(input, dedupTable, col1 [, col2])` excludes keys found in another table and retains repeated input keys.
 
 **Parameters**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `input` | CacheTable | Input table |
-| `dedupTable` | CacheTable | Deduplication table, containing values to exclude |
-| `col1` | String | Column name in input table for deduplication |
+| `dedupTable` | CacheTable | Used only for cross-table exclusion; contains keys to exclude |
+| `col1` | String | Input key column for deduplication or exclusion |
 | `col2` | String | Optional column name in deduplication table; defaults to `col1` |
 
 **Return Value**: Returns deduplicated `CacheTable` with same structure as input table.
@@ -31,6 +33,9 @@ Deduplication function that excludes records from the input table that already e
 **Usage Example**:
 
 ```sql
+-- Keep the first row per item_id
+CACHE TABLE unique_items AS CALL dedup(recall_item, 'item_id');
+
 -- Get items already exposed to user
 CACHE TABLE exposured_item AS
 SELECT item_id
@@ -79,9 +84,9 @@ Window diversification function that ensures adjacent records don't concentrate 
 |-----------|------|-------------|
 | `input` | CacheTable | Input table |
 | `categoryColumnName` | String | Category column name, basis for diversification |
-| `windowSize` | String | Sliding window size |
-| `maxCategoryNumInWindow` | String | Maximum occurrences per category in window |
-| `maxReturnRecord` | String | Maximum return record count |
+| `windowSize` | INT | Sliding window size |
+| `maxCategoryNumInWindow` | INT | Maximum occurrences per category in window |
+| `maxReturnRecord` | INT | Maximum return record count |
 
 **Return Value**: Returns diversified `CacheTable` with same structure as input table.
 
@@ -90,7 +95,7 @@ Window diversification function that ensures adjacent records don't concentrate 
 ```sql
 -- Category diversification: window size 3, each category appears at most once in window, return 10 records
 CACHE TABLE diversify_result AS
-CALL window_diversify(rec_item, 'category1', '3', '1', '10');
+CALL window_diversify(rec_item, 'category1', 3, 1, 10);
 ```
 
 ---
@@ -263,8 +268,8 @@ DPP (Determinantal Point Process) diversification combines item embeddings and r
 | `input` | CacheTable | Input table |
 | `embeddingColumnName` | String | Embedding column name, used to compute item similarity |
 | `scoreColumnName` | String | Relevance score column name, used to measure item quality |
-| `theta` | String | Relevance-diversity trade-off parameter, range [0, 1). Closer to 1 favors relevance, closer to 0 favors diversity |
-| `maxLength` | String | Maximum number of records to return |
+| `theta` | DOUBLE | Relevance-diversity trade-off parameter, range [0, 1). Closer to 1 favors relevance, closer to 0 favors diversity |
+| `maxLength` | INT | Maximum number of records to return |
 
 **Return Value**: Returns diversified `CacheTable` with same structure as input table.
 
@@ -273,7 +278,7 @@ DPP (Determinantal Point Process) diversification combines item embeddings and r
 ```sql
 -- DPP diversity: theta=0.5 balances relevance and diversity, return 20 records
 CACHE TABLE dpp_result AS
-CALL dpp_diversity(rec_item, 'item_embedding', 'score', '0.5', '20');
+CALL dpp_diversity(rec_item, 'item_embedding', 'score', 0.5, 20);
 ```
 
 **Notes**:
@@ -294,7 +299,7 @@ Reorders recommendation results with user-defined window rules. Use it to constr
 |-----------|------|-------------|
 | `targetTable` | CacheTable | Target table to be diversified |
 | `ruleTable` | CacheTable | Rule table defining diversity constraints |
-| `maxReturn` | String | Maximum number of records to return |
+| `maxReturn` | INT | Maximum number of records to return |
 
 **Rule Table Fields**:
 
@@ -331,7 +336,7 @@ SELECT
 
 -- Rule-based diversification, return 20 records
 CACHE TABLE rule_diversify_result AS
-CALL rule_diversity(rec_item, diversity_rules, '20');
+CALL rule_diversity(rec_item, diversity_rules, 20);
 ```
 
 **Notes**:
@@ -417,7 +422,7 @@ Weighted merge function that merges multiple tables into one based on specified 
 |-----------|------|-------------|
 | `primaryKey` | String | Primary key column name for deduplication |
 | `weights` | String | Weights for each table, comma-separated, e.g. `"2,1,1"` |
-| `limit` | String | Maximum number of records to return |
+| `limit` | INT | Maximum number of records to return |
 | `tables` | CacheTable... | One or more input tables; all must have the same schema |
 
 **Return Value**: Returns merged `CacheTable` with same structure as input tables.
@@ -427,11 +432,11 @@ Weighted merge function that merges multiple tables into one based on specified 
 ```sql
 -- Merge three recall channels with weights 2:1:1, return 100 records
 CACHE TABLE merged_recall AS
-CALL weighted_merge('item_id', '2,1,1', '100', recall_channel_a, recall_channel_b, recall_channel_c);
+CALL weighted_merge('item_id', '2,1,1', 100, recall_channel_a, recall_channel_b, recall_channel_c);
 
 -- Merge two recall channels with weights 3:2, return 50 records
 CACHE TABLE merged_result AS
-CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
+CALL weighted_merge('item_id', '3,2', 50, recall_a, recall_b);
 ```
 
 **Notes**:

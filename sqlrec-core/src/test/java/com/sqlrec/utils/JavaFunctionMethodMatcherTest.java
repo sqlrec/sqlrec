@@ -54,7 +54,7 @@ class JavaFunctionMethodMatcherTest {
         for (SqlNode input : List.of(number("2147483648"), number("0.5"), text("1"),
                 SqlLiteral.createBoolean(true, POS))) {
             assertThrows(RuntimeException.class,
-                    () -> JavaFunctionMethodMatcher.selectEvalMethod(IntOnly.class, List.of(input)));
+                    () -> select(IntOnly.class, List.of(input)));
         }
     }
 
@@ -63,7 +63,7 @@ class JavaFunctionMethodMatcherTest {
         assertMatch(TableAndString.class, List.of(new SqlIdentifier("items", POS)), CacheTable.class);
         assertMatch(TableAndString.class, List.of(text("items")), String.class);
         assertThrows(RuntimeException.class,
-                () -> JavaFunctionMethodMatcher.selectEvalMethod(TableAndString.class, List.of(number("1"))));
+                () -> select(TableAndString.class, List.of(number("1"))));
     }
 
     @Test
@@ -94,9 +94,9 @@ class JavaFunctionMethodMatcherTest {
         assertMatch(NumericVarargs.class, List.of(text("prefix"), number("1"), number("0.5")),
                 ReadonlyContext.class, String.class, double[].class);
         assertThrows(RuntimeException.class,
-                () -> JavaFunctionMethodMatcher.selectEvalMethod(NumericVarargs.class, List.of()));
+                () -> select(NumericVarargs.class, List.of()));
         assertThrows(RuntimeException.class,
-                () -> JavaFunctionMethodMatcher.selectEvalMethod(NumericVarargs.class,
+                () -> select(NumericVarargs.class,
                         List.of(text("prefix"), number("1"), text("invalid"))));
         assertMatch(TableVarargs.class, List.of(new SqlIdentifier("a", POS), new SqlIdentifier("b", POS)),
                 CacheTable[].class);
@@ -106,25 +106,39 @@ class JavaFunctionMethodMatcherTest {
     void rejectsWrongArgumentCountsAndMissingEvaluateMethods() {
         for (List<SqlNode> inputs : List.of(List.<SqlNode>of(), List.<SqlNode>of(number("1"), number("2")))) {
             RuntimeException error = assertThrows(RuntimeException.class,
-                    () -> JavaFunctionMethodMatcher.selectEvalMethod(IntOnly.class, inputs));
-            assertTrue(error.getMessage().contains("found 0 evaluate method(s)"));
+                    () -> select(IntOnly.class, inputs));
+            assertTrue(error.getMessage().contains("No matching overload for test_function("));
         }
         RuntimeException error = assertThrows(RuntimeException.class,
-                () -> JavaFunctionMethodMatcher.selectEvalMethod(NoPublicEvaluate.class, List.of(text("value"))));
-        assertTrue(error.getMessage().contains("at least one evaluate method"));
+                () -> select(NoPublicEvaluate.class, List.of(text("value"))));
+        assertTrue(error.getMessage().contains("candidates: none"));
+    }
+
+    @Test
+    void mismatchErrorsShowSqlFunctionNameAndArgumentTypes() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> JavaFunctionMethodMatcher.selectEvalMethod("limit_items", IntOnly.class, List.of(text("value"))));
+        assertEquals("No matching overload for limit_items(VARCHAR); candidates: limit_items(INT)", error.getMessage());
+    }
+
+    @Test
+    void signaturesHideInjectedContextsAndDescribeVarargs() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> JavaFunctionMethodMatcher.selectEvalMethod("batch", NumericVarargs.class, List.of(number("1"))));
+        assertEquals("No matching overload for batch(INT); candidates: batch(VARCHAR, DOUBLE...)", error.getMessage());
     }
 
     @Test
     void rejectsEquallyGoodOverloadsInsteadOfDependingOnReflectionOrder() {
         RuntimeException error = assertThrows(RuntimeException.class,
-                () -> JavaFunctionMethodMatcher.selectEvalMethod(AmbiguousOverloads.class, List.of(text("value"))));
-        assertTrue(error.getMessage().contains("found 2 evaluate method(s)"));
+                () -> select(AmbiguousOverloads.class, List.of(text("value"))));
+        assertTrue(error.getMessage().contains("Ambiguous overload for test_function(VARCHAR)"));
     }
 
     @Test
     void supportsInheritedMethodsAndIgnoresBridgeMethods() throws Exception {
         assertMatch(InheritedFunction.class, List.of(number("1")), int.class);
-        var method = JavaFunctionMethodMatcher.selectEvalMethod(StringResult.class, List.of(text("value")));
+        var method = select(StringResult.class, List.of(text("value")));
         assertFalse(method.isBridge());
         assertEquals(String.class, method.getReturnType());
     }
@@ -134,9 +148,13 @@ class JavaFunctionMethodMatcherTest {
         assertMatch(ClassOnlyFunction.class, List.of(number("1")), int.class);
     }
 
+    private static java.lang.reflect.Method select(Class<?> functionClass, List<SqlNode> inputs) {
+        return JavaFunctionMethodMatcher.selectEvalMethod("test_function", functionClass, inputs);
+    }
+
     private static void assertMatch(Class<?> functionClass, List<SqlNode> inputs, Class<?>... parameters) throws Exception {
         assertEquals(functionClass.getMethod("evaluate", parameters),
-                JavaFunctionMethodMatcher.selectEvalMethod(functionClass, inputs));
+                select(functionClass, inputs));
     }
 
     private static SqlLiteral number(String value) {

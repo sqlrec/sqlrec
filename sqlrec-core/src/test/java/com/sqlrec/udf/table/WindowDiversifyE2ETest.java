@@ -51,7 +51,7 @@ public class WindowDiversifyE2ETest {
                         )
                 ),
                 new SqlTestCase(
-                        "cache table t2 as call window_diversify(t1, 'varchar_type', '2', '1', '10')",
+                        "cache table t2 as call window_diversify(t1, 'varchar_type', 2, 1, 10)",
                         Arrays.<Object[]>asList(
                                 new Object[]{"t2", 3L}
                         )
@@ -65,7 +65,7 @@ public class WindowDiversifyE2ETest {
                         )
                 ),
                 new SqlTestCase(
-                        "cache table t3 as call window_diversify(t1, 'array_varchar_type', '2', '1', '10')",
+                        "cache table t3 as call window_diversify(t1, 'array_varchar_type', 2, 1, 10)",
                         Arrays.<Object[]>asList(
                                 new Object[]{"t3", 3L}
                         )
@@ -79,7 +79,7 @@ public class WindowDiversifyE2ETest {
                         )
                 ),
                 new SqlTestCase(
-                        "cache table t4 as call window_diversify(t1, 'array_varchar_type', '3', '1', '10')",
+                        "cache table t4 as call window_diversify(t1, 'array_varchar_type', 3, 1, 10)",
                         Arrays.<Object[]>asList(
                                 new Object[]{"t4", 3L}
                         )

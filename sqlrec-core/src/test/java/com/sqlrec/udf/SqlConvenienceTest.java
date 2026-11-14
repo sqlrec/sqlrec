@@ -91,6 +91,27 @@ class SqlConvenienceTest {
     }
 
     @Test
+    void selfDedupRunsThroughCallAndPreservesInputOrder() throws Exception {
+        root.add("duplicates", new CacheTable("duplicates", Linq4j.asEnumerable(
+                List.of(new Object[]{2}, new Object[]{1}, new Object[]{2}, new Object[]{3})),
+                List.of(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER))));
+        var rows = execute("CALL dedup(duplicates, 'ID')");
+        assertEquals(List.of(2, 1, 3), rows.stream().map(row -> row[0]).toList());
+    }
+
+    @Test
+    void mergeAndRuleFunctionsAcceptNumericLimits() throws Exception {
+        context.setVariable("merge_limit", "2");
+        var rows = execute("CALL weighted_merge('ID', '1,1', GET('merge_limit', 3), items, excluded)");
+        assertEquals(List.of(1, 2), rows.stream().map(row -> row[0]).toList());
+        execute("CACHE TABLE rules AS SELECT 3 AS window_size, 1 AS window_start, 1 AS window_num, "
+                + "'id' AS diversity_column, CAST(NULL AS VARCHAR) AS diversity_value, "
+                + "'<' AS op, 1 AS diversity_num, 1.0 AS weight LIMIT 0");
+        rows = execute("CALL rule_diversity(items, rules, 2)");
+        assertEquals(List.of(1, 2), rows.stream().map(row -> row[0]).toList());
+    }
+
+    @Test
     void tableFunctionShorthandsExecuteThroughCall() throws Exception {
         for (String sql : List.of("CALL truncate_table(items, 2)", "CALL truncate_table(items, 0, 2)")) {
             var rows = execute(sql);

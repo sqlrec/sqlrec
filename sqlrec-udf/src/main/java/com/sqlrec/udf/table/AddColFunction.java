@@ -18,10 +18,8 @@ public class AddColFunction {
         }
 
         List<RelDataTypeField> dataFields = input.getDataFields();
-        for (RelDataTypeField field : dataFields) {
-            if (field.getName().equalsIgnoreCase(colName)) {
-                throw new IllegalArgumentException("col name already exists");
-            }
+        if (DataTypeUtils.findFieldIndex(dataFields, colName) != -1) {
+            throw new IllegalArgumentException("col name already exists");
         }
 
         List<RelDataTypeField> newDataFields = new ArrayList<>(dataFields);

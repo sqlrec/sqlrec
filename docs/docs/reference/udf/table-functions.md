@@ -13,17 +13,19 @@ SQLRec 表函数通过 `CALL` 调用，以一张或多张缓存表为输入，�
 | 变量与可观测性 | [`get_variables`](#get-variables)、[`set_variables`](#set-variables)、[`feature_coverage_metrics`](#feature-coverage-metrics) |
 | 测试辅助 | [`sleep`](#sleep) |
 
+列名参数不区分大小写。数值参数直接使用数字字面量，或通过带类型默认值的 `GET` 传入，例如 `GET('limit', 100)`。
+
 ### dedup
 
-去重函数，根据指定列从输入表中排除已存在于去重表中的记录。
+`dedup(input, column)` 按键保留首次出现的记录，并保持输入顺序；NULL 键视为同一组。`dedup(input, dedupTable, col1 [, col2])` 排除另一张表中已存在的键，保留输入表内重复的键。
 
 **参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `input` | CacheTable | 输入表 |
-| `dedupTable` | CacheTable | 去重表，包含需要排除的值 |
-| `col1` | String | 输入表中用于去重的列名 |
+| `dedupTable` | CacheTable | 仅跨表排除时传入，包含需要排除的键 |
+| `col1` | String | 输入表中用于去重或匹配的键列名 |
 | `col2` | String | 可选，去重表中用于匹配的列名，默认为 `col1` |
 
 **返回值**：返回去重后的 `CacheTable`，结构与输入表相同。
@@ -31,6 +33,9 @@ SQLRec 表函数通过 `CALL` 调用，以一张或多张缓存表为输入，�
 **使用示例**：
 
 ```sql
+-- 每个 item_id 保留首次出现的记录
+CACHE TABLE unique_items AS CALL dedup(recall_item, 'item_id');
+
 -- 获取用户已曝光的物品
 CACHE TABLE exposured_item AS
 SELECT item_id
@@ -79,9 +84,9 @@ SELECT * FROM shuffled_result LIMIT 10;
 |------|------|------|
 | `input` | CacheTable | 输入表 |
 | `categoryColumnName` | String | 类目列名，用于打散的依据 |
-| `windowSize` | String | 滑动窗口大小 |
-| `maxCategoryNumInWindow` | String | 窗口内每个类目最多出现的次数 |
-| `maxReturnRecord` | String | 最大返回记录数 |
+| `windowSize` | INT | 滑动窗口大小 |
+| `maxCategoryNumInWindow` | INT | 窗口内每个类目最多出现的次数 |
+| `maxReturnRecord` | INT | 最大返回记录数 |
 
 **返回值**：返回打散后的 `CacheTable`，结构与输入表相同。
 
@@ -90,7 +95,7 @@ SELECT * FROM shuffled_result LIMIT 10;
 ```sql
 -- 类目打散：窗口大小为 3，每个类目在窗口内最多出现 1 次，返回 10 条
 CACHE TABLE diversify_result AS
-CALL window_diversify(rec_item, 'category1', '3', '1', '10');
+CALL window_diversify(rec_item, 'category1', 3, 1, 10);
 ```
 
 ---
@@ -263,8 +268,8 @@ DPP（Determinantal Point Process）多样性函数，结合物品向量和相�
 | `input` | CacheTable | 输入表 |
 | `embeddingColumnName` | String | 向量列名，用于计算物品间的相似度 |
 | `scoreColumnName` | String | 相关性得分列名，用于衡量物品质量 |
-| `theta` | String | 相关性-多样性权衡参数，取值范围 [0, 1)，值越接近 1 越偏向相关性，越接近 0 越偏向多样性 |
-| `maxLength` | String | 最大返回记录数 |
+| `theta` | DOUBLE | 相关性-多样性权衡参数，取值范围 [0, 1)，值越接近 1 越偏向相关性，越接近 0 越偏向多样性 |
+| `maxLength` | INT | 最大返回记录数 |
 
 **返回值**：返回多样性选择后的 `CacheTable`，结构与输入表相同。
 
@@ -273,7 +278,7 @@ DPP（Determinantal Point Process）多样性函数，结合物品向量和相�
 ```sql
 -- DPP 多样性打散：theta=0.5 平衡相关性与多样性，返回 20 条
 CACHE TABLE dpp_result AS
-CALL dpp_diversity(rec_item, 'item_embedding', 'score', '0.5', '20');
+CALL dpp_diversity(rec_item, 'item_embedding', 'score', 0.5, 20);
 ```
 
 **注意事项**：
@@ -294,7 +299,7 @@ CALL dpp_diversity(rec_item, 'item_embedding', 'score', '0.5', '20');
 |------|------|------|
 | `targetTable` | CacheTable | 待打散的目标表 |
 | `ruleTable` | CacheTable | 规则表，定义多样性约束规则 |
-| `maxReturn` | String | 最大返回记录数 |
+| `maxReturn` | INT | 最大返回记录数 |
 
 **规则表字段说明**：
 
@@ -331,7 +336,7 @@ SELECT
 
 -- 基于规则打散，返回 20 条
 CACHE TABLE rule_diversify_result AS
-CALL rule_diversity(rec_item, diversity_rules, '20');
+CALL rule_diversity(rec_item, diversity_rules, 20);
 ```
 
 **注意事项**：
@@ -417,7 +422,7 @@ CALL tag_to_vec(item_info, 'categories', 'category_vector');
 |------|------|------|
 | `primaryKey` | String | 主键列名，用于去重 |
 | `weights` | String | 各表权重，逗号分隔，如 `"2,1,1"` |
-| `limit` | String | 最大返回记录数 |
+| `limit` | INT | 最大返回记录数 |
 | `tables` | CacheTable... | 一个或多个输入表，所有表结构必须相同 |
 
 **返回值**：返回合并后的 `CacheTable`，结构与输入表相同。
@@ -427,16 +432,16 @@ CALL tag_to_vec(item_info, 'categories', 'category_vector');
 ```sql
 -- 按权重 2:1:1 合并三个召回通道，返回 100 条
 CACHE TABLE merged_recall AS
-CALL weighted_merge('item_id', '2,1,1', '100', recall_channel_a, recall_channel_b, recall_channel_c);
+CALL weighted_merge('item_id', '2,1,1', 100, recall_channel_a, recall_channel_b, recall_channel_c);
 
 -- 按权重 3:2 合并两个召回通道，返回 50 条
 CACHE TABLE merged_result AS
-CALL weighted_merge('item_id', '3,2', '50', recall_a, recall_b);
+CALL weighted_merge('item_id', '3,2', 50, recall_a, recall_b);
 ```
 
 **注意事项**：
 - 所有输入表的结构（列名和类型）必须完全相同
-- `primaryKey` 为空字符串时不去重；指定主键时按该列的字符串值去重
+- `primaryKey` 为空字符串时不去重；指定主键时按该列的值去重
 - 权重数量必须与表的数量一致
 - 权重和 limit 必须为正整数
 - 主键列必须存在于所有表中

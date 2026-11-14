@@ -49,7 +49,7 @@ public class DppDiversityE2ETest {
                         Arrays.<Object[]>asList(new Object[]{"input", 3L})
                 ),
                 new SqlTestCase(
-                        "cache table dpp_output as call dpp_diversity(input, 'embedding', 'score', '0', '2')",
+                        "cache table dpp_output as call dpp_diversity(input, 'embedding', 'score', 0, 2)",
                         Arrays.<Object[]>asList(new Object[]{"dpp_output", 2L})
                 ),
                 new SqlTestCase(

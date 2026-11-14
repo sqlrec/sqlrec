@@ -42,7 +42,7 @@ public class JavaFunctionBindable extends BindableInterface {
         this.functionName = functionName;
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
-        this.evalMethod = JavaFunctionMethodMatcher.selectEvalMethod(tableFunction.getClass(), inputTableList);
+        this.evalMethod = JavaFunctionMethodMatcher.selectEvalMethod(functionName, tableFunction.getClass(), inputTableList);
         this.parameterTypes = evalMethod.getParameterTypes();
         this.varArgs = evalMethod.isVarArgs();
 

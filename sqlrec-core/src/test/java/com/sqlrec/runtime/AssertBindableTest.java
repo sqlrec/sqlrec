@@ -1,6 +1,8 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -16,12 +18,47 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AssertBindableTest {
+    @Test
+    void sqlFailureReportsTheAssertionAlias() throws Exception {
+        CalciteSchema schema = buildSchema();
+        String sql = "ASSERT SELECT TRUE AS valid, FALSE AS has_candidates";
+        BindableInterface plan = new CompileManager().compileSql(
+                CompileManager.parseSql(sql), schema, Consts.DEFAULT_SCHEMA_NAME, sql);
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> plan.bind(schema, new ExecuteContextImpl(schema)));
+        Throwable cause = error;
+        while (cause.getCause() != null) cause = cause.getCause();
+        assertTrue(cause.getMessage().toLowerCase(Locale.ROOT).contains("has_candidates"));
+        assertTrue(cause.getMessage().contains("index 1"));
+    }
+
+    @Test
+    void allRuntimeAssertionFailuresIncludeColumnNames() {
+        CalciteSchema schema = buildSchema();
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
+        for (Object value : new Object[]{false, null, "invalid"}) {
+            BindableInterface source = mock(BindableInterface.class);
+            when(source.getReturnDataFields()).thenReturn(List.of(
+                    DataTypeUtils.getRelDataTypeField("expected_boolean", 0, SqlTypeName.BOOLEAN)));
+            when(source.bind(schema, context)).thenReturn(Linq4j.singletonEnumerable(new Object[]{value}));
+            AssertBindable assertion = new AssertBindable(source);
+            RuntimeException error = assertThrows(RuntimeException.class, () -> assertion.bind(schema, context));
+            assertTrue(error.getMessage().contains("column 'expected_boolean'"));
+            assertTrue(error.getMessage().contains("index 0"));
+        }
+    }
+
 
     @Test
     public void testAssertPassTrue() throws Exception {

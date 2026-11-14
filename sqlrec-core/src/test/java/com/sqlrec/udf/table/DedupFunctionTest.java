@@ -14,6 +14,51 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class DedupFunctionTest {
+    @Test
+    public void selfDedupKeepsFirstRowsInInputOrder() {
+        CacheTable input = createTable(new Object[][]{
+                {2, "first-2"}, {1, "first-1"}, {2, "later-2"}, {3, "first-3"}, {1, "later-1"}
+        });
+        CacheTable output = new DedupFunction().evaluate(input, "ID");
+        List<Object[]> rows = collectRows(output);
+        assertEquals(3, rows.size());
+        assertArrayEquals(new Object[]{2, "first-2"}, rows.get(0));
+        assertArrayEquals(new Object[]{1, "first-1"}, rows.get(1));
+        assertArrayEquals(new Object[]{3, "first-3"}, rows.get(2));
+        assertEquals(input.getDataFields(), output.getDataFields());
+    }
+
+    @Test
+    public void selfDedupTreatsNullAsOneKeyAndPreservesNullString() {
+        CacheTable input = createTable(new Object[][]{{1, null}, {2, "null"}, {3, null}, {4, "other"}, {5, "null"}});
+        List<Object[]> rows = collectRows(new DedupFunction().evaluate(input, "NAME"));
+        assertEquals(3, rows.size());
+        assertArrayEquals(new Object[]{1, null}, rows.get(0));
+        assertArrayEquals(new Object[]{2, "null"}, rows.get(1));
+        assertArrayEquals(new Object[]{4, "other"}, rows.get(2));
+    }
+
+    @Test
+    public void selfDedupHandlesEmptyInputAndRejectsInvalidColumns() {
+        DedupFunction function = new DedupFunction();
+        CacheTable empty = createTable(new Object[][]{});
+        assertTrue(collectRows(function.evaluate(empty, "id")).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> function.evaluate(null, "id"));
+        for (String column : new String[]{null, "", "missing"}) {
+            assertThrows(IllegalArgumentException.class, () -> function.evaluate(empty, column));
+        }
+    }
+
+    @Test
+    public void crossTableExclusionPreservesRepeatedInputKeys() {
+        CacheTable input = createTable(new Object[][]{{1, "A"}, {1, "B"}, {2, "C"}});
+        CacheTable excluded = createTable(new Object[][]{{2, "excluded"}});
+        List<Object[]> rows = collectRows(new DedupFunction().evaluate(input, excluded, "ID"));
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1, "A"}, rows.get(0));
+        assertArrayEquals(new Object[]{1, "B"}, rows.get(1));
+    }
+
 
     @Test
     public void testNullAndNullStringAreDistinct() {

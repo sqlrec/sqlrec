@@ -12,6 +12,6 @@ define input table rec_item(
 );
 
 -- window_diversify: (table, group_col, window_size, min_per_group, max_per_group)
-cache table diversify_rec_item as call window_diversify(rec_item, 'genres', '3', '1', '10');
+cache table diversify_rec_item as call window_diversify(rec_item, 'genres', 3, 1, 10);
 
 return diversify_rec_item;

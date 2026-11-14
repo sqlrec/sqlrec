@@ -16,6 +16,15 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class WindowDiversifyTest {
+    @Test
+    public void columnLookupIgnoresCase() {
+        CacheTable input = createTable(new Object[][]{{1, "A"}, {2, "B"}});
+        List<Object[]> rows = collectRows(new WindowDiversify().evaluate(input, "CaTeGoRy", 3, 2, 2));
+        assertEquals(2, rows.size());
+        assertArrayEquals(new Object[]{1, "A"}, rows.get(0));
+        assertArrayEquals(new Object[]{2, "B"}, rows.get(1));
+    }
+
 
     @Test
     public void testBasicWindowDiversify() {
@@ -25,7 +34,7 @@ public class WindowDiversifyTest {
         });
 
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "2", "6");
+        CacheTable output = function.evaluate(input, "category", 3, 2, 6);
 
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
@@ -38,7 +47,7 @@ public class WindowDiversifyTest {
         });
 
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "2", "3");
+        CacheTable output = function.evaluate(input, "category", 3, 2, 3);
 
         List<Object[]> result = collectRows(output);
         assertEquals(3, result.size());
@@ -53,7 +62,7 @@ public class WindowDiversifyTest {
         });
 
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "1", "6");
+        CacheTable output = function.evaluate(input, "category", 3, 1, 6);
 
         List<Object[]> result = collectRows(output);
         assertEquals(6, result.size());
@@ -83,7 +92,7 @@ public class WindowDiversifyTest {
         CacheTable input = createTable(new Object[][]{{1, "A"}});
         WindowDiversify function = new WindowDiversify();
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "nonexistent", "3", "2", "10");
+            function.evaluate(input, "nonexistent", 3, 2, 10);
         });
     }
 
@@ -91,7 +100,7 @@ public class WindowDiversifyTest {
     public void testEmptyInput() {
         CacheTable input = createTable(new Object[][]{});
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "2", "10");
+        CacheTable output = function.evaluate(input, "category", 3, 2, 10);
 
         List<Object[]> result = collectRows(output);
         assertEquals(0, result.size());
@@ -101,7 +110,7 @@ public class WindowDiversifyTest {
     public void testSingleItem() {
         CacheTable input = createTable(new Object[][]{{1, "A"}});
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "2", "10");
+        CacheTable output = function.evaluate(input, "category", 3, 2, 10);
 
         List<Object[]> result = collectRows(output);
         assertEquals(1, result.size());
@@ -112,7 +121,7 @@ public class WindowDiversifyTest {
     public void testPreservesSchema() {
         CacheTable input = createTable(new Object[][]{{1, "A"}, {2, "B"}});
         WindowDiversify function = new WindowDiversify();
-        CacheTable output = function.evaluate(input, "category", "3", "2", "10");
+        CacheTable output = function.evaluate(input, "category", 3, 2, 10);
 
         assertEquals(input.getDataFields(), output.getDataFields());
     }

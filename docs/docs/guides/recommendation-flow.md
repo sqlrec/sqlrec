@@ -112,7 +112,7 @@ SQLRec 内置的 `dedup`、`weighted_merge`、`window_diversify` 等表函数也
 
 ```sql
 CACHE TABLE final_result AS
-CALL window_diversify(ranked_item, 'category', '3', '1', '10');
+CALL window_diversify(ranked_item, 'category', 3, 1, 10);
 ```
 
 表参数直接写缓存表名，字符串参数使用单引号。完整的内置函数清单见 [表函数](../reference/udf/table-functions.md)。

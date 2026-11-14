@@ -43,7 +43,7 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         // theta=0.5 (balanced), maxLength=6
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "6");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 6);
         List<Object[]> result = collectRows(output);
 
         // All items should be returned (no early termination)
@@ -66,7 +66,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "3");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 3);
         List<Object[]> result = collectRows(output);
 
         // All 3 orthogonal items should be selected
@@ -93,7 +93,7 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         // Select 2 items with balanced theta
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "2");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 2);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size());
@@ -118,7 +118,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.0", "2");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.0, 2);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size());
@@ -144,9 +144,9 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         List<String> lowTheta = selectedNames(
-                function.evaluate(input, "embedding", "score", "0.1", "2"));
+                function.evaluate(input, "embedding", "score", 0.1, 2));
         List<String> highTheta = selectedNames(
-                function.evaluate(input, "embedding", "score", "0.9", "2"));
+                function.evaluate(input, "embedding", "score", 0.9, 2));
 
         assertEquals(Arrays.asList("highest", "diverse"), lowTheta,
                 "Low theta should sacrifice relevance for diversity");
@@ -168,7 +168,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "3");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 3);
         List<Object[]> result = collectRows(output);
 
         assertEquals(3, result.size(), "Output size should be limited by maxLength");
@@ -186,7 +186,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "10");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 10);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size(), "Rows with null embedding should be filtered out");
@@ -208,7 +208,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "10");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 10);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size(), "Rows with null score should be filtered out");
@@ -221,7 +221,7 @@ public class DppDiversityTest {
     public void testEmptyInput() {
         CacheTable input = createTable(new Object[][]{});
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "10");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 10);
         List<Object[]> result = collectRows(output);
 
         assertEquals(0, result.size());
@@ -234,7 +234,7 @@ public class DppDiversityTest {
     public void testInvalidThetaNegative() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "score", "-0.1", "1");
+            function.evaluate(input, "embedding", "score", -0.1, 1);
         });
     }
 
@@ -242,7 +242,7 @@ public class DppDiversityTest {
     public void testInvalidThetaOne() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "score", "1.0", "1");
+            function.evaluate(input, "embedding", "score", 1.0, 1);
         });
     }
 
@@ -253,7 +253,7 @@ public class DppDiversityTest {
     public void testInvalidMaxLengthZero() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "score", "0.5", "0");
+            function.evaluate(input, "embedding", "score", 0.5, 0);
         });
     }
 
@@ -261,7 +261,7 @@ public class DppDiversityTest {
     public void testInvalidMaxLengthNegative() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "score", "0.5", "-1");
+            function.evaluate(input, "embedding", "score", 0.5, -1);
         });
     }
 
@@ -272,7 +272,7 @@ public class DppDiversityTest {
     public void testEmbeddingColumnNotFound() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "nonexistent", "score", "0.5", "1");
+            function.evaluate(input, "nonexistent", "score", 0.5, 1);
         });
     }
 
@@ -280,7 +280,7 @@ public class DppDiversityTest {
     public void testScoreColumnNotFound() {
         CacheTable input = createTable(new Object[][]{{"item1", 1.0, Arrays.asList(1.0, 0.0)}});
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "nonexistent", "0.5", "1");
+            function.evaluate(input, "embedding", "nonexistent", 0.5, 1);
         });
     }
 
@@ -296,7 +296,7 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         assertThrows(IllegalArgumentException.class, () -> {
-            function.evaluate(input, "embedding", "score", "0.5", "2");
+            function.evaluate(input, "embedding", "score", 0.5, 2);
         });
     }
 
@@ -312,7 +312,7 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         // Should not throw, negative score is clipped
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "2");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 2);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size());
@@ -334,9 +334,9 @@ public class DppDiversityTest {
         };
 
         List<String> normal = selectedNames(function.evaluate(
-                createTable(normalScores), "embedding", "score", "0.5", "4"));
+                createTable(normalScores), "embedding", "score", 0.5, 4));
         List<String> shifted = selectedNames(function.evaluate(
-                createTable(shiftedScores), "embedding", "score", "0.5", "4"));
+                createTable(shiftedScores), "embedding", "score", 0.5, 4));
 
         assertEquals(normal, shifted,
                 "Adding a common score offset must not change fixed-cardinality DPP ranking");
@@ -349,7 +349,7 @@ public class DppDiversityTest {
                 {"item1", 1.0, embedding},
         });
 
-        function.evaluate(input, "embedding", "score", "0.5", "1");
+        function.evaluate(input, "embedding", "score", 0.5, 1);
 
         assertArrayEquals(new double[]{3.0, 4.0}, embedding);
     }
@@ -362,7 +362,7 @@ public class DppDiversityTest {
             Object[][] data = randomData(random, 7, 8);
             List<String> expected = naiveGreedySelection(data, 0.45, 5);
             List<String> actual = selectedNames(function.evaluate(
-                    createTable(data), "embedding", "score", "0.45", "5"));
+                    createTable(data), "embedding", "score", 0.45, 5));
 
             assertEquals(expected, actual, "Greedy order differs in random round " + round);
         }
@@ -384,9 +384,9 @@ public class DppDiversityTest {
         };
 
         List<String> expected = selectedNames(function.evaluate(
-                createTable(normalizedScale), "embedding", "score", "0.4", "3"));
+                createTable(normalizedScale), "embedding", "score", 0.4, 3));
         List<String> actual = selectedNames(function.evaluate(
-                createTable(arbitraryScale), "embedding", "score", "0.4", "3"));
+                createTable(arbitraryScale), "embedding", "score", 0.4, 3));
 
         assertEquals(expected, actual);
     }
@@ -405,13 +405,13 @@ public class DppDiversityTest {
 
         assertAll(
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> function.evaluate(valid, "embedding", "score", "NaN", "1")),
+                        () -> function.evaluate(valid, "embedding", "score", Double.NaN, 1)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> function.evaluate(valid, "embedding", "score", "Infinity", "1")),
+                        () -> function.evaluate(valid, "embedding", "score", Double.POSITIVE_INFINITY, 1)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> function.evaluate(infiniteScore, "embedding", "score", "0.5", "1")),
+                        () -> function.evaluate(infiniteScore, "embedding", "score", 0.5, 1)),
                 () -> assertThrows(IllegalArgumentException.class,
-                        () -> function.evaluate(nanEmbedding, "embedding", "score", "0.5", "1"))
+                        () -> function.evaluate(nanEmbedding, "embedding", "score", 0.5, 1))
         );
     }
 
@@ -431,7 +431,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "2");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 2);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size());
@@ -452,7 +452,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "5");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 5);
         List<Object[]> result = collectRows(output);
 
         assertEquals(1, result.size());
@@ -470,7 +470,7 @@ public class DppDiversityTest {
         };
         CacheTable input = createTable(data);
 
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", "100");
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, 100);
         List<Object[]> result = collectRows(output);
 
         assertEquals(2, result.size(), "Should return all items when maxLength exceeds item count");
@@ -497,7 +497,7 @@ public class DppDiversityTest {
         CacheTable input = createTable(data);
 
         long start = System.currentTimeMillis();
-        CacheTable output = function.evaluate(input, "embedding", "score", "0.5", String.valueOf(maxLen));
+        CacheTable output = function.evaluate(input, "embedding", "score", 0.5, maxLen);
         long elapsed = System.currentTimeMillis() - start;
 
         List<Object[]> result = collectRows(output);
