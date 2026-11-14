@@ -379,8 +379,9 @@ CALL json_to_table('{"id": 1, "name": "Alice", "score": 95.5}');
 **Notes**:
 - JSON string cannot be empty
 - Must be in JSON object or JSON array format
+- Integer literals within the BIGINT range infer `BIGINT`. A column containing fractional, exponent-form, or out-of-range numbers uses `DOUBLE`, which may lose precision for large integers
 - Nested objects in arrays are stored as JSON strings in `VARCHAR` type
-- Array types automatically infer element types (`ARRAY<DOUBLE>`, `ARRAY<BOOLEAN>`, `ARRAY<VARCHAR>`)
+- Array types automatically infer element types (`ARRAY<BIGINT>`, `ARRAY<DOUBLE>`, `ARRAY<BOOLEAN>`, `ARRAY<VARCHAR>`), with the same rules for numeric elements
 
 ---
 

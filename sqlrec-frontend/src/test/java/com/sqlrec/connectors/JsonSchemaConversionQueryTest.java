@@ -15,7 +15,7 @@ class JsonSchemaConversionQueryTest {
     @Test
     void convertedAndInvalidInferredValuesCanBeUsedInSql() throws Exception {
         var table = new JsonToTableFunction().evaluate("""
-                [{"n":1,"flag":false,"xs":[1]},
+                [{"n":1.0,"flag":false,"xs":[1.0]},
                  {"n":"2.5","flag":"true","xs":["3","bad"]},
                  {"n":"bad","flag":"bad","xs":[]}]
                 """);
@@ -28,5 +28,23 @@ class JsonSchemaConversionQueryTest {
         assertArrayEquals(new Object[]{2.5d, 3.5d, true, 3.0d, null}, rows.get(0));
         assertArrayEquals(new Object[]{1.0d, 2.0d, false, 1.0d, null}, rows.get(1));
         assertArrayEquals(new Object[]{null, null, false, null, null}, rows.get(2));
+    }
+
+    @Test
+    void convertedAndInvalidInferredBigintsCanBeUsedInSql() throws Exception {
+        var table = new JsonToTableFunction().evaluate("""
+                [{"n":1,"xs":[1]},
+                 {"n":"2","xs":["3","bad"]},
+                 {"n":"2.5","xs":[]}]
+                """);
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema()).add("items", table);
+        var query = NormalSqlCompiler.getNormalSqlBindable(
+                "select n, n + 1, xs[1], xs[2] from items order by n desc nulls last", schema, "default");
+        var rows = query.bind(schema, new ExecuteContextImpl(schema)).toList();
+        assertEquals(3, rows.size());
+        assertArrayEquals(new Object[]{2L, 3L, 3L, null}, rows.get(0));
+        assertArrayEquals(new Object[]{1L, 2L, 1L, null}, rows.get(1));
+        assertArrayEquals(new Object[]{null, null, null, null}, rows.get(2));
     }
 }

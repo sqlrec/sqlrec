@@ -34,7 +34,7 @@ public final class SchemaInference {
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), schema).getFieldList());
     }
 
-    /** Uses all JSON object keys in encounter order; JSON numbers are always DOUBLE. */
+    /** Uses all JSON object keys in encounter order, widening mixed numeric values to DOUBLE. */
     public static List<FieldSchema> inferJsonFields(List<JsonObject> objects) {
         Collection<String> names = new LinkedHashSet<>();
         for (JsonObject object : objects) {
@@ -89,7 +89,7 @@ public final class SchemaInference {
     private static String inferJsonValues(List<JsonElement> values) {
         for (JsonElement value : values) {
             if (value == null || value.isJsonNull()) continue;
-            if (!value.isJsonArray()) return inferJsonType(value);
+            if (!value.isJsonArray()) return inferJsonType(value, values);
             List<JsonElement> elements = new ArrayList<>();
             for (JsonElement candidate : values) {
                 if (candidate != null && candidate.isJsonArray()) {
@@ -97,7 +97,7 @@ public final class SchemaInference {
                 }
             }
             for (JsonElement element : elements) {
-                if (element.isJsonPrimitive()) return "ARRAY<" + inferJsonType(element) + ">";
+                if (element.isJsonPrimitive()) return "ARRAY<" + inferJsonType(element, elements) + ">";
             }
             List<JsonElement> nested = new ArrayList<>();
             for (JsonElement element : elements) if (element.isJsonArray()) nested.add(element);
@@ -106,11 +106,21 @@ public final class SchemaInference {
         return "VARCHAR";
     }
 
-    private static String inferJsonType(JsonElement value) {
+    private static String inferJsonType(JsonElement value, List<JsonElement> values) {
         if (value.isJsonPrimitive()) {
             JsonPrimitive primitive = value.getAsJsonPrimitive();
             if (primitive.isNumber()) {
-                return "DOUBLE";
+                for (JsonElement candidate : values) {
+                    if (candidate == null || !candidate.isJsonPrimitive()
+                            || !candidate.getAsJsonPrimitive().isNumber()) continue;
+                    try {
+                        Long.parseLong(candidate.getAsString());
+                    } catch (NumberFormatException notBigint) {
+                        // Fractions, exponents and integers outside BIGINT use DOUBLE.
+                        return "DOUBLE";
+                    }
+                }
+                return "BIGINT";
             }
             return primitive.isBoolean() ? "BOOLEAN" : "VARCHAR";
         }

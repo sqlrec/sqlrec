@@ -45,7 +45,7 @@ public class JsonToTableFunctionTest {
                 ),
                 new SqlTestCase(
                         "select name, age, score from t1",
-                        Collections.singletonList(new Object[]{"Alice", 30.0d, 95.5d})
+                        Collections.singletonList(new Object[]{"Alice", 30L, 95.5d})
                 )
         );
 
@@ -76,8 +76,8 @@ public class JsonToTableFunctionTest {
                 new SqlTestCase(
                         "select name, age from t1",
                         Arrays.asList(
-                                new Object[]{"Alice", 30.0d},
-                                new Object[]{"Bob", 25.0d}
+                                new Object[]{"Alice", 30L},
+                                new Object[]{"Bob", 25L}
                         )
                 )
         );
@@ -168,7 +168,7 @@ public class JsonToTableFunctionTest {
                 new SqlTestCase(
                         "select name, age, score from t1",
                         Arrays.asList(
-                                new Object[]{"Alice", 30.0d, null},
+                                new Object[]{"Alice", 30L, null},
                                 new Object[]{"Bob", null, 95.0d}
                         )
                 )

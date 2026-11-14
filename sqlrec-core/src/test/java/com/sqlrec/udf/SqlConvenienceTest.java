@@ -154,6 +154,23 @@ class SqlConvenienceTest {
         assertEquals(List.of(1, 3), rows.stream().map(row -> row[0]).toList());
     }
 
+    @Test
+    void jsonTablePreservesBigintThroughSqlAndWidensMixedNumbers() throws Exception {
+        execute("CACHE TABLE json_items AS CALL json_to_table("
+                + "'[{\"id\":9007199254740993,\"ids\":[9007199254740993],\"score\":1},"
+                + "{\"id\":9223372036854775807,\"ids\":[9223372036854775807],\"score\":0.5}]')");
+        var plan = NormalSqlCompiler.getNormalSqlBindable("SELECT id, ids, score FROM json_items", root, "default");
+        var fields = plan.getReturnDataFields();
+        assertEquals(SqlTypeName.BIGINT, fields.get(0).getType().getSqlTypeName());
+        assertEquals(SqlTypeName.BIGINT, fields.get(1).getType().getComponentType().getSqlTypeName());
+        assertEquals(SqlTypeName.DOUBLE, fields.get(2).getType().getSqlTypeName());
+        var rows = plan.bind(root, context).toList();
+        assertArrayEquals(new Object[]{9007199254740993L, List.of(9007199254740993L), 1.0d}, rows.get(0));
+        assertArrayEquals(new Object[]{Long.MAX_VALUE, List.of(Long.MAX_VALUE), 0.5d}, rows.get(1));
+        assertArrayEquals(new Object[]{9007199254740993L}, execute(
+                "SELECT id FROM json_items WHERE id = CAST(9007199254740993 AS BIGINT)").get(0));
+    }
+
     private List<Object[]> execute(String sql) throws Exception {
         var plan = new CompileManager().compileSql(CompileManager.parseSql(sql), root, "default", sql);
         var result = plan.bind(root, context);

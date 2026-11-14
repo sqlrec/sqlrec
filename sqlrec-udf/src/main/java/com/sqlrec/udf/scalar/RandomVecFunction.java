@@ -10,7 +10,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspector;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,14 +19,15 @@ import java.util.Random;
 @UDFType(deterministic = false)
 public class RandomVecFunction extends GenericUDF {
     private static final Random random = new Random();
-    private StringObjectInspector dimensionOI;
+    private IntObjectInspector dimensionOI;
 
-    public List<Double> evaluate(String dimensionStr) {
-        if (dimensionStr == null) {
+    public List<Double> evaluate(Integer dimension) {
+        if (dimension == null) {
             return null;
         }
-
-        int dimension = parseDimension(dimensionStr);
+        if (dimension <= 0) {
+            throw new IllegalArgumentException("RandomVecFunction dimension must be positive");
+        }
         return generateRandomVector(dimension);
     }
 
@@ -36,11 +37,11 @@ public class RandomVecFunction extends GenericUDF {
             throw new UDFArgumentLengthException("RandomVecFunction requires exactly one argument.");
         }
 
-        if (!(arguments[0] instanceof StringObjectInspector)) {
-            throw new UDFArgumentTypeException(0, "The argument must be a string.");
+        if (!(arguments[0] instanceof IntObjectInspector)) {
+            throw new UDFArgumentTypeException(0, "The argument must be an INT.");
         }
 
-        this.dimensionOI = (StringObjectInspector) arguments[0];
+        this.dimensionOI = (IntObjectInspector) arguments[0];
 
         ObjectInspector doubleOI = PrimitiveObjectInspectorFactory.javaDoubleObjectInspector;
         return ObjectInspectorFactory.getStandardListObjectInspector(doubleOI);
@@ -52,14 +53,8 @@ public class RandomVecFunction extends GenericUDF {
             return null;
         }
 
-        String dimensionStr = dimensionOI.getPrimitiveJavaObject(arguments[0].get());
-        if (dimensionStr == null) {
-            return null;
-        }
-
         try {
-            int dimension = parseDimension(dimensionStr);
-            return generateRandomVector(dimension);
+            return evaluate(dimensionOI.get(arguments[0].get()));
         } catch (RuntimeException e) {
             throw new HiveException(e.getMessage());
         }
@@ -68,21 +63,6 @@ public class RandomVecFunction extends GenericUDF {
     @Override
     public String getDisplayString(String[] children) {
         return "random_vec(" + (children.length > 0 ? children[0] : "null") + ")";
-    }
-
-    private int parseDimension(String dimensionStr) {
-        int dimension;
-        try {
-            dimension = Integer.parseInt(dimensionStr);
-        } catch (NumberFormatException e) {
-            throw new RuntimeException("RandomVecFunction dimension must be a valid integer string");
-        }
-
-        if (dimension <= 0) {
-            throw new RuntimeException("RandomVecFunction dimension must be positive");
-        }
-
-        return dimension;
     }
 
     private List<Double> generateRandomVector(int dimension) {

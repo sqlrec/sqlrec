@@ -379,8 +379,9 @@ CALL json_to_table('{"id": 1, "name": "Alice", "score": 95.5}');
 **注意事项**：
 - JSON 字符串不能为空
 - 必须是 JSON 对象或 JSON 数组格式
+- BIGINT 范围内的整数字面量推断为 `BIGINT`；同列出现小数、科学计数法或超出 BIGINT 范围的数字时统一使用 `DOUBLE`，可能损失大整数精度
 - 数组中的嵌套对象会以 JSON 字符串形式存储为 `VARCHAR`
-- 数组类型会自动推断元素类型（`ARRAY<DOUBLE>`、`ARRAY<BOOLEAN>`、`ARRAY<VARCHAR>`）
+- 数组类型会自动推断元素类型（`ARRAY<BIGINT>`、`ARRAY<DOUBLE>`、`ARRAY<BOOLEAN>`、`ARRAY<VARCHAR>`），数字元素遵循相同规则
 
 ---
 

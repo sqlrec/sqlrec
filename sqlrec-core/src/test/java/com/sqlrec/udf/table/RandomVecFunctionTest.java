@@ -1,6 +1,13 @@
 package com.sqlrec.udf.table;
 
 import com.sqlrec.udf.scalar.RandomVecFunction;
+import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
+import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+import org.apache.hadoop.io.IntWritable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +25,7 @@ public class RandomVecFunctionTest {
 
     @Test
     public void testRandomVecBasic() {
-        Object result = function.evaluate("10");
+        Object result = function.evaluate(10);
 
         assertNotNull(result);
         assertTrue(result instanceof List);
@@ -35,7 +42,7 @@ public class RandomVecFunctionTest {
 
     @Test
     public void testRandomVecNormalized() {
-        Object result = function.evaluate("100");
+        Object result = function.evaluate(100);
 
         assertNotNull(result);
         assertTrue(result instanceof List);
@@ -56,9 +63,9 @@ public class RandomVecFunctionTest {
 
     @Test
     public void testRandomVecDifferentDimensions() {
-        Object result1 = function.evaluate("5");
-        Object result2 = function.evaluate("50");
-        Object result3 = function.evaluate("500");
+        Object result1 = function.evaluate(5);
+        Object result2 = function.evaluate(50);
+        Object result3 = function.evaluate(500);
 
         assertNotNull(result1);
         assertNotNull(result2);
@@ -70,30 +77,56 @@ public class RandomVecFunctionTest {
     }
 
     @Test
-    public void testRandomVecInvalidDimension() {
-        assertThrows(RuntimeException.class, () -> {
-            function.evaluate("invalid");
-        });
+    public void testRandomVecNullDimension() {
+        assertNull(function.evaluate((Integer) null));
+    }
+
+    @Test
+    public void testHiveIntegerInspectors() throws Exception {
+        function.initialize(new ObjectInspector[]{PrimitiveObjectInspectorFactory.javaIntObjectInspector});
+        assertEquals(4, ((List<?>) function.evaluate(new GenericUDF.DeferredObject[]{
+                new GenericUDF.DeferredJavaObject(4)})).size());
+
+        function.initialize(new ObjectInspector[]{PrimitiveObjectInspectorFactory.writableIntObjectInspector});
+        assertEquals(5, ((List<?>) function.evaluate(new GenericUDF.DeferredObject[]{
+                new GenericUDF.DeferredJavaObject(new IntWritable(5))})).size());
+        assertNull(function.evaluate(new GenericUDF.DeferredObject[]{new GenericUDF.DeferredJavaObject(null)}));
+        assertThrows(HiveException.class, () -> function.evaluate(new GenericUDF.DeferredObject[]{
+                new GenericUDF.DeferredJavaObject(new IntWritable(0))}));
+    }
+
+    @Test
+    public void testHiveRejectsInvalidArguments() {
+        assertThrows(UDFArgumentLengthException.class, () -> function.initialize(new ObjectInspector[0]));
+        assertThrows(UDFArgumentLengthException.class, () -> function.initialize(new ObjectInspector[]{
+                PrimitiveObjectInspectorFactory.javaIntObjectInspector,
+                PrimitiveObjectInspectorFactory.javaIntObjectInspector}));
+        for (ObjectInspector inspector : new ObjectInspector[]{
+                PrimitiveObjectInspectorFactory.javaStringObjectInspector,
+                PrimitiveObjectInspectorFactory.javaDoubleObjectInspector,
+                PrimitiveObjectInspectorFactory.javaLongObjectInspector}) {
+            assertThrows(UDFArgumentTypeException.class, () -> function.initialize(new ObjectInspector[]{inspector}));
+        }
     }
 
     @Test
     public void testRandomVecZeroDimension() {
         assertThrows(RuntimeException.class, () -> {
-            function.evaluate("0");
+            function.evaluate(0);
         });
     }
 
     @Test
     public void testRandomVecNegativeDimension() {
         assertThrows(RuntimeException.class, () -> {
-            function.evaluate("-10");
+            function.evaluate(-10);
         });
     }
 
     @Test
     public void testRandomVecMultipleCallsDifferent() {
-        Object result1 = function.evaluate("10");
-        Object result2 = function.evaluate("10");
+        Object result1 = function.evaluate(10);
+        Object result2 = function.evaluate(10);
 
         assertNotNull(result1);
         assertNotNull(result2);
@@ -116,7 +149,7 @@ public class RandomVecFunctionTest {
 
     @Test
     public void testRandomVecLargeDimension() {
-        Object result = function.evaluate("1000");
+        Object result = function.evaluate(1000);
 
         assertNotNull(result);
         assertTrue(result instanceof List);

@@ -235,7 +235,7 @@ class UdfTest {
         StreamTableEnvironment tEnv = createTableEnvWithHive();
         registerFunction(tEnv, "uuid", "com.sqlrec.udf.scalar.UuidFunction");
         registerFunction(tEnv, "random_vec", "com.sqlrec.udf.scalar.RandomVecFunction");
-        String sql = "SELECT uuid(), random_vec('4') "
+        String sql = "SELECT uuid(), random_vec(4) "
                 + "FROM (VALUES (1), (2), (3)) AS t(n)";
         assertNotNull(tEnv.explainSql(sql));
         Set<String> identifiers = new HashSet<>();
@@ -269,7 +269,7 @@ class UdfTest {
         registerFunction(tEnv, "random_vec", "com.sqlrec.udf.scalar.RandomVecFunction");
 
         TableResult result = tEnv.executeSql(
-                "SELECT random_vec('5')"
+                "SELECT random_vec(5)"
         );
         List<Double[]> values = collectDoubleArrayColumn(result);
         assertEquals(1, values.size());
@@ -282,7 +282,7 @@ class UdfTest {
         registerFunction(tEnv, "random_vec", "com.sqlrec.udf.scalar.RandomVecFunction");
 
         TableResult result = tEnv.executeSql(
-                "SELECT random_vec('100')"
+                "SELECT random_vec(100)"
         );
         List<Double[]> values = collectDoubleArrayColumn(result);
         assertEquals(1, values.size());
@@ -303,7 +303,7 @@ class UdfTest {
 
         // Use different dimension args to get different results
         TableResult result = tEnv.executeSql(
-                "SELECT random_vec('3') AS v1, random_vec('4') AS v2\n" +
+                "SELECT random_vec(3) AS v1, random_vec(4) AS v2\n" +
                 "FROM (VALUES (1)) AS t (x)"
         );
         List<Row> rows = collectRows(result);
@@ -320,7 +320,7 @@ class UdfTest {
         registerFunction(tEnv, "random_vec", "com.sqlrec.udf.scalar.RandomVecFunction");
 
         TableResult result = tEnv.executeSql(
-                "SELECT random_vec(CAST(NULL AS STRING))"
+                "SELECT random_vec(CAST(NULL AS INT))"
         );
         List<Double[]> values = collectDoubleArrayColumn(result);
         assertEquals(1, values.size());

@@ -25,6 +25,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlNameMatchers;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.Frameworks;
@@ -72,7 +73,7 @@ class NonDeterministicScalarFunctionTest {
                 .transform(config -> config.withSimplify(false));
         Project project = (Project) builder.values(new String[]{"n"}, 1, 2, 3)
                 .project(builder.call(operator("uuid")),
-                        builder.call(operator("random_vec"), builder.literal("4")),
+                        builder.call(operator("random_vec"), builder.literal(4)),
                         builder.call(SqlStdOperatorTable.ABS, builder.literal(-1)))
                 .build();
         HepPlanner planner = new HepPlanner(new HepProgramBuilder()
@@ -96,7 +97,7 @@ class NonDeterministicScalarFunctionTest {
 
     @Test
     void constantArgumentsProduceFreshResultsPerRowAndAcrossPlanExecutions() throws Exception {
-        BindableInterface plan = compile("select uuid(), random_vec('4') "
+        BindableInterface plan = compile("select uuid(), random_vec(4) "
                 + "from (values (1), (2), (3)) as t(n)");
         Set<String> identifiers = new HashSet<>();
         Set<List<Double>> vectors = new HashSet<>();
@@ -113,6 +114,19 @@ class NonDeterministicScalarFunctionTest {
         }
         assertEquals(6, identifiers.size());
         assertEquals(6, vectors.size());
+    }
+
+    @Test
+    void randomVectorAcceptsTypedGetAndReadsDimensionEachExecution() throws Exception {
+        UdfManager.addFunction(schema.getSubSchema(Consts.DEFAULT_SCHEMA_NAME, false), "get",
+                FunctionConfigs.DEFAULT_SCALAR_FUNCTION_CONFIGS.get("get"));
+        BindableInterface plan = compile("SELECT random_vec(`get`('embedding_dim', 4))");
+        assertEquals(SqlTypeName.DOUBLE,
+                plan.getReturnDataFields().get(0).getType().getComponentType().getSqlTypeName());
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
+        assertEquals(4, ((List<?>) plan.bind(schema, context).toList().get(0)[0]).size());
+        context.setVariable("embedding_dim", "7");
+        assertEquals(7, ((List<?>) plan.bind(schema, context).toList().get(0)[0]).size());
     }
 
     private List<Double> vector(Object value) {

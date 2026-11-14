@@ -178,7 +178,7 @@ class ConditionalSchemaTest {
             for (boolean condition : List.of(false, true)) {
                 SqlFunctionBindable function = compile("cast_array_cache",
                         "IF (SELECT " + condition + ") THEN (CACHE TABLE t AS SELECT ARRAY[CAST(1 AS FLOAT)] AS xs) "
-                                + "ELSE (CACHE TABLE t AS SELECT CAST(random_vec('3') AS FLOAT ARRAY) AS xs)",
+                                + "ELSE (CACHE TABLE t AS SELECT CAST(random_vec(3) AS FLOAT ARRAY) AS xs)",
                         "RETURN SELECT xs[1] + 1 AS result_value FROM t");
                 Number result = assertInstanceOf(Number.class, execute(function, parallel)[0]);
                 assertTrue(result.doubleValue() >= 1 && result.doubleValue() <= 2);

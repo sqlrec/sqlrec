@@ -157,7 +157,7 @@ WHERE array_contains_any(tags, ARRAY['new_user', 'trial']) = true;
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `dimensionStr` | VARCHAR | 向量维度，必须是正整数字符串 |
+| `dimension` | INT | 向量维度，必须是正整数 |
 
 **返回值**：返回归一化的随机向量（`ARRAY<DOUBLE>`），向量的 L2 范数为 1。
 
@@ -167,15 +167,18 @@ WHERE array_contains_any(tags, ARRAY['new_user', 'trial']) = true;
 -- 生成 64 维随机向量
 SELECT
     user_id,
-    random_vec('64') AS random_embedding
+    random_vec(64) AS random_embedding
 FROM user_info;
 
 -- 为冷启动用户生成随机向量
 CACHE TABLE cold_start_users AS
 SELECT
     user_id,
-    random_vec('128') AS user_embedding
+    random_vec(128) AS user_embedding
 FROM new_users;
+
+-- 从执行变量读取维度，缺省使用 128
+SELECT random_vec(GET('embedding_dim', 128));
 ```
 
 **注意事项**：

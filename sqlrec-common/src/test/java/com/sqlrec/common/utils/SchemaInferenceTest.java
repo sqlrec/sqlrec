@@ -35,6 +35,39 @@ class SchemaInferenceTest {
     }
 
     @Test
+    void jsonIntegersWithinLongRangeUseBigintIncludingNestedArrays() {
+        List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+                "[{\"id\":null,\"ids\":[],\"matrix\":[]},"
+                        + "{\"id\":9007199254740993,\"ids\":[-9223372036854775808,9223372036854775807],"
+                        + "\"matrix\":[[1],[2]]}]"));
+        assertEquals(Arrays.asList("BIGINT", "ARRAY<BIGINT>", "ARRAY<ARRAY<BIGINT>>"),
+                fields.stream().map(FieldSchema::getType).collect(Collectors.toList()));
+    }
+
+    @Test
+    void jsonNumbersWidenAcrossRowsAndArraysRegardlessOfOrder() {
+        for (String[] pair : new String[][]{{"1", "0.75"}, {"0.75", "1"}}) {
+            List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+                    "[{\"score\":" + pair[0] + ",\"scores\":[" + pair[0] + "],"
+                            + "\"matrix\":[[" + pair[0] + "]]},"
+                            + "{\"score\":" + pair[1] + ",\"scores\":[" + pair[1] + "],"
+                            + "\"matrix\":[[" + pair[1] + "]]}]"));
+            assertEquals(Arrays.asList("DOUBLE", "ARRAY<DOUBLE>", "ARRAY<ARRAY<DOUBLE>>"),
+                    fields.stream().map(FieldSchema::getType).collect(Collectors.toList()));
+        }
+    }
+
+    @Test
+    void jsonFractionalExponentAndOutOfRangeNumbersUseDouble() {
+        for (String number : List.of("1.0", "1e3", "-2E-3", "9223372036854775808", "-9223372036854775809")) {
+            List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+                    "[{\"value\":0,\"values\":[0]},{\"value\":" + number + ",\"values\":[" + number + "]}]"));
+            assertEquals("DOUBLE", fields.get(0).getType(), number);
+            assertEquals("ARRAY<DOUBLE>", fields.get(1).getType(), number);
+        }
+    }
+
+    @Test
     void javaResponsesUseFirstRowKeysAndPreserveIntegralAndArrayPolicies() {
         Map<String, Object> first = new LinkedHashMap<>();
         first.put("id", null);
@@ -53,12 +86,12 @@ class SchemaInferenceTest {
     }
 
     @Test
-    void jsonTablesUseAllKeysDoubleNumbersAndFirstPrimitiveArrayElements() {
+    void jsonTablesUseAllKeysAndFirstPrimitiveArrayElements() {
         List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
                 "[{\"id\":1,\"empty\":[],\"nested\":[{},[1],null,2],\"flag\":null},{\"flag\":true,\"late\":false}]"));
         assertEquals(Arrays.asList("id", "empty", "nested", "flag", "late"),
                 fields.stream().map(FieldSchema::getName).collect(Collectors.toList()));
-        assertEquals(Arrays.asList("DOUBLE", "ARRAY<VARCHAR>", "ARRAY<DOUBLE>", "BOOLEAN", "BOOLEAN"),
+        assertEquals(Arrays.asList("BIGINT", "ARRAY<VARCHAR>", "ARRAY<BIGINT>", "BOOLEAN", "BOOLEAN"),
                 fields.stream().map(FieldSchema::getType).collect(Collectors.toList()));
     }
 

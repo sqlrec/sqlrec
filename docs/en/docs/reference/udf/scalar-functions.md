@@ -157,7 +157,7 @@ Random vector generation function that generates a normalized random vector of s
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `dimensionStr` | VARCHAR | Vector dimension, must be a positive integer string |
+| `dimension` | INT | Vector dimension, must be a positive integer |
 
 **Return Value**: Returns a normalized random vector (`ARRAY<DOUBLE>`), with L2 norm equal to 1.
 
@@ -167,15 +167,18 @@ Random vector generation function that generates a normalized random vector of s
 -- Generate a 64-dimensional random vector
 SELECT
     user_id,
-    random_vec('64') AS random_embedding
+    random_vec(64) AS random_embedding
 FROM user_info;
 
 -- Generate random vectors for cold-start users
 CACHE TABLE cold_start_users AS
 SELECT
     user_id,
-    random_vec('128') AS user_embedding
+    random_vec(128) AS user_embedding
 FROM new_users;
+
+-- Read the dimension from an execution variable, defaulting to 128
+SELECT random_vec(GET('embedding_dim', 128));
 ```
 
 **Notes**:

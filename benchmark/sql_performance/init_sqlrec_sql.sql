@@ -20,8 +20,8 @@ ELSE
   (cache table user_embedding as
     select
       *,
-      cast(random_vec('32') as FLOAT ARRAY) as user_tower_emb,
-      cast(random_vec('32') as FLOAT ARRAY) as item_tower_emb
+      cast(random_vec(32) as FLOAT ARRAY) as user_tower_emb,
+      cast(random_vec(32) as FLOAT ARRAY) as item_tower_emb
     from user_features
   );
 
