@@ -34,7 +34,7 @@ jobs:
 
   publish-release:
     needs: [build-test-release, publish-images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: sqlrec-release-${{ github.ref }}
       cancel-in-progress: false
@@ -42,22 +42,22 @@ jobs:
       contents: write
     steps:
       - name: Checkout sqlrec
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Download shared wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: model-wheels-*
           path: ${{ runner.temp }}/release-input
           merge-multiple: false
 
       - name: Download release JARs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: release-jars
           path: ${{ runner.temp }}/release-input/release-jars
