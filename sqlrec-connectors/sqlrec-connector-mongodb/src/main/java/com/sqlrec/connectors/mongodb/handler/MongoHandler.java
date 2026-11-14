@@ -7,6 +7,7 @@ import com.mongodb.client.model.ReplaceOneModel;
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.WriteModel;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.connectors.mongodb.utils.MongoClientUtils;
 import org.apache.calcite.rex.RexNode;
@@ -115,12 +116,7 @@ public class MongoHandler implements Serializable {
 
 
     private Object[] documentToRow(Document doc) {
-        List<FieldSchema> schemas = mongoConfig.fieldSchemas;
-        Object[] row = new Object[schemas.size()];
-        for (int i = 0; i < schemas.size(); i++) {
-            row[i] = doc.get(schemas.get(i).getName());
-        }
-        return row;
+        return RowTransformUtils.projectRow(mongoConfig.fieldSchemas, field -> doc.get(field.getName()));
     }
 
     private Document rowToDocument(Object[] row) {

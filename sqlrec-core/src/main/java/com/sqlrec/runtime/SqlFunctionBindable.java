@@ -166,12 +166,12 @@ public class SqlFunctionBindable extends BindableInterface {
             if (StringUtils.isNotEmpty(bindable.getCacheTableName())) {
                 cacheTableNames.add(NodeUtils.normalizeTableName(bindable.getCacheTableName()));
             }
-            Set<String> bindableTables = new HashSet<>();
             for (String tableName : tableFunction.apply(bindable)) {
-                bindableTables.add(NodeUtils.normalizeTableName(tableName));
+                String normalizedName = NodeUtils.normalizeTableName(tableName);
+                if (!cacheTableNames.contains(normalizedName)) {
+                    resultTables.add(normalizedName);
+                }
             }
-            bindableTables.removeAll(cacheTableNames);
-            resultTables.addAll(bindableTables);
         }
         return resultTables;
     }

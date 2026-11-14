@@ -6,6 +6,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.utils.JsonUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.filter.MilvusFilterBuilder;
 import com.sqlrec.connectors.milvus.utils.MilvusClientPoolUtils;
@@ -260,11 +261,7 @@ public class MilvusHandler {
     }
 
     private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
-        Object[] row = new Object[fieldSchemas.size()];
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            row[i] = entity.get(fieldSchemas.get(i).getName());
-        }
-        return row;
+        return RowTransformUtils.projectRow(fieldSchemas, field -> entity.get(field.getName()));
     }
 
     public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {
