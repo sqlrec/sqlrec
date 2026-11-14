@@ -3,6 +3,7 @@ package com.sqlrec.executor;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.Arrays;
@@ -36,10 +37,9 @@ public class SqlProcessResult implements AutoCloseable {
     }
 
     public static SqlProcessResult tableTypeDesc(List<RelDataTypeField> dataFields) {
-        List<List<String>> fieldNameAndType = dataFields.stream().map(
-                f -> Arrays.asList(f.getName(), f.getType().toString())
-        ).collect(Collectors.toList());
-        Enumerable<Object[]> enumerable = RowTransformUtils.convertListToArrayToEnumerable(fieldNameAndType);
+        Enumerable<Object[]> enumerable = Linq4j.asEnumerable(dataFields.stream()
+                .map(field -> new Object[]{field.getName(), field.getType().toString()})
+                .collect(Collectors.toList()));
         List<RelDataTypeField> resultFields = DataTypeUtils.getStringTypeFieldList(
                 Arrays.asList("name", "type")
         );

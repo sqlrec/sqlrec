@@ -1,5 +1,6 @@
 package com.sqlrec.model.huggingface;
 
+import com.sqlrec.common.config.ConfigOption;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelController;
@@ -50,19 +51,18 @@ public class HuggingFaceTransformersModel implements ModelController {
         } catch (IllegalArgumentException e) {
             return e.getMessage();
         }
-        String requiredColumn = switch (task) {
-            case "text-classification", "embedding" -> Config.TEXT_COLUMN.getValueOrNull(params);
-            case "text-generation" -> Config.PROMPT_COLUMN.getValueOrNull(params);
-            case "image-embedding" -> Config.IMAGE_COLUMN.getValueOrNull(params);
+        ConfigOption<String> requiredColumnOption = switch (task) {
+            case "text-classification", "embedding" -> Config.TEXT_COLUMN;
+            case "text-generation" -> Config.PROMPT_COLUMN;
+            case "image-embedding" -> Config.IMAGE_COLUMN;
             default -> null;
         };
+        if (requiredColumnOption == null) {
+            return "unsupported task: " + task;
+        }
+        String requiredColumn = requiredColumnOption.getValueOrNull(params);
         if (StringUtils.isBlank(requiredColumn)) {
-            return switch (task) {
-                case "text-classification", "embedding" -> "text_column is required for task " + task;
-                case "text-generation" -> "prompt_column is required for task text-generation";
-                case "image-embedding" -> "image_column is required for task image-embedding";
-                default -> "unsupported task: " + task;
-            };
+            return requiredColumnOption.getKey() + " is required for task " + task;
         }
         String error = validateStringField(model, requiredColumn);
         if (error != null) {
