@@ -3,14 +3,12 @@ package com.sqlrec.frontend.thrift;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.executor.SqlProcessResult;
+import com.sqlrec.frontend.utils.JdbcMetadataSchema;
+import com.sqlrec.frontend.utils.JdbcTypeUtils;
 import com.sqlrec.udf.config.FunctionConfigs;
-import org.apache.calcite.linq4j.Linq4j;
-import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
@@ -20,7 +18,6 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -28,27 +25,6 @@ import java.util.regex.Pattern;
 /** Hive JDBC metadata for SQLRec-visible persistent objects. No Gateway calls or UDF class loading. */
 public final class JdbcMetadataExecutor {
     private record PrimaryKey(String column, int sequence, String name) {}
-    private static final Pattern TYPE_PRECISION = Pattern.compile("(?i)^[A-Z_]+\\s*\\(\\s*(\\d+)");
-    private static final Pattern DECIMAL_SCALE = Pattern.compile("(?i)^DECIMAL\\s*\\(\\s*\\d+\\s*,\\s*(\\d+)");
-    private static final String CATALOG_COLUMNS = "TABLE_CAT";
-    private static final String SCHEMA_COLUMNS = "TABLE_SCHEM,TABLE_CATALOG";
-    private static final String TABLE_TYPE_COLUMNS = "TABLE_TYPE";
-    private static final String TABLE_COLUMNS =
-            "TABLE_CAT,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE,REMARKS,TYPE_CAT,TYPE_SCHEM,TYPE_NAME,"
-            + "SELF_REFERENCING_COL_NAME,REF_GENERATION";
-    private static final String COLUMN_RESULT_COLUMNS =
-            "TABLE_CAT,TABLE_SCHEM,TABLE_NAME,COLUMN_NAME,DATA_TYPE,TYPE_NAME,COLUMN_SIZE,"
-            + "BUFFER_LENGTH,DECIMAL_DIGITS,NUM_PREC_RADIX,NULLABLE,REMARKS,COLUMN_DEF,SQL_DATA_TYPE,"
-            + "SQL_DATETIME_SUB,CHAR_OCTET_LENGTH,ORDINAL_POSITION,IS_NULLABLE,SCOPE_CATALOG,"
-            + "SCOPE_SCHEMA,SCOPE_TABLE,SOURCE_DATA_TYPE,IS_AUTOINCREMENT,IS_GENERATEDCOLUMN";
-    private static final String FUNCTION_COLUMNS = "FUNCTION_CAT,FUNCTION_SCHEM,FUNCTION_NAME,REMARKS,FUNCTION_TYPE,SPECIFIC_NAME";
-    private static final String PRIMARY_KEY_COLUMNS = "TABLE_CAT,TABLE_SCHEM,TABLE_NAME,COLUMN_NAME,KEY_SEQ,PK_NAME";
-    private static final String TYPE_INFO_COLUMNS =
-            "TYPE_NAME,DATA_TYPE,PRECISION,LITERAL_PREFIX,LITERAL_SUFFIX,CREATE_PARAMS,NULLABLE,"
-            + "CASE_SENSITIVE,SEARCHABLE,UNSIGNED_ATTRIBUTE,FIXED_PREC_SCALE,AUTO_INCREMENT,"
-            + "LOCAL_TYPE_NAME,MINIMUM_SCALE,MAXIMUM_SCALE,SQL_DATA_TYPE,SQL_DATETIME_SUB,NUM_PREC_RADIX";
-    private static final Map<String, SqlTypeName> COLUMN_TYPES = columnTypes();
-    private static final Map<String, SqlTypeName> TYPE_INFO_TYPES = typeInfoTypes();
     private final MetadataAccess metadata;
 
     public JdbcMetadataExecutor(MetadataAccess metadata) {
@@ -60,7 +36,7 @@ public final class JdbcMetadataExecutor {
     }
 
     public SqlProcessResult catalogs() {
-        return rows(CATALOG_COLUMNS, List.<Object[]>of(new Object[]{catalog()}));
+        return JdbcMetadataSchema.CATALOGS.rows(List.<Object[]>of(new Object[]{catalog()}));
     }
 
     public SqlProcessResult schemas(String requestedCatalog, String schemaPattern) throws Exception {
@@ -70,11 +46,11 @@ public final class JdbcMetadataExecutor {
                 result.add(new Object[]{database, catalog()});
             }
         }
-        return rows(SCHEMA_COLUMNS, result);
+        return JdbcMetadataSchema.SCHEMAS.rows(result);
     }
 
     public SqlProcessResult tableTypes() {
-        return rows(TABLE_TYPE_COLUMNS, List.of(new Object[]{"TABLE"}, new Object[]{"VIEW"}));
+        return JdbcMetadataSchema.TABLE_TYPES.rows(List.of(new Object[]{"TABLE"}, new Object[]{"VIEW"}));
     }
 
     public SqlProcessResult tables(String requestedCatalog, String schemaPattern,
@@ -94,7 +70,7 @@ public final class JdbcMetadataExecutor {
                 }
             }
         }
-        return rows(TABLE_COLUMNS, result);
+        return JdbcMetadataSchema.TABLES.rows(result);
     }
 
     public SqlProcessResult columns(String requestedCatalog, String schemaPattern,
@@ -112,7 +88,7 @@ public final class JdbcMetadataExecutor {
                 }
             }
         }
-        return rows(COLUMN_RESULT_COLUMNS, COLUMN_TYPES, result);
+        return JdbcMetadataSchema.COLUMNS.rows(result);
     }
 
     private static List<Object[]> columnRows(String database, Table table, Predicate<String> filter) throws Exception {
@@ -131,25 +107,19 @@ public final class JdbcMetadataExecutor {
     private static Object[] columnRow(String database, Table table, FieldSchema column,
             int index, List<String> primaryKeys) {
         String rawType = column.getType();
-        int type = jdbcType(rawType);
-        int size = precision(rawType);
+        int type = JdbcTypeUtils.jdbcType(rawType);
+        int size = JdbcTypeUtils.precision(rawType);
         boolean nullable = !primaryKeys.contains(column.getName())
-                && !rawType.toUpperCase(Locale.ROOT).endsWith("NOT NULL");
+                && JdbcTypeUtils.isNullable(rawType);
         String prefix = "flink.schema." + index + ".";
-        String typeName = rawType.replaceAll("(?i)\\s+NOT\\s+NULL$", "");
+        String typeName = JdbcTypeUtils.typeName(rawType);
         Integer characterLength = type == Types.VARCHAR || type == Types.CHAR ? size : null;
         boolean generated = parameters(table).containsKey(prefix + "expr");
         return new Object[]{catalog(), database, table.getTableName(), column.getName(),
-                type, typeName, size, null, scale(rawType), numericRadix(type),
+                type, typeName, size, null, JdbcTypeUtils.scale(rawType), JdbcTypeUtils.numericRadix(type),
                 nullable ? DatabaseMetaData.columnNullable : DatabaseMetaData.columnNoNulls,
                 columnComment(table, column.getName(), prefix), null, null, null, characterLength,
                 index + 1, nullable ? "YES" : "NO", null, null, null, null, "NO", generated ? "YES" : "NO"};
-    }
-
-    private static Map<String, SqlTypeName> columnTypes() {
-        Map<String, SqlTypeName> types = integerColumns("DATA_TYPE,COLUMN_SIZE,BUFFER_LENGTH,DECIMAL_DIGITS,NUM_PREC_RADIX,NULLABLE,SQL_DATA_TYPE,SQL_DATETIME_SUB,CHAR_OCTET_LENGTH,ORDINAL_POSITION");
-        types.put("SOURCE_DATA_TYPE", SqlTypeName.SMALLINT);
-        return Map.copyOf(types);
     }
 
     public SqlProcessResult functions(String requestedCatalog, String schemaPattern,
@@ -161,8 +131,7 @@ public final class JdbcMetadataExecutor {
                 result.addAll(functionRows(database, functionFilter));
             }
         }
-        return rows(FUNCTION_COLUMNS,
-                Map.of("FUNCTION_TYPE", SqlTypeName.SMALLINT), result);
+        return JdbcMetadataSchema.FUNCTIONS.rows(result);
     }
 
     private List<Object[]> functionRows(String database, Predicate<String> filter) throws Exception {
@@ -222,8 +191,7 @@ public final class JdbcMetadataExecutor {
                 }
             }
         }
-        return rows(PRIMARY_KEY_COLUMNS,
-                Map.of("KEY_SEQ", SqlTypeName.SMALLINT), result);
+        return JdbcMetadataSchema.PRIMARY_KEYS.rows(result);
     }
 
     public SqlProcessResult typeInfo() {
@@ -232,29 +200,18 @@ public final class JdbcMetadataExecutor {
                 "DECIMAL", "STRING", "CHAR", "VARCHAR", "BINARY", "DATE", "TIMESTAMP", "ARRAY", "MAP", "STRUCT")) {
             result.add(typeInfoRow(type));
         }
-        return rows(TYPE_INFO_COLUMNS, TYPE_INFO_TYPES, result);
+        return JdbcMetadataSchema.TYPE_INFO.rows(result);
     }
 
     private static Object[] typeInfoRow(String type) {
-        int code = jdbcType(type);
+        int code = JdbcTypeUtils.jdbcType(type);
         boolean character = code == Types.CHAR || code == Types.VARCHAR;
         String quote = character ? "'" : null;
         String createParams = type.equals("DECIMAL") ? "precision,scale" : character ? "length" : null;
         short maxScale = (short) (type.equals("DECIMAL") ? 38 : type.equals("TIMESTAMP") ? 9 : 0);
-        return new Object[]{type, code, precision(type), quote, quote, createParams,
+        return new Object[]{type, code, JdbcTypeUtils.precision(type), quote, quote, createParams,
                 (short) DatabaseMetaData.typeNullable, character, (short) DatabaseMetaData.typeSearchable,
-                false, false, false, type, (short) 0, maxScale, null, null, numericRadix(code)};
-    }
-
-    private static Map<String, SqlTypeName> typeInfoTypes() {
-        Map<String, SqlTypeName> types = integerColumns("DATA_TYPE,PRECISION,SQL_DATA_TYPE,SQL_DATETIME_SUB,NUM_PREC_RADIX");
-        for (String name : List.of("NULLABLE", "SEARCHABLE", "MINIMUM_SCALE", "MAXIMUM_SCALE")) {
-            types.put(name, SqlTypeName.SMALLINT);
-        }
-        for (String name : List.of("CASE_SENSITIVE", "UNSIGNED_ATTRIBUTE", "FIXED_PREC_SCALE", "AUTO_INCREMENT")) {
-            types.put(name, SqlTypeName.BOOLEAN);
-        }
-        return Map.copyOf(types);
+                false, false, false, type, (short) 0, maxScale, null, null, JdbcTypeUtils.numericRadix(code)};
     }
 
     private List<String> databases(String pattern) throws Exception {
@@ -331,98 +288,4 @@ public final class JdbcMetadataExecutor {
         return result;
     }
 
-    private static String baseType(String type) {
-        return type.strip().toUpperCase(Locale.ROOT).split("[<(\\s]", 2)[0];
-    }
-
-    static int jdbcType(String type) {
-        return switch (baseType(type)) {
-            case "BOOLEAN" -> Types.BOOLEAN;
-            case "TINYINT" -> Types.TINYINT;
-            case "SMALLINT" -> Types.SMALLINT;
-            case "INT", "INTEGER" -> Types.INTEGER;
-            case "BIGINT" -> Types.BIGINT;
-            case "FLOAT" -> Types.FLOAT;
-            case "DOUBLE" -> Types.DOUBLE;
-            case "DECIMAL" -> Types.DECIMAL;
-            case "CHAR" -> Types.CHAR;
-            case "VARCHAR", "STRING" -> Types.VARCHAR;
-            case "BINARY", "VARBINARY", "BYTES" -> Types.BINARY;
-            case "DATE" -> Types.DATE;
-            case "TIME" -> Types.TIME;
-            case "TIMESTAMP", "TIMESTAMP_LTZ" -> Types.TIMESTAMP;
-            case "ARRAY" -> Types.ARRAY;
-            case "ROW", "STRUCT" -> Types.STRUCT;
-            default -> Types.JAVA_OBJECT;
-        };
-    }
-
-    private static int precision(String type) {
-        String base = baseType(type);
-        if (base.equals("TIME") || base.equals("TIMESTAMP") || base.equals("TIMESTAMP_LTZ")) {
-            int fraction = fractionalPrecision(type);
-            return (base.equals("TIME") ? 8 : 19) + (fraction == 0 ? 0 : fraction + 1);
-        }
-        var match = TYPE_PRECISION.matcher(type);
-        if (match.find()) {
-            return Integer.parseInt(match.group(1));
-        }
-        return switch (baseType(type)) {
-            case "TINYINT" -> 3;
-            case "SMALLINT" -> 5;
-            case "INT", "INTEGER" -> 10;
-            case "BIGINT" -> 19;
-            case "FLOAT" -> 7;
-            case "DOUBLE" -> 15;
-            case "DECIMAL" -> 38;
-            case "DATE" -> 10;
-            case "BOOLEAN" -> 1;
-            default -> Integer.MAX_VALUE;
-        };
-    }
-
-    private static Integer scale(String type) {
-        return switch (baseType(type)) {
-            case "TIME", "TIMESTAMP", "TIMESTAMP_LTZ" -> fractionalPrecision(type);
-            case "DECIMAL" -> {
-                var match = DECIMAL_SCALE.matcher(type);
-                yield match.find() ? Integer.valueOf(match.group(1)) : 0;
-            }
-            case "TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT" -> 0;
-            default -> null;
-        };
-    }
-
-    private static int fractionalPrecision(String type) {
-        var match = TYPE_PRECISION.matcher(type);
-        return match.find() ? Integer.parseInt(match.group(1)) : baseType(type).equals("TIME") ? 0 : 9;
-    }
-
-    private static Integer numericRadix(int type) {
-        return switch (type) {
-            case Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT,
-                    Types.FLOAT, Types.DOUBLE, Types.DECIMAL -> 10;
-            default -> null;
-        };
-    }
-
-    private static Map<String, SqlTypeName> integerColumns(String columns) {
-        Map<String, SqlTypeName> types = new LinkedHashMap<>();
-        for (String name : columns.split(",")) {
-            types.put(name, SqlTypeName.INTEGER);
-        }
-        return types;
-    }
-
-    private static SqlProcessResult rows(String columns, List<Object[]> values) {
-        return rows(columns, Map.of(), values);
-    }
-
-    private static SqlProcessResult rows(String columns, Map<String, SqlTypeName> types, List<Object[]> values) {
-        List<RelDataTypeField> fields = new ArrayList<>();
-        for (String name : columns.split(",")) {
-            fields.add(DataTypeUtils.getRelDataTypeField(name, fields.size(), types.getOrDefault(name, SqlTypeName.VARCHAR)));
-        }
-        return SqlProcessResult.of(Linq4j.asEnumerable(values), fields);
-    }
 }

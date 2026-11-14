@@ -21,8 +21,8 @@ class HuggingFaceHttpTest(unittest.TestCase):
         def predict(rows):
             self.calls.append(rows)
             return {"embedding": [[len(row["text"])] for row in rows]}
-        self.server._adapter = types.SimpleNamespace(predict=predict)
-        self.server._batch_size = 2
+        self.server._runtime.adapter = types.SimpleNamespace(predict=predict)
+        self.server._runtime.batch_size = 2
         self.client = TestClient(self.server.app)
         self.addCleanup(self.client.close)
 
@@ -41,13 +41,13 @@ class HuggingFaceHttpTest(unittest.TestCase):
             with self.subTest(body=body):
                 self.assertEqual(self.client.post("/predict", json=body).status_code, 400)
         self.assertEqual(self.calls, [])
-        self.server._adapter = None
+        self.server._runtime.adapter = None
         self.assertEqual(self.client.post("/predict", json=[{"text": "a"}]).status_code, 503)
 
     def test_sql_null_text_returns_400_before_tokenization(self):
         from test_huggingface_classification import ClassificationTest
         adapter = ClassificationTest().adapter(None, [[2., 3.]])
-        self.server._adapter = adapter
+        self.server._runtime.adapter = adapter
         response = self.client.post("/predict", json=[{"body": None}])
         self.assertEqual(response.status_code, 400, response.text)
         self.assertIn("non-null STRING", response.json()["detail"])
@@ -84,7 +84,7 @@ class HuggingFaceHttpTest(unittest.TestCase):
                 self.server.load_runtime(directory, str(config))
         self.assertEqual(calls[0]["task"], "embedding")
         self.assertEqual(calls[0]["text_column"], "text")
-        self.assertEqual(self.server._batch_size, 3)
+        self.assertEqual(self.server._runtime.batch_size, 3)
 
     def test_checkpoint_column_options_and_service_overrides_use_declared_schema_spelling(self):
         calls = []

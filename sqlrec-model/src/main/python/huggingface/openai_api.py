@@ -7,9 +7,10 @@ import json
 import logging
 import math
 import os
-import threading
 import time
 import uuid
+
+from huggingface.runtime import ModelBusy
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -17,8 +18,6 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("sqlrec.huggingface.openai")
-SERVICE_PARAMS = ("served_model_name", "openai_api_key_secret", "openai_api_key_secret_key",
-                  "openai_max_request_bytes", "openai_max_batch_inputs")
 
 
 class APIError(Exception):
@@ -46,9 +45,8 @@ def number(value, name, lower, upper, exclusive_lower=False):
 
 
 class OpenAIRuntime:
-    def __init__(self, adapter_provider):
-        self.adapter_provider = adapter_provider
-        self.slot = threading.Lock()
+    def __init__(self, model_runtime):
+        self.model_runtime = model_runtime
         self.configure({}, {})
 
     def configure(self, manifest, service_config):
@@ -68,7 +66,7 @@ class OpenAIRuntime:
             raise ValueError("OpenAI API key must contain printable ASCII without whitespace")
 
     def adapter(self, task=None):
-        adapter = self.adapter_provider()
+        adapter = self.model_runtime.adapter
         if adapter is None:
             raise APIError(503, "model is not loaded", "model_not_ready")
         if task is not None and self.task != task:
@@ -77,12 +75,11 @@ class OpenAIRuntime:
 
     @contextmanager
     def inference(self):
-        if not self.slot.acquire(blocking=False):
-            raise APIError(429, "model is busy", "rate_limit_exceeded")
         try:
-            yield
-        finally:
-            self.slot.release()
+            with self.model_runtime.inference():
+                yield
+        except ModelBusy as exc:
+            raise APIError(429, str(exc), "rate_limit_exceeded") from None
 
     def validate(self, body, allowed):
         if not isinstance(body, dict):

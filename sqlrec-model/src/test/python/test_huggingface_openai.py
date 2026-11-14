@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from huggingface.openai_api import APIError, OpenAIMiddleware, OpenAIRuntime
+from huggingface.runtime import ModelRuntime
 
 
 class OpenAIHttpTest(unittest.TestCase):
@@ -29,7 +30,7 @@ class OpenAIHttpTest(unittest.TestCase):
         self.adapter.embed = Mock(side_effect=lambda texts, strict: {
             'embedding': [[float(len(text)), 1.] for text in texts], 'prompt_tokens': len(texts) * 3})
         self.adapter.predict = Mock(return_value={'generated_text': ['native']})
-        self.server._adapter = self.adapter
+        self.server._runtime.adapter = self.adapter
         self.configure()
         self.client = TestClient(self.server.app)
         self.addCleanup(self.client.close)
@@ -60,7 +61,7 @@ class OpenAIHttpTest(unittest.TestCase):
         self.post(status=404)
         self.post({**self.body, 'model': 'alias'})
         self.post({**self.body, 'model': ''}, status=400)
-        self.server._adapter = None
+        self.server._runtime.adapter = None
         self.post({**self.body, 'model': 'alias'}, status=503)
 
     def test_strict_chat_fields_and_types(self):
@@ -170,13 +171,13 @@ class OpenAIHttpTest(unittest.TestCase):
                 self.server.load_runtime(directory, str(config))
         self.assertEqual(self.runtime.model_name, 'original')
         self.assertEqual(self.runtime.max_request_bytes, 1048576)
-        self.assertNotIn('openai_api_key_secret', self.server._adapter.config)
+        self.assertNotIn('openai_api_key_secret', self.server._runtime.adapter.config)
 
 
 class StreamLimitTest(unittest.TestCase):
     def test_chunked_body_is_bounded_without_content_length(self):
         async def run():
-            runtime = OpenAIRuntime(lambda: None)
+            runtime = OpenAIRuntime(ModelRuntime({}))
             runtime.max_request_bytes = 4
             app = Mock()
             middleware = OpenAIMiddleware(app, runtime)
