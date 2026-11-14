@@ -49,7 +49,7 @@ class UnionDependencyTest {
                     "RETURN CALL throwable_fail(input1, '" + kind + "') LIKE input1"));
             for (String call : List.of("throwable_fail(seed_table, '" + kind + "') LIKE seed_table",
                     "throwable_child(seed_table)",
-                    "GET_OR_DEFAULT('callee', 'throwable_child')(seed_table) LIKE seed_table")) {
+                    "GET('callee', 'throwable_child')(seed_table) LIKE seed_table")) {
                 SqlFunctionBindable union = compile(
                         "CACHE TABLE seed_table AS SELECT 1 AS id",
                         "CACHE TABLE branch_table AS CALL " + call,
@@ -435,7 +435,7 @@ class UnionDependencyTest {
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
                 "CACHE TABLE actual_table AS CALL dependency_fail(seed_table)",
-                "CACHE TABLE branch_table AS CALL GET_OR_DEFAULT('callee', 'dynamic_condition_child')"
+                "CACHE TABLE branch_table AS CALL GET('callee', 'dynamic_condition_child')"
                         + "(actual_table) LIKE actual_table",
                 "RETURN SELECT * FROM branch_table UNION ALL SELECT 3 AS id");
 
@@ -449,7 +449,7 @@ class UnionDependencyTest {
         SqlFunctionBindable child = compileFailingConditionalChild();
         assertFalse(child.getBindableList().getFirst().isIgnoreException());
         for (String call : List.of("failing_if_child(seed_table)",
-                "GET_OR_DEFAULT('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
+                "GET('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
             SqlFunctionBindable function = compile(
                     "CACHE TABLE seed_table AS SELECT 1 AS id",
                     "CACHE TABLE branch_table AS CALL " + call,
@@ -464,7 +464,7 @@ class UnionDependencyTest {
     void failedCallsRemainRequiredWhenReturnedDirectlyOrUsedOutsideUnion() throws Exception {
         compileFailingConditionalChild();
         for (String call : List.of("failing_if_child(seed_table)",
-                "GET_OR_DEFAULT('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
+                "GET('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
             SqlFunctionBindable returned = compile(
                     "CACHE TABLE seed_table AS SELECT 1 AS id",
                     "CACHE TABLE branch_table AS CALL " + call,
@@ -487,7 +487,7 @@ class UnionDependencyTest {
     void aParentConditionUsesTheCalleesRecoveredResult() throws Exception {
         compileRecoverableChild();
         for (String call : List.of("recoverable_child(seed_table)",
-                "GET_OR_DEFAULT('callee', 'recoverable_child')(seed_table) LIKE seed_table")) {
+                "GET('callee', 'recoverable_child')(seed_table) LIKE seed_table")) {
             SqlFunctionBindable function = compile(
                     "CACHE TABLE seed_table AS SELECT 1 AS id",
                     "CACHE TABLE guard_table AS CALL " + call,
@@ -504,7 +504,7 @@ class UnionDependencyTest {
     void anUnrecoveredCalleeFailureStillFailsAParentCondition() throws Exception {
         compileFailingConditionalChild();
         for (String call : List.of("failing_if_child(seed_table)",
-                "GET_OR_DEFAULT('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
+                "GET('callee', 'failing_if_child')(seed_table) LIKE seed_table")) {
             SqlFunctionBindable function = compile(
                     "CACHE TABLE seed_table AS SELECT 1 AS id",
                     "CACHE TABLE guard_table AS CALL " + call,
@@ -523,7 +523,7 @@ class UnionDependencyTest {
         compileRecoverableChild();
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
-                "CACHE TABLE branch_table AS CALL GET_OR_DEFAULT('callee', 'recoverable_child')"
+                "CACHE TABLE branch_table AS CALL GET('callee', 'recoverable_child')"
                         + "(seed_table) LIKE seed_table",
                 "RETURN SELECT * FROM branch_table UNION ALL SELECT 3 AS id");
 
@@ -616,7 +616,7 @@ class UnionDependencyTest {
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
                 "CACHE TABLE branch_table AS CALL dependency_fail(seed_table)",
-                "CACHE TABLE call_table AS CALL GET_OR_DEFAULT('callee', 'healthy_dynamic_child')"
+                "CACHE TABLE call_table AS CALL GET('callee', 'healthy_dynamic_child')"
                         + "(seed_table) LIKE seed_table",
                 "RETURN SELECT * FROM branch_table UNION ALL SELECT * FROM call_table");
 

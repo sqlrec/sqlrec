@@ -182,7 +182,7 @@ SET 'limit_count' = '100';
 
 SELECT CAST(`get`('limit_count') AS INT);
 
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 API 请求体中的 `params` 也会进入执行上下文：
@@ -206,7 +206,7 @@ API 请求体中的 `params` 也会进入执行上下文：
 执行变量可用于在运行时选择函数：
 
 ```sql
-CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(user_info, recall_result)
+CALL GET('rank_fun', 'default_rank')(user_info, recall_result)
 LIKE FUNCTION 'default_rank';
 ```
 
@@ -269,7 +269,7 @@ PARTITION BY input_table SIZE 100;
 ```
 
 - `PARTITION BY` 指定被拆分的输入表。
-- `SIZE` 是每个分区的最大行数，也可以使用 `get()` 或 `get_or_default()` 取值。
+- `SIZE` 是每个分区的最大行数，也可以使用 `get()` 取值。
 - 被分区的表必须是被调函数的输入参数之一。
 - 建议使用 `LIKE` 明确合并后的结果结构。
 

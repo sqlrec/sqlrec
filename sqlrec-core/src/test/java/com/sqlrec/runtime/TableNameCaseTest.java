@@ -68,7 +68,7 @@ class TableNameCaseTest {
         SqlFunctionBindable function = compile("case_java",
                 "CACHE TABLE Seed_Table AS SELECT 7 AS id",
                 "CACHE TABLE Java_Result AS CALL case_echo(SEED_TABLE) LIKE sEeD_tAbLe",
-                "CACHE TABLE Dynamic_Result AS CALL GET_OR_DEFAULT('callee', 'case_echo')(sEeD_tAbLe) "
+                "CACHE TABLE Dynamic_Result AS CALL GET('callee', 'case_echo')(sEeD_tAbLe) "
                         + "LIKE SEED_TABLE PARTITION BY Seed_Table SIZE 1",
                 "RETURN SELECT * FROM JAVA_RESULT UNION ALL SELECT * FROM dynamic_result");
         assertInts(function, List.of(7, 7));
@@ -80,7 +80,7 @@ class TableNameCaseTest {
         SqlFunctionBindable function = compile("case_parent",
                 "CACHE TABLE Seed_Table AS SELECT 7 AS id",
                 "CACHE TABLE Static_Result AS CALL case_child(SEED_TABLE)",
-                "CACHE TABLE Dynamic_Result AS CALL GET_OR_DEFAULT('callee', 'case_child')(sEeD_tAbLe) LIKE SEED_TABLE",
+                "CACHE TABLE Dynamic_Result AS CALL GET('callee', 'case_child')(sEeD_tAbLe) LIKE SEED_TABLE",
                 "RETURN SELECT * FROM STATIC_RESULT UNION ALL SELECT * FROM dynamic_result");
         assertInts(function, List.of(7, 7));
     }

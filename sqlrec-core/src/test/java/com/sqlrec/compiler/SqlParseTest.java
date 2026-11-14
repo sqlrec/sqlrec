@@ -52,7 +52,7 @@ public class SqlParseTest {
                 "call fun1(t1) like function 'fun2' async",
                 "call fun1(t1) partition by t1 size 100",
                 "call fun1(t1) partition by t1 size get('partition_size')",
-                "call fun1(t1) partition by t1 size get_or_default('partition_size', '100')",
+                "call fun1(t1) partition by t1 size get('partition_size', '100')",
                 "call fun1(t1) partition by t1 size 100 async",
                 "call fun1(t1) like t1 partition by t1 size 100",
                 "call fun1(t1) like function 'fun2' partition by t1 size 100 async",

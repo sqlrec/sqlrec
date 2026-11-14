@@ -14,7 +14,7 @@ import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.impl.ReflectiveFunctionBase;
 import org.apache.hadoop.hive.ql.udf.UDFType;
-import org.checkerframework.checker.nullness.qual.Nullable;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -46,38 +46,20 @@ public class SqlRecScalarFunctionImpl extends ReflectiveFunctionBase
         return retParams;
     }
 
-    public static @Nullable ScalarFunction create(Class<?> clazz, String methodName) {
-        final Method method = findMethod(clazz, methodName);
-        if (method == null) {
-            return null;
-        }
-        return create(method);
-    }
-
-    static @Nullable Method findMethod(Class<?> clazz, String name) {
-        Method preferredMethod = null;
-        Method otherMethod = null;
-        
+    public static List<ScalarFunction> createAll(Class<?> clazz, String methodName) {
+        List<ScalarFunction> functions = new ArrayList<>();
         for (Method method : clazz.getMethods()) {
-            if (method.getName().equals(name) && !method.isBridge()) {
-                if (isPreferParams(method)) {
-                    preferredMethod = method;
-                } else if (otherMethod == null) {
-                    otherMethod = method;
-                }
+            if (!method.getName().equals(methodName) || method.isBridge()) {
+                continue;
             }
-        }
-        
-        return preferredMethod != null ? preferredMethod : otherMethod;
-    }
-
-    private static boolean isPreferParams(Method method) {
-        for (Class<?> paramType : method.getParameterTypes()) {
-            if (paramType != String.class && paramType != DataContext.class && paramType != Object.class) {
-                return false;
+            // Hive's execution entry point is not a SQL overload.
+            if (method.getParameterCount() == 1
+                    && method.getParameterTypes()[0] == DeferredObject[].class) {
+                continue;
             }
+            functions.add(create(method));
         }
-        return true;
+        return functions;
     }
 
     public static ScalarFunction create(Method method) {

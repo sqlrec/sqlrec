@@ -61,7 +61,7 @@ curl -X POST http://localhost:30001/api/v1/recommend \
 
 ## 传递执行参数
 
-`params` 适合传递返回数量、实验分组、动态函数名等请求级配置。值必须是字符串，可在 SQL 中通过 `` `get` `` 或 `` `get_or_default` `` 读取：
+`params` 适合传递返回数量、实验分组、动态函数名等请求级配置。值必须是字符串，可在 SQL 中通过 `` `get` `` 读取：
 
 ```json
 {
@@ -76,7 +76,7 @@ curl -X POST http://localhost:30001/api/v1/recommend \
 ```
 
 ```sql
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 ## 读取响应

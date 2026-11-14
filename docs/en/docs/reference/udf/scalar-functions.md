@@ -54,7 +54,7 @@ The Calcite reference may describe a newer version than the one used by SQLRec a
 | Array predicates | [`array_contains`](#array-contains), [`array_contains_all`](#array-contains-all), [`array_contains_any`](#array-contains-any) |
 | Vector operations | [`random_vec`](#random-vec), [`l2_norm`](#l2-norm), [`ip`](#ip) |
 | Request identifiers | [`uuid`](#uuid) |
-| Execution variables | [`get`](#get), [`get_or_default`](#get-or-default) |
+| Execution variables | [`get`](#get) |
 | Remote models | [`llm_embed_text`, `llm_complete`, `ark_embed_image`](#remote-model-functions) |
 
 ### array_contains
@@ -269,8 +269,9 @@ Variable retrieval function that gets the value of a variable from the execution
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `key` | VARCHAR | Variable name |
+| `defaultValue` | VARCHAR | Optional default value when the variable is absent |
 
-**Return Value**: Returns the variable value (`VARCHAR`). An absent execution variable falls back to the same-named environment variable by default; returns `NULL` if neither exists. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
+**Return Value**: Returns the variable value (`VARCHAR`). An absent execution variable falls back to the same-named environment variable by default; returns `defaultValue` if neither exists, or `NULL` when the default is omitted. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
 
 ::: warning Note
 Since `get` is a SQL keyword, you need to wrap the function name with backticks when using it, written as `` `get` ``.
@@ -288,6 +289,9 @@ SELECT `get`('user_id') AS user_id;
 -- Use in expressions
 SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
 
+-- Default value
+SELECT `get`('limit_count', '50') AS limit_count;
+
 -- Type conversion
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
 
@@ -301,36 +305,7 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 - Dynamic configuration passing
 - Cross-statement variable sharing
 
----
-
-### get_or_default
-
-Variable retrieval function with default value that gets the value of a variable from the execution context, returning the specified default value if the variable doesn't exist.
-
-**Parameters**:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | VARCHAR | Variable name |
-| `defaultValue` | VARCHAR | Default value to return when variable doesn't exist |
-
-**Return Value**: Returns the variable value (`VARCHAR`), resolving the execution variable, same-named environment variable, then `defaultValue` by default. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable environment fallback. Explicit empty strings still take precedence.
-
-**Usage Example**:
-
-```sql
-SET 'limit_count' = '10';
-
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT) AS limit_count;
-```
-
-To select a function dynamically, use `GET_OR_DEFAULT(...)` as shown in [Writing a Recommendation Flow](../../guides/recommendation-flow.md#select-a-function-dynamically).
-
-**Typical Use Cases**:
-- Dynamic function calls with fallback functions
-- Configuration retrieval with default settings
-- Parameterized SQL with default parameters
-
+To select a function dynamically, use `GET('callee', 'fallback')` as shown in [Writing a Recommendation Flow](../../guides/recommendation-flow.md#select-a-function-dynamically).
 
 ### Remote model functions
 

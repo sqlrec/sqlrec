@@ -110,7 +110,7 @@ class CallSqlFunctionBindableTest {
                 compile("overwrite_input_child", "DEFINE INPUT TABLE Input1(id integer)",
                         write, "RETURN SELECT * FROM Input1");
                 for (String call : List.of("overwrite_input_child(seed_table)",
-                        "GET_OR_DEFAULT('callee', 'overwrite_input_child')(seed_table) LIKE seed_table")) {
+                        "GET('callee', 'overwrite_input_child')(seed_table) LIKE seed_table")) {
                     SqlFunctionBindable parent = compile("overwrite_input_parent",
                             "CACHE TABLE seed_table AS SELECT 7 AS id",
                             "RETURN CALL " + call);

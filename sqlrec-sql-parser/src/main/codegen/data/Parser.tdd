@@ -25,7 +25,6 @@
     "FLUSH"
     "FORMATTED"
     "FUNCTIONS"
-    "GET_OR_DEFAULT"
     "IF"
     "MODEL"
     "MODELS"

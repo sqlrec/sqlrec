@@ -180,7 +180,7 @@ SET 'limit_count' = '100';
 
 SELECT CAST(`get`('limit_count') AS INT);
 
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 API `params` are added to the same execution context:
@@ -204,7 +204,7 @@ API `params` are added to the same execution context:
 To select a function at runtime, use an execution variable:
 
 ```sql
-CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(user_info, recall_result)
+CALL GET('rank_fun', 'default_rank')(user_info, recall_result)
 LIKE FUNCTION 'default_rank';
 ```
 
@@ -265,7 +265,7 @@ PARTITION BY input_table SIZE 100;
 ```
 
 - `PARTITION BY` selects the table to split.
-- `SIZE` is the maximum rows per partition and may also come from `get()` or `get_or_default()`.
+- `SIZE` is the maximum rows per partition and may also come from `get()`.
 - The partitioned table must be an argument of the called function.
 - Prefer `LIKE` to declare the merged result schema.
 

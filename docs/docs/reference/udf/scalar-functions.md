@@ -54,7 +54,7 @@ Calcite 官方参考页可能对应比 SQLRec 依赖更新的版本，并且包�
 | 数组判断 | [`array_contains`](#array-contains)、[`array_contains_all`](#array-contains-all)、[`array_contains_any`](#array-contains-any) |
 | 向量计算 | [`random_vec`](#random-vec)、[`l2_norm`](#l2-norm)、[`ip`](#ip) |
 | 请求标识 | [`uuid`](#uuid) |
-| 执行变量 | [`get`](#get)、[`get_or_default`](#get-or-default) |
+| 执行变量 | [`get`](#get) |
 | 远程模型 | [`llm_embed_text`、`llm_complete`、`ark_embed_image`](#远程模型函数) |
 
 ### array_contains
@@ -269,8 +269,9 @@ LIMIT 300;
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `key` | VARCHAR | 变量名 |
+| `defaultValue` | VARCHAR | 可选，变量不存在时返回的默认值 |
 
-**返回值**：返回变量的值（`VARCHAR`）。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
+**返回值**：返回变量的值（`VARCHAR`）。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `defaultValue`，未指定默认值时返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
 
 ::: warning 注意
 由于 `get` 是 SQL 关键字，使用时需要用反引号包裹函数名，写作 `` `get` ``。
@@ -288,6 +289,9 @@ SELECT `get`('user_id') AS user_id;
 -- 在表达式中使用
 SELECT `get`('user_id') || '_suffix' AS user_id_with_suffix;
 
+-- 指定默认值
+SELECT `get`('limit_count', '50') AS limit_count;
+
 -- 类型转换
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
 
@@ -301,36 +305,7 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 - 动态配置传递
 - 跨语句共享变量
 
----
-
-### get_or_default
-
-变量获取函数（带默认值），从执行上下文中获取变量的值，如果变量不存在则返回指定的默认值。
-
-**参数**：
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `key` | VARCHAR | 变量名 |
-| `defaultValue` | VARCHAR | 默认值，当变量不存在时返回 |
-
-**返回值**：返回变量的值（`VARCHAR`）。默认按执行变量、同名环境变量、`defaultValue` 的顺序解析。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭环境变量回退；显式空字符串仍优先。
-
-**使用示例**：
-
-```sql
-SET 'limit_count' = '10';
-
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT) AS limit_count;
-```
-
-动态选择被调函数时使用 `GET_OR_DEFAULT(...)`，写法见[推荐流程指南](../../guides/recommendation-flow.md#动态选择函数)。
-
-**典型应用场景**：
-- 动态函数调用，提供兜底函数
-- 配置项获取，提供默认配置
-- 参数化 SQL，提供默认参数
-
+动态选择被调函数时使用 `GET('callee', 'fallback')`，写法见[推荐流程指南](../../guides/recommendation-flow.md#动态选择函数)。
 
 ### 远程模型函数
 

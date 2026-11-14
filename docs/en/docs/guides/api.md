@@ -61,7 +61,7 @@ For multiple inputs, add each table under `data`:
 
 ## Pass Execution Parameters
 
-Use `params` for request-level settings such as result limits, experiment groups, or dynamically selected functions. Values must be strings. Read them in SQL with `` `get` `` or `` `get_or_default` ``:
+Use `params` for request-level settings such as result limits, experiment groups, or dynamically selected functions. Values must be strings. Read them in SQL with `` `get` ``:
 
 ```json
 {
@@ -76,7 +76,7 @@ Use `params` for request-level settings such as result limits, experiment groups
 ```
 
 ```sql
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 ## Read the Response

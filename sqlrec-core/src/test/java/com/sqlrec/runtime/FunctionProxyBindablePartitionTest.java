@@ -162,17 +162,17 @@ public class FunctionProxyBindablePartitionTest {
                 ),
                 new SqlTestCase(
                         "cache table r8 as call partition_echo_fun(t1) " +
-                                "partition by t1 size get_or_default('unknown_partition_size', '2')",
+                                "partition by t1 size get('unknown_partition_size', '2')",
                         Arrays.<Object[]>asList(new Object[]{"r8", 2L})
                 ),
                 new SqlTestCase(
                         "select * from r8",
                         Arrays.asList(new Object[]{2}, new Object[]{1})
                 ),
-                // A present variable takes precedence over get_or_default's fallback.
+                // A present variable takes precedence over get's fallback.
                 new SqlTestCase(
                         "cache table r8_override as call partition_echo_fun(t1) " +
-                                "partition by t1 size get_or_default('partition_size_override', '2')",
+                                "partition by t1 size get('partition_size_override', '2')",
                         Arrays.<Object[]>asList(new Object[]{"r8_override", 3L})
                 ),
                 new SqlTestCase(
@@ -216,13 +216,13 @@ public class FunctionProxyBindablePartitionTest {
                 ),
                 new SqlTestCase(
                         "call partition_echo_fun(t1) " +
-                                "partition by t1 size get_or_default('missing_partition_size', 'invalid')",
+                                "partition by t1 size get('missing_partition_size', 'invalid')",
                         null,
                         new RuntimeException()
                 ),
                 new SqlTestCase(
                         "call partition_echo_fun(t1) " +
-                                "partition by t1 size get_or_default('missing_partition_size', '2147483648')",
+                                "partition by t1 size get('missing_partition_size', '2147483648')",
                         null,
                         new RuntimeException()
                 ),

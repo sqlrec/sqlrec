@@ -208,6 +208,11 @@ public class UdfSupportTest {
                         )
                 ),
                 new SqlTestCase(
+                        "select `get`('test_var', 'fallback'), `get`('nonexistent_var', 'fallback'), "
+                                + "`get`('nonexistent_var', NULL)",
+                        Arrays.<Object[]>asList(new Object[]{"hello_world", "fallback", null})
+                ),
+                new SqlTestCase(
                         "select `get`('test_var') || '!'",
                         Arrays.<Object[]>asList(
                                 new Object[]{"hello_world!"}

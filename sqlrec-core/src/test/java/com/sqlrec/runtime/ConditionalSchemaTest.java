@@ -165,7 +165,7 @@ class ConditionalSchemaTest {
     @Test
     void explicitArrayCastMakesUdfBranchCompatible() throws Exception {
         CalciteSchema root = ConcurrentCalciteSchema.createRootSchema();
-        ScalarFunction randomVec = UdfManager.createScalarFunction("com.sqlrec.udf.scalar.RandomVecFunction");
+        ScalarFunction randomVec = UdfManager.createScalarFunctions("com.sqlrec.udf.scalar.RandomVecFunction").get(0);
         root.add("default", new AbstractSchema() {
             @Override
             protected Multimap<String, Function> getFunctionMultimap() {

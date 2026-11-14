@@ -37,7 +37,7 @@ IF TIMEIN (SELECT 100 FROM config_table) THEN (
 
 ```sql
 IF TIMEIN (
-    SELECT CAST(`get_or_default`('rank_timeout_ms', '80') AS BIGINT)
+    SELECT CAST(`get`('rank_timeout_ms', '80') AS BIGINT)
 ) THEN (
     CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
@@ -164,7 +164,7 @@ SET 'IGNORE_PARTITION_EXCEPTION' = 'true';
 
 CACHE TABLE ranked AS
 CALL rank_partition(items)
-PARTITION BY items SIZE get_or_default('partition_size', '100');
+PARTITION BY items SIZE get('partition_size', '100');
 ```
 
 开启后：
@@ -190,7 +190,7 @@ SET 'IGNORE_PARTITION_EXCEPTION' = 'false';
 PARTITION BY items SIZE 100
 
 -- 变量不存在时使用 100
-PARTITION BY items SIZE get_or_default('partition_size', '100')
+PARTITION BY items SIZE get('partition_size', '100')
 
 -- 变量不存在时抛异常
 PARTITION BY items SIZE get('partition_size')

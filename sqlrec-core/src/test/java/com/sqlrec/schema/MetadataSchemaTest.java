@@ -188,8 +188,8 @@ class MetadataSchemaTest {
         when(metadata.getFunctions("db")).thenReturn(List.of(broken, healthy));
         ScalarFunction loaded = mock(ScalarFunction.class);
         try (var udf = mockStatic(UdfManager.class)) {
-            udf.when(() -> UdfManager.createScalarFunction(anyString())).thenReturn(loaded);
-            udf.when(() -> UdfManager.createScalarFunction("example.Broken"))
+            udf.when(() -> UdfManager.createScalarFunctions(anyString())).thenReturn(List.of(loaded));
+            udf.when(() -> UdfManager.createScalarFunctions("example.Broken"))
                     .thenThrow(new NoClassDefFoundError("missing dependency"));
             HmsSchema schema = new HmsSchema("db", metadata);
             assertTrue(schema.getFunctions("broken").isEmpty());

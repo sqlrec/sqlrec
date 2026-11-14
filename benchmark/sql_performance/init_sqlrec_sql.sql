@@ -12,7 +12,7 @@ define input table user_info(
 cache table user_features as
 select *, cast(age as float) as age_years from user_info;
 
-IF (SELECT `get_or_default`('use_recall_service', 'false') = 'true') THEN
+IF (SELECT `get`('use_recall_service', 'false') = 'true') THEN
   (cache table user_embedding as
     call call_service('recall-service-user', user_features)
   )
@@ -241,15 +241,15 @@ select user_info.user_id, gender, age, occupation, zip_code
 from user_info join user_table on user_info.user_id = user_table.user_id;
 
 cache table recall_item as
-call get_or_default('recall_fun', 'recall_fun')(full_user_info)
+call get('recall_fun', 'recall_fun')(full_user_info)
 like function 'recall_fun';
 
 cache table rec_item as
-call get_or_default('rank_fun', 'rank_fun_simple')(full_user_info, recall_item)
+call get('rank_fun', 'rank_fun_simple')(full_user_info, recall_item)
 like function 'rank_fun';
 
 cache table diversify_rec_item as
-call get_or_default('diversify_fun', 'diversify_fun')(rec_item)
+call get('diversify_fun', 'diversify_fun')(rec_item)
 like function 'diversify_fun';
 
 cache table request_meta as

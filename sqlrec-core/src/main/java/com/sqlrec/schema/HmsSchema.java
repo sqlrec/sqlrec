@@ -12,7 +12,6 @@ import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.CacheUtils;
 import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.schema.Function;
-import org.apache.calcite.schema.ScalarFunction;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.slf4j.Logger;
@@ -154,10 +153,7 @@ public class HmsSchema extends AbstractSchema {
             return;
         }
         try {
-            ScalarFunction scalarFunction = UdfManager.createScalarFunction(className);
-            if (scalarFunction != null) {
-                functionMap.put(functionName, scalarFunction);
-            }
+            functionMap.putAll(functionName, UdfManager.createScalarFunctions(className));
         } catch (Exception | LinkageError e) {
             log.error("Failed to create scalar function {} from class {}", name, className, e);
         }

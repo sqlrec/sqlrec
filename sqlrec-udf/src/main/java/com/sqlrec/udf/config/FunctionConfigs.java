@@ -5,7 +5,6 @@ import com.sqlrec.udf.scalar.ArrayContainsAnyFunction;
 import com.sqlrec.udf.scalar.ArrayContainsFunction;
 import com.sqlrec.udf.scalar.ArkEmbedImageFunction;
 import com.sqlrec.udf.scalar.GetFunction;
-import com.sqlrec.udf.scalar.GetOrDefaultFunction;
 import com.sqlrec.udf.scalar.IpFunction;
 import com.sqlrec.udf.scalar.L2NormFunction;
 import com.sqlrec.udf.scalar.LlmCompleteFunction;
@@ -34,7 +33,6 @@ public final class FunctionConfigs {
         configs.put("random_vec", RandomVecFunction.class.getName());
         configs.put("uuid", UuidFunction.class.getName());
         configs.put("get", GetFunction.class.getName());
-        configs.put("get_or_default", GetOrDefaultFunction.class.getName());
         configs.put("array_contains", ArrayContainsFunction.class.getName());
         configs.put("array_contains_all", ArrayContainsAllFunction.class.getName());
         configs.put("array_contains_any", ArrayContainsAnyFunction.class.getName());

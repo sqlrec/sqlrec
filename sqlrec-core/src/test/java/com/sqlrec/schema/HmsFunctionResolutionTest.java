@@ -6,6 +6,7 @@ import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.udf.scalar.IpFunction;
+import com.sqlrec.udf.scalar.GetFunction;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.ScalarFunction;
@@ -17,6 +18,28 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class HmsFunctionResolutionTest {
+    @Test
+    void hmsRegistersAllOverloadsWithoutDuplicatingBuiltin() throws Exception {
+        CalciteSchema root = schema("get", GetFunction.class.getName());
+        assertEquals(2, root.getSubSchema("default", false).getFunctions("get", false).size());
+        ExecuteContextImpl context = new ExecuteContextImpl(root);
+        context.setVariable("present", "value");
+        String sql = "SELECT `get`('present'), `get`('missing', 'fallback')";
+        List<Object[]> rows = NormalSqlCompiler.getNormalSqlBindable(sql, root, "default")
+                .bind(root, context).toList();
+        assertArrayEquals(new Object[]{"value", "fallback"}, rows.get(0));
+    }
+
+    @Test
+    void hmsOverrideReplacesTheWholeBuiltinOverloadSet() throws Exception {
+        CalciteSchema root = schema("get", OverrideGet.class.getName());
+        assertEquals(1, root.getSubSchema("default", false).getFunctions("get", false).size());
+        String sql = "SELECT `get`('key')";
+        List<Object[]> rows = NormalSqlCompiler.getNormalSqlBindable(sql, root, "default")
+                .bind(root, new ExecuteContextImpl(root)).toList();
+        assertArrayEquals(new Object[]{"override"}, rows.get(0));
+    }
+
     @Test
     void sameImplementationIsRegisteredOnceAndExecutesArrayArguments() throws Exception {
         CalciteSchema root = schema("ip", IpFunction.class.getName());
@@ -93,6 +116,12 @@ class HmsFunctionResolutionTest {
     public static class OverrideIp {
         public Double evaluate(Object first, Object second) {
             return 42.0;
+        }
+    }
+
+    public static class OverrideGet {
+        public static String evaluate(String key) {
+            return "override";
         }
     }
 }

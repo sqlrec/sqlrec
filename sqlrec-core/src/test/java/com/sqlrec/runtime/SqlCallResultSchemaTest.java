@@ -43,7 +43,7 @@ class SqlCallResultSchemaTest {
                 compile("schema_child", "SET 'child_ran' = 'true'", "RETURN SELECT " + result);
                 SqlFunctionBindable parent = compile("schema_parent",
                         "CACHE TABLE template AS SELECT 1 AS left_id, 2 AS right_id",
-                        "CACHE TABLE output_table AS CALL GET_OR_DEFAULT('callee', 'schema_child')() LIKE template",
+                        "CACHE TABLE output_table AS CALL GET('callee', 'schema_child')() LIKE template",
                         "RETURN output_table");
                 CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
                 ExecuteContextImpl context = context(schema);
@@ -70,7 +70,7 @@ class SqlCallResultSchemaTest {
         for (boolean parallel : List.of(false, true)) {
             compile("recursive_schema",
                     "CACHE TABLE template AS SELECT 1 AS id",
-                    "CALL GET_OR_DEFAULT('callee', 'recursive_schema')() LIKE template",
+                    "CALL GET('callee', 'recursive_schema')() LIKE template",
                     "RETURN template");
             SqlFunctionBindable caller = compile("recursive_schema_caller", "RETURN CALL recursive_schema()");
             SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(parallel);
@@ -90,7 +90,7 @@ class SqlCallResultSchemaTest {
             for (String like : List.of("LIKE seed_table", "LIKE FUNCTION 'schema_echo'")) {
                 SqlFunctionBindable parent = compile("schema_matching",
                         "CACHE TABLE seed_table AS SELECT 7 AS id",
-                        "CACHE TABLE output_table AS CALL GET_OR_DEFAULT('callee', 'schema_echo')(seed_table) "
+                        "CACHE TABLE output_table AS CALL GET('callee', 'schema_echo')(seed_table) "
                                 + like + " PARTITION BY seed_table SIZE 1", "RETURN output_table");
                 SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(parallel);
                 CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
@@ -105,7 +105,7 @@ class SqlCallResultSchemaTest {
             compile("nonnull_schema_child", "RETURN SELECT 7 AS id");
             SqlFunctionBindable parent = compile("nullable_schema_parent",
                     "CACHE TABLE template AS SELECT CAST(NULL AS INTEGER) AS id",
-                    "CACHE TABLE output_table AS CALL GET_OR_DEFAULT('callee', 'nonnull_schema_child')() LIKE template",
+                    "CACHE TABLE output_table AS CALL GET('callee', 'nonnull_schema_child')() LIKE template",
                     "RETURN SELECT id IS NULL AS missing, id + 1 AS next_id FROM output_table");
             SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(parallel);
             CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();

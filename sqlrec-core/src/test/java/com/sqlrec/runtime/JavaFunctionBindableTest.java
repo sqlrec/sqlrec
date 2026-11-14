@@ -192,14 +192,14 @@ public class JavaFunctionBindableTest {
                 Arrays.<Object[]>asList(new Object[]{"t6", 1L})
         ).test(schema, executeContext);
 
-        new SqlTestCase("call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+        new SqlTestCase("call get('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
                 Arrays.<Object[]>asList(new Object[]{1, "1", "new_col_value_test"})
         ).test(schema, executeContext);
-        new SqlTestCase("call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col' async").test(schema, executeContext);
-        new SqlTestCase("cache table t7 as call get_or_default('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+        new SqlTestCase("call get('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col' async").test(schema, executeContext);
+        new SqlTestCase("cache table t7 as call get('func_name', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
                 Arrays.<Object[]>asList(new Object[]{"t7", 1L})
         ).test(schema, executeContext);
-        new SqlTestCase("cache table t8 as call get_or_default('non_existing_func', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
+        new SqlTestCase("cache table t8 as call get('non_existing_func', 'add_col')(tmp, 'new_col', get('col_value')) like function 'test_add_col'",
                 Arrays.<Object[]>asList(new Object[]{"t8", 1L})
         ).test(schema, executeContext);
 
@@ -217,9 +217,9 @@ public class JavaFunctionBindableTest {
         ExecuteContext context = new ExecuteContextImpl(schema);
         context.setVariable("empty", "");
         SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
-                "CALL context_args(get_or_default('empty', 'fallback'), input, "
-                        + "get('missing'), get_or_default('empty', 'fallback'), "
-                        + "get_or_default('missing', 'fallback'))");
+                "CALL context_args(get('empty', 'fallback'), input, "
+                        + "get('missing'), get('empty', 'fallback'), "
+                        + "get('missing', 'fallback'))");
         TestContextAndVarArgsFun function = new TestContextAndVarArgsFun();
         JavaFunctionBindable bindable = new JavaFunctionBindable(
                 "context_args", function, call.getInputTableList(), null, schema);
@@ -360,19 +360,19 @@ public class JavaFunctionBindableTest {
                 Collections.singletonList(new Object[]{"varargs: [value1, value2]"})
         ).test(schema, executeContext);
 
-        new SqlTestCase("cache table r17 as call overload_fun(get_or_default('var1', 'default_val'))",
+        new SqlTestCase("cache table r17 as call overload_fun(get('var1', 'default_val'))",
                 Arrays.<Object[]>asList(new Object[]{"r17", 1L})
         ).test(schema, executeContext);
         new SqlTestCase("select * from r17",
                 Collections.singletonList(new Object[]{"one_arg: value1"})
         ).test(schema, executeContext);
-        new SqlTestCase("cache table r18 as call overload_fun(get_or_default('non_existing_var', 'fallback_value'))",
+        new SqlTestCase("cache table r18 as call overload_fun(get('non_existing_var', 'fallback_value'))",
                 Arrays.<Object[]>asList(new Object[]{"r18", 1L})
         ).test(schema, executeContext);
         new SqlTestCase("select * from r18",
                 Collections.singletonList(new Object[]{"one_arg: fallback_value"})
         ).test(schema, executeContext);
-        new SqlTestCase("cache table r19 as call varargs_fun(get_or_default('var1', 'default1'), get_or_default('unknown_var', 'default2'))",
+        new SqlTestCase("cache table r19 as call varargs_fun(get('var1', 'default1'), get('unknown_var', 'default2'))",
                 Arrays.<Object[]>asList(new Object[]{"r19", 1L})
         ).test(schema, executeContext);
         new SqlTestCase("select * from r19",
@@ -465,7 +465,7 @@ public class JavaFunctionBindableTest {
         JavaFunctionUtils.registerTableFunction("default", "dynamic_override", TestVarArgsFun.class);
         ExecuteContext context = new ExecuteContextImpl(schema);
         SqlCallSqlFunction call = (SqlCallSqlFunction) CompileManager.parseSql(
-                "call get_or_default('target', 'dynamic_default')() like output");
+                "call get('target', 'dynamic_default')() like output");
         FunctionProxyBindable bindable = new FunctionProxyBindable(
                 call, call.getInputTableList(), call.getFuncNameVariable(), createStringField("result"), false);
 

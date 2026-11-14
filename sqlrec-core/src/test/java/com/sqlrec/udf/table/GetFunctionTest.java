@@ -34,4 +34,20 @@ public class GetFunctionTest {
     public void testGetNonExistingVariable() {
         assertNull(GetFunction.evaluate(dataContext, "nonexistent"));
     }
+
+    @Test
+    public void testGetExistingVariableWithDefault() {
+        executeContext.setVariable("key1", "value1");
+        assertEquals("value1", GetFunction.evaluate(dataContext, "key1", "default"));
+    }
+
+    @Test
+    public void testGetNonExistingVariableReturnsDefault() {
+        assertEquals("default", GetFunction.evaluate(dataContext, "nonexistent", "default"));
+    }
+
+    @Test
+    public void testNullDefaultValue() {
+        assertNull(GetFunction.evaluate(dataContext, "nonexistent", null));
+    }
 }

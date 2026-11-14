@@ -37,7 +37,7 @@ The timeout can come from a variable:
 
 ```sql
 IF TIMEIN (
-    SELECT CAST(`get_or_default`('rank_timeout_ms', '80') AS BIGINT)
+    SELECT CAST(`get`('rank_timeout_ms', '80') AS BIGINT)
 ) THEN (
     CACHE TABLE result_table AS CALL rank_service(items)
 ) ELSE (
@@ -152,7 +152,7 @@ SET 'IGNORE_PARTITION_EXCEPTION' = 'true';
 
 CACHE TABLE ranked AS
 CALL rank_partition(items)
-PARTITION BY items SIZE get_or_default('partition_size', '100');
+PARTITION BY items SIZE get('partition_size', '100');
 ```
 
 With the option enabled, successful partitions are merged and failed partition results are discarded. At least one successful partition returns partial results; if every partition fails, the call still raises an error. Cancellation, timeout, and serious errors are not treated as ordinary partition failures.
@@ -169,7 +169,7 @@ SET 'IGNORE_PARTITION_EXCEPTION' = 'false';
 
 ```sql
 PARTITION BY items SIZE 100
-PARTITION BY items SIZE get_or_default('partition_size', '100')
+PARTITION BY items SIZE get('partition_size', '100')
 PARTITION BY items SIZE get('partition_size')
 ```
 

@@ -91,7 +91,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
         if (sizeNode != null) {
             if (!(sizeNode instanceof SqlLiteral)
                     && !(sizeNode instanceof SqlGetVariable)) {
-                throw new RuntimeException("SIZE must be an integer literal, get(), or get_or_default()");
+                throw new RuntimeException("SIZE must be an integer literal or get()");
             }
         }
         return partitionTable == null ? null : new PartitionExecutor(partitionTable, sizeNode);

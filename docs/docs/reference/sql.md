@@ -8,7 +8,7 @@
 | --- | --- |
 | 定义和管理 SQL 函数 | [CREATE SQL FUNCTION](#create-sql-function)、[SHOW SQL FUNCTIONS](#show-sql-functions) |
 | 编写推荐流程 | [DEFINE INPUT TABLE](#define-input-table)、[CACHE TABLE](#cache-table)、[CALL](#call)、[IF](#if)、[ASSERT](#assert)、[RETURN](#return) |
-| 设置和读取执行变量 | [SET](#set)、[GET / GET_OR_DEFAULT](#get) |
+| 设置和读取执行变量 | [SET](#set)、[GET](#get) |
 | 发布和管理 API | [CREATE API](#create-api)、[SHOW APIS](#show-apis) |
 | 定义、训练和导出模型 | [CREATE MODEL](#create-model)、[TRAIN MODEL](#train-model)、[EXPORT MODEL](#export-model)、[SHOW CHECKPOINTS](#show-checkpoints) |
 | 部署和管理模型服务 | [CREATE SERVICE](#create-service)、[SHOW SERVICES](#show-services) |
@@ -180,11 +180,11 @@ CACHE TABLE table_name AS
 | 参数 | 描述 |
 |------|------|
 | `table_name` | 缓存表名称 |
-| `function_name` | 要调用的函数名称，可以是标识符或 `GET()` / `GET_OR_DEFAULT()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` / `GET_OR_DEFAULT()` 表达式或字符串字面量 |
+| `function_name` | 要调用的函数名称，可以是标识符或 `GET()` 表达式 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
-| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`，表示每个分区的最大行数 |
 | `select_statement` | SELECT 查询语句 |
 
 缓存表名不区分大小写，创建时统一保存为小写；SQL 函数的输入表名使用相同规则，并按此规则检查重复声明。不同大小写的同名缓存写入会覆盖同一张表。表名引号内的空格属于名称的一部分，会保留。
@@ -217,7 +217,7 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 ### CALL
 
-调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量，或通过 `GET()` / `GET_OR_DEFAULT()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
+调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量，或通过 `GET()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
 
 未通过 `LIKE` 指定返回模式时，默认在编译期调用返回 `CacheTable` 的 Java 方法来推断模式。启动服务前设置环境变量 `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` 可关闭此调用；SQL `SET` 和请求 `params` 不能覆盖该配置。关闭后，调用返回 `CacheTable` 的 Java 方法必须通过 `LIKE table` 或 `LIKE FUNCTION` 显式指定模式，否则编译时直接报错，不调用方法。返回 `void` 的方法无需指定模式。
 
@@ -231,11 +231,11 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 
 | 参数 | 描述 |
 |------|------|
-| `function_name` | 函数名称，可以是标识符或 `GET()` / `GET_OR_DEFAULT()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` / `GET_OR_DEFAULT()` 表达式或字符串字面量 |
+| `function_name` | 函数名称，可以是标识符或 `GET()` 表达式 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
-| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`/`get_or_default()`，表示每个分区的最大行数 |
+| `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`，表示每个分区的最大行数 |
 | `ASYNC` | 可选。异步执行 |
 
 `ASYNC` 仅提交后台任务并立即返回，不提供可同步消费的结果，因此不能放在 `CACHE TABLE ... AS CALL` 或 `RETURN CALL` 中。`PARTITION BY` 会按输入缓存表分区并发调用，通常应配合 `LIKE` 显式声明合并结果的模式；`ASYNC` 必须放在语句末尾。
@@ -450,7 +450,7 @@ RETURN SELECT id FROM candidates;
 
 ### SET
 
-设置当前执行上下文中的字符串变量。SQL 函数可以通过 `` `get` `` 或 `` `get_or_default` `` 读取变量。
+设置当前执行上下文中的字符串变量。SQL 函数可以通过 `` `get` `` 读取变量。
 
 在 Thrift 会话中，顶层 `SET 'key' = 'value'` 还会保存会话设置，无需连接 Gateway；设置在下一次远程 SQL 执行前同步到 Gateway，本地保存成功不代表远程验证成功。无赋值的 `SET`（如 `SET;`）查询 Flink 配置，仍需 Gateway。`RESET` 或 `RESET 'key'` 经 Gateway 确认成功后才清除本地保存的全部或指定会话设置；转发禁用或远程执行失败时，原设置保持不变。REST/CLI 不提供透明 Gateway 转发，详见[执行边界](./architecture.md#gateway-转发边界)。
 
@@ -467,7 +467,7 @@ SET 'rank_fun' = 'rank_fun_simple';
 SET 'limit_count' = '10';
 
 SELECT `get`('rank_fun');
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 API 请求体中 `params` 对象的键值也会作为执行变量。变量值为字符串；用作数字或布尔值时需要显式转换。
@@ -476,13 +476,13 @@ API 请求体中 `params` 对象的键值也会作为执行变量。变量值为
 
 ### GET
 
-在 `CALL` 的动态函数名、Java 表函数的字符串参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 和 `GET_OR_DEFAULT` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。
+在 `CALL` 的动态函数名、Java 表函数的字符串参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。
 
 **语法：**
 
 ```sql
 GET('variable_name')
-GET_OR_DEFAULT('variable_name', 'default_value')
+GET('variable_name', 'default_value')
 ```
 
 **参数：**
@@ -499,11 +499,11 @@ SET 'rank_fun' = 'default_rank';
 
 CALL GET('rank_fun')(input_table) LIKE FUNCTION 'default_rank';
 
-CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(input_table)
+CALL GET('rank_fun', 'default_rank')(input_table)
 LIKE FUNCTION 'default_rank';
 ```
 
-在 `SELECT` 等普通 SQL 表达式中，使用标量函数 `` `get`('variable_name') `` 或 `` `get_or_default`('variable_name', 'default_value') ``；写法和适用位置见[标量函数](./udf/scalar-functions.md#get)。
+在 `SELECT` 等普通 SQL 表达式中，使用标量函数 `` `get`('variable_name') `` 或 `` `get`('variable_name', 'default_value') ``；写法和适用位置见[标量函数](./udf/scalar-functions.md#get)。
 
 ## API 管理
 

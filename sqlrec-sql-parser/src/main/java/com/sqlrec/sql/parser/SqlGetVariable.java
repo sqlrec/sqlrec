@@ -40,11 +40,7 @@ public class SqlGetVariable extends SqlCall {
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-        if (defaultValue != null) {
-            writer.keyword("get_or_default");
-        } else {
-            writer.keyword("get");
-        }
+        writer.keyword("get");
         writer.literal("(");
         variableName.unparse(writer, leftPrec, rightPrec);
         if (defaultValue != null) {

@@ -5,10 +5,15 @@ import org.apache.calcite.DataContext;
 
 public class GetFunction {
     public static String evaluate(DataContext context, String key) {
+        return evaluate(context, key, null);
+    }
+
+    public static String evaluate(DataContext context, String key, String defaultValue) {
         if (!(context instanceof SqlRecDataContext)) {
             throw new IllegalArgumentException("context must be SqlRecDataContext");
         }
         SqlRecDataContext sqlRecDataContext = (SqlRecDataContext) context;
-        return sqlRecDataContext.getVariable(key);
+        String value = sqlRecDataContext.getVariable(key);
+        return value != null ? value : defaultValue;
     }
 }

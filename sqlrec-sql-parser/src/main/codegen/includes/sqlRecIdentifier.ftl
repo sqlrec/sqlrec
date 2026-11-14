@@ -115,25 +115,17 @@ SqlGetVariable SqlGetVariable() :
     SqlNode defaultValue = null;
 }
 {
-    (
-        <GET>
-        <LPAREN>
-        variableName = StringLiteral()
-        <RPAREN>
-        {
-            return new SqlGetVariable(getPos(), variableName);
-        }
-    |
-        <GET_OR_DEFAULT>
-        <LPAREN>
-        variableName = StringLiteral()
+    <GET>
+    <LPAREN>
+    variableName = StringLiteral()
+    [
         <COMMA>
         defaultValue = StringLiteral()
-        <RPAREN>
-        {
-            return new SqlGetVariable(getPos(), variableName, defaultValue);
-        }
-    )
+    ]
+    <RPAREN>
+    {
+        return new SqlGetVariable(getPos(), variableName, defaultValue);
+    }
 }
 
 SqlDefineInputTable SqlDefineInputTable():

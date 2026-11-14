@@ -1,6 +1,7 @@
 package com.sqlrec.sql.parser;
 
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,19 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlRecSqlParserTest {
+    @Test
+    void roundTripsGetWithOptionalDefault() throws Exception {
+        for (String arguments : new String[]{"'callee'", "'callee', 'fallback'"}) {
+            SqlCallSqlFunction call = assertInstanceOf(SqlCallSqlFunction.class,
+                    SqlRecSqlParser.parse("CALL GET(" + arguments + ")()"));
+            String sql = call.toSqlString(AnsiSqlDialect.DEFAULT).getSql();
+            SqlCallSqlFunction reparsed = assertInstanceOf(SqlCallSqlFunction.class,
+                    SqlRecSqlParser.parse(sql));
+            assertEquals("callee", reparsed.getFuncNameVariable().getVariableName().getNlsString().getValue());
+            assertEquals(arguments.contains(","), reparsed.getFuncNameVariable().hasDefaultValue());
+        }
+    }
+
     @Test
     void parsesStandardSqlWithDependencyFlinkParser() throws Exception {
         SqlNode node = SqlRecSqlParser.parse(

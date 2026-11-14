@@ -2,7 +2,6 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.udf.scalar.GetFunction;
-import com.sqlrec.udf.scalar.GetOrDefaultFunction;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,7 @@ class ExecuteContextImplVariableTest {
         assertFalse(context.getVariables().containsKey("PATH"));
         var dataContext = new SqlRecDataContextImpl(Map.of(), schema, context);
         assertEquals(System.getenv("PATH"), GetFunction.evaluate(dataContext, "PATH"));
-        assertEquals(System.getenv("PATH"), GetOrDefaultFunction.evaluate(dataContext, "PATH", "default"));
+        assertEquals(System.getenv("PATH"), GetFunction.evaluate(dataContext, "PATH", "default"));
     }
 
     @Test
@@ -48,7 +47,7 @@ class ExecuteContextImplVariableTest {
         context.setVariable("ENABLE_VARIABLE_ENV_FALLBACK", "true");
         assertNull(context.getVariable("PATH"));
         var dataContext = new SqlRecDataContextImpl(Map.of(), schema, context);
-        assertEquals("default", GetOrDefaultFunction.evaluate(dataContext, "PATH", "default"));
+        assertEquals("default", GetFunction.evaluate(dataContext, "PATH", "default"));
         context.setVariable("PATH", "explicit");
         assertEquals("explicit", context.getVariable("PATH"));
     }
@@ -59,6 +58,6 @@ class ExecuteContextImplVariableTest {
         assertNull(System.getenv(key));
         assertNull(context.getVariable(key));
         var dataContext = new SqlRecDataContextImpl(Map.of(), schema, context);
-        assertEquals("default", GetOrDefaultFunction.evaluate(dataContext, key, "default"));
+        assertEquals("default", GetFunction.evaluate(dataContext, key, "default"));
     }
 }

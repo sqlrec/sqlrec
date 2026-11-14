@@ -8,7 +8,7 @@ Find a statement by task:
 | --- | --- |
 | Define and manage SQL functions | [CREATE SQL FUNCTION](#create-sql-function), [SHOW SQL FUNCTIONS](#show-sql-functions) |
 | Write a recommendation flow | [DEFINE INPUT TABLE](#define-input-table), [CACHE TABLE](#cache-table), [CALL](#call), [IF](#if), [ASSERT](#assert), [RETURN](#return) |
-| Set and read execution variables | [SET](#set), [GET / GET_OR_DEFAULT](#get) |
+| Set and read execution variables | [SET](#set), [GET](#get) |
 | Publish and manage APIs | [CREATE API](#create-api), [SHOW APIS](#show-apis) |
 | Define, train, and export models | [CREATE MODEL](#create-model), [TRAIN MODEL](#train-model), [EXPORT MODEL](#export-model), [SHOW CHECKPOINTS](#show-checkpoints) |
 | Deploy and manage model services | [CREATE SERVICE](#create-service), [SHOW SERVICES](#show-services) |
@@ -180,11 +180,11 @@ CACHE TABLE table_name AS
 | Parameter | Description |
 |-----------|-------------|
 | `table_name` | Cache table name |
-| `function_name` | Function name to call; an identifier or a `GET()` / `GET_OR_DEFAULT()` expression |
-| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` / `GET_OR_DEFAULT()` expressions, or string literals |
+| `function_name` | Function name to call; an identifier or a `GET()` expression |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
-| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()` and is the maximum number of rows per partition |
 | `select_statement` | SELECT query statement |
 
 Cache table names are case-insensitive and stored in lowercase. SQL function input table names follow the same rule and must be unique under that rule. Cache writes whose names differ only in case replace the same table. Spaces inside quoted table names remain part of the name.
@@ -217,7 +217,7 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 ### CALL
 
-Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()` / `GET_OR_DEFAULT()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
+Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
 
 When no return schema is specified with `LIKE`, Java methods returning `CacheTable` are invoked at compile time by default to infer the schema. Set the server environment variable `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` before startup to disable this invocation; SQL `SET` and request `params` cannot override it. With inference disabled, calls to Java methods returning `CacheTable` require an explicit schema through `LIKE table` or `LIKE FUNCTION`; otherwise compilation fails without invoking the method. Methods returning `void` do not require a schema.
 
@@ -231,11 +231,11 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 
 | Parameter | Description |
 |-----------|-------------|
-| `function_name` | Function name; an identifier or a `GET()` / `GET_OR_DEFAULT()` expression |
-| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` / `GET_OR_DEFAULT()` expressions, or string literals |
+| `function_name` | Function name; an identifier or a `GET()` expression |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
-| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()`/`get_or_default()` and is the maximum number of rows per partition |
+| `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()` and is the maximum number of rows per partition |
 | `ASYNC` | Optional. Execute asynchronously |
 
 `ASYNC` only submits background work and returns immediately; it has no synchronously consumable result, so it cannot be used in `CACHE TABLE ... AS CALL` or `RETURN CALL`. `PARTITION BY` splits an input cache table for concurrent calls and normally should be combined with `LIKE` to declare the merged result schema; `ASYNC` must be last.
@@ -450,7 +450,7 @@ RETURN SELECT id FROM candidates;
 
 ### SET
 
-Set a string variable in the current execution context. A SQL function can read it with `` `get` `` or `` `get_or_default` ``.
+Set a string variable in the current execution context. A SQL function can read it with `` `get` ``.
 
 In a Thrift session, top-level `SET 'key' = 'value'` also saves session settings without connecting to Gateway. Settings synchronize before the next remote SQL statement; successful local saving does not mean remote validation succeeded. Non-assignment `SET` (such as `SET;`) reads Flink configuration and still requires Gateway. `RESET` or `RESET 'key'` clears all or the specified saved local session settings only after Gateway confirms success; disabled forwarding or remote execution failure leaves the settings unchanged. REST and CLI do not provide transparent Gateway forwarding. See [Execution Boundaries](./architecture.md#gateway-forwarding-boundaries).
 
@@ -467,7 +467,7 @@ SET 'rank_fun' = 'rank_fun_simple';
 SET 'limit_count' = '10';
 
 SELECT `get`('rank_fun');
-SELECT CAST(`get_or_default`('limit_count', '50') AS INT);
+SELECT CAST(`get`('limit_count', '50') AS INT);
 ```
 
 Keys and values in the API request's `params` object are also execution variables. Values are strings; cast them explicitly when using them as numbers or Booleans.
@@ -476,13 +476,13 @@ Reading an absent execution variable falls back to the same-named environment va
 
 ### GET
 
-Read an execution variable as a dynamic function name in `CALL`, a string argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` and `GET_OR_DEFAULT` are available in these positions; neither is a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.
+Read an execution variable as a dynamic function name in `CALL`, a string argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` is available in these positions; it is not a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.
 
 **Syntax:**
 
 ```sql
 GET('variable_name')
-GET_OR_DEFAULT('variable_name', 'default_value')
+GET('variable_name', 'default_value')
 ```
 
 **Parameters:**
@@ -499,11 +499,11 @@ SET 'rank_fun' = 'default_rank';
 
 CALL GET('rank_fun')(input_table) LIKE FUNCTION 'default_rank';
 
-CALL GET_OR_DEFAULT('rank_fun', 'default_rank')(input_table)
+CALL GET('rank_fun', 'default_rank')(input_table)
 LIKE FUNCTION 'default_rank';
 ```
 
-In ordinary SQL expressions such as `SELECT`, use the scalar function `` `get`('variable_name') `` or `` `get_or_default`('variable_name', 'default_value') ``. See [Scalar Functions](./udf/scalar-functions.md#get) for the syntax and supported positions.
+In ordinary SQL expressions such as `SELECT`, use the scalar function `` `get`('variable_name') `` or `` `get`('variable_name', 'default_value') ``. See [Scalar Functions](./udf/scalar-functions.md#get) for the syntax and supported positions.
 
 ## API Management
 
