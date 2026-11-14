@@ -110,7 +110,7 @@ CALL window_diversify(rec_item, 'category1', 3, 1, 10);
 |------|------|------|
 | `input` | CacheTable | 输入表 |
 | `colName` | String | 新列名 |
-| `value` | String | 新列的值（所有行相同） |
+| `value` | VARCHAR / INT / BIGINT / DOUBLE / BOOLEAN | 新列的值（所有行相同） |
 
 **返回值**：返回添加新列后的 `CacheTable`。
 
@@ -124,11 +124,16 @@ CALL add_col(recall_item, 'source', 'daily_rec');
 -- 添加时间戳列
 CACHE TABLE result_with_time AS
 CALL add_col(recall_item, 'rec_time', '2024-01-01');
+
+-- 添加数字和布尔列
+CALL add_col(recall_item, 'boost', 0.5);
+CALL add_col(recall_item, 'is_fallback', false);
+CALL add_col(recall_item, 'priority', 10);
 ```
 
 **注意事项**：
 - 新列名不能与已有列名重复
-- 新列类型为 `VARCHAR`
+- 新列类型由值的类型决定，带引号的数字仍为 `VARCHAR`
 
 ---
 

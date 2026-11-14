@@ -4,6 +4,7 @@ import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.JavaFunctionUtils;
@@ -88,6 +89,38 @@ class SqlConvenienceTest {
         assertNull(execute("CALL sleep(GET('missing_sleep', 0))"));
         assertThrows(RuntimeException.class, () -> execute("CALL sleep('0')"));
         assertThrows(RuntimeException.class, () -> execute("CALL truncate_table(items, 0.5)"));
+    }
+
+    @Test
+    void addColInfersColumnTypesFromConstants() throws Exception {
+        Object[][] cases = {
+                {"50", SqlTypeName.INTEGER, 50}, {"2147483648", SqlTypeName.BIGINT, 2147483648L},
+                {"0.5", SqlTypeName.DOUBLE, 0.5d}, {"false", SqlTypeName.BOOLEAN, false},
+                {"'0.5'", SqlTypeName.VARCHAR, "0.5"}
+        };
+        for (Object[] testCase : cases) {
+            String table = "typed_" + testCase[1];
+            execute("CACHE TABLE " + table + " AS CALL add_col(items, 'extra', " + testCase[0] + ")");
+            var plan = NormalSqlCompiler.getNormalSqlBindable("SELECT extra FROM " + table, root, "default");
+            assertEquals(testCase[1], plan.getReturnDataFields().get(0).getType().getSqlTypeName());
+            var rows = plan.bind(root, context).toList();
+            assertEquals(3, rows.size());
+            for (Object[] row : rows) assertArrayEquals(new Object[]{testCase[2]}, row);
+        }
+    }
+
+    @Test
+    void addColAcceptsTypedGetArguments() throws Exception {
+        context.setVariable("boost", "1.25");
+        context.setVariable("enabled", "true");
+        for (Object[] testCase : new Object[][]{
+                {"GET('boost', 0.5)", 1.25d}, {"GET('enabled', false)", true}, {"GET('missing', 10)", 10}}) {
+            var rows = execute("CALL add_col(items, 'extra', " + testCase[0] + ")");
+            assertEquals(3, rows.size());
+            for (int i = 0; i < rows.size(); i++) {
+                assertArrayEquals(new Object[]{i + 1, testCase[1]}, rows.get(i));
+            }
+        }
     }
 
     @Test

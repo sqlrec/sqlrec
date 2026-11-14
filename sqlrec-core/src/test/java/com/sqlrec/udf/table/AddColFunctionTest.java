@@ -14,6 +14,42 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class AddColFunctionTest {
+    @Test
+    void addsTypedConstantsWithMatchingColumnTypes() {
+        CacheTable input = createTable(new Object[][]{{1, "A"}, {2, "B"}});
+        AddColFunction function = new AddColFunction();
+        CacheTable[] outputs = {
+                function.evaluate(input, "count", 50),
+                function.evaluate(input, "large", 2147483648L),
+                function.evaluate(input, "boost", 0.5d),
+                function.evaluate(input, "enabled", false)
+        };
+        Object[] values = {50, 2147483648L, 0.5d, false};
+        SqlTypeName[] types = {SqlTypeName.INTEGER, SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.BOOLEAN};
+        for (int i = 0; i < outputs.length; i++) {
+            assertEquals(types[i], outputs[i].getDataFields().get(2).getType().getSqlTypeName());
+            List<Object[]> rows = collectRows(outputs[i]);
+            assertEquals(2, rows.size());
+            assertArrayEquals(new Object[]{1, "A", values[i]}, rows.get(0));
+            assertArrayEquals(new Object[]{2, "B", values[i]}, rows.get(1));
+        }
+        assertEquals(2, input.getDataFields().size());
+        assertArrayEquals(new Object[]{1, "A"}, collectRows(input).get(0));
+    }
+
+    @Test
+    void emptyInputRetainsTypedColumnSchema() {
+        CacheTable input = createTable(new Object[][]{});
+        AddColFunction function = new AddColFunction();
+        CacheTable[] outputs = {function.evaluate(input, "extra", 1), function.evaluate(input, "extra", 1L),
+                function.evaluate(input, "extra", 0.5d), function.evaluate(input, "extra", true)};
+        SqlTypeName[] types = {SqlTypeName.INTEGER, SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.BOOLEAN};
+        for (int i = 0; i < outputs.length; i++) {
+            assertTrue(collectRows(outputs[i]).isEmpty());
+            assertEquals(types[i], outputs[i].getDataFields().get(2).getType().getSqlTypeName());
+        }
+    }
+
 
     @Test
     public void testAddColBasic() {
@@ -60,7 +96,7 @@ public class AddColFunctionTest {
     public void testAddColNullValue() {
         CacheTable input = createTable(new Object[][]{{1, "A"}});
         AddColFunction function = new AddColFunction();
-        CacheTable output = function.evaluate(input, "nullable_col", null);
+        CacheTable output = function.evaluate(input, "nullable_col", (String) null);
 
         List<Object[]> result = collectRows(output);
         assertEquals(1, result.size());

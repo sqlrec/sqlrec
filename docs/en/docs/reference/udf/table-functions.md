@@ -110,7 +110,7 @@ Add column function that adds a new column to the input table with the same valu
 |-----------|------|-------------|
 | `input` | CacheTable | Input table |
 | `colName` | String | New column name |
-| `value` | String | New column value (same for all rows) |
+| `value` | VARCHAR / INT / BIGINT / DOUBLE / BOOLEAN | New column value (same for all rows) |
 
 **Return Value**: Returns `CacheTable` with new column added.
 
@@ -124,11 +124,16 @@ CALL add_col(recall_item, 'source', 'daily_rec');
 -- Add timestamp column
 CACHE TABLE result_with_time AS
 CALL add_col(recall_item, 'rec_time', '2024-01-01');
+
+-- Add numeric and Boolean columns
+CALL add_col(recall_item, 'boost', 0.5);
+CALL add_col(recall_item, 'is_fallback', false);
+CALL add_col(recall_item, 'priority', 10);
 ```
 
 **Notes**:
 - New column name cannot duplicate existing column names
-- New column type is `VARCHAR`
+- The value type determines the new column type; quoted numbers remain `VARCHAR`
 
 ---
 

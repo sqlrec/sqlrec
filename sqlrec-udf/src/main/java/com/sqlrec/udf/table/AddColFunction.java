@@ -13,6 +13,26 @@ import java.util.List;
 
 public class AddColFunction {
     public CacheTable evaluate(CacheTable input, String colName, String value) {
+        return addColumn(input, colName, value, SqlTypeName.VARCHAR);
+    }
+
+    public CacheTable evaluate(CacheTable input, String colName, Integer value) {
+        return addColumn(input, colName, value, SqlTypeName.INTEGER);
+    }
+
+    public CacheTable evaluate(CacheTable input, String colName, Long value) {
+        return addColumn(input, colName, value, SqlTypeName.BIGINT);
+    }
+
+    public CacheTable evaluate(CacheTable input, String colName, Double value) {
+        return addColumn(input, colName, value, SqlTypeName.DOUBLE);
+    }
+
+    public CacheTable evaluate(CacheTable input, String colName, Boolean value) {
+        return addColumn(input, colName, value, SqlTypeName.BOOLEAN);
+    }
+
+    private CacheTable addColumn(CacheTable input, String colName, Object value, SqlTypeName type) {
         if (colName == null || colName.isEmpty()) {
             throw new IllegalArgumentException("col name is empty");
         }
@@ -23,7 +43,7 @@ public class AddColFunction {
         }
 
         List<RelDataTypeField> newDataFields = new ArrayList<>(dataFields);
-        newDataFields.add(DataTypeUtils.getRelDataTypeField(colName, dataFields.size(), SqlTypeName.VARCHAR));
+        newDataFields.add(DataTypeUtils.getRelDataTypeField(colName, dataFields.size(), type));
 
         Enumerable<Object[]> enumerable = input.scan(null);
         List<Object[]> newData = new ArrayList<>();
