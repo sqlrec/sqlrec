@@ -39,6 +39,7 @@
         <junit.version>5.10.1</junit.version>
         <caffeine.version>2.9.3</caffeine.version>
         <okhttp.version>4.12.0</okhttp.version>
+        <jackson.version>2.21.4</jackson.version>
         <protobuf.version>3.25.5</protobuf.version>
         <micrometer.version>1.16.5</micrometer.version>
         <h2.version>2.2.224</h2.version>
@@ -56,6 +57,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Fabric8's model deserializers require the same Jackson API used
+                 by its SDK. Calcite/Hive otherwise select an older databind. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Keep Lettuce and Hadoop on the same Netty modules. Mixing
                  Hadoop's newer buffer/handler with Lettuce's older common
                  causes NoSuchMethodError during Redis client initialization. -->

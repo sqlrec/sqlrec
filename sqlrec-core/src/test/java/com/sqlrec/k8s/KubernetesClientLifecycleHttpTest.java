@@ -8,21 +8,48 @@ import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import io.fabric8.kubernetes.client.dsl.Resource;
+import io.fabric8.kubernetes.client.utils.internal.SerialExecutor;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class KubernetesClientLifecycleHttpTest {
+    @Test
+    void queuedCallbackHandlesUnderlyingExecutorShutdown() {
+        var scheduled = new ArrayDeque<Runnable>();
+        var accepting = new AtomicBoolean(true);
+        var queuedCallbackRan = new AtomicBoolean();
+        SerialExecutor callbacks = new SerialExecutor(task -> {
+            if (!accepting.get()) throw new RejectedExecutionException("Client executor has closed");
+            scheduled.add(task);
+        });
+        callbacks.execute(() -> {});
+        callbacks.execute(() -> queuedCallbackRan.set(true));
+
+        accepting.set(false);
+        // The first callback's finally block tries to submit the second callback.
+        assertDoesNotThrow(scheduled.remove()::run);
+        assertTrue(scheduled.isEmpty());
+        assertFalse(queuedCallbackRan.get());
+    }
+
     @RepeatedTest(value = 30, failureThreshold = 1)
     void deletionWaitFollowedImmediatelyByClientCloseDoesNotDeadlock() throws Exception {
         try (var api = new TestApi(true)) {
@@ -74,6 +101,14 @@ class KubernetesClientLifecycleHttpTest {
                 + "{\"name\":\"cfg\",\"namespace\":\"test\",\"uid\":\"uid\",\"resourceVersion\":\"1\"}}";
         private final HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         private final ExecutorService handlers = Executors.newVirtualThreadPerTaskExecutor();
+        private final ConcurrentLinkedQueue<Throwable> backgroundFailures = new ConcurrentLinkedQueue<>();
+        private final List<Thread> clientThreads = new CopyOnWriteArrayList<>();
+        private final ExecutorService clientExecutor = Executors.newCachedThreadPool(task -> {
+            Thread thread = new Thread(task, "kubernetes-lifecycle-test-callback");
+            thread.setUncaughtExceptionHandler((ignored, failure) -> backgroundFailures.add(failure));
+            clientThreads.add(thread);
+            return thread;
+        });
         private final CountDownLatch watching = new CountDownLatch(1);
         private final CountDownLatch shutdown = new CountDownLatch(1);
         private final KubernetesClient client;
@@ -106,7 +141,12 @@ class KubernetesClientLifecycleHttpTest {
             server.start();
             client = new KubernetesClientBuilder().withConfig(new ConfigBuilder()
                     .withMasterUrl("http://127.0.0.1:" + server.getAddress().getPort())
-                    .withNamespace("test").withOnlyHttpWatches(true).withRequestTimeout(5000).build()).build();
+                    .withNamespace("test").withOnlyHttpWatches(true).withRequestTimeout(5000).build())
+                    .withTaskExecutorSupplier(new KubernetesClientBuilder.ExecutorSupplier() {
+                        @Override public Executor get() { return clientExecutor; }
+                        // Match Fabric8's default shutdown behavior while capturing uncaught failures.
+                        @Override public void onClose(Executor executor) { clientExecutor.shutdownNow(); }
+                    }).build();
         }
 
         Resource<ConfigMap> resource() {
@@ -117,7 +157,16 @@ class KubernetesClientLifecycleHttpTest {
         public void close() throws Exception {
             try {
                 KubernetesTestSupport.closeClient(client);
+                assertTrue(clientExecutor.awaitTermination(5, TimeUnit.SECONDS),
+                        "Client callback executor must terminate");
+                // awaitTermination can finish before a worker's uncaught exception handler runs.
+                for (Thread thread : clientThreads) {
+                    thread.join(1000);
+                    assertFalse(thread.isAlive(), "Client callback thread must terminate");
+                }
+                assertTrue(backgroundFailures.isEmpty(), () -> "Uncaught client callback failures: " + backgroundFailures);
             } finally {
+                clientExecutor.shutdownNow();
                 shutdown.countDown();
                 server.stop(0);
                 handlers.close();
