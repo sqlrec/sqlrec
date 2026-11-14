@@ -7,7 +7,6 @@ rejected at validation time (use CatBoost for those).
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 
@@ -15,6 +14,7 @@ import pandas as pd
 import xgboost as xgb
 
 from common import filesystem as common
+from common.cli import load_pipeline_config_from_args
 from common.training_data import resolve_feature_columns, validate_float_features
 
 logger = logging.getLogger("gbdt.train_xgboost")
@@ -38,14 +38,8 @@ def _build_xgb_params(p: dict) -> dict:
         xgb_eval_metric = "mlogloss"
     elif objective == "regression" and metric in ("auc", "logloss"):
         xgb_eval_metric = "rmse"
-    elif objective == "binary" and metric == "logloss":
-        xgb_eval_metric = "logloss"
     else:
-        xgb_eval_metric = {
-            "auc": "auc",
-            "logloss": "logloss",
-            "rmse": "rmse",
-        }.get(metric, metric)
+        xgb_eval_metric = metric
 
     return {
         "objective": xgb_objective,
@@ -129,12 +123,7 @@ def train(config: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--pipeline_config_path", required=True,
-                        help="path to the JSON pipeline.config (hdfs:// or local)")
-    args = parser.parse_args()
-    config = common.load_pipeline_config(args.pipeline_config_path)
-    train(config)
+    train(load_pipeline_config_from_args())
 
 
 if __name__ == "__main__":

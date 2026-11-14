@@ -12,7 +12,6 @@ float probability tensor instead of a ``seq<map>`` output.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 
@@ -23,6 +22,7 @@ from onnx import TensorProto
 from onnxmltools.convert.common.data_types import FloatTensorType
 
 from common import filesystem as common
+from common.cli import load_pipeline_config_from_args
 from common.onnx_export import write_onnx_export
 
 logger = logging.getLogger("gbdt.export_xgboost")
@@ -103,12 +103,7 @@ def export(config: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--pipeline_config_path", required=True,
-                        help="path to the JSON pipeline.config (hdfs:// or local)")
-    args = parser.parse_args()
-    config = common.load_pipeline_config(args.pipeline_config_path)
-    export(config)
+    export(load_pipeline_config_from_args())
 
 
 if __name__ == "__main__":

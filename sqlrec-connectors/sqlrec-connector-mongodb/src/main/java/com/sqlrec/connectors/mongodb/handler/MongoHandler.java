@@ -8,26 +8,16 @@ import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.WriteModel;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
+import com.sqlrec.connectors.mongodb.utils.MongoClientUtils;
 import org.apache.calcite.rex.RexNode;
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class MongoHandler implements Serializable {
     private static final long serialVersionUID = 1L;
-    private static final Logger logger = LoggerFactory.getLogger(MongoHandler.class);
-    private static final Map<String, MongoClient> mongoClients = new ConcurrentHashMap<>();
-
-    static {
-        // Close every cached MongoClient on JVM exit so connection pools and background
-        // monitoring threads are not leaked when the process terminates.
-        Runtime.getRuntime().addShutdownHook(new Thread(MongoHandler::closeAllMongoClients, "MongoHandler-shutdown"));
-    }
 
     private final MongoConfig mongoConfig;
     private final MongoFilterTranslator filterTranslator;
@@ -143,7 +133,7 @@ public class MongoHandler implements Serializable {
     }
 
     private MongoCollection<Document> getCollection() {
-        MongoClient client = testMongoClient != null ? testMongoClient : getOrCreateMongoClient();
+        MongoClient client = testMongoClient != null ? testMongoClient : MongoClientUtils.getOrCreate(mongoConfig.uri);
         MongoDatabase database = client.getDatabase(mongoConfig.database);
         return database.getCollection(mongoConfig.collection);
     }
@@ -157,42 +147,13 @@ public class MongoHandler implements Serializable {
     }
 
     /**
-     * Return the cached MongoClient for this handler's URI, creating it on first use.
-     * Uses double-checked locking instead of {@code computeIfAbsent} so the expensive
-     * {@link MongoClients#create} (which builds a connection pool) does not hold the
-     * ConcurrentHashMap bin lock and block lookups for other URIs.
-     */
-    private MongoClient getOrCreateMongoClient() {
-        MongoClient client = mongoClients.get(mongoConfig.uri);
-        if (client != null) {
-            return client;
-        }
-        synchronized (mongoClients) {
-            client = mongoClients.get(mongoConfig.uri);
-            if (client == null) {
-                client = MongoClients.create(mongoConfig.uri);
-                mongoClients.put(mongoConfig.uri, client);
-            }
-            return client;
-        }
-    }
-
-    /**
      * Close and discard the cached MongoClient for {@code uri} so the next call
      * re-creates it. Intended to be called after a connection-level failure (MongoDB
      * restart, network blip, credential rotation) so that subsequent calls recover
      * instead of failing forever on the broken client.
      */
     public static synchronized void invalidateClient(String uri) {
-        MongoClient client = mongoClients.remove(uri);
-        if (client != null) {
-            try {
-                client.close();
-            } catch (Exception e) {
-                // MongoDB URIs may contain credentials; do not include them in logs.
-                logger.warn("Failed to close MongoClient during invalidation: {}", e.getMessage());
-            }
-        }
+        MongoClientUtils.invalidateClient(uri);
     }
 
     /**
@@ -200,15 +161,7 @@ public class MongoHandler implements Serializable {
      * hook so connection pools and background monitoring threads are released on exit.
      */
     public static synchronized void closeAllMongoClients() {
-        for (Map.Entry<String, MongoClient> entry : new ArrayList<>(mongoClients.entrySet())) {
-            try {
-                entry.getValue().close();
-            } catch (Exception e) {
-                logger.warn("Failed to close MongoClient on shutdown: {}", e.getMessage());
-            }
-        }
-        mongoClients.clear();
-        logger.info("Closed all MongoDB clients on shutdown");
+        MongoClientUtils.closeAll();
     }
 
 }

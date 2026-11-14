@@ -7,7 +7,6 @@ categorical column names are passed via ``cat_features``.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 
@@ -16,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from common import filesystem as common
+from common.cli import load_pipeline_config_from_args
 from common.training_data import resolve_feature_columns
 
 logger = logging.getLogger("gbdt.train_catboost")
@@ -154,12 +154,7 @@ def train(config: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--pipeline_config_path", required=True,
-                        help="path to the JSON pipeline.config (hdfs:// or local)")
-    args = parser.parse_args()
-    config = common.load_pipeline_config(args.pipeline_config_path)
-    train(config)
+    train(load_pipeline_config_from_args())
 
 
 if __name__ == "__main__":
