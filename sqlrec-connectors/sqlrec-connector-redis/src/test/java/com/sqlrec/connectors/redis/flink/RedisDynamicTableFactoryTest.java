@@ -4,6 +4,7 @@ import com.sqlrec.connectors.redis.codec.ProtobufCodec;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -56,6 +58,22 @@ class RedisDynamicTableFactoryTest {
 
         assertProtobufConfig(readConfig(sink));
         assertProtobufConfig(readConfig(source));
+    }
+
+    @Test
+    void rejectsInvalidOptionsForBothSourceAndSink() {
+        RedisDynamicTableFactory factory = new RedisDynamicTableFactory();
+        for (Map<String, String> options : Arrays.asList(
+                Map.of("connector", "redis"),
+                Map.of("connector", "redis", "url", "redis://localhost:6379", "unexpected", "value"))) {
+            DynamicTableFactory.Context context = context(options);
+            ValidationException source = assertThrows(ValidationException.class,
+                    () -> factory.createDynamicTableSource(context));
+            ValidationException sink = assertThrows(ValidationException.class,
+                    () -> factory.createDynamicTableSink(context));
+            assertEquals(source.getMessage(), sink.getMessage());
+            assertTrue(source.getMessage().contains(options.containsKey("url") ? "unexpected" : "url"));
+        }
     }
 
     @Test

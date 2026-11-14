@@ -6,6 +6,7 @@ import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.ProtobufRowCodec;
 import com.sqlrec.common.utils.RowJsonEncoder;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
+import com.sqlrec.connectors.kafka.utils.KafkaProducerUtils;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.linq4j.tree.Expression;
@@ -23,8 +24,6 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Schemas;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,17 +31,10 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
-    static volatile Map<String, KafkaProducer<String, byte[]>> kafkaProducerMap = new ConcurrentHashMap<>();
     private final KafkaConfig kafkaConfig;
     private final ProtobufRowCodec protobufRowCodec;
-
-    static {
-        Runtime.getRuntime().addShutdownHook(
-                new Thread(KafkaCalciteTable::closeAllProducers, "KafkaCalciteTable-shutdown"));
-    }
 
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
         this.kafkaConfig = kafkaConfig;
@@ -82,53 +74,13 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         return Schemas.tableExpression(schema, getElementType(), tableName, clazz);
     }
 
-    private static String getProducerConfigKey(KafkaConfig config) {
-        return config.bootstrapServers + "|" + config.lingerMs;
-    }
-
     public static KafkaProducer<String, byte[]> getKafkaProducer(KafkaConfig kafkaConfig) {
-        String configKey = getProducerConfigKey(kafkaConfig);
-        return kafkaProducerMap.computeIfAbsent(configKey, k -> {
-            Properties props = new Properties();
-            props.put("bootstrap.servers", kafkaConfig.bootstrapServers);
-            props.put("key.serializer", StringSerializer.class.getName());
-            props.put("value.serializer", ByteArraySerializer.class.getName());
-            props.put("linger.ms", String.valueOf(kafkaConfig.lingerMs));
-            return new KafkaProducer<>(props);
-        });
+        return KafkaProducerUtils.getOrCreate(kafkaConfig);
     }
 
     /** Close every cached Kafka producer and clear the cache. */
     public static synchronized void closeAllProducers() {
-        for (Map.Entry<String, KafkaProducer<String, byte[]>> entry
-                : new ArrayList<>(kafkaProducerMap.entrySet())) {
-            try {
-                entry.getValue().close();
-            } catch (Exception e) {
-                LoggerFactory.getLogger(KafkaCalciteTable.class).warn(
-                        "Failed to close Kafka producer for key {}: {}",
-                        entry.getKey(), e.getMessage(), e);
-            }
-        }
-        kafkaProducerMap.clear();
-    }
-
-    /** Test-only: inject a mock producer for the given config key. */
-    static void setKafkaProducerForTest(String configKey, KafkaProducer<String, byte[]> mockProducer) {
-        kafkaProducerMap.put(configKey, mockProducer);
-    }
-
-    /** Test-only: remove and close the producer for the given config key. */
-    static void invalidateProducer(String configKey) {
-        KafkaProducer<String, byte[]> producer = kafkaProducerMap.remove(configKey);
-        if (producer != null) {
-            producer.close();
-        }
-    }
-
-    /** Test-only: get the config key for a given config (so tests can match the injection key). */
-    static String getProducerConfigKeyForTest(KafkaConfig config) {
-        return getProducerConfigKey(config);
+        KafkaProducerUtils.closeAll();
     }
 
     public static class KafkaCollection extends SqlRecCollection {

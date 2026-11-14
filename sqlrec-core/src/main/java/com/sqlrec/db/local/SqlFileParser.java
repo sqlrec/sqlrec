@@ -55,14 +55,12 @@ public class SqlFileParser {
     }
 
     private List<Path> collectSqlFiles(Path dir) throws IOException {
-        List<Path> sqlFiles = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(dir)) {
-            walk.filter(Files::isRegularFile)
+            return walk.filter(Files::isRegularFile)
                     .filter(this::isSqlFile)
                     .sorted()
-                    .forEach(sqlFiles::add);
+                    .toList();
         }
-        return sqlFiles;
     }
 
     private void parseSqlFile(Path sqlFile) throws Exception {

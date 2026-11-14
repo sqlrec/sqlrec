@@ -345,46 +345,9 @@ public final class ProtobufRowCodec {
     ) {
         switch (field.getJavaType()) {
             case INT:
-                int intValue = (Integer) value;
-                if (field.getType() == Descriptors.FieldDescriptor.Type.UINT32
-                        || field.getType() == Descriptors.FieldDescriptor.Type.FIXED32) {
-                    long unsigned = Integer.toUnsignedLong(intValue);
-                    if (isDecimalType(sqlType)) {
-                        return BigDecimal.valueOf(unsigned);
-                    }
-                    if (isBigIntType(sqlType)) {
-                        return unsigned;
-                    }
-                    if (unsigned > Integer.MAX_VALUE) {
-                        if (sqlType != null) {
-                            throw new IllegalArgumentException(
-                                    "Protobuf field " + field.getFullName()
-                                            + " requires a BIGINT or DECIMAL SQL column for value " + unsigned);
-                        }
-                        return unsigned;
-                    }
-                }
-                if (isBigIntType(sqlType)) {
-                    return (long) intValue;
-                }
-                return intValue;
+                return fromProtobufInt(field, (Integer) value, sqlType);
             case LONG:
-                long longValue = (Long) value;
-                if ((field.getType() == Descriptors.FieldDescriptor.Type.UINT64
-                        || field.getType() == Descriptors.FieldDescriptor.Type.FIXED64)
-                        && longValue < 0) {
-                    BigInteger unsigned = new BigInteger(Long.toUnsignedString(longValue));
-                    if (isDecimalType(sqlType)) {
-                        return new BigDecimal(unsigned);
-                    }
-                    if (sqlType != null) {
-                        throw new IllegalArgumentException(
-                                "Protobuf field " + field.getFullName()
-                                        + " requires a DECIMAL SQL column for value " + unsigned);
-                    }
-                    return unsigned;
-                }
-                return isDecimalType(sqlType) ? BigDecimal.valueOf(longValue) : longValue;
+                return fromProtobufLong(field, (Long) value, sqlType);
             case BYTE_STRING:
                 return ((ByteString) value).toByteArray();
             case ENUM:
@@ -404,6 +367,51 @@ public final class ProtobufRowCodec {
             default:
                 return value;
         }
+    }
+
+    private static Object fromProtobufInt(
+            Descriptors.FieldDescriptor field, int value, String sqlType) {
+        if (field.getType() == Descriptors.FieldDescriptor.Type.UINT32
+                || field.getType() == Descriptors.FieldDescriptor.Type.FIXED32) {
+            long unsigned = Integer.toUnsignedLong(value);
+            if (isDecimalType(sqlType)) {
+                return BigDecimal.valueOf(unsigned);
+            }
+            if (isBigIntType(sqlType)) {
+                return unsigned;
+            }
+            if (unsigned > Integer.MAX_VALUE) {
+                if (sqlType != null) {
+                    throw new IllegalArgumentException(
+                            "Protobuf field " + field.getFullName()
+                                    + " requires a BIGINT or DECIMAL SQL column for value " + unsigned);
+                }
+                return unsigned;
+            }
+        }
+        if (isBigIntType(sqlType)) {
+            return (long) value;
+        }
+        return value;
+    }
+
+    private static Object fromProtobufLong(
+            Descriptors.FieldDescriptor field, long value, String sqlType) {
+        if ((field.getType() == Descriptors.FieldDescriptor.Type.UINT64
+                || field.getType() == Descriptors.FieldDescriptor.Type.FIXED64)
+                && value < 0) {
+            BigInteger unsigned = new BigInteger(Long.toUnsignedString(value));
+            if (isDecimalType(sqlType)) {
+                return new BigDecimal(unsigned);
+            }
+            if (sqlType != null) {
+                throw new IllegalArgumentException(
+                        "Protobuf field " + field.getFullName()
+                                + " requires a DECIMAL SQL column for value " + unsigned);
+            }
+            return unsigned;
+        }
+        return isDecimalType(sqlType) ? BigDecimal.valueOf(value) : value;
     }
 
     private static String arrayElementType(String sqlType) {

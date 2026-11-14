@@ -5,7 +5,6 @@ import com.sqlrec.common.schema.ConnectorTableMetadata;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.source.DynamicTableSource;
@@ -20,23 +19,20 @@ import java.util.Set;
 public class RedisDynamicTableFactory implements DynamicTableSinkFactory, DynamicTableSourceFactory {
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
-        FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validate();
-
         RedisConfig redisConfig = getRedisConfig(context);
         return new RedisDynamicTableSink(redisConfig, context.getCatalogTable().getResolvedSchema());
     }
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
-        FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validate();
-
         RedisConfig redisConfig = getRedisConfig(context);
         return new RedisDynamicTableSource(redisConfig, context.getCatalogTable().getResolvedSchema());
     }
 
     private RedisConfig getRedisConfig(Context context) {
+        FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
+        helper.validate();
+
         Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
         RedisConfig redisConfig = RedisOptions.getRedisConfig(options);

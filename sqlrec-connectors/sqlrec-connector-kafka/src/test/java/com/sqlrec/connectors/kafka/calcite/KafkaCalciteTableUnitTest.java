@@ -4,6 +4,7 @@ import com.google.protobuf.StringValue;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
+import com.sqlrec.connectors.kafka.utils.KafkaProducerUtils;
 import com.sqlrec.common.utils.SilenceLoggers;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -11,26 +12,26 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.MockedConstruction;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 public class KafkaCalciteTableUnitTest {
 
-    @Mock
     private KafkaProducer<String, byte[]> mockProducer;
+    private MockedConstruction<KafkaProducer> producerConstruction;
+    private final List<Properties> producerProperties = new ArrayList<>();
 
     private KafkaCalciteTable table;
     private KafkaConfig config;
-    private String configKey;
 
     @BeforeEach
     public void setUp() {
@@ -46,38 +47,45 @@ public class KafkaCalciteTableUnitTest {
         table = new KafkaCalciteTable(config);
         table.setTableName("test_table");
 
-        configKey = KafkaCalciteTable.getProducerConfigKeyForTest(config);
-        KafkaCalciteTable.setKafkaProducerForTest(configKey, mockProducer);
+        producerConstruction = mockConstruction(KafkaProducer.class,
+                (producer, context) -> producerProperties.add((Properties) context.arguments().get(0)));
+        mockProducer = KafkaCalciteTable.getKafkaProducer(config);
     }
 
     @AfterEach
     public void tearDown() {
-        KafkaCalciteTable.invalidateProducer(configKey);
+        try {
+            KafkaCalciteTable.closeAllProducers();
+        } finally {
+            producerConstruction.close();
+        }
     }
 
     @Test
-    public void testGetProducerConfigKey() {
-        String key = KafkaCalciteTable.getProducerConfigKeyForTest(config);
-
-        assertEquals("localhost:9092|10", key);
+    public void testProducerConnectionAndSerializationProperties() {
+        Properties properties = producerProperties.get(0);
+        assertEquals("localhost:9092", properties.getProperty("bootstrap.servers"));
+        assertEquals("10", properties.getProperty("linger.ms"));
+        assertEquals("org.apache.kafka.common.serialization.StringSerializer", properties.getProperty("key.serializer"));
+        assertEquals("org.apache.kafka.common.serialization.ByteArraySerializer", properties.getProperty("value.serializer"));
     }
 
     @Test
-    public void testGetProducerConfigKeyDifferentLinger() {
+    public void testDifferentLingerCreatesAnotherProducer() {
         KafkaConfig config2 = new KafkaConfig();
         config2.bootstrapServers = "localhost:9092";
         config2.lingerMs = 20;
 
-        String key2 = KafkaCalciteTable.getProducerConfigKeyForTest(config2);
-
-        assertNotEquals(configKey, key2);
+        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config2));
     }
 
     @Test
-    public void testGetKafkaProducerReturnsInjected() {
+    public void testTableAndUtilityReuseTheSameProducer() {
         KafkaProducer<String, byte[]> producer = KafkaCalciteTable.getKafkaProducer(config);
 
         assertSame(mockProducer, producer);
+        assertSame(producer, KafkaProducerUtils.getOrCreate(config));
+        assertEquals(1, producerConstruction.constructed().size());
     }
 
     @Test
@@ -90,9 +98,7 @@ public class KafkaCalciteTableUnitTest {
         assertSame(
                 KafkaCalciteTable.getKafkaProducer(config),
                 KafkaCalciteTable.getKafkaProducer(protobufConfig));
-        assertEquals(
-                KafkaCalciteTable.getProducerConfigKeyForTest(config),
-                KafkaCalciteTable.getProducerConfigKeyForTest(protobufConfig));
+        assertEquals(1, producerConstruction.constructed().size());
     }
 
     @Test
@@ -242,7 +248,7 @@ public class KafkaCalciteTableUnitTest {
         KafkaCalciteTable multiTable = new KafkaCalciteTable(multiTypeConfig);
         multiTable.setTableName("multi_table");
 
-        // Same producer config key as setUp, so mockProducer is already injected
+        // The same connection settings reuse the producer created in setUp.
         KafkaCalciteTable.KafkaCollection collection =
                 new KafkaCalciteTable.KafkaCollection(multiTable, multiTypeConfig);
 
@@ -263,10 +269,11 @@ public class KafkaCalciteTableUnitTest {
     }
 
     @Test
-    public void testInvalidateProducer() {
-        KafkaCalciteTable.invalidateProducer(configKey);
+    public void testClosedProducerIsRecreatedOnNextUse() {
+        KafkaCalciteTable.closeAllProducers();
 
         verify(mockProducer, times(1)).close();
+        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config));
     }
 
     @Test
@@ -278,11 +285,16 @@ public class KafkaCalciteTableUnitTest {
 
     @Test
     public void testCloseAllProducersContinuesWhenCloseFails() {
+        KafkaConfig otherConfig = new KafkaConfig();
+        otherConfig.bootstrapServers = "localhost:9093";
+        otherConfig.lingerMs = config.lingerMs;
+        KafkaProducer<String, byte[]> otherProducer = KafkaProducerUtils.getOrCreate(otherConfig);
         doThrow(new RuntimeException("close failed")).when(mockProducer).close();
 
         assertDoesNotThrow(KafkaCalciteTable::closeAllProducers);
 
-        assertTrue(KafkaCalciteTable.kafkaProducerMap.isEmpty());
         verify(mockProducer).close();
+        verify(otherProducer).close();
+        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config));
     }
 }
