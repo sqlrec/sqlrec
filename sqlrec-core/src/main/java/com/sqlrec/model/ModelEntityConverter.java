@@ -18,18 +18,12 @@ import com.sqlrec.utils.PathUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.conf.Configuration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /** Converts SQL and stored entities; managers resolve metadata and execution paths. */
 public class ModelEntityConverter {
-    private static final Logger log = LoggerFactory.getLogger(ModelEntityConverter.class);
-
     public static ModelConf convertToModel(String modelDdl) throws Exception {
         SqlNode modelSqlNode = CompileManager.parseSql(modelDdl);
         if (!(modelSqlNode instanceof SqlCreateModel createModel)) {
@@ -123,7 +117,7 @@ public class ModelEntityConverter {
         }
         fullPath += modelConfig.getModelName();
 
-        List<String> fixedPaths = fixPathProtocol(Collections.singletonList(fullPath));
+        List<String> fixedPaths = PathUtils.fixPathProtocol(Collections.singletonList(fullPath));
         return fixedPaths.get(0);
     }
 
@@ -133,20 +127,6 @@ public class ModelEntityConverter {
     }
 
     public static List<String> fixPathProtocol(List<String> partitionPaths) {
-        String defaultFS = null;
-        List<String> fixedPaths = new ArrayList<>();
-        for (String path : partitionPaths) {
-            if (!path.contains(":")) {
-                if (defaultFS == null) {
-                    Configuration hadoopConf = new Configuration();
-                    defaultFS = hadoopConf.get("fs.defaultFS", "hdfs:///");
-                    log.info("Default filesystem: {}", defaultFS);
-                }
-                fixedPaths.add(defaultFS + path);
-            } else {
-                fixedPaths.add(path);
-            }
-        }
-        return fixedPaths;
+        return PathUtils.fixPathProtocol(partitionPaths);
     }
 }

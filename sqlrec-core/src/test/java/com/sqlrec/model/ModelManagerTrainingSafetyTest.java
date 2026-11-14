@@ -97,7 +97,6 @@ class ModelManagerTrainingSafetyTest {
             f.verifyNoDeletion();
             when(f.statement.getDataSource()).thenReturn(new SqlIdentifier("data", SqlParserPos.ZERO));
             when(f.db.getPartitionPaths("default", "data", "")).thenReturn(List.of("hdfs:///data"));
-            f.converter.when(() -> ModelEntityConverter.fixPathProtocol(List.of("hdfs:///data"))).thenCallRealMethod();
             when(f.controller.genModelTrainK8sYaml(f.model, f.train)).thenThrow(new IllegalArgumentException("bad configuration"));
             assertThrows(IllegalArgumentException.class, () -> ModelManager.trainModel(f.statement, "default"));
             f.verifyNoDeletion();

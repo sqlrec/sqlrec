@@ -297,7 +297,7 @@ public class ModelManager {
         String table = dataSource.isSimple() ? dataSource.toString() : dataSource.getComponent(1).toString();
         String filter = whereCondition == null ? "" : whereCondition.toString();
         List<String> paths = metadata.getPartitionPaths(database, table, filter);
-        return ModelEntityConverter.fixPathProtocol(paths).stream().map(path -> path + "/*").toList();
+        return PathUtils.fixPathProtocol(paths).stream().map(path -> path + "/*").toList();
     }
 
     private static ExportCheckpoints findExportCheckpoints(

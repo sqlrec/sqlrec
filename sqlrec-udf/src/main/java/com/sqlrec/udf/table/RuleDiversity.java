@@ -80,8 +80,7 @@ public final class RuleDiversity {
 
         List<Rule> rules = parseRules(ruleTable, targetTable.getDataFields());
         List<Map<Integer, List<String>>> itemValues = extractItemValues(targetRows, rules);
-        List<WindowInfo> windows = buildWindows(rules, limit);
-        List<List<WindowInfo>> windowsPerPosition = buildWindowsPerPosition(windows, limit);
+        List<List<WindowInfo>> windowsPerPosition = buildWindowsPerPosition(rules, limit);
         int[] selectedIndexes = greedyAssign(targetRows.size(), limit, itemValues, windowsPerPosition);
 
         List<Object[]> selectedRows = new ArrayList<>(limit);
@@ -135,11 +134,12 @@ public final class RuleDiversity {
         return itemValues;
     }
 
-    /**
-     * Build all windows for all rules. Each window holds a reference to its rule.
-     */
-    private static List<WindowInfo> buildWindows(List<Rule> rules, int limit) {
-        List<WindowInfo> windows = new ArrayList<>();
+    /** Index each window by the positions it covers, sharing its counts across positions. */
+    private static List<List<WindowInfo>> buildWindowsPerPosition(List<Rule> rules, int limit) {
+        List<List<WindowInfo>> windowsPerPosition = new ArrayList<>(limit);
+        for (int position = 0; position < limit; position++) {
+            windowsPerPosition.add(new ArrayList<>());
+        }
         for (Rule rule : rules) {
             if (!rule.isValidOp()) {
                 continue;
@@ -150,27 +150,11 @@ public final class RuleDiversity {
                 if (start >= limit) {
                     break;
                 }
-                windows.add(new WindowInfo(start, end, rule));
-            }
-        }
-        return windows;
-    }
-
-    /**
-     * Build per-position window lists.
-     */
-    private static List<List<WindowInfo>> buildWindowsPerPosition(
-            List<WindowInfo> windows,
-            int limit) {
-        List<List<WindowInfo>> windowsPerPosition = new ArrayList<>(limit);
-        for (int position = 0; position < limit; position++) {
-            List<WindowInfo> active = new ArrayList<>();
-            for (WindowInfo window : windows) {
-                if (window.covers(position)) {
-                    active.add(window);
+                WindowInfo window = new WindowInfo(rule);
+                for (int position = start; position < end; position++) {
+                    windowsPerPosition.get(position).add(window);
                 }
             }
-            windowsPerPosition.add(active);
         }
         return windowsPerPosition;
     }
@@ -453,21 +437,13 @@ public final class RuleDiversity {
     }
 
     private static final class WindowInfo {
-        final int start;
-        final int end;
         final Rule rule;
         int matchedCount;
         final Map<String, Integer> valueCounts;
 
-        WindowInfo(int start, int end, Rule rule) {
-            this.start = start;
-            this.end = end;
+        WindowInfo(Rule rule) {
             this.rule = rule;
             this.valueCounts = rule.appliesToEachValue ? new HashMap<>() : null;
-        }
-
-        boolean covers(int position) {
-            return position >= start && position < end;
         }
 
         /**

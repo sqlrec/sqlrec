@@ -2,8 +2,34 @@ package com.sqlrec.utils;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class PathUtils {
+    private static final Logger log = LoggerFactory.getLogger(PathUtils.class);
+
+    /** Prefixes paths without a protocol using Hadoop's default filesystem. */
+    public static List<String> fixPathProtocol(List<String> paths) {
+        String defaultFS = null;
+        List<String> fixedPaths = new ArrayList<>();
+        for (String path : paths) {
+            if (!path.contains(":")) {
+                if (defaultFS == null) {
+                    Configuration hadoopConf = new Configuration();
+                    defaultFS = hadoopConf.get("fs.defaultFS", "hdfs:///");
+                    log.info("Default filesystem: {}", defaultFS);
+                }
+                fixedPaths.add(defaultFS + path);
+            } else {
+                fixedPaths.add(path);
+            }
+        }
+        return fixedPaths;
+    }
 
     public static void validateModelPath(String hdfsPath, String modelPath) {
         if (StringUtils.isBlank(hdfsPath)) {
