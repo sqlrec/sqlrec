@@ -20,7 +20,9 @@ public class SqlTestCase {
 
     public String sql;
     public List<Object[]> expectedResult;
+    /** Expected outer exception type; a non-null message must occur in its cause chain. */
     public Exception expectedException;
+    private Throwable expectedRootCause;
     public String expectedLogicalPlan;
     public String expectedPhysicalPlan;
     public String expectedJavaExpression;
@@ -55,33 +57,22 @@ public class SqlTestCase {
         return this;
     }
 
+    /** Optionally require a specific root cause, including its message substring. */
+    public SqlTestCase setExpectedRootCause(Throwable expectedRootCause) {
+        this.expectedRootCause = java.util.Objects.requireNonNull(expectedRootCause);
+        return this;
+    }
+
     public void checkBindable(BindableInterface bindable) {
-        if (expectedLogicalPlan != null) {
-            String actualLogicalPlan = bindable.getLogicalPlan();
-            if (!normalizeString(expectedLogicalPlan).equals(normalizeString(actualLogicalPlan))) {
-                log.error("Logical plan mismatch:");
-                log.error("  Expected (length={}):\n{}", expectedLogicalPlan.length(), expectedLogicalPlan);
-                log.error("  Actual (length={}):\n{}", actualLogicalPlan.length(), actualLogicalPlan);
-                assert false : "Logical plan mismatch";
-            }
-        }
-        if (expectedPhysicalPlan != null) {
-            String actualPhysicalPlan = bindable.getPhysicalPlan();
-            if (!normalizeString(expectedPhysicalPlan).equals(normalizeString(actualPhysicalPlan))) {
-                log.error("Physical plan mismatch:");
-                log.error("  Expected (length={}):\n{}", expectedPhysicalPlan.length(), expectedPhysicalPlan);
-                log.error("  Actual (length={}):\n{}", actualPhysicalPlan.length(), actualPhysicalPlan);
-                assert false : "Physical plan mismatch";
-            }
-        }
-        if (expectedJavaExpression != null) {
-            String actualJavaExpression = bindable.getJavaExpression();
-            if (!normalizeString(expectedJavaExpression).equals(normalizeString(actualJavaExpression))) {
-                log.error("Java expression mismatch:");
-                log.error("  Expected (length={}):\n{}", expectedJavaExpression.length(), expectedJavaExpression);
-                log.error("  Actual (length={}):\n{}", actualJavaExpression.length(), actualJavaExpression);
-                assert false : "Java expression mismatch";
-            }
+        checkPlan("Logical plan", expectedLogicalPlan, bindable.getLogicalPlan());
+        checkPlan("Physical plan", expectedPhysicalPlan, bindable.getPhysicalPlan());
+        checkPlan("Java expression", expectedJavaExpression, bindable.getJavaExpression());
+    }
+
+    private void checkPlan(String name, String expected, String actual) {
+        if (expected != null && !normalizeString(expected).equals(normalizeString(actual))) {
+            throw new AssertionError(name + " mismatch for SQL: " + sql
+                    + "\nExpected:\n" + expected + "\nActual:\n" + actual);
         }
     }
 
@@ -99,7 +90,7 @@ public class SqlTestCase {
     public void test(CalciteSchema schema, ExecuteContext executeContext) throws Exception {
         log.info(sql);
         Exception actualException = null;
-        Enumerable enumerable = null;
+        List<Object[]> actualResults = new ArrayList<>();
         try {
             SqlNode flinkSqlNode = CompileManager.parseSql(sql);
             BindableInterface bindable = new CompileManager().compileSql(
@@ -115,33 +106,66 @@ public class SqlTestCase {
                     log.info("=== Java Expression ===");
                     log.info(bindable.getJavaExpression());
                 }
-                checkBindable(bindable);
             }
-            enumerable = bindable.bind(schema, executeContext);
+            checkBindable(bindable);
+            Enumerable<Object[]> enumerable = bindable.bind(schema, executeContext);
+            // Failures may be deferred until the enumerable is consumed.
+            if (enumerable != null) {
+                actualResults = enumerable.toList();
+            }
         } catch (Exception e) {
             actualException = e;
         }
 
-        if (expectedException != null) {
-            assert actualException != null;
-            assert expectedException.getClass().isAssignableFrom(actualException.getClass());
-        } else {
-            if (actualException != null) {
-                log.error("Exception during execution:", actualException);
-                throw new AssertionError("SQL execution failed: " + sql, actualException);
+        if (expectedException != null || expectedRootCause != null) {
+            if (actualException == null) {
+                throw new AssertionError("Expected SQL execution to fail: " + sql);
             }
+            if (expectedException != null) {
+                if (!expectedException.getClass().isInstance(actualException)) {
+                    throw new AssertionError("Expected " + expectedException.getClass().getName()
+                            + " but got " + actualException.getClass().getName() + " for SQL: " + sql,
+                            actualException);
+                }
+                // Execution proxies may add a wrapper; retain the original diagnostic.
+                requireMessage(expectedException.getMessage(), actualException, true);
+            }
+            if (expectedRootCause != null) {
+                Throwable rootCause = actualException;
+                while (rootCause.getCause() != null) {
+                    rootCause = rootCause.getCause();
+                }
+                if (!expectedRootCause.getClass().isInstance(rootCause)) {
+                    throw new AssertionError("Expected root cause " + expectedRootCause.getClass().getName()
+                            + " but got " + rootCause.getClass().getName() + " for SQL: " + sql,
+                            actualException);
+                }
+                requireMessage(expectedRootCause.getMessage(), rootCause, false);
+            }
+            return;
+        }
+        if (actualException != null) {
+            throw new AssertionError("SQL execution failed: " + sql, actualException);
         }
 
-        List<Object[]> actualResults = new ArrayList<>();
-        if (enumerable != null) {
-            actualResults = enumerable.toList();
-            for (Object[] result : actualResults) {
-                log.info(java.util.Arrays.toString(result));
-            }
-        } else {
-            log.info("no result");
+        for (Object[] result : actualResults) {
+            log.info(java.util.Arrays.toString(result));
         }
 
         DataCheckUtils.checkResultEqual(actualResults, expectedResult);
+    }
+
+    private void requireMessage(String expected, Throwable actual, boolean searchCauses) {
+        if (expected == null) {
+            return;
+        }
+        for (Throwable candidate = actual; candidate != null;
+             candidate = searchCauses ? candidate.getCause() : null) {
+            if (candidate.getMessage() != null && candidate.getMessage().contains(expected)) {
+                return;
+            }
+        }
+        throw new AssertionError("Expected exception message to contain '" + expected
+                + "' for SQL: " + sql, actual);
     }
 }

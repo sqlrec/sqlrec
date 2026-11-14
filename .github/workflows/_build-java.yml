@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       unit_tests_only:
-        description: 'Run Java unit tests without Python tests or packaging'
+        description: 'Run Java unit tests without model Python tests or packaging'
         type: boolean
         default: false
       release:
@@ -16,6 +16,28 @@ permissions:
   contents: read
 
 jobs:
+  huggingface-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            benchmark/huggingface/requirements.txt
+            benchmark/model_quality/requirements.txt
+
+      - name: Install contract test dependencies
+        run: python -m pip install -r benchmark/huggingface/requirements.txt
+
+      - name: Test Hugging Face benchmark contracts without model downloads
+        run: python -m unittest discover -s benchmark/huggingface/tests -v
+
   build-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

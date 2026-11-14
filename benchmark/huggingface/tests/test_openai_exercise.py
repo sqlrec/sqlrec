@@ -1,8 +1,8 @@
 """Run the benchmark's checks against the real ASGI protocol without sockets."""
 from contextlib import contextmanager, nullcontext
-import importlib.util
 import math
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -14,10 +14,12 @@ from fastapi.testclient import TestClient
 from benchmark.huggingface.config import CASES
 from benchmark.huggingface import openai_checks as checks
 
-source = Path(__file__).resolve().parents[3] / 'sqlrec-model/src/main/python/huggingface/openai_api.py'
-spec = importlib.util.spec_from_file_location('benchmark_openai_protocol', source)
-protocol = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(protocol)
+# Load the lightweight production protocol package without requiring PYTHONPATH
+# or importing the model adapters (and their torch/transformers dependencies).
+source = Path(__file__).resolve().parents[3] / 'sqlrec-model/src/main/python'
+with patch.object(sys, 'path', [str(source), *sys.path]):
+    from huggingface import openai_api as protocol
+    from huggingface.runtime import ModelRuntime
 
 
 class Adapter:
@@ -62,14 +64,18 @@ class Session:
 class OpenAIExerciseTest(unittest.TestCase):
     def run_checks(self, case, bad_udf=False):
         adapter = Adapter(case)
-        runtime = protocol.OpenAIRuntime(lambda: adapter)
-        runtime.configure({'task': case.task, 'model_name': 'hf_run'}, {})
+        model_runtime = ModelRuntime({})
+        model_runtime.adapter = adapter
+        with patch.dict('os.environ', {'SQLREC_OPENAI_API_KEY': ''}):
+            runtime = protocol.OpenAIRuntime(model_runtime)
+            runtime.configure({'task': case.task, 'model_name': 'hf_run'}, {})
         app = FastAPI()
         protocol.register_openai_routes(app, runtime)
 
         @app.post('/predict')
         def predict(body: list[dict]):
-            return {'embedding': adapter.embed([row['body'] for row in body])['embedding']}
+            with model_runtime.inference():
+                return {'embedding': adapter.embed([row['body'] for row in body])['embedding']}
 
         def sql_call(function, body, retry):
             rows = body['data']['observations']

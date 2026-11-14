@@ -305,10 +305,12 @@ public class TestMilvusCalciteTable {
                 null).test(schema);
         // An unsupported right-side predicate must prevent the vector lookup rule
         // from firing, so the original Calcite plan keeps the complete condition.
+        // The remaining cross join has no Enumerable conversion; Calcite reports
+        // that planning failure rather than a connector-specific filter error.
         new SqlTestCase("select * from t2 join t1 on 1=1 " +
                 "where t2.title = t1.title and t1.id + 1 > 1 " +
                 "order by ip(t2.embedding, t1.embedding) limit 10", null,
-                new RelOptPlanner.CannotPlanException("Unsupported vector filter")).test(schema);
+                new RelOptPlanner.CannotPlanException("Missing conversion is LogicalJoin")).test(schema);
         new SqlTestCase("select * from t2 join t1 on 1=1 " +
                 "where t2.ID > " + TEST_ID_BASE
                 + " and t1.title = 'SqlRec Coverage Movie Beta Updated' " +

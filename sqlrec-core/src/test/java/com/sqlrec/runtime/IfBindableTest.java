@@ -221,9 +221,9 @@ public class IfBindableTest {
     @Test
     public void testIfTableSchemaMismatch() throws Exception {
         SqlTestCase sqlTestCase = new SqlTestCase(
-                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table T1 as SELECT 'x' as name)"
+                "IF (SELECT true) THEN (cache table t1 as SELECT 1 as id) ELSE (cache table T1 as SELECT 'x' as id)"
         );
-        sqlTestCase.expectedException = new RuntimeException("desired field type not equal to given field type");
+        sqlTestCase.expectedException = new RuntimeException("field type not equal:");
         sqlTestCase.test(schema);
     }
 
@@ -525,7 +525,7 @@ public class IfBindableTest {
         SqlTestCase sqlTestCase = new SqlTestCase(
                 "IF (SELECT true) THEN (SELECT 1 as id) ELSE (SELECT 'x' as name)"
         );
-        sqlTestCase.expectedException = new RuntimeException("desired field name not equal to given field name");
+        sqlTestCase.expectedException = new RuntimeException("field name not equal: id != name");
         sqlTestCase.test(schema);
     }
 

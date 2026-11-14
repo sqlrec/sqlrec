@@ -102,7 +102,7 @@ public class AssertBindableTest {
 
         // WHERE filters out all rows -> empty result -> assert throws "no rows"
         SqlTestCase failCase = new SqlTestCase(
-                "assert select count(*) > 0 from myTable where id > 1000",
+                "assert select true from myTable where id > 1000",
                 null,
                 new RuntimeException("no rows"));
         failCase.test(schema);
@@ -112,11 +112,11 @@ public class AssertBindableTest {
     public void testAssertFailWhenNullBoolean() throws Exception {
         CalciteSchema schema = buildSchema();
 
-        // count(*) returns 0 for empty set, 0 > 0 is false -> throws
+        // Return a BOOLEAN NULL rather than a false aggregate expression.
         SqlTestCase failCase = new SqlTestCase(
-                "assert select count(*) > 0 from myTable where id > 1000",
+                "assert select cast(null as boolean) from myTable",
                 null,
-                new RuntimeException("assert failed"));
+                new RuntimeException("returned null"));
         failCase.test(schema);
     }
 
