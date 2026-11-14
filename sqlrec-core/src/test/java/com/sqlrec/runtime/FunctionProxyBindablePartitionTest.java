@@ -162,7 +162,7 @@ public class FunctionProxyBindablePartitionTest {
                 ),
                 new SqlTestCase(
                         "cache table r8 as call partition_echo_fun(t1) " +
-                                "partition by t1 size get('unknown_partition_size', '2')",
+                                "partition by t1 size get('unknown_partition_size', 2)",
                         Arrays.<Object[]>asList(new Object[]{"r8", 2L})
                 ),
                 new SqlTestCase(
@@ -172,7 +172,7 @@ public class FunctionProxyBindablePartitionTest {
                 // A present variable takes precedence over get's fallback.
                 new SqlTestCase(
                         "cache table r8_override as call partition_echo_fun(t1) " +
-                                "partition by t1 size get('partition_size_override', '2')",
+                                "partition by t1 size get('partition_size_override', 2)",
                         Arrays.<Object[]>asList(new Object[]{"r8_override", 3L})
                 ),
                 new SqlTestCase(

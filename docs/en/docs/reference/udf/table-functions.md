@@ -24,7 +24,7 @@ Deduplication function that excludes records from the input table that already e
 | `input` | CacheTable | Input table |
 | `dedupTable` | CacheTable | Deduplication table, containing values to exclude |
 | `col1` | String | Column name in input table for deduplication |
-| `col2` | String | Column name in deduplication table for matching |
+| `col2` | String | Optional column name in deduplication table; defaults to `col1` |
 
 **Return Value**: Returns deduplicated `CacheTable` with same structure as input table.
 
@@ -38,7 +38,7 @@ FROM user_info JOIN exposure_item ON user_id = user_info.id;
 
 -- Exclude exposed items from recall results
 CACHE TABLE dedup_recall AS
-CALL dedup(recall_item, exposured_item, 'item_id', 'item_id');
+CALL dedup(recall_item, exposured_item, 'item_id');
 ```
 
 ---
@@ -496,8 +496,10 @@ Table truncation function that extracts rows within a specified range from the i
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `input` | CacheTable | Input table |
-| `start` | String | Starting row index (0-based, inclusive) |
-| `end` | String | Ending row index (exclusive) |
+| `start` | INT | Starting row index (0-based, inclusive) |
+| `end` | INT | Ending row index (exclusive) |
+
+The two-argument form `truncate_table(input, limit)` returns the first `limit` rows.
 
 **Return Value**: Returns truncated `CacheTable` with same structure as input table.
 
@@ -506,15 +508,15 @@ Table truncation function that extracts rows within a specified range from the i
 ```sql
 -- Get records from row 10 to 20
 CACHE TABLE partial_result AS
-CALL truncate_table(recall_item, '10', '20');
+CALL truncate_table(recall_item, 10, 20);
 
 -- Get first 100 records
 CACHE TABLE top_100 AS
-CALL truncate_table(recall_item, '0', '100');
+CALL truncate_table(recall_item, 100);
 ```
 
 **Notes**:
-- `start` and `end` must be valid integer strings
+- `start` and `end` must be integers
 - `start` and `end` must be non-negative
 - `start` must be less than or equal to `end`
 - Truncation range is left-closed, right-open interval `[start, end)`
@@ -674,7 +676,7 @@ Sleep function that causes the current thread to sleep for a specified number of
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `millisStr` | String | Sleep duration in milliseconds, must be a non-negative integer string |
+| `millis` | BIGINT | Non-negative sleep duration in milliseconds |
 
 **Return Value**: No return value.
 
@@ -682,14 +684,14 @@ Sleep function that causes the current thread to sleep for a specified number of
 
 ```sql
 -- Sleep for 1000 milliseconds (1 second)
-CALL sleep('1000');
+CALL sleep(1000);
 
 -- Sleep for 500 milliseconds
-CALL sleep('500');
+CALL sleep(500);
 ```
 
 **Notes**:
-- `millisStr` must be a valid long integer string
+- `millis` must be a BIGINT value
 - Sleep duration must be non-negative
 - This function only has side effects and no return value
 

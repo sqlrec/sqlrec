@@ -1,16 +1,9 @@
 package com.sqlrec.udf.table;
 
 public class SleepFunction {
-    public Void evaluate(String millisStr) {
-        if (millisStr == null) {
+    public Void evaluate(Long millis) {
+        if (millis == null) {
             throw new IllegalArgumentException("millis parameter cannot be null");
-        }
-
-        long millis;
-        try {
-            millis = Long.parseLong(millisStr);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("millis parameter must be a valid long integer");
         }
 
         if (millis < 0) {

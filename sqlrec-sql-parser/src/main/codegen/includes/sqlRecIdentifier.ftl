@@ -104,7 +104,7 @@ void AddCallSqlFunction(List<SqlNode> list) :
     |
         input = SqlGetVariable()
     |
-        input = StringLiteral()
+        input = Literal()
     )
     { list.add(input); }
 }
@@ -120,7 +120,7 @@ SqlGetVariable SqlGetVariable() :
     variableName = StringLiteral()
     [
         <COMMA>
-        defaultValue = StringLiteral()
+        defaultValue = Literal()
     ]
     <RPAREN>
     {

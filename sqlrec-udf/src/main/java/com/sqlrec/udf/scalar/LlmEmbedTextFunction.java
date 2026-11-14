@@ -7,6 +7,10 @@ import java.util.List;
 
 @UDFType(deterministic = false)
 public class LlmEmbedTextFunction extends RemoteLlmFunction {
+    public List<Double> evaluate(String endpoint, String apiKey, String model, String text) {
+        return evaluate(endpoint, apiKey, model, text, null);
+    }
+
     public List<Double> evaluate(String endpoint, String apiKey, String model, String text, String optionsJson) {
         return LlmClient.embedText(endpoint, apiKey, model, text, optionsJson);
     }

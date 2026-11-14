@@ -11,6 +11,10 @@ import java.util.List;
 import java.util.Set;
 
 public class DedupFunction {
+    public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String column) {
+        return evaluate(input, dedupTable, column, column);
+    }
+
     public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1, String col2) {
         if (input == null) {
             throw new IllegalArgumentException("input table cannot be null");

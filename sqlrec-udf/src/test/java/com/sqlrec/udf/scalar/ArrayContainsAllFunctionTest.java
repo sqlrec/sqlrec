@@ -8,6 +8,13 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ArrayContainsAllFunctionTest {
+    @Test
+    public void comparesMixedNumericTypes() {
+        assertTrue(ArrayContainsAllFunction.evaluate(Arrays.asList(1L, 2.0), Arrays.asList(1, 2L)));
+        assertFalse(ArrayContainsAllFunction.evaluate(Arrays.asList(9007199254740993L),
+                Arrays.asList(9007199254740992d)));
+    }
+
 
     @Test
     public void testContainsAllTrue() {

@@ -72,6 +72,16 @@ class RemoteLlmSqlTest {
     }
 
     @Test
+    void optionsCanBeOmittedForAllRemoteFunctions() throws Exception {
+        assertEquals("summary", execute("SELECT llm_complete('" + url + "/chat', '', 'model', 'prompt')").get(0)[0]);
+        assertEquals(Arrays.asList(3.0, 4.0), execute("SELECT llm_embed_text('" + url
+                + "/embed', '', 'model', 'text')").get(0)[0]);
+        assertEquals(Arrays.asList(3.0, 4.0), execute("SELECT ark_embed_image('" + url
+                + "/ark', '', 'model', 'https://example.com/image.png')").get(0)[0]);
+        assertEquals(3, requests.get());
+    }
+
+    @Test
     void constantArgumentsDoNotCallRemoteDuringCompilationAndReusedPlansCallAtRuntime() throws Exception {
         for (String function : Arrays.asList("llm_embed_text", "llm_complete", "ark_embed_image")) {
             String path = function.equals("llm_complete") ? "/chat" : function.equals("ark_embed_image") ? "/ark" : "/embed";
@@ -147,8 +157,10 @@ class RemoteLlmSqlTest {
             NormalSqlCompiler.getCatalogReader(schema, Consts.DEFAULT_SCHEMA_NAME).lookupOperatorOverloads(
                     new SqlIdentifier(name, SqlParserPos.ZERO), SqlFunctionCategory.USER_DEFINED_FUNCTION,
                     SqlSyntax.FUNCTION, operators, SqlNameMatchers.withCaseSensitive(false));
-            assertEquals(1, operators.size());
-            assertEquals(name.equals("l2_norm"), operators.get(0).isDeterministic());
+            assertEquals(name.equals("l2_norm") ? 1 : 2, operators.size());
+            for (SqlOperator operator : operators) {
+                assertEquals(name.equals("l2_norm"), operator.isDeterministic());
+            }
         }
     }
 

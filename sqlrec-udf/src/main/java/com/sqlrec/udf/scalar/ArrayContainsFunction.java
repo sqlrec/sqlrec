@@ -7,6 +7,6 @@ public class ArrayContainsFunction {
         if (list == null || element == null) {
             return null;
         }
-        return list.contains(element);
+        return ArrayFunctionUtils.contains(list, element);
     }
 }

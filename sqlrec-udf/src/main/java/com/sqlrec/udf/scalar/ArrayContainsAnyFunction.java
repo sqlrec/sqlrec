@@ -8,7 +8,7 @@ public class ArrayContainsAnyFunction {
             return null;
         }
         for (Object element : elements) {
-            if (list.contains(element)) {
+            if (ArrayFunctionUtils.contains(list, element)) {
                 return true;
             }
         }

@@ -181,7 +181,7 @@ CACHE TABLE table_name AS
 |-----------|-------------|
 | `table_name` | Cache table name |
 | `function_name` | Function name to call; an identifier or a `GET()` expression |
-| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string literals |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string, numeric and Boolean literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()` and is the maximum number of rows per partition |
@@ -217,7 +217,9 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 ### CALL
 
-Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; string arguments may be literals or values from `GET()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
+Call an SQL function or a registered Java UDF. Explicit table arguments for table functions must be `CacheTable` objects in the current executor; scalar arguments may be string, numeric or Boolean literals, or values from `GET()`. If the result schema cannot be inferred at compile time, use `LIKE table` or `LIKE FUNCTION`.
+
+Java scalar parameters support `String`, `Integer`, `Long`, `Double`, `Boolean` and their primitive types. Exact type matches take priority; integers may widen to BIGINT or DOUBLE. For numeric or Boolean `GET` arguments, provide a typed default. Arbitrary expressions are not supported in these arguments.
 
 When no return schema is specified with `LIKE`, Java methods returning `CacheTable` are invoked at compile time by default to infer the schema. Set the server environment variable `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` before startup to disable this invocation; SQL `SET` and request `params` cannot override it. With inference disabled, calls to Java methods returning `CacheTable` require an explicit schema through `LIKE table` or `LIKE FUNCTION`; otherwise compilation fails without invoking the method. Methods returning `void` do not require a schema.
 
@@ -232,7 +234,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | Parameter | Description |
 |-----------|-------------|
 | `function_name` | Function name; an identifier or a `GET()` expression |
-| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string literals |
+| `arg1, arg2, ...` | Function arguments; identifiers, `GET()` expressions, or string, numeric and Boolean literals |
 | `like_table` | Optional. Specify template table for result table |
 | `FUNCTION 'function_name'` | Optional. Specify that the result table schema matches the output schema of a function |
 | `PARTITION BY table_name SIZE partition_size` | Optional. Partition the specified input table for concurrent execution. `table_name` must be one of the function's input tables; `partition_size` can be an integer literal or `get()` and is the maximum number of rows per partition |
@@ -476,7 +478,7 @@ Reading an absent execution variable falls back to the same-named environment va
 
 ### GET
 
-Read an execution variable as a dynamic function name in `CALL`, a string argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` is available in these positions; it is not a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.
+Read an execution variable as a dynamic function name in `CALL`, a scalar argument to a Java table function, or a `PARTITION BY ... SIZE` value. `GET` is available in these positions; it is not a standalone SQL statement. When calling an SQL function, pass cache-table names directly as its table arguments.
 
 **Syntax:**
 
@@ -490,7 +492,7 @@ GET('variable_name', 'default_value')
 | Parameter | Description |
 |-----------|-------------|
 | `variable_name` | Variable name, must be a string literal |
-| `default_value` | Optional fallback when the variable is absent; must be a string literal |
+| `default_value` | Optional fallback; a string, numeric or Boolean literal. Its type determines the Java argument type; omitted defaults imply VARCHAR. |
 
 **Examples:**
 

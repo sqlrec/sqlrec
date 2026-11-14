@@ -181,7 +181,7 @@ CACHE TABLE table_name AS
 |------|------|
 | `table_name` | 缓存表名称 |
 | `function_name` | 要调用的函数名称，可以是标识符或 `GET()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串、数字、布尔字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`，表示每个分区的最大行数 |
@@ -217,7 +217,9 @@ CALL my_function(t1) LIKE t1 PARTITION BY t1 SIZE 100;
 
 ### CALL
 
-调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；字符串参数可直接传入字面量，或通过 `GET()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
+调用 SQL 函数或已注册的 Java UDF。表函数的显式表参数必须是当前执行器中的 `CacheTable`；标量参数可直接传入字符串、数字或布尔字面量，或通过 `GET()` 获取。返回表结果时，若编译期无法推断模式，需要使用 `LIKE table` 或 `LIKE FUNCTION`。
+
+Java 标量参数支持 `String`、`Integer`、`Long`、`Double`、`Boolean` 及对应基本类型。重载优先选择精确类型，整数可以向 BIGINT、DOUBLE 扩展。通过 `GET` 传入数字或布尔参数时，需要提供对应类型的默认值；这些位置暂不支持任意表达式。
 
 未通过 `LIKE` 指定返回模式时，默认在编译期调用返回 `CacheTable` 的 Java 方法来推断模式。启动服务前设置环境变量 `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` 可关闭此调用；SQL `SET` 和请求 `params` 不能覆盖该配置。关闭后，调用返回 `CacheTable` 的 Java 方法必须通过 `LIKE table` 或 `LIKE FUNCTION` 显式指定模式，否则编译时直接报错，不调用方法。返回 `void` 的方法无需指定模式。
 
@@ -232,7 +234,7 @@ CALL function_name([arg1, arg2, ...]) [LIKE {like_table | FUNCTION 'function_nam
 | 参数 | 描述 |
 |------|------|
 | `function_name` | 函数名称，可以是标识符或 `GET()` 表达式 |
-| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串字面量 |
+| `arg1, arg2, ...` | 函数参数，可以是标识符、`GET()` 表达式或字符串、数字、布尔字面量 |
 | `like_table` | 可选。指定结果表的模板表 |
 | `FUNCTION 'function_name'` | 可选。指定结果表的模式与某个函数的输出模式相同 |
 | `PARTITION BY table_name SIZE partition_size` | 可选。按指定输入表进行分区并发执行，`table_name` 必须是函数的输入表之一，`partition_size` 可为整数字面量或 `get()`，表示每个分区的最大行数 |
@@ -476,7 +478,7 @@ API 请求体中 `params` 对象的键值也会作为执行变量。变量值为
 
 ### GET
 
-在 `CALL` 的动态函数名、Java 表函数的字符串参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。
+在 `CALL` 的动态函数名、Java 表函数的标量参数或 `PARTITION BY ... SIZE` 中读取执行变量。`GET` 是这些位置可用的语法，不是独立的 SQL 语句；调用 SQL 函数时，表参数仍须直接写缓存表名。
 
 **语法：**
 
@@ -490,7 +492,7 @@ GET('variable_name', 'default_value')
 | 参数 | 描述 |
 |------|------|
 | `variable_name` | 变量名称，必须是字符串字面量 |
-| `default_value` | 可选的默认值，变量不存在时使用，必须是字符串字面量 |
+| `default_value` | 可选，变量不存在时使用，可以是字符串、数字或布尔字面量；其类型决定 Java 参数类型，省略时按 VARCHAR 处理 |
 
 **示例：**
 

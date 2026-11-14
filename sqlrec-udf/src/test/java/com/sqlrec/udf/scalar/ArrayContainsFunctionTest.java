@@ -8,6 +8,16 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ArrayContainsFunctionTest {
+    @Test
+    public void comparesNumericValuesWithoutLosingLargeIntegerPrecision() {
+        assertTrue(ArrayContainsFunction.evaluate(Arrays.asList(1L), 1));
+        assertTrue(ArrayContainsFunction.evaluate(Arrays.asList(new java.math.BigDecimal("1.00")), 1.0));
+        assertFalse(ArrayContainsFunction.evaluate(Arrays.asList(9007199254740993L), 9007199254740992d));
+        assertTrue(ArrayContainsFunction.evaluate(Arrays.asList(9007199254740993L),
+                new java.math.BigDecimal("9007199254740993")));
+        assertFalse(ArrayContainsFunction.evaluate(Arrays.asList(1), "1"));
+    }
+
 
     @Test
     public void testContainsElement() {

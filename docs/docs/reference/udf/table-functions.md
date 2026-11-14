@@ -24,7 +24,7 @@ SQLRec 表函数通过 `CALL` 调用，以一张或多张缓存表为输入，�
 | `input` | CacheTable | 输入表 |
 | `dedupTable` | CacheTable | 去重表，包含需要排除的值 |
 | `col1` | String | 输入表中用于去重的列名 |
-| `col2` | String | 去重表中用于匹配的列名 |
+| `col2` | String | 可选，去重表中用于匹配的列名，默认为 `col1` |
 
 **返回值**：返回去重后的 `CacheTable`，结构与输入表相同。
 
@@ -38,7 +38,7 @@ FROM user_info JOIN exposure_item ON user_id = user_info.id;
 
 -- 从召回结果中排除已曝光物品
 CACHE TABLE dedup_recall AS
-CALL dedup(recall_item, exposured_item, 'item_id', 'item_id');
+CALL dedup(recall_item, exposured_item, 'item_id');
 ```
 
 ---
@@ -496,8 +496,10 @@ SELECT * FROM remote_rec;
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `input` | CacheTable | 输入表 |
-| `start` | String | 起始行索引（从 0 开始，包含） |
-| `end` | String | 结束行索引（不包含） |
+| `start` | INT | 起始行索引（从 0 开始，包含） |
+| `end` | INT | 结束行索引（不包含） |
+
+两个参数的写法 `truncate_table(input, limit)` 表示获取前 `limit` 行。
 
 **返回值**：返回截取后的 `CacheTable`，结构与输入表相同。
 
@@ -506,15 +508,15 @@ SELECT * FROM remote_rec;
 ```sql
 -- 获取第 10 到 20 条记录
 CACHE TABLE partial_result AS
-CALL truncate_table(recall_item, '10', '20');
+CALL truncate_table(recall_item, 10, 20);
 
 -- 获取前 100 条记录
 CACHE TABLE top_100 AS
-CALL truncate_table(recall_item, '0', '100');
+CALL truncate_table(recall_item, 100);
 ```
 
 **注意事项**：
-- `start` 和 `end` 必须为有效的整数字符串
+- `start` 和 `end` 必须为整数
 - `start` 和 `end` 必须为非负数
 - `start` 必须小于或等于 `end`
 - 截取范围为左闭右开区间 `[start, end)`
@@ -674,7 +676,7 @@ SELECT `get`('new_recommendation_algo') AS algo;
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `millisStr` | String | 休眠时长，单位为毫秒，必须是非负整数字符串 |
+| `millis` | BIGINT | 休眠时长，单位为毫秒，必须是非负整数 |
 
 **返回值**：无返回值。
 
@@ -682,14 +684,14 @@ SELECT `get`('new_recommendation_algo') AS algo;
 
 ```sql
 -- 休眠 1000 毫秒（1 秒）
-CALL sleep('1000');
+CALL sleep(1000);
 
 -- 休眠 500 毫秒
-CALL sleep('500');
+CALL sleep(500);
 ```
 
 **注意事项**：
-- `millisStr` 必须是有效的长整数字符串
+- `millis` 必须为 BIGINT 数值
 - 休眠时长必须为非负数
 - 该函数仅产生副作用，无返回值
 

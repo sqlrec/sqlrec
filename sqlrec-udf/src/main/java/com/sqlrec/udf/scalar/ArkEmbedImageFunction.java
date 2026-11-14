@@ -7,6 +7,10 @@ import java.util.List;
 
 @UDFType(deterministic = false)
 public class ArkEmbedImageFunction extends RemoteLlmFunction {
+    public List<Double> evaluate(String endpoint, String apiKey, String model, String image) {
+        return evaluate(endpoint, apiKey, model, image, null);
+    }
+
     public List<Double> evaluate(String endpoint, String apiKey, String model, String image, String optionsJson) {
         return LlmClient.embedImage(endpoint, apiKey, model, image, optionsJson);
     }

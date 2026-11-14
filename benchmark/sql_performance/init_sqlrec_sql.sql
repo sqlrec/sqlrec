@@ -78,10 +78,10 @@ cur_user_interest_genre join genre_hot_item
 on genre_hot_item.genre = cur_user_interest_genre.genre
 limit 300;
 
-cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_genre_recall as call dedup(genre_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'movie_id', 'movie_id');
+cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'movie_id');
+cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'movie_id');
+cache table dedup_genre_recall as call dedup(genre_recall, exposured_item, 'movie_id');
+cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'movie_id');
 
 cache table all_recall_item as
 select * from dedup_i2i_recall

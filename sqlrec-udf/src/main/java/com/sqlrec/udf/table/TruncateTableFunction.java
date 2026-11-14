@@ -8,18 +8,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TruncateTableFunction {
-    public CacheTable evaluate(CacheTable input, String startStr, String endStr) {
-        if (startStr == null || endStr == null) {
-            throw new IllegalArgumentException("start and end parameters cannot be null");
-        }
+    public CacheTable evaluate(CacheTable input, Integer limit) {
+        return evaluate(input, 0, limit);
+    }
 
-        int start;
-        int end;
-        try {
-            start = Integer.parseInt(startStr);
-            end = Integer.parseInt(endStr);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("start and end parameters must be valid integers");
+    public CacheTable evaluate(CacheTable input, Integer start, Integer end) {
+        if (start == null || end == null) {
+            throw new IllegalArgumentException("start and end parameters cannot be null");
         }
 
         if (start < 0) {

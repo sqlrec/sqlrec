@@ -71,7 +71,7 @@ with (
 'NAMESPACE'='${NAMESPACE}'
 );
 
-call sleep('3000');
+call sleep(3000);
 
 CACHE TABLE t1 AS
 SELECT
@@ -153,7 +153,7 @@ with (
 'NAMESPACE'='${NAMESPACE}'
 );
 
-call sleep('3000');
+call sleep(3000);
 
 CACHE TABLE tmp_user AS
 SELECT

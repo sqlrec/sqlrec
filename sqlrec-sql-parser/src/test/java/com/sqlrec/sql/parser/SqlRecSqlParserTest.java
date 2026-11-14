@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlRecSqlParserTest {
     @Test
+    void parsesAndRoundTripsTypedCallArgumentsAndPartitionDefaults() throws Exception {
+        for (String sql : new String[]{"CALL f(1, -2, 0.5, TRUE, 'text')",
+                "CALL f(GET('count', 10), GET('enabled', false))",
+                "CALL f(items) PARTITION BY items SIZE GET('size', 100)"}) {
+            SqlCallSqlFunction call = assertInstanceOf(SqlCallSqlFunction.class, SqlRecSqlParser.parse(sql));
+            SqlCallSqlFunction reparsed = assertInstanceOf(SqlCallSqlFunction.class,
+                    SqlRecSqlParser.parse(call.toSqlString(AnsiSqlDialect.DEFAULT).getSql()));
+            assertEquals(call.getInputTableList().size(), reparsed.getInputTableList().size());
+        }
+    }
+
+    @Test
     void roundTripsGetWithOptionalDefault() throws Exception {
         for (String arguments : new String[]{"'callee'", "'callee', 'fallback'"}) {
             SqlCallSqlFunction call = assertInstanceOf(SqlCallSqlFunction.class,

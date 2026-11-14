@@ -7,6 +7,11 @@ public class ArrayContainsAllFunction {
         if (list == null || elements == null) {
             return null;
         }
-        return list.containsAll(elements);
+        for (Object element : elements) {
+            if (!ArrayFunctionUtils.contains(list, element)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

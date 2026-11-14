@@ -57,6 +57,8 @@ Calcite 官方参考页可能对应比 SQLRec 依赖更新的版本，并且包�
 | 执行变量 | [`get`](#get) |
 | 远程模型 | [`llm_embed_text`、`llm_complete`、`ark_embed_image`](#远程模型函数) |
 
+数组包含函数按数值比较不同数字类型，例如 `INT` 的 1 与 `BIGINT` 的 1 相等，比较时保留大整数精度；字符串不会自动转换为数字。
+
 ### array_contains
 
 数组包含函数，检查数组是否包含指定元素。
@@ -273,7 +275,7 @@ LIMIT 300;
 
 **返回值**：未指定默认值时返回 `VARCHAR`；提供默认值时，将变量字符串转换为默认值对应的类型。默认在执行变量不存在时回退到同名环境变量，两者均不存在则返回 `defaultValue`，未指定默认值时返回 `NULL`。设置服务环境变量 `ENABLE_VARIABLE_ENV_FALLBACK=false` 可关闭回退；显式空字符串不触发回退。
 
-变量存在但无法转换为目标类型时直接报错，不使用默认值；整数溢出同样报错。布尔值只接受不区分大小写的 `true` 和 `false`。需要 `DOUBLE` 时显式转换默认值；本函数不提供 `DECIMAL` 重载。默认值为 `NULL` 时，使用 `CAST(NULL AS 类型)` 指定类型。
+变量存在但无法转换为目标类型时直接报错，不使用默认值；整数溢出同样报错。布尔值只接受不区分大小写的 `true` 和 `false`。浮点数默认值请显式转换类型，例如 `CAST(0.5 AS DOUBLE)`。
 
 ::: warning 注意
 由于 `get` 是 SQL 关键字，使用时需要用反引号包裹函数名，写作 `` `get` ``。
@@ -297,7 +299,6 @@ SELECT `get`('timeout', CAST(1000 AS BIGINT)) AS timeout; -- BIGINT
 SELECT `get`('weight', CAST(0.5 AS DOUBLE)) AS weight; -- DOUBLE
 SELECT `get`('enabled', false) AS enabled; -- BOOLEAN
 SELECT `get`('name', 'anonymous') AS name; -- VARCHAR
-SELECT `get`('optional_count', CAST(NULL AS INT)) AS optional_count;
 
 -- 类型转换
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
@@ -316,13 +317,13 @@ SELECT `get`(var_name) AS var_value FROM var_names;
 
 ### 远程模型函数
 
-三个函数均接收五个 `VARCHAR` 参数，连接参数直接传入：
+三个函数均接收四个必填的 `VARCHAR` 参数，最后的 `options_json` 可省略并使用默认配置：
 
 | 函数 | 签名 | 返回类型 |
 |------|------|----------|
-| `llm_embed_text` | `(endpoint, api_key, model, text, options_json)` | `ARRAY<DOUBLE>` |
-| `llm_complete` | `(endpoint, api_key, model, prompt, options_json)` | `VARCHAR` |
-| `ark_embed_image` | `(endpoint, api_key, model, image, options_json)` | `ARRAY<DOUBLE>` |
+| `llm_embed_text` | `(endpoint, api_key, model, text [, options_json])` | `ARRAY<DOUBLE>` |
+| `llm_complete` | `(endpoint, api_key, model, prompt [, options_json])` | `VARCHAR` |
+| `ark_embed_image` | `(endpoint, api_key, model, image [, options_json])` | `ARRAY<DOUBLE>` |
 
 `endpoint` 是完整 HTTP(S) 接口地址，不自动拼接路径。`model` 原样传给服务端。非空 `api_key` 通过 `Authorization: Bearer ...` 发送；空字符串用于无需鉴权的兼容服务。建议由执行上下文注入密钥并使用 `` `get`('llm_api_key') `` 读取，避免 SQL 字面量进入 SQL 日志、计划或元数据；UDF 自身的异常不包含密钥、输入和响应正文。
 
@@ -358,7 +359,7 @@ SELECT ark_embed_image(
 FROM items;
 ```
 
-`options_json` 使用严格 JSON 对象；无额外参数传 `'{}'`，SQL `NULL` 也使用默认配置。只接受下面列出的字段，其他字段直接报错：
+`options_json` 使用严格 JSON 对象；无额外参数可省略该参数，也可传 `'{}'` 或 SQL `NULL` 使用默认配置。只接受下面列出的字段，其他字段直接报错：
 
 | 位置 | 字段 | 说明 |
 |------|------|------|

@@ -57,6 +57,8 @@ The Calcite reference may describe a newer version than the one used by SQLRec a
 | Execution variables | [`get`](#get) |
 | Remote models | [`llm_embed_text`, `llm_complete`, `ark_embed_image`](#remote-model-functions) |
 
+Numeric array predicates compare values across numeric types; `INT 1` and `BIGINT 1` match without losing large integer precision. Strings are not converted to numbers.
+
 ### array_contains
 
 Array contains function that checks if an array contains a specified element.
@@ -273,7 +275,7 @@ Variable retrieval function that gets the value of a variable from the execution
 
 **Return Value**: Returns `VARCHAR` when no default is provided. With a default, converts the variable string to the corresponding type. An absent execution variable falls back to the same-named environment variable by default; returns `defaultValue` if neither exists, or `NULL` when the default is omitted. Set the server environment variable `ENABLE_VARIABLE_ENV_FALLBACK=false` to disable fallback. Explicit empty strings do not trigger fallback.
 
-An existing value that cannot be converted raises an error instead of using the default; integer overflow also raises an error. Boolean values accept only case-insensitive `true` and `false`. Cast the default explicitly for `DOUBLE`; this function has no `DECIMAL` overload. For a `NULL` default, specify its type with `CAST(NULL AS type)`.
+An existing value that cannot be converted raises an error instead of using the default; integer overflow also raises an error. Boolean values accept only case-insensitive `true` and `false`. For floating-point defaults, use an explicit cast such as `CAST(0.5 AS DOUBLE)`.
 
 ::: warning Note
 Since `get` is a SQL keyword, you need to wrap the function name with backticks when using it, written as `` `get` ``.
@@ -297,7 +299,6 @@ SELECT `get`('timeout', CAST(1000 AS BIGINT)) AS timeout; -- BIGINT
 SELECT `get`('weight', CAST(0.5 AS DOUBLE)) AS weight; -- DOUBLE
 SELECT `get`('enabled', false) AS enabled; -- BOOLEAN
 SELECT `get`('name', 'anonymous') AS name; -- VARCHAR
-SELECT `get`('optional_count', CAST(NULL AS INT)) AS optional_count;
 
 -- Type conversion
 SELECT CAST(`get`('limit_count') AS INT) AS limit_count;
@@ -316,13 +317,13 @@ To select a function dynamically, use `GET('callee', 'fallback')` as shown in [W
 
 ### Remote model functions
 
-All three functions take five `VARCHAR` arguments:
+All three functions take four required `VARCHAR` arguments and optional `options_json`:
 
 | Function | Signature | Result |
 |----------|-----------|--------|
-| `llm_embed_text` | `(endpoint, api_key, model, text, options_json)` | `ARRAY<DOUBLE>` |
-| `llm_complete` | `(endpoint, api_key, model, prompt, options_json)` | `VARCHAR` |
-| `ark_embed_image` | `(endpoint, api_key, model, image, options_json)` | `ARRAY<DOUBLE>` |
+| `llm_embed_text` | `(endpoint, api_key, model, text [, options_json])` | `ARRAY<DOUBLE>` |
+| `llm_complete` | `(endpoint, api_key, model, prompt [, options_json])` | `VARCHAR` |
+| `ark_embed_image` | `(endpoint, api_key, model, image [, options_json])` | `ARRAY<DOUBLE>` |
 
 Pass the complete HTTP(S) endpoint; paths are never appended. Model names are passed through. A nonempty key is sent as `Authorization: Bearer ...`; an empty key supports unauthenticated compatible services. Inject secrets through the execution context and use `` `get`('llm_api_key') `` rather than SQL literals, which can appear in SQL logs, plans and metadata. UDF exceptions omit credentials, input and response bodies.
 
@@ -346,7 +347,7 @@ SELECT ark_embed_image(
 ) AS embedding FROM items;
 ```
 
-Options must be a strict JSON object. Use `'{}'` or SQL `NULL` for defaults. Unknown fields are rejected.
+Options must be a strict JSON object. Omit the last argument or use `'{}'` or SQL `NULL` for defaults. Unknown fields are rejected.
 
 | Section | Allowed fields |
 |---------|----------------|

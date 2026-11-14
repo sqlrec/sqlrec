@@ -59,6 +59,24 @@ class RemoteLlmFunctionTest {
     }
 
     @Test
+    void hiveAllowsOmittedOptionsForAllRemoteFunctions() throws Exception {
+        ObjectInspector[] inspectors = new ObjectInspector[4];
+        Arrays.fill(inspectors, PrimitiveObjectInspectorFactory.javaStringObjectInspector);
+        for (GenericUDF function : Arrays.asList(embed, complete, image)) {
+            function.initialize(inspectors);
+            assertNull(function.evaluate(deferred(endpoint, "key", "model", null)));
+        }
+        response = "{\"data\":[{\"embedding\":[3,4]}]}";
+        assertEquals(Arrays.asList(3.0, 4.0), embed.evaluate(deferred(endpoint, "key", "model", "text")));
+        response = "{\"choices\":[{\"message\":{\"content\":\"summary\"}}]}";
+        assertEquals("summary", complete.evaluate(deferred(endpoint, "key", "model", "prompt")));
+        response = "{\"data\":{\"embedding\":[3,4]}}";
+        assertEquals(Arrays.asList(3.0, 4.0), image.evaluate(
+                deferred(endpoint, "key", "model", "https://example.com/image.png")));
+        assertEquals(3, requests.get());
+    }
+
+    @Test
     void openAiEmbeddingUsesFloatEncodingAndKeepsRuntimeOptionsLocal() {
         assertEquals(Arrays.asList(3.0, 4.0), embed.evaluate(endpoint, "secret-one", "model-a", "中文文本",
                 "{\"request\":{\"dimensions\":2},\"runtime\":{\"timeout_ms\":5000}}"));

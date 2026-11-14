@@ -95,10 +95,10 @@ on genre_hot_item.genre = cur_user_interest_genre.genre
 limit 300;
 
 -- Dedup each recall source against exposure history.
-cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_genre_recall as call dedup(genre_recall, exposured_item, 'movie_id', 'movie_id');
-cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'movie_id', 'movie_id');
+cache table dedup_i2i_recall as call dedup(i2i_recall, exposured_item, 'movie_id');
+cache table dedup_global_hot_recall as call dedup(global_hot_recall, exposured_item, 'movie_id');
+cache table dedup_genre_recall as call dedup(genre_recall, exposured_item, 'movie_id');
+cache table dedup_vector_recall as call dedup(vector_recall, exposured_item, 'movie_id');
 
 -- Merge all recall sources via UNION ALL.
 cache table all_recall_item as

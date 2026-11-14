@@ -11,7 +11,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils;
 
-/** Hive bridge shared by the five-string remote scalar functions. */
+/** Hive bridge shared by the remote scalar functions. */
 public abstract class RemoteLlmFunction extends GenericUDF {
     private final PrimitiveObjectInspector[] inspectors = new PrimitiveObjectInspector[5];
 
@@ -21,8 +21,8 @@ public abstract class RemoteLlmFunction extends GenericUDF {
 
     @Override
     public ObjectInspector initialize(ObjectInspector[] arguments) throws UDFArgumentException {
-        if (arguments.length != 5) {
-            throw new UDFArgumentLengthException("Remote LLM functions require exactly five string arguments");
+        if (arguments.length != 4 && arguments.length != 5) {
+            throw new UDFArgumentLengthException("Remote LLM functions require four or five string arguments");
         }
         for (int i = 0; i < arguments.length; i++) {
             if (!(arguments[i] instanceof PrimitiveObjectInspector)) {
@@ -54,7 +54,7 @@ public abstract class RemoteLlmFunction extends GenericUDF {
         }
         try {
             return invoke(string(arguments[0], 0), string(arguments[1], 1),
-                    string(arguments[2], 2), input, string(arguments[4], 4));
+                    string(arguments[2], 2), input, arguments.length == 5 ? string(arguments[4], 4) : null);
         } catch (RuntimeException e) {
             throw new HiveException(e.getMessage(), e);
         }

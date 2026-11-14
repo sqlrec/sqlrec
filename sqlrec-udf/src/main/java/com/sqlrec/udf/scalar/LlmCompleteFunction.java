@@ -5,6 +5,10 @@ import org.apache.hadoop.hive.ql.udf.UDFType;
 
 @UDFType(deterministic = false)
 public class LlmCompleteFunction extends RemoteLlmFunction {
+    public String evaluate(String endpoint, String apiKey, String model, String prompt) {
+        return evaluate(endpoint, apiKey, model, prompt, null);
+    }
+
     public String evaluate(String endpoint, String apiKey, String model, String prompt, String optionsJson) {
         return LlmClient.complete(endpoint, apiKey, model, prompt, optionsJson);
     }
