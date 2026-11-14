@@ -97,29 +97,11 @@ public final class JsonRows {
         try {
             switch (target.getSqlTypeName()) {
                 case ARRAY:
-                    value = parseContainer(value);
-                    if (!(value instanceof List)) return null;
-                    List<Object> elements = new ArrayList<>(((List<?>) value).size());
-                    for (Object element : (List<?>) value) elements.add(decodeValue(element, target.getComponentType()));
-                    return elements;
+                    return decodeArray(value, target);
                 case MAP:
-                    value = parseContainer(value);
-                    if (!(value instanceof Map)) return null;
-                    Map<Object, Object> entries = new LinkedHashMap<>();
-                    for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                        Object key = decodeValue(entry.getKey(), target.getKeyType());
-                        if (key == null || entries.containsKey(key)) return null;
-                        entries.put(key, decodeValue(entry.getValue(), target.getValueType()));
-                    }
-                    return entries;
+                    return decodeMap(value, target);
                 case ROW:
-                    value = parseContainer(value);
-                    if (!(value instanceof Map)) return null;
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    for (var field : target.getFieldList()) {
-                        row.put(field.getName(), decodeValue(((Map<?, ?>) value).get(field.getName()), field.getType()));
-                    }
-                    return row;
+                    return decodeRow(value, target);
                 case VARCHAR:
                 case CHAR:
                     return value instanceof Map || value instanceof List || value.getClass().isArray()
@@ -132,6 +114,38 @@ public final class JsonRows {
         } catch (RuntimeException invalidValue) {
             return null;
         }
+    }
+
+    private static List<Object> decodeArray(Object value, RelDataType target) {
+        value = parseContainer(value);
+        if (!(value instanceof List)) return null;
+        List<Object> elements = new ArrayList<>(((List<?>) value).size());
+        for (Object element : (List<?>) value) {
+            elements.add(decodeValue(element, target.getComponentType()));
+        }
+        return elements;
+    }
+
+    private static Map<Object, Object> decodeMap(Object value, RelDataType target) {
+        value = parseContainer(value);
+        if (!(value instanceof Map)) return null;
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            Object key = decodeValue(entry.getKey(), target.getKeyType());
+            if (key == null || entries.containsKey(key)) return null;
+            entries.put(key, decodeValue(entry.getValue(), target.getValueType()));
+        }
+        return entries;
+    }
+
+    private static Map<String, Object> decodeRow(Object value, RelDataType target) {
+        value = parseContainer(value);
+        if (!(value instanceof Map)) return null;
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (var field : target.getFieldList()) {
+            row.put(field.getName(), decodeValue(((Map<?, ?>) value).get(field.getName()), field.getType()));
+        }
+        return row;
     }
 
     private static Object unwrap(Object value) {

@@ -25,6 +25,7 @@ from onnx import TensorProto
 from onnxmltools.convert.common.data_types import FloatTensorType
 
 from common import filesystem as common
+from common.onnx_export import write_onnx_export
 
 logger = logging.getLogger("gbdt.export_xgboost")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -104,23 +105,7 @@ def export(config: dict) -> None:
     )
     _remove_zipmap(onnx_model)
 
-    # Annotate the ONNX model with feature metadata.
-    meta = {
-        "feature_columns": feature_cols,
-        "label_columns": schema.get("label_columns"),
-        "objective": schema.get("objective", "binary"),
-        "framework": "xgboost",
-    }
-    onnx_model.producer_name = "sqlrec-gbdt-export"
-    onnx_model.doc_string = json.dumps(meta)
-
-    onnx_bytes = onnx_model.SerializeToString()
-    onnx_path = f"{export_dir}/model.onnx"
-    logger.info("Writing ONNX model to %s (%d bytes)", onnx_path, len(onnx_bytes))
-    common.write_binary(onnx_path, onnx_bytes)
-
-    common.write_text(f"{export_dir}/schema.json", json.dumps(meta, indent=2))
-    logger.info("Export complete")
+    write_onnx_export(onnx_model, export_dir, schema, "xgboost")
 
 
 def main() -> None:
