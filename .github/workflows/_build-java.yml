@@ -17,15 +17,15 @@ permissions:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Keep Node/npm versions in sync with sqlrec-ui/pom.xml.
       - name: Cache frontend node and npm deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             sqlrec-ui/.node
@@ -35,7 +35,7 @@ jobs:
             frontend-${{ runner.os }}-
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -43,7 +43,7 @@ jobs:
 
       - name: Set up Python 3.11
         if: ${{ !inputs.unit_tests_only }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
@@ -77,7 +77,7 @@ jobs:
 
       - name: Save Java test reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: java-test-reports
           path: |
@@ -88,7 +88,7 @@ jobs:
 
       - name: Save release JARs
         if: inputs.release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-jars
           path: |
