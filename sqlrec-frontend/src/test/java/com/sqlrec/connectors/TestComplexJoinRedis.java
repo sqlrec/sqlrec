@@ -3,7 +3,9 @@ package com.sqlrec.connectors;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.utils.DataCheckUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.redis.calcite.RedisCalciteTable;
 import com.sqlrec.connectors.redis.config.RedisConfig;
@@ -176,6 +178,7 @@ class TestComplexJoinRedis {
     }
 
     @Test
+    @SilenceLoggers(SqlRecKvTable.class)
     void leftNestedFilterOnKvValueCurrentlyRequiresUnsupportedScan() {
         // Record the current boundary: optimization makes items the driving table.
         // Replace this error assertion with result assertions when that SQL shape is supported.

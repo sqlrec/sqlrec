@@ -3,6 +3,8 @@ package com.sqlrec.udf.table;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
+import growthbook.sdk.java.repository.GBFeaturesRepository;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -119,6 +121,7 @@ class GrowthBookClientIsolationTest {
     }
 
     @Test
+    @SilenceLoggers(GBFeaturesRepository.class)
     void failedInitializationDoesNotPoisonLaterClientsOrRetry() {
         assertThrows(RuntimeException.class, () -> check("retry", "user", "US"));
         check("other", "user", "US");

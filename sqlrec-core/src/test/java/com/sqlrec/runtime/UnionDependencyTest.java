@@ -2,6 +2,7 @@ package com.sqlrec.runtime;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -38,6 +39,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers({ProxyAllBindable.class, IfBindable.class})
     void wrappedFailuresRecoverInUnionAndTimeinAcrossFunctionCalls() throws Exception {
         JavaFunctionUtils.registerTableFunction("default", "throwable_fail", ThrowableFunction.class);
         for (String kind : List.of("error", "interruption")) {
@@ -333,6 +335,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinCacheBranchesCanDifferOnlyInTableNameCase() throws Exception {
         for (int timeout : List.of(0, 5000)) {
             SqlFunctionBindable function = compile(
@@ -403,6 +406,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void aCalleeConditionDoesNotProtectAnOptionalCallerInput() throws Exception {
         new CompileManager().compileSqlFunction("condition_child", List.of(
                 "CREATE SQL FUNCTION condition_child",
@@ -421,6 +425,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void aDynamicCalleeConditionDoesNotProtectAnOptionalCallerInput() throws Exception {
         new CompileManager().compileSqlFunction("dynamic_condition_child", List.of(
                 "CREATE SQL FUNCTION dynamic_condition_child",
@@ -439,6 +444,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers({ProxyAllBindable.class, IfBindable.class})
     void aFailureInsideAConditionalCalleeCanBeRecoveredByItsCaller() throws Exception {
         SqlFunctionBindable child = compileFailingConditionalChild();
         assertFalse(child.getBindableList().getFirst().isIgnoreException());
@@ -477,6 +483,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void aParentConditionUsesTheCalleesRecoveredResult() throws Exception {
         compileRecoverableChild();
         for (String call : List.of("recoverable_child(seed_table)",
@@ -511,6 +518,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void optionalDynamicCallsAllowRecoveryInsideTheirCallees() throws Exception {
         compileRecoverableChild();
         SqlFunctionBindable function = compile(
@@ -524,6 +532,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinStillFallsBackToElseAfterAnOrdinaryBranchFailure() throws Exception {
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
@@ -535,6 +544,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void setStatementsDoNotDisableRecoveryInUnconditionalFunctions() throws Exception {
         SqlFunctionBindable function = compile(
                 "SET IGNORE_UNION_EXCEPTION=true",
@@ -547,6 +557,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void anUnrelatedIfDoesNotDisableUnionRecovery() throws Exception {
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
@@ -562,6 +573,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void unrelatedRepeatedWritesDoNotDisableUnionRecovery() throws Exception {
         SqlFunctionBindable function = compile(
                 "CACHE TABLE seed_table AS SELECT 1 AS id",
@@ -577,6 +589,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void anUnrelatedConditionalCalleeDoesNotDisableUnionRecovery() throws Exception {
         new CompileManager().compileSqlFunction("healthy_if_child", List.of(
                 "CREATE SQL FUNCTION healthy_if_child",
@@ -595,6 +608,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void anUnrelatedDynamicCallDoesNotDisableUnionRecovery() throws Exception {
         new CompileManager().compileSqlFunction("healthy_dynamic_child", List.of(
                 "CREATE SQL FUNCTION healthy_dynamic_child",
@@ -612,6 +626,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void anUnrelatedIfDoesNotDisableRecoveryInsideANormalCallee() throws Exception {
         compileRecoverableChild();
         SqlFunctionBindable function = compile(
@@ -624,6 +639,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void aFailureInsideARepeatedWriteCalleeCanBeRecoveredByItsCaller() throws Exception {
         SqlFunctionBindable child = new CompileManager().compileSqlFunction("repeated_write_child", List.of(
                 "CREATE SQL FUNCTION repeated_write_child",
@@ -641,6 +657,7 @@ class UnionDependencyTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void anUnrelatedRepeatedWriteCalleeDoesNotDisableUnionRecovery() throws Exception {
         new CompileManager().compileSqlFunction("healthy_repeated_write_child", List.of(
                 "CREATE SQL FUNCTION healthy_repeated_write_child",

@@ -1,6 +1,7 @@
 package com.sqlrec.frontend.auth;
 
 import com.sqlrec.common.config.SqlRecConfigs;
+import com.sqlrec.common.utils.SilenceLoggers;
 import org.apache.thrift.transport.TMemoryBuffer;
 import org.apache.thrift.transport.TSaslServerTransport;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,7 @@ class PlainSaslAuthenticationTest {
     }
 
     @Test
+    @SilenceLoggers(names = "org.apache.thrift.transport.TSaslTransport")
     void rejectsBadPasswordsUsersAndProxyIdentitiesDuringTheHandshake() throws Exception {
         TSaslServerTransport.Factory factory = PlainSaslAuthentication.transportFactory();
         for (String response : List.of("\0用户\0wrong", "\0other\0secret:密码", "\0\0secret:密码",
@@ -56,6 +58,7 @@ class PlainSaslAuthenticationTest {
     }
 
     @Test
+    @SilenceLoggers(names = "org.apache.thrift.transport.TSaslTransport")
     void authenticatesEachConfiguredAccountButRejectsSwappedPasswords() throws Exception {
         SqlRecConfigs.AUTH_USERNAME.setDefaultValue("用户,alice");
         SqlRecConfigs.AUTH_PASSWORD.setDefaultValue("secret:密码,second");

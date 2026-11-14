@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.schema.ConcurrentCalciteSchema;
 import com.sqlrec.utils.ExecutorServiceUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -47,6 +48,7 @@ class CacheNodeExecutionTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void lateComputationCannotOverwriteTheRecoveredEmptyTable() throws Exception {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1);
@@ -79,6 +81,7 @@ class CacheNodeExecutionTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void publicationFailureStillRecoversAndCancelsOnlyTheFailedNode() {
         CalciteSchema schema = spy(ConcurrentCalciteSchema.createRootSchema());
         doAnswer(invocation -> {
@@ -102,6 +105,7 @@ class CacheNodeExecutionTest {
     }
 
     @Test
+    @SilenceLoggers(ProxyAllBindable.class)
     void failedNodeCancelsItsBackgroundWorkBeforeRecoveryWithOrWithoutTimeout() throws Exception {
         for (long timeout : new long[]{0, 5000}) {
             for (boolean timeoutAble : new boolean[]{false, true}) {

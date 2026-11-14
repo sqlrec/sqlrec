@@ -1,5 +1,6 @@
 package com.sqlrec.k8s;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -11,6 +12,7 @@ import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.fabric8.kubernetes.client.informers.impl.cache.Reflector;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -99,6 +101,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
     }
 
     @Test
+    @SilenceLoggers(K8sManager.class)
     void nonzeroContainerExitProducesARealJobFailure() throws Exception {
         Job job = createJob("failure", "exit 17", 1);
         K8sManager.JobStatus status = watch(job).get(90, TimeUnit.SECONDS);
@@ -199,6 +202,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
     }
 
     @Test
+    @SilenceLoggers(Reflector.class)
     void missingWatchPermissionsAreAnObserverErrorAndDoNotDeleteTheJob() throws Exception {
         Job job = createJob("forbidden", "sleep 60", 1);
         client.serviceAccounts().inNamespace(namespace).resource(new ServiceAccountBuilder()

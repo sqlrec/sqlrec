@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.schema.ConcurrentCalciteSchema;
 import com.sqlrec.utils.ExecutorServiceUtils;
@@ -58,6 +59,7 @@ class PartitionExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
     void partitionsPublishAndCancelUsingTheirOwnSchemas() throws Exception {
         Source source = new Source() {
             @Override public Enumerable<Object[]> bind(CalciteSchema s, ExecuteContext c) {
@@ -143,6 +145,7 @@ class PartitionExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
     void partialFailureStillWaitsForAndKeepsTheSuccessfulPartition() throws Exception {
         CountDownLatch started = new CountDownLatch(1), failed = new CountDownLatch(1), release = new CountDownLatch(1);
         AtomicReference<ExecuteContext> child = new AtomicReference<>();
@@ -226,6 +229,7 @@ class PartitionExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
     void ignoredPartitionFailureCancelsOnlyItsOwnBackgroundWorkIncludingLazyFailures() throws Exception {
         for (boolean lazyFailure : List.of(false, true)) {
             CountDownLatch release = new CountDownLatch(1);

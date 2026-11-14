@@ -4,6 +4,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.connectors.mongodb.handler.MongoHandler;
 import org.bson.Document;
@@ -68,6 +69,7 @@ class MongoClientUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(MongoClientUtils.class)
     void legacyCloseAllClearsTheCacheEvenIfOneClientFailsToClose() {
         String uri = "mongodb://localhost:27017";
         String otherUri = "mongodb://localhost:27018";

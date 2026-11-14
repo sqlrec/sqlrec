@@ -98,7 +98,8 @@ class OpenAIHttpTest(unittest.TestCase):
                       {'input': ['a'] * 33}):
             self.post({**body, **extra}, 400, '/v1/embeddings')
         self.adapter.embed.side_effect = lambda texts, strict: {'embedding': [[float('nan'), 1]], 'prompt_tokens': 3}
-        self.post({**body, 'input': 'one'}, 500, '/v1/embeddings')
+        with self.assertLogs('sqlrec.huggingface.openai', level='ERROR'):
+            self.post({**body, 'input': 'one'}, 500, '/v1/embeddings')
 
     def test_auth_covers_v1_but_preserves_native_predict_and_health(self):
         self.runtime.api_key = 'secret'
@@ -132,11 +133,13 @@ class OpenAIHttpTest(unittest.TestCase):
             self.assertEqual(self.client.get('/health').status_code, 200)
             self.assertEqual(self.client.get('/ready').status_code, 200)
         finally:
-            release.set()
-            thread.join(5)
+            with self.assertLogs('sqlrec.huggingface.openai', level='ERROR') as logs:
+                release.set()
+                thread.join(5)
         self.assertFalse(thread.is_alive())
         self.assertEqual(result[0].status_code, 500)
         self.assertNotIn('SECRET', result[0].text)
+        self.assertNotIn('SECRET', '\n'.join(logs.output))
         self.adapter.chat.side_effect = None
         self.post()
         with self.runtime.inference():

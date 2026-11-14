@@ -3,7 +3,9 @@ package com.sqlrec.executor;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.compiler.SqlApiCache;
+import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.local.InMemoryStoreAccess;
@@ -61,11 +63,13 @@ class SqlExecutorFileDdlTest {
     }
 
     @Test
+    @SilenceLoggers(SqlTypeChecker.class)
     void fileDatabaseDdlUpdatesOnlyTheExecutingSession() throws Exception {
         databaseDdlUpdatesOnlyTheExecutingSession();
     }
 
     @Test
+    @SilenceLoggers(SqlTypeChecker.class)
     void remoteDatabaseDdlUpdatesOnlyTheExecutingSession() throws Exception {
         SqlRecConfigs.SQL_SCHEMA_DIR.setDefaultValue("");
         databaseDdlUpdatesOnlyTheExecutingSession();
@@ -291,6 +295,7 @@ class SqlExecutorFileDdlTest {
     }
 
     @Test
+    @SilenceLoggers(SqlExecutor.class)
     void failedFunctionDefinitionsAndDuplicateApisLeaveStoredResourcesIntact() throws Exception {
         SqlExecutor executor = new SqlExecutor();
         executor.executeSql("CREATE SQL FUNCTION existing_function");

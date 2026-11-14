@@ -1,5 +1,6 @@
 package com.sqlrec.k8s;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -115,6 +116,7 @@ class JobCompletionWatcherTest {
     }
 
     @Test
+    @SilenceLoggers(K8sManager.class)
     void failedConditionWinsOverSucceededCount() {
         Fixture f = new Fixture();
         var completion = f.watch();

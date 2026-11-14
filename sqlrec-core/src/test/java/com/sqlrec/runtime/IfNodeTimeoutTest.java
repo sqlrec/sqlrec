@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.schema.ConcurrentCalciteSchema;
 import com.sqlrec.utils.ExecutorServiceUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -39,6 +40,7 @@ class IfNodeTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void ordinaryIfAndTimeinPublishTheSelectedBranch() {
         assertSelectedBranch(true, false, false, 1);
         assertSelectedBranch(false, false, false, 2);
@@ -128,6 +130,7 @@ class IfNodeTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinTimeoutCanFallbackWithinTheLongerNodeBudgetWithoutLateOverwrite() throws Exception {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         CountDownLatch release = new CountDownLatch(1);
@@ -153,6 +156,7 @@ class IfNodeTimeoutTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void timeinPublicationFailureStillRunsElseUnderTheNodeBudget() {
         CalciteSchema schema = spy(ConcurrentCalciteSchema.createRootSchema());
         doAnswer(invocation -> {

@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.milvus.utils;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import io.milvus.pool.MilvusClientV2Pool;
@@ -56,6 +57,7 @@ class MilvusClientPoolUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(MilvusClientPoolUtils.class)
     void invalidationClosesOnlyTheSelectedPoolAndAllowsRecreation() {
         MilvusConfig first = config("first");
         MilvusConfig second = config("second");
@@ -77,6 +79,7 @@ class MilvusClientPoolUtilsTest {
     }
 
     @Test
+    @SilenceLoggers(MilvusClientPoolUtils.class)
     void closeAllClearsEveryPoolEvenIfOneCloseFails() {
         MilvusConfig config = config("first");
         try (MockedConstruction<MilvusClientV2Pool> pools = mockConstruction(MilvusClientV2Pool.class)) {

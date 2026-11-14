@@ -1,6 +1,7 @@
 package com.sqlrec.runtime;
 
 import com.sqlrec.common.utils.SilenceLoggers;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -111,6 +112,7 @@ public class IfBindableCancelTest {
     // ==================== timein mode: timeout/failure cancels the then subtree ====================
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     public void testTimeinErrorRunsElse() {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         AssertionError failure = new AssertionError("fatal THEN failure");
@@ -138,6 +140,7 @@ public class IfBindableCancelTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     public void testInterruptedTimeinWaitRunsElseAndCommitsOnlyItsReturn() throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         CountDownLatch started = new CountDownLatch(1);

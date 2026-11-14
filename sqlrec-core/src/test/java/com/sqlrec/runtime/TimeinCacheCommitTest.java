@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.schema.ConcurrentCalciteSchema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -34,6 +35,7 @@ class TimeinCacheCommitTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void aTimedOutComputationCannotChangeTheFallbackAfterItFinishes() throws Exception {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1);
@@ -63,6 +65,7 @@ class TimeinCacheCommitTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void lazyEvaluationFailureRunsElseBeforePublishingAnyPrimaryData() {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         AtomicBoolean primaryVisible = new AtomicBoolean();
@@ -80,6 +83,7 @@ class TimeinCacheCommitTest {
     }
 
     @Test
+    @SilenceLoggers(IfBindable.class)
     void cachePublicationFailureStillRunsElse() {
         CalciteSchema schema = spy(ConcurrentCalciteSchema.createRootSchema());
         doAnswer(invocation -> {

@@ -1,5 +1,6 @@
 package com.sqlrec.db.local;
 
+import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
@@ -455,6 +456,7 @@ class SqlFileParserTest {
     }
 
     @Test
+    @SilenceLoggers(SqlFileParser.class)
     void testResolveVariablesNotFoundKeepsPlaceholder() {
         Map<String, String> vars = Map.of();
         String content = "'url' = '${SQLREC_NONEXISTENT_VAR_12345}'";
@@ -463,6 +465,7 @@ class SqlFileParserTest {
     }
 
     @Test
+    @SilenceLoggers(SqlFileParser.class)
     void testResolveVariablesEmptyVarName() {
         Map<String, String> vars = Map.of();
         String content = "'url' = '${}'";

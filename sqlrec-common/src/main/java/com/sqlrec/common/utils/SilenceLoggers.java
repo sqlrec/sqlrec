@@ -25,7 +25,10 @@ import java.util.concurrent.locks.ReentrantLock;
 @ExtendWith(SilenceLoggers.Extension.class)
 public @interface SilenceLoggers {
 
-    Class<?>[] value();
+    Class<?>[] value() default {};
+
+    /** Logger names for classes that are not publicly accessible. */
+    String[] names() default {};
 
     class Extension implements BeforeEachCallback, AfterEachCallback {
         private static final ReentrantLock LOGGER_CONFIGURATION_LOCK = new ReentrantLock();
@@ -45,6 +48,9 @@ public @interface SilenceLoggers {
             try {
                 for (Class<?> loggerClass : annotation.value()) {
                     states.add(LoggerState.disable(loggerClass.getName()));
+                }
+                for (String loggerName : annotation.names()) {
+                    states.add(LoggerState.disable(loggerName));
                 }
                 context.getStore(NAMESPACE).put(STATE_KEY, states);
             } catch (RuntimeException | Error e) {
