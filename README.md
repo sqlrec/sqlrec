@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sqlrec/sqlrec/blob/main/LICENSE">
+  <a href="https://github.com/sqlrec/sqlrec/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/sqlrec/sqlrec" alt="License">
   </a>
   <a href="https://github.com/sqlrec/sqlrec/stargazers">

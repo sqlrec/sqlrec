@@ -139,35 +139,16 @@ CALL add_col(recall_item, 'priority', 10);
 
 ### call_service
 
-模型服务调用函数，用于调用已部署的模型服务进行推理。详见[模型训练与在线推理](../../guides/model-lifecycle.md#调用模型服务)。
+调用已注册的模型服务，将预测结果追加到输入：
 
-调用示例和输出模板见[模型指南](../../guides/model-lifecycle.md#调用模型服务)。使用 `LIKE` 声明输入列加模型输出列的结果结构。
+| 签名 | 返回结果 |
+| --- | --- |
+| `CALL call_service(serviceName, input)` | 输入列加模型输出列 |
+| `CALL call_service(serviceName, user, item)` | Item 列加模型输出列 |
 
-SQL 调用支持以下两种形式：
+双表形式要求 User 恰好一行，同名输入字段优先取 User，Item 字段按物品顺序发送。Item 为空时不发 HTTP 请求，直接返回空表。连接及读写超时默认各为 30 秒。
 
-- `CALL call_service(serviceName, input)`：使用行式 JSON 调用服务，返回表包含输入列以及模型输出列。
-- `CALL call_service(serviceName, user, item)`：使用 User-Item 模式调用服务，请求体为列式 JSON，返回表保留 Item 表列并追加模型输出列。
-
-User-Item 模式的请求规则：
-
-1. User 表必须恰好一行；Item 表可以包含多行。
-2. 仅处理模型定义的输入字段。字段名如果存在于 User 表中（匹配时忽略大小写），该字段归入 User；否则归入 Item。若两张表存在同名字段，优先使用 User 表中的字段；在对应表中找不到的模型字段不会写入请求。两张表中不属于模型输入的额外列也不会写入请求。
-3. 每个字段都序列化为一个 JSON 数组。User 字段是单元素数组，因此一份用户数据在一次请求中只发送一遍；Item 字段按 Item 表的行顺序组成数组，不会为每个 Item 重复发送 User 数据。
-
-例如，一行 User 数据和三行 Item 数据会生成：
-
-```json
-{
-  "user_id": [1001],
-  "user_age": [25],
-  "item_id": [1, 2, 3],
-  "category": ["phone", "tablet", "laptop"]
-}
-```
-
-当 Item 表为空时不会发送 HTTP 请求，函数直接返回空表，其字段为 Item 表字段加模型输出字段。
-
-HTTP 请求超时默认为连接、读写各 30 秒。详细协议和示例参见[模型训练与在线推理](../../guides/model-lifecycle.md#调用模型服务)。
+使用 `LIKE` 声明结果结构，完整示例和 HTTP 协议见[调用模型服务](../../guides/model-lifecycle.md#调用模型服务)。
 
 ---
 
@@ -249,7 +230,7 @@ LATERAL TABLE(batch_call_service(
 
 ```json
 {
-  "item_tower_emb": [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  "item_tower_emb": [[0.1, 0.2], [0.3, 0.4]],
   "score": [0.95, 0.87]
 }
 ```
@@ -538,7 +519,6 @@ CALL truncate_table(recall_item, 100);
 
 获取变量函数，从执行上下文中获取所有变量，返回一个包含变量键值对的表。
 
-
 **返回值**：返回一个 2 列的 `CacheTable`，列名为 `key` 和 `value`，类型均为 `VARCHAR`。
 
 **使用示例**：
@@ -667,7 +647,7 @@ CALL get_growthbook_features(
 SELECT `get`('new_recommendation_algo') AS algo;
 ```
 
-完整集成验证见 `benchmark/growthbook/README.md`：运行 `bash benchmark/growthbook/test.sh`，自动部署 GrowthBook，通过 API 创建真实实验及关联 feature，再验证分组、曝光记录和执行变量，并清理本轮测试资源。
+扩展开发验证见 [GrowthBook benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/growthbook/README.md)。
 
 **注意事项**：
 - `apiHost` 和 `clientKey` 不能为空

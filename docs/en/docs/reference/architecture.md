@@ -1,10 +1,8 @@
 # SQLRec Architecture
 
-SQLRec uses SQL to orchestrate recommendation workflows: read features and candidates, call functions and model services, return results, and write to external stores. The module overview comes first; the rest of the page follows a request to explain the execution model and data boundaries. Links at the end cover syntax, parameters, and deployment steps.
+SQLRec compiles and schedules SQL recommendation flows within the JVM, using UDFs for custom computation, Connectors for storage access, and HTTP for model inference. This page covers compilation, scheduling, state isolation, and external access.
 
-![SQLRec component architecture](/sqlrec_arch.svg)
-
-## Module Overview
+## Core Components {#module-overview}
 
 ```text
                         ┌──────────────────────────────────────────┐
@@ -36,190 +34,365 @@ SQLRec uses SQL to orchestrate recommendation workflows: read features and candi
                         └──────────────────────────────────────────┘
 ```
 
-The upper half shows the main modules used after a request enters the engine; the lower half shows shared abstractions and storage adapters. The arrow to Connectors denotes runtime discovery through an SPI: `sqlrec-common` does not depend on concrete Connectors. The frontend serves `sqlrec-ui` static assets; `sqlrec-demo` provides examples, and `sqlrec-flink` contains Flink integration tests.
+Arrows show module collaboration and runtime SPI discovery, rather than Maven dependencies. Connectors implement interfaces from `sqlrec-common`.
 
-These objects appear throughout the execution flow:
+| Layer | Main implementation | Responsibility |
+| --- | --- | --- |
+| Service entry points | `sqlrec-frontend` | HTTP, Thrift/JDBC, CLI, UI, session management |
+| SQL compilation | `sqlrec-sql-parser`, the `compiler` package in `sqlrec-core` | Parsing, query compilation, function compilation |
+| Flow runtime | The `runtime` package in `sqlrec-core` | DAG scheduling, variables, returns, timeouts, cancellation |
+| Data and function adapters | `sqlrec-connectors`, `sqlrec-udf` | Storage operators, scalar and table functions |
+| Metadata and model management | The `db` and `model` packages in `sqlrec-core`, `sqlrec-model` | Definitions and caches, model tasks, inference services |
+| Shared interfaces | `sqlrec-common` | Table schemas, contexts, extension contracts |
 
-| Object | Meaning in the execution flow |
-| --- | --- |
-| Connector table | The SQL entry point to external data or local files; determines available reads and writes |
-| SQL function | A reusable recommendation flow made of several statements |
-| Schema | Tables and functions visible to the current executor, including named `CACHE TABLE` results |
-| Execution context | Variables, metric tags, and cancellation state for the current call |
-| API / Service | An API publishes a SQL function to callers; a Service exposes a model inference endpoint |
+| Execution level | What it determines | Implementation |
+| --- | --- | --- |
+| SQL-function DAG | Dependencies and parallel execution across statements | SQLRec execution nodes and scheduler |
+| Relational plan for one SQL statement | Scans, filters, joins, sorting, and other operations | Calcite + SQLRec storage operators |
 
-## From Request to Result
+## Request Entry Points and Execution Paths {#from-request-to-result}
+
+### HTTP Recommendation API
 
 ```text
-Client
-  ├─ Thrift / REST SQL / CLI ─→ parse and route SQL
-  │                              ├─ local queries/writes ─→ Calcite ─→ execute ─→ return results
-  │                              │                                    └─ Connectors / SQL functions
-  │                              ├─ table/database/UDF metadata DDL ─→ HiveCatalog ─→ HMS
-  │                              └─ SQL requiring Flink ─→ Gateway (remote-mode Thrift sessions)
-  └─ REST API ─→ resolve API to SQL function ─→ execute function ─→ return JSON
+HTTP request
+  → Netty I/O: decode
+  → HttpServerHandler: handle on business threads
+  → RestFunctionExecutor: resolve API and compiled function
+  → Create root schema; bind input CacheTables and execution variables
+  → SqlFunctionBindable: execute the function DAG
+  → Materialize RETURN result → JSON response
+
+Process-wide: API mappings, compiled function plans
+Per request: input tables, intermediate tables, execution variables
 ```
 
-SQLRec uses two parsers. The Flink parser gets the first chance to parse standard Flink SQL; a separate SQLRec parser handles extensions such as `CACHE TABLE`, `CALL`, and model management. The executor then routes the statement to local Calcite execution, metadata handling, or Flink.
+| Step | Key implementation |
+| --- | --- |
+| Separate network and business threads | `RestServer` uses Netty I/O threads and a separate business executor group; node concurrency uses the engine executor |
+| API → function | `SqlApiCache` holds name mappings; `CompileManager` / `SqlFunctionCache` retrieves compiled functions |
+| Bind request data | `CalciteSchemaFactory` creates the root schema; JSON rows become input tables, and `params` populate `ExecuteContextImpl` |
 
-The local path handles online SQL queries and writes, SQL functions, and control statements. Calcite compiles queries into executable code, which reads or writes data through Connectors. SQLRec handles resource commands such as `SHOW` and model or service management itself. In remote metadata mode, a local adapter writes persistent table, database, and UDF metadata DDL to HMS through the official HiveCatalog, without creating a TableEnvironment or connecting to Gateway. See the [SQL Reference](./sql.md#metadata-ddl) for DDL support limits. Thrift sessions forward other statements not handled locally to Flink SQL Gateway. REST `/sql/v1` and CLI have no transparent forwarding path, and local file metadata mode does not depend on Flink Gateway.
+### SQL Entry Points and Statement Dispatch
 
-`TCLIServiceImpl` adapts the Thrift protocol, `SessionManager` owns sessions and their local/remote operation entries, `GatewayClient` handles only remote connections, state synchronization, and Gateway calls, and `JdbcMetadataExecutor` provides local JDBC metadata results.
+CLI, REST SQL, and Thrift sessions dispatch through `SqlExecutor`:
 
-A Thrift session owns its SQL executor. REST `/sql/v1` creates one executor per request and runs that request's statements in order. `POST /api/v1/<name>` resolves the published API and its SQL function, then creates input tables and an execution context for that call. See [Publishing and Calling APIs](../guides/api.md) for the API contract.
+| Statement category | Execution path |
+| --- | --- |
+| SQL-function definition | Collect inputs and body, compile, and save the definition |
+| Local queries, writes, and control statements | `CompileManager` → execution node → `bind` |
+| Metadata-only DDL for databases, tables, and Java UDFs | Metadata adapters; remote mode writes HMS through HiveCatalog |
+| SHOW, DESCRIBE | Read metadata or session cache tables |
+| Model, checkpoint, and Service commands | Resource managers; submit external tasks when needed |
+| Forwardable remote statements | Remote-mode Thrift session → Flink SQL Gateway |
 
-The entry point determines how long state remains visible and whether forwarding is available:
+Remote routing is considered only when local handling produces no result. Local compilation or execution errors return directly, without a Gateway retry.
 
-| Entry point | Executor and state lifetime | Flink forwarding |
+## SQL Parsing and Compilation {#execution-model}
+
+```text
+One SQL statement · NormalSqlCompiler
+  Parse and validate → Relational expressions → Optimize plan
+    → Enumerable code generation → CalciteBindable
+
+SQL function · FunctionCompiler
+  Register schema placeholders → Compile each node → Check RETURN schema
+    → Build dependency DAG → SqlFunctionBindable
+```
+
+### Parsing and Local Execution Checks
+
+| Stage | Implementation and checks |
+| --- | --- |
+| Parse standard SQL | `SqlRecSqlParser` first tries Flink parsing |
+| Parse extensions | Separate SQLRec grammar handles `CACHE TABLE`, function calls, model management, and other extensions |
+| Check local capability | `SqlTypeChecker` checks statement types and table adapters; CTEs currently bypass the local query path |
+
+Parsing, metadata persistence, and local execution are checked at separate stages.
+
+### One SQL Statement: From Relational Plan to Executable Code
+
+| Step | Key implementation and output |
+| --- | --- |
+| Name and type validation | Resolve table schemas and function signatures from the current schema |
+| Plan optimization | `VolcanoPlanner` applies Calcite rules and SQLRec rules for KV joins, vector joins, writes, and UNION |
+| Code generation | Convert to an Enumerable plan; `EnumerableInterpretable.toBindable()` compiles an executable object within the JVM |
+| Execution and materialization | `CalciteBindable` binds the schema, variables, and parameters through `SqlRecDataContextImpl`, materializing results as row arrays |
+| Diagnostics | Retain logical plans, physical plans, and generated code for the UI |
+
+### SQL Functions: Build Schemas and Nodes at Compile Time
+
+After compiling input declarations and cache-table statements, `FunctionCompiler` registers `CacheTable` placeholders with **schemas but no request data**, allowing later statements to validate. The top-level `RETURN` completes return-schema checks and DAG initialization.
+
+| Execution node | Role |
+| --- | --- |
+| `CalciteBindable` | Local query or write |
+| `CacheTableBindable` | Execute a child node and publish a named result table |
+| `CallSqlFunctionBindable` / `JavaFunctionBindable` | SQL subfunction / Java `evaluate` call |
+| `IfBindable` / `ReturnBindable` | Branch / return |
+| `SqlFunctionBindable` | Nodes, schemas, and dependencies for the whole function |
+
+Functions are compiled and validated when defined and may be recompiled when metadata loads. `SqlFunctionCache` reuses compiled results within the process; remote mode recompiles according to refresh policies.
+
+| Call form | Target binding and schema handling |
+| --- | --- |
+| Static SQL subfunction | Bind at compile time and obtain its return schema; check compatibility when `LIKE` is present |
+| Dynamic call | `FunctionProxyBindable` resolves the function name at runtime; `LIKE` declares the schema at compile time |
+
+## UDF Registration and Execution
+
+Java UDFs include **scalar functions** embedded in SQL expressions and **table functions** that process whole tables through `CALL`. SQL subfunctions are compiled by `FunctionCompiler` as described above.
+
+### Registration and Execution Paths
+
+```text
+Function name → Java class name
+  ├── Built-in: FunctionConfigs
+  └── Custom: CREATE FUNCTION → Metadata
+                       ↓ Load from the runtime classpath
+Scalar function
+  HmsSchema → UdfManager → SqlRecScalarFunctionImpl
+    → Calcite type checking, overload resolution, and code generation
+    → SQL expression result
+
+Java table function
+  CALL → FunctionBindableFactory → JavaFunctionUtils
+    → JavaFunctionBindable → Inject arguments and invoke evaluate reflectively
+    → CacheTable rows → Subsequent DAG nodes
+```
+
+| Type | Integration | Computation and use |
 | --- | --- | --- |
-| Thrift | One executor, default database, and named intermediate tables per session | Available in remote mode |
-| REST `/sql/v1` | Statements in one request share an executor, released afterward | No transparent forwarding |
-| CLI | A local executor for the current CLI run | No transparent forwarding |
-| REST `/api/v1/<name>` | Function input tables and execution context created for each call | No forwarding |
+| Scalar function | Adapt public `evaluate` methods as Calcite `ScalarFunction` implementations | Compute row values in expressions, such as `l2_norm` and `array_contains` |
+| Java table function | `JavaFunctionBindable` wraps an execution node and selects an `evaluate` overload from static argument types | Batch processing of `CacheTable` inputs, literals, or variables, such as `dedup`, `weighted_merge`, and `call_service` |
+
+Registration stores only the name-to-class mapping. Deploy the JAR and its dependencies on each SQLRec process's classpath beforehand; UDFs execute within the SQLRec JVM.
+
+### Compile-Time Contracts and Runtime State
+
+| Mechanism | Implementation and limits |
+| --- | --- |
+| Scalar-function context | `SqlRecCallNotNullImplementor` injects `DataContext` into generated calls without consuming an explicit SQL argument |
+| Scalar-function determinism | Read the `deterministic` / `stateful` flags from `@UDFType` and propagate them to Calcite to prevent constant folding of nondeterministic calls |
+| Table-function return schema | `LIKE` supplies the compile-time contract; without it, functions returning `CacheTable` run at compile time by default to infer fields. `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` disables this behavior |
+| Table-function context | Automatically inject `ReadonlyContext` / `ExecuteContext` at runtime; a writable context makes the node nonparallel, as described in the next section |
+| Table-function results | Materialize returned `CacheTable` rows and adapt them to the compiled fields; operations with no result may return `Void` and provide no result table |
+| Instance state | `JavaFunctionBindable` holds the UDF instance, which may be reused across requests with the compiled plan; pass request state through arguments and contexts |
+
+Use explicit `LIKE` for table functions that access the network or have side effects. See [Custom UDFs](../development/custom-udf.md) for implementation and deployment, and [CALL](./sql.md#call) for syntax.
+
+## DAG Scheduling and Runtime Contexts
+
+### Building Dependencies
+
+`TopologicalSortUtils` reads each node's `getReadTables()`, `getWriteTables()`, and parallelism declaration in statement order:
+
+| Constraint | Dependency |
+| --- | --- |
+| RAW: later read depends on earlier write | Wait for the table to be produced or updated |
+| WAR: later write depends on earlier read | Finish reading before overwriting |
+| WAW: later write depends on earlier write | Preserve write order for the same table |
+| Execution barrier | Wait for earlier nodes; later nodes wait for the barrier |
+
+`RETURN` and nonparallel nodes form barriers, including `SET`, `ASSERT`, and Java table functions declaring writable `ExecuteContext`. Using only `ReadonlyContext` does not impose this restriction. The graph undergoes topological sorting and redundant-edge removal; arbitrary external side effects inside Java UDFs are not inferred.
+
+This function-body fragment assumes the subfunctions are defined, both recall paths return the same schema, have no additional shared writes, and allow parallel execution.
+
+```sql
+CACHE TABLE interest AS CALL interest_recall(user_info);
+CACHE TABLE hot AS CALL hot_recall(user_info);
+CACHE TABLE candidates AS
+SELECT * FROM interest UNION ALL SELECT * FROM hot;
+CACHE TABLE ranked AS CALL rank_items(candidates);
+RETURN ranked;
+```
+
+```text
+interest_recall → interest ─┐
+                           ├→ UNION ALL → candidates → rank_items → ranked → RETURN
+hot_recall ─────→ hot ──────┘
+
+Recall paths run in parallel; merging waits for both, ranking waits for merging,
+and RETURN forms an execution barrier.
+```
+
+SQL-subfunction read/write information maps back to the caller for outer dependency analysis. Rewriting a cache table also waits for earlier reads to finish.
+
+### Parallelism, Partitioning, and Async Calls
+
+| Mode | Implementation | Results and limits |
+| --- | --- | --- |
+| DAG parallelism | `SqlFunctionBindable` waits for dependencies with `CompletableFuture`, then submits nodes | `ExecutorServiceUtils` uses a virtual thread per task; disabling `PARALLELISM_EXEC` runs nodes sequentially |
+| Partitioned calls | `PartitionExecutor` splits inputs and creates a schema per partition | Execute targets concurrently, then merge results |
+| `ASYNC` | Submit a background call and return immediately | No synchronous result for the current `CACHE TABLE` / `RETURN` |
+
+This concurrency runs within the SQLRec process; it does not submit a distributed job for each node.
+
+### Shared Plans, Isolated Data, and Function Returns
+
+```text
+Process-wide resources
+├── Compiled function plans
+├── Database HmsSchema objects
+└── Connector table objects
+        ↑ Reuse
+        ├── Request A (independent state)
+        │   ├── Root schema: input and intermediate tables
+        │   ├── Variable map ←→ Shared with SQL subfunctions
+        │   └── SQL subfunction: own schema, local tables, return frame
+        └── Request B (independent state, same structure)
+
+Cancellation state: parent context → child context
+```
+
+| Implementation | State handling |
+| --- | --- |
+| `CallSqlFunctionBindable` | Check argument/parameter schemas and bind by position in a new schema; local tables remain hidden from the caller |
+| `ExecuteContextImpl` | Manage variables, call stacks, Trace, cancellation, and return frames; subfunctions share the variable map but have separate return frames |
+| `CacheTableBindable` | Fully materialize results → check cancellation → publish to the current schema; later nodes reuse results by table name |
+
+Table-scope isolation does not copy variables. Query results and intermediate tables primarily reside in memory and are constrained by JVM memory.
+
+### Failures, Timeouts, and Result Publication
+
+| Level | Implementation and handling |
+| --- | --- |
+| Node | `ProxyAllBindable` handles timeouts, cancellation checks, Trace, duration, row counts, and merge-branch fallback |
+| DAG | Unrecovered errors end waiting early and cancel the current function scope; child contexts observe cancellation through the parent chain, and tasks exit cooperatively |
+| TIMEIN | `IfBindable` executes THEN in a child context; failure or timeout cancels it and runs ELSE, preventing late cache or return values from overwriting fallback results |
+| Partition | Fail the whole call or discard failed partitions and merge the rest, depending on configuration |
+
+Cancellation does not guarantee immediate termination of network requests. Completed external writes have no unified rollback across Connectors. See [Exception Recovery](../guides/exception-recovery.md) and [Observability](../operations/observability.md).
+
+## Metadata, Table Objects, and Storage Execution {#data-sources-and-caches}
+
+### Metadata Management
+
+`MetadataAccess` separates schema definitions, resource records, and model-file access. `MetadataAccessFactory` selects the implementation based on `SQL_SCHEMA_DIR`.
+
+| Mode | Schema definitions | Resources and files |
+| --- | --- | --- |
+| Remote | `HmsSchemaAccess` → HMS; DDL through HiveCatalog | `DbStoreAccess` → PostgreSQL; file access through Hadoop interfaces |
+| Local files | `SqlFileParser` → `SqlFileSchemaAccess` | `InMemoryStoreAccess`; Services may point to existing endpoints |
+
+| Object | Reuse and updates |
+| --- | --- |
+| Root schema | Created by `CalciteSchemaFactory` for each executor |
+| Database `HmsSchema` | Reused within the process, loading tables and functions in both metadata modes |
+| Connector Table | Created from table definitions through factories for compilation and execution |
+| Local in-memory DDL | Neither writes back to files nor shares changes across instances; restarting restores file definitions |
+| Remote persistent definitions | Shared across instances; each instance still maintains its own execution objects and caches |
+
+See [Metadata DDL](./sql.md#metadata-ddl) for definition scope.
+
+### How Connectors Enter Query Plans
+
+```text
+Table metadata → SPI / HmsTableFactory → Calcite Table
+  → Select operators by table capabilities and query shape
+
+KV primary-key join (INNER / LEFT)
+  Materialize left input; deduplicate join keys, ignoring NULL
+    → Convert key types → Check table cache → Batch-fetch missing keys
+    → Merge by key and join rows; LEFT fills unmatched rows with NULL
+
+Vector lookup join
+  Recognize sorting, Top K, and filters
+    → Build VectorSearchRequest per left row
+    → Search through VectorSearchable / Milvus
+    → Combine left row, right row, and score → Continue outer relational plan
+```
+
+| Path | Implementation and limits |
+| --- | --- |
+| Factory | `TableFactoryUtils` discovers `HmsTableFactory` through SPI and creates a Table using the `connector` option |
+| KV primary-key join | `SqlrecEnumerableKvJoin` → `KvJoinUtils` → `SqlRecKvTable.getByPrimaryKey()`; support multiple rows per key, filling unmatched LEFT rows with NULL |
+| KV non-key join | Build filtered scans for distinct join keys, with different costs from batched primary-key access |
+| Vector join | `SqlRecVectorJoinRule` → `SqlrecEnumerableVectorLookupJoin` → `VectorJoinExecutor`; build vector, field, filter, and Top K requests per left row |
+| Subsequent computation | Continue outer projections and sorting after combining search results; supported local plans handle predicates that were not pushed down |
+
+These specialized paths depend on table capabilities and query shape. Unsupported queries are rejected; see [Built-in Connectors](./connectors/builtin-connectors.md).
+
+### Caches and Definition Refresh {#connector-row-cache-and-query-paths}
+
+| Cache or data | Location | Updates and invalidation |
+| --- | --- | --- |
+| `CACHE TABLE` | Execution schema | Published after the statement completes; scoped to the request, session, or subfunction |
+| Table schemas and Connector objects | Database schema | Compare metadata; reuse unchanged objects and rebuild changed ones |
+| Compiled functions | `SqlFunctionCache` | Reuse on cache hits; recompile after definition refresh or invalidation |
+| Primary-key cache | Caffeine within a Table | TTL, size eviction, and affected-key invalidation after SQLRec writes |
+| Filesystem data | File snapshot within a Table | Writes affect memory only; rebuilding the object reloads the file |
+
+| Operation | What is retained or rebuilt |
+| --- | --- |
+| Normal metadata refresh | Retain unchanged Tables, primary-key caches, and Filesystem data |
+| `FLUSH` | Invalidate definition caches and Tables; retain session cache tables and local in-memory DDL without rereading SQL files |
+| External-system writes | Do not proactively clear primary-key caches; visibility depends on TTL and other policies |
+
+See [Query Caching](./connectors/builtin-connectors.md#query-caching) and [FLUSH](./sql.md#flush) for details.
+
+## Model Tasks and Online Inference {#models-and-online-services}
+
+`ModelManager` and `ServiceManager` call backends through the `ModelController` SPI to generate training, export, and inference workload configurations.
+
+### Task Management and Artifacts
+
+```text
+Preparation (training backends)
+  Model / ModelController
+    → Training and export Jobs (Kubernetes)
+    → Checkpoint metadata + model files
+    → Deploy inference workload (Deployment / Service)
+      → HTTP endpoint for online calls
+
+Online call
+  Input CacheTable → CallServiceFunction feature encoding
+    → PredictionClient HTTP inference → Append predictions → New CacheTable
+
+An API publishes a recommendation flow; a Service provides model predictions.
+```
+
+| Object or stage | Stored or executed content |
+| --- | --- |
+| Model | Fields, model type, configuration |
+| Checkpoint metadata | Model-definition snapshot, name, type, task DDL/YAML, and status; locate artifacts from the snapshot and name |
+| Model storage | Actual weights and exported files; training backends export origin to export artifacts |
+| Before export / service creation | Check the source checkpoint's completion status and type |
+| Hosted-service creation | Validate configuration → submit to Kubernetes → save the definition and URL; submission success does not mean readiness |
+| Load a Service in file mode | Build call configuration only; do not deploy to Kubernetes |
+
+### How Inference Results Enter SQL Results
+
+| Step | Implementation |
+| --- | --- |
+| Resolve inputs and outputs | `CallServiceFunction` reads Service configuration and model fields |
+| Request | Select input columns according to the Model, encode row-based or User-Item JSON, and send HTTP through `PredictionClient` |
+| Response | Append declared prediction fields by input position to form a new `CacheTable`; missing or short output columns are filled with NULL |
+
+The service provider must still preserve response row count and order. Inference services run and scale independently. Hugging Face can deploy a downloaded origin directly; `external` connects to an existing endpoint. **An API publishes the flow; a Service provides predictions.** See the [Model Guide](../guides/model-lifecycle.md) for backend differences.
+
+## Execution Boundaries {#runtime-boundaries}
 
 ### Gateway Forwarding Boundaries
 
-Thrift sessions are created locally and do not require an available Gateway. Local failures do not fall back to Gateway; only requests requiring remote capabilities open a remote connection.
-
-| Request | Gateway dependency |
+| Area | Implementation and limits |
 | --- | --- |
-| Locally supported SQL and persistent table/database/UDF metadata DDL | None |
-| `SHOW DATABASES/TABLES/FUNCTIONS`, `SHOW USER FUNCTIONS`, `SHOW CREATE TABLE`, `DESCRIBE` | None; supported in both shared metadata and SQL-file mode |
-| Top-level `USE database`, `SET 'key' = 'value'` | None; state is saved locally and synchronized before the next remote SQL statement |
-| JDBC type, catalog, schema, table, column, function, and primary-key queries | None |
-| Client session information, local operation status, and local result fetching | None |
-| Non-assignment `SET`, `RESET` | Required; see [SET/RESET](./sql.md#set) for details |
-| Other SQL requiring Flink execution, `GetCrossReference`, and Delegation Token RPCs | Required; connects on demand |
-| Remote operation status, fetching, cancellation, and closing | Require the original remote session and a valid operation handle |
+| Session and operation ownership | `SessionManager` manages each session's `SqlExecutor`, distinguishing local and remote operations |
+| Remote execution | `GatewayClient` connects on demand, synchronizes the database and session settings, and executes RPCs |
+| Forwarding entry points | Thrift/JDBC in remote metadata mode only; REST API, REST SQL, and CLI have no transparent forwarding |
+| Routing limits | Forwardable statements such as CTEs go to Gateway; forwarding cannot bypass SQLRec extension restrictions |
+| Metadata-only DDL | Local adapters write HMS without creating a Flink execution environment |
 
-See [Service Deployment](../operations/deployment.md#gateway-forwarding-configuration) for connection settings and [Error Recovery](../guides/exception-recovery.md#gateway-connection-and-execution-failures) for connection loss and execution errors.
+See the [SQL Reference](./sql.md#metadata-ddl) and [Client Connections](../guides/clients.md#gateway-errors).
 
-## Execution Model
+### Memory and State Boundaries
 
-### Plain SQL and SQL Functions
-
-Plain `SELECT`, `INSERT`, `UPDATE`, and `DELETE` statements are validated, optimized, and compiled by Calcite, then run in the current execution context. The context holds request variables, metric tags, and cancellation state. Query results are materialized in process memory before returning to the client. Queries containing `WITH` do not take the local Calcite path; a remote-mode Thrift session can forward them to Flink.
-
-A SQL function is a sequence of separately submitted statements rather than one query. For example:
-
-```sql
-CREATE SQL FUNCTION recommend;
-
-DEFINE INPUT TABLE user_info (user_id BIGINT);
-
-CACHE TABLE candidates AS
-SELECT item_id, score FROM hot_item LIMIT 10;
-
-RETURN candidates;
-```
-
-The top-level `RETURN` ends the definition and saves the function. At call time, SQLRec obtains the compiled function (compiling it on the first access and reusing it afterward), adds input tables to the call's schema, and executes the body. Independent API requests do not share input tables or intermediate results. See [Writing a SQL Recommendation Flow](../guides/recommendation-flow.md) for function syntax and examples.
-
-A function call has three main steps:
-
-1. Check declared input tables and obtain the function definition and compiled form;
-2. Execute queries, `CACHE TABLE`, `CALL`, and control statements according to table read/write dependencies;
-3. Take the result from the reached `RETURN` and convert it into the Thrift/REST response.
-
-For example, a business call to `POST /api/v1/recommend` first maps the API name to a SQL function. Input rows in the request become tables visible to that function. The function reads Connectors, creates intermediate `CacheTable` results, optionally calls a model Service, and returns JSON from `RETURN`. Plain SQL uses the same local query engine but does not automatically reuse a compiled SQL function.
-
-These statements determine how data moves through a function:
-
-| Statement | Effect at execution time |
+| Entry point or resource | State scope |
 | --- | --- |
-| `CACHE TABLE t AS ...` | Runs a query or synchronous call and names its result as an in-memory table `t` for the current execution |
-| `CALL f(...)` | Calls a SQL function or Java table function; a synchronous result can be processed further or returned |
-| `IF ... THEN ... ELSE ...` | Chooses a branch based on a query; `TIMEIN` can fall back to `ELSE` after timeout or failure |
-| `RETURN` | Returns a table, query, or synchronous call result and stops later work in the current function |
+| HTTP recommendation API | Independent inputs, variables, and root schema for each call |
+| REST SQL | One shared executor within a request |
+| Thrift/JDBC | Current session retains its executor, default database, and cache tables |
+| Local CLI | Current process, with memory independent of the HTTP service |
+| Connectors, model services, Flink jobs | Separate storage, compute, and resource lifecycles |
 
-`CACHE TABLE` is not persistent storage. It lives in the current executor's schema: later statements in a Thrift session or the same REST SQL request can reference it, while independent REST/API requests cannot share it. A plain query result is not automatically registered as a named `CacheTable`. Write to an external Connector table when data must survive across requests.
-
-### Dependencies, Parallelism, and Async Calls
-
-SQLRec determines dependencies between SQL-function statements from the tables they read and write. Statements that need prior results wait for them; independent nodes can run concurrently when `PARALLELISM_EXEC` is enabled. Nodes not started after `RETURN` are skipped. `CALL ... PARTITION BY` splits an input table into partitions, calls the function concurrently, and merges the results. `CALL ... ASYNC` submits background work and returns immediately, so it cannot provide a synchronous result to `CACHE TABLE` or `RETURN`.
-
-Local queries and intermediate results are primarily materialized in JVM memory, so their size is constrained by process memory. This path has no general spill-to-disk or streaming intermediate-result mechanism; use the Flink path for continuous processing. See the [SQL Reference](./sql.md) for complete control-flow syntax.
-
-## Data Sources and Caches
-
-### Connector Capabilities
-
-All Connectors expose Calcite tables, with query capabilities determined by the backing store:
-
-| Connector | Main capabilities in local execution |
-| --- | --- |
-| Redis | Primary-key lookup; no full scan; SQL writes and Flink Lookup/writes |
-| JDBC, MongoDB | Primary-key lookup or filtered scan; SQL writes |
-| Milvus | Key/filter lookup and vector search; SQL writes and a Flink Sink |
-| Kafka | Calcite table is write-only; streaming reads run through Flink |
-| filesystem | Loads local CSV/JSON into memory on first use; subsequent reads and writes affect the table object's in-memory data, without writing it back to the source file |
-
-A KV Join batches lookups when the right-side join column is its primary key; joining on a non-key column scans once per key. Milvus can be the right side of a vector lookup Join. See [Built-in Connectors](./connectors/builtin-connectors.md) for configuration, query constraints, and write behavior.
-
-### Four Different Kinds of “Cache”
-
-| Data | Scope and purpose | How it changes |
-| --- | --- | --- |
-| `CACHE TABLE` | Named intermediate result in the current executor's schema | Created by the statement; `FLUSH` does not remove it |
-| Connector primary-key row cache | Per Calcite table object for Redis, JDBC, and MongoDB; speeds up key lookups | Expires by configured TTL and size; SQL writes invalidate affected keys |
-| filesystem in-memory snapshot | Whole-table data loaded by each filesystem table object | SQL writes change memory only; no TTL or automatic file-change detection |
-| Definition caches | Process-wide schema, SQL/Java functions, APIs, and service configuration | Refreshed or expired by their own policies; `FLUSH` invalidates them |
-
-### Connector Row Cache and Query Paths
-
-The primary-key row cache is used only through `getByPrimaryKey()`: Redis primary-key equality (including an extractable key condition within `AND`), standalone JDBC/MongoDB primary-key equality, and KV Joins on the right table's primary key use it. JDBC/MongoDB compound, non-key, range, and full-scan queries go directly to the source. Milvus, filesystem, and Flink Redis Lookup do not use this primary-key cache; the Kafka Calcite table cannot be read.
-
-If `id` is the primary key, these conditions illustrate common paths:
-
-| Query condition | Redis | JDBC / MongoDB |
-| --- | --- | --- |
-| `WHERE id = 1` | Primary-key cache | Primary-key cache |
-| `WHERE id = 1 AND status = 'active'` | Fetch by key, then filter | Compound scan; no primary-key cache |
-| `WHERE status = 'active'` | No key; full scan unsupported | Filtered scan; no primary-key cache |
-
-External or Flink writes do not proactively clear the row cache on an existing Calcite table object. Successful DDL refreshes reuse table objects whose metadata is unchanged, preserving their row caches and filesystem in-memory data. Explicit `FLUSH` invalidates all connector table objects; later accesses rebuild them and reload files, resetting filesystem runtime writes. Session `CACHE TABLE` results are preserved.
-
-## Metadata Management
-
-Metadata describes databases, tables, Java UDFs, SQL functions, APIs, models, and services. It determines what SQLRec can resolve and call; it does not hold the business data in Connectors. Both modes supply definitions to the executor through the same metadata access layer. They differ in where definitions come from and how changes persist. An empty `SQL_SCHEMA_DIR` selects remote mode; a nonempty directory selects local SQL-file mode.
-
-| Aspect | Remote metadata mode | Local SQL-file mode |
-| --- | --- | --- |
-| Tables and Java UDFs | Read databases, table schemas, and function definitions from Hive Metastore (HMS) | Recursively parse `.sql` files under `SQL_SCHEMA_DIR` at startup and build an in-process schema |
-| SQL functions, APIs, models, Checkpoints, Services | Stored in PostgreSQL and read or updated by SQLRec management commands | Function, API, model, and Service definitions from SQL files initialize in-process objects; there is no shared metadata store |
-| Updating definitions | Resource commands update PostgreSQL; supported persistent table, database, and UDF metadata DDL updates HMS locally through HiveCatalog | Edit SQL files and restart by default; with `SQL_SCHEMA_DDL_ENABLED`, supported DDL updates in-process definitions without rewriting files |
-| Dependencies and use | Requires HMS and PostgreSQL and lets instances share definitions; Flink Gateway is needed only for forwarded statements | Suitable for demos, local development, and online serving: SQL files can be versioned with the image or deployment configuration, removing HMS, PostgreSQL, and Flink Gateway dependencies; any referenced Connectors or model endpoints must still be reachable |
-
-Local SQL-file mode disables DDL by default. Set the environment variable `SQL_SCHEMA_DDL_ENABLED=true` before startup to enable in-memory database, table, Java UDF, SQL function, and API DDL. Each SQL executor reads and fixes the option when created; session `SET` cannot change it. `SqlExecutor` applies the DDL policy before dispatch; metadata stores perform reads, writes, and definition validation without checking the option. File definitions initialize the store and can be altered or dropped at runtime. Sessions in one process share changes; separate instances do not. DDL never rewrites SQL files, and restarting restores file definitions. The option does not enable model, Service, Checkpoint, training, or export commands. Queries, data writes, `CACHE TABLE`, and calls to predefined functions retain their existing behavior. Online serving can continue to deploy the complete SQL directory with the application version.
-
-Both modes support [metadata queries](./sql.md#metadata-queries). `ResourceQueryExecutor` handles query dispatch and session cache tables, delegating table-definition and UDF queries to the metadata access layer. SQL-file mode validates and saves resolved table schemas and function definitions at startup; runtime DDL uses the same representation. Inspecting metadata does not require loading connector or UDF classes; executing data queries requires the corresponding capabilities.
-
-SQLRec caches database lists, table schemas, and function/API/Service definitions. The database list primarily relies on `databaseListCache`: access after `SCHEMA_CACHE_EXPIRE` triggers an asynchronous refresh, which may return the old list until the refresh completes. DDL or `FLUSH` can also invalidate relevant caches. Both modes use the cached database list when creating a Calcite schema and do not synchronize database membership before each SQL statement. Successful database DDL updates only the executing session, so a newly created database can be used and queried there immediately. Other existing sessions need a new executor once the list has updated (Thrift clients can reconnect) to use the updated database list for local SQL compilation. `SHOW DATABASES` and `SHOW TABLES` query metadata directly and are not limited by that session list.
-
-Table and function caches within existing databases can still refresh independently. Table refresh compares complete metadata snapshots, reusing unchanged table objects and rebuilding changed ones. Local mode reads files only at startup. `FLUSH` invalidates caches without reparsing files or undoing in-memory DDL; file edits still require a restart. Database DDL preserves session cache tables and custom sub-schemas. Local and HMS tables both store second-based `transient_lastDdlTime`; metadata snapshot comparison also detects schema changes within the same second. DROP and RENAME immediately evict old objects, so dropping and recreating an identically named table without an intervening read cannot restore old in-memory data. Function and API DDL preserve unchanged table objects. See [Service Deployment](../operations/deployment.md) for configuration and the [Docker Quick Start](../getting-started/docker.md) for a local-file example.
-
-## Models and Online Services
-
-Model features revolve around three objects: a **Model** defines the backend and input/output contract, a **Checkpoint** identifies a trained, downloaded, or exported version, and a **Service** connects the model to an online inference endpoint (deploying a hosted model or pointing to an existing URL). A typical trained model follows:
-
-```text
-CREATE MODEL → TRAIN MODEL → check Checkpoint status
-             → EXPORT MODEL → CREATE SERVICE → call_service(...)
-```
-
-Training and export submit Kubernetes Jobs. Successful submission does not mean the job has completed; check the Checkpoint status. `CREATE SERVICE` deploys an online workload for a hosted model. The `call_service` function in SQL sends input rows to that service and merges predictions into the rows. Backend paths differ: Hugging Face Transformers does not require export, while an `external` model uses an existing HTTP service and needs no training, export, or locally deployed inference container.
-
-`CREATE SERVICE` manages a model inference endpoint; `CREATE API` publishes a SQL function for business callers. A public API can query Connectors and call a model Service within its SQL function. See [Model Training and Online Inference](../guides/model-lifecycle.md) and [Built-in Models](./models/builtin-models.md) for steps and backend differences.
-
-## Runtime Boundaries
-
-Online queries in remote mode require metadata services (HMS and PostgreSQL) and the storage systems they use. Forwarded statements require Flink SQL Gateway; training and deploying hosted models require Kubernetes. Local SQL-file mode also suits online serving: it reduces metadata-service dependencies and keeps definitions under version control. REST runs synchronous business work on a separate executor group; Thrift manages an executor per session. Metrics and traces cover requests and execution nodes; see [Observability](../operations/observability.md) for how to use them. See [Service Deployment](../operations/deployment.md) for dependencies, ports, and resource requirements.
-
-Keep three boundaries in mind: local SQLRec queries materialize in process memory; `CACHE TABLE` is visible only within its execution scope; external data, model services, and Flink jobs have separate lifecycles. Size deployment dependencies and resources for the paths you actually enable.
-
-## Further Reading
-
-- [Writing a SQL Recommendation Flow](../guides/recommendation-flow.md) and [SQL Reference](./sql.md): functions, control flow, and full syntax.
-- [Connecting Data Sources](../guides/data-sources.md) and [Built-in Connectors](./connectors/builtin-connectors.md): table definitions, queries, and cache settings.
-- [Publishing and Calling APIs](../guides/api.md) and [Model Training and Online Inference](../guides/model-lifecycle.md): public APIs and model lifecycle.
-- [Custom Connectors](../development/custom-connector.md), [Custom UDFs](../development/custom-udf.md), and [Custom Models](../development/custom-model.md): extension points and implementation requirements.
+Local queries materialize in memory, without a general spill-to-disk or continuous streaming execution mechanism. Use the appropriate Flink path for continuous large-scale processing; training and hosted-model deployment depend on Kubernetes.

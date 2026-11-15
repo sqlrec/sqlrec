@@ -12,7 +12,17 @@ If you are new to creating and using data-source tables, start with [Connecting 
 
 Redis, JDBC, and MongoDB support primary-key query caching. `cache-ttl` controls expiration and `max-cache-size` controls capacity; setting either to 0 disables caching. Writes outside SQLRec become visible to an existing cache after TTL expiry. Shorten the TTL or disable caching when freshness is more important.
 
-This differs from request-local `CACHE TABLE` results. See [the architecture cache reference](../architecture.md#connector-row-cache-and-query-paths) for exact query coverage and `FLUSH` behavior.
+Query caching reuses storage query results, unlike `CACHE TABLE` results in the current execution scope. With `id` as the primary key, common query paths are:
+
+| Query condition | Redis | JDBC / MongoDB |
+| --- | --- | --- |
+| `WHERE id = 1` | Primary-key cache | Primary-key cache |
+| `WHERE id = 1 AND status = 'active'` | Fetch candidates by key, then filter | Compound scan; no primary-key cache |
+| `WHERE status = 'active'` | Full scans unsupported | Filtered scan; no primary-key cache |
+
+KV Joins on the right table's primary key also use this cache. Non-key lookups, Milvus, Filesystem, and Flink Redis Lookup do not use it.
+
+SQLRec table writes invalidate affected primary-key cache entries. DDL refreshes retain unchanged table definitions and their caches. Explicit `FLUSH` invalidates Connector table objects, which are recreated on subsequent access. Filesystem reloads its files, resetting runtime in-memory writes; session `CACHE TABLE` results are retained. See [FLUSH](../sql.md#flush).
 
 ## Built-in Connectors
 
@@ -21,14 +31,6 @@ This differs from request-local `CACHE TABLE` results. See [the architecture cac
 The Redis connector is used to connect to Redis databases, supporting key-value storage and queries.
 
 **Connector Identifier**: `redis`
-
-**Features**:
-- Supports standalone and cluster modes
-- Supports `json`, `list`, and `string` data structures
-- Supports JSON and Protobuf value formats
-- Supports local cache for query acceleration
-- Supports primary key filter queries
-- Supports `INSERT`, `UPDATE`, and `DELETE`
 
 **Configuration Parameters**:
 
@@ -95,13 +97,6 @@ The Milvus connector is used to connect to Milvus vector databases, supporting v
 
 **Connector Identifier**: `milvus`
 
-**Features**:
-- Supports vector similarity search (ANN)
-- Supports primary key queries
-- Supports filter conditions
-- Supports data insertion and deletion
-- Supports projection column optimization
-
 **Configuration Parameters**:
 
 | Parameter | Type | Default | Description |
@@ -147,11 +142,6 @@ The Kafka connector is used to connect to Apache Kafka message queues, supportin
 
 **Connector Identifier**: `kafka`
 
-**Features**:
-- Supports message writing to Kafka Topic
-- Supports JSON and Protobuf messages
-- Supports batch sending optimization
-
 **Configuration Parameters**:
 
 | Parameter | Type | Default | Description |
@@ -190,14 +180,6 @@ CREATE TABLE rec_log_kafka (
 The JDBC connector is used to connect to relational databases (e.g., PostgreSQL, MySQL), supporting SQL queries and data writes.
 
 **Connector Identifier**: `jdbc`
-
-**Features**:
-- Supports various JDBC databases (PostgreSQL, MySQL, etc.)
-- Supports primary key queries and local cache acceleration
-- Supports complex filter condition queries (not limited to primary key filtering)
-- Supports data upsert and deletion
-- Uses HikariCP connection pool for database connection management
-- Supports custom JDBC properties
 
 **Configuration Parameters**:
 
@@ -244,7 +226,6 @@ CREATE TABLE user_profile (
 - JDBC connector supports complex filter conditions, not limited to primary key equality filtering
 - PostgreSQL, MySQL and H2 reserved words and identifiers containing special characters are quoted automatically; declared names must match the database identifiers, including case for quoted names
 - H2 upserts use declared column names, allowing a different physical column order or a subset of columns
-- Uses HikariCP connection pool for database connection management, sharing the pool for the same URL and username
 - Supports upsert operations, automatically determining insert or update based on primary key
 - Custom JDBC properties can be passed via the `jdbc.properties.*` prefix
 
@@ -253,13 +234,6 @@ CREATE TABLE user_profile (
 The MongoDB connector is used to connect to MongoDB document databases, supporting document queries and data writes.
 
 **Connector Identifier**: `mongodb`
-
-**Features**:
-- Supports MongoDB connection URI
-- Supports primary key queries and local cache acceleration
-- Supports complex filter conditions (AND, OR, comparison operators, IS NULL, etc.)
-- Supports data upsert and deletion
-- Automatically pushes down Calcite filter conditions to MongoDB queries
 
 **Configuration Parameters**:
 
@@ -301,14 +275,6 @@ CREATE TABLE user_behavior (
 The Filesystem connector is used to read data files from the local file system, supporting CSV and JSON formats.
 
 **Connector Identifier**: `filesystem`
-
-**Features**:
-- Supports CSV and JSON file formats
-- Data is loaded only once on first access; subsequent accesses use in-memory data
-- Supports primary key queries and filter queries
-- Uses the primary key as a lookup key and retains multiple rows per key
-- Supports in-memory inserts, updates, and deletes (does not write back to the file system)
-- Automatically initializes as an empty table if no path is configured or the path does not exist
 
 **Configuration Parameters**:
 

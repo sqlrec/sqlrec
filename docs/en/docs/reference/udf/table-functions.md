@@ -139,35 +139,16 @@ CALL add_col(recall_item, 'priority', 10);
 
 ### call_service
 
-Model service call function used to call deployed model services for inference. See [Model Training and Online Inference](../../guides/model-lifecycle.md#call-a-model-service) for details.
+Call a registered model service and append predictions to the input:
 
-See [the model guide](../../guides/model-lifecycle.md#call-a-model-service) for calls and output templates. Use `LIKE` to declare the input columns plus model outputs.
+| Signature | Result |
+| --- | --- |
+| `CALL call_service(serviceName, input)` | Input columns plus model outputs |
+| `CALL call_service(serviceName, user, item)` | Item columns plus model outputs |
 
-SQL supports these two call forms:
+In the two-table form, User must contain exactly one row. Same-named input fields prefer User, and Item fields follow item order. Empty Item input returns an empty result without an HTTP request. Connection and read/write timeouts default to 30 seconds each.
 
-- `CALL call_service(serviceName, input)`: calls the service with row-wise JSON. The result contains the input columns followed by model output columns.
-- `CALL call_service(serviceName, user, item)`: calls the service in User-Item mode with a column-oriented JSON request body. The result keeps the Item columns and appends model output columns.
-
-User-Item request rules:
-
-1. The User table must contain exactly one row; the Item table may contain multiple rows.
-2. Only model input fields are considered. A field belongs to User when its name matches a User table column (case-insensitive); otherwise it belongs to Item. If both tables contain the same field, the User field takes precedence. A model field missing from its selected table is omitted from the request, as are extra table columns not declared as model inputs.
-3. Every field is serialized as a JSON array. User fields are single-element arrays, so one set of user data is sent only once per request. Item fields become arrays in Item row order; user data is not repeated for every item.
-
-For example, one User row and three Item rows produce:
-
-```json
-{
-  "user_id": [1001],
-  "user_age": [25],
-  "item_id": [1, 2, 3],
-  "category": ["phone", "tablet", "laptop"]
-}
-```
-
-When the Item table is empty, no HTTP request is sent. The function returns an empty table whose schema consists of the Item columns followed by the model output columns.
-
-HTTP connect/read/write timeouts default to 30 seconds. See [Model Training and Online Inference](../../guides/model-lifecycle.md#call-a-model-service) for the protocol and examples.
+Declare the result schema with `LIKE`. For complete examples and the HTTP protocol, see [Call a Model Service](../../guides/model-lifecycle.md#call-a-model-service).
 
 ---
 
@@ -249,7 +230,7 @@ Model service should return a JSON object where each field's value is an array w
 
 ```json
 {
-  "item_tower_emb": [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  "item_tower_emb": [[0.1, 0.2], [0.3, 0.4]],
   "score": [0.95, 0.87]
 }
 ```
@@ -537,7 +518,6 @@ CALL truncate_table(recall_item, 100);
 ### get_variables
 
 Get variables function that retrieves all variables from the execution context and returns a table containing key-value pairs.
-
 
 **Return Value**: Returns a 2-column `CacheTable` with column names `key` and `value`, both of type `VARCHAR`.
 

@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: "SQLRec"
-  text: "A Recommendation Engine That Supports SQL Development"
+  text: "Build Recommendation Systems with SQL"
   actions:
     - theme: brand
       text: Quick Start
@@ -14,8 +14,8 @@ features:
     details: Write recall, ranking, and business rules in SQL, then publish the flow as an API
   - title: Cloud Native
     details: Includes a Docker demo and scripts for a Minikube development environment
-  - title: Based on Existing Big Data Ecosystem
-    details: Easy to get started, compatible with current big data development practices
+  - title: Connect Existing Data
+    details: Connect Redis, JDBC, and Milvus, and reuse HMS tables and HDFS data
   - title: Highly Extensible
     details: Extend functions, data sources, and model backends as needed
 ---

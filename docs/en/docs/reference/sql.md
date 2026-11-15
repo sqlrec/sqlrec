@@ -49,42 +49,17 @@ CREATE OR REPLACE SQL FUNCTION my_function;
 
 ### DROP SQL FUNCTION
 
-Drop an existing SQL function.
-
-**Syntax:**
+Drop an existing SQL function. `IF EXISTS` suppresses the error when the object is absent.
 
 ```sql
-DROP SQL FUNCTION [IF EXISTS] function_name
+DROP SQL FUNCTION [IF EXISTS] function_name;
 ```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the function doesn't exist, no error is raised |
-| `function_name` | Name of the function to drop |
 
 **Note:** If the function is referenced by an API, it cannot be dropped.
-
-**Examples:**
-
-```sql
-DROP SQL FUNCTION my_function;
-
-DROP SQL FUNCTION IF EXISTS my_function;
-```
 
 ### SHOW SQL FUNCTIONS
 
 Show list of all SQL functions.
-
-**Syntax:**
-
-```sql
-SHOW SQL FUNCTIONS
-```
-
-**Example:**
 
 ```sql
 SHOW SQL FUNCTIONS;
@@ -288,8 +263,8 @@ The IF statement supports two execution modes:
 1. **Normal Mode**: Evaluates the condition expression. If it returns true, executes the THEN clause; otherwise executes the ELSE clause (if present)
 2. **Timeout Mode** (TIMEIN): The condition expression must return a numeric THEN execution time budget in milliseconds
    - If timeout > 0, executes the THEN clause with the specified timeout; falls back to the ELSE clause if timeout occurs
-   - If the budget <= 0, skips THEN and executes ELSE directly, without submitting a THEN task or creating its child context
-   - When timeout > 0, if THEN times out or throws, its temporary `RETURN` state is discarded before ELSE runs, so a failed branch cannot publish a function result
+   - If the budget <= 0, skips THEN and executes ELSE directly
+   - If THEN times out or fails, ELSE provides the result; partial results from the failed branch are not returned
 
 **Notes:**
 - The condition query must return exactly one row and one column. In normal mode the value must be BOOLEAN (NULL is treated as false); in TIMEIN mode it must be numeric.
@@ -301,7 +276,7 @@ The IF statement supports two execution modes:
 - When both branches return, their result schemas must be compatible. The IF must be followed immediately by one empty `RETURN;` that ends the definition, with no intervening statement. The function result schema comes from the two branches and is unaffected by this empty terminator
 - When THEN returns and ELSE is omitted, a false condition continues with the statements following the IF
 - TIMEIN requires ELSE; both branches must be CACHE statements or both must be RETURN statements
-- A TIMEIN worker computes cache data; the waiting thread publishes it only after success. A late THEN result after timeout cannot overwrite ELSE.
+- Late results from a timed-out or failed THEN cannot overwrite ELSE.
 - Request cancellation terminates execution without falling back to ELSE. While the request remains active, THEN exceptions, Errors, and interruptions may all trigger ELSE.
 - A non-positive TIMEIN budget selects ELSE directly; `NODE_EXEC_TIMEOUT <= 0` still disables the node timeout
 - Directly nesting another IF in THEN or ELSE is currently unsupported
@@ -543,40 +518,15 @@ CREATE OR REPLACE API my_api WITH my_function;
 
 ### DROP API
 
-Drop an existing API.
-
-**Syntax:**
+Drop an existing API. `IF EXISTS` suppresses the error when the object is absent.
 
 ```sql
-DROP API [IF EXISTS] api_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the API doesn't exist, no error is raised |
-| `api_name` | Name of the API to drop |
-
-**Examples:**
-
-```sql
-DROP API my_api;
-
-DROP API IF EXISTS my_api;
+DROP API [IF EXISTS] api_name;
 ```
 
 ### SHOW APIS
 
 Show list of all APIs.
-
-**Syntax:**
-
-```sql
-SHOW APIS
-```
-
-**Example:**
 
 ```sql
 SHOW APIS;
@@ -652,27 +602,10 @@ CREATE MODEL IF NOT EXISTS external_rank_model WITH (
 
 ### DROP MODEL
 
-Drop an existing model.
-
-**Syntax:**
+Drop an existing model. `IF EXISTS` suppresses the error when the object is absent.
 
 ```sql
-DROP MODEL [IF EXISTS] model_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the model doesn't exist, no error is raised |
-| `model_name` | Name of the model to drop |
-
-**Examples:**
-
-```sql
-DROP MODEL my_model;
-
-DROP MODEL IF EXISTS my_model;
+DROP MODEL [IF EXISTS] model_name;
 ```
 
 ### TRAIN MODEL
@@ -759,14 +692,6 @@ EXPORT MODEL my_model CHECKPOINT = 'v1.0'
 
 Show list of all models.
 
-**Syntax:**
-
-```sql
-SHOW MODELS
-```
-
-**Example:**
-
 ```sql
 SHOW MODELS;
 ```
@@ -805,22 +730,8 @@ DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
 
 Show list of all checkpoints for a specified model.
 
-**Syntax:**
-
 ```sql
-SHOW CHECKPOINTS model_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `model_name` | Model name |
-
-**Example:**
-
-```sql
-SHOW CHECKPOINTS my_model;
+SHOW CHECKPOINTS model_name;
 ```
 
 ### ALTER MODEL DROP CHECKPOINT
@@ -889,44 +800,19 @@ CREATE SERVICE IF NOT EXISTS `external-rank-service`
 
 Names follow [Kubernetes Service DNS naming rules](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names). Uppercase letters, underscores, dots and spaces are rejected without case conversion. Name validation also applies to `IF NOT EXISTS`. Quote names containing hyphens with backticks. Hosted services use the service name directly for Kubernetes Services and Deployments, without a hash suffix. Their URL is `http://<service-name>.<namespace>.svc.cluster.local:80/predict`. Invalid names are rejected without substitution or truncation. The same name validation applies to external services.
 
-The service definition, including its URL and complete YAML, is saved before submission to Kubernetes. The record is retained if submission fails; its existence does not imply readiness. Retry with `CREATE SERVICE` without `IF NOT EXISTS`, or use `DROP SERVICE` to clean up resources already created. `IF NOT EXISTS` skips existing records and does not retry failed deployments.
+Service metadata is saved after Kubernetes submission succeeds. Submission failure does not overwrite an existing definition. Successful submission does not mean the workload is ready; check its status before calling it. To update or retry an existing definition, omit `IF NOT EXISTS`, which skips existing records.
 
 ### DROP SERVICE
 
-Drop an existing service.
-
-**Syntax:**
+Drop an existing service. `IF EXISTS` suppresses the error when the object is absent.
 
 ```sql
-DROP SERVICE [IF EXISTS] service_name
-```
-
-**Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `IF EXISTS` | Optional. If the service doesn't exist, no error is raised |
-| `service_name` | Name of the service to drop |
-
-**Examples:**
-
-```sql
-DROP SERVICE `my-service`;
-
-DROP SERVICE IF EXISTS `my-service`;
+DROP SERVICE [IF EXISTS] service_name;
 ```
 
 ### SHOW SERVICES
 
 Show list of all services.
-
-**Syntax:**
-
-```sql
-SHOW SERVICES
-```
-
-**Example:**
 
 ```sql
 SHOW SERVICES;
@@ -961,57 +847,43 @@ DESCRIBE FORMATTED SERVICE `my-service`;
 
 ## Metadata DDL
 
-In shared metadata mode, persistent table/database/UDF metadata DDL uses the Flink 1.19 default dialect and writes HMS through the official HiveCatalog's Hive client, without creating a TableEnvironment or planner or connecting to Gateway. Table DDL supports physical columns, metadata columns, primary keys, and partitions. Computed columns and watermarks are unsupported; queries and alterations that resolve an existing table schema also reject those definitions.
+| Mode | Where definitions live | Runtime DDL |
+| --- | --- | --- |
+| Remote metadata | HMS for databases/tables/Java UDFs; PostgreSQL for SQLRec resources | Persistent DDL through Beeline/JDBC |
+| SQL files | Files under `SQL_SCHEMA_DIR`, loaded at startup | Disabled by default; `SQL_SCHEMA_DDL_ENABLED=true` enables supported in-memory DDL |
 
-`USE CATALOG` and temporary table creation, including temporary CTAS/RTAS, are unsupported. `USE database` does not check whether the database exists in the session schema; subsequent operations use the actual metadata. In remote metadata mode, temporary function and view DDL, along with persistent table CTAS/RTAS, retain the Thrift remote route. Persisting a definition does not imply local support for every connector, column semantic, or function interface. SQL-file metadata mode does not forward statements to Gateway.
+SQL-file DDL changes are shared within one process, are not written back to files, and disappear on restart. Separate instances do not share changes. The Demo image enables this option. Configure it before startup; SQL `SET` cannot change it.
 
-SQL-file metadata disables DDL by default. Set `SQL_SCHEMA_DDL_ENABLED=true` before startup to enable database `CREATE / ALTER ... SET / DROP`, table `CREATE / CREATE ... LIKE / ALTER / DROP`, persistent Java UDFs, SQL functions, and APIs, including replacement where supported by the syntax. Table alterations reuse existing column, primary-key, and option operations. Partition-key declarations are supported; partition instance changes, cross-database renames, computed columns, watermarks, CTAS/RTAS, temporary objects, and views are unsupported. Model, Service, Checkpoint, training, and export commands remain disabled. Java UDF registration stores class, language, and resource declarations without downloading JARs or loading classes; execution still requires the corresponding dependencies. Database drops support `RESTRICT / CASCADE`; the current and default databases cannot be dropped.
+Supported SQL-file DDL includes database CREATE/ALTER SET/DROP, table CREATE/CREATE LIKE/ALTER/DROP, persistent Java UDFs, SQL functions, and APIs. Replacement is available where the syntax supports it. Model, Service, Checkpoint, training, and export commands remain disabled at runtime.
 
-Changes live only in the current process and are shared by its sessions. They never rewrite SQL files or synchronize across instances; restarting restores file definitions. Each SQL executor reads and fixes the option when created and checks it before DDL dispatch; session `SET` cannot change it. The option controls SQL execution, while internal metadata APIs perform reads and writes without this check. Successful database DDL updates only the executing session's compilation schema. Other existing sessions do not automatically synchronize database membership and need a new executor to query data in newly added databases. Commands such as `SHOW` and `DESCRIBE` still read shared definitions directly from metadata.
+Database/table/UDF definitions use the Flink 1.19 default dialect. Tables support ordinary and metadata columns, primary keys, and partition declarations. Computed columns, WATERMARK, temporary tables, CTAS/RTAS, views, partition-instance changes, and cross-database renaming are not supported in file mode. Database DROP supports RESTRICT/CASCADE; current and default databases cannot be dropped. After a database DDL change, other existing sessions may need to reconnect before querying the new database.
 
-```bash
-export SQL_SCHEMA_DIR=/app/sql
-export SQL_SCHEMA_DDL_ENABLED=true
-```
+Remote-mode persistent metadata DDL does not require Gateway. Temporary functions, views, and persistent CTAS/RTAS use remote Thrift forwarding. `USE CATALOG` and temporary tables are unsupported. `USE database` does not validate existence immediately; later operations use actual metadata. See [execution boundaries](./architecture.md#gateway-forwarding-boundaries).
+
+Saving a table or UDF definition does not guarantee local execution support. Deploy required Connector/UDF JARs separately; SQLRec does not download UDF resources automatically.
 
 ## Metadata Queries
 
-Both shared metadata and SQL-file mode support `SHOW DATABASES`, `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, `SHOW FUNCTIONS`, and `SHOW USER FUNCTIONS`. All run within SQLRec without Gateway forwarding. Table names accept `table`, `database.table`, and `hive.database.table`. Only unqualified names give session `CACHE TABLE` results precedence. Missing objects and unconfigured catalogs produce explicit errors.
+Both modes support `SHOW DATABASES`, `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, `SHOW FUNCTIONS`, and `SHOW USER FUNCTIONS` without Gateway. SQL-file queries do not need HMS or the Connector/UDF classes just to inspect definitions.
 
-`SHOW TABLES` reads database and table lists directly from metadata. For the current database, it also includes session cache tables. Results are deduplicated and sorted, with `LIKE` and `NOT LIKE` support. In remote mode, being able to list tables in a new database does not mean an existing session's local SQL compilation schema includes that database; see [Metadata Management](./architecture.md#metadata-management).
+- Table names accept `table`, `database.table`, or `hive.database.table`. Unqualified names prefer a session `CACHE TABLE`.
+- `SHOW TABLES` includes cached tables for the current database; `LIKE` and `NOT LIKE` filter names.
+- `SHOW USER FUNCTIONS` lists declared Java UDFs. `SHOW FUNCTIONS` also lists Flink built-ins and supports LIKE/ILIKE and their NOT forms. A listed function may not execute locally; SQL functions use `SHOW SQL FUNCTIONS`.
+- `SHOW CREATE TABLE` returns normalized DDL, including primary-key NOT NULL constraints. Column comments may not survive round-trip conversion.
+- Persistent table `DESCRIBE` returns `name`, `type`, `null`, `key`, `extras`, `watermark`, and `comment` when present. Cached tables return `name` and `type`.
 
-SQL-file mode reads definitions loaded at startup and updated by in-memory DDL. Inspecting a table or function does not require its connector or UDF class to be available and does not connect to HMS or Gateway. File loading and runtime DDL use the same schema validation; unsupported definitions such as computed columns, watermarks, and CTAS fail during loading. SQL files load in path order, so a `CREATE TABLE ... LIKE` source must be defined first. The resolved schema supports subsequent description and alteration.
-
-`SHOW CREATE TABLE` generates normalized SQL from the current definition, preserving columns, primary keys, partitions, table comments, and options; primary-key columns include `NOT NULL`. Column comments follow Flink 1.19's conversion behavior and are not guaranteed to survive serialization and subsequent resolution. For persistent tables, `DESCRIBE` returns `name`, `type`, `null`, `key`, `extras`, and `watermark` in both modes, with an additional `comment` column when column comments are present. Session cache tables retain the `name` and `type` columns.
-
-`SHOW USER FUNCTIONS` lists UDFs declared in the requested database. `SHOW FUNCTIONS` also includes Flink built-ins. Results are sorted and deduplicated and support `LIKE`, `ILIKE`, and their `NOT` forms. Listing a function does not guarantee local execution support. SQLRec SQL functions remain available through `SHOW SQL FUNCTIONS`. SQL-file metadata is read-only by default and supports in-memory DDL with the option above. File changes still require a restart; `FLUSH` does not reload files.
+SQL files load in path order; the source of `CREATE TABLE ... LIKE` must be defined first. Editing files requires a restart; `FLUSH` does not re-read them.
 
 ## Metadata Refresh
 
-Successful DDL refreshes preserve table objects whose metadata is unchanged, including their filesystem in-memory data. A no-op `CREATE TABLE IF NOT EXISTS` also preserves data. Actual ALTER or RENAME operations rebuild their target table and may reset its runtime in-memory writes. Dropping and recreating an identically named table uses a new object.
+DDL preserves unchanged tables and their in-memory data. ALTER or RENAME may reset the affected table's runtime data; DROP followed by recreation creates a new table.
 
 ### FLUSH
-
-Invalidate process-level metadata, function, API, and service configuration caches.
-
-**Syntax:**
-
-```sql
-FLUSH
-```
-
-**Description:**
-
-`FLUSH` invalidates the current process's cached database and table definitions, Java/SQL functions, APIs, and model-service configuration. Later accesses reload definitions and rebuild connector table objects, resetting filesystem runtime writes. Session `CACHE TABLE` results are preserved.
-
-In both modes, `FLUSH` does not add or remove database sub-schemas in existing sessions. Successful database DDL updates only the executing session. Other existing sessions need a new executor once the database-list cache has updated (Thrift clients can reconnect) to use the updated database list for local SQL compilation. Table and function caches within existing databases still refresh under their own policies. In SQL-file mode, `FLUSH` preserves all in-memory DDL changes.
-
-It does not clear session `CACHE TABLE` results or guarantee immediate updates to existing connectors' business-data caches. Changes to local SQL files still require a process restart. See [Architecture](./architecture.md#connector-row-cache-and-query-paths) for exact cache coverage.
-
-**Example:**
 
 ```sql
 FLUSH;
 ```
 
-Use it after external changes to remote metadata. Reloading definitions may cause short-term overhead.
+Invalidate this process's definition caches, including table, Java/SQL function, API, and service configuration caches. Subsequent access rebuilds Connector table objects; Filesystem runtime writes are reset. Session `CACHE TABLE` results and SQL-file in-memory DDL changes remain.
+
+Use this after external metadata changes. It does not re-read SQL files or add databases to existing sessions; reconnect if a newly created database is not visible to local queries. See [cache scope](./architecture.md#connector-row-cache-and-query-paths).

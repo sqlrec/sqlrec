@@ -73,7 +73,7 @@ The SQLRec UI at `/ui/static/index.html` shows a function's execution DAG and th
 
 ## Investigate One Request
 
-A successful API response includes the execution ID in `params.log_id`. With tracing enabled, use it to find a span's `log.id` attribute. Node debug logs also include that ID. If a failed request returns no ID, inspect the service logs around the request time.
+By default, a successful API response includes the execution ID in `params.log_id`. When Trace is enabled, search for span attribute `log.id`; debug node logs also include it. If response `params` are disabled or an error response omits the ID, locate logs by request time.
 
 ### View a Trace
 
@@ -156,6 +156,7 @@ Prometheus metric names use underscores. Counters have the `_total` suffix; time
 | Business executor workers / pending tasks | `netty_eventexecutor_workers`, `netty_eventexecutor_tasks_pending`, filtered by `pool="rest-business"` |
 | Mean node duration and status | `sqlrec_node_exec_duration_seconds_sum`, `sqlrec_node_exec_duration_seconds_count` |
 | Table scan duration | `sqlrec_table_scan_duration_seconds_sum`, `sqlrec_table_scan_duration_seconds_count` |
+| Failed merge branch treated as empty | `sqlrec_cache_table_ignore_exception_total` |
 | Direct TIMEIN fallback for a non-positive budget | `sqlrec_if_timein_outcome_total{reason="direct"}` |
 | TIMEIN timeout while waiting for THEN | `sqlrec_if_timein_outcome_total{reason="timeout"}` |
 | TIMEIN fallback after an ordinary THEN failure | `sqlrec_if_timein_outcome_total{reason="error"}` |
@@ -168,19 +169,22 @@ sum by (name) (rate(sqlrec_node_exec_duration_seconds_sum[5m]))
 sum by (name) (rate(sqlrec_node_exec_duration_seconds_count[5m]))
 ```
 
-For HTTP metrics, requests starting with `/api/v1/` retain their full path with query parameters removed; for example, `/api/v1/demo_rec?trace=true` is recorded as `/api/v1/demo_rec`. Other paths use `/sql/v1`, `/metrics`, `/ui/api/*`, `/ui/static/*`, and `unmatched` for unknown paths. The `method` label retains the original request method name without conversion. Per-API results use `sqlrec_api_execution_duration_seconds_*{api="demo_rec",outcome="success"}`. REST SQL statements use `sqlrec_sql_execution_duration_seconds_*`, including failures returned inside HTTP 200. Execution metrics use `outcome`; node cancellations have `phase=before_start/running`. Do not add cancellation events to the timer's cancelled count.
+Metric interpretation:
 
-Set process environment `METRICS_TAG_KEYS=scene,experiment`. The metrics helper reads these current execution variables and exports `scene` and `experiment` directly. Empty configuration adds no business tags. Keys are trimmed, deduplicated and fixed at startup; requests cannot override the list. Missing, null and blank values become empty strings. Fixed system tags take precedence when keys conflict on the current metric. Unconfigured variables, including log_id, are never automatically exported. API/SQL/node, branch/fallback and feature metrics carry business tags; HTTP and table metrics do not. Each event reuses one tag snapshot, and normalization never changes the business variables. Histograms and registration-failure callbacks are configured on the actual Prometheus registry during initialization; the composite forwards meters to its child registries.
+- HTTP `path` preserves the API path without query parameters; UI and unknown paths are grouped. HTTP duration excludes queue wait before the handler and is not the client's full round-trip time. Requests rejected before the handler are not counted.
+- API outcomes use `sqlrec_api_execution_duration_seconds_*`; SQL outcomes use `sqlrec_sql_execution_duration_seconds_*`. SQL statement failures can occur inside HTTP 200 responses.
+- Node and table `outcome` labels describe execution results. Node cancellation event counters and duration timers overlap; do not add them together.
+- Table cache metrics include `cache_gets_total{result="hit|miss"}`, `cache_size`, and `cache_evictions_total`. Size counts entries, not bytes; counters restart when caches are replaced. UI node averages are successful historical executions in the current process.
 
-Nonempty business tag values are recorded unchanged. There are no limits on dimension count, value count, value length, combinations or meter count, and no variable-name denylist. Configured keys still require valid label-name syntax. HTTP method uses the request value; SQL statement_type uses the first word in uppercase, or an empty string for empty SQL, with no allowlist mapping. `sqlrec_metrics_registration_failures_total` counts registration failures.
+### Business Labels
 
-HTTP, API and main table queries publish fixed histogram buckets. Enable node buckets with exact names in `METRICS_HISTOGRAM_NODES=demo_rec:RETURN,demo_rec:items`; disabled by default. Boundaries are 5/10/25/50/100/250/500/1000/3000/10000/30000/60000ms plus +Inf. Quantiles have bucket-width error and cannot accurately represent values beyond the highest finite bucket.
+Set `METRICS_TAG_KEYS=scene,experiment` in the server process environment and restart. Supply those variables in API `params` or SQL `SET`. Labels apply to API/SQL/node, branch/fallback, and feature metrics; HTTP and table metrics do not inherit them.
 
-HTTP keeps a single request-duration Timer, from business-handler execution start to response-write completion, including failed writes. It excludes prior business-queue wait and the client's full network round trip. QPS, status ratios, mean latency and P95/P99 use this Timer; requests rejected before reaching the handler are excluded. Netty dispatches requests to the business executors; its rejection mechanism applies when the queue is full, with no guaranteed HTTP 503 response. The official `NettyEventExecutorMetrics` binder exports worker and pending-task counts tagged with `pool="rest-business"`. Workers means total workers; pending tasks are tagged by thread `name` and include other pipeline tasks. No separate queue/processing durations, in-flight gauge, rejection counter or write-failure counter are collected.
+Keys must be valid Prometheus label names. Missing or blank values produce empty labels, and system labels take precedence on name conflicts. The request cannot change the configured key list. Values are recorded unchanged without cardinality limits; choose bounded values such as scene names instead of per-request IDs.
 
-Table caches enable Caffeine `recordStats()` and bind through Micrometer's official `CaffeineCacheMetrics`. Panels use `cache_gets_total{result="hit|miss"}`, `cache_size` and `cache_evictions_total`; both `cache` and `table` tags contain the full table name. Hit ratio combines read-through and cache-only reads; cache-disabled calls are excluded. No custom capacity or backend-load metrics are added. When a table refresh creates a new cache, its old meters are removed before binding the new instance. A replacement with caching disabled only removes the old meters. A successful table-list refresh removes cache meters for tables confirmed deleted; failed metadata reads do not trigger deletion cleanup. Unchanged tables retain their cache and meters. Cumulative counts restart with the new cache; previously stored Prometheus history remains, and windows spanning replacement cannot provide exact continuous counts. Size is an estimate of entries, not bytes.
+### Histograms
 
-UI node means weight all business-tag combinations by total duration/rows and event count; they remain process-local cumulative means.
+HTTP, API, and main table queries publish fixed histogram buckets. Enable node histograms with exact names in `METRICS_HISTOGRAM_NODES=demo_rec:RETURN,demo_rec:items`; node histograms are off by default. Boundaries are 5/10/25/50/100/250/500/1000/3000/10000/30000/60000 ms, plus +Inf. P95/P99 are estimates limited by bucket width and range.
 
 ### Trace Settings
 

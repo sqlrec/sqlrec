@@ -32,6 +32,7 @@ export default defineConfig({
             items: [
               { text: '编写推荐流程', link: '/docs/guides/recommendation-flow' },
               { text: '发布和调用 API', link: '/docs/guides/api' },
+              { text: '客户端连接', link: '/docs/guides/clients' },
               { text: '接入数据源', link: '/docs/guides/data-sources' },
               { text: '模型训练与在线推理', link: '/docs/guides/model-lifecycle' },
               { text: '超时、降级与异常恢复', link: '/docs/guides/exception-recovery' }
@@ -63,7 +64,10 @@ export default defineConfig({
                 text: '模型',
                 collapsed: true,
                 items: [
-                  { text: '内置模型', link: '/docs/reference/models/builtin-models' }
+                  { text: '模型总览', link: '/docs/reference/models/builtin-models' },
+                  { text: 'TZRec', link: '/docs/reference/models/tzrec' },
+                  { text: 'GBDT', link: '/docs/reference/models/gbdt' },
+                  { text: 'Hugging Face', link: '/docs/reference/models/huggingface' }
                 ]
               }
             ]
@@ -88,6 +92,7 @@ export default defineConfig({
             text: '扩展开发',
             collapsed: true,
             items: [
+              { text: '开发与测试', link: '/docs/development/testing' },
               { text: '自定义 UDF', link: '/docs/development/custom-udf' },
               { text: '自定义 Connector', link: '/docs/development/custom-connector' },
               { text: '自定义模型', link: '/docs/development/custom-model' }
@@ -124,6 +129,7 @@ export default defineConfig({
             items: [
               { text: 'Write a Recommendation Flow', link: '/en/docs/guides/recommendation-flow' },
               { text: 'Publish and Call an API', link: '/en/docs/guides/api' },
+              { text: 'Client Connections', link: '/en/docs/guides/clients' },
               { text: 'Connect Data Sources', link: '/en/docs/guides/data-sources' },
               { text: 'Train and Serve Models', link: '/en/docs/guides/model-lifecycle' },
               { text: 'Timeouts and Recovery', link: '/en/docs/guides/exception-recovery' }
@@ -155,7 +161,10 @@ export default defineConfig({
                 text: 'Models',
                 collapsed: true,
                 items: [
-                  { text: 'Built-in Models', link: '/en/docs/reference/models/builtin-models' }
+                  { text: 'Model Overview', link: '/en/docs/reference/models/builtin-models' },
+                  { text: 'TZRec', link: '/en/docs/reference/models/tzrec' },
+                  { text: 'GBDT', link: '/en/docs/reference/models/gbdt' },
+                  { text: 'Hugging Face', link: '/en/docs/reference/models/huggingface' }
                 ]
               }
             ]
@@ -180,6 +189,7 @@ export default defineConfig({
             text: 'Extension Development',
             collapsed: true,
             items: [
+              { text: 'Development and Testing', link: '/en/docs/development/testing' },
               { text: 'Custom UDF', link: '/en/docs/development/custom-udf' },
               { text: 'Custom Connector', link: '/en/docs/development/custom-connector' },
               { text: 'Custom Model', link: '/en/docs/development/custom-model' }

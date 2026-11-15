@@ -39,7 +39,7 @@ FROM item_info;
 
 ## Implement a Table Function
 
-A table function also uses `evaluate` as its entry point. Explicit SQL arguments support `CacheTable` and `String`. To access execution variables, declare an `ExecuteContext` or `ReadonlyContext` argument and SQLRec will inject it automatically.
+A table function uses `evaluate` as its entry point. Explicit SQL arguments support `CacheTable`, `String`, `Integer`, `Long`, `Double`, `Boolean`, and the corresponding primitive types. SQLRec automatically injects declared `ExecuteContext` or `ReadonlyContext` parameters; callers do not pass them.
 
 ```java
 package com.example.udf;
@@ -62,7 +62,7 @@ CACHE TABLE output AS
 CALL pass_through(input_table);
 ```
 
-A table function may overload `evaluate` and may use `String...` or `CacheTable...` as its final argument. Do not define overloads that can match the same call, because SQLRec cannot choose between them.
+`evaluate` may be overloaded and may end in a varargs parameter of a supported type. Overload selection prefers exact types, then numeric widening from INT to BIGINT/DOUBLE or BIGINT to DOUBLE. Equally good matches are ambiguous. Use a typed default with `GET`, such as `GET('limit', 100)`, for numeric or boolean arguments.
 
 ## Register and Deploy
 
@@ -75,7 +75,7 @@ CREATE FUNCTION my_function AS 'com.example.udf.MyFunction';
 
 3. Use minimal input to verify argument types, `NULL` behavior, and result fields.
 
-With Hive Metastore, run `CREATE FUNCTION` in a session. With local `SQL_SCHEMA_DIR` metadata, put the same statement in an SQL file under that directory so SQLRec loads it at startup.
+With remote metadata, register functions through Beeline or JDBC. In SQL-file mode, put the definition under `SQL_SCHEMA_DIR` and restart, or enable `SQL_SCHEMA_DDL_ENABLED` for process-local runtime registration. Deploy the JAR in either case.
 
 ## Define the Result Schema
 
@@ -88,13 +88,13 @@ CALL my_function(input_table)
 LIKE FUNCTION 'another_function';
 ```
 
-`LIKE output_template` reuses a template table's schema, while `LIKE FUNCTION` reuses another function's result schema. Without either clause, a function returning `CacheTable` may be invoked once during compilation to infer its fields.
+`LIKE output_template` reuses a template table's schema, while `LIKE FUNCTION` reuses another function's result schema. Without either clause, a function returning `CacheTable` may be invoked once during compilation to infer its fields. Set the process environment variable `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` to require an explicit schema.
 
 ## Pre-release Checklist
 
 - The JAR is on every SQLRec process's classpath and has no dependency-version conflicts.
 - The class and `evaluate` method are public, and the registered class name includes its package.
-- Table functions expose only `CacheTable` and `String` as SQL arguments; users do not pass context arguments.
+- Table functions use supported SQL argument types; callers do not pass context arguments.
 - `NULL`, empty-table, invalid-argument, and error behavior is defined.
 - A table function with dynamic fields or side effects uses `LIKE` to fix its result schema.
 

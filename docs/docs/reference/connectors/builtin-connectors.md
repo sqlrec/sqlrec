@@ -12,7 +12,17 @@ SQLRec 提供了多种内置连接器，用于连接不同的数据存储系统�
 
 Redis、JDBC、MongoDB 支持主键查询缓存，`cache-ttl` 控制过期时间，`max-cache-size` 控制容量；任一参数设为 0 即关闭。SQLRec 之外的写入要等 TTL 才会被当前缓存看到，需要更及时的数据时可缩短 TTL 或关闭缓存。
 
-它与请求中的 `CACHE TABLE` 不同。精确的查询范围和 `FLUSH` 行为见[架构中的缓存说明](../architecture.md#connector-表数据缓存与查询路径)。
+查询缓存用于复用存储查询结果，与当前执行过程的 `CACHE TABLE` 不同。以 `id` 为主键，常见查询路径如下：
+
+| 查询条件 | Redis | JDBC / MongoDB |
+| --- | --- | --- |
+| `WHERE id = 1` | 主键缓存 | 主键缓存 |
+| `WHERE id = 1 AND status = 'active'` | 先按主键取候选行，再过滤 | 复合条件扫描，不使用主键缓存 |
+| `WHERE status = 'active'` | 不支持全表扫描 | 按条件扫描，不使用主键缓存 |
+
+右表按主键关联的 KV Join 也使用这层缓存；非主键查找、Milvus、Filesystem 和 Flink Redis Lookup 不使用它。
+
+SQLRec 通过表执行写入时会使相关主键缓存失效。DDL 刷新会保留定义未变化的表及其缓存；显式 `FLUSH` 则使 Connector 表对象失效，后续访问重新创建。Filesystem 会重新读取文件，运行时内存写入随之重置，会话中的 `CACHE TABLE` 保留。详见 [FLUSH](../sql.md#flush)。
 
 ## 内置连接器
 
@@ -21,14 +31,6 @@ Redis、JDBC、MongoDB 支持主键查询缓存，`cache-ttl` 控制过期时间
 Redis 连接器用于连接 Redis 数据库，支持键值存储和查询。
 
 **连接器标识符**：`redis`
-
-**特性**：
-- 支持单机模式和集群模式
-- 支持 `json`、`list` 和 `string` 数据结构
-- 支持 JSON 和 Protobuf value 格式
-- 支持本地缓存加速查询
-- 支持主键过滤查询
-- 支持 `INSERT`、`UPDATE` 和 `DELETE`
 
 **配置参数**：
 
@@ -95,13 +97,6 @@ Milvus 连接器用于连接 Milvus 向量数据库，支持向量相似度检�
 
 **连接器标识符**：`milvus`
 
-**特性**：
-- 支持向量相似度搜索（ANN）
-- 支持主键查询
-- 支持过滤条件
-- 支持数据插入和删除
-- 支持投影列优化
-
 **配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -147,11 +142,6 @@ Kafka 连接器用于连接 Apache Kafka 消息队列，支持消息写入。
 
 **连接器标识符**：`kafka`
 
-**特性**：
-- 支持消息写入到 Kafka Topic
-- 支持 JSON 和 Protobuf 格式消息
-- 支持批量发送优化
-
 **配置参数**：
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -190,14 +180,6 @@ CREATE TABLE rec_log_kafka (
 JDBC 连接器用于连接关系型数据库（如 PostgreSQL、MySQL 等），支持 SQL 查询和数据写入。
 
 **连接器标识符**：`jdbc`
-
-**特性**：
-- 支持多种 JDBC 数据库（PostgreSQL、MySQL 等）
-- 支持主键查询和本地缓存加速
-- 支持复杂过滤条件查询（不仅限于主键过滤）
-- 支持数据 Upsert 和删除
-- 使用 HikariCP 连接池管理数据库连接
-- 支持自定义 JDBC 属性
 
 **配置参数**：
 
@@ -244,7 +226,6 @@ CREATE TABLE user_profile (
 - JDBC 连接器支持复杂过滤条件，不仅限于主键相等过滤
 - PostgreSQL、MySQL、H2 的保留字及特殊字符标识符会自动加引号；声明名称必须与数据库实际名称一致，尤其是带引号名称的大小写
 - H2 Upsert 按声明列名写入，支持声明列与物理列顺序不同、只声明部分列
-- 使用 HikariCP 连接池管理数据库连接，相同 URL 和用户名共享连接池
 - 支持 Upsert 操作，根据主键自动判断插入或更新
 - 可通过 `jdbc.properties.*` 前缀传递自定义 JDBC 属性
 
@@ -253,13 +234,6 @@ CREATE TABLE user_profile (
 MongoDB 连接器用于连接 MongoDB 文档数据库，支持文档查询和数据写入。
 
 **连接器标识符**：`mongodb`
-
-**特性**：
-- 支持 MongoDB 连接 URI
-- 支持主键查询和本地缓存加速
-- 支持复杂过滤条件（AND、OR、比较运算、IS NULL 等）
-- 支持数据 Upsert 和删除
-- 自动将 Calcite 过滤条件下推为 MongoDB 查询
 
 **配置参数**：
 
@@ -292,7 +266,6 @@ CREATE TABLE user_behavior (
 **注意事项**：
 - MongoDB 连接器支持复杂过滤条件，包括 AND、OR、等于、不等于、大于、小于等
 - 无法下推的过滤条件将由 Calcite 在内存中处理
-- 相同 URI 共享 MongoClient 实例
 - Upsert 操作基于主键自动判断插入或更新
 - 行为记录使用 `event_id` 作为主键；若改用 `user_id`，同一用户的后续写入会替换已有记录
 
@@ -301,14 +274,6 @@ CREATE TABLE user_behavior (
 Filesystem 连接器用于读取本地文件系统中的数据文件，支持 CSV 和 JSON 格式。
 
 **连接器标识符**：`filesystem`
-
-**特性**：
-- 支持 CSV 和 JSON 两种文件格式
-- 数据仅在首次访问时加载一次，后续访问直接使用内存数据
-- 支持主键查询和过滤查询
-- 主键是查找键，同一主键可保存多行
-- 支持内存中的插入、更新和删除（不写回文件系统）
-- 如果未配置路径或路径不存在，自动初始化为空表
 
 **配置参数**：
 
@@ -366,7 +331,7 @@ CREATE TABLE user_interest (
 
 **注意事项**：
 - CSV 文件的第一个非空白记录为表头，会被自动跳过；数据按列位置匹配声明的字段，不按表头名称重排
-- CSV 文件使用 Apache Commons CSV 解析，支持双引号字段、字段内逗号、双引号转义及引号内换行；跳过空行和仅含空白的单字段记录
+- CSV 文件支持双引号字段、字段内逗号、双引号转义及引号内换行；跳过空行和仅含空白的单字段记录
 - JSON 文件支持数组格式 `[{...}, {...}]` 和单对象格式 `{...}`
 - 数据写入操作仅修改内存中的数据，不会写回到文件系统
 - 如果路径不存在或格式无效，表会被初始化为空表，不会抛出异常

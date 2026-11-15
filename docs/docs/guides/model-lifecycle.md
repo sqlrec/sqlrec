@@ -99,15 +99,15 @@ Checkpoint 有两种类型：
 
 Checkpoint 名称是用户自定义的版本标识。TRAIN 同名运行中或成功任务直接复用，失败重试保留存储目录，并按本次 SQL 参数重新提交；需要重新提供训练数据和参数。EXPORT 同名目标在校验通过后清理并重新导出，被服务引用的目标不能覆盖。源和目标须不同，导出源须为成功的 origin checkpoint。
 
-TRAIN、EXPORT 在提交任务前检查新建 checkpoint 的目标路径：如果没有对应的 checkpoint 元数据，但路径已经存在（包括空目录），会拒绝操作，避免覆盖未登记的数据。DSSM 首次导出还会检查双塔共享的发布目录。已有 checkpoint 仍按复用、重试或重新导出的规则处理；该预检不替代任务发布时的最终检查。
+新任务使用新的 checkpoint 名称。目标存储路径已存在、但没有对应 checkpoint 记录时，操作会失败；请先确认已有数据的来源再重试。
 
-数据库中的 `created` 表示任务已提交、尚未确认完成。创建 Service 或导出模型前，会核对源 checkpoint 的实际 K8s 状态并更新数据库；仍在运行或已失败时拒绝消费。Service 在 K8s 资源提交成功后才写入数据库，提交失败不会覆盖已保存的服务配置；如果提交成功但写库失败，可以重试创建。
+checkpoint 的 `created` 表示已提交、尚未确认完成。导出或创建服务前，先确认状态为 `succeeded`；创建服务后也需确认工作负载就绪，再发送推理请求。
 
 ## 训练型模型的完整流程
 
 以下训练、导出和自托管服务部署需要[完整服务环境](../operations/deployment.md)，包括 Kubernetes 和模型存储。Docker Demo 不提供这些组件。执行前还需准备可访问的 `training_sample` 训练表，字段与模型定义兼容。
 
-TZRec 样本按[样本数据格式](../reference/models/builtin-models.md#tzrec-样本数据格式)准备。训练入口不额外扫描训练集或验证集标签，标签类型、取值和正负样本要求须在生成数据时保证。
+TZRec 样本按[样本数据格式](../reference/models/tzrec.md#tzrec-样本数据格式)准备。训练入口不额外扫描训练集或验证集标签，标签类型、取值和正负样本要求须在生成数据时保证。
 
 ### 1. 创建模型
 
@@ -156,7 +156,7 @@ ON training_sample;
 
 导出的具体处理由模型后端决定。导出完成后会生成 export checkpoint，常规单模型的名称为 `<origin_checkpoint>_export`。DSSM 会分别生成 user 和 item 塔产物，具体名称以 `SHOW CHECKPOINTS` 的结果为准。
 
-RocketLaunching 导出单个 light 推理产物，输出 `probs_light`；训练时的 booster 不参与推理。网络、特征、标签和蒸馏配置在续训、导出及服务部署时保持一致，样本要求见[内置模型](../reference/models/builtin-models.md#rocket-launching)。
+RocketLaunching 导出单个 light 推理产物，输出 `probs_light`；训练时的 booster 不参与推理。网络、特征、标签和蒸馏配置在续训、导出及服务部署时保持一致，样本要求见[内置模型](../reference/models/tzrec.md#rocket-launching)。
 
 ### 4. 创建在线服务
 

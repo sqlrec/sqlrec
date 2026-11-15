@@ -99,22 +99,7 @@ SELECT CAST(`get`('limit_count', '50') AS INT);
 
 调用方应先检查 HTTP 状态码，再读取结果或错误说明。路径不匹配返回 404，方法不支持返回 405。
 
-## 高级选项：指标标签
-
-在服务进程中配置 `METRICS_TAG_KEYS=scene` 后，打点会从 `params` 中提取对应变量：
-
-```json
-{
-  "data": {
-    "user_info": [{"user_id": 1000001}]
-  },
-  "params": {
-    "scene": "homepage"
-  }
-}
-```
-
-`scene` 直接作为标签名导出，缺失或空白值导出为空字符串；与当前指标的系统标签同名时，系统标签优先。`METRICS_TAG_KEYS` 是进程环境配置，按逗号分隔，修改后重启生效；请求不能覆盖维度列表。执行中的变量修改会影响后续打点，远端调用仅通过 `params` 传递这些变量。详见[可观测性](../operations/observability.md#常用指标)。
+需要按场景或实验分组查看指标时，可在 `params` 中传入 `scene`、`experiment` 等变量，再由运维配置 `METRICS_TAG_KEYS`。配置方法见[可观测性](../operations/observability.md#业务标签)。
 
 ## 常见问题
 

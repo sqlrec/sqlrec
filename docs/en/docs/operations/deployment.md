@@ -102,7 +102,7 @@ bash ./bin/beeline.sh
 
 `deploy_components.sh` deploys PostgreSQL, RustFS/JuiceFS, Hadoop configuration, HDFS, Spark configuration, HMS, Flink SQL Gateway, SQLRec, and Kafka, Redis, and Milvus by default. Milvus runs in `${NAMESPACE}-milvus`. MongoDB, Kyuubi, Jupyter, and observability components use their own deployment scripts. The default filesystem remains `jfs://myjfs`; access HDFS explicitly through `hdfs://myhdfs`.
 
-HDFS runs one NameNode and one DataNode on the node identified by `NODE_IP`. Deployment waits for readiness and verifies actual remote writes and reads. Redeployment checks `current/VERSION` on the volume and preserves existing metadata. Hadoop downloads match `CONTAINER_ARCH`; older ARM deployments must rerun `deploy/hadoop/init.sh` to refresh the native libraries required by Python/PyArrow, followed by the HDFS deployment script.
+HDFS uses one NameNode and one DataNode on the selected `NODE_IP` node. The deployment preserves existing metadata. Use separate capacity and availability planning for workloads that need more than this development setup.
 
 ## Storage and Resource Synchronization
 
@@ -130,33 +130,11 @@ RustFS provides S3 storage in standalone mode, and the deployment creates the bu
 
 Deployment scripts prepare clients, JARs, and configuration automatically. No manual PV/PVC template application or separate HMS configuration step is needed. After updating prepared resources, run `bash ./deploy/storage/sync.sh` from the repository root. Synchronization does not remove extra remote files; do not run it concurrently in one namespace.
 
-::: details Directories and Synchronization Details
-
-Files are stored in `deploy/data` by default, or `${BASE_DIR}/data` when `BASE_DIR` is set:
-
-| Directory | Contents |
-|-----------|----------|
-| `conf` | Generated Hadoop, Hive, and Spark configuration |
-| `lib` | Dependency JARs |
-| `client` | Clients, Java, and downloaded archives |
-| `image-cache` | Manually saved Minikube image caches |
-
-`download_resource.sh` creates `conf/lib/client` automatically. Individual component downloads also create their destination directories and reuse existing downloaded files.
-
-`deploy/storage/deploy.sh` creates storage; no manual PV/PVC template application is needed. Deployment creates storage and generates configuration first. The HMS deployment script then calls `deploy/storage/sync.sh` to prepare volume contents before starting the HMS initialization Job. No separate HMS configuration preparation script is needed.
-
-Shared mode uploads runtime clients, container Java, and JARs, excluding download archives, host-only Java, and Minikube tools. Synchronization checks the actual remote files' SHA-256, type, and executable status, skips matching files, and updates new or changed files. Regenerated configuration participates in the same checks. Synchronization does not remove extra remote files and does not make every component deployment step fully idempotent.
-
-Once volumes and local clients are prepared, synchronize manually from the repository root:
+Local resources are under `deploy/data` by default, or `${BASE_DIR}/data` when configured: `conf/` contains generated configuration, `lib/` contains JARs, and `client/` contains clients and Java. Shared-mode synchronization uploads runtime files and skips unchanged ones.
 
 ```bash
 bash ./deploy/storage/sync.sh
 ```
-
-The temporary sync pod and ConfigMap are cleaned up on exit. Do not run synchronization concurrently in the same namespace. The default pod name is `sqlrec-resource-sync`; the script stops if a pod with that name already exists.
-
-Key configuration files are `core-site.xml` (filesystem/JuiceFS), `hdfs-site.xml` (HDFS), and `hive-site.xml` (Hive Metastore). Shared volumes mount at the `CLIENT_DIR` and `LIB_DIR` paths computed by the scripts.
-:::
 
 ## Production Configuration
 
@@ -203,23 +181,9 @@ Keep namespace, version, path, and architecture settings consistent between reso
 
 The SQLRec container's `META_DB_URL` and `HIVE_METASTORE_URI` are generated in `deploy/sqlrec/sqlrec.yaml` from `NODE_IP` and the corresponding ports. `MODEL_BASE_PATH` is fixed to `/user/sqlrec/models` in that template.
 
-When starting SQLRec directly, `META_DB_URL`, `HIVE_METASTORE_URI`, `FLINK_SQL_GATEWAY_ADDRESS`, and `TRACE_ENDPOINT` default to empty strings. Set the first two explicitly for remote metadata; empty Gateway and Trace addresses disable those features. For development integration tests, `bin/test.sh` supplies component defaults using `DEFAULT_TEST_IP`, `NODE_IP`, or Minikube discovery. Individual component addresses can also be overridden. The `DEFAULT_TEST_IP` option also defaults to an empty string and is used by Java tests and demo SQL. When starting the service directly, component endpoints are configured separately and are not derived from this option.
+When starting SQLRec directly, set `META_DB_URL` and `HIVE_METASTORE_URI` for remote metadata. `FLINK_SQL_GATEWAY_ADDRESS` and `TRACE_ENDPOINT` default to empty and disable those features. For SQL-file mode, set `SQL_SCHEMA_DIR` instead of metadata endpoints.
 
-When running `bash bin/cli.sh` from a source checkout, remote metadata mode uses the same component defaults. Minikube is not required when `HIVE_METASTORE_URI` is configured or `SQL_SCHEMA_DIR` selects SQL-file mode. Explicit settings, including empty values, are preserved. CLI logs default to `sqlrec-frontend/target/logs` in source mode. Inside Docker, the CLI uses the container environment and packaged JARs without Minikube discovery.
-
-Run integration tests from the repository root:
-
-```bash
-# Use an existing environment; remaining arguments pass through to Maven
-bash bin/test.sh -pl sqlrec-core -am
-
-# Validate deployment and run all benchmark suites (--all is also supported)
-bash bin/test.sh -all
-```
-
-`-all` first caches images from the existing `minikube` environment through `deploy/cache_images.sh save`. After that command succeeds, it runs `minikube -p minikube delete`, rebuilds the cluster through `deploy_minikube.sh`, and reloads the image cache. It then downloads deployment resources and deploys the default components plus MongoDB, Redis Cluster and GrowthBook for integration tests. It waits for Flink and deployed workloads, verifies the SQLRec connection with `SELECT 1` through Beeline, and runs Maven integration tests. Finally, it initializes and runs the SQL performance benchmark, installs the shared Python dependencies, and runs the GrowthBook UDF integration benchmark, creating experiments, features and an SDK connection through its APIs (see `benchmark/growthbook/README.md`). The Hugging Face benchmark follows (see `benchmark/huggingface/README.md`), covering text classification, text generation, text embedding and image embedding. It then prepares and uploads all model quality datasets and evaluates every applicable model combination on the full validation sets (`--model all --dataset all --full-eval`). Any failed stage stops the run; a failed cache command prevents deletion of the existing environment.
-
-This mode requires an accessible existing Minikube environment for image caching and deletes that cluster and its node-local dynamic volume data. Host-side image caches and client directories are retained. It uses the existing deployment scripts and configured release images without building local source images. Running it requires deployment permissions and external network access. Maven keeps the current shell's JDK; the Hive/Hadoop Java environment is configured in subprocesses. GrowthBook, Hugging Face and model quality reports go to `benchmark/growthbook/runs/`, `benchmark/huggingface/runs/` and `benchmark/model_quality/runs/`, respectively; SQL load results print to the terminal. Without `-all`, the script only runs Maven tests. Address selection prefers `DEFAULT_TEST_IP`, then `NODE_IP`, then Minikube discovery. `HADOOP_CONF_DIR` can be overridden; its default path follows `BASE_DIR` and `HADOOP_VERSION`.
+Connect using [CLI, Beeline, or Python](../guides/clients.md). Source development and integration tests are covered in [Development and Testing](../development/testing.md).
 
 To use dependencies managed by SRE teams, adjust the corresponding deployment steps and YAML connection settings. The scripts do not skip component deployment when an external address is set. Exporting `META_DB_URL` or `HIVE_METASTORE_URI` alone does not replace the template addresses. Even running `deploy/sqlrec/deploy.sh` alone deploys PostgreSQL first.
 
@@ -231,102 +195,35 @@ These options are read only from the server process environment and default to e
 
 | Environment variable | Default | Description |
 | --- | --- | --- |
-| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | When an execution variable is absent (`null`), `getVariable()` reads the same-named environment variable; explicit empty strings do not trigger fallback |
+| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | When an execution variable is absent (`null`), SQL reads the same-named environment variable; explicit empty strings do not trigger fallback |
 | `EXECUTE_RESULT_INCLUDE_PARAMS` | `true` | Include execution variables as `params` in SQL and function REST API results; disabling omits this JSON field without affecting variable use during execution |
 
 Set either environment variable to `false` and restart the service to disable it. Fallback values are never written into execution variables: `get_variables()` and response `params` contain only explicit execution variables. Removing an explicit variable restores environment fallback on subsequent reads. With fallback enabled, SQL can read server process environment settings by variable name.
 
 ### Entry Authentication
 
-These settings are defined in `SqlRecConfigs.java` and read from the server process environment. The table lists defaults for direct server startup. Repository deployment scripts override them through `deploy/env.sh` with `AUTH_ENABLED=true`, `AUTH_USERNAME=sqlrec`, and `AUTH_PASSWORD=abc123456`. These credentials are development defaults; edit `deploy/env.sh` or override them with environment variables:
+Direct server startup disables authentication by default. Deployment scripts enable it with development credentials `sqlrec` / `abc123456`. Override them before deployment:
 
 | Environment variable | Server default | Description |
-|----------------------|---------|-------------|
-| `AUTH_ENABLED` | `false` | Enable HTTP Basic and Thrift/JDBC SASL PLAIN authentication |
-| `AUTH_USERNAME` | Empty string | Comma-separated usernames; entries must be non-blank and unique, without colons or control characters |
-| `AUTH_PASSWORD` | Empty string | Comma-separated passwords paired with usernames by position; entries must be non-blank, without control characters |
-
-Both regular and demo deployments write these settings directly into container environment variables; rendered YAML contains the credentials. Rerun deployment after configuration changes; the Deployment updates Pods when environment variables change. The server validates credentials at startup. Use `true` or `false` for `AUTH_ENABLED`.
-
-Single-account settings keep their existing form. For multiple accounts, both lists must have the same number of entries. For example, `AUTH_USERNAME=alice,bob` and `AUTH_PASSWORD=alice-secret,bob-secret` configure a password for each user by position. Commas are delimiters with no escaping, so neither usernames nor passwords can contain commas; replace any existing single-account credentials containing commas before upgrading. Entries are not trimmed: spaces remain part of the credentials. With authentication enabled, mismatched counts, empty entries (including trailing commas), or duplicate usernames prevent startup.
+| --- | --- | --- |
+| `AUTH_ENABLED` | `false` | Enable HTTP Basic and JDBC/Thrift SASL PLAIN |
+| `AUTH_USERNAME` | Empty | Comma-separated usernames |
+| `AUTH_PASSWORD` | Empty | Passwords paired with usernames by position |
 
 ```bash
-AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
-# Two accounts, with usernames and passwords paired by position
-AUTH_USERNAME=alice,bob AUTH_PASSWORD='alice-secret,bob-secret' bash deploy/sqlrec/deploy.sh
-# Legacy anonymous deployments; clients must also set AUTH_ENABLED=false
-AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
+AUTH_ENABLED=true AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' \
+  bash deploy/sqlrec/deploy.sh
 ```
 
-Keep these settings with other secrets in your environment configuration file, for example `/etc/sqlrec/sqlrec.env`:
+For multiple accounts, set `AUTH_USERNAME=alice,bob` and `AUTH_PASSWORD=alice-secret,bob-secret`. Both lists must have the same length; entries must be non-blank, usernames unique, and usernames must not contain colons. Commas separate entries and cannot be escaped. Spaces are part of credentials; control characters are rejected. Invalid credentials prevent startup.
 
-```bash
-export AUTH_ENABLED=true
-export AUTH_USERNAME=sqlrec
-export AUTH_PASSWORD='replace-with-your-password'
-```
+Set these values in the container environment or in a file loaded by `bin/server.sh` through `SQLREC_ENV_CONF`. Changes require a restart or redeployment; SQL `SET` and request `params` cannot override them. Deployment templates write credentials into container environment variables, including the rendered YAML.
 
-Set `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env` before startup; `bin/server.sh` loads the file. In Kubernetes, mount the file in the SQLRec container and set this variable there, or configure the three container environment variables directly. Restart after changes. Empty or invalid credentials prevent startup when authentication is enabled. SQL `SET` and request `params` cannot override authentication settings.
+- HTTP and UI require Basic credentials; missing or incorrect credentials return `401`. `GET /metrics` remains anonymous.
+- Authenticated clients have the same permissions; role-based and per-resource authorization are not available.
+- Basic and SASL PLAIN do not encrypt transport. Use HTTPS or an appropriate TLS tunnel where required.
 
-- **HTTP and UI**: All requests except `GET /metrics` require HTTP Basic. Missing or incorrect credentials return `401` and `WWW-Authenticate`. The UI uses the browser's native credential prompt. Browsers cache credentials, so there is no application logout action.
-- **Metrics**: `GET /metrics` always permits anonymous access, including when authentication is enabled. Prometheus needs no additional credentials.
-- **Thrift/JDBC**: Use `jdbc:hive2://<host>:<port>/default` with SASL PLAIN when authentication is enabled, and `;auth=noSasl` when disabled. `bin/beeline.sh` reads addresses, authentication mode, and credentials from `deploy/env.sh`, with environment variable overrides. Execution arguments such as `-e` and `-f` are passed through unchanged; the script does not parse connection or credential options. Configure the connection with `NODE_IP`, `SQLREC_THRIFT_PORT`, `AUTH_USERNAME`, and `AUTH_PASSWORD`. The script does not read `SQLREC_ENV_CONF`. Incorrect credentials are rejected during SASL negotiation. Local credentials are not forwarded to Flink Gateway.
-- **Local CLI**: Runs the engine directly and continues to rely on operating system access control.
-
-Clients send only one username/password pair per connection, never the comma-separated lists. If `deploy/env.sh` or the current environment contains server account lists, override these environment variables with one configured pair when running Beeline or benchmarks.
-
-Beeline examples:
-
-```bash
-bash bin/beeline.sh -e 'SELECT 1'
-AUTH_USERNAME=alice AUTH_PASSWORD='my-password' bash bin/beeline.sh -f query.sql
-NODE_IP=other-host SQLREC_THRIFT_PORT=10000 bash bin/beeline.sh
-AUTH_ENABLED=false bash bin/beeline.sh            # Server with authentication disabled
-```
-
-Credentials are passed through Beeline's native `-n/-p` options. Hive Beeline 3.1.3 tokenizes credentials on spaces again, so use usernames and passwords without spaces.
-
-Example HTTP calls (`--user sqlrec` prompts for the password; use the configured username):
-
-```bash
-curl --user sqlrec -X POST http://localhost:30001/sql/v1 \
-  -H 'Content-Type: application/json' \
-  -d '{"sqls":["SHOW TABLES"]}'
-
-curl http://localhost:30001/metrics
-```
-
-When authentication is enabled, SQL and recommendation API POST requests must use `Content-Type: application/json`, otherwise they return `415`. Java callers can use `SqlRecApiClient.callFunctionApi(url, data, params, username, password)` or `callSqlApi(url, sqls, params, username, password)`. Credentials go only in the HTTP header, never execution parameters. Existing overloads remain anonymous and do not automatically send local entry credentials to remote servers.
-
-All authenticated clients have the same capabilities, with no roles or resource permissions. For serving-only deployments, disable unused REST SQL, UI, and Thrift entry points. HTTP Basic and Thrift SASL PLAIN do not encrypt traffic; protect connections with HTTPS, TLS tunnels, or equivalent transport security.
-
-#### Python / PyHive
-
-Install the pure Python SASL dependencies without requiring system `libsasl`:
-
-```bash
-pip install 'PyHive[hive_pure_sasl]'
-```
-
-With authentication enabled, use `auth="CUSTOM"` and one credential pair from the server's `AUTH_USERNAME` and `AUTH_PASSWORD`:
-
-```python
-from pyhive import hive
-
-with hive.Connection(
-    host="localhost",
-    port=30000,
-    username="sqlrec",
-    password="your-password",
-    auth="CUSTOM",
-    database="default",
-) as connection:
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT 1")
-        print(cursor.fetchall())
-```
-
-With authentication disabled, use `auth="NOSASL"` and omit `password`. The server supports Hive CLI protocol V6–V10 and negotiates the client's requested version, including PyHive's V6. Passwords are checked during the SASL handshake; `OpenSession` does not need to send them again.
+Client examples, including Beeline and PyHive, are in [Client Connections](../guides/clients.md).
 
 ### Gateway Forwarding Configuration
 
@@ -352,18 +249,9 @@ Configure these in the container environment or `SQLREC_ENV_CONF`, then restart 
 
 ### SQL Initialization
 
-`deploy/sqlrec/deploy.sh` waits until PostgreSQL is reachable, executes `deploy/sql/master.sql`, and applies the SQLRec Deployment only after success. Normal script deployment does not require a separate manual SQL import.
+`deploy/sqlrec/deploy.sh` waits for PostgreSQL, runs `deploy/sql/master.sql`, then deploys SQLRec. No manual SQL import is needed. Existing tables are reused; this file does not migrate existing table schemas.
 
-::: details Initialization Retries and Transactions
-
-| Parameter | Default | Requirement |
-|-----------|---------|-------------|
-| `PSQL_MAX_ATTEMPTS` | `30` | Positive integer; maximum connection attempts |
-| `PSQL_RETRY_INTERVAL` | `5` seconds | Non-negative integer; connection retry interval |
-| `PGCONNECT_TIMEOUT` | `10` seconds | Positive integer; timeout per connection attempt |
-
-Invalid parameters fail before resources are created. Connection failures are retried according to these settings. Schema SQL uses `ON_ERROR_STOP=1` and a single transaction: SQL errors stop deployment and roll back the initialization attempt, without retrying schema SQL. Existing tables are reused with `CREATE TABLE IF NOT EXISTS`; the file does not migrate existing table definitions.
-:::
+If PostgreSQL is not ready, adjust `PSQL_MAX_ATTEMPTS` (default 30), `PSQL_RETRY_INTERVAL` (5 seconds), or `PGCONNECT_TIMEOUT` (10 seconds). SQL initialization errors stop deployment and roll back that initialization transaction; fix the reported SQL error before retrying.
 
 ## Verification and Troubleshooting
 

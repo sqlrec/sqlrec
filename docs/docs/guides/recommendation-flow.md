@@ -1,137 +1,8 @@
 # 编写 SQL 推荐流程
 
-SQLRec 把一段由多条 SQL 组成的业务流程定义为 **SQL 函数**。一个典型推荐函数会接收用户信息，依次完成召回、去重、排序和打散，最后返回推荐结果。
+SQL 函数接收输入表，完成召回、过滤、排序和打散，再返回结果。本文先用一个完整示例说明写法，后面介绍按需使用的控制流能力；完整语法见 [SQL 参考](../reference/sql.md)。
 
-本文面向编写业务 SQL 的用户。语法的完整定义请查看 [SQL 语法参考](../reference/sql.md)，执行引擎和调度机制请查看[架构设计](../reference/architecture.md)。
-
-## 一个最小函数
-
-先按[Docker 指南](../getting-started/docker.md#管理本地-sql-定义)准备 `hot_item` 表。在本地文件模式中，将下面的定义保存为 `function/recommend.sql` 并重启容器；远程元数据模式可通过 Beeline 或 JDBC 执行定义。
-
-```sql
-CREATE OR REPLACE SQL FUNCTION recommend;
-
-DEFINE INPUT TABLE user_info (
-  user_id BIGINT
-);
-
-CACHE TABLE result_table AS
-SELECT item_id, score
-FROM hot_item
-ORDER BY score DESC
-LIMIT 10;
-
-RETURN result_table;
-```
-
-这段 SQL 包含四个要点：
-
-1. `CREATE SQL FUNCTION` 开始函数定义。
-2. `DEFINE INPUT TABLE` 声明调用方需要传入的表及其字段。
-3. `CACHE TABLE` 保存中间结果。
-4. 顶层 `RETURN` 返回结果并结束函数定义。
-
-多语句函数中的每条顶层语句都应以分号结尾。
-
-## 准备输入并调用
-
-在同一个 CLI 或 Beeline 会话中创建输入表，再调用函数：
-
-```sql
-CACHE TABLE quick_start_user AS
-SELECT CAST(1000001 AS BIGINT) AS user_id;
-
-CALL recommend(quick_start_user);
-```
-
-`quick_start_user` 与函数声明的输入结构一致。函数验证完成后，按[发布和调用 API](./api.md)将它提供给业务方。
-
-## 输入表
-
-输入表是函数的表类型参数。调用函数时，按声明顺序传入结构兼容的缓存表。
-
-### 显式声明字段
-
-```sql
-DEFINE INPUT TABLE user_info (
-  user_id BIGINT,
-  country VARCHAR,
-  tags ARRAY<VARCHAR>
-);
-```
-
-### 复用现有表结构
-
-```sql
-DEFINE INPUT TABLE user_info LIKE user_profile;
-```
-
-`LIKE` 只复用字段结构，不会把 `user_profile` 的数据带入函数。
-
-## 缓存表
-
-`CACHE TABLE` 用于保存当前请求中的中间结果：
-
-```sql
-CACHE TABLE interested_category AS
-SELECT category
-FROM user_info
-JOIN user_interest_category
-  ON user_interest_category.user_id = user_info.user_id
-ORDER BY score DESC
-LIMIT 10;
-```
-
-缓存表可以被后续 SQL 查询，也可以作为参数传给 SQL 函数或 Java 表函数：
-
-```sql
-CACHE TABLE dedup_result AS
-CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
-```
-
-缓存表属于当前执行过程。不要用它在不同 API 请求之间保存数据；需要持久化时，应将结果 `INSERT` 到 Redis、Kafka、JDBC 等 Connector 表。
-
-## 调用函数
-
-### 调用 SQL 函数
-
-```sql
-CALL recall(user_info);
-```
-
-如果需要继续处理返回数据，先把结果保存为缓存表：
-
-```sql
-CACHE TABLE recall_result AS
-CALL recall(user_info);
-```
-
-### 调用 Java 表函数
-
-SQLRec 内置的 `dedup`、`weighted_merge`、`window_diversify` 等表函数也使用 `CALL`：
-
-```sql
-CACHE TABLE final_result AS
-CALL window_diversify(ranked_item, 'category', 3, 1, 10);
-```
-
-表参数直接写缓存表名，字符串参数使用单引号。完整的内置函数清单见 [表函数](../reference/udf/table-functions.md)。
-
-## 返回结果
-
-SQL 函数必须以一条顶层 `RETURN` 结束定义。可以返回缓存表、查询结果或同步函数调用：
-
-```sql
-RETURN result_table;
-
-RETURN SELECT item_id, score FROM result_table;
-
-RETURN CALL post_process(result_table);
-
-RETURN;
-```
-
-`RETURN;` 表示正常结束但不返回数据。`RETURN CALL ... ASYNC` 不受支持，因为异步调用无法同步提供函数结果。
+先启动 [Docker Demo](../getting-started/docker.md)，进入 [CLI](./clients.md#本地-cli)。下面复用内置表；接入自己的数据时参考[接入数据源](./data-sources.md)。
 
 ## 完整示例
 
@@ -169,9 +40,42 @@ CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
 RETURN SELECT item_id, rec_reason FROM dedup_result LIMIT 10;
 ```
 
-可直接运行的 Demo 定义位于 `sqlrec-demo/src/main/sql/quick_start/`。
+## 理解并调用函数
 
-后续章节介绍按需使用的变量、动态调用、条件、并发和异步能力；完整规则见 [SQL 参考](../reference/sql.md)。
+| 语句 | 作用 |
+| --- | --- |
+| `CREATE SQL FUNCTION` | 开始函数定义 |
+| `DEFINE INPUT TABLE` | 声明必需输入字段；`LIKE existing_table` 只复用结构，不读取数据 |
+| `CACHE TABLE` | 为当前执行过程的中间结果命名 |
+| `RETURN` | 返回表、SELECT 或同步 CALL；顶层 RETURN 结束定义 |
+
+在 CLI 执行完整定义，再在同一会话中准备输入并调用：
+
+```sql
+CACHE TABLE quick_start_user AS
+SELECT CAST(1000001 AS BIGINT) AS user_id;
+
+CALL example_rec(quick_start_user);
+```
+
+结果包含 `item_id`、`rec_reason`。输入表按声明顺序传入，字段结构须兼容。表参数须为缓存表；外部表先通过 `CACHE TABLE ... AS SELECT ...` 读取。
+
+使用文件管理定义时，将完整函数保存为 SQL 目录中的 `function/example_rec.sql` 并重启，见[加载 SQL 文件](../getting-started/docker.md#管理本地-sql-定义)。Demo 也允许执行内存 DDL，但重启后丢失；远程元数据通过 Beeline/JDBC 管理。
+
+缓存结果不在独立 API 请求间共享。曝光记录等共享数据应写入外部 Connector；函数验证后按[发布 API](./api.md)供业务调用。
+
+## 调用函数
+
+SQL 函数和内置表函数均使用 `CALL`，后续需要处理结果时先保存：
+
+```sql
+CACHE TABLE recall_result AS CALL recall(user_info);
+
+CACHE TABLE final_result AS
+CALL window_diversify(ranked_item, 'category', 3, 1, 10);
+```
+
+缓存表参数直接写表名，字符串使用单引号。动态结果结构使用 `LIKE table_name` 或 `LIKE FUNCTION 'function_name'` 声明，签名及输出见[表函数](../reference/udf/table-functions.md)。
 
 ## 执行变量
 
@@ -273,7 +177,7 @@ PARTITION BY input_table SIZE 100;
 - 被分区的表必须是被调函数的输入参数之一。
 - 建议使用 `LIKE` 明确合并后的结果结构。
 
-默认情况下，任何分区失败都会使整次调用失败。是否允许保留部分成功结果，请查看 `IGNORE_PARTITION_EXCEPTION` 配置。
+默认情况下，任何分区失败都会使整次调用失败。是否允许保留部分成功结果，请查看[异常恢复中的分区配置](./exception-recovery.md)。
 
 ## 异步调用
 

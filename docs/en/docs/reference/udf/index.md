@@ -36,5 +36,5 @@ Regular SQL expressions can also use Calcite built-in functions such as `ABS`, `
 - When built-in functions are not enough, see [Custom UDFs](../../development/custom-udf.md).
 
 ::: tip UDFs and SQL functions
-Use a Java UDF to reuse Java code or integrate an external capability. A business flow composed of several SQL statements is usually better expressed as a [SQL function](../../guides/recommendation-flow.md#a-minimal-function).
+Use a Java UDF to reuse Java code or integrate an external capability. A business flow composed of several SQL statements is usually better expressed as a [SQL function](../../guides/recommendation-flow.md#complete-example).
 :::

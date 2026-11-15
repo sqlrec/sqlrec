@@ -36,5 +36,5 @@ CALL dedup(recall_item, exposed_item, 'item_id', 'item_id');
 - 内置函数无法满足需求：查看[自定义 UDF](../../development/custom-udf.md)。
 
 ::: tip UDF 与 SQL 函数
-Java UDF 适合复用 Java 代码或接入外部能力；由多条 SQL 组合而成的业务流程，通常更适合使用 [SQL 函数](../../guides/recommendation-flow.md#一个最小函数)。
+Java UDF 适合复用 Java 代码或接入外部能力；由多条 SQL 组合而成的业务流程，通常更适合使用 [SQL 函数](../../guides/recommendation-flow.md#完整示例)。
 :::

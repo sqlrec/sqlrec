@@ -91,7 +91,7 @@ The image loads definitions through `SQL_SCHEMA_DIR=/app/sql`. See [Writing a Re
 
 ## Managing Local SQL Definitions
 
-Local file mode loads SQL definitions at startup. It does not accept DDL through the CLI or `/sql/v1`; restart the container after changing files. This example defines a hot-item table, a recommendation function, and an API.
+SQL-file mode loads definitions at startup; restart after editing files. The Demo image enables `SQL_SCHEMA_DDL_ENABLED=true`, so CLI and `/sql/v1` also accept supported in-memory DDL. Those changes are process-local, are not written back to files, and disappear on restart. Set the variable to `false` to disable runtime DDL. This example manages definitions as files.
 
 Use `SHOW TABLES`, `SHOW CREATE TABLE`, `DESCRIBE`, and `SHOW FUNCTIONS` to inspect loaded definitions without connecting to HMS or Gateway. See [Metadata Queries](../reference/sql.md#metadata-queries) for supported behavior.
 
@@ -170,4 +170,4 @@ This API returns hot items ordered by score without using user features. Extend 
 
 Filesystem tables are for demos and tests; writes do not update source files. See [Built-in Connectors](../reference/connectors/builtin-connectors.md) for configuration and data limits.
 
-For online serving, version the complete SQL directory with the image or deployment configuration and redeploy instances when it changes. To execute and persist DDL in a session, prepare the remote metadata environment described in [Service Deployment](../operations/deployment.md) and connect through Beeline or JDBC.
+For serving, version the complete SQL directory with the image or deployment configuration and redeploy to update it. Use [remote metadata](../operations/deployment.md) when you need persistent, shared runtime DDL.

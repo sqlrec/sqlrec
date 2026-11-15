@@ -102,7 +102,7 @@ bash ./bin/beeline.sh
 
 `deploy_components.sh` 默认部署 PostgreSQL、RustFS/JuiceFS、Hadoop 配置、HDFS、Spark 配置、HMS、Flink SQL Gateway、SQLRec，以及 Kafka、Redis、Milvus。Milvus 位于 `${NAMESPACE}-milvus` 命名空间。MongoDB、Kyuubi、Jupyter、监控等组件通过各自脚本单独启用。默认文件系统仍为 `jfs://myjfs`，HDFS 使用 `hdfs://myhdfs` 显式访问。
 
-HDFS 使用单 NameNode、单 DataNode，并绑定到 `NODE_IP` 对应节点；部署脚本等待节点就绪后执行真实读写检查。重复部署通过卷内 `current/VERSION` 判断初始化状态，保留已有元数据。ARM 环境的 Hadoop 下载包按 `CONTAINER_ARCH` 选择；旧部署需重新执行 `deploy/hadoop/init.sh`，更新 Python/PyArrow 所需的 ARM 原生库，再运行 HDFS 部署脚本。
+HDFS 使用单 NameNode、单 DataNode，部署到 `NODE_IP` 对应节点；重复部署保留已有元数据。需要更高容量或可用性时，应单独规划 HDFS 集群。
 
 ## 存储与资源同步
 
@@ -130,33 +130,11 @@ RustFS 以单节点模式提供 S3 存储，部署脚本创建 JuiceFS 和 Milvu
 
 部署脚本会自动准备客户端、JAR 和配置；无需手动应用 PV/PVC 模板或单独准备 HMS 配置。已有资源更新后，可在项目根目录执行 `bash ./deploy/storage/sync.sh`。同步不会删除远端多余文件，同一命名空间内不要并发执行。
 
-::: details 目录和同步细节
-
-默认文件存放在 `deploy/data`；设置 `BASE_DIR` 后则存放在 `${BASE_DIR}/data`：
-
-| 目录 | 内容 |
-|------|------|
-| `conf` | 生成的 Hadoop、Hive、Spark 配置 |
-| `lib` | 依赖 JAR |
-| `client` | 客户端、Java 和下载的归档文件 |
-| `image-cache` | 手动保存的 Minikube 镜像缓存 |
-
-`download_resource.sh` 自动创建 `conf/lib/client`；组件单独下载资源时也会创建目标目录，已有下载文件会被复用。
-
-存储由 `deploy/storage/deploy.sh` 创建，无需手动应用 PV/PVC 模板。部署时先创建存储、生成配置，再由 HMS 部署脚本调用 `deploy/storage/sync.sh`，在启动 HMS 初始化 Job 前准备好卷内文件。无需单独执行 HMS 配置准备脚本。
-
-共享模式仅上传运行所需的客户端、容器 Java 和 JAR，不上传下载归档、仅供宿主机使用的 Java 或 Minikube 工具。同步时检查远端实际文件的 SHA-256、文件类型和可执行属性，跳过一致的文件，更新新增或变化的文件；配置重新生成后参与相同检查。同步不会清理远端多余文件，也不代表所有组件部署步骤都完全幂等。
-
-已有卷和客户端准备好后，可在项目根目录手动同步：
+本地资源默认位于 `deploy/data`，配置 `BASE_DIR` 后位于 `${BASE_DIR}/data`：`conf/` 保存生成的配置，`lib/` 保存 JAR，`client/` 保存客户端及 Java。共享模式同步运行所需文件，跳过未变化的文件。
 
 ```bash
 bash ./deploy/storage/sync.sh
 ```
-
-同步使用临时 Pod 和 ConfigMap，结束时自动清理。同一命名空间内不要并发执行同步；默认同步 Pod 名为 `sqlrec-resource-sync`，已有同名 Pod 时脚本会停止。
-
-关键配置文件包括 `core-site.xml`（文件系统/JuiceFS）、`hdfs-site.xml`（HDFS）和 `hive-site.xml`（Hive Metastore）。共享卷在容器内挂载到脚本计算的 `CLIENT_DIR`、`LIB_DIR` 路径。
-:::
 
 ## 生产环境配置
 
@@ -203,23 +181,9 @@ bash ./deploy/deploy_components.sh
 
 SQLRec 容器的 `META_DB_URL` 和 `HIVE_METASTORE_URI` 由 `deploy/sqlrec/sqlrec.yaml` 根据 `NODE_IP` 和对应端口生成；`MODEL_BASE_PATH` 在模板中固定为 `/user/sqlrec/models`。
 
-直接启动 SQLRec 时，`META_DB_URL`、`HIVE_METASTORE_URI`、`FLINK_SQL_GATEWAY_ADDRESS` 和 `TRACE_ENDPOINT` 默认均为空；使用远程元数据时需显式设置前两项，Gateway 转发和 Trace 在地址为空时关闭。开发集成测试通过 `bin/test.sh` 根据 `DEFAULT_TEST_IP`、`NODE_IP` 或 Minikube 地址设置组件连接默认值，也可显式覆盖各组件地址。`DEFAULT_TEST_IP` 配置默认也为空，供 Java 测试和示例 SQL 使用；直接启动服务时，组件地址不会根据它自动生成，仍需分别配置。
+直接启动 SQLRec 时，远程元数据模式需设置 `META_DB_URL`、`HIVE_METASTORE_URI`；`FLINK_SQL_GATEWAY_ADDRESS`、`TRACE_ENDPOINT` 默认空值，分别关闭转发和 Trace。文件模式改用 `SQL_SCHEMA_DIR`。
 
-在源码目录下运行 `bash bin/cli.sh` 时，远程元数据模式使用同样的组件连接默认值。已配置 `HIVE_METASTORE_URI` 或使用 `SQL_SCHEMA_DIR` 文件模式时，无需 Minikube；显式设置的值（包括空值）会保留。源码模式的 CLI 日志默认写入 `sqlrec-frontend/target/logs`。Docker 中的 CLI 继续使用容器环境配置和镜像内的 JAR，不进行 Minikube 地址发现。
-
-在仓库根目录运行集成测试：
-
-```bash
-# 使用已有环境；其余参数原样传递给 Maven
-bash bin/test.sh -pl sqlrec-core -am
-
-# 完整部署验证和全部 benchmark（也支持 --all）
-bash bin/test.sh -all
-```
-
-`-all` 首先通过 `deploy/cache_images.sh save` 缓存已有 `minikube` 环境的镜像，缓存命令成功后执行 `minikube -p minikube delete` 删除已有环境，再通过 `deploy_minikube.sh` 重建集群并加载镜像缓存。随后下载部署资源、部署默认组件，以及集成测试需要的 MongoDB、Redis Cluster 和 GrowthBook；等待 Flink 和工作负载就绪，并通过 Beeline 执行 `SELECT 1` 验证 SQLRec 连接后，运行 Maven 集成测试。最后执行 SQL 性能 benchmark 的初始化和压测，安装共享 Python 依赖，运行 GrowthBook UDF 集成测试（通过 API 创建实验、feature 和 SDK 连接，见 `benchmark/growthbook/README.md`），再运行 Hugging Face 小模型集成测试（见 `benchmark/huggingface/README.md`），覆盖文本分类、文本生成、文本 embedding 和图片 embedding；随后准备并上传模型质量数据集，运行全部适用模型组合的完整验证集评估（`--model all --dataset all --full-eval`）。任一步骤失败立即停止；缓存命令失败时不会删除已有环境。
-
-此模式需要已有可访问的 Minikube 环境以保存镜像，并会删除该集群及其节点动态卷数据；宿主机的镜像缓存和客户端目录保留。它使用现有部署脚本和配置的发布镜像，不构建本地源码镜像。运行需要部署权限和外网访问；Maven 使用当前终端的 JDK，Hive/Hadoop 客户端的 Java 环境在子进程中配置。GrowthBook、Hugging Face 和模型质量报告分别写入 `benchmark/growthbook/runs/`、`benchmark/huggingface/runs/`、`benchmark/model_quality/runs/`，SQL 压测结果输出到终端。不带 `-all` 时不部署环境，也不运行 benchmark。测试地址优先使用 `DEFAULT_TEST_IP`，其次使用 `NODE_IP`，均未设置时从 Minikube 获取；`HADOOP_CONF_DIR` 可显式覆盖，默认路径跟随 `BASE_DIR` 和 `HADOOP_VERSION`。
+客户端连接见 [CLI、Beeline 与 Python](../guides/clients.md)，源码环境和测试见[开发与测试](../development/testing.md)。
 
 使用 SRE 运维的已有依赖时，需要调整对应部署步骤和 YAML 中的连接配置。当前脚本没有“设置外部组件地址就自动跳过部署”的机制；仅导出 `META_DB_URL` 或 `HIVE_METASTORE_URI` 不会替换模板中的地址。单独运行 `deploy/sqlrec/deploy.sh` 也会先部署 PostgreSQL。
 
@@ -231,102 +195,35 @@ SQLRec 和 Spark 部署脚本会创建各自的 ServiceAccount，并通过 Clust
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | `getVariable()` 在执行变量不存在（`null`）时读取同名环境变量；显式空字符串不回退 |
+| `ENABLE_VARIABLE_ENV_FALLBACK` | `true` | 执行变量不存在（`null`）时，SQL 读取同名环境变量；显式空字符串不回退 |
 | `EXECUTE_RESULT_INCLUDE_PARAMS` | `true` | SQL 和函数 REST API 的执行结果包含执行变量 `params`；关闭后 JSON 省略该字段，不影响执行变量的使用 |
 
 设置对应环境变量为 `false` 并重启服务即可关闭。环境变量回退不会将读取的值写入执行变量，`get_variables()` 和响应 `params` 仅包含显式执行变量。删除显式变量后，后续读取会再次回退到环境变量。开启回退时，SQL 可通过变量名读取服务进程中的环境配置。
 
 ### 入口认证
 
-以下配置统一定义在 `SqlRecConfigs.java`，从服务进程的环境变量读取。直接启动服务时使用下表默认值；仓库部署脚本通过 `deploy/env.sh` 将默认值覆盖为 `AUTH_ENABLED=true`、`AUTH_USERNAME=sqlrec`、`AUTH_PASSWORD=abc123456`。默认凭证用于开发环境，可修改 `deploy/env.sh` 或用同名环境变量覆盖：
+直接启动服务默认关闭认证；仓库部署脚本默认开启，开发凭证为 `sqlrec` / `abc123456`。部署前用环境变量覆盖：
 
 | 环境变量 | 服务默认值 | 说明 |
-|----------|--------|------|
-| `AUTH_ENABLED` | `false` | 开启 HTTP Basic 和 Thrift/JDBC SASL PLAIN 认证 |
-| `AUTH_USERNAME` | 空字符串 | 用户名列表，用英文逗号分隔；每项非空白、不能重复，不能包含冒号或控制字符 |
-| `AUTH_PASSWORD` | 空字符串 | 密码列表，用英文逗号分隔，与用户名按位置对应；每项非空白，不能包含控制字符 |
-
-普通部署和 demo 部署都将这三个配置直接写入容器环境变量；渲染后的 YAML 包含账号密码。修改配置后重新运行部署脚本，Deployment 会根据环境变量变更自动更新 Pod。凭证合法性由服务端在启动时校验。`AUTH_ENABLED` 使用 `true` 或 `false`。
-
-单账号配置保持原用法。多账号时，两份列表长度必须一致，例如 `AUTH_USERNAME=alice,bob`、`AUTH_PASSWORD=alice-secret,bob-secret` 分别配置 alice 和 bob 的密码。逗号只作分隔符，不支持转义，因此用户名和密码都不能包含逗号；此前含逗号的单账号凭证需先更换。分隔后的内容不自动去除空格，空格属于凭证。开启认证时，数量不一致、空项（包括末尾逗号）或重复用户名都会导致启动失败。
+| --- | --- | --- |
+| `AUTH_ENABLED` | `false` | 开启 HTTP Basic 和 JDBC/Thrift SASL PLAIN |
+| `AUTH_USERNAME` | 空字符串 | 逗号分隔的用户名 |
+| `AUTH_PASSWORD` | 空字符串 | 与用户名按位置配对的密码 |
 
 ```bash
-AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' bash deploy/sqlrec/deploy.sh
-# 两个账号，用户名和密码按位置配对
-AUTH_USERNAME=alice,bob AUTH_PASSWORD='alice-secret,bob-secret' bash deploy/sqlrec/deploy.sh
-# 兼容旧的匿名环境；客户端也需设置 AUTH_ENABLED=false
-AUTH_ENABLED=false bash deploy/sqlrec/deploy.sh
+AUTH_ENABLED=true AUTH_USERNAME=alice AUTH_PASSWORD='replace-with-your-password' \
+  bash deploy/sqlrec/deploy.sh
 ```
 
-可以把这些配置和其他密钥统一放到 `/etc/sqlrec/sqlrec.env` 等自己的环境配置文件中：
+多个账号可设置 `AUTH_USERNAME=alice,bob`、`AUTH_PASSWORD=alice-secret,bob-secret`。两份列表长度须一致，每项非空白，用户名不能重复或包含冒号。逗号不能转义，空格属于凭证，控制字符不允许；不合法的配置会导致启动失败。
 
-```bash
-export AUTH_ENABLED=true
-export AUTH_USERNAME=sqlrec
-export AUTH_PASSWORD='replace-with-your-password'
-```
+配置可直接写入容器环境，也可放入由 `bin/server.sh` 通过 `SQLREC_ENV_CONF` 加载的环境文件。修改后重启或重新部署，SQL `SET` 和请求 `params` 不能覆盖。部署模板将凭证写入容器环境变量，渲染后的 YAML 也包含凭证。
 
-启动前设置 `export SQLREC_ENV_CONF=/etc/sqlrec/sqlrec.env`，`bin/server.sh` 会加载该文件。Kubernetes 部署时，将文件挂载到 SQLRec 容器内并在容器中设置此变量，也可以直接配置上述三个容器环境变量。修改后重启服务；开启认证但凭证为空或格式不合法时，启动失败。SQL `SET` 和请求 `params` 不能覆盖认证配置。
+- HTTP 和 UI 使用 Basic 认证，缺少或错误凭证返回 `401`；`GET /metrics` 仍匿名开放。
+- 所有认证客户端拥有相同能力，尚无角色或资源级权限控制。
+- Basic 和 SASL PLAIN 不加密传输，需要时使用 HTTPS 或 TLS 隧道保护连接。
 
-- **HTTP 和 UI**：除 `GET /metrics` 外，所有请求均要求 HTTP Basic；缺少或错误凭证返回 `401` 和 `WWW-Authenticate`。UI 使用浏览器原生账号密码提示框；浏览器缓存凭证，暂不提供应用内退出登录。
-- **指标**：`GET /metrics` 始终匿名放行，包括开启认证时。Prometheus 无需增加账号密码配置。
-- **Thrift/JDBC**：开启认证时使用 `jdbc:hive2://<host>:<port>/default` 和 SASL PLAIN；关闭时使用 `;auth=noSasl`。`bin/beeline.sh` 自动读取 `deploy/env.sh` 的地址、认证开关和凭证，通过同名环境变量覆盖配置。脚本将 `-e`、`-f` 等执行参数原样传给 Beeline，不解析命令行连接或凭证参数；连接设置使用 `NODE_IP`、`SQLREC_THRIFT_PORT`、`AUTH_USERNAME` 和 `AUTH_PASSWORD`。脚本不读取 `SQLREC_ENV_CONF`。错误凭证在 SASL 握手阶段被拒绝，本地凭证不会转发给 Flink Gateway。
-- **本地 CLI**：直接运行引擎，继续依赖操作系统的访问控制。
-
-客户端每次只发送一组用户名和密码，不发送逗号列表。如果 `deploy/env.sh` 或当前环境配置的是服务端账号列表，运行 Beeline 或 benchmark 时需用同名环境变量覆盖为其中一组凭证。
-
-Beeline 示例：
-
-```bash
-bash bin/beeline.sh -e 'SELECT 1'
-AUTH_USERNAME=alice AUTH_PASSWORD='my-password' bash bin/beeline.sh -f query.sql
-NODE_IP=other-host SQLREC_THRIFT_PORT=10000 bash bin/beeline.sh
-AUTH_ENABLED=false bash bin/beeline.sh            # 连接关闭认证的服务
-```
-
-凭证通过 Beeline 原生 `-n/-p` 参数传入。Hive Beeline 3.1.3 会再次按空格拆分凭证，应使用不含空格的用户名和密码。
-
-HTTP 调用示例（`--user sqlrec` 会提示输入密码，用户名取实际配置）：
-
-```bash
-curl --user sqlrec -X POST http://localhost:30001/sql/v1 \
-  -H 'Content-Type: application/json' \
-  -d '{"sqls":["SHOW TABLES"]}'
-
-curl http://localhost:30001/metrics
-```
-
-开启认证时，SQL 和推荐 API 的 POST 请求必须使用 `Content-Type: application/json`，否则返回 `415`。Java 调用方可使用 `SqlRecApiClient.callFunctionApi(url, data, params, username, password)` 或 `callSqlApi(url, sqls, params, username, password)`；凭证仅放入 HTTP Header，不进入执行参数。原有方法继续匿名调用，不会自动把本机入口凭证发送给远端。
-
-所有认证通过的客户端拥有相同能力，不区分角色或资源权限；仅提供在线推荐服务时，可关闭不需要的 REST SQL、UI 和 Thrift 入口。HTTP Basic 和 Thrift SASL PLAIN 不提供传输加密，部署时通过 HTTPS、TLS 隧道等保护连接。
-
-#### Python / PyHive
-
-安装纯 Python SASL 依赖，无需系统 `libsasl`：
-
-```bash
-pip install 'PyHive[hive_pure_sasl]'
-```
-
-开启认证后，使用 `auth="CUSTOM"`，账号密码对应服务端 `AUTH_USERNAME` 和 `AUTH_PASSWORD` 中的一组凭证：
-
-```python
-from pyhive import hive
-
-with hive.Connection(
-    host="localhost",
-    port=30000,
-    username="sqlrec",
-    password="your-password",
-    auth="CUSTOM",
-    database="default",
-) as connection:
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT 1")
-        print(cursor.fetchall())
-```
-
-关闭认证时，改用 `auth="NOSASL"` 并省略 `password`。服务端支持 Hive CLI 协议 V6–V10，按客户端请求协商版本，兼容 PyHive 的 V6 请求。密码在 SASL 握手中校验，`OpenSession` 不要求重复携带密码。
+Beeline、PyHive 等客户端示例见[客户端连接](../guides/clients.md)。
 
 ### Gateway 转发配置
 
@@ -352,18 +249,9 @@ SQL 执行范围见[架构说明](../reference/architecture.md#gateway-转发边
 
 ### SQL 初始化
 
-`deploy/sqlrec/deploy.sh` 会先等待 PostgreSQL 可连接，再执行 `deploy/sql/master.sql`，成功后才应用 SQLRec Deployment。无需在正常脚本部署前手动导入 SQL。
+`deploy/sqlrec/deploy.sh` 等待 PostgreSQL 可连接后，执行 `deploy/sql/master.sql`，再部署 SQLRec。无需手动导入 SQL。已有表会被复用，该文件不负责已有表的结构迁移。
 
-::: details 初始化重试参数和事务行为
-
-| 参数 | 默认值 | 要求 |
-|------|--------|------|
-| `PSQL_MAX_ATTEMPTS` | `30` | 正整数，数据库连接最大尝试次数 |
-| `PSQL_RETRY_INTERVAL` | `5` 秒 | 非负整数，连接重试间隔 |
-| `PGCONNECT_TIMEOUT` | `10` 秒 | 正整数，单次连接超时 |
-
-参数非法时在创建资源前报错。连接失败会按上表重试；建表 SQL 使用 `ON_ERROR_STOP=1` 和单个事务，SQL 错误会停止部署并回滚本次初始化，不会重复执行建表 SQL。已有表通过 `CREATE TABLE IF NOT EXISTS` 复用，该文件不负责已有表的结构迁移。
-:::
+连接等待不足时可调整 `PSQL_MAX_ATTEMPTS`（默认 30）、`PSQL_RETRY_INTERVAL`（默认 5 秒）、`PGCONNECT_TIMEOUT`（默认 10 秒）。SQL 初始化错误会停止部署并回滚本次初始化事务，修正报错后再重试。
 
 ## 验证与排障
 

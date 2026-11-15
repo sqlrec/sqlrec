@@ -61,7 +61,7 @@ Criteo 使用固定的 1M 样本版本，相同特征记录始终分到同一组
 
 Criteo 包含 13 个数值特征和 26 个匿名类别特征。CatBoost 和三个神经排序模型使用全部 39 个特征；LightGBM、XGBoost 使用 13 个数值特征，符合 SQLRec 当前训练与导出链路的输入要求。因此 Criteo 各模型的成绩对应不同特征配置。
 
-部分排序模型还使用用户和物品的平滑历史正例率。具体字段和模型参数见[内置模型](../reference/models/builtin-models.md)及 [benchmark README](https://github.com/sqlrec/sqlrec/blob/main/benchmark/model_quality/README.md)。
+部分排序模型还使用用户和物品的平滑历史正例率。具体字段和模型参数见[内置模型](../reference/models/builtin-models.md)及 [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/model_quality/README.md)。
 
 ### 主要训练配置
 
@@ -109,6 +109,6 @@ source deploy/env.sh
 
 - 数据字段、标签和特征视图：`benchmark/model_quality/configs/datasets/*.yaml`。
 - 模型与训练参数：`benchmark/model_quality/config.py`，支持按数据集、模型分别配置。
-- 参数含义与 SQL 用法：见[内置模型](../reference/models/builtin-models.md)；完整测试配置及运行选项见 [benchmark README](https://github.com/sqlrec/sqlrec/blob/main/benchmark/model_quality/README.md)。
+- 参数含义与 SQL 用法：见[内置模型](../reference/models/builtin-models.md)；完整测试配置及运行选项见 [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/model_quality/README.md)。
 
 调整后应使用相同验证数据和候选范围比较结果。修改数据准备规则或特征定义时，需要重新运行数据准备命令。

@@ -39,7 +39,7 @@ FROM item_info;
 
 ## 实现表函数
 
-表函数同样以 `evaluate` 作为入口。SQL 显式传入的参数支持 `CacheTable` 和 `String`；需要访问执行变量时，还可以声明由 SQLRec 自动注入的 `ExecuteContext` 或 `ReadonlyContext`。
+表函数以 `evaluate` 为入口。SQL 显式参数支持 `CacheTable`、`String`、`Integer`、`Long`、`Double`、`Boolean` 及对应基本类型；`ExecuteContext`、`ReadonlyContext` 由 SQLRec 自动注入，调用方无需传入。
 
 ```java
 package com.example.udf;
@@ -62,7 +62,7 @@ CACHE TABLE output AS
 CALL pass_through(input_table);
 ```
 
-表函数可以重载 `evaluate`，也可以在最后一个参数使用 `String...` 或 `CacheTable...`。不要同时定义会匹配同一次调用的重载，否则 SQLRec 无法确定应调用哪个方法。
+`evaluate` 支持重载，最后一个参数可使用受支持类型的可变参数。重载优先精确匹配，再考虑 INT 到 BIGINT/DOUBLE、BIGINT 到 DOUBLE 的数值扩展；存在同等匹配时会报歧义错误。用 `GET` 传入数字或布尔参数时，应提供对应类型的默认值，例如 `GET('limit', 100)`。
 
 ## 注册与部署
 
@@ -75,7 +75,7 @@ CREATE FUNCTION my_function AS 'com.example.udf.MyFunction';
 
 3. 用最小输入验证函数的参数类型、`NULL` 行为和返回字段。
 
-使用 Hive Metastore 时，可以在会话中执行 `CREATE FUNCTION`。使用 `SQL_SCHEMA_DIR` 本地元数据时，应把同一条语句写入该目录下的 SQL 文件，由 SQLRec 启动时加载。
+远程元数据模式通过 Beeline 或 JDBC 注册；文件模式可将定义放入 `SQL_SCHEMA_DIR` 并重启，也可开启 `SQL_SCHEMA_DDL_ENABLED` 后在当前进程中注册。两种方式均需先部署 JAR。
 
 ## 返回表结构
 
@@ -88,13 +88,13 @@ CALL my_function(input_table)
 LIKE FUNCTION 'another_function';
 ```
 
-`LIKE output_template` 复用模板表结构；`LIKE FUNCTION` 复用另一个函数的返回结构。不指定时，返回 `CacheTable` 的函数可能在编译期被调用一次以推断字段。
+`LIKE output_template` 复用模板表结构；`LIKE FUNCTION` 复用另一个函数的返回结构。不指定时，返回 `CacheTable` 的函数可能在编译期被调用一次以推断字段。服务环境变量 `ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` 可强制要求返回 `CacheTable` 的函数显式声明结果结构。
 
 ## 发布前检查
 
 - JAR 已部署到所有 SQLRec 进程使用的类路径，依赖没有版本冲突。
 - 类和 `evaluate` 方法是公共的，注册的类名包含完整包名。
-- 表函数只把 `CacheTable`、`String` 作为 SQL 参数，上下文参数不需要用户传入。
+- 表函数的 SQL 参数使用上述支持类型，上下文参数不由用户传入。
 - 明确定义 `NULL`、空表、非法参数和异常的处理方式。
 - 对动态返回结构或有副作用的表函数使用 `LIKE` 固定返回字段。
 

@@ -1,10 +1,8 @@
 # SQLRec 架构
 
-SQLRec 用 SQL 编排推荐流程：读取特征与候选集、调用函数和模型服务、返回结果，也可以将结果写入外部存储。下面先看模块全景，再从一次请求出发解释执行模型和数据边界。具体语法、参数和部署步骤见文末链接。
+SQLRec 在 JVM 内编译和调度 SQL 推荐流程，通过 UDF 扩展计算、Connector 访问存储、HTTP 调用模型服务。本文介绍编译、调度、状态隔离和外部访问的实现机制。
 
-![SQLRec 组件架构](/sqlrec_arch.svg)
-
-## 模块全景
+## 核心组件 {#模块全景}
 
 ```text
                         ┌──────────────────────────────────────────┐
@@ -36,190 +34,363 @@ SQLRec 用 SQL 编排推荐流程：读取特征与候选集、调用函数和�
                         └──────────────────────────────────────────┘
 ```
 
-图中上半部分表示请求进入引擎后使用的主要模块，下半部分表示共享抽象和存储适配。通往 Connector 的箭头表示运行时通过 SPI 发现实现；`sqlrec-common` 不依赖具体 Connector。`sqlrec-ui` 的静态资源由 frontend 提供；`sqlrec-demo` 提供示例，`sqlrec-flink` 用于 Flink 集成测试。
+箭头表示模块协作及运行时 SPI 发现，不是 Maven 依赖关系；Connector 通过 `sqlrec-common` 的接口接入。
 
-先区分几个贯穿全文的对象：
+| 层次 | 主要实现 | 职责 |
+| --- | --- | --- |
+| 服务入口 | `sqlrec-frontend` | HTTP、Thrift/JDBC、CLI、UI、会话管理 |
+| SQL 编译 | `sqlrec-sql-parser`、`sqlrec-core` 的 `compiler` 包 | 解析、查询编译、函数编译 |
+| 流程运行时 | `sqlrec-core` 的 `runtime` 包 | DAG 调度、变量、返回、超时和取消 |
+| 数据与函数适配 | `sqlrec-connectors`、`sqlrec-udf` | 存储算子、标量及表函数 |
+| 元数据与模型管理 | `sqlrec-core` 的 `db`、`model` 包，`sqlrec-model` | 定义与缓存、模型任务、推理服务 |
+| 共享接口 | `sqlrec-common` | 表结构、上下文和扩展契约 |
 
-| 对象 | 在执行流程中的含义 |
-| --- | --- |
-| Connector 表 | 外部数据或本地文件在 SQL 中的表入口，决定可用的查询和写入方式 |
-| SQL 函数 | 由多条语句组成、可反复调用的推荐流程 |
-| Schema | 当前执行器可见的表和函数定义，也容纳命名的 `CACHE TABLE` |
-| 执行上下文 | 当前调用的变量、指标标签和取消状态 |
-| API / Service | API 将 SQL 函数发布给业务调用方；Service 提供模型推理端点 |
+| 执行层次 | 决定什么 | 实现基础 |
+| --- | --- | --- |
+| SQL 函数 DAG | 多条语句的依赖与并行顺序 | SQLRec 执行节点与调度器 |
+| 单条 SQL 关系计划 | 扫描、过滤、Join、排序等操作 | Calcite + SQLRec 存储算子 |
 
-## 从请求到结果
+## 请求入口与执行路径 {#从请求到结果}
+
+### HTTP 推荐 API
 
 ```text
-客户端
-  ├─ Thrift / REST SQL / CLI ─→ SQL 解析与分发
-  │                              ├─ 本地查询/写入 ─→ Calcite 编译 ─→ 执行 ─→ 返回结果
-  │                              │                                  └─ Connector / SQL 函数
-  │                              ├─ 表/库/UDF 元数据 DDL ─→ HiveCatalog ─→ HMS
-  │                              └─ 需要 Flink 执行的语句 ─→ Gateway（远程模式的 Thrift 会话）
-  └─ REST API ─→ 查找 API 对应的 SQL 函数 ─→ 执行函数 ─→ 返回 JSON
+HTTP 请求
+  → Netty I/O：解码
+  → HttpServerHandler：业务线程处理
+  → RestFunctionExecutor：查找 API 与函数编译计划
+  → 创建根 schema，绑定输入 CacheTable 与执行变量
+  → SqlFunctionBindable：执行函数 DAG
+  → 物化 RETURN 结果 → JSON 响应
+
+进程共享：API 映射、函数编译计划
+请求独立：输入表、中间表、执行变量
 ```
 
-SQLRec 使用两个解析器：标准 Flink SQL 优先由 Flink 解析器处理，SQLRec 的 `CACHE TABLE`、`CALL`、模型管理等扩展语句由独立的 SQLRec 解析器处理。解析后，执行器按语句类型决定由本地 Calcite 执行、操作元数据，还是交给 Flink。
+| 环节 | 关键实现 |
+| --- | --- |
+| 网络与业务线程分离 | `RestServer` 使用 Netty I/O 线程及独立业务线程组；节点并发使用引擎执行器 |
+| API → 函数 | `SqlApiCache` 保存名称映射，`CompileManager` / `SqlFunctionCache` 取得编译结果 |
+| 请求数据绑定 | `CalciteSchemaFactory` 创建根 schema；JSON 行绑定为输入表，`params` 写入 `ExecuteContextImpl` |
 
-本地路径负责面向在线请求的 SQL 查询、数据写入、SQL 函数和控制语句。Calcite 将查询编译成可执行代码，执行时通过 Connector 读取或写入数据。`SHOW`、模型与服务等资源命令由 SQLRec 自己处理。远程元数据模式下，持久表、库和 UDF 的纯元数据 DDL 由本地适配器通过官方 HiveCatalog 写入 HMS，无需创建 TableEnvironment 或连接 Gateway。DDL 支持范围见[SQL 参考](./sql.md#元数据-ddl)。Thrift 会话把其他未由本地处理的语句转发到 Flink SQL Gateway。REST `/sql/v1` 和 CLI 没有这条透明转发路径，本地文件元数据模式也不依赖 Flink Gateway。
+### SQL 入口与语句分发
 
-Thrift 入口由 `TCLIServiceImpl` 适配协议，`SessionManager` 管理会话及本地/远程操作的归属，`GatewayClient` 只负责远程连接、会话状态同步和 Gateway 调用，`JdbcMetadataExecutor` 提供本地 JDBC 元数据结果。
+CLI、REST SQL 和 Thrift 会话通过 `SqlExecutor` 分发：
 
-一个 Thrift 会话持有自己的 SQL 执行器；REST `/sql/v1` 每个请求新建一个执行器，同一请求中的多条 SQL 依次运行。`POST /api/v1/<name>` 则查找已发布的 API 和对应的 SQL 函数，为每次调用建立执行数据和输入表。API 的发布与请求格式见[发布和调用 API](../guides/api.md)。
+| 语句类别 | 处理路径 |
+| --- | --- |
+| SQL 函数定义 | 收集输入和函数体，编译并保存定义 |
+| 本地查询、写入、流程语句 | `CompileManager` → 执行节点 → `bind` |
+| 库、表、Java UDF 的纯元数据 DDL | 元数据适配层；远程模式经 HiveCatalog 写 HMS |
+| SHOW、DESCRIBE | 读取元数据或会话缓存表 |
+| 模型、checkpoint、Service 命令 | 资源管理器，必要时提交外部任务 |
+| 可转发的远程语句 | 远程模式的 Thrift 会话 → Flink SQL Gateway |
 
-按入口看，同一段 SQL 的可见状态和转发能力并不完全一样：
+没有本地处理结果才进入远程路由；本地编译或运行异常直接返回，不触发 Gateway 重试。
 
-| 入口 | 执行器和状态的范围 | Flink 转发 |
+## SQL 解析与编译 {#执行模型}
+
+```text
+单条 SQL · NormalSqlCompiler
+  解析与校验 → 关系表达式 → 计划优化 → Enumerable 代码生成
+                                             ↓
+                                      CalciteBindable
+
+SQL 函数 · FunctionCompiler
+  登记结构占位 → 逐条编译节点 → 检查 RETURN 结构 → 建立依赖 DAG
+                                                 ↓
+                                        SqlFunctionBindable
+```
+
+### 解析与可执行性判断
+
+| 阶段 | 实现与判断 |
+| --- | --- |
+| 解析标准 SQL | `SqlRecSqlParser` 优先使用 Flink 解析结果 |
+| 解析扩展语句 | SQLRec 独立语法处理 `CACHE TABLE`、函数调用、模型管理等扩展 |
+| 判断本地能力 | `SqlTypeChecker` 检查语句类型及表适配；当前 CTE 不进入本地查询路径 |
+
+可解析、可保存元数据、可本地执行，分别由不同阶段判断。
+
+### 单条 SQL：从关系计划到执行代码
+
+| 处理 | 关键实现与产物 |
+| --- | --- |
+| 名称与类型校验 | 从当前 schema 取得表结构、函数签名 |
+| 计划优化 | `VolcanoPlanner` 使用 Calcite 通用规则及 SQLRec 的 KV Join、向量 Join、写入、UNION 规则 |
+| 代码生成 | 转为 Enumerable 计划，由 `EnumerableInterpretable.toBindable()` 编译成 JVM 内执行对象 |
+| 运行与物化 | `CalciteBindable` 通过 `SqlRecDataContextImpl` 绑定 schema、变量及参数，将结果物化为行数组 |
+| 诊断 | 保留逻辑计划、物理计划和生成代码，供 UI 使用 |
+
+### SQL 函数：编译期建立数据结构与节点
+
+`FunctionCompiler` 在输入声明及缓存表编译后登记**只有结构、没有请求数据**的 `CacheTable`，供后续语句校验；顶层 `RETURN` 完成返回结构检查和 DAG 初始化。
+
+| 执行节点 | 工作 |
+| --- | --- |
+| `CalciteBindable` | 本地查询或写入 |
+| `CacheTableBindable` | 运行子节点，发布命名结果表 |
+| `CallSqlFunctionBindable` / `JavaFunctionBindable` | SQL 子函数 / Java `evaluate` 调用 |
+| `IfBindable` / `ReturnBindable` | 分支 / 返回 |
+| `SqlFunctionBindable` | 整个函数的节点、结构和依赖 |
+
+定义函数时进行编译校验；元数据加载时可重新编译。`SqlFunctionCache` 在进程内复用结果，远程模式按刷新策略重编译。
+
+| 调用形式 | 目标绑定与结构处理 |
+| --- | --- |
+| 静态 SQL 子函数 | 编译时绑定，取得返回结构；存在 `LIKE` 时检查兼容性 |
+| 动态调用 | `FunctionProxyBindable` 运行时解析函数名；编译期通过 `LIKE` 声明结构 |
+
+## UDF 注册与执行
+
+Java UDF 分为嵌入 SQL 表达式的**标量函数**和通过 `CALL` 处理整表的**表函数**；SQL 子函数则由前述 `FunctionCompiler` 编译。
+
+### 注册与执行路径
+
+```text
+函数名 → Java 类名
+  ├── 内置：FunctionConfigs
+  └── 自定义：CREATE FUNCTION → 元数据
+                       ↓ 从运行时类路径加载
+标量函数
+  HmsSchema → UdfManager → SqlRecScalarFunctionImpl
+    → Calcite 类型校验、重载解析与代码生成 → SQL 表达式结果
+
+Java 表函数
+  CALL → FunctionBindableFactory → JavaFunctionUtils
+    → JavaFunctionBindable → 注入参数并反射调用 evaluate
+    → CacheTable 行数据 → 后续 DAG 节点
+```
+
+| 类型 | 接入方式 | 计算粒度与用途 |
 | --- | --- | --- |
-| Thrift | 一个会话保留一个执行器、默认数据库和命名中间表 | 远程模式下支持 |
-| REST `/sql/v1` | 一个请求内的多条 SQL 共用执行器，请求结束后释放 | 不支持自动转发 |
-| CLI | 当前 CLI 执行过程使用本地执行器 | 不支持自动转发 |
-| REST `/api/v1/<name>` | 每次调用建立函数输入表和执行上下文 | 不转发 |
+| 标量函数 | 公共 `evaluate` 方法适配为 Calcite `ScalarFunction` | 在表达式中对行值计算，如 `l2_norm`、`array_contains` |
+| Java 表函数 | `JavaFunctionBindable` 包装为执行节点，按静态实参类型选择 `evaluate` 重载 | 接收 `CacheTable`、字面量或变量，进行批量处理，如 `dedup`、`weighted_merge`、`call_service` |
+
+注册只保存名称和类名映射，JAR 及依赖须预先部署到各 SQLRec 进程的类路径；UDF 在 SQLRec JVM 内执行。
+
+### 编译契约与运行状态
+
+| 机制 | 实现与边界 |
+| --- | --- |
+| 标量函数上下文 | `SqlRecCallNotNullImplementor` 在生成调用代码时注入 `DataContext`，不占 SQL 显式参数 |
+| 标量函数确定性 | 读取 `@UDFType` 的 `deterministic` / `stateful` 标记并传递给 Calcite，避免将非确定性调用按常量折叠 |
+| 表函数返回结构 | `LIKE` 提供编译契约；未指定时，返回 `CacheTable` 的函数默认会在编译期执行以推断字段。`ENABLE_JAVA_FUNCTION_SCHEMA_INFERENCE=false` 可禁止此行为 |
+| 表函数上下文 | 运行时自动注入 `ReadonlyContext` / `ExecuteContext`；可写上下文使节点不可并行，调度规则见下节 |
+| 表函数结果 | 返回 `CacheTable` 时物化并按编译期字段适配；无结果操作可返回 `Void`，不提供结果表 |
+| 实例状态 | `JavaFunctionBindable` 持有 UDF 实例，可随编译计划跨请求复用；请求状态应通过参数和上下文传递 |
+
+网络或有副作用的表函数应显式使用 `LIKE`。实现和部署步骤见[自定义 UDF](../development/custom-udf.md)，调用语法见[CALL](./sql.md#call)。
+
+## DAG 调度与运行上下文
+
+### 依赖关系如何建立
+
+`TopologicalSortUtils` 按语句顺序读取节点的 `getReadTables()`、`getWriteTables()` 和并行声明：
+
+| 约束 | 依赖方向 |
+| --- | --- |
+| RAW：后读依赖先写 | 等待表产生或更新 |
+| WAR：后写依赖先读 | 读取完成后才能覆盖 |
+| WAW：后写依赖先写 | 同表写入保序 |
+| 执行屏障 | 等待前序节点，后续节点等待屏障 |
+
+`RETURN`、不可并行节点形成屏障；包括 `SET`、`ASSERT` 和声明可写 `ExecuteContext` 的 Java 表函数。仅使用 `ReadonlyContext` 不触发该限制。构图后进行拓扑排序和冗余边消除；不推断 Java UDF 内任意外部副作用。
+
+下面是函数体片段：假设子函数已定义，两路召回结构相同、无额外共享写入，且允许并行。
+
+```sql
+CACHE TABLE interest AS CALL interest_recall(user_info);
+CACHE TABLE hot AS CALL hot_recall(user_info);
+CACHE TABLE candidates AS
+SELECT * FROM interest UNION ALL SELECT * FROM hot;
+CACHE TABLE ranked AS CALL rank_items(candidates);
+RETURN ranked;
+```
+
+```text
+interest_recall → interest ─┐
+                           ├→ UNION ALL → candidates → rank_items → ranked → RETURN
+hot_recall ─────→ hot ──────┘
+
+两路召回可并行；合并等待两路完成，排序等待合并完成，RETURN 形成执行屏障。
+```
+
+SQL 子函数的读写信息映射回调用方，参与外层依赖分析；对同一缓存表再次写入时，也须等待先前读取完成。
+
+### 并行、分区与异步
+
+| 方式 | 实现 | 结果与边界 |
+| --- | --- | --- |
+| DAG 并行 | `SqlFunctionBindable` 用 `CompletableFuture` 等待依赖，再提交节点 | `ExecutorServiceUtils` 使用按任务创建的虚拟线程；关闭 `PARALLELISM_EXEC` 时顺序执行 |
+| 分区调用 | `PartitionExecutor` 切分输入，为分区建立 schema | 并发执行目标后合并结果 |
+| `ASYNC` | 提交后台调用后立即返回 | 无同步结果供当前 `CACHE TABLE` / `RETURN` 消费 |
+
+这些并发发生在 SQLRec 进程内，不为每个节点提交分布式作业。
+
+### 共享计划、隔离数据与函数返回
+
+```text
+进程共享
+├── 函数编译计划
+├── 数据库 HmsSchema
+└── Connector 表对象
+        ↑ 复用
+        ├── 请求 A（独立状态）
+        │   ├── 根 schema：输入表、中间表
+        │   ├── 变量映射 ←→ SQL 子函数共享
+        │   └── SQL 子函数：独立 schema、局部表、返回帧
+        └── 请求 B（独立状态，结构同上）
+
+取消状态：父上下文 → 子上下文
+```
+
+| 实现 | 状态处理 |
+| --- | --- |
+| `CallSqlFunctionBindable` | 检查实参与形参结构，在新 schema 中按位置绑定；局部表不暴露给调用方 |
+| `ExecuteContextImpl` | 管理变量、调用栈、Trace、取消和返回帧；子函数共享变量映射，独立返回帧 |
+| `CacheTableBindable` | 完整物化结果 → 检查取消 → 发布到当前 schema；后续节点按表名复用结果 |
+
+表作用域隔离不等于变量复制。查询结果和中间表主要保存在内存中，受 JVM 内存约束。
+
+### 失败、超时与结果发布
+
+| 层次 | 实现与处理 |
+| --- | --- |
+| 节点 | `ProxyAllBindable` 统一处理超时、取消检查、Trace、耗时、行数及合并分支降级 |
+| DAG | 未恢复错误尽早结束等待，取消当前函数范围；子上下文沿父链感知取消，任务协作退出 |
+| TIMEIN | `IfBindable` 在子上下文执行 THEN；失败或超时后取消并运行 ELSE，阻止迟到缓存或返回值覆盖备用结果 |
+| 分区 | 按配置整次失败，或丢弃失败分区后合并 |
+
+取消不保证网络请求立即停止，已完成的外部写入也没有跨 Connector 统一回滚。详见[异常恢复](../guides/exception-recovery.md)及[可观测性](../operations/observability.md)。
+
+## 元数据、表对象与存储执行 {#数据来源与缓存}
+
+### 元数据管理
+
+`MetadataAccess` 分离 schema 定义、资源记录和模型文件访问；`MetadataAccessFactory` 根据 `SQL_SCHEMA_DIR` 选择实现。
+
+| 模式 | Schema 定义 | 资源与文件 |
+| --- | --- | --- |
+| 远程 | `HmsSchemaAccess` → HMS；DDL 经 HiveCatalog | `DbStoreAccess` → PostgreSQL；文件访问走 Hadoop 接口 |
+| 本地文件 | `SqlFileParser` → `SqlFileSchemaAccess` | `InMemoryStoreAccess`；Service 可指向已有端点 |
+
+| 对象 | 复用与更新 |
+| --- | --- |
+| 根 schema | `CalciteSchemaFactory` 为每个执行器创建 |
+| 数据库 `HmsSchema` | 在进程内复用，加载表与函数；两种元数据模式均使用 |
+| Connector Table | 根据表定义经工厂创建，供编译及执行使用 |
+| 本地内存 DDL | 不回写文件、不跨实例共享，重启恢复文件定义 |
+| 远程持久定义 | 可跨实例共享；每个实例仍维护自己的执行对象与缓存 |
+
+定义范围见[元数据 DDL](./sql.md#元数据-ddl)。
+
+### Connector 如何接入查询计划
+
+```text
+表元数据 → SPI / HmsTableFactory → Calcite Table
+                                       ↓ 按能力与查询形态选算子
+KV 主键 Join（INNER / LEFT）
+  物化左表、去重关联键（忽略 NULL）
+    → 主键类型转换 → 查询表级缓存 → 未命中键批量读取后端
+    → 按键合并并拼接（LEFT 无匹配补 NULL）
+
+向量检索 Join
+  识别排序、Top K、过滤
+    → 按左行构造 VectorSearchRequest
+    → VectorSearchable / Milvus 检索
+    → 拼接左行、右行与分数 → 继续外层关系计划
+```
+
+| 路径 | 实现与限制 |
+| --- | --- |
+| 工厂 | `TableFactoryUtils` 通过 SPI 查找 `HmsTableFactory`；按 `connector` 选项创建 Table |
+| KV 主键 Join | `SqlrecEnumerableKvJoin` → `KvJoinUtils` → `SqlRecKvTable.getByPrimaryKey()`；返回同键多行，LEFT 无匹配补 NULL |
+| KV 非主键 Join | 按不同关联键构造过滤扫描，成本不同于批量主键读取 |
+| 向量 Join | `SqlRecVectorJoinRule` → `SqlrecEnumerableVectorLookupJoin` → `VectorJoinExecutor`；按左行构造向量、字段、过滤及 Top K 请求 |
+| 后续计算 | 检索结果拼接后继续外层投影、排序；未下推条件由支持的本地计划处理 |
+
+特化路径受表能力与查询形态限制，不支持的查询会拒绝执行，见[内置 Connector](./connectors/builtin-connectors.md)。
+
+### 缓存与定义刷新 {#connector-表数据缓存与查询路径}
+
+| 缓存或数据 | 所在层次 | 更新与失效 |
+| --- | --- | --- |
+| `CACHE TABLE` | 执行 schema | 语句完成后发布，随请求、会话或子函数作用域 |
+| 表结构与 Connector 对象 | 数据库 schema | 比较元数据，未变化复用，变化重建 |
+| 函数编译结果 | `SqlFunctionCache` | 命中复用，定义刷新或失效后重新编译 |
+| 主键缓存 | Table 内的 Caffeine | TTL、容量淘汰、SQLRec 写入使相关键失效 |
+| Filesystem 数据 | Table 内的文件快照 | 只写内存，对象重建后重载文件 |
+
+| 操作 | 保留什么 / 重建什么 |
+| --- | --- |
+| 普通元数据刷新 | 保留定义未变化的 Table、主键缓存及 Filesystem 数据 |
+| `FLUSH` | 失效定义缓存和 Table；保留会话缓存表及本地内存 DDL，不重读 SQL 文件 |
+| 外部系统写入 | 不主动清主键缓存，可见性受 TTL 等策略影响 |
+
+细则见[查询缓存](./connectors/builtin-connectors.md#查询缓存)与 [FLUSH](./sql.md#flush)。
+
+## 模型任务与在线推理 {#模型与在线服务}
+
+`ModelManager`、`ServiceManager` 经 `ModelController` SPI 调用后端，生成训练、导出及推理工作负载配置。
+
+### 任务管理与产物衔接
+
+```text
+准备阶段（训练型后端）
+  Model / ModelController
+    → 训练、导出 Job（Kubernetes）
+    → checkpoint 元数据 + 模型文件
+    → 部署推理服务（Deployment / Service）
+                       ↓ 提供 HTTP 端点
+在线调用
+  输入 CacheTable → CallServiceFunction 特征编码
+    → PredictionClient HTTP 推理 → 追加预测字段 → 新 CacheTable
+
+API 发布推荐流程；Service 提供模型预测。
+```
+
+| 对象或阶段 | 保存 / 执行内容 |
+| --- | --- |
+| Model | 字段、模型类型、配置 |
+| checkpoint 元数据 | Model 定义快照、名称、类型、任务 DDL/YAML、状态；按快照与名称定位产物 |
+| 模型存储 | 实际权重与导出文件；训练型后端由 origin 导出 export |
+| 导出 / 服务创建前 | 检查源 checkpoint 的完成状态及类型 |
+| 自托管服务创建 | 校验配置 → 提交 Kubernetes → 保存定义与 URL；提交成功不等于就绪 |
+| 文件模式加载 Service | 只建立调用配置，不执行 Kubernetes 部署 |
+
+### 推理调用如何进入 SQL 结果
+
+| 环节 | 实现 |
+| --- | --- |
+| 解析输入输出 | `CallServiceFunction` 读取 Service 配置及模型字段 |
+| 请求 | 按 Model 选输入列，编码行式或 User-Item JSON；`PredictionClient` 发 HTTP 请求 |
+| 响应 | 按输入位置追加声明的预测字段，形成新 `CacheTable`；缺失或过短列补 NULL |
+
+服务提供方仍须保证响应行数和顺序。推理服务独立运行并扩缩容；Hugging Face 可用下载的 origin 直接部署，`external` 连接已有端点。**API 发布流程，Service 提供预测**。后端差异见[模型指南](../guides/model-lifecycle.md)。
+
+## 执行边界 {#运行边界}
 
 ### Gateway 转发边界
 
-Thrift 会话在本地创建，不要求 Gateway 可用。本地执行失败不会回退到 Gateway；只有需要远程能力的请求才建立远程连接。
-
-| 请求 | 是否需要 Gateway |
+| 处理 | 实现与边界 |
 | --- | --- |
-| 本地可执行的 SQL、持久表/库/UDF 的纯元数据 DDL | 不需要 |
-| `SHOW DATABASES/TABLES/FUNCTIONS`、`SHOW USER FUNCTIONS`、`SHOW CREATE TABLE`、`DESCRIBE` | 不需要；共享元数据和 SQL 文件模式均支持 |
-| 顶层 `USE database`、`SET 'key' = 'value'` | 不需要；本地保存状态，在下一次远程 SQL 执行前同步 |
-| JDBC 类型、Catalog、库、表、列、函数和主键查询 | 不需要 |
-| 客户端会话信息、本地操作的状态查询和结果读取 | 不需要 |
-| 无赋值的 `SET`、`RESET` | 需要；具体行为见 [SET/RESET](./sql.md#set) |
-| 其他需要 Flink 执行的 SQL、`GetCrossReference` 和 Delegation Token RPC | 需要；按需连接 |
-| 远程操作的状态查询、结果读取、取消和关闭 | 需要原远程会话及其有效操作句柄 |
+| 会话与操作归属 | `SessionManager` 管理会话对应的 `SqlExecutor`，区分本地和远程操作 |
+| 远程执行 | `GatewayClient` 按需连接、同步数据库及会话设置、执行 RPC |
+| 转发入口 | 仅远程元数据模式的 Thrift/JDBC；REST API、REST SQL、CLI 无透明转发 |
+| 路由限制 | 可转发的 CTE 等进入 Gateway；SQLRec 扩展不能靠转发绕过限制 |
+| 纯元数据 DDL | 本地适配层写 HMS，不创建 Flink 执行环境 |
 
-连接配置见[服务部署](../operations/deployment.md#gateway-转发配置)，断线和错误处理见[异常恢复](../guides/exception-recovery.md#gateway-连接与执行失败)。
+详见[SQL 参考](./sql.md#元数据-ddl)与[客户端连接](../guides/clients.md#gateway-errors)。
 
-## 执行模型
+### 内存与状态边界
 
-### 普通 SQL 与 SQL 函数
-
-普通 `SELECT`、`INSERT`、`UPDATE`、`DELETE` 经过 Calcite 的校验、优化和编译，然后在当前执行上下文中运行。上下文保存请求变量、指标标签和取消状态；查询结果在进程内物化后返回给客户端。`WITH` 查询不走本地 Calcite 路径；在远程模式的 Thrift 会话中，它可交给 Flink 处理。
-
-SQL 函数是一组按顺序提交的 SQL 语句，而不是单条查询。例如：
-
-```sql
-CREATE SQL FUNCTION recommend;
-
-DEFINE INPUT TABLE user_info (user_id BIGINT);
-
-CACHE TABLE candidates AS
-SELECT item_id, score FROM hot_item LIMIT 10;
-
-RETURN candidates;
-```
-
-顶层 `RETURN` 结束定义并保存函数。调用时，SQLRec 取得已编译的函数（首次访问编译，后续可复用），将输入表加入本次调用的 schema，再执行函数体。独立 API 请求之间不共享输入表或中间结果。函数定义、输入表和调用语法见[编写 SQL 推荐流程](../guides/recommendation-flow.md)。
-
-一次函数调用大致经历三步：
-
-1. 按函数声明检查输入表，取得函数定义和编译结果；
-2. 按表的读写依赖执行查询、`CACHE TABLE`、`CALL` 和控制语句；
-3. 从执行到的 `RETURN` 取得结果，交给 Thrift/REST 转成客户端响应。
-
-例如，业务方调用 `POST /api/v1/recommend` 时，API 名先映射到 SQL 函数；请求里的输入行变成该函数可见的输入表。函数读取 Connector、生成中间 `CacheTable`，必要时调用模型 Service，最后由 `RETURN` 给出 JSON 响应。直接运行普通 SQL 走同一个本地查询引擎，但不会自动获得“已编译 SQL 函数”的复用能力。
-
-函数体中的几个概念决定了数据如何流动：
-
-| 语句 | 执行时的作用 |
+| 入口或资源 | 状态范围 |
 | --- | --- |
-| `CACHE TABLE t AS ...` | 执行查询或同步调用，将结果命名为当前执行过程可引用的内存表 `t` |
-| `CALL f(...)` | 调用 SQL 函数或 Java 表函数；同步调用的结果可继续处理或返回 |
-| `IF ... THEN ... ELSE ...` | 按查询条件选择分支；`TIMEIN` 可在超时或异常时回退到 `ELSE` |
-| `RETURN` | 返回表、查询或同步调用的结果，并结束当前函数的后续执行 |
+| HTTP 推荐 API | 每次调用独立输入、变量和根 schema |
+| REST SQL | 同一请求内共用执行器 |
+| Thrift/JDBC | 当前会话保留执行器、默认库和缓存表 |
+| 本地 CLI | 当前进程，与 HTTP 服务的内存独立 |
+| Connector、模型服务、Flink 作业 | 各自的存储、计算和资源生命周期 |
 
-`CACHE TABLE` 不是持久表。它留在当前执行器的 schema 中：Thrift 会话和单个 REST SQL 请求中的后续语句可以引用它，独立 REST/API 请求不能共享它。普通查询返回的结果也不会自动注册为命名的 `CacheTable`。需要跨请求保存数据时，应写入外部 Connector 表。
-
-### 依赖、并行与异步
-
-SQL 函数按读写表关系确定语句依赖：必须等待前序结果的语句按依赖执行；没有依赖的节点在 `PARALLELISM_EXEC` 开启时可以并行。`RETURN` 后未开始的节点会跳过。`CALL ... PARTITION BY` 将输入表拆成多份并发调用，再合并结果；`CALL ... ASYNC` 提交后台任务并立即返回，因而不能作为同步结果供 `CACHE TABLE` 或 `RETURN` 消费。
-
-本地查询和中间结果主要在 JVM 内存中物化，规模受进程内存约束。SQLRec 在这里没有通用的落盘或流式中间结果机制；需要持续处理数据时使用 Flink 路径。完整控制流语法见[SQL 参考](./sql.md)。
-
-## 数据来源与缓存
-
-### Connector 能力
-
-所有 Connector 都提供 Calcite 表，具体查询能力取决于存储类型：
-
-| Connector | 本地执行中的主要能力 |
-| --- | --- |
-| Redis | 按主键取行；不支持全表扫描；支持 SQL 写入和 Flink Lookup/写入 |
-| JDBC、MongoDB | 主键点查或按条件扫描，支持 SQL 写入 |
-| Milvus | 主键/过滤查询和向量检索，支持 SQL 写入及 Flink Sink |
-| Kafka | Calcite 表只写入；流式读取交给 Flink |
-| filesystem | 首次使用时把本地 CSV/JSON 加载到内存；后续读写作用于该表对象的内存数据，不回写源文件 |
-
-KV Join 在右表关联列是主键时批量点查；非主键关联逐键扫描。Milvus 可作为向量检索 Join 的右表。Connector 配置、查询约束和写入语义见[内置 Connector](./connectors/builtin-connectors.md)。
-
-### 四种容易混淆的“缓存”
-
-| 数据 | 作用域与用途 | 更新方式 |
-| --- | --- | --- |
-| `CACHE TABLE` | 当前执行器 schema 中的命名中间结果 | 执行该语句时生成；`FLUSH` 不删除 |
-| Connector 主键行缓存 | Redis、JDBC、MongoDB 的每个 Calcite 表对象；加速主键点查 | 按表配置的 TTL 和容量过期；经 SQL 写入时失效相关主键 |
-| filesystem 内存快照 | 每个 filesystem 表对象首次加载的整表数据 | SQL 写入只修改内存；无 TTL，不自动感知文件变化 |
-| 定义缓存 | 进程内的 schema、SQL/Java 函数、API 和服务配置 | 按各自策略刷新或过期；`FLUSH` 使这些定义缓存失效 |
-
-### Connector 表数据缓存与查询路径
-
-主键行缓存只作用于 `getByPrimaryKey()`：Redis 的主键等值查询（包括 `AND` 中可提取的主键条件）、JDBC/MongoDB 的单一主键等值查询，以及右表按主键关联的 KV Join 会使用它。JDBC/MongoDB 的复合条件、非主键条件、范围查询和全表扫描直接访问数据源。Milvus、filesystem 和 Flink Redis Lookup 不使用这层主键缓存；Kafka Calcite 表不支持读取。
-
-以 `id` 为主键时，可用下面的条件区分常见路径：
-
-| 查询条件 | Redis | JDBC / MongoDB |
-| --- | --- | --- |
-| `WHERE id = 1` | 主键缓存 | 主键缓存 |
-| `WHERE id = 1 AND status = 'active'` | 先按主键取候选行，再过滤 | 复合条件扫描，不使用主键缓存 |
-| `WHERE status = 'active'` | 无主键条件，无法全扫 | 按条件扫描，不使用主键缓存 |
-
-外部系统或 Flink 写入不会主动清除已有 Calcite 表对象的主键缓存。成功的 DDL 刷新会复用元数据未变化的表对象，保留其主键缓存和 filesystem 内存数据。显式 `FLUSH` 会使所有 Connector 表对象失效，后续访问重新构建对象并重新读取文件，filesystem 运行时写入会重置；会话中的 `CACHE TABLE` 保留。
-
-## 元数据管理
-
-元数据描述数据库、表、Java UDF、SQL 函数、API、模型和服务；它决定 SQLRec 能识别和调用什么，不保存 Connector 中的业务数据。两种模式通过同一元数据访问层向执行器提供定义，区别在于定义的来源和更新方式。`SQL_SCHEMA_DIR` 为空时使用远程模式；设置为非空目录时使用本地 SQL 文件模式。
-
-| 项目 | 远程元数据模式 | 本地 SQL 文件模式 |
-| --- | --- | --- |
-| 表和 Java UDF | 从 Hive Metastore（HMS）读取数据库、表结构和函数定义 | 启动时递归解析 `SQL_SCHEMA_DIR` 下的 `.sql` 文件，在进程内建立 schema |
-| SQL 函数、API、模型、Checkpoint、Service | 保存在 PostgreSQL，由 SQLRec 的管理命令读取或更新 | SQL 文件中的函数、API、模型和 Service 定义初始化为进程内对象；没有共享的元数据存储 |
-| 更新定义 | 资源命令更新 PostgreSQL；支持的持久表、库和 UDF 元数据 DDL 在本地通过 HiveCatalog 更新 HMS | 默认修改 SQL 文件并重启；开启 `SQL_SCHEMA_DDL_ENABLED` 后，支持的 DDL 更新进程内定义，不回写文件 |
-| 依赖与用途 | 需要 HMS 和 PostgreSQL，适合多实例共享定义；Flink Gateway 只在需要转发语句时使用 | 适合 Demo、本地开发和线上 serving：SQL 文件可随镜像或部署配置纳入版本管理，省去 HMS、PostgreSQL 和 Flink Gateway；实际使用的 Connector、模型端点仍需可访问 |
-
-本地 SQL 文件模式默认禁止执行 DDL。启动前设置环境变量 `SQL_SCHEMA_DDL_ENABLED=true`，可开放数据库、表、Java UDF、SQL 函数和 API 的内存 DDL。每个 SQL 执行器在创建时读取并固定开关，由 `SqlExecutor` 在 DDL 分发前统一检查；会话 `SET` 不会修改它。底层元数据存储只负责读写和定义校验，不检查该开关。文件定义作为初始状态，允许运行时修改或删除；同一进程的所有会话共享变更，不同实例互不共享。DDL 不回写 SQL 文件，重启后恢复文件定义。模型、Service、Checkpoint、训练和导出操作仍不可通过该开关执行。查询、数据写入、`CACHE TABLE` 和调用已定义的函数保持原有能力。线上 serving 可继续把完整 SQL 目录与应用版本一起发布。
-
-两种模式均支持[元数据查询](./sql.md#元数据查询)。`ResourceQueryExecutor` 统一处理查询入口和会话缓存表，表定义与 UDF 查询交由元数据访问层处理。SQL 文件模式在加载时校验并保存解析后的表结构和函数定义，运行时 DDL 使用同一套表示；查看元数据不需要加载对应的 Connector 或 UDF 类，执行数据查询时才需要相应能力。
-
-SQLRec 缓存数据库列表、表结构和函数/API/服务定义。数据库列表主要依靠 `databaseListCache`：达到 `SCHEMA_CACHE_EXPIRE` 后，后续访问触发异步刷新，刷新完成前可能仍返回旧列表；DDL 或 `FLUSH` 也可使相关缓存失效。两种模式均在创建 Calcite schema 时使用缓存中的数据库列表，不在每条 SQL 执行前同步数据库成员。数据库 DDL 成功后，只更新执行该语句的会话，新建数据库可在该会话立即 `USE` 并查询；其他已有会话需在列表更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的数据库列表；`SHOW DATABASES`、`SHOW TABLES` 直接查询元数据，不受该会话列表限制。
-
-已有数据库内的表和函数缓存仍可独立刷新。表刷新比较完整元数据快照，定义未变化时复用已有表对象，变化时重建对应对象。本地模式只在启动时读取文件；`FLUSH` 只清缓存，不重新解析文件、不撤销内存 DDL。文件改动仍需重启才能生效。数据库 DDL 保留会话缓存表和自定义子 schema。本地表与 HMS 表统一保存秒级的 `transient_lastDdlTime`；元数据快照比较也能识别同一秒内的结构变更。DROP 和 RENAME 会立即淘汰旧对象，即使删除后没有查询就重建同名表，也不会恢复旧内存数据。函数和 API DDL 保留未修改表的对象。部署所需配置见[服务部署](../operations/deployment.md)，本地文件示例见[Docker 快速开始](../getting-started/docker.md)。
-
-## 模型与在线服务
-
-模型功能包含三个对象：**Model** 定义类型和输入输出，**Checkpoint** 标识训练、下载或导出的版本，**Service** 将模型关联到在线推理端点（自托管时负责部署，外部模型则指向已有 URL）。常见训练型模型的路径是：
-
-```text
-CREATE MODEL → TRAIN MODEL → 检查 Checkpoint 状态
-             → EXPORT MODEL → CREATE SERVICE → call_service(...)
-```
-
-训练和导出提交 Kubernetes Job；提交成功不代表任务已完成，应检查 Checkpoint 状态。自托管模型的 `CREATE SERVICE` 部署在线工作负载；SQL 函数中的 `call_service` 把输入行发送给该服务，并将预测结果并回行中。不同后端的路径不同：Hugging Face Transformers 不需要导出，`external` 模型直接对接已有 HTTP 服务，不进行训练、导出或自行部署推理容器。
-
-`CREATE SERVICE` 管理模型推理服务；`CREATE API` 发布 SQL 函数供业务请求调用。一个对外 API 可以在函数内部查询 Connector，并通过 `call_service` 使用模型服务。操作步骤和后端差异见[模型训练与在线推理](../guides/model-lifecycle.md)及[内置模型](./models/builtin-models.md)。
-
-## 运行边界
-
-远程模式运行在线查询需要元数据服务（HMS、PostgreSQL）和实际使用的存储系统；转发语句需要 Flink SQL Gateway，自托管模型的训练和部署需要 Kubernetes。本地 SQL 文件模式也适合线上 serving，可减少元数据服务依赖并把定义纳入版本管理。REST 把同步业务执行放在独立线程组，Thrift 按会话管理执行器；指标和 Trace 用于观察请求与节点执行，使用方法见[可观测性](../operations/observability.md)。部署依赖、端口和资源要求见[服务部署](../operations/deployment.md)。
-
-读这个架构时要记住三个边界：SQLRec 的本地查询在进程内物化；`CACHE TABLE` 只在当前执行范围内可见；外部数据、模型服务和 Flink 作业各自有独立的生命周期。部署依赖与资源规模应按实际启用的路径选择。
-
-## 深入阅读
-
-- [编写 SQL 推荐流程](../guides/recommendation-flow.md)与[SQL 参考](./sql.md)：函数、控制流与完整语法。
-- [接入数据源](../guides/data-sources.md)与[内置 Connector](./connectors/builtin-connectors.md)：表定义、查询和缓存参数。
-- [发布和调用 API](../guides/api.md)与[模型训练与在线推理](../guides/model-lifecycle.md)：对外接口及模型生命周期。
-- [自定义 Connector](../development/custom-connector.md)、[自定义 UDF](../development/custom-udf.md)、[自定义模型](../development/custom-model.md)：扩展点与实现要求。
+本地查询物化在内存中，无通用中间结果落盘或持续流式执行机制。持续大规模处理使用相应 Flink 路径，训练和自托管模型部署依赖 Kubernetes。

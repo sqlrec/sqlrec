@@ -73,7 +73,7 @@ SQLRec UI 的 `/ui/static/index.html` 也能查看函数执行 DAG，以及当�
 
 ## 定位一次请求
 
-成功的 API 响应会在 `params.log_id` 中带上本次执行的 ID。开启 Trace 后，可用它查找 span 的 `log.id` 属性；启用调试日志时，节点日志也带有这个 ID。请求失败而没有返回 ID 时，可按请求时间查看服务日志。
+默认成功的 API 响应在 `params.log_id` 中带上执行 ID。开启 Trace 后可搜索 span 的 `log.id`，调试节点日志也包含该 ID。关闭响应 `params` 或错误响应未返回 ID 时，可按请求时间查找日志。
 
 ### 查看 Trace
 
@@ -156,6 +156,7 @@ Prometheus 暴露的指标名使用下划线；计数器带 `_total`，计时器
 | 业务执行器线程数 / 待处理任务数 | `netty_eventexecutor_workers`、`netty_eventexecutor_tasks_pending`，筛选 `pool="rest-business"` |
 | 节点平均耗时与状态 | `sqlrec_node_exec_duration_seconds_sum`、`sqlrec_node_exec_duration_seconds_count` |
 | 表扫描耗时 | `sqlrec_table_scan_duration_seconds_sum`、`sqlrec_table_scan_duration_seconds_count` |
+| 合并分支失败后按空表继续 | `sqlrec_cache_table_ignore_exception_total` |
 | TIMEIN 非正数预算直接降级 | `sqlrec_if_timein_outcome_total{reason="direct"}` |
 | TIMEIN 等待 THEN 超时 | `sqlrec_if_timein_outcome_total{reason="timeout"}` |
 | TIMEIN 普通异常回退 | `sqlrec_if_timein_outcome_total{reason="error"}` |
@@ -168,19 +169,22 @@ sum by (name) (rate(sqlrec_node_exec_duration_seconds_sum[5m]))
 sum by (name) (rate(sqlrec_node_exec_duration_seconds_count[5m]))
 ```
 
-HTTP 指标中，`/api/v1/` 开头的请求保留完整路径，仅去掉查询参数；例如 `/api/v1/demo_rec?trace=true` 记为 `/api/v1/demo_rec`。其他路径使用 `/sql/v1`、`/metrics`、`/ui/api/*`、`/ui/static/*` 和未知路径 `unmatched` 分组。`method` 保留请求的原始方法名，不进行转换。具体 API 的执行结果使用 `sqlrec_api_execution_duration_seconds_*{api="demo_rec",outcome="success"}`；SQL statement 使用 `sqlrec_sql_execution_duration_seconds_*`，可以观察 HTTP 200 内部的 SQL 失败。节点与表执行统一使用 `outcome` 标签，节点取消另有 `phase=before_start/running`，不能把取消事件与 Timer 的 cancelled 次数相加。
+指标口径：
 
-在进程环境中配置 `METRICS_TAG_KEYS=scene,experiment`，统一打点 helper 会从当前执行变量提取同名值，直接导出为 `scene`、`experiment`。配置为空时不附加业务标签；解析时 trim、忽略空项并去重，配置在启动时固定，请求不能覆盖。缺失、null、空白值统一为空字符串；与当前指标的系统标签同名时，系统标签优先。未配置变量（包括 log_id）不会自动导出。HTTP 与表指标不继承业务维度，API/SQL/节点、分支/降级、特征覆盖指标支持它。打点时读取当前变量值，同一事件复用一份标签快照；不会更改业务原值。直方图与注册失败回调在实际 Prometheus registry 初始化时配置，composite 仅负责分发指标。
+- HTTP 的 `path` 保留去掉查询参数的 API 路径，UI 和未知路径按类别归组。HTTP 耗时不含进入处理逻辑前的排队时间，也不等于客户端完整往返时间；进入处理逻辑前被拒绝的请求不计入。
+- API 结果使用 `sqlrec_api_execution_duration_seconds_*`；SQL 结果使用 `sqlrec_sql_execution_duration_seconds_*`，可发现 HTTP 200 响应内的 SQL 失败。
+- 节点和表通过 `outcome` 标记执行结果；节点的取消事件计数与耗时指标中的取消次数有重叠，不能相加。
+- 表缓存使用 `cache_gets_total{result="hit|miss"}`、`cache_size`、`cache_evictions_total`。容量是条目数而非字节；缓存重建后累计计数重新开始。UI 节点均值为当前进程成功执行的历史平均值。
 
-业务标签非空值按原值记录，不限制维度数、取值数量、长度、组合数或 meter 总量，也不设置变量名黑名单。配置键保留合法标签名的格式校验。HTTP method 使用请求中的原值；SQL statement_type 使用首个词的大写形式，空 SQL 记为空字符串，不做白名单归并。`sqlrec_metrics_registration_failures_total` 记录注册失败。
+### 业务标签
 
-HTTP、API 和主要表查询默认提供有限直方图桶；节点按 `METRICS_HISTOGRAM_NODES=demo_rec:RETURN,demo_rec:items` 精确名称开启，默认关闭节点桶。桶边界为 5/10/25/50/100/250/500/1000/3000/10000/30000/60000ms，另有 +Inf；分位数精度受桶宽限制，超过最大有限桶的分位数也不能准确表示。
+在服务进程中设置 `METRICS_TAG_KEYS=scene,experiment` 并重启，再通过 API `params` 或 SQL `SET` 传入对应变量。API、SQL、节点、分支降级及特征指标支持这些标签；HTTP 和表指标不继承它们。
 
-HTTP 仅保留 request duration Timer，从业务 Handler 开始执行计到响应写操作完成（含写失败），不包含此前业务队列等待或客户端网络全程。QPS、状态码比例、平均耗时、P95/P99 均来自这个 Timer；进入 Handler 前被拒绝的请求不计入。使用 Netty 内置业务线程分发，队列满时沿用 Netty 的拒绝机制，不保证返回 HTTP 503。线程和队列使用官方 `NettyEventExecutorMetrics`，固定 `pool="rest-business"`；workers 是工作线程总数，pending 按线程 `name` 导出，包含 HTTP 以外的 pipeline 任务。不额外采集排队/处理耗时、在途请求、拒绝或写失败计数。
+键须为合法的 Prometheus 标签名。缺失或空白值记为空标签，与系统标签重名时系统标签优先；请求不能改变配置的键列表。值按原样记录，不限制取值数量，宜使用场景名等有限集合，避免每请求唯一的 ID。
 
-表缓存启用 Caffeine `recordStats()`，通过 Micrometer 官方 `CaffeineCacheMetrics` 采集。面板使用 `cache_gets_total{result="hit|miss"}`、`cache_size`、`cache_evictions_total`，固定 `cache`/`table` 标签均为完整表名。命中率合并 read-through/cache-only 两种读取，未启用缓存的请求不计入；不增加容量或后端加载耗时等自定义缓存指标。表刷新创建新缓存时，先注销同表旧指标，再绑定新实例；新实例关闭缓存时只注销旧指标。成功刷新表清单并确认某表已删除时，注销该表的缓存指标；读取元数据失败不触发删表注销。未变化的表复用原缓存及其指标。新缓存的累计计数重新开始；Prometheus 已存储的历史数据保留，跨实例切换的窗口不能视为精确连续计数。条目数为估算值，非字节占用。
+### 直方图
 
-UI 的成功节点均值按所有业务标签组合的总量/次数加权计算，仍是本进程累计历史值。
+HTTP、API 和主要表查询默认有固定直方图桶。节点需通过 `METRICS_HISTOGRAM_NODES=demo_rec:RETURN,demo_rec:items` 按精确名称开启，默认关闭。桶边界为 5/10/25/50/100/250/500/1000/3000/10000/30000/60000 毫秒，另有 +Inf；P95/P99 为估算值，精度受桶宽及范围限制。
 
 ### Trace 配置
 

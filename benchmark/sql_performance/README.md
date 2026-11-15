@@ -78,6 +78,15 @@ Run this command from the repository root. `HADOOP_TEST_HDFS_URI` and
 `HADOOP_TEST_JUICEFS_URI` override the test endpoints (defaults:
 `hdfs://myhdfs` and `jfs://myjfs`); an unavailable backend fails the test.
 
+## Features and Labels
+
+The numeric features are `age_years = CAST(age AS FLOAT)` and `genre_count`,
+the number of movie genres cast to FLOAT. MovieLens age is a group code, not an
+exact age. Their minmax ranges are `[0,100]` and `[0,18]`, with missing values
+defaulting to zero. Ranking uses both; DSSM uses age in the user tower and genre
+count in the item tower. Offline samples, online requests, and item-vector
+loading use the same calculations. Rating is a label, not an input feature.
+
 `ml_ratings.rating` retains the normalized original MovieLens score `(score - 1) / 4`.
 `compute_features.sql` creates binary `FLOAT` labels in `ml_sample.rating`: original
 scores of 4 or 5 map to `1.0`, and scores of 1 through 3 map to `0.0`. TZRec training

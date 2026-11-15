@@ -19,46 +19,7 @@
 
 当前接口位于 `sqlrec-common` 模块：
 
-```java
-package com.sqlrec.common.model;
-
-public interface ModelController {
-    String getModelName();
-
-    List<FieldSchema> getOutputFields(ModelConf model);
-
-    String checkModel(ModelConf model);
-
-    String genModelTrainK8sYaml(
-        ModelConf model,
-        ModelTrainConf trainConf
-    );
-
-    default boolean requiresTrainingData() {
-        return true;
-    }
-
-    List<String> getExportCheckpoints(ModelExportConf exportConf);
-
-    String getExportCleanPath(ModelExportConf exportConf);
-
-    String genModelExportK8sYaml(
-        ModelConf model,
-        ModelExportConf exportConf
-    );
-
-    String getServiceUrl(ModelConf model, ServiceConf serviceConf);
-
-    String getServiceK8sYaml(ModelConf model, ServiceConf serviceConf);
-
-    default String validateServiceCheckpointType(String checkpointType) {
-        if (!Consts.CHECKPOINT_TYPE_EXPORT.equals(checkpointType)) {
-            return "service only supports export checkpoint";
-        }
-        return null;
-    }
-}
-```
+接口定义见 [`sqlrec-common/.../ModelController.java`](https://github.com/sqlrec/sqlrec/blob/master/sqlrec-common/src/main/java/com/sqlrec/common/model/ModelController.java)。下表说明需要实现的方法；扩展项目应依赖部署环境对应版本的 `sqlrec-common`。
 
 | 方法 | 实现要点 |
 |------|------------|

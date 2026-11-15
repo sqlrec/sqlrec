@@ -91,7 +91,7 @@ call demo_rec(quick_start_user);
 
 ## 管理本地 SQL 定义
 
-本地文件模式在启动时加载 SQL 定义。不能通过 CLI 或 `/sql/v1` 执行 DDL；修改文件后需要重启容器。下面的示例定义一张热门商品表、一个推荐函数和一个 API。
+本地文件模式在启动时加载定义，修改文件后需重启。Demo 镜像已开启 `SQL_SCHEMA_DDL_ENABLED=true`，也可通过 CLI 或 `/sql/v1` 执行支持的内存 DDL；这些修改只影响当前进程，不回写文件，重启后丢失。设置该变量为 `false` 可关闭运行时 DDL。以下示例使用文件管理定义。
 
 可通过 `SHOW TABLES`、`SHOW CREATE TABLE`、`DESCRIBE` 和 `SHOW FUNCTIONS` 查看已加载的定义，无需连接 HMS 或 Gateway。支持范围见[元数据查询](../reference/sql.md#元数据查询)。
 
@@ -170,4 +170,4 @@ curl -X POST http://localhost:30001/api/v1/recommend \
 
 Filesystem 表只用于 Demo 或测试，写入不会回写文件；配置和数据限制见[内置 Connector](../reference/connectors/builtin-connectors.md)。
 
-线上 serving 也可以将完整 SQL 目录随镜像或部署配置管理版本，更新时重新部署实例。如果需要在会话中直接执行并持久化 DDL，请按[服务部署](../operations/deployment.md)准备远程元数据环境，通过 Beeline 或 JDBC 连接。
+在线服务可将完整 SQL 目录随镜像或部署配置管理版本，更新时重新部署。需要持久化并跨实例共享运行时 DDL 时，使用[远程元数据](../operations/deployment.md)。

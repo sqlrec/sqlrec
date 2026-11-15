@@ -39,13 +39,7 @@
 
 `request.lua` 显式设置 `use_recall_service=false` 和 `rank_fun=rank_fun_simple`，固定压测口径。需要测试在线模型时，将请求 `params` 设为 `{"use_recall_service":"true","rank_fun":"rank_fun"}`，此时会调用 DSSM 用户塔和 Wide & Deep 排序服务。默认流程中的随机用户向量用于性能测试，不用于评估推荐质量。
 
-模型包含两个 `FLOAT` 特征：`age_years = CAST(age AS FLOAT)` 和 `genre_count = CAST(电影类型数量 AS FLOAT)`。MovieLens 的 `age` 表示年龄段编码，`age_years` 是该编码的数值形式，并非精确年龄。两者分别使用 minmax 的 `[0,100]` 和 `[0,18]` 参数归一化；缺失值默认 0。排序模型将它们输入 deep 分支，DSSM 将 `age_years` 输入用户塔、`genre_count` 输入物品塔。离线样本、在线请求和物品向量加载使用相同的计算方式。`rating` 只作为标签，不参与特征输入。
-
-`ml_ratings.rating` 保留原评分归一化后的数值 `(原评分 - 1) / 4`；`compute_features.sql` 将 `ml_sample.rating` 生成为 `FLOAT` 类型的 0/1 标签：原评分 4、5 为 `1.0`，1、2、3 为 `0.0`。TZRec 的训练 AUC、Accuracy 要求 0/1 标签，不能直接使用归一化后的软标签。`ml_recall_sample` 仍筛选同一批 4/5 星正样本对。已有环境重新训练前须重新生成这两张样本表，SQL 修改不会自动更新已有数据或 checkpoint。
-
-训练 SQL 显式开启训练指标和全部六种原生 TensorBoard summary：loss、学习率、梯度总范数、逐参数梯度范数、参数直方图、梯度直方图。排序模型记录训练 AUC/Accuracy，召回模型记录训练 Recall@1/5/10/20。直方图采集增加的是准备阶段开销，不计入 `wrk` 压测时间；验证曲线另需配置 `eval_input_path`。
-
-`init.sh` 保留 JuiceFS 上的 `ml_sample`、`ml_recall_sample`，并生成内容相同的 HDFS 副本 `ml_sample_hdfs`、`ml_recall_sample_hdfs`。排序模型 `rank_model` 继续使用 JuiceFS；DSSM 模型 `recall_model_hdfs` 使用 HDFS 召回样本，训练 checkpoint、TensorBoard 事件和双塔导出均写入 HDFS。独立模型名避免已有环境的 `IF NOT EXISTS` 沿用旧 JuiceFS 定义。部署的服务仍为 `rank-service`、`recall-service-user`、`recall-service-item`，后续生成的 Milvus 物品向量来自 HDFS 模型。
+特征定义、样本准备和模型存储配置见 [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/sql_performance/README.md)。修改样本规则后需重新准备数据，编辑 SQL 不会更新已有表或 checkpoint。
 
 ## 环境前提
 

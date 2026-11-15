@@ -39,13 +39,7 @@ The recommendation flow is defined in `benchmark/sql_performance/init_sqlrec_sql
 
 `request.lua` explicitly sets `use_recall_service=false` and `rank_fun=rank_fun_simple` to keep the timed workload stable. To exercise online inference, set request `params` to `{"use_recall_service":"true","rank_fun":"rank_fun"}`. That path calls the DSSM user tower and Wide & Deep ranking Services. Random user vectors in the default benchmark are for performance measurement, not recommendation-quality evaluation.
 
-The models include two `FLOAT` features: `age_years = CAST(age AS FLOAT)` and `genre_count = CAST(number of genres AS FLOAT)`. MovieLens `age` is an age-group code; `age_years` is its numeric representation, not an exact age. Their minmax parameters are `[0,100]` and `[0,18]`, respectively, with missing values defaulting to 0. Both enter the ranking model's deep branch. DSSM uses `age_years` in the user tower and `genre_count` in the item tower. Offline samples, online requests, and item-embedding loading use the same calculations. `rating` remains a label and never becomes an input feature.
-
-`ml_ratings.rating` retains the normalized original score `(score - 1) / 4`. `compute_features.sql` produces binary `FLOAT` labels in `ml_sample.rating`: original scores of 4 or 5 become `1.0`, and scores of 1 through 3 become `0.0`. TZRec training AUC and Accuracy require 0/1 labels and must not use normalized soft labels. `ml_recall_sample` still selects the same 4/5-star positive pairs. Regenerate both sample tables before retraining an existing setup; editing the SQL does not update existing data or checkpoints.
-
-Training SQL explicitly enables training metrics and all six native TensorBoard summary types: loss, learning rate, total gradient norm, per-parameter gradient norm, parameter histograms, and gradient histograms. Ranking records training AUC/Accuracy, and recall records training Recall@1/5/10/20. Histogram collection adds preparation overhead outside the timed `wrk` run. Evaluation curves additionally require `eval_input_path`.
-
-`init.sh` keeps `ml_sample` and `ml_recall_sample` on JuiceFS and creates identical HDFS copies in `ml_sample_hdfs` and `ml_recall_sample_hdfs`. Ranking (`rank_model`) continues to use JuiceFS. DSSM (`recall_model_hdfs`) reads the HDFS recall samples and writes training checkpoints, TensorBoard events, and both tower exports to HDFS. The separate model name prevents `IF NOT EXISTS` from retaining an older JuiceFS definition. Service names remain `rank-service`, `recall-service-user`, and `recall-service-item`; subsequent Milvus item vectors come from the HDFS model.
+Feature definitions, sample preparation, and model storage settings are documented in the [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/sql_performance/README.md). Rerun data preparation after changing samples; editing SQL does not update existing tables or checkpoints.
 
 ## Prerequisites
 

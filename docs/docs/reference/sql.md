@@ -49,42 +49,17 @@ CREATE OR REPLACE SQL FUNCTION my_function;
 
 ### DROP SQL FUNCTION
 
-删除一个已存在的 SQL 函数。
-
-**语法：**
+删除一个已存在的 SQL 函数。对象不存在时，`IF EXISTS` 可避免报错。
 
 ```sql
-DROP SQL FUNCTION [IF EXISTS] function_name
+DROP SQL FUNCTION [IF EXISTS] function_name;
 ```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果函数不存在，则不报错 |
-| `function_name` | 要删除的函数名称 |
 
 **注意：** 如果函数被 API 引用，则无法删除。
-
-**示例：**
-
-```sql
-DROP SQL FUNCTION my_function;
-
-DROP SQL FUNCTION IF EXISTS my_function;
-```
 
 ### SHOW SQL FUNCTIONS
 
 显示所有 SQL 函数列表。
-
-**语法：**
-
-```sql
-SHOW SQL FUNCTIONS
-```
-
-**示例：**
 
 ```sql
 SHOW SQL FUNCTIONS;
@@ -288,8 +263,8 @@ IF 语句支持两种执行模式：
 1. **普通模式**：评估条件表达式，如果返回 true 则执行 THEN 子句，否则执行 ELSE 子句（如果存在）
 2. **超时模式**（TIMEIN）：条件表达式必须返回数值类型的 THEN 执行时间预算（毫秒）
    - 如果超时时间 > 0，执行 THEN 子句并设置超时；如果超时则回退到 ELSE 子句
-   - 如果时间预算 <= 0，跳过 THEN，直接执行 ELSE；不提交 THEN 任务或创建其子上下文
-   - 当超时时间 > 0 时，THEN 执行超时或抛出异常会丢弃其临时 `RETURN` 状态，再执行 ELSE，因而不会把失败分支的结果提交给函数
+   - 如果时间预算 <= 0，跳过 THEN，直接执行 ELSE
+   - THEN 超时或执行失败时使用 ELSE 的结果，不返回失败分支的中间结果
 
 **注意：**
 - 条件查询必须恰好返回一行一列。普通模式下该值必须是 BOOLEAN（NULL 按 false 处理）；TIMEIN 模式下必须是数值。
@@ -301,7 +276,7 @@ IF 语句支持两种执行模式：
 - 两个分支都返回时，返回模式必须兼容；该 IF 后必须立即以一条空 `RETURN;` 结束函数定义，不能再写其他语句。函数结果模式由两个分支推导，不受末尾空 RETURN 影响
 - THEN 返回且没有 ELSE 时，如果条件为 false，函数继续执行 IF 后面的语句
 - TIMEIN 模式必须提供 ELSE；两个分支必须同为 CACHE，或同为 RETURN
-- TIMEIN 的缓存数据由工作线程计算，成功后由等待线程发布；超时后迟到的 THEN 数据不会覆盖 ELSE。
+- TIMEIN 超时或失败后，THEN 的迟到结果不会覆盖 ELSE。
 - 请求已取消时终止执行，不再降级到 ELSE；请求仍有效时，THEN 的异常、Error 和中断均可触发 ELSE。
 - TIMEIN 的非正数预算表示直接降级；`NODE_EXEC_TIMEOUT <= 0` 仍表示不设置节点超时，两者含义不同
 - 当前不支持在 THEN 或 ELSE 中直接嵌套另一个 IF
@@ -543,40 +518,15 @@ CREATE OR REPLACE API my_api WITH my_function;
 
 ### DROP API
 
-删除一个已存在的 API。
-
-**语法：**
+删除一个已存在的 API。对象不存在时，`IF EXISTS` 可避免报错。
 
 ```sql
-DROP API [IF EXISTS] api_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果 API 不存在，则不报错 |
-| `api_name` | 要删除的 API 名称 |
-
-**示例：**
-
-```sql
-DROP API my_api;
-
-DROP API IF EXISTS my_api;
+DROP API [IF EXISTS] api_name;
 ```
 
 ### SHOW APIS
 
 显示所有 API 列表。
-
-**语法：**
-
-```sql
-SHOW APIS
-```
-
-**示例：**
 
 ```sql
 SHOW APIS;
@@ -652,27 +602,10 @@ CREATE MODEL IF NOT EXISTS external_rank_model WITH (
 
 ### DROP MODEL
 
-删除一个已存在的模型。
-
-**语法：**
+删除一个已存在的模型。对象不存在时，`IF EXISTS` 可避免报错。
 
 ```sql
-DROP MODEL [IF EXISTS] model_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果模型不存在，则不报错 |
-| `model_name` | 要删除的模型名称 |
-
-**示例：**
-
-```sql
-DROP MODEL my_model;
-
-DROP MODEL IF EXISTS my_model;
+DROP MODEL [IF EXISTS] model_name;
 ```
 
 ### TRAIN MODEL
@@ -759,14 +692,6 @@ EXPORT MODEL my_model CHECKPOINT = 'v1.0'
 
 显示所有模型列表。
 
-**语法：**
-
-```sql
-SHOW MODELS
-```
-
-**示例：**
-
 ```sql
 SHOW MODELS;
 ```
@@ -805,22 +730,8 @@ DESCRIBE FORMATTED MODEL my_model CHECKPOINT = 'v1.0';
 
 显示指定模型的所有检查点列表。
 
-**语法：**
-
 ```sql
-SHOW CHECKPOINTS model_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `model_name` | 模型名称 |
-
-**示例：**
-
-```sql
-SHOW CHECKPOINTS my_model;
+SHOW CHECKPOINTS model_name;
 ```
 
 ### ALTER MODEL DROP CHECKPOINT
@@ -889,44 +800,19 @@ CREATE SERVICE IF NOT EXISTS `external-rank-service`
 
 名称限制遵循 [Kubernetes Service 的 DNS 命名规则](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names)。大写字母、下划线、点号、空格等均会报错，不自动转换大小写；`IF NOT EXISTS` 也必须通过名称校验。含连字符的名称须用反引号包裹。自托管服务直接使用服务名作为 Kubernetes Service 和 Deployment 名称，不追加哈希后缀；URL 为 `http://<service-name>.<namespace>.svc.cluster.local:80/predict`。非法名称直接报错，不自动替换或截断。此名称校验也适用于 external 服务。
 
-服务定义（含 URL 和完整 YAML）在提交 Kubernetes 前保存。提交失败时保留记录，服务记录存在不代表已就绪。可重新执行不带 `IF NOT EXISTS` 的 `CREATE SERVICE` 重试，或用 `DROP SERVICE` 清理已创建的资源；`IF NOT EXISTS` 会跳过已有记录，不能用于重试失败的部署。
+服务定义在 Kubernetes 提交成功后保存，提交失败不会覆盖已有定义。提交成功不代表工作负载已就绪，调用前仍需检查状态。更新或重试已有定义时不带 `IF NOT EXISTS`；该选项会跳过已有记录。
 
 ### DROP SERVICE
 
-删除一个已存在的服务。
-
-**语法：**
+删除一个已存在的服务。对象不存在时，`IF EXISTS` 可避免报错。
 
 ```sql
-DROP SERVICE [IF EXISTS] service_name
-```
-
-**参数：**
-
-| 参数 | 描述 |
-|------|------|
-| `IF EXISTS` | 可选。如果服务不存在，则不报错 |
-| `service_name` | 要删除的服务名称 |
-
-**示例：**
-
-```sql
-DROP SERVICE `my-service`;
-
-DROP SERVICE IF EXISTS `my-service`;
+DROP SERVICE [IF EXISTS] service_name;
 ```
 
 ### SHOW SERVICES
 
 显示所有服务列表。
-
-**语法：**
-
-```sql
-SHOW SERVICES
-```
-
-**示例：**
 
 ```sql
 SHOW SERVICES;
@@ -961,57 +847,43 @@ DESCRIBE FORMATTED SERVICE `my-service`;
 
 ## 元数据 DDL
 
-共享元数据模式下，持久表、库和 UDF 的纯元数据 DDL 使用 Flink 1.19 default 方言，通过官方 HiveCatalog 的 Hive 客户端直接写 HMS，不创建 TableEnvironment 或 Planner，也不连接 Gateway。表 DDL 支持普通列、metadata 列、主键和分区，不支持计算列和 WATERMARK；需要解析已有表结构的查询和修改也会拒绝这些定义。
+| 模式 | 定义存放位置 | 运行时 DDL |
+| --- | --- | --- |
+| 远程元数据 | 库、表、Java UDF 在 HMS；SQLRec 资源在 PostgreSQL | 通过 Beeline/JDBC 执行持久化 DDL |
+| SQL 文件 | 启动时加载 `SQL_SCHEMA_DIR` 下的文件 | 默认关闭；`SQL_SCHEMA_DDL_ENABLED=true` 开启支持的内存 DDL |
 
-不支持 `USE CATALOG` 和创建临时表（包括临时 CTAS/RTAS）。`USE database` 不校验会话 schema 中是否存在该数据库，后续操作按实际元数据执行。远程元数据模式下，临时函数、视图及持久表的 CTAS/RTAS 保留 Thrift 远程路由。保存表/UDF 定义不代表 SQLRec 本地支持其全部 Connector、列语义或函数接口。SQL 文件元数据模式不提供 Gateway 转发。
+文件模式的 DDL 在同一进程的会话间共享，不回写文件，重启后恢复文件定义，不跨实例同步。Demo 镜像已开启该选项；需在启动前配置，SQL `SET` 不能改变它。
 
-SQL 文件元数据模式默认禁止 DDL；启动前设置 `SQL_SCHEMA_DDL_ENABLED=true` 后，支持库的 `CREATE / ALTER ... SET / DROP`、表的 `CREATE / CREATE ... LIKE / ALTER / DROP`、持久 Java UDF、SQL 函数和 API 的创建、替换（语法支持时）及删除。表 ALTER 复用现有列、主键、选项修改能力；支持分区键声明，不支持分区实例的增删改、跨库重命名、计算列、WATERMARK、CTAS/RTAS、临时对象和视图。模型、Service、Checkpoint、训练及导出操作仍保持禁用。Java UDF 仅保存类名、语言和资源声明，不下载 JAR 或加载类；实际执行仍需相应依赖。数据库删除支持 `RESTRICT / CASCADE`，禁止删除当前数据库和默认数据库。
+文件模式支持库的 CREATE/ALTER SET/DROP、表的 CREATE/CREATE LIKE/ALTER/DROP，以及持久 Java UDF、SQL 函数和 API 的创建、删除；语法支持时可替换。模型、Service、Checkpoint、训练和导出命令仍不能在运行时执行。
 
-变更仅保存在当前进程内，对该进程的所有会话可见；不回写文件，不跨实例同步，重启后恢复文件定义。开关由每个 SQL 执行器在创建时读取并固定，在 DDL 分发前统一检查，会话 `SET` 不改变权限。该开关控制 SQL 执行，内部元数据 API 不做该权限检查。数据库 DDL 成功后只更新执行该语句的会话的编译 schema；其他已有会话不自动同步数据库列表，需要重新创建执行器才能使用新增数据库进行数据查询。`SHOW`、`DESCRIBE` 等直接读取元数据的命令仍可看到共享定义。
+库、表及 UDF 定义使用 Flink 1.19 default 方言。表支持普通列、metadata 列、主键及分区键声明。文件模式不支持计算列、WATERMARK、临时表、CTAS/RTAS、视图、分区实例修改和跨库重命名。库删除支持 RESTRICT/CASCADE，不能删除当前库和默认库。数据库 DDL 变更后，其他已有会话查询新库前可能需要重新连接。
 
-```bash
-export SQL_SCHEMA_DIR=/app/sql
-export SQL_SCHEMA_DDL_ENABLED=true
-```
+远程模式的持久元数据 DDL 不需要 Gateway；临时函数、视图及持久表 CTAS/RTAS 通过 Thrift 远程转发。不支持 `USE CATALOG` 和临时表。`USE database` 不立即校验库是否存在，后续操作按实际元数据执行，见[执行边界](./architecture.md#gateway-转发边界)。
+
+保存表或 UDF 定义不代表本地引擎支持对应能力。Connector/UDF JAR 需另行部署，SQLRec 不自动下载 UDF 资源。
 
 ## 元数据查询
 
-共享元数据和 SQL 文件模式均支持 `SHOW DATABASES`、`SHOW TABLES`、`SHOW CREATE TABLE`、`DESCRIBE`、`SHOW FUNCTIONS` 和 `SHOW USER FUNCTIONS`，均在 SQLRec 内执行，不转发到 Gateway。表名支持 `table`、`database.table` 和 `hive.database.table`；只有未限定数据库的表名优先匹配会话中的 `CACHE TABLE`。缺失对象和未配置的 catalog 会明确报错。
+两种模式均支持 `SHOW DATABASES`、`SHOW TABLES`、`SHOW CREATE TABLE`、`DESCRIBE`、`SHOW FUNCTIONS`、`SHOW USER FUNCTIONS`，无需 Gateway。文件模式查看定义不依赖 HMS，也不要求对应 Connector/UDF 类可用。
 
-`SHOW TABLES` 直接读取元数据中的数据库和表列表；查询当前数据库时，还会合并会话缓存表，结果去重、排序，支持 `LIKE` 和 `NOT LIKE`。远程模式下，能列出新数据库中的表，不代表已有会话的本地 SQL 编译 schema 已包含该数据库，详见[元数据管理](./architecture.md#元数据管理)。
+- 表名支持 `table`、`database.table`、`hive.database.table`；未限定数据库时优先匹配会话 `CACHE TABLE`。
+- `SHOW TABLES` 包含当前库的会话缓存表，可用 `LIKE`、`NOT LIKE` 筛选名称。
+- `SHOW USER FUNCTIONS` 列出已声明的 Java UDF；`SHOW FUNCTIONS` 还含 Flink 内置函数，支持 LIKE/ILIKE 及其 NOT 形式。被列出的函数不一定能本地执行；SQL 函数使用 `SHOW SQL FUNCTIONS`。
+- `SHOW CREATE TABLE` 返回规范化 DDL，主键列包含 NOT NULL；列注释不保证在往返转换中保留。
+- 持久表 `DESCRIBE` 返回 `name`、`type`、`null`、`key`、`extras`、`watermark`，存在注释时追加 `comment`；缓存表返回 `name`、`type`。
 
-SQL 文件模式读取启动时加载并经内存 DDL 更新的定义，查看表和函数不要求对应 Connector 或 UDF 类可用，也不连接 HMS/Gateway。文件加载和运行时 DDL 使用同一套结构校验，计算列、WATERMARK、CTAS 等不支持的定义会在加载时直接报错。SQL 文件按路径排序加载，`CREATE TABLE ... LIKE` 的源表必须先定义；加载后保存解析完成的结构，支持后续 `DESCRIBE` 和修改。
-
-`SHOW CREATE TABLE` 根据当前结构生成规范化建表语句，保留列、主键、分区、表注释和选项，主键列会显示为 `NOT NULL`。列注释沿用 Flink 1.19 的转换行为，不保证在序列化及重新解析后保留。持久表的 `DESCRIBE` 在两种模式下均返回 `name`、`type`、`null`、`key`、`extras`、`watermark`，存在列注释时追加 `comment`；会话缓存表仍返回 `name`、`type`。
-
-`SHOW USER FUNCTIONS` 返回指定数据库声明的 UDF；`SHOW FUNCTIONS` 还包含 Flink 内置函数，结果排序并去重，支持 `LIKE`、`ILIKE` 及其 `NOT` 形式。函数被列出不代表本地执行器一定支持执行。SQLRec SQL 函数仍通过 `SHOW SQL FUNCTIONS` 查询。SQL 文件元数据默认只读，可通过上述开关开放内存 DDL；修改文件后仍需重启，`FLUSH` 不重新加载文件。
+SQL 文件按路径排序加载，`CREATE TABLE ... LIKE` 的源表须先定义。修改文件需要重启，`FLUSH` 不重新读取文件。
 
 ## 元数据刷新
 
-成功的 DDL 刷新保留元数据未变化的表对象和 filesystem 内存数据；`CREATE TABLE IF NOT EXISTS` 未产生变更时也保留数据。实际 ALTER 或 RENAME 会重建目标表，目标表的运行时内存写入可能重置。DROP 后重建同名表使用新对象。
+DDL 保留未变化表的内存数据。ALTER、RENAME 可能重置目标表的运行时数据；DROP 后重建同名表会创建新对象。
 
 ### FLUSH
-
-失效进程内的元数据、函数、API 与服务配置缓存。
-
-**语法：**
-
-```sql
-FLUSH
-```
-
-**描述：**
-
-`FLUSH` 使当前进程中的数据库和表定义、Java/SQL 函数、API、模型服务配置缓存失效，后续访问会重新加载定义并重建 Connector 表对象。filesystem 表的运行时写入会随对象重建而重置，会话中的 `CACHE TABLE` 保留。
-
-两种模式下，`FLUSH` 均不会增删已有会话的数据库子 schema。数据库 DDL 成功后只更新执行该语句的会话；其他已有会话需要在数据库列表缓存更新后创建新的执行器（Thrift 客户端可重新连接），本地 SQL 编译才能使用更新后的数据库列表。已有数据库内的表和函数缓存仍按各自策略刷新。文件模式的 `FLUSH` 保留所有内存 DDL 变更。
-
-它不清除会话中的 `CACHE TABLE` 结果，也不保证已有 Connector 的业务数据缓存立即更新。本地 SQL 文件的改动仍需重启进程才能生效。精确的缓存范围见[架构设计](./architecture.md#connector-表数据缓存与查询路径)。
-
-**示例：**
 
 ```sql
 FLUSH;
 ```
 
-通常在远程元数据被外部修改后使用；重新加载定义可能带来短暂额外开销。
+使当前进程的表、Java/SQL 函数、API、服务配置等定义缓存失效。后续访问重建 Connector 表对象，Filesystem 运行时写入会重置；会话 `CACHE TABLE` 及文件模式的内存 DDL 修改保留。
+
+通常在外部修改元数据后使用。它不重新读取 SQL 文件，也不为已有会话增加数据库；新库不能用于本地查询时应重新连接。缓存范围见[架构说明](./architecture.md#connector-表数据缓存与查询路径)。

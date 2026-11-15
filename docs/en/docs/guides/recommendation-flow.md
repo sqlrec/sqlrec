@@ -1,135 +1,8 @@
 # Writing a Recommendation Flow
 
-SQLRec represents a multi-step business flow as a **SQL function**. A typical recommendation function receives user data, performs recall, deduplication, ranking, and diversification, then returns the final items.
+A SQL function receives input tables, runs recall, filtering, ranking, and diversification, then returns a result. This guide uses one complete example, followed by optional control-flow features. See [the SQL reference](../reference/sql.md) for full syntax.
 
-This guide is for people writing business SQL. See the [SQL Syntax Reference](../reference/sql.md) for exact grammar and [Architecture](../reference/architecture.md) for execution-engine details.
-
-## A Minimal Function
-
-Prepare `hot_item` using [the Docker guide](../getting-started/docker.md#managing-local-sql-definitions). In local file mode, save the definition below as `function/recommend.sql` and restart the container. In remote metadata mode, execute it through Beeline or JDBC.
-
-```sql
-CREATE OR REPLACE SQL FUNCTION recommend;
-
-DEFINE INPUT TABLE user_info (
-  user_id BIGINT
-);
-
-CACHE TABLE result_table AS
-SELECT item_id, score
-FROM hot_item
-ORDER BY score DESC
-LIMIT 10;
-
-RETURN result_table;
-```
-
-The function has four essential parts:
-
-1. `CREATE SQL FUNCTION` starts the definition.
-2. `DEFINE INPUT TABLE` declares the table and fields the caller must provide.
-3. `CACHE TABLE` stores an intermediate result.
-4. A top-level `RETURN` returns the result and ends the definition.
-
-Terminate every top-level statement in a multi-statement function with a semicolon.
-
-## Prepare an Input and Call
-
-In the same CLI or Beeline session, create the input table and call the function:
-
-```sql
-CACHE TABLE quick_start_user AS
-SELECT CAST(1000001 AS BIGINT) AS user_id;
-
-CALL recommend(quick_start_user);
-```
-
-`quick_start_user` matches the declared input schema. After validating the function, follow [Publishing and Calling an API](./api.md) to expose it to an application.
-
-## Input Tables
-
-An input table is a table-valued function argument. At call time, pass compatible cached tables in declaration order.
-
-Declare fields explicitly:
-
-```sql
-DEFINE INPUT TABLE user_info (
-  user_id BIGINT,
-  country VARCHAR,
-  tags ARRAY<VARCHAR>
-);
-```
-
-Or reuse an existing table's schema:
-
-```sql
-DEFINE INPUT TABLE user_info LIKE user_profile;
-```
-
-`LIKE` copies only the schema, not rows from `user_profile`.
-
-## Cached Tables
-
-`CACHE TABLE` stores an intermediate result for the current request:
-
-```sql
-CACHE TABLE interested_category AS
-SELECT category
-FROM user_info
-JOIN user_interest_category
-  ON user_interest_category.user_id = user_info.user_id
-ORDER BY score DESC
-LIMIT 10;
-```
-
-Later statements can query the table or pass it to another SQL or Java table function:
-
-```sql
-CACHE TABLE dedup_result AS
-CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
-```
-
-A cached table belongs to one execution. Do not use it to retain data between API calls. For persistence, `INSERT` into a Redis, Kafka, JDBC, or other connector table.
-
-## Calling Functions
-
-Call a SQL function directly:
-
-```sql
-CALL recall(user_info);
-```
-
-Cache its result when later steps need it:
-
-```sql
-CACHE TABLE recall_result AS
-CALL recall(user_info);
-```
-
-Built-in Java table functions such as `dedup`, `weighted_merge`, and `window_diversify` also use `CALL`:
-
-```sql
-CACHE TABLE final_result AS
-CALL window_diversify(ranked_item, 'category', 3, 1, 10);
-```
-
-Pass a cached table name directly and quote string arguments. See [Table Functions](../reference/udf/table-functions.md) for the complete list.
-
-## Returning a Result
-
-A SQL function must end with a top-level `RETURN`. It may return a cached table, a query, or a synchronous call:
-
-```sql
-RETURN result_table;
-
-RETURN SELECT item_id, score FROM result_table;
-
-RETURN CALL post_process(result_table);
-
-RETURN;
-```
-
-`RETURN;` completes successfully with no data. `RETURN CALL ... ASYNC` is unsupported because an asynchronous call cannot provide a synchronous function result.
+Start the [Docker demo](../getting-started/docker.md), then open [a CLI](./clients.md#local-cli). The example reuses its built-in tables. For your own data sources, see [Connect Data Sources](./data-sources.md).
 
 ## Complete Example
 
@@ -167,9 +40,42 @@ CALL dedup(recall_result, exposed_item, 'item_id', 'item_id');
 RETURN SELECT item_id, rec_reason FROM dedup_result LIMIT 10;
 ```
 
-Runnable demo definitions are under `sqlrec-demo/src/main/sql/quick_start/`.
+## Read and Call the Function
 
-The following sections cover optional variables, dynamic calls, conditions, concurrent processing, and side tasks. See [the SQL reference](../reference/sql.md) for complete rules.
+| Statement | Purpose |
+| --- | --- |
+| `CREATE SQL FUNCTION` | Begin a function definition |
+| `DEFINE INPUT TABLE` | Declare required input fields; `LIKE existing_table` reuses a schema, not its data |
+| `CACHE TABLE` | Name an intermediate result for the current execution |
+| `RETURN` | Return a table, SELECT, or synchronous CALL; a top-level RETURN ends the definition |
+
+Run the complete definition in the CLI, then prepare input and call it in the same session:
+
+```sql
+CACHE TABLE quick_start_user AS
+SELECT CAST(1000001 AS BIGINT) AS user_id;
+
+CALL example_rec(quick_start_user);
+```
+
+The result contains `item_id` and `rec_reason`. Input tables are passed in declaration order with compatible fields. Parameters must be cached tables; first query an external table with `CACHE TABLE ... AS SELECT ...`.
+
+To manage this definition as a file, save it under `function/example_rec.sql` in the complete SQL directory and restart; see [Load SQL Files](../getting-started/docker.md#managing-local-sql-definitions). The Demo also permits in-memory DDL, which disappears on restart. Remote metadata uses Beeline/JDBC.
+
+Cached results are not shared across independent API requests. Persist exposure records and other shared data through an external Connector. Publish the function using [the API guide](./api.md).
+
+## Calling Functions
+
+SQL functions and built-in table functions use `CALL`. Capture the result when later statements need it:
+
+```sql
+CACHE TABLE recall_result AS CALL recall(user_info);
+
+CACHE TABLE final_result AS
+CALL window_diversify(ranked_item, 'category', 3, 1, 10);
+```
+
+Pass cached tables by name and strings in single quotes. Use `LIKE table_name` or `LIKE FUNCTION 'function_name'` when the result schema is dynamic. See [Table Functions](../reference/udf/table-functions.md) for signatures and output schemas.
 
 ## Execution Variables
 

@@ -101,22 +101,7 @@ Normal execution returns HTTP 200. An empty result has `data: []`; when the func
 
 Check the HTTP status first, then read the result or error message. Unmatched paths return 404, and unsupported methods return 405.
 
-## Advanced Option: Metric Labels
-
-Configure `METRICS_TAG_KEYS=scene` in the server process, then supply the variable through `params`:
-
-```json
-{
-  "data": {
-    "user_info": [{"user_id": 1000001}]
-  },
-  "params": {
-    "scene": "homepage"
-  }
-}
-```
-
-`scene` is exported directly as the tag name; missing or blank values become empty strings. Fixed system tags take precedence when a business key conflicts with them on the current metric. `METRICS_TAG_KEYS` is a comma-separated process environment option loaded once and requires a restart to change. Requests cannot override the dimension list. Variable changes affect subsequent metric events, and remote calls propagate these variables through `params` only. See [Observability](../operations/observability.md#common-metrics).
+Business metric labels can use values from `params`, such as `scene` or `experiment`. The operator selects the allowed label keys with `METRICS_TAG_KEYS`; see [Observability](../operations/observability.md#business-labels).
 
 ## Troubleshooting
 

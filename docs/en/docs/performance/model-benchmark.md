@@ -61,7 +61,7 @@ Criteo uses a pinned 1M sample version. Identical feature rows stay in the same 
 
 Criteo contains 13 numeric features and 26 anonymous categorical features. CatBoost and the three neural ranking models use all 39 features. LightGBM/XGBoost use the 13 numeric features, as required by SQLRec's current training/export path. Criteo scores therefore reflect different feature configurations.
 
-Some ranking models also use user/item smoothed positive rates from training history. See [Built-in Models](../reference/models/builtin-models.md) and the [benchmark README](https://github.com/sqlrec/sqlrec/blob/main/benchmark/model_quality/README.md) for specific features and parameters.
+Some ranking models also use user/item smoothed positive rates from training history. See [Built-in Models](../reference/models/builtin-models.md) and the [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/model_quality/README.md) for specific features and parameters.
 
 ### Main Training Settings
 
@@ -109,6 +109,6 @@ After each run, open `summary.md` in the corresponding directory under `benchmar
 
 - Data fields, labels, and feature views: `benchmark/model_quality/configs/datasets/*.yaml`.
 - Model and training parameters: `benchmark/model_quality/config.py`, with separate settings for each dataset/model combination.
-- Parameter meanings and SQL usage: [Built-in Models](../reference/models/builtin-models.md). For complete test settings and run options, see the [benchmark README](https://github.com/sqlrec/sqlrec/blob/main/benchmark/model_quality/README.md).
+- Parameter meanings and SQL usage: [Built-in Models](../reference/models/builtin-models.md). For complete test settings and run options, see the [benchmark README](https://github.com/sqlrec/sqlrec/blob/master/benchmark/model_quality/README.md).
 
 Compare changes on the same validation data and candidate scope. Rerun data preparation when changing preparation rules or feature definitions.
