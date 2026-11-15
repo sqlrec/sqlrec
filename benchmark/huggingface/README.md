@@ -66,6 +66,12 @@ source deploy/env.sh
 .venv/bin/python -m unittest discover -s benchmark/huggingface/tests -v
 ```
 
+The local contract tests also run in the `sqlrec-model` Maven `test` phase,
+using the shared `.venv` prepared by `bin/setup_python_env.sh`, just like the
+model Python unit tests. `-DskipPythonTests=true` or `-DskipTests` skips both
+suites. The local tests only need the root `requirements.txt`; the benchmark
+requirements above are for running the benchmark against a deployment.
+
 `bin/test.sh -all` also runs this benchmark after deployment, Maven tests and
 the SQL performance benchmark, before the model quality benchmark. Its existing
 Python dependency installation covers the shared SQL clients and lifecycle

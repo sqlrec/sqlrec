@@ -1,4 +1,4 @@
-name: Java Unit Tests
+name: Java and Python Unit Tests
 
 on:
   # A merged PR updates master and triggers this workflow, as does a direct push.

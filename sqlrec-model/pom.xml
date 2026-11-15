@@ -98,6 +98,32 @@
                             <skip>${skipPythonTests}</skip>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>huggingface-contract-tests</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.executable}</executable>
+                            <workingDirectory>${project.basedir}/..</workingDirectory>
+                            <arguments>
+                                <argument>-m</argument>
+                                <argument>unittest</argument>
+                                <argument>discover</argument>
+                                <argument>-s</argument>
+                                <argument>benchmark/huggingface/tests</argument>
+                                <argument>-p</argument>
+                                <argument>test_*.py</argument>
+                                <argument>-v</argument>
+                            </arguments>
+                            <environmentVariables>
+                                <PYTHONPATH>${project.basedir}/src/main/python</PYTHONPATH>
+                                <PYTHONDONTWRITEBYTECODE>1</PYTHONDONTWRITEBYTECODE>
+                            </environmentVariables>
+                            <skip>${skipPythonTests}</skip>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>

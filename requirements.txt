@@ -8,3 +8,4 @@ redis
 pymilvus==2.6.3
 fastapi
 uvicorn
+PyYAML>=6.0

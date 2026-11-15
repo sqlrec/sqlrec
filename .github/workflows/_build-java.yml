@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       unit_tests_only:
-        description: 'Run Java unit tests without model Python tests or packaging'
+        description: 'Run Java and Python unit tests without packaging'
         type: boolean
         default: false
       release:
@@ -16,28 +16,6 @@ permissions:
   contents: read
 
 jobs:
-  huggingface-contract-tests:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-          cache: pip
-          cache-dependency-path: |
-            benchmark/huggingface/requirements.txt
-            benchmark/model_quality/requirements.txt
-
-      - name: Install contract test dependencies
-        run: python -m pip install -r benchmark/huggingface/requirements.txt
-
-      - name: Test Hugging Face benchmark contracts without model downloads
-        run: python -m unittest discover -s benchmark/huggingface/tests -v
-
   build-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -64,7 +42,6 @@ jobs:
           cache: maven
 
       - name: Set up Python 3.11
-        if: ${{ !inputs.unit_tests_only }}
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -72,7 +49,6 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Test artifact and release helpers
-        if: ${{ !inputs.unit_tests_only }}
         run: python3 -m unittest discover -s .github/tests -v
 
       - name: Verify tag matches pom version
@@ -92,10 +68,9 @@ jobs:
         run: mvn -B -DexcludedGroups=integration package
 
       # UI resources are required by UiHandlerTest, so keep the frontend build.
-      # Skip only Python tests; -DskipTests would also disable the Java tests.
-      - name: Run Java unit tests
+      - name: Run Java and Python unit tests
         if: inputs.unit_tests_only
-        run: mvn -B -ntp -DskipPythonTests=true -DexcludedGroups=integration test
+        run: mvn -B -ntp -DexcludedGroups=integration test
 
       - name: Save Java test reports
         if: ${{ always() }}
