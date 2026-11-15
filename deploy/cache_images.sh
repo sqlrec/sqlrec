@@ -37,11 +37,11 @@ image_created_time() {
 load_images() {
   local quoted_image loaded_count=0
   if [ ! -s "${manifest}" ]; then
-    echo "No cached ${DEPLOY_ARCH} workload images found."
+    echo "No cached ${DEPLOY_ARCH} images found."
     return 0
   fi
 
-  echo "Loading cached ${DEPLOY_ARCH} workload images into Minikube..."
+  echo "Loading cached ${DEPLOY_ARCH} images into Minikube..."
   while IFS="$(printf '\t')" read -r image archive_name; do
     [ -n "${image}" ] || continue
     archive="${cache_arch_dir}/${archive_name}"
@@ -51,7 +51,7 @@ load_images() {
     fi
     echo "Loading ${image}"
     minikube -p minikube image load "${archive}" --overwrite=true < /dev/null
-    # A successful load must make the exact workload image reference available.
+    # A successful load must make the exact image reference available.
     # This also catches archives containing an outdated or different image tag.
     printf -v quoted_image '%q' "${image}"
     if ! minikube -p minikube ssh -- \
@@ -61,35 +61,32 @@ load_images() {
     fi
     loaded_count=$((loaded_count + 1))
   done < "${manifest}"
-  echo "Loaded ${loaded_count} cached workload images."
+  echo "Loaded ${loaded_count} cached images."
 }
 
 save_images() {
-  require_commands kubectl minikube stat
+  require_commands minikube stat
 
   images_file="$(mktemp "${TMPDIR:-/tmp}/sqlrec-images.XXXXXX")"
   manifest_tmp="$(mktemp "${cache_arch_dir}/images.tsv.XXXXXX")"
   trap 'rm -f "${images_file}" "${manifest_tmp}"' EXIT INT TERM
 
-  # Cache workload images that are actually present after a successful deploy.
-  # Minikube already manages the Kubernetes system/preload images separately.
-  {
-    kubectl --context=minikube get pods --all-namespaces \
-      -o go-template='{{range .items}}{{if ne .metadata.namespace "kube-system"}}{{range .spec.initContainers}}{{printf "%s\n" .image}}{{end}}{{range .spec.containers}}{{printf "%s\n" .image}}{{end}}{{end}}{{end}}'
-    # Spark driver/executor Pods are created only when the first query starts.
-    printf '%s\n' "${SPARK_IMAGE}"
-  } |
+  # Cache every local image in the same Minikube Docker daemon used by save,
+  # including system images, unused tags, and untagged images (by full ID).
+  minikube -p minikube ssh -- \
+    'sudo docker image ls --all --no-trunc --format '\''{{if or (eq .Repository "<none>") (eq .Tag "<none>")}}{{.ID}}{{else}}{{.Repository}}:{{.Tag}}{{end}}'\''' < /dev/null |
+    tr -d '\r' |
     sed '/^[[:space:]]*$/d' |
     sort -u > "${images_file}"
 
   if [ ! -s "${images_file}" ]; then
-    echo "No workload images found to cache."
-    rm -f "${manifest_tmp}"
+    echo "No local Minikube images found to cache."
+    rm -f "${images_file}" "${manifest_tmp}"
     trap - EXIT INT TERM
     return 0
   fi
 
-  echo "Saving workload images to ${cache_arch_dir}..."
+  echo "Saving all local Minikube images to ${cache_arch_dir}..."
   while IFS= read -r image; do
     checksum="$(printf '%s' "${image}" | cksum | awk '{print $1}')"
     safe_name="$(printf '%s' "${image}" | sed 's/[^[:alnum:]._-]/_/g' | cut -c1-180)"
@@ -116,7 +113,7 @@ save_images() {
     echo "Saving ${image}"
     rm -f "${archive_tmp}"
     # `minikube image save` can exit successfully without creating an archive
-    # when a Pod declares an image that has not actually been pulled yet.
+    # if an image becomes unavailable between listing and saving.
     if minikube -p minikube image save "${image}" "${archive_tmp}" < /dev/null && [ -s "${archive_tmp}" ]; then
       mv "${archive_tmp}" "${archive}"
       printf '%s\t%s\n' "${image}" "${archive_name}" >> "${manifest_tmp}"
@@ -129,7 +126,7 @@ save_images() {
   mv "${manifest_tmp}" "${manifest}"
   rm -f "${images_file}"
   trap - EXIT INT TERM
-  echo "Workload image cache updated."
+  echo "Image cache updated."
 }
 
 case "${action}" in

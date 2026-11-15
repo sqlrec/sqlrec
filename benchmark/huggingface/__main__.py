@@ -10,11 +10,11 @@ import statistics
 import time
 import uuid
 
-from benchmark.model_quality.client import APIClient, HS2Client, Indeterminate, SQLFailed
+from benchmark.model_quality.client import APIClient, HS2Client, SQLFailed
 from benchmark.model_quality.common import literal, write_json
 from benchmark.model_quality.config import Feature, environment
 from benchmark.model_quality.data import fields, options
-from benchmark.model_quality.resources import RunResources, kubernetes_name
+from benchmark.model_quality.resources import RunResources
 
 from .checks import check_equivalent, check_predictions
 from .config import ALLOW_PATTERNS, CASES, TASKS, input_rows
@@ -25,22 +25,9 @@ class HuggingFaceResources(RunResources):
     def download(self):
         # HF TRAIN downloads an origin checkpoint; it must not have an ON table
         # or invoke the train/export path used by recommendation models.
-        job = {'name': kubernetes_name(self.name + '-v1') + '-job', 'kind': 'download',
-               'checkpoints': ['v1'], 'status': 'submitted'}
-        if (self.workloads.get('job', job['name'])
-                or (self.workloads.get('pods', selector='job-name=' + job['name']) or {}).get('items')):
-            raise ValueError('Download workload name already exists')
-        self.jobs.append(job)
-        self.save()
-        with self.stage('download'):
-            self.execute(f'TRAIN MODEL `{self.name}`\nCHECKPOINT = \'v1\'\n'
-                         f'WITH ({options(self.env.train_resources)})', long=True,
-                         on_submitted=lambda operation: self.capture_job(job))
-            info = self.checkpoint('v1')
-            if info.get('Status:') != 'succeeded' or info.get('Checkpoint Type:') != 'origin':
-                raise Indeterminate('Download has no public succeeded origin checkpoint proof')
-            job['status'] = 'completed'
-            self.save()
+        self.checkpoint_operation('download', ['v1'], 'origin',
+                                  f'TRAIN MODEL `{self.name}`\nCHECKPOINT = \'v1\'\n'
+                                  f'WITH ({options(self.env.train_resources)})')
 
 
 def register_api(resources, case, service):

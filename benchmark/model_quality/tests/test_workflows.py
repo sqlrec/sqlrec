@@ -13,7 +13,7 @@ import pandas as pd
 
 from benchmark.model_quality import config
 from benchmark.model_quality import __main__ as runner
-from benchmark.model_quality.client import HS2Client, Indeterminate, SQLResult
+from benchmark.model_quality.client import HS2Client, Indeterminate, SQLFailed, SQLResult
 from benchmark.model_quality.common import digest, read_json, write_json
 from benchmark.model_quality.data import (check_prepared, load_dataset, sample, training_identity,
                                          training_table, upload_training_tables)
@@ -290,7 +290,7 @@ class ResourceTest(unittest.TestCase):
             self.assertIn("'token' = '{{env:TEST_TOKEN}}'", sql)
             self.assertTrue(logged.endswith(sql + ';\n\n'))
 
-    def test_cleanup_attempts_both_services_and_blocks_on_unknown_job(self):
+    def test_cleanup_attempts_both_services_and_blocks_on_unknown_operation(self):
         with tempfile.TemporaryDirectory() as directory:
             resource = self.resource(directory)
             resource.services = [{'name': 'user', 'deployment': 'user', 'checkpoint': 'u', 'status': 'created'},
@@ -309,9 +309,111 @@ class ResourceTest(unittest.TestCase):
             self.assertEqual(read_json(Path(directory) / 'resources.json')['status'], 'cleanup_failed')
         with tempfile.TemporaryDirectory() as directory:
             resource = self.resource(directory)
-            resource.jobs = [{'name': 'job', 'kind': 'train', 'checkpoints': ['v1'], 'status': 'submitted'}]
+            resource.operations = [{'kind': 'train', 'checkpoints': ['v1'],
+                                    'checkpoint_type': 'origin', 'status': 'submitted'}]
             with self.assertRaises(Indeterminate):
                 resource.cleanup()
+
+    def test_checkpoint_operation_waits_for_hs2_completion_without_kubernetes_reads(self):
+        from TCLIService import ttypes
+        with tempfile.TemporaryDirectory() as directory:
+            resource = self.resource(directory)
+            client = HS2Client({})
+            client.client = Mock()
+            handle = SimpleNamespace(operationId=SimpleNamespace(guid=b'id'), hasResultSet=False)
+            client.client.ExecuteStatement.return_value = SimpleNamespace(
+                status=SimpleNamespace(statusCode=0), operationHandle=handle)
+            client.client.GetOperationStatus.side_effect = [
+                SimpleNamespace(status=SimpleNamespace(statusCode=0), operationState=state)
+                for state in (ttypes.TOperationState.PENDING_STATE, ttypes.TOperationState.RUNNING_STATE,
+                              ttypes.TOperationState.FINISHED_STATE)]
+            resource.client = client
+
+            def checkpoint(name, **kwargs):
+                self.assertEqual(client.client.GetOperationStatus.call_count, 3)
+                return {'Status:': 'succeeded', 'Checkpoint Type:': 'origin'}
+
+            resource.checkpoint = Mock(side_effect=checkpoint)
+            with patch('benchmark.model_quality.client.time.sleep') as sleep:
+                resource.checkpoint_operation('download', ['v1'], 'origin', 'TRAIN MODEL mq_test')
+            self.assertEqual(sleep.call_count, 2)
+            operation = read_json(Path(directory) / 'resources.json')['operations'][0]
+            self.assertEqual(operation['operation_id'], b'id'.hex())
+            self.assertEqual(operation['status'], 'completed')
+            resource.cleanup()
+            self.assertEqual(resource.status, 'released')
+            resource.workloads.get.assert_not_called()
+
+    def test_dssm_waits_for_both_export_checkpoints_without_job_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            resource = self.resource(directory)
+
+            def execute(sql, **kwargs):
+                if sql.startswith(('TRAIN', 'EXPORT')):
+                    kwargs['on_submitted']('sql-operation-id')
+                if sql.startswith('DESCRIBE'):
+                    return SQLResult([], [['Status:', 'succeeded'],
+                                          ['Checkpoint Type:', 'export' if 'v1_export' in sql else 'origin']])
+                return SQLResult([], [])
+
+            resource.client.execute.side_effect = execute
+            self.assertEqual(resource.train_export('training_table', dssm=True),
+                             ['v1_export/user', 'v1_export/item'])
+            resource.cleanup()
+            self.assertEqual(resource.status, 'released')
+            self.assertEqual(resource.operations[1]['checkpoint_statuses'],
+                             {'v1_export/user': 'succeeded', 'v1_export/item': 'succeeded'})
+            resource.workloads.get.assert_not_called()
+
+    def test_one_failed_export_tower_blocks_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            resource = self.resource(directory)
+            resource.checkpoint = Mock(side_effect=lambda name, **kwargs: {
+                'Status:': 'failed' if name.endswith('/item') else 'succeeded',
+                'Checkpoint Type:': 'export' if 'v1_export' in name else 'origin'})
+            with self.assertRaisesRegex(Indeterminate, 'export'):
+                resource.train_export('training_table', dssm=True)
+            with self.assertRaisesRegex(Indeterminate, 'Resource release'):
+                resource.cleanup()
+            self.assertEqual(resource.operations[0]['status'], 'completed')
+            self.assertEqual(resource.operations[1]['status'], 'submitted')
+
+    def test_cleanup_requires_success_proof_after_uncertain_submission(self):
+        for status in ('succeeded', 'created', 'failed', None):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                resource = self.resource(directory)
+
+                def interrupted(sql, **kwargs):
+                    kwargs['on_submitted']('sql-operation-id')
+                    raise Indeterminate('transport interrupted')
+
+                resource.client.execute.side_effect = interrupted
+                with self.assertRaisesRegex(Indeterminate, 'transport interrupted'):
+                    resource.checkpoint_operation('train', ['v1'], 'origin', 'TRAIN MODEL mq_test')
+                resource.checkpoint = Mock(return_value={'Status:': status, 'Checkpoint Type:': 'origin'})
+                if status == 'succeeded':
+                    resource.cleanup()
+                    self.assertEqual(resource.status, 'released')
+                else:
+                    with self.assertRaisesRegex(Indeterminate, 'Resource release'):
+                        resource.cleanup()
+                    self.assertEqual(resource.status, 'cleanup_failed')
+                self.assertEqual(resource.client.execute.call_count, 1)
+                resource.workloads.get.assert_not_called()
+
+    def test_sql_failure_or_missing_checkpoint_does_not_pass_or_replay(self):
+        for failure in (SQLFailed('download failed'), Indeterminate('timeout'), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as directory:
+                resource = self.resource(directory)
+                resource.client.execute.side_effect = failure
+                with self.assertRaises(type(failure)):
+                    resource.checkpoint_operation('download', ['v1'], 'origin', 'TRAIN MODEL mq_test')
+                resource.client.execute.side_effect = SQLFailed('checkpoint not exists')
+                with self.assertRaisesRegex(Indeterminate, 'Resource release'):
+                    resource.cleanup()
+                self.assertEqual(resource.operations[0]['status'], 'submitted')
+                self.assertEqual(sum(call.args[0].startswith('TRAIN')
+                                     for call in resource.client.execute.call_args_list), 1)
 
     def test_cleanup_drops_verified_service_and_keeps_uid_identity(self):
         with tempfile.TemporaryDirectory() as directory:

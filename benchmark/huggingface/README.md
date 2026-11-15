@@ -108,7 +108,9 @@ bash bin/build_model_docker.sh transformers
   Image cases also reject local file URLs and FTP URLs. A valid request
   after these failures must still match the baseline.
 - Cleanup uses the existing model benchmark lifecycle helper: drop each owned
-  service and verify that its Kubernetes resources disappear and Jobs are quiet.
+  service and verify that its Kubernetes resources disappear. Downloads wait for
+  HS2 operation completion and require a succeeded origin checkpoint through
+  public SQL; the benchmark does not depend on Kubernetes Job names.
   Failure or Ctrl-C attempts cleanup and stops the run; unproven cleanup prevents
   the next case from starting. Submitted download mutations are not retried.
 - Text cases test the default-on `/v1/models`, `/v1/chat/completions` and
@@ -130,6 +132,8 @@ transport and image downloads; download/deployment and correctness checks are
 outside the timed requests. These tiny workloads do not represent production
 throughput. Generated run reports are ignored by Git.
 
-As in `model_quality`, models, checkpoints, completed Jobs, functions and APIs
-remain for inspection. Only serving resources are released. Each run uses
-unique names; it does not overwrite earlier runs or resume interrupted downloads.
+As in `model_quality`, models, checkpoints, functions and APIs remain for
+inspection. SQLRec manages completed Jobs; the benchmark releases serving
+resources. `resources.json` records logical operations, their SQL operation IDs
+and observed checkpoint statuses. Each run uses unique names; it does not
+overwrite earlier runs or resume interrupted downloads.

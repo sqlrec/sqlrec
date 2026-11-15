@@ -116,7 +116,22 @@ All six Criteo models completed full training and evaluation on all 100,266 vali
 
 With `--save-predictions`, each model saves one `predictions.parquet`: ranking stores `row_id` and task probabilities; retrieval stores `query_id`, `item_id`, and `score`. An empty retrieval response is represented by a row with its query ID and null item/score. Input features and labels are not copied into prediction files. API requests still use batches, independently of file output.
 
-On failure or Ctrl-C, the script attempts to release the current model's services and confirms that their Kubernetes Deployments, Services, ReplicaSets, and Pods are gone and training/export Jobs are no longer active. If cleanup cannot be verified, it stops and records an error. The script does not cancel training Jobs or retry writes with uncertain outcomes. After a forced process termination or power loss, use `resources.json` to check for remaining resources manually. Models/checkpoints, APIs, and indexes are retained for inspection and are not reused across runs. Versioned training tables and files are shared across runs and are retained.
+Training and export wait for HS2 operation completion and require succeeded
+checkpoints through public SQL, including both DSSM export towers. The benchmark
+does not infer or query Kubernetes Job names. `resources.json` records logical
+operations, their SQL operation IDs and observed checkpoint statuses.
+
+On failure or Ctrl-C, the script attempts to release the current model's services
+and confirms that their Kubernetes Deployments, Services, ReplicaSets, and Pods
+are gone. An uncertain training/export submission requires public succeeded
+checkpoint proof before cleanup can be marked complete. A missing, unfinished,
+or failed checkpoint stops the run: failure can also mean partial submission,
+so it does not prove all workloads stopped. The script does not cancel training
+Jobs or retry writes with uncertain outcomes. After a forced process termination
+or power loss, use `resources.json` to inspect the recorded model, checkpoints and
+services manually. Models/checkpoints, APIs, and indexes are retained for
+inspection and are not reused across runs. Versioned training tables and files
+are shared across runs and are retained.
 
 ## Suggested code reading order
 

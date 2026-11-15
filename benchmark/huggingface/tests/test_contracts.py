@@ -87,14 +87,24 @@ class DownloadContractTest(unittest.TestCase):
             self.assertIn('TRAIN MODEL', sql)
             self.assertNotIn(' ON ', sql.replace('\n', ' '))
             self.assertNotIn('EXPORT MODEL', sql)
-            self.assertEqual(resource.jobs[0]['status'], 'completed')
+            self.assertEqual(resource.operations[0]['status'], 'completed')
+            resource.workloads.get.assert_not_called()
 
     def test_export_checkpoint_is_not_accepted_as_hf_download_success(self):
         with tempfile.TemporaryDirectory() as directory:
             resource = self.resource(directory, 'export')
             with self.assertRaisesRegex(Indeterminate, 'origin'):
                 resource.download()
-            self.assertEqual(resource.jobs[0]['status'], 'submitted')
+            self.assertEqual(resource.operations[0]['status'], 'submitted')
+
+    def test_created_failed_or_missing_status_cannot_pass_as_a_download(self):
+        for status in ('created', 'failed', None):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                resource = self.resource(directory, 'origin')
+                resource.checkpoint.return_value['Status:'] = status
+                with self.assertRaisesRegex(Indeterminate, 'origin'):
+                    resource.download()
+                self.assertEqual(resource.operations[0]['status'], 'submitted')
 
 
 class CleanupContractTest(unittest.TestCase):

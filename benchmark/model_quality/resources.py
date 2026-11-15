@@ -14,10 +14,6 @@ from .config import Feature
 from .data import fields, options
 
 
-def kubernetes_name(name):
-    return re.sub(r'[.-]+', '-', re.sub(r'[^a-z0-9.-]', '-', name.lower()).strip('.-'))[:63].rstrip('.-')
-
-
 def metadata(result):
     return {str(row[0]).strip(): str(row[1]).strip() for row in result.rows if len(row) >= 2}
 
@@ -72,7 +68,7 @@ class RunResources:
         self.name = identifier(name)
         self.env, self.root, self.client = env, Path(root), client
         self.workloads = Workloads(env.kubectl, env.train_resources['NAMESPACE'])
-        self.services, self.jobs = [], []
+        self.services, self.operations = [], []
         self.times = {}
         self.root.mkdir(parents=True, exist_ok=True)
         self.sql_log = self.root / 'statements.sql'
@@ -80,7 +76,7 @@ class RunResources:
 
     def save(self):
         write_json(self.root / 'resources.json', {'model': self.name, 'namespace': self.workloads.namespace,
-                                                'services': self.services, 'jobs': self.jobs, 'status': self.status})
+                                                'services': self.services, 'operations': self.operations, 'status': self.status})
 
     @contextmanager
     def stage(self, name):
@@ -106,42 +102,40 @@ class RunResources:
     def checkpoint(self, checkpoint, timeout=3600):
         return metadata(self.execute(f'DESCRIBE FORMATTED MODEL `{self.name}` CHECKPOINT={literal(checkpoint)}', timeout=timeout))
 
-    def capture_job(self, job):
-        deadline = time.monotonic() + 10
-        while True:
-            value = self.workloads.get('job', job['name'])
-            if value:
-                uid = value['metadata']['uid']
-                if job.get('uid') and job['uid'] != uid:
-                    raise Indeterminate('Training/export Job UID changed')
-                job['uid'] = uid
-                self.save()
-                return
-            if time.monotonic() >= deadline:
-                raise Indeterminate('Submitted Job identity could not be captured')
-            time.sleep(1)
+    def checkpoint_operation(self, kind, checkpoints, checkpoint_type, sql):
+        # HS2 waits for the server's checkpoint completion watcher. Its operation
+        # handle identifies the submission; physical Job names are server internals.
+        operation = {'kind': kind, 'checkpoints': checkpoints,
+                     'checkpoint_type': checkpoint_type, 'status': 'submitted'}
+        self.operations.append(operation)
+        self.save()
+
+        def submitted(operation_id):
+            operation['operation_id'] = operation_id
+            self.save()
+
+        with self.stage(kind):
+            self.execute(sql, long=True, on_submitted=submitted)
+            self.verify_checkpoints(operation)
+            operation['status'] = 'completed'
+            self.save()
+
+    def verify_checkpoints(self, operation, timeout=3600):
+        info = {name: self.checkpoint(name, timeout=timeout) for name in operation['checkpoints']}
+        operation['checkpoint_statuses'] = {name: item.get('Status:') for name, item in info.items()}
+        self.save()
+        if not all(item.get('Status:') == 'succeeded'
+                   and item.get('Checkpoint Type:') == operation['checkpoint_type'] for item in info.values()):
+            raise Indeterminate(f'{operation["kind"]} has no public succeeded '
+                                f'{operation["checkpoint_type"]} checkpoint proof')
 
     def train_export(self, table, dssm=False):
         exports = ['v1_export/user', 'v1_export/item'] if dssm else ['v1_export']
         for kind, checkpoints in [('train', ['v1']), ('export', exports)]:
-            suffix = '-v1' if kind == 'train' else '-v1-export'
-            job = {'name': kubernetes_name(self.name + suffix) + '-job', 'kind': kind,
-                   'checkpoints': checkpoints, 'status': 'submitted'}
-            if self.workloads.get('job', job['name']) or (self.workloads.get('pods', selector='job-name=' + job['name']) or {}).get('items'):
-                raise ValueError('Training/export workload name already exists')
-            self.jobs.append(job)
-            self.save()
-            with self.stage(kind):
-                self.execute(f"{kind.upper()} MODEL `{self.name}`\nCHECKPOINT = 'v1'\nON `{table}`\n"
-                             f'WITH ({options(self.env.train_resources)})', long=True,
-                             on_submitted=lambda operation: self.capture_job(job))
-                expected = 'origin' if kind == 'train' else 'export'
-                for checkpoint in checkpoints:
-                    info = self.checkpoint(checkpoint)
-                    if info.get('Status:') != 'succeeded' or info.get('Checkpoint Type:') != expected:
-                        raise Indeterminate('Training/export has no public succeeded checkpoint proof')
-                job['status'] = 'completed'
-                self.save()
+            self.checkpoint_operation(
+                kind, checkpoints, 'origin' if kind == 'train' else 'export',
+                f"{kind.upper()} MODEL `{self.name}`\nCHECKPOINT = 'v1'\nON `{table}`\n"
+                f'WITH ({options(self.env.train_resources)})')
         return exports
 
     def deploy(self, checkpoints):
@@ -197,7 +191,7 @@ class RunResources:
         self.save()
 
     def cleanup(self):
-        """Try both DSSM services, then verify Jobs are quiet before another model."""
+        """Release services and require public checkpoint completion before another model."""
         errors = []
         self.status = 'cleanup_pending'
         self.save()
@@ -241,24 +235,16 @@ class RunResources:
                     errors.append(error)
                     service.update(status='cleanup_failed', error=str(error))
                     self.save()
-            for job in self.jobs:
+            for operation in self.operations:
                 try:
-                    value = self.workloads.get('job', job['name'])
-                    pods = (self.workloads.get('pods', selector='job-name=' + job['name']) or {}).get('items', [])
-                    if value and job.get('uid') != value['metadata']['uid']:
-                        raise Indeterminate('Job ownership is unverified')
-                    terminal = value is None or any(c.get('status') == 'True' and c.get('type') in ('Complete', 'Failed')
-                                                   for c in value.get('status', {}).get('conditions', []))
-                    if job['status'] != 'completed' and not (value and terminal and job.get('uid')):
-                        info = [self.checkpoint(checkpoint, timeout=120) for checkpoint in job['checkpoints']]
-                        if not all(item.get('Status:') in ('succeeded', 'failed') for item in info):
-                            raise Indeterminate('Submitted Job outcome is uncertain')
-                    if not terminal or any(p.get('status', {}).get('phase') not in ('Succeeded', 'Failed') for p in pods):
-                        raise Indeterminate('Training/export workload remains active')
-                    job['quiet'] = True
+                    if operation['status'] != 'completed':
+                        # A failed checkpoint can also mean partial submission;
+                        # without completion proof, do not assume its Jobs stopped.
+                        self.verify_checkpoints(operation, timeout=120)
+                        operation['status'] = 'completed'
                 except Exception as error:
                     errors.append(error)
-                    job['error'] = str(error)
+                    operation['error'] = str(error)
             self.status = 'cleanup_failed' if errors else 'released'
             self.save()
         if errors:
