@@ -4,6 +4,7 @@ import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.FunctionCompiler;
+import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.entity.Checkpoint;
@@ -11,6 +12,7 @@ import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.model.ModelManager;
 import com.sqlrec.model.ServiceManager;
+import com.sqlrec.schema.CacheManager;
 import com.sqlrec.sql.parser.*;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.sql.SqlNode;
@@ -30,9 +32,29 @@ final class ResourceCommandExecutor {
 
     SqlProcessResult execute(SqlNode node, String defaultSchema) throws Exception {
         if (node instanceof SqlCreateApi command) {
-            saveSqlApi(metadata, command);
+            saveSqlApi(command);
+            SqlApiCache.invalidateAll();
             return message("create api success");
         }
+        if (node instanceof SqlDropApi command) {
+            dropApi(command);
+            SqlApiCache.invalidateAll();
+            return message("drop api success");
+        }
+        if (node instanceof SqlDropSqlFunction command) {
+            dropSqlFunction(command);
+            SqlFunctionCache.invalidateAll();
+            return message("drop sql function success");
+        }
+
+        SqlProcessResult result = executeModelOrServiceCommand(node, defaultSchema);
+        if (result != null) {
+            CacheManager.invalidateAll();
+        }
+        return result;
+    }
+
+    private SqlProcessResult executeModelOrServiceCommand(SqlNode node, String defaultSchema) throws Exception {
         if (node instanceof SqlCreateModel command) {
             ModelManager.createModel(command);
             return message("create model success");
@@ -61,12 +83,6 @@ final class ResourceCommandExecutor {
             ServiceManager.deleteService(command.getServiceName().getSimple());
             return message("drop service success");
         }
-        if (node instanceof SqlDropSqlFunction command) {
-            return dropSqlFunction(command);
-        }
-        if (node instanceof SqlDropApi command) {
-            return dropApi(command);
-        }
         return null;
     }
 
@@ -85,11 +101,11 @@ final class ResourceCommandExecutor {
         return message("drop checkpoint success");
     }
 
-    private SqlProcessResult dropSqlFunction(SqlDropSqlFunction command) {
+    private void dropSqlFunction(SqlDropSqlFunction command) {
         String name = command.getFuncName().getSimple();
         if (metadata.getSqlFunction(name) == null) {
             if (command.isIfExists()) {
-                return message("drop sql function success");
+                return;
             }
             throw new RuntimeException("sql function not exists: " + name);
         }
@@ -101,19 +117,17 @@ final class ResourceCommandExecutor {
                     "sql function " + name + " is used by api: " + String.join(", ", usingApis));
         }
         metadata.deleteSqlFunction(name);
-        return message("drop sql function success");
     }
 
-    private SqlProcessResult dropApi(SqlDropApi command) {
+    private void dropApi(SqlDropApi command) {
         String name = command.getApiName().getSimple();
         if (metadata.getSqlApi(name) == null) {
             if (command.isIfExists()) {
-                return message("drop api success");
+                return;
             }
             throw new RuntimeException("api not exists: " + name);
         }
         metadata.deleteSqlApi(name);
-        return message("drop api success");
     }
 
     static void saveSqlFunction(MetadataAccess metadata, FunctionCompiler compiler) {
@@ -130,7 +144,7 @@ final class ResourceCommandExecutor {
         SqlFunctionCache.invalidateAll();
     }
 
-    static void saveSqlApi(MetadataAccess metadata, SqlCreateApi command) {
+    private void saveSqlApi(SqlCreateApi command) {
         SqlApi api = new SqlApi();
         api.setName(ResourceNames.normalize(command.getApiName()));
         api.setFunctionName(ResourceNames.normalize(command.getFuncName()));

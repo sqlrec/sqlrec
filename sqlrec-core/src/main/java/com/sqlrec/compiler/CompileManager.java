@@ -143,41 +143,20 @@ public class CompileManager {
     }
 
     private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
-        String tableName = cache.getTableName().getSimple();
-        String createSql = getSqlStr(cache);
-
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
+        SqlNode select = cache.getSelect();
+        BindableInterface source;
         if (callSqlFunction != null) {
             if (callSqlFunction.isAsync()) {
                 throw new Exception("async function not support in cache");
             }
-            return createCacheBindable(
-                    tableName,
-                    createSql,
-                    getCallSqlFunctionBindable(callSqlFunction, schema)
-            );
+            source = getCallSqlFunctionBindable(callSqlFunction, schema);
+        } else if (select != null) {
+            source = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+        } else {
+            throw new Exception("cache sql obj is invalid");
         }
-
-        SqlNode select = cache.getSelect();
-        if (select != null) {
-            return createCacheBindable(
-                    tableName,
-                    createSql,
-                    getNormalSqlBindable(getSqlStr(select), schema, defaultSchema)
-            );
-        }
-
-        throw new Exception("cache sql obj is invalid");
-    }
-
-    private static BindableInterface createCacheBindable(
-            String tableName,
-            String createSql,
-            BindableInterface source
-    ) {
-        BindableInterface cacheBindable = new CacheTableBindable(tableName, source);
-        cacheBindable.setSql(createSql);
-        return cacheBindable;
+        return new CacheTableBindable(cache.getTableName().getSimple(), source);
     }
 
     private BindableInterface getIfBindable(

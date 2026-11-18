@@ -6,8 +6,6 @@ import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.FunctionCompiler;
-import com.sqlrec.compiler.SqlFunctionCache;
-import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.compiler.SqlTypeChecker;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
@@ -154,9 +152,7 @@ public class SqlExecutor {
 
         result = new ResourceCommandExecutor(MetadataAccessFactory.getInstance())
                 .execute(node, defaultSchema);
-        if (result != null) {
-            invalidateCaches(node);
-        } else if (node instanceof com.sqlrec.sql.parser.SqlRecStatement) {
+        if (result == null && node instanceof com.sqlrec.sql.parser.SqlRecStatement) {
             throw new UnsupportedOperationException("SQLRec statement cannot execute locally and cannot be forwarded to Flink");
         }
         return result;
@@ -255,16 +251,6 @@ public class SqlExecutor {
             functionCompiler = null;
             logger.error("compile function error: " + exception.getMessage(), exception);
             throw exception;
-        }
-    }
-
-    private static void invalidateCaches(SqlNode node) {
-        if (node instanceof SqlDropSqlFunction) {
-            SqlFunctionCache.invalidateAll();
-        } else if (node instanceof SqlCreateApi || node instanceof SqlDropApi) {
-            SqlApiCache.invalidateAll();
-        } else {
-            CacheManager.invalidateAll();
         }
     }
 

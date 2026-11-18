@@ -215,6 +215,23 @@ class SqlExecutorFileDdlTest {
     }
 
     @Test
+    void cacheTableKeepsSubmittedSqlForSelectAndCall() throws Exception {
+        SqlExecutor executor = new SqlExecutor();
+        executor.executeSql("CREATE SQL FUNCTION cached_source");
+        executor.executeSql("RETURN SELECT 2 AS id");
+
+        String select = "cache table cached_select as select 1 as id";
+        String call = "cache table cached_call as call cached_source()";
+        executor.executeSql(select);
+        executor.executeSql(call);
+
+        assertEquals(List.of(select), names(executor.executeSqlAsync("SHOW CREATE TABLE cached_select")));
+        assertEquals(List.of(call), names(executor.executeSqlAsync("SHOW CREATE TABLE cached_call")));
+        assertEquals(List.of(1), names(executor.executeSqlAsync("SELECT id FROM cached_select")));
+        assertEquals(List.of(2), names(executor.executeSqlAsync("SELECT id FROM cached_call")));
+    }
+
+    @Test
     void ddlPermissionIsCapturedAtInitializationAndUnsupportedOperationsStayBlocked() throws Exception {
         SqlExecutor executor = new SqlExecutor();
         SqlRecConfigs.SQL_SCHEMA_DDL_ENABLED.setDefaultValue(false);
