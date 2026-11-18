@@ -39,7 +39,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
     public KafkaCalciteTable(KafkaConfig kafkaConfig) {
         this.kafkaConfig = kafkaConfig;
         this.protobufRowCodec = "protobuf".equals(kafkaConfig.format)
-                ? new ProtobufRowCodec(kafkaConfig.protobufMessageClassName)
+                ? new ProtobufRowCodec(kafkaConfig.protobufMessageClassName, kafkaConfig.fieldSchemas)
                 : null;
     }
 
@@ -103,7 +103,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         @Override
         protected boolean addImpl(Object[] objects) {
             byte[] msg = table.protobufRowCodec != null
-                    ? table.protobufRowCodec.encode(objects, kafkaConfig.fieldSchemas)
+                    ? table.protobufRowCodec.encode(objects)
                     : RowJsonEncoder.toJson(objects, kafkaConfig.fieldSchemas)
                             .getBytes(StandardCharsets.UTF_8);
             KafkaProducer<String, byte[]> producer = getKafkaProducer(kafkaConfig);

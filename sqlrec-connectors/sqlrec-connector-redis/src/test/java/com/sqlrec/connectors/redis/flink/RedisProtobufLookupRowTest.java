@@ -1,6 +1,5 @@
 package com.sqlrec.connectors.redis.flink;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.redis.codec.ProtobufCodec;
 import org.apache.flink.table.api.DataTypes;
@@ -15,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,23 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class RedisProtobufLookupRowTest {
     @Test
     void convertsDecodedCollectionsAndNestedMessageToFlinkInternalTypes() {
-        List<FieldSchema> fields = Arrays.asList(
-                new FieldSchema("string_value", "VARCHAR"),
-                new FieldSchema("repeated_string", "ARRAY<VARCHAR>"),
-                new FieldSchema("status_by_name", "MAP<VARCHAR, VARCHAR>"),
-                new FieldSchema("nested", "ROW"));
-        ProtobufCodec codec = new ProtobufCodec("com.sqlrec.connectors.redis.proto.RedisAllTypes");
-        codec.init(fields, 0);
-
-        Map<String, Object> nested = new LinkedHashMap<>();
-        nested.put("id", 7L);
-        nested.put("name", "child");
-        nested.put("enabled", true);
-        Object[] decoded = codec.decode(codec.encode(new Object[]{
-                "key", Arrays.asList("red", "blue"),
-                Collections.singletonMap("primary", "ACTIVE"), nested
-        }), "key");
-
         ResolvedSchema schema = ResolvedSchema.of(
                 Column.physical("string_value", DataTypes.STRING()),
                 Column.physical("repeated_string", DataTypes.ARRAY(DataTypes.STRING())),
@@ -49,6 +30,17 @@ class RedisProtobufLookupRowTest {
                         DataTypes.FIELD("id", DataTypes.BIGINT()),
                         DataTypes.FIELD("name", DataTypes.STRING()),
                         DataTypes.FIELD("enabled", DataTypes.BOOLEAN()))));
+        ProtobufCodec codec = new ProtobufCodec("com.sqlrec.connectors.redis.proto.RedisAllTypes");
+        codec.init(FlinkSchemaUtils.getFieldSchemas(schema), 0);
+
+        Map<String, Object> nested = new LinkedHashMap<>();
+        nested.put("id", 7L);
+        nested.put("name", "child");
+        nested.put("enabled", true);
+        Object[] decoded = codec.decode(codec.encode(new Object[]{
+                "key", Arrays.asList("red", "blue"),
+                Collections.singletonMap("primary", "ACTIVE"), nested
+        }), "key");
 
         GenericRowData row = FlinkSchemaUtils.toRowData(decoded, schema.getColumnDataTypes());
 

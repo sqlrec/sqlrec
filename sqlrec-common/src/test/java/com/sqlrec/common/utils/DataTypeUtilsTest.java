@@ -52,6 +52,15 @@ class DataTypeUtilsTest {
     }
 
     @Test
+    void mapRequiresKeyAndValueTypes() {
+        for (String type : List.of("MAP", "ARRAY<MAP>")) {
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                    () -> DataTypeUtils.getRelDataType(type));
+            assertEquals("MAP requires key and value types", error.getMessage());
+        }
+    }
+
+    @Test
     void sqlReservedWordsAreAcceptedAsQuotedRowFieldNames() {
         RelDataType row = DataTypeUtils.getRelDataType("ROW<`value` INT, \"year\" STRING>");
         assertEquals(List.of("value", "year"), row.getFieldNames());

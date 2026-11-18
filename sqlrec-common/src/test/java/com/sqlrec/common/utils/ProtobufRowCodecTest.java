@@ -32,37 +32,27 @@ class ProtobufRowCodecTest {
 
     @Test
     void encodesGeneratedMessage() throws Exception {
-        ProtobufRowCodec codec =
-                new ProtobufRowCodec("com.google.protobuf.StringValue");
-
-        byte[] bytes = codec.encode(
-                new Object[]{"hello"},
-                Collections.singletonList(new FieldSchema("value", "VARCHAR")));
+        ProtobufRowCodec codec = valueCodec(StringValue.class, "VARCHAR");
+        byte[] bytes = codec.encode(new Object[]{"hello"});
 
         assertEquals("hello", StringValue.parseFrom(bytes).getValue());
     }
 
     @Test
     void decodesGeneratedMessage() {
-        ProtobufRowCodec codec =
-                new ProtobufRowCodec("com.google.protobuf.StringValue");
-
-        Object[] row = codec.decode(
-                StringValue.of("hello").toByteArray(),
-                Collections.singletonList(new FieldSchema("value", "VARCHAR")));
+        ProtobufRowCodec codec = valueCodec(StringValue.class, "VARCHAR");
+        Object[] row = codec.decode(StringValue.of("hello").toByteArray());
 
         assertEquals("hello", row[0]);
     }
 
     @Test
     void rejectsUnknownTableField() {
-        ProtobufRowCodec codec =
-                new ProtobufRowCodec("com.google.protobuf.StringValue");
+        ProtobufRowCodec codec = new ProtobufRowCodec(StringValue.class.getName(),
+                List.of(new FieldSchema("missing", "VARCHAR")));
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> codec.encode(
-                        new Object[]{"hello"},
-                        Collections.singletonList(new FieldSchema("missing", "VARCHAR"))));
+                () -> codec.encode(new Object[]{"hello"}));
 
         assertEquals(
                 "Table field 'missing' does not exist in Protobuf message google.protobuf.StringValue",
@@ -72,108 +62,100 @@ class ProtobufRowCodecTest {
     @Test
     void rejectsNonMessageClass() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ProtobufRowCodec("java.lang.String"));
+                () -> valueCodec(String.class, "VARCHAR"));
     }
 
     @Test
     void roundTripsScalarTypes() throws Exception {
-        assertScalarRoundTrip("com.google.protobuf.Int32Value", 12L, 12);
-        assertScalarRoundTrip("com.google.protobuf.Int64Value", 13, 13L);
-        assertScalarRoundTrip("com.google.protobuf.FloatValue", 1.25D, 1.25F);
-        assertScalarRoundTrip("com.google.protobuf.DoubleValue", 2.5F, 2.5D);
-        assertScalarRoundTrip("com.google.protobuf.BoolValue", true, true);
+        assertScalarRoundTrip(Int32Value.class, 12L, 12);
+        assertScalarRoundTrip(Int64Value.class, 13, 13L);
+        assertScalarRoundTrip(FloatValue.class, 1.25D, 1.25F);
+        assertScalarRoundTrip(DoubleValue.class, 2.5F, 2.5D);
+        assertScalarRoundTrip(BoolValue.class, true, true);
 
-        assertEquals(12, Int32Value.parseFrom(new ProtobufRowCodec(
-                "com.google.protobuf.Int32Value").encode(
-                new Object[]{12L}, valueSchema("INTEGER"))).getValue());
-        assertEquals(13L, Int64Value.parseFrom(new ProtobufRowCodec(
-                "com.google.protobuf.Int64Value").encode(
-                new Object[]{13}, valueSchema("BIGINT"))).getValue());
-        assertEquals(1.25F, FloatValue.parseFrom(new ProtobufRowCodec(
-                "com.google.protobuf.FloatValue").encode(
-                new Object[]{1.25D}, valueSchema("FLOAT"))).getValue());
-        assertEquals(2.5D, DoubleValue.parseFrom(new ProtobufRowCodec(
-                "com.google.protobuf.DoubleValue").encode(
-                new Object[]{2.5F}, valueSchema("DOUBLE"))).getValue());
-        assertTrue(BoolValue.parseFrom(new ProtobufRowCodec(
-                "com.google.protobuf.BoolValue").encode(
-                new Object[]{true}, valueSchema("BOOLEAN"))).getValue());
+        assertEquals(12, Int32Value.parseFrom(valueCodec(Int32Value.class, "INTEGER")
+                .encode(new Object[]{12L})).getValue());
+        assertEquals(13L, Int64Value.parseFrom(valueCodec(Int64Value.class, "BIGINT")
+                .encode(new Object[]{13})).getValue());
+        assertEquals(1.25F, FloatValue.parseFrom(valueCodec(FloatValue.class, "FLOAT")
+                .encode(new Object[]{1.25D})).getValue());
+        assertEquals(2.5D, DoubleValue.parseFrom(valueCodec(DoubleValue.class, "DOUBLE")
+                .encode(new Object[]{2.5F})).getValue());
+        assertTrue(BoolValue.parseFrom(valueCodec(BoolValue.class, "BOOLEAN")
+                .encode(new Object[]{true})).getValue());
     }
 
     @Test
     void preservesUnsignedIntegerValuesAndRejectsNarrowSqlColumns() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.UInt32Value");
-        List<FieldSchema> bigintSchema = valueSchema("BIGINT");
-        byte[] encoded = codec.encode(new Object[]{4_000_000_000L}, bigintSchema);
+        ProtobufRowCodec codec = valueCodec(UInt32Value.class, "BIGINT");
+        byte[] encoded = codec.encode(new Object[]{4_000_000_000L});
 
         assertEquals(4_000_000_000L,
                 Integer.toUnsignedLong(UInt32Value.parseFrom(encoded).getValue()));
-        assertEquals(4_000_000_000L, codec.decode(encoded, bigintSchema)[0]);
+        assertEquals(4_000_000_000L, codec.decode(encoded)[0]);
         assertThrows(IllegalArgumentException.class,
-                () -> codec.decode(encoded, valueSchema("INTEGER")));
+                () -> valueCodec(UInt32Value.class, "INTEGER").decode(encoded));
 
-        ProtobufRowCodec uint64Codec = new ProtobufRowCodec("com.google.protobuf.UInt64Value");
+        ProtobufRowCodec uint64Codec = valueCodec(UInt64Value.class, "DECIMAL(20, 0)");
         BigInteger maxUnsigned64 = new BigInteger("18446744073709551615");
-        List<FieldSchema> decimalSchema = valueSchema("DECIMAL(20, 0)");
-        byte[] uint64Encoded = uint64Codec.encode(new Object[]{maxUnsigned64}, decimalSchema);
+        byte[] uint64Encoded = uint64Codec.encode(new Object[]{maxUnsigned64});
         assertEquals(maxUnsigned64.toString(),
                 Long.toUnsignedString(UInt64Value.parseFrom(uint64Encoded).getValue()));
-        assertEquals(new BigDecimal(maxUnsigned64), uint64Codec.decode(uint64Encoded, decimalSchema)[0]);
+        assertEquals(new BigDecimal(maxUnsigned64), uint64Codec.decode(uint64Encoded)[0]);
         assertThrows(IllegalArgumentException.class,
-                () -> uint64Codec.decode(uint64Encoded, bigintSchema));
+                () -> valueCodec(UInt64Value.class, "BIGINT").decode(uint64Encoded));
     }
 
     @Test
     void acceptsExactIntegersAcrossJavaNumericTypes() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
+        ProtobufRowCodec codec = valueCodec(Int32Value.class, "INTEGER");
         for (Number value : List.of((byte) 12, (short) 12, 12, 12L,
                 BigInteger.valueOf(12), new BigDecimal("12.000"), 12.0F, 12.0D,
                 new java.util.concurrent.atomic.AtomicLong(12))) {
-            byte[] encoded = codec.encode(new Object[]{value}, valueSchema("INTEGER"));
+            byte[] encoded = codec.encode(new Object[]{value});
             assertEquals(12, Int32Value.parseFrom(encoded).getValue(), value.getClass().getName());
         }
     }
 
     @Test
     void rejectsIntegerOverflowAndFractionalValues() {
-        ProtobufRowCodec int32Codec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
+        ProtobufRowCodec int32Codec = valueCodec(Int32Value.class, "BIGINT");
         assertThrows(IllegalArgumentException.class,
-                () -> int32Codec.encode(new Object[]{2_147_483_648L}, valueSchema("BIGINT")));
+                () -> int32Codec.encode(new Object[]{2_147_483_648L}));
         for (Number value : List.of(1.5D, new BigDecimal("1.5"), Float.NaN, Double.POSITIVE_INFINITY)) {
             assertThrows(IllegalArgumentException.class,
-                    () -> int32Codec.encode(new Object[]{value}, valueSchema("INTEGER")));
+                    () -> int32Codec.encode(new Object[]{value}));
         }
 
-        ProtobufRowCodec uint32Codec = new ProtobufRowCodec("com.google.protobuf.UInt32Value");
+        ProtobufRowCodec uint32Codec = valueCodec(UInt32Value.class, "BIGINT");
         assertThrows(IllegalArgumentException.class,
-                () -> uint32Codec.encode(new Object[]{-1}, valueSchema("INTEGER")));
+                () -> uint32Codec.encode(new Object[]{-1}));
         assertThrows(IllegalArgumentException.class,
-                () -> uint32Codec.encode(new Object[]{4_294_967_296L}, valueSchema("BIGINT")));
+                () -> uint32Codec.encode(new Object[]{4_294_967_296L}));
 
-        ProtobufRowCodec int64Codec = new ProtobufRowCodec("com.google.protobuf.Int64Value");
+        ProtobufRowCodec int64Codec = valueCodec(Int64Value.class, "DECIMAL");
         assertThrows(IllegalArgumentException.class,
-                () -> int64Codec.encode(new Object[]{BigInteger.ONE.shiftLeft(63)}, valueSchema("DECIMAL")));
+                () -> int64Codec.encode(new Object[]{BigInteger.ONE.shiftLeft(63)}));
 
-        ProtobufRowCodec enumCodec = new ProtobufRowCodec("com.google.protobuf.Type");
+        ProtobufRowCodec enumCodec = new ProtobufRowCodec(Type.class.getName(),
+                List.of(new FieldSchema("syntax", "BIGINT")));
         assertThrows(IllegalArgumentException.class,
-                () -> enumCodec.encode(new Object[]{4_294_967_297L},
-                        Collections.singletonList(new FieldSchema("syntax", "BIGINT"))));
+                () -> enumCodec.encode(new Object[]{4_294_967_297L}));
     }
 
     @Test
     void supportsAllBytesInputTypesAndDecodesToByteArray() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.BytesValue");
-        List<FieldSchema> schema = valueSchema("VARBINARY");
+        ProtobufRowCodec codec = valueCodec(BytesValue.class, "VARBINARY");
         byte[] expected = new byte[]{1, 2, 3};
 
         assertArrayEquals(expected, BytesValue.parseFrom(
-                codec.encode(new Object[]{expected}, schema)).getValue().toByteArray());
+                codec.encode(new Object[]{expected})).getValue().toByteArray());
         assertArrayEquals(expected, BytesValue.parseFrom(
-                codec.encode(new Object[]{ByteBuffer.wrap(expected)}, schema)).getValue().toByteArray());
+                codec.encode(new Object[]{ByteBuffer.wrap(expected)})).getValue().toByteArray());
         assertArrayEquals(expected, BytesValue.parseFrom(
-                codec.encode(new Object[]{ByteString.copyFrom(expected)}, schema)).getValue().toByteArray());
+                codec.encode(new Object[]{ByteString.copyFrom(expected)})).getValue().toByteArray());
         assertArrayEquals(expected, (byte[]) codec.decode(
-                BytesValue.of(ByteString.copyFrom(expected)).toByteArray(), schema)[0]);
+                BytesValue.of(ByteString.copyFrom(expected)).toByteArray())[0]);
     }
 
     @Test
@@ -182,9 +164,9 @@ class ProtobufRowCodecTest {
         buffer.position(1);
         buffer.limit(4);
         buffer.mark();
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.BytesValue");
+        ProtobufRowCodec codec = valueCodec(BytesValue.class, "VARBINARY");
 
-        byte[] encoded = codec.encode(new Object[]{buffer}, valueSchema("VARBINARY"));
+        byte[] encoded = codec.encode(new Object[]{buffer});
 
         assertArrayEquals(new byte[]{1, 2, 3}, BytesValue.parseFrom(encoded).getValue().toByteArray());
         assertEquals(1, buffer.position());
@@ -195,12 +177,12 @@ class ProtobufRowCodecTest {
 
     @Test
     void roundTripsRepeatedNestedAndEnumFields() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Type");
         List<FieldSchema> schema = Arrays.asList(
                 new FieldSchema("name", "VARCHAR"),
-                new FieldSchema("fields", "ARRAY<ROW>"),
-                new FieldSchema("source_context", "ROW"),
+                new FieldSchema("fields", "ARRAY<ROW<name STRING>>"),
+                new FieldSchema("source_context", "ROW<file_name STRING>"),
                 new FieldSchema("syntax", "VARCHAR"));
+        ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), schema);
         Map<String, Object> nestedField = Collections.singletonMap("name", "id");
         Map<String, Object> sourceContext = Collections.singletonMap("file_name", "schema.proto");
 
@@ -209,7 +191,7 @@ class ProtobufRowCodecTest {
                 Collections.singletonList(nestedField),
                 sourceContext,
                 "SYNTAX_PROTO3"
-        }, schema);
+        });
 
         Type message = Type.parseFrom(encoded);
         assertEquals("example.Type", message.getName());
@@ -217,7 +199,7 @@ class ProtobufRowCodecTest {
         assertEquals("schema.proto", message.getSourceContext().getFileName());
         assertEquals(Syntax.SYNTAX_PROTO3, message.getSyntax());
 
-        Object[] decoded = codec.decode(encoded, schema);
+        Object[] decoded = codec.decode(encoded);
         assertEquals("example.Type", decoded[0]);
         assertEquals("id", ((Map<?, ?>) ((List<?>) decoded[1]).get(0)).get("name"));
         assertEquals("schema.proto", ((Map<?, ?>) decoded[2]).get("file_name"));
@@ -226,35 +208,34 @@ class ProtobufRowCodecTest {
 
     @Test
     void acceptsJavaArrayForRepeatedFieldAndNumericEnumValue() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Type");
         Object[] repeatedFields = {
                 Collections.singletonMap("name", "first"),
                 Collections.singletonMap("name", "second")
         };
         List<FieldSchema> schema = Arrays.asList(
-                new FieldSchema("fields", "ARRAY<ROW>"),
+                new FieldSchema("fields", "ARRAY<ROW<name STRING>>"),
                 new FieldSchema("syntax", "INTEGER"));
+        ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), schema);
 
-        byte[] encoded = codec.encode(new Object[]{repeatedFields, 1}, schema);
+        byte[] encoded = codec.encode(new Object[]{repeatedFields, 1});
         Type message = Type.parseFrom(encoded);
         assertEquals(Arrays.asList("first", "second"), Arrays.asList(
                 message.getFields(0).getName(), message.getFields(1).getName()));
         assertEquals(Syntax.SYNTAX_PROTO3, message.getSyntax());
 
-        Object[] decoded = codec.decode(encoded, schema);
+        Object[] decoded = codec.decode(encoded);
         assertEquals(1, decoded[1]);
     }
 
     @Test
     void acceptsMatchingGeneratedMessageForNestedField() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Type");
+        ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(),
+                List.of(new FieldSchema("source_context", "ROW<file_name STRING>")));
         SourceContext sourceContext = SourceContext.newBuilder()
                 .setFileName("schema.proto")
                 .build();
 
-        byte[] encoded = codec.encode(
-                new Object[]{sourceContext},
-                Collections.singletonList(new FieldSchema("source_context", "ROW")));
+        byte[] encoded = codec.encode(new Object[]{sourceContext});
 
         assertEquals("schema.proto", Type.parseFrom(encoded)
                 .getSourceContext().getFileName());
@@ -262,27 +243,26 @@ class ProtobufRowCodecTest {
 
     @Test
     void roundTripsMapWithNestedMessageValues() throws Exception {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Struct");
-        List<FieldSchema> schema = Collections.singletonList(new FieldSchema("fields", "MAP"));
+        ProtobufRowCodec codec = new ProtobufRowCodec(Struct.class.getName(),
+                List.of(new FieldSchema("fields", "MAP<STRING, ROW<string_value STRING>>")));
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("name", Collections.singletonMap("string_value", "alice"));
 
-        byte[] encoded = codec.encode(new Object[]{value}, schema);
+        byte[] encoded = codec.encode(new Object[]{value});
 
         assertEquals("alice", Struct.parseFrom(encoded)
                 .getFieldsOrThrow("name").getStringValue());
-        Map<?, ?> decodedMap = (Map<?, ?>) codec.decode(encoded, schema)[0];
+        Map<?, ?> decodedMap = (Map<?, ?>) codec.decode(encoded)[0];
         assertEquals("alice", ((Map<?, ?>) decodedMap.get("name")).get("string_value"));
     }
 
     @Test
     void distinguishesAbsentMessageFromDefaultScalar() {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.Type");
-        List<FieldSchema> schema = Arrays.asList(
-                new FieldSchema("source_context", "ROW"),
-                new FieldSchema("name", "VARCHAR"));
+        ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), List.of(
+                new FieldSchema("source_context", "ROW<file_name STRING>"),
+                new FieldSchema("name", "VARCHAR")));
 
-        Object[] decoded = codec.decode(Type.getDefaultInstance().toByteArray(), schema);
+        Object[] decoded = codec.decode(Type.getDefaultInstance().toByteArray());
 
         assertNull(decoded[0]);
         assertEquals("", decoded[1]);
@@ -290,85 +270,84 @@ class ProtobufRowCodecTest {
 
     @Test
     void rejectsInvalidConstructorAndInputArguments() {
-        assertThrows(IllegalArgumentException.class, () -> new ProtobufRowCodec(null));
-        assertThrows(IllegalArgumentException.class, () -> new ProtobufRowCodec("   "));
+        assertThrows(IllegalArgumentException.class, () -> new ProtobufRowCodec(null, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ProtobufRowCodec("   ", List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new ProtobufRowCodec("example.missing.Message"));
+                () -> new ProtobufRowCodec("example.missing.Message", List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProtobufRowCodec(StringValue.class.getName(), null));
 
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.StringValue");
-        assertThrows(IllegalArgumentException.class, () -> codec.encode(null, valueSchema("VARCHAR")));
+        ProtobufRowCodec codec = valueCodec(StringValue.class, "VARCHAR");
+        assertThrows(IllegalArgumentException.class, () -> codec.encode(null));
         assertThrows(IllegalArgumentException.class,
-                () -> codec.encode(new Object[]{"one", "two"}, valueSchema("VARCHAR")));
-        assertThrows(IllegalArgumentException.class, () -> codec.encode(new Object[]{"one"}, null));
-        assertThrows(IllegalArgumentException.class, () -> codec.decode(null, valueSchema("VARCHAR")));
-        assertThrows(IllegalArgumentException.class,
-                () -> codec.decode(StringValue.getDefaultInstance().toByteArray(), null));
+                () -> codec.encode(new Object[]{"one", "two"}));
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(null));
     }
 
     @Test
     void rejectsMalformedPayloadAndUnknownDecodeField() {
-        ProtobufRowCodec codec = new ProtobufRowCodec("com.google.protobuf.StringValue");
+        ProtobufRowCodec codec = valueCodec(StringValue.class, "VARCHAR");
+        ProtobufRowCodec missingFieldCodec = new ProtobufRowCodec(StringValue.class.getName(),
+                List.of(new FieldSchema("missing", "VARCHAR")));
 
         assertThrows(IllegalArgumentException.class,
-                () -> codec.decode(new byte[]{0x0A, 0x05, 0x01}, valueSchema("VARCHAR")));
+                () -> codec.decode(new byte[]{0x0A, 0x05, 0x01}));
         assertThrows(IllegalArgumentException.class,
-                () -> codec.decode(StringValue.of("hello").toByteArray(),
-                        Collections.singletonList(new FieldSchema("missing", "VARCHAR"))));
+                () -> missingFieldCodec.decode(StringValue.of("hello").toByteArray()));
     }
 
     @Test
     void rejectsIncompatibleCollectionAndScalarValues() {
-        ProtobufRowCodec typeCodec = new ProtobufRowCodec("com.google.protobuf.Type");
+        ProtobufRowCodec fieldsCodec = new ProtobufRowCodec(Type.class.getName(),
+                List.of(new FieldSchema("fields", "ARRAY<ROW<name STRING>>")));
         assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{"not-a-list"},
-                        Collections.singletonList(new FieldSchema("fields", "ARRAY<ROW>"))));
+                () -> fieldsCodec.encode(new Object[]{"not-a-list"}));
         assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{Collections.singletonList(null)},
-                        Collections.singletonList(new FieldSchema("fields", "ARRAY<ROW>"))));
-        assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{"UNKNOWN_SYNTAX"},
-                        Collections.singletonList(new FieldSchema("syntax", "VARCHAR"))));
-        assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{999},
-                        Collections.singletonList(new FieldSchema("syntax", "INTEGER"))));
-        assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{Collections.singletonMap("unknown", "value")},
-                        Collections.singletonList(new FieldSchema("source_context", "ROW"))));
-        assertThrows(IllegalArgumentException.class,
-                () -> typeCodec.encode(new Object[]{StringValue.of("wrong message type")},
-                        Collections.singletonList(new FieldSchema("source_context", "ROW"))));
+                () -> fieldsCodec.encode(new Object[]{Collections.singletonList(null)}));
 
-        ProtobufRowCodec structCodec = new ProtobufRowCodec("com.google.protobuf.Struct");
+        ProtobufRowCodec enumCodec = new ProtobufRowCodec(Type.class.getName(),
+                List.of(new FieldSchema("syntax", "VARCHAR")));
         assertThrows(IllegalArgumentException.class,
-                () -> structCodec.encode(new Object[]{"not-a-map"},
-                        Collections.singletonList(new FieldSchema("fields", "MAP"))));
+                () -> enumCodec.encode(new Object[]{"UNKNOWN_SYNTAX"}));
+        assertThrows(IllegalArgumentException.class,
+                () -> enumCodec.encode(new Object[]{999}));
+
+        ProtobufRowCodec nestedCodec = new ProtobufRowCodec(Type.class.getName(),
+                List.of(new FieldSchema("source_context", "ROW<file_name STRING>")));
+        assertThrows(IllegalArgumentException.class,
+                () -> nestedCodec.encode(new Object[]{Collections.singletonMap("unknown", "value")}));
+        assertThrows(IllegalArgumentException.class,
+                () -> nestedCodec.encode(new Object[]{StringValue.of("wrong message type")}));
+
+        ProtobufRowCodec structCodec = new ProtobufRowCodec(Struct.class.getName(),
+                List.of(new FieldSchema("fields", "MAP<STRING, ROW<string_value STRING>>")));
+        assertThrows(IllegalArgumentException.class,
+                () -> structCodec.encode(new Object[]{"not-a-map"}));
         Map<String, Object> mapWithNullValue = new LinkedHashMap<>();
         mapWithNullValue.put("key", null);
         assertThrows(IllegalArgumentException.class,
-                () -> structCodec.encode(new Object[]{mapWithNullValue},
-                        Collections.singletonList(new FieldSchema("fields", "MAP"))));
+                () -> structCodec.encode(new Object[]{mapWithNullValue}));
 
-        ProtobufRowCodec intCodec = new ProtobufRowCodec("com.google.protobuf.Int32Value");
+        ProtobufRowCodec intCodec = valueCodec(Int32Value.class, "INTEGER");
         assertThrows(IllegalArgumentException.class,
-                () -> intCodec.encode(new Object[]{"not-a-number"}, valueSchema("INTEGER")));
+                () -> intCodec.encode(new Object[]{"not-a-number"}));
 
-        ProtobufRowCodec bytesCodec = new ProtobufRowCodec("com.google.protobuf.BytesValue");
+        ProtobufRowCodec bytesCodec = valueCodec(BytesValue.class, "VARBINARY");
         assertThrows(IllegalArgumentException.class,
-                () -> bytesCodec.encode(new Object[]{"not-bytes"}, valueSchema("VARBINARY")));
+                () -> bytesCodec.encode(new Object[]{"not-bytes"}));
     }
 
-    private static List<FieldSchema> valueSchema(String sqlType) {
-        return Collections.singletonList(new FieldSchema("value", sqlType));
+    private static ProtobufRowCodec valueCodec(Class<?> messageClass, String sqlType) {
+        return new ProtobufRowCodec(messageClass.getName(), List.of(new FieldSchema("value", sqlType)));
     }
 
     private static void assertScalarRoundTrip(
-            String messageClassName,
+            Class<?> messageClass,
             Object input,
             Object expected
     ) {
-        ProtobufRowCodec codec = new ProtobufRowCodec(messageClassName);
-        Object[] decoded = codec.decode(codec.encode(
-                new Object[]{input}, valueSchema("UNKNOWN")), valueSchema("UNKNOWN"));
+        ProtobufRowCodec codec = valueCodec(messageClass, "UNKNOWN");
+        Object[] decoded = codec.decode(codec.encode(new Object[]{input}));
         assertEquals(expected, decoded[0]);
     }
 }

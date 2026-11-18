@@ -93,6 +93,9 @@ final class DataTypeSupport {
                 String name = type.getTypeName().getSimple().toUpperCase(Locale.ROOT);
                 SqlTypeName scalar = name.equals("TEXT") ? SqlTypeName.VARCHAR : SqlTypeName.get(name);
                 if (scalar == null) throw new IllegalArgumentException("Unknown SQL type: " + name);
+                if (scalar == SqlTypeName.MAP) {
+                    throw new IllegalArgumentException("MAP requires key and value types");
+                }
                 return new SqlBasicTypeNameSpec(scalar, type.getParserPos());
             }
             if (type instanceof SqlMapTypeNameSpec) {

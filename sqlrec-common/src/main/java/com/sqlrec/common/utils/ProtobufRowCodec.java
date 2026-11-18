@@ -6,6 +6,8 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.sqlrec.common.schema.FieldSchema;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
@@ -26,70 +28,86 @@ public final class ProtobufRowCodec {
     private static final BigInteger INT64_MAX = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger UINT64_MAX = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
     private final Message defaultInstance;
+    private final List<Column> columns;
 
-    public ProtobufRowCodec(String messageClassName) {
+    public ProtobufRowCodec(String messageClassName, List<FieldSchema> fieldSchemas) {
         if (messageClassName == null || messageClassName.trim().isEmpty()) {
             throw new IllegalArgumentException("protobuf.message-class-name must not be empty");
         }
         this.defaultInstance = loadDefaultInstance(messageClassName);
+        if (fieldSchemas == null) {
+            throw new IllegalArgumentException("table schema must not be null");
+        }
+        Descriptors.Descriptor descriptor = defaultInstance.getDescriptorForType();
+        this.columns = new ArrayList<>(fieldSchemas.size());
+        for (FieldSchema schema : fieldSchemas) {
+            String name = schema.getName();
+            Descriptors.FieldDescriptor field = descriptor.findFieldByName(name);
+            RelDataType type = field == null ? null : DataTypeUtils.getRelDataType(schema.getType());
+            columns.add(new Column(name, field, type));
+        }
     }
 
-    public byte[] encode(Object[] row, List<FieldSchema> fieldSchemas) {
+    public byte[] encode(Object[] row) {
         if (row == null) {
             throw new IllegalArgumentException("row must not be null");
         }
-        if (fieldSchemas == null || row.length != fieldSchemas.size()) {
+        if (row.length != columns.size()) {
             throw new IllegalArgumentException("row size must match the table schema");
         }
 
         Message.Builder builder = defaultInstance.newBuilderForType();
         Descriptors.Descriptor descriptor = defaultInstance.getDescriptorForType();
-        for (int i = 0; i < fieldSchemas.size(); i++) {
+        for (int i = 0; i < row.length; i++) {
             Object value = row[i];
-            if (value == null) {
-                continue;
+            if (value != null) {
+                setField(builder, columns.get(i).requireField(descriptor), value);
             }
-
-            Descriptors.FieldDescriptor field = requireField(descriptor, fieldSchemas.get(i).getName());
-            setField(builder, field, value);
         }
         return builder.build().toByteArray();
     }
 
-    public Object[] decode(byte[] bytes, List<FieldSchema> fieldSchemas) {
+    public Object[] decode(byte[] bytes) {
         if (bytes == null) {
             throw new IllegalArgumentException("bytes must not be null");
         }
-        if (fieldSchemas == null) {
-            throw new IllegalArgumentException("table schema must not be null");
-        }
 
-        final Message message;
+        Message message;
         try {
-            message = (Message) defaultInstance.getParserForType().parseFrom(bytes);
+            message = defaultInstance.getParserForType().parseFrom(bytes);
         } catch (InvalidProtocolBufferException e) {
             throw new IllegalArgumentException(
                     "Unable to parse " + defaultInstance.getDescriptorForType().getFullName(), e);
         }
 
-        Object[] row = new Object[fieldSchemas.size()];
+        Object[] row = new Object[columns.size()];
         Descriptors.Descriptor descriptor = message.getDescriptorForType();
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            FieldSchema fieldSchema = fieldSchemas.get(i);
-            Descriptors.FieldDescriptor field = requireField(descriptor, fieldSchema.getName());
-            row[i] = readField(message, field, fieldSchema.getType());
+        for (int i = 0; i < row.length; i++) {
+            Column column = columns.get(i);
+            row[i] = readField(message, column.requireField(descriptor), column.sqlType);
         }
         return row;
     }
 
-    private static Descriptors.FieldDescriptor requireField(Descriptors.Descriptor descriptor, String fieldName) {
-        Descriptors.FieldDescriptor field = descriptor.findFieldByName(fieldName);
-        if (field == null) {
-            throw new IllegalArgumentException(
-                    "Table field '" + fieldName + "' does not exist in Protobuf message "
-                            + descriptor.getFullName());
+    private static final class Column {
+        private final String name;
+        private final Descriptors.FieldDescriptor field;
+        private final RelDataType sqlType;
+
+        private Column(String name, Descriptors.FieldDescriptor field, RelDataType sqlType) {
+            this.name = name;
+            this.field = field;
+            this.sqlType = sqlType;
         }
-        return field;
+
+        private Descriptors.FieldDescriptor requireField(Descriptors.Descriptor descriptor) {
+            if (field == null) {
+                throw new IllegalArgumentException(
+                        "Table field '" + name + "' does not exist in Protobuf message "
+                                + descriptor.getFullName());
+            }
+            return field;
+        }
     }
 
     private static Message loadDefaultInstance(String messageClassName) {
@@ -306,18 +324,19 @@ public final class ProtobufRowCodec {
     private static Object readField(
             Message message,
             Descriptors.FieldDescriptor field,
-            String sqlType
+            RelDataType sqlType
     ) {
         if (field.isMapField()) {
             Map<Object, Object> result = new LinkedHashMap<>();
             Descriptors.FieldDescriptor keyField = field.getMessageType().findFieldByName("key");
             Descriptors.FieldDescriptor valueField = field.getMessageType().findFieldByName("value");
-            String[] entryTypes = mapEntryTypes(sqlType);
+            RelDataType keyType = sqlType == null ? null : sqlType.getKeyType();
+            RelDataType valueType = sqlType == null ? null : sqlType.getValueType();
             for (Object value : (List<?>) message.getField(field)) {
                 Message entry = (Message) value;
                 result.put(
-                        fromProtobufValue(keyField, entry.getField(keyField), entryTypes[0]),
-                        fromProtobufValue(valueField, entry.getField(valueField), entryTypes[1]));
+                        fromProtobufValue(keyField, entry.getField(keyField), keyType),
+                        fromProtobufValue(valueField, entry.getField(valueField), valueType));
             }
             return result;
         }
@@ -325,7 +344,7 @@ public final class ProtobufRowCodec {
         if (field.isRepeated()) {
             List<?> values = (List<?>) message.getField(field);
             List<Object> result = new ArrayList<>(values.size());
-            String elementType = arrayElementType(sqlType);
+            RelDataType elementType = sqlType == null ? null : sqlType.getComponentType();
             for (Object value : values) {
                 result.add(fromProtobufValue(field, value, elementType));
             }
@@ -341,19 +360,21 @@ public final class ProtobufRowCodec {
     private static Object fromProtobufValue(
             Descriptors.FieldDescriptor field,
             Object value,
-            String sqlType
+            RelDataType sqlType
     ) {
+        SqlTypeName target = sqlType == null ? null : sqlType.getSqlTypeName();
         switch (field.getJavaType()) {
             case INT:
-                return fromProtobufInt(field, (Integer) value, sqlType);
+                return fromProtobufInt(field, (Integer) value, target);
             case LONG:
-                return fromProtobufLong(field, (Long) value, sqlType);
+                return fromProtobufLong(field, (Long) value, target);
             case BYTE_STRING:
                 return ((ByteString) value).toByteArray();
             case ENUM:
                 Descriptors.EnumValueDescriptor enumValue =
                         (Descriptors.EnumValueDescriptor) value;
-                return isStringType(sqlType) ? enumValue.getName() : enumValue.getNumber();
+                return target == SqlTypeName.CHAR || target == SqlTypeName.VARCHAR
+                        ? enumValue.getName() : enumValue.getNumber();
             case MESSAGE:
                 Message nestedMessage = (Message) value;
                 Map<String, Object> nested = new LinkedHashMap<>();
@@ -370,14 +391,14 @@ public final class ProtobufRowCodec {
     }
 
     private static Object fromProtobufInt(
-            Descriptors.FieldDescriptor field, int value, String sqlType) {
+            Descriptors.FieldDescriptor field, int value, SqlTypeName sqlType) {
         if (field.getType() == Descriptors.FieldDescriptor.Type.UINT32
                 || field.getType() == Descriptors.FieldDescriptor.Type.FIXED32) {
             long unsigned = Integer.toUnsignedLong(value);
-            if (isDecimalType(sqlType)) {
+            if (sqlType == SqlTypeName.DECIMAL) {
                 return BigDecimal.valueOf(unsigned);
             }
-            if (isBigIntType(sqlType)) {
+            if (sqlType == SqlTypeName.BIGINT) {
                 return unsigned;
             }
             if (unsigned > Integer.MAX_VALUE) {
@@ -389,19 +410,19 @@ public final class ProtobufRowCodec {
                 return unsigned;
             }
         }
-        if (isBigIntType(sqlType)) {
+        if (sqlType == SqlTypeName.BIGINT) {
             return (long) value;
         }
         return value;
     }
 
     private static Object fromProtobufLong(
-            Descriptors.FieldDescriptor field, long value, String sqlType) {
+            Descriptors.FieldDescriptor field, long value, SqlTypeName sqlType) {
         if ((field.getType() == Descriptors.FieldDescriptor.Type.UINT64
                 || field.getType() == Descriptors.FieldDescriptor.Type.FIXED64)
                 && value < 0) {
             BigInteger unsigned = new BigInteger(Long.toUnsignedString(value));
-            if (isDecimalType(sqlType)) {
+            if (sqlType == SqlTypeName.DECIMAL) {
                 return new BigDecimal(unsigned);
             }
             if (sqlType != null) {
@@ -411,76 +432,7 @@ public final class ProtobufRowCodec {
             }
             return unsigned;
         }
-        return isDecimalType(sqlType) ? BigDecimal.valueOf(value) : value;
-    }
-
-    private static String arrayElementType(String sqlType) {
-        if (sqlType == null) {
-            return null;
-        }
-        String normalized = withoutNotNull(sqlType);
-        if (normalized.regionMatches(true, 0, "ARRAY<", 0, "ARRAY<".length())
-                && normalized.endsWith(">")) {
-            return normalized.substring("ARRAY<".length(), normalized.length() - 1).trim();
-        }
-        return null;
-    }
-
-    private static String[] mapEntryTypes(String sqlType) {
-        String[] result = {null, null};
-        if (sqlType == null) {
-            return result;
-        }
-        String normalized = withoutNotNull(sqlType);
-        if (!normalized.regionMatches(true, 0, "MAP<", 0, "MAP<".length())
-                || !normalized.endsWith(">")) {
-            return result;
-        }
-        String arguments = normalized.substring("MAP<".length(), normalized.length() - 1);
-        int depth = 0;
-        for (int i = 0; i < arguments.length(); i++) {
-            char character = arguments.charAt(i);
-            if (character == '<') {
-                depth++;
-            } else if (character == '>') {
-                depth--;
-            } else if (character == ',' && depth == 0) {
-                result[0] = arguments.substring(0, i).trim();
-                result[1] = arguments.substring(i + 1).trim();
-                break;
-            }
-        }
-        return result;
-    }
-
-    private static boolean isBigIntType(String sqlType) {
-        return sqlType != null && withoutNotNull(sqlType).equalsIgnoreCase("BIGINT");
-    }
-
-    private static boolean isDecimalType(String sqlType) {
-        return sqlType != null && withoutNotNull(sqlType).toUpperCase().startsWith("DECIMAL");
-    }
-
-    private static boolean isStringType(String sqlType) {
-        if (sqlType == null) {
-            return false;
-        }
-        String normalized = withoutNotNull(sqlType).toUpperCase();
-        return normalized.startsWith("CHAR")
-                || normalized.startsWith("VARCHAR")
-                || normalized.equals("STRING")
-                || normalized.equals("TEXT");
-    }
-
-    private static String withoutNotNull(String sqlType) {
-        String normalized = sqlType.trim();
-        String suffix = " NOT NULL";
-        if (normalized.length() >= suffix.length()
-                && normalized.regionMatches(true, normalized.length() - suffix.length(),
-                suffix, 0, suffix.length())) {
-            return normalized.substring(0, normalized.length() - suffix.length()).trim();
-        }
-        return normalized;
+        return sqlType == SqlTypeName.DECIMAL ? BigDecimal.valueOf(value) : value;
     }
 
     private static IllegalArgumentException incompatible(

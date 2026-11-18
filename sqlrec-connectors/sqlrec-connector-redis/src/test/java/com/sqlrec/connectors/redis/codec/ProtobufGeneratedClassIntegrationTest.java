@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.redis.proto.RedisAllTypes;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -89,11 +90,22 @@ class ProtobufGeneratedClassIntegrationTest {
                 new FieldSchema("status_by_name", "MAP<STRING NOT NULL, STRING NOT NULL> NOT NULL")));
         assertEquals("ACTIVE", ((Map<?, ?>) notNullCodec.decode(encoded, "key")[0]).get("primary"));
 
-        ProtobufCodec notNullArrayCodec = codec(Collections.singletonList(
-                new FieldSchema("repeated_status", "ARRAY<STRING NOT NULL> NOT NULL")));
         byte[] arrayBytes = RedisAllTypes.newBuilder()
                 .addRepeatedStatus(RedisAllTypes.Status.ACTIVE).build().toByteArray();
-        assertEquals(Collections.singletonList("ACTIVE"), notNullArrayCodec.decode(arrayBytes, "key")[0]);
+        for (String type : List.of("ARRAY<STRING NOT NULL> NOT NULL", "TEXT ARRAY")) {
+            ProtobufCodec arrayCodec = codec(List.of(new FieldSchema("repeated_status", type)));
+            assertEquals(List.of("ACTIVE"), arrayCodec.decode(arrayBytes, "key")[0], type);
+        }
+    }
+
+    @Test
+    void decodesMapWithPrecisionInTheSqlKeyType() throws Exception {
+        ProtobufCodec codec = codec(List.of(new FieldSchema("status_by_id", "MAP<DECIMAL(20, 0), STRING>")));
+        byte[] encoded = RedisAllTypes.newBuilder()
+                .putStatusById(-1L, RedisAllTypes.Status.ACTIVE)
+                .build().toByteArray();
+
+        assertEquals(Map.of(new BigDecimal("18446744073709551615"), "ACTIVE"), codec.decode(encoded, "key")[0]);
     }
 
     private static ProtobufCodec codec(List<FieldSchema> schemas) {
@@ -120,14 +132,14 @@ class ProtobufGeneratedClassIntegrationTest {
                 new FieldSchema("string_value", "VARCHAR"),
                 new FieldSchema("bytes_value", "VARBINARY"),
                 new FieldSchema("status", "VARCHAR"),
-                new FieldSchema("nested", "ROW"),
+                new FieldSchema("nested", "ROW<id BIGINT, name STRING, enabled BOOLEAN>"),
                 new FieldSchema("repeated_int32", "ARRAY<INTEGER>"),
                 new FieldSchema("repeated_string", "ARRAY<VARCHAR>"),
                 new FieldSchema("repeated_bytes", "ARRAY<VARBINARY>"),
                 new FieldSchema("repeated_status", "ARRAY<VARCHAR>"),
-                new FieldSchema("repeated_nested", "ARRAY<ROW>"),
+                new FieldSchema("repeated_nested", "ARRAY<ROW<id BIGINT, name STRING, enabled BOOLEAN>>"),
                 new FieldSchema("attributes", "MAP<VARCHAR, BIGINT>"),
-                new FieldSchema("nested_by_name", "MAP<VARCHAR, ROW>"),
+                new FieldSchema("nested_by_name", "MAP<VARCHAR, ROW<id BIGINT, name STRING, enabled BOOLEAN>>"),
                 new FieldSchema("optional_string", "VARCHAR"),
                 new FieldSchema("choice_string", "VARCHAR"));
     }
