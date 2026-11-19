@@ -20,21 +20,15 @@ public class TopologicalSortUtils {
     }
 
     public static DependencyPlan topologicalSort(List<BindableInterface> bindableList) {
-        Map<Integer, Set<Integer>> bindableDependency = buildBindableDependency(bindableList);
-        bindableDependency = optimizeDependency(bindableDependency);
-        List<Integer> sortedBindableList = topologicalSort(bindableDependency);
-
-        return new DependencyPlan(sortedBindableList, bindableDependency);
+        return planDependencies(buildBindableDependency(bindableList));
     }
 
-    /** Removes redundant execution edges from a DAG without modifying the input. */
-    public static Map<Integer, Set<Integer>> optimizeDependency(Map<Integer, Set<Integer>> bindableDependency) {
-        if (bindableDependency == null || bindableDependency.isEmpty()) {
-            return bindableDependency;
-        }
-        // Transitive reduction is only valid here for an acyclic, complete graph.
-        topologicalSort(bindableDependency);
+    static DependencyPlan planDependencies(Map<Integer, Set<Integer>> dependencies) {
+        List<Integer> executionOrder = topologicalSort(dependencies);
+        return new DependencyPlan(executionOrder, removeRedundantEdges(dependencies));
+    }
 
+    private static Map<Integer, Set<Integer>> removeRedundantEdges(Map<Integer, Set<Integer>> bindableDependency) {
         Map<Integer, Set<Integer>> optimized = new HashMap<>();
         for (Map.Entry<Integer, Set<Integer>> entry : bindableDependency.entrySet()) {
             optimized.put(entry.getKey(), new HashSet<>(entry.getValue()));

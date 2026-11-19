@@ -27,30 +27,32 @@ class TopologicalSortPropertiesTest {
                 dependency.put(nodes.get(i), Set.copyOf(predecessors));
             }
             Map<Integer, Set<Integer>> original = Map.copyOf(dependency);
-            Map<Integer, Set<Integer>> reduced = TopologicalSortUtils.optimizeDependency(dependency);
-            List<Integer> sorted = TopologicalSortUtils.topologicalSort(reduced);
+            TopologicalSortUtils.DependencyPlan plan = TopologicalSortUtils.planDependencies(dependency);
+            Map<Integer, Set<Integer>> reduced = plan.dependencies();
+            List<Integer> sorted = plan.executionOrder();
 
             assertEquals(original, dependency);
             assertEquals(nodes.size(), sorted.size());
             assertEquals(dependency.keySet(), new HashSet<>(sorted));
             for (int node : nodes) {
-                assertEquals(reachable(dependency, node), reachable(reduced, node));
+                assertEquals(reachableFrom(dependency, dependency.get(node)),
+                        reachableFrom(reduced, reduced.get(node)));
                 for (int predecessor : dependency.get(node)) {
                     assertTrue(sorted.indexOf(predecessor) < sorted.indexOf(node));
                 }
-                for (int predecessor : Set.copyOf(reduced.get(node))) {
-                    reduced.get(node).remove(predecessor);
-                    assertFalse(reachable(reduced, node).contains(predecessor),
+                for (int predecessor : reduced.get(node)) {
+                    Set<Integer> otherPredecessors = new HashSet<>(reduced.get(node));
+                    otherPredecessors.remove(predecessor);
+                    assertFalse(reachableFrom(reduced, otherPredecessors).contains(predecessor),
                             "a reduced edge must not have an alternative path");
-                    reduced.get(node).add(predecessor);
                 }
             }
         }
     }
 
-    private Set<Integer> reachable(Map<Integer, Set<Integer>> graph, int node) {
+    private Set<Integer> reachableFrom(Map<Integer, Set<Integer>> graph, Set<Integer> predecessors) {
         Set<Integer> visited = new HashSet<>();
-        Deque<Integer> remaining = new ArrayDeque<>(graph.get(node));
+        Deque<Integer> remaining = new ArrayDeque<>(predecessors);
         while (!remaining.isEmpty()) {
             int current = remaining.removeFirst();
             if (visited.add(current)) {

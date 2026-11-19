@@ -114,15 +114,15 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyRejectsMissingNodesAndCyclesWithoutChangingInput() {
+    public void testDependencyPlanRejectsMissingNodesAndCyclesWithoutChangingInput() {
         Map<Integer, Set<Integer>> dependency = Map.of(
                 0, Set.of(1, 2), 1, Set.of(2), 2, Set.of(1));
 
         assertThrows(IllegalArgumentException.class,
-                () -> TopologicalSortUtils.optimizeDependency(dependency));
+                () -> TopologicalSortUtils.planDependencies(dependency));
         assertEquals(Set.of(1, 2), dependency.get(0));
         assertThrows(IllegalArgumentException.class,
-                () -> TopologicalSortUtils.optimizeDependency(Map.of(0, Set.of(99))));
+                () -> TopologicalSortUtils.planDependencies(Map.of(0, Set.of(99))));
     }
 
     @Test
@@ -386,9 +386,7 @@ public class TopologicalSortUtilsTest {
                 TopologicalSortUtils.buildBindableDependency(function.getBindableList());
 
         assertEquals(Set.of(0, 1), dependency.get(2));
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(
-                TopologicalSortUtils.optimizeDependency(dependency)
-        );
+        List<Integer> sorted = TopologicalSortUtils.topologicalSort(function.getBindableList()).executionOrder();
         assertTrue(sorted.indexOf(0) < sorted.indexOf(2));
         assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
     }
@@ -647,12 +645,7 @@ public class TopologicalSortUtilsTest {
         TopologicalSortUtils.DependencyPlan result =
                 TopologicalSortUtils.topologicalSort(function.getBindableList());
 
-        assertNotNull(result);
-        assertNotNull(result.executionOrder());
-        assertNotNull(result.dependencies());
-        assertEquals(4, result.executionOrder().size());
-        assertTrue(result.executionOrder().indexOf(0) < result.executionOrder().indexOf(1));
-        assertTrue(result.executionOrder().indexOf(1) < result.executionOrder().indexOf(2));
+        assertEquals(List.of(0, 1, 2, 3), result.executionOrder());
         assertEquals(Set.of(), result.dependencies().get(0));
         assertEquals(Set.of(0), result.dependencies().get(1));
         assertEquals(Set.of(1), result.dependencies().get(2));
@@ -660,25 +653,18 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithEmptyMap() {
-        Map<Integer, Set<Integer>> emptyDependency = new HashMap<>();
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(emptyDependency);
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
+    public void testDependencyPlanWithNoBindables() {
+        TopologicalSortUtils.DependencyPlan plan = TopologicalSortUtils.topologicalSort(List.of());
+        assertTrue(plan.executionOrder().isEmpty());
+        assertTrue(plan.dependencies().isEmpty());
     }
 
     @Test
-    public void testOptimizeDependencyWithNull() {
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(null);
-        assertNull(result);
-    }
-
-    @Test
-    public void testOptimizeDependencyWithSingleNode() {
+    public void testDependencyPlanWithSingleNode() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -686,13 +672,13 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencySimpleChain() {
+    public void testDependencyPlanSimpleChain() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
         dependency.put(2, new HashSet<>(Arrays.asList(0, 1)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(3, result.size());
@@ -705,13 +691,13 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyNoRedundancy() {
+    public void testDependencyPlanNoRedundancy() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>());
         dependency.put(2, new HashSet<>(Arrays.asList(0, 1)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(3, result.size());
@@ -723,14 +709,14 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyDiamond() {
+    public void testDependencyPlanDiamond() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
         dependency.put(2, new HashSet<>(Collections.singleton(0)));
         dependency.put(3, new HashSet<>(Arrays.asList(0, 1, 2)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(4, result.size());
@@ -746,7 +732,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyLongChain() {
+    public void testDependencyPlanLongChain() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -754,7 +740,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(3, new HashSet<>(Arrays.asList(0, 1, 2)));
         dependency.put(4, new HashSet<>(Arrays.asList(0, 1, 2, 3)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(5, result.size());
@@ -770,7 +756,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyMultiplePaths() {
+    public void testDependencyPlanMultiplePaths() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -778,7 +764,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(3, new HashSet<>(Arrays.asList(1, 2)));
         dependency.put(4, new HashSet<>(Arrays.asList(0, 1, 2, 3)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(5, result.size());
@@ -795,7 +781,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyComplexGraph() {
+    public void testDependencyPlanComplexGraph() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -804,7 +790,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(4, new HashSet<>(Arrays.asList(0, 3)));
         dependency.put(5, new HashSet<>(Arrays.asList(0, 1, 2, 3, 4)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(6, result.size());
@@ -823,7 +809,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyPreservesOriginal() {
+    public void testDependencyPlanPreservesOriginal() {
         Map<Integer, Set<Integer>> original = new HashMap<>();
         original.put(0, new HashSet<>());
         original.put(1, new HashSet<>(Collections.singleton(0)));
@@ -834,29 +820,29 @@ public class TopologicalSortUtilsTest {
             copy.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
-        TopologicalSortUtils.optimizeDependency(original);
+        TopologicalSortUtils.planDependencies(original);
 
         assertEquals(copy, original);
     }
 
     @Test
-    public void testOptimizeDependencyWithSelfDependency() {
+    public void testDependencyPlanWithSelfDependency() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>(Collections.singleton(0)));
 
         assertThrows(IllegalArgumentException.class,
-                () -> TopologicalSortUtils.optimizeDependency(dependency));
+                () -> TopologicalSortUtils.planDependencies(dependency));
         assertEquals(Set.of(0), dependency.get(0));
     }
 
     @Test
-    public void testOptimizeDependencyWithIsolatedNodes() {
+    public void testDependencyPlanWithIsolatedNodes() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>());
         dependency.put(2, new HashSet<>());
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(3, result.size());
@@ -866,7 +852,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithPartialRedundancy() {
+    public void testDependencyPlanWithPartialRedundancy() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -874,7 +860,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(3, new HashSet<>(Arrays.asList(0, 1)));
         dependency.put(4, new HashSet<>(Arrays.asList(1, 2)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(5, result.size());
@@ -892,7 +878,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyDeepChain() {
+    public void testDependencyPlanDeepChain() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         for (int i = 1; i <= 10; i++) {
@@ -903,7 +889,7 @@ public class TopologicalSortUtilsTest {
             dependency.put(i, deps);
         }
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(11, result.size());
@@ -915,7 +901,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithTransitiveReduction() {
+    public void testDependencyPlanWithTransitiveReduction() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -924,7 +910,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(4, new HashSet<>(Arrays.asList(0, 1, 2, 3)));
         dependency.put(5, new HashSet<>(Arrays.asList(0, 2, 4)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(6, result.size());
@@ -942,7 +928,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyMultipleSources() {
+    public void testDependencyPlanMultipleSources() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>());
@@ -950,7 +936,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(3, new HashSet<>(Arrays.asList(0, 1, 2)));
         dependency.put(4, new HashSet<>(Arrays.asList(0, 1, 2, 3)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(5, result.size());
@@ -966,7 +952,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithThreeWayBranch() {
+    public void testDependencyPlanWithThreeWayBranch() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -975,7 +961,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(4, new HashSet<>(Arrays.asList(1, 2, 3)));
         dependency.put(5, new HashSet<>(Arrays.asList(0, 1, 2, 3, 4)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(6, result.size());
@@ -995,7 +981,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithMixedDepths() {
+    public void testDependencyPlanWithMixedDepths() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -1004,7 +990,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(4, new HashSet<>(Collections.singleton(2)));
         dependency.put(5, new HashSet<>(Arrays.asList(0, 1, 2, 3, 4)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(6, result.size());
@@ -1023,7 +1009,7 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyWithSkipLevelDependency() {
+    public void testDependencyPlanWithSkipLevelDependency() {
         Map<Integer, Set<Integer>> dependency = new HashMap<>();
         dependency.put(0, new HashSet<>());
         dependency.put(1, new HashSet<>(Collections.singleton(0)));
@@ -1031,7 +1017,7 @@ public class TopologicalSortUtilsTest {
         dependency.put(3, new HashSet<>(Arrays.asList(0, 2)));
         dependency.put(4, new HashSet<>(Arrays.asList(0, 1, 2, 3)));
 
-        Map<Integer, Set<Integer>> result = TopologicalSortUtils.optimizeDependency(dependency);
+        Map<Integer, Set<Integer>> result = TopologicalSortUtils.planDependencies(dependency).dependencies();
 
         assertNotNull(result);
         assertEquals(5, result.size());
@@ -1048,19 +1034,15 @@ public class TopologicalSortUtilsTest {
     }
 
     @Test
-    public void testOptimizeDependencyIntegrationWithTopologicalSort() {
-        Map<Integer, Set<Integer>> dependency = new HashMap<>();
-        dependency.put(0, new HashSet<>());
-        dependency.put(1, new HashSet<>(Collections.singleton(0)));
-        dependency.put(2, new HashSet<>(Arrays.asList(0, 1)));
+    public void testDependencyPlanKeepsExecutionOrderAfterRemovingRedundantEdges() {
+        Map<Integer, Set<Integer>> dependency = Map.of(
+                0, Set.of(), 1, Set.of(0), 2, Set.of(), 3, Set.of(0, 1, 2));
 
-        Map<Integer, Set<Integer>> optimized = TopologicalSortUtils.optimizeDependency(dependency);
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(optimized);
+        TopologicalSortUtils.DependencyPlan plan = TopologicalSortUtils.planDependencies(dependency);
 
-        assertNotNull(sorted);
-        assertEquals(3, sorted.size());
-        assertTrue(sorted.indexOf(0) < sorted.indexOf(1));
-        assertTrue(sorted.indexOf(1) < sorted.indexOf(2));
+        assertEquals(Set.of(1, 2), plan.dependencies().get(3));
+        assertEquals(List.of(0, 2, 1, 3), plan.executionOrder());
+        assertEquals(TopologicalSortUtils.topologicalSort(plan.dependencies()), plan.executionOrder());
     }
 
 }
