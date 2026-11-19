@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.NonNamespaceOperation;
 import io.fabric8.kubernetes.client.dsl.NamespaceableResource;
 import io.fabric8.kubernetes.client.dsl.PodResource;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.ScalableResource;
 import io.fabric8.kubernetes.client.dsl.V1BatchAPIGroupDSL;
 import org.junit.jupiter.api.AfterEach;
@@ -62,6 +63,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import org.mockito.InOrder;
 
 /**
@@ -104,7 +106,7 @@ public class K8sManagerUnitTest {
             };
             switch (action) {
                 case "apply", "validate" -> doAnswer(lateFailure).when(failing).load(any(InputStream.class));
-                case "deleteAndWait" -> doAnswer(lateFailure).when(failing).resource(any(HasMetadata.class));
+                case "delete", "deleteAndWait" -> doAnswer(lateFailure).when(failing).resource(any(HasMetadata.class));
                 case "deployment" -> doAnswer(lateFailure).when(failing).apps();
                 default -> doAnswer(lateFailure).when(failing).batch();
             }
@@ -454,20 +456,21 @@ public class K8sManagerUnitTest {
     @SilenceLoggers(K8sManager.class)
     @SuppressWarnings("unchecked")
     void businessDeletionFailureIsReportedButAlreadyDeletedResourcesAreAccepted() {
-        io.fabric8.kubernetes.client.dsl.MixedOperation operations = mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
-        io.fabric8.kubernetes.client.dsl.NonNamespaceOperation namespaced = mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
-        io.fabric8.kubernetes.client.dsl.Resource resource = mock(io.fabric8.kubernetes.client.dsl.Resource.class);
-        NamespaceableResource<HasMetadata> delete = mock(NamespaceableResource.class);
-        when(mockClient.configMaps()).thenReturn(operations);
-        when(operations.inNamespace("default")).thenReturn(namespaced);
-        when(namespaced.withName("cfg")).thenReturn(resource);
-        when(resource.get()).thenReturn(new io.fabric8.kubernetes.api.model.ConfigMap());
-        when(mockClient.resource(any(HasMetadata.class))).thenReturn(delete);
-        when(delete.delete()).thenThrow(new io.fabric8.kubernetes.client.KubernetesClientException("forbidden", 403, null));
+        NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        Resource<HasMetadata> handle = mock(Resource.class);
+        when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
+        when(resource.inNamespace("default")).thenReturn(handle);
+        var existing = new io.fabric8.kubernetes.api.model.ConfigMap();
+        when(handle.get()).thenReturn(existing, existing, null);
+        when(handle.delete()).thenThrow(
+                new KubernetesClientException("forbidden", 403, null),
+                new KubernetesClientException("not found", 404, null));
         String yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n";
+
         assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml));
-        org.mockito.Mockito.doThrow(new io.fabric8.kubernetes.client.KubernetesClientException("not found", 404, null)).when(delete).delete();
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
+        verify(handle, times(2)).delete();
     }
 
 }

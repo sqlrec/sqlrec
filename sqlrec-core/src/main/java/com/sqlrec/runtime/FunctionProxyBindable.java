@@ -105,17 +105,6 @@ public class FunctionProxyBindable extends ForwardingBindable {
         return FunctionBindableFactory.create(callSqlFunction, schema, compileManager);
     }
 
-    public static BindableInterface getFunctionBindableByName(
-            String functionName,
-            CalciteSchema schema,
-            List<SqlNode> inputList,
-            List<RelDataTypeField> returnDataFields,
-            CompileManager compileManager
-    ) throws Exception {
-        return FunctionBindableFactory.createByName(
-                functionName, schema, inputList, returnDataFields, compileManager);
-    }
-
     @Override
     protected BindableInterface metadataDelegate() {
         return delegate;
@@ -146,7 +135,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
 
         String functionName = resolveFunctionName(context);
         try {
-            return getFunctionBindableByName(
+            return FunctionBindableFactory.createByName(
                     functionName, schema, inputList, returnDataFields, new CompileManager()
             );
         } catch (Exception e) {

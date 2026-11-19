@@ -84,7 +84,7 @@ public class CompileManager {
         if (flinkSqlNode instanceof SqlReturn sqlReturn) {
             bindable = getReturnBindable(sqlReturn, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlCallSqlFunction callSqlFunction) {
-            bindable = getCallSqlFunctionBindable(callSqlFunction, schema);
+            bindable = FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
         } else if (flinkSqlNode instanceof SqlIfCache ifCache) {
             bindable = getIfBindable(ifCache, schema, defaultSchema);
         } else if (flinkSqlNode instanceof SqlCache cache) {
@@ -122,7 +122,7 @@ public class CompileManager {
             if (call.isAsync()) {
                 throw new Exception("async function is not supported in return statement");
             }
-            returnBindable = new ReturnBindable(getCallSqlFunctionBindable(call, schema));
+            returnBindable = new ReturnBindable(FunctionProxyBindable.getFunctionBindable(call, schema, this));
         } else if (sqlReturn.getSelect() != null) {
             BindableInterface selectBindable = getNormalSqlBindable(
                     getSqlStr(sqlReturn.getSelect()), schema, defaultSchema
@@ -135,13 +135,6 @@ public class CompileManager {
         return returnBindable;
     }
 
-    private BindableInterface getCallSqlFunctionBindable(
-            SqlCallSqlFunction callSqlFunction,
-            CalciteSchema schema
-    ) throws Exception {
-        return FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
-    }
-
     private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
         SqlCallSqlFunction callSqlFunction = cache.getCallSqlFunction();
         SqlNode select = cache.getSelect();
@@ -150,7 +143,7 @@ public class CompileManager {
             if (callSqlFunction.isAsync()) {
                 throw new Exception("async function not support in cache");
             }
-            source = getCallSqlFunctionBindable(callSqlFunction, schema);
+            source = FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
         } else if (select != null) {
             source = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
         } else {

@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 public class IfBindable extends BindableInterface {
     private static final Logger log = LoggerFactory.getLogger(IfBindable.class);
@@ -263,21 +264,14 @@ public class IfBindable extends BindableInterface {
 
     @Override
     public Set<String> getReadTables() {
-        Set<String> readTables = new HashSet<>(condition.getReadTables());
-        readTables.addAll(thenClause.getReadTables());
-        if (elseClause != null) {
-            readTables.addAll(elseClause.getReadTables());
-        }
+        Set<String> readTables = collectBranchNames(BindableInterface::getReadTables);
+        readTables.addAll(condition.getReadTables());
         return readTables;
     }
 
     @Override
     public Set<String> getWriteTables() {
-        Set<String> writeTables = new HashSet<>(thenClause.getWriteTables());
-        if (elseClause != null) {
-            writeTables.addAll(elseClause.getWriteTables());
-        }
-        return writeTables;
+        return collectBranchNames(BindableInterface::getWriteTables);
     }
 
     public CalciteBindable getCondition() {
@@ -309,20 +303,20 @@ public class IfBindable extends BindableInterface {
 
     @Override
     public Set<String> getDependencySqlFuncName() {
-        Set<String> dependencySqlFuncNames = new HashSet<>(thenClause.getDependencySqlFuncName());
-        if (elseClause != null) {
-            dependencySqlFuncNames.addAll(elseClause.getDependencySqlFuncName());
-        }
-        return dependencySqlFuncNames;
+        return collectBranchNames(BindableInterface::getDependencySqlFuncName);
     }
 
     @Override
     public Set<String> getDependencyJavaFuncName() {
-        Set<String> dependencyJavaFuncNames = new HashSet<>(thenClause.getDependencyJavaFuncName());
+        return collectBranchNames(BindableInterface::getDependencyJavaFuncName);
+    }
+
+    private Set<String> collectBranchNames(Function<BindableInterface, Set<String>> namesForBranch) {
+        Set<String> names = new HashSet<>(namesForBranch.apply(thenClause));
         if (elseClause != null) {
-            dependencyJavaFuncNames.addAll(elseClause.getDependencyJavaFuncName());
+            names.addAll(namesForBranch.apply(elseClause));
         }
-        return dependencyJavaFuncNames;
+        return names;
     }
 
     @Override

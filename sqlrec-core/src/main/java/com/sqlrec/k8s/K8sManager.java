@@ -1,10 +1,13 @@
 package com.sqlrec.k8s;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.Secret;
+import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobCondition;
@@ -23,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class K8sManager {
     private static final Logger log = LoggerFactory.getLogger(K8sManager.class);
     private static final long DELETE_WAIT_SECONDS = 60;
+    private static final Set<Class<? extends HasMetadata>> CLEANUP_RESOURCE_TYPES =
+            Set.of(Deployment.class, Service.class, ConfigMap.class, Secret.class, Pod.class, Job.class);
     static volatile KubernetesClient kubernetesClient;
 
     static {
@@ -149,30 +155,30 @@ public class K8sManager {
 
             for (HasMetadata resource : resources) {
                 String kind = resource.getKind();
-                String name = resource.getMetadata() != null ? resource.getMetadata().getName() : null;
-                String namespace = resource.getMetadata() != null ? resource.getMetadata().getNamespace() : null;
-
+                var metadata = resource.getMetadata();
+                String name = metadata == null ? null : metadata.getName();
                 if (name == null || name.isEmpty()) {
                     log.warn("Skipping resource with no name, kind: {}", kind);
                     continue;
                 }
+                if (!CLEANUP_RESOURCE_TYPES.contains(resource.getClass())) {
+                    throw new RuntimeException("unsupport k8s resource: " + kind);
+                }
 
-                boolean exists = checkResourceExists(client, kind, name, namespace);
-
-                if (exists) {
-                    try {
-                        client.resource(resource).delete();
-                        log.info("Successfully deleted {}: {}/{}", kind, namespace != null ? namespace : "default", name);
-                    } catch (Exception e) {
-                        log.error("Failed to delete {}: {}/{}, error: {}", kind, namespace != null ? namespace : "default", name, e.getMessage());
-                        if (!(e instanceof KubernetesClientException)
-                                || ((KubernetesClientException) e).getCode() != 404) {
-                            throw new RuntimeException("Failed to delete " + kind + ": "
-                                    + (namespace != null ? namespace : "default") + "/" + name, e);
-                        }
+                String namespace = Objects.requireNonNullElse(metadata.getNamespace(), "default");
+                Resource<HasMetadata> handle = client.resource(resource).inNamespace(namespace);
+                if (handle.get() == null) {
+                    log.info("Skipping non-existent {}: {}/{}", kind, namespace, name);
+                    continue;
+                }
+                try {
+                    handle.delete();
+                    log.info("Successfully deleted {}: {}/{}", kind, namespace, name);
+                } catch (Exception e) {
+                    log.error("Failed to delete {}: {}/{}, error: {}", kind, namespace, name, e.getMessage());
+                    if (!(e instanceof KubernetesClientException failure) || failure.getCode() != 404) {
+                        throw new RuntimeException("Failed to delete " + kind + ": " + namespace + "/" + name, e);
                     }
-                } else {
-                    log.info("Skipping non-existent {}: {}/{}", kind, namespace != null ? namespace : "default", name);
                 }
             }
         } catch (Exception e) {
@@ -227,25 +233,6 @@ public class K8sManager {
                 resetClient(client);
             }
             throw new RuntimeException("Failed to delete old checkpoint resources: " + e.getMessage(), e);
-        }
-    }
-
-    private static boolean checkResourceExists(KubernetesClient client, String kind, String name, String namespace) {
-        switch (kind) {
-            case "Deployment":
-                return client.apps().deployments().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            case "Service":
-                return client.services().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            case "ConfigMap":
-                return client.configMaps().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            case "Secret":
-                return client.secrets().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            case "Pod":
-                return client.pods().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            case "Job":
-                return client.batch().v1().jobs().inNamespace(namespace != null ? namespace : "default").withName(name).get() != null;
-            default:
-                throw new RuntimeException("unsupport k8s resource: " + kind);
         }
     }
 
