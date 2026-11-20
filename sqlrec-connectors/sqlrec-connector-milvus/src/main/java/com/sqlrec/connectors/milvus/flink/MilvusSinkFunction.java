@@ -59,13 +59,9 @@ public class MilvusSinkFunction<IN> extends RichSinkFunction<IN> implements Chec
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
 
-        Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
-
-        if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            // INSERT and UPDATE_AFTER both replace rows with an existing primary key.
-            buffer.add(Operation.WRITE, objects);
-        } else if (kind == RowKind.DELETE) {
-            buffer.add(Operation.DELETE, objects);
+        if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER || kind == RowKind.DELETE) {
+            Operation operation = kind == RowKind.DELETE ? Operation.DELETE : Operation.WRITE;
+            buffer.add(operation, FlinkSchemaUtils.transform(rowData, dataTypes));
         }
         buffer.flushIfDue();
     }

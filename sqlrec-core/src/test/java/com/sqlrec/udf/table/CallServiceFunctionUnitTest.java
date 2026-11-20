@@ -11,6 +11,7 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.JavaFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
+import com.sqlrec.udf.inference.PredictionClient;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -135,7 +136,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.body()).thenReturn(mockBody);
         when(mockBody.string()).thenReturn("{\"key\":\"value\",\"score\":0.95}");
 
-        Map<String, Object> result = CallServiceFunction.callPredictionService(mockHttpClient,
+        Map<String, Object> result = new PredictionClient(mockHttpClient).predict(
                 "http://test", "{\"input\":[1,2]}");
 
         // Assert the returned Map contains expected key-value pairs
@@ -157,7 +158,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.code()).thenReturn(500);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
 
         assertTrue(ex.getMessage().contains("500"));
     }
@@ -171,7 +172,7 @@ public class CallServiceFunctionUnitTest {
         when(mockCall.execute()).thenThrow(new IOException("timeout"));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
 
         assertTrue(ex.getMessage().contains("timeout"));
     }
@@ -187,7 +188,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.body()).thenReturn(null);
 
         // When body is null, responseBody becomes empty string; Gson returns null for empty JSON
-        Map<String, Object> result = CallServiceFunction.callPredictionService(mockHttpClient,
+        Map<String, Object> result = new PredictionClient(mockHttpClient).predict(
                 "http://test", "{\"input\":[1,2]}");
         assertNull(result);
     }
@@ -206,7 +207,7 @@ public class CallServiceFunctionUnitTest {
         when(mockBody.string()).thenReturn("not valid json");
 
         assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
     }
 
     /**
@@ -221,7 +222,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.body()).thenReturn(mockBody);
         when(mockBody.string()).thenReturn("");
 
-        Map<String, Object> result = CallServiceFunction.callPredictionService(mockHttpClient,
+        Map<String, Object> result = new PredictionClient(mockHttpClient).predict(
                 "http://test", "{\"input\":[1,2]}");
         assertNull(result);
     }
@@ -237,7 +238,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.code()).thenReturn(400);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
         assertTrue(ex.getMessage().contains("400"));
     }
 
@@ -252,7 +253,7 @@ public class CallServiceFunctionUnitTest {
         when(mockResponse.code()).thenReturn(503);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
         assertTrue(ex.getMessage().contains("503"));
     }
 
@@ -266,7 +267,7 @@ public class CallServiceFunctionUnitTest {
                 .thenThrow(new RuntimeException("Failed to connect"));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                CallServiceFunction.callPredictionService(mockHttpClient, "http://test", "{\"input\":[1,2]}"));
+                new PredictionClient(mockHttpClient).predict("http://test", "{\"input\":[1,2]}"));
         assertTrue(ex.getMessage().contains("Failed to connect"));
     }
 

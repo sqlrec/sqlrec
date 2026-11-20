@@ -6,27 +6,16 @@ import com.google.gson.JsonObject;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.common.utils.RowJsonEncoder;
 import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-/** Model input selection and request layouts shared by prediction functions. */
+/** Model input selection for user-item prediction requests. */
 public final class PredictionRequestEncoder {
     private static final Gson gson = JsonUtils.getGson();
 
     private PredictionRequestEncoder() {
-    }
-
-    public static String encodeRows(List<Map<String, Object>> rows) {
-        return RowJsonEncoder.toJsonArray(rows);
-    }
-
-    public static String encodeRows(
-            List<Object[]> rows, List<FieldSchema> modelFields, List<RelDataTypeField> dataFields) {
-        return RowJsonEncoder.toJsonArray(rows, modelFields, dataFields);
     }
 
     /** Encodes the first user row and all item rows as separate feature column arrays. */

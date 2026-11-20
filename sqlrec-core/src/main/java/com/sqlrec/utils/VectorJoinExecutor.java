@@ -1,7 +1,6 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.runtime.SqlRecDataContext;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.common.schema.VectorSearchable;
@@ -93,20 +92,12 @@ public final class VectorJoinExecutor {
             }
             return Linq4j.asEnumerable(matches).select(match -> join(leftRow, match));
         } catch (RuntimeException e) {
-            if (!ignoreJoinQueryException(dataContext)) {
+            if (!KvJoinUtils.canIgnoreJoinFailure(dataContext, e)) {
                 throw e;
             }
             log.warn("Failed to execute vector lookup for one left row", e);
             return Linq4j.emptyEnumerable();
         }
-    }
-
-    private static boolean ignoreJoinQueryException(DataContext dataContext) {
-        if (dataContext instanceof SqlRecDataContext) {
-            return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION
-                    .getValueWithEnvFallback(((SqlRecDataContext) dataContext).getVariables());
-        }
-        return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue();
     }
 
     private static Object[] join(Object[] leftRow, VectorSearchResult match) {

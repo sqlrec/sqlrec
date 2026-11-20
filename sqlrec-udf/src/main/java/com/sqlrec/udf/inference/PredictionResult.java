@@ -9,7 +9,7 @@ public final class PredictionResult {
     private final Map<String, Object> predictions;
 
     public PredictionResult(Map<String, Object> predictions) {
-        this.predictions = predictions;
+        this.predictions = predictions == null ? Map.of() : predictions;
     }
 
     /** Online callers append null for missing fields or short prediction columns. */
@@ -20,9 +20,6 @@ public final class PredictionResult {
 
     /** Batch callers only overwrite inputs when a prediction row is present, including explicit nulls. */
     public void forEachValue(int rowIndex, BiConsumer<String, Object> consumer) {
-        if (predictions == null) {
-            return;
-        }
         for (Map.Entry<String, Object> entry : predictions.entrySet()) {
             Object prediction = entry.getValue();
             if (hasRow(prediction, rowIndex)) {

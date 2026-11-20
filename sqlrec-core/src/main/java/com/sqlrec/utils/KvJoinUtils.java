@@ -19,6 +19,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.TimeoutException;
 
 public class KvJoinUtils {
     private static final Logger log = LoggerFactory.getLogger(KvJoinUtils.class);
@@ -172,20 +174,16 @@ public class KvJoinUtils {
         return rightValuesMap;
     }
 
-    private static boolean canIgnoreJoinFailure(DataContext context, Exception failure) {
+    static boolean canIgnoreJoinFailure(DataContext context, Exception failure) {
         if (Thread.currentThread().isInterrupted()) return false;
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof java.util.concurrent.CancellationException
+            if (cause instanceof CancellationException
                     || cause instanceof InterruptedException
-                    || cause instanceof java.util.concurrent.TimeoutException) return false;
+                    || cause instanceof TimeoutException) return false;
         }
-        return ignoreJoinQueryException(context);
-    }
-
-    private static boolean ignoreJoinQueryException(DataContext dataContext) {
-        if (dataContext instanceof SqlRecDataContext) {
+        if (context instanceof SqlRecDataContext sqlContext) {
             return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION
-                    .getValueWithEnvFallback(((SqlRecDataContext) dataContext).getVariables());
+                    .getValueWithEnvFallback(sqlContext.getVariables());
         }
         return SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.getValue();
     }

@@ -26,8 +26,10 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Mock unit tests for the Milvus Flink sink: verify buffering until batch-size,
@@ -114,9 +116,12 @@ class MilvusSinkFunctionTest {
 
     @Test
     void testUpdateBeforeIgnored() throws Exception {
-        sink.invoke(row(RowKind.UPDATE_BEFORE, "k1", "v1"), null);
+        RowData ignored = mock(RowData.class);
+        when(ignored.getRowKind()).thenReturn(RowKind.UPDATE_BEFORE);
+        sink.invoke(ignored, null);
         sink.snapshotState(null);
 
+        verify(ignored, never()).getArity();
         verify(mockHandler, never()).addBatch(anyList());
         verify(mockHandler, never()).removeBatch(anyList());
     }

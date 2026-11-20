@@ -33,7 +33,7 @@ class JavaFunctionUtilsTest {
     private final AtomicReference<Function> remoteFunction = new AtomicReference<>();
     private ManualTicker ticker;
     private QueuedExecutor executor;
-    private LoadingCache<String, Optional<Class<?>>> cache;
+    private LoadingCache<JavaFunctionUtils.FunctionKey, Optional<Class<?>>> cache;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -95,7 +95,7 @@ class JavaFunctionUtilsTest {
         );
 
         remoteFunction.set(null);
-        cache.invalidate("default.remote_fun");
+        cache.invalidate(new JavaFunctionUtils.FunctionKey("default", "remote_fun"));
         assertNull(JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache));
 
         remoteFunction.set(functionFor(SecondTableFunction.class));
@@ -104,7 +104,7 @@ class JavaFunctionUtilsTest {
                 "a missing definition should also be cached"
         );
 
-        cache.invalidate("default.remote_fun");
+        cache.invalidate(new JavaFunctionUtils.FunctionKey("default", "remote_fun"));
         assertEquals(
                 SecondTableFunction.class,
                 JavaFunctionUtils.getTableFunctionClass("default", "remote_fun", cache)
@@ -124,6 +124,23 @@ class JavaFunctionUtilsTest {
                 SecondTableFunction.class,
                 JavaFunctionUtils.getTableFunctionClass("default", "local_fun", cache)
         );
+    }
+
+    @Test
+    void keepsDatabaseAndFunctionNamesWithDotsSeparate() {
+        Function function = functionFor(FirstTableFunction.class);
+        function.setDbName("features.v1");
+        function.setFunctionName("rank");
+        remoteFunction.set(function);
+        JavaFunctionUtils.registerTableFunction("features", "v1.rank", SecondTableFunction.class);
+        try {
+            assertEquals(FirstTableFunction.class,
+                    JavaFunctionUtils.getTableFunctionClass(" FEATURES.V1 ", "rank", cache));
+            assertEquals(SecondTableFunction.class,
+                    JavaFunctionUtils.getTableFunctionClass("features", "v1.rank", cache));
+        } finally {
+            JavaFunctionUtils.unregisterTableFunction("features", "v1.rank");
+        }
     }
 
     private static Function functionFor(Class<?> clazz) {
@@ -205,11 +222,9 @@ class JavaFunctionUtilsTest {
 
         @Override
         public Function getFunction(String database, String funName) throws NoSuchObjectException {
-            if (!"default".equals(database) || !"remote_fun".equals(funName)) {
-                throw new NoSuchObjectException("function not found");
-            }
             Function function = remoteFunction.get();
-            if (function == null) {
+            if (function == null || !function.getDbName().equals(database)
+                    || !function.getFunctionName().equals(funName)) {
                 throw new NoSuchObjectException("function not found");
             }
             return function;

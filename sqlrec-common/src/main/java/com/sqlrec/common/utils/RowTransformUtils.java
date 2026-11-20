@@ -115,11 +115,12 @@ public final class RowTransformUtils {
             return;
         }
         for (Object[] row : rows) {
-            convertRowTypes(row, fields);
+            convertRowType(row, fields);
         }
     }
 
-    private static void convertRowTypes(Object[] row, List<RelDataTypeField> fields) {
+    /** Normalizes one row for Calcite in place. */
+    public static void convertRowType(Object[] row, List<RelDataTypeField> fields) {
         if (row == null || fields == null) return;
         if (fields.size() > row.length) {
             throw new RuntimeException("convertRowTypes failed, row length is " + row.length
@@ -198,7 +199,7 @@ public final class RowTransformUtils {
             }
             if (value instanceof Object[] || value instanceof List) {
                 Object[] row = value instanceof List ? ((List<?>) value).toArray() : ((Object[]) value).clone();
-                convertRowTypes(row, target.getFieldList());
+                convertRowType(row, target.getFieldList());
                 return row;
             }
             return value;

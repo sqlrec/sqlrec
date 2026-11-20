@@ -8,32 +8,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PredictionRequestEncoderTest {
-    @Test
-    void rowRequestsProjectModelFieldsPreserveNullAndOmitMissingValues() {
-        List<RelDataTypeField> dataFields = Arrays.asList(
-                field("score", 0), field("ID", 1), field("ignored", 2));
-        List<FieldSchema> modelFields = Arrays.asList(
-                new FieldSchema("id", "STRING"), new FieldSchema("score", "FLOAT"),
-                new FieldSchema("missing", "STRING"));
-        List<Object[]> rows = Arrays.asList(new Object[]{null, "item", "unused"}, new Object[]{0.5});
-
-        assertEquals("[{\"id\":\"item\",\"score\":null},{\"score\":0.5}]",
-                PredictionRequestEncoder.encodeRows(rows, modelFields, dataFields));
-
-        Map<String, Object> batchRow = new LinkedHashMap<>();
-        batchRow.put("id", "item");
-        batchRow.put("score", null);
-        assertEquals("[{\"id\":\"item\",\"score\":null}]",
-                PredictionRequestEncoder.encodeRows(Collections.singletonList(batchRow)));
-    }
-
     @Test
     void userItemRequestsPreferUserFieldsAndPreserveNullsInColumnArrays() {
         List<RelDataTypeField> userFields = Arrays.asList(field("shared", 0), field("user", 1));

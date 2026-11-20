@@ -35,13 +35,10 @@ public interface VectorSearchable extends Table {
         try {
             List<VectorSearchResult> result = searchByEmbeddingImpl(request);
             if (result != null) {
-                List<Object[]> rows = result.stream()
-                        .map(VectorSearchResult::getRow)
-                        .collect(java.util.stream.Collectors.toList());
-                RowTransformUtils.convertRowTypes(
-                        rows,
-                        getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList()
-                );
+                var fields = getRowType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT)).getFieldList();
+                for (VectorSearchResult match : result) {
+                    RowTransformUtils.convertRowType(match.getRow(), fields);
+                }
                 count = result.size();
             }
             return result;

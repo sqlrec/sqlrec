@@ -41,13 +41,13 @@ class FunctionDagBuilderTest {
                 DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.BIGINT)));
         SetBindable assignment = mock(SetBindable.class);
         SqlFunctionBindable function = mock(SqlFunctionBindable.class);
-        when(function.getBindableList()).thenReturn(List.of(sql, cache, assignment));
+        when(function.getBindableList()).thenReturn(List.of(sql, cache, assignment, ProxyAllBindable.wrap(assignment)));
         when(function.getBindableDependency()).thenReturn(Map.of(1, Set.of(0)));
 
         Map<String, Object> result = FunctionDagBuilder.build("EXAMPLE", function);
         List<?> nodes = (List<?>) result.get("nodes");
         Map<?, ?> sqlNode = (Map<?, ?>) nodes.get(0);
-        assertEquals(3, nodes.size());
+        assertEquals(4, nodes.size());
         assertEquals("0", sqlNode.get("id"));
         assertEquals("sql", sqlNode.get("type"));
         assertEquals("scan", sqlNode.get("label"));
@@ -66,6 +66,9 @@ class FunctionDagBuilderTest {
         assertEquals(List.of(Map.of("name", "id", "type", "BIGINT NOT NULL")),
                 cacheNode.get("cacheTableDataFields"));
         assertEquals("SET", ((Map<?, ?>) nodes.get(2)).get("label"));
+        Map<?, ?> proxiedAssignment = (Map<?, ?>) nodes.get(3);
+        assertEquals("set", proxiedAssignment.get("type"));
+        assertEquals("SET", proxiedAssignment.get("label"));
         assertEquals(List.of(Map.of("id", "0-1", "source", "0", "target", "1")), result.get("edges"));
     }
 

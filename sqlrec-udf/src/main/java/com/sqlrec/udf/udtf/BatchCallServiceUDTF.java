@@ -1,7 +1,7 @@
 package com.sqlrec.udf.udtf;
 
+import com.sqlrec.common.utils.RowJsonEncoder;
 import com.sqlrec.udf.inference.PredictionClient;
-import com.sqlrec.udf.inference.PredictionRequestEncoder;
 import com.sqlrec.udf.inference.PredictionResult;
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
@@ -136,7 +136,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         }
 
         try {
-            String jsonData = PredictionRequestEncoder.encodeRows(buffer);
+            String jsonData = RowJsonEncoder.toJsonArray(buffer);
             Map<String, Object> predictions = predictionClient.call(serviceUrl, jsonData);
             outputResults(predictions);
         } catch (Exception e) {

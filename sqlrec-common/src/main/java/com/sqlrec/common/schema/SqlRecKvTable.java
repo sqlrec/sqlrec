@@ -165,17 +165,10 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                 return loadRowsByPrimaryKey(convertedKeySet, primaryKeyType);
             }
 
-            Map<Object, List<Object[]>> result = new HashMap<>(convertedKeySet.size());
-            Set<Object> missKeys = new HashSet<>();
-            for (Object key : convertedKeySet) {
-                List<Object[]> list = cache.getIfPresent(key);
-                if (list != null) {
-                    result.put(key, list);
-                } else {
-                    missKeys.add(key);
-                }
-            }
-            if (!missKeys.isEmpty()) {
+            Map<Object, List<Object[]>> result = new HashMap<>(cache.getAllPresent(convertedKeySet));
+            if (result.size() < convertedKeySet.size()) {
+                Set<Object> missKeys = new HashSet<>(convertedKeySet);
+                missKeys.removeAll(result.keySet());
                 Map<Object, List<Object[]>> missKeyResult = loadRowsByPrimaryKey(missKeys, primaryKeyType);
                 result.putAll(missKeyResult);
                 cache.putAll(missKeyResult);
@@ -214,12 +207,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             return Collections.emptyMap();
         }
         Set<Object> convertedKeys = RowTransformUtils.convertKeySet(keySet, getPrimaryKeyType());
-        Map<Object, List<Object[]>> result = new HashMap<>();
-        for (Object key : convertedKeys) {
-            List<Object[]> rows = cache.getIfPresent(key);
-            if (rows != null) result.put(key, rows);
-        }
-        return result;
+        return new HashMap<>(cache.getAllPresent(convertedKeys));
     }
 
     public void invalidateCache(Object[] row) {

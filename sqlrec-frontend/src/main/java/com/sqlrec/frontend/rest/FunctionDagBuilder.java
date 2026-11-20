@@ -63,10 +63,11 @@ final class FunctionDagBuilder {
             int index,
             String functionNamePrefix
     ) {
-        String originalName = getBindableLabel(bindable, index);
+        String type = getBindableType(bindable);
+        String originalName = getBindableLabel(bindable, index, type);
         Map<String, Object> node = new HashMap<>();
         node.put("id", String.valueOf(index));
-        node.put("type", getBindableType(bindable));
+        node.put("type", type);
         node.put("label", stripFunctionNamePrefix(originalName, functionNamePrefix));
         node.put("sql", bindable.getSql());
         node.put("dependencyFunction", String.join(",", bindable.getDependencySqlFuncName()));
@@ -131,7 +132,7 @@ final class FunctionDagBuilder {
         return "unknown";
     }
 
-    private static String getBindableLabel(BindableInterface bindable, int index) {
+    private static String getBindableLabel(BindableInterface bindable, int index, String type) {
         String name = bindable.getName();
         if (name != null && !name.isEmpty()) {
             return name;
@@ -141,10 +142,7 @@ final class FunctionDagBuilder {
         if (cacheTableName != null && !cacheTableName.isEmpty()) {
             return cacheTableName;
         }
-        if (bindable instanceof CacheTableBindable cacheTableBindable) {
-            return cacheTableBindable.getTableName();
-        }
-        if (bindable instanceof SetBindable) {
+        if ("set".equals(type)) {
             return "SET";
         }
         return "Node " + index;

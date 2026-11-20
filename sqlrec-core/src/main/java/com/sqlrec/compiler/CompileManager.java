@@ -173,7 +173,7 @@ public class CompileManager {
         if (elseClause != null) {
             elseBindable = compileIfBranch(elseClause, schema, defaultSchema);
         } else if (thenBindable instanceof CacheTableBindable thenCache) {
-            CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getTableName(), schema);
+            CacheTable table = SchemaUtils.tryGetCacheTable(thenCache.getCacheTableName(), schema);
             if (table != null) {
                 existingCacheFields = table.getDataFields();
             }

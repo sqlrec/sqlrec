@@ -1,5 +1,6 @@
 package com.sqlrec.udf.inference;
 
+import com.sqlrec.common.utils.JsonUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -33,9 +34,11 @@ class PredictionResultTest {
     }
 
     @Test
-    void emptyResponseLeavesBatchInputsIntact() {
+    void nullResponseLeavesBatchInputsIntactAndSuppliesNoOnlineValues() {
+        PredictionResult predictions = new PredictionResult(JsonUtils.parseJsonToMap("null"));
         Map<String, Object> input = new LinkedHashMap<>(Map.of("id", 1L));
-        new PredictionResult(null).forEachValue(0, input::put);
+        predictions.forEachValue(0, input::put);
         assertEquals(Map.of("id", 1L), input);
+        assertNull(predictions.getValue("id", 0));
     }
 }

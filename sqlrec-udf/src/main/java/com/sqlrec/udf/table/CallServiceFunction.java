@@ -7,6 +7,7 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowJsonEncoder;
 import com.sqlrec.udf.inference.PredictionClient;
 import com.sqlrec.udf.inference.PredictionRequestEncoder;
 import com.sqlrec.udf.inference.PredictionResult;
@@ -43,7 +44,7 @@ public class CallServiceFunction {
         }
 
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
-        String jsonData = PredictionRequestEncoder.encodeRows(inputData, inputFields, input.getDataFields());
+        String jsonData = RowJsonEncoder.toJsonArray(inputData, inputFields, input.getDataFields());
 
         return predictAndMerge(service, jsonData, inputData, newDataFields);
     }
@@ -100,25 +101,6 @@ public class CallServiceFunction {
             List<RelDataTypeField> fields
     ) {
         return new CacheTable("output", Linq4j.asEnumerable(rows), fields);
-    }
-
-    public static Map<String, Object> callPredictionService(String serviceUrl, String jsonData) {
-        return PredictionClient.getDefault().predict(serviceUrl, jsonData);
-    }
-
-    public static Map<String, Object> callPredictionService(
-            String serviceUrl, String jsonData, Map<String, String> serviceParams) {
-        return PredictionClient.getDefault().predict(serviceUrl, jsonData, serviceParams);
-    }
-
-    static Map<String, Object> callPredictionService(
-            OkHttpClient httpClient, String serviceUrl, String jsonData) {
-        return callPredictionService(httpClient, serviceUrl, jsonData, null);
-    }
-
-    static Map<String, Object> callPredictionService(
-            OkHttpClient httpClient, String serviceUrl, String jsonData, Map<String, String> serviceParams) {
-        return new PredictionClient(httpClient).predict(serviceUrl, jsonData, serviceParams);
     }
 
     public static List<Object[]> mergePredictions(

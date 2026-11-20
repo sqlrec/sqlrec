@@ -19,9 +19,12 @@ import org.mockito.ArgumentCaptor;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -188,6 +191,22 @@ public class VectorJoinExecutorTest {
                 10);
 
         assertEquals(0, result.count());
+    }
+
+    @Test
+    public void propagatesCancellationAndTimeoutWhenLookupFailuresAreIgnored() {
+        SqlRecConfigs.IGNORE_JOIN_QUERY_EXCEPTION.setDefaultValue(true);
+        for (RuntimeException failure : List.of(
+                new CancellationException(), new RuntimeException(new TimeoutException()),
+                new RuntimeException(new InterruptedException()))) {
+            VectorSearchable rightTable = mock(VectorSearchable.class);
+            when(rightTable.searchByEmbedding(any())).thenThrow(failure);
+            Enumerable<Object[]> result = VectorJoinExecutor.execute(
+                    Linq4j.singletonEnumerable(new Object[]{List.of(0.1f, 0.2f)}),
+                    rightTable, null, 0, "embedding", 10);
+
+            assertSame(failure, assertThrows(RuntimeException.class, result::count));
+        }
     }
 
     @Test

@@ -23,20 +23,27 @@ import java.util.concurrent.Executor;
 public class JavaFunctionUtils {
     private static final Logger log = LoggerFactory.getLogger(JavaFunctionUtils.class);
     private static volatile boolean skipHmsQuery = false;
-    private static final LoadingCache<String, Optional<Class<?>>> javaFunctionClassCache =
+    private static final LoadingCache<FunctionKey, Optional<Class<?>>> javaFunctionClassCache =
             createCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
                     ExecutorServiceUtils.getCacheRefreshExecutorService(),
                     Ticker.systemTicker()
             );
 
-    private static final Map<String, Class<?>> registeredJavaFunctionClassMap = new ConcurrentHashMap<>();
+    private static final Map<FunctionKey, Class<?>> registeredJavaFunctionClassMap = new ConcurrentHashMap<>();
+
+    record FunctionKey(String database, String functionName) {
+        FunctionKey {
+            database = ResourceNames.normalize(database);
+            functionName = ResourceNames.normalize(functionName);
+        }
+    }
 
     public static void invalidateCache() {
         javaFunctionClassCache.invalidateAll();
     }
 
-    static LoadingCache<String, Optional<Class<?>>> createCache(
+    static LoadingCache<FunctionKey, Optional<Class<?>>> createCache(
             Duration refreshInterval,
             Executor executor,
             Ticker ticker
@@ -53,98 +60,77 @@ public class JavaFunctionUtils {
         skipHmsQuery = skip;
     }
 
-    public static boolean isSkipHmsQuery() {
-        return skipHmsQuery;
-    }
-
     public static Object getTableFunction(String db, String funName) throws Exception {
-        Class<?> clazz = getTableFunctionClass(db, funName);
+        Class<?> clazz = getTableFunctionClass(db, funName, javaFunctionClassCache);
         if (clazz == null) {
             return null;
         }
         return clazz.getDeclaredConstructor().newInstance();
     }
 
-    public static Class<?> getTableFunctionClass(String db, String funName) {
-        return getTableFunctionClass(db, funName, javaFunctionClassCache);
-    }
-
     static Class<?> getTableFunctionClass(
             String db,
             String funName,
-            LoadingCache<String, Optional<Class<?>>> cache
+            LoadingCache<FunctionKey, Optional<Class<?>>> cache
     ) {
-        String normalizedDb = ResourceNames.normalize(db);
-        String normalizedFunName = ResourceNames.normalize(funName);
-        String mapKey = getMapKey(normalizedDb, normalizedFunName);
-        Class<?> registeredClazz = registeredJavaFunctionClassMap.get(mapKey);
+        FunctionKey key = new FunctionKey(db, funName);
+        Class<?> registeredClazz = registeredJavaFunctionClassMap.get(key);
         if (registeredClazz != null) {
             return registeredClazz;
         }
 
         try {
-            return cache.get(mapKey).orElse(null);
+            return cache.get(key).orElse(null);
         } catch (JavaFunctionLoadException e) {
             log.warn("Exception when get table function: db={}, funName={}",
-                    normalizedDb, normalizedFunName, e.getCause());
+                    key.database(), key.functionName(), e.getCause());
             return null;
         }
     }
 
-    private static Optional<Class<?>> loadJavaFunctionClass(String mapKey) {
-        int separatorIndex = mapKey.indexOf('.');
-        String db = mapKey.substring(0, separatorIndex);
-        String funName = mapKey.substring(separatorIndex + 1);
+    private static Optional<Class<?>> loadJavaFunctionClass(FunctionKey key) {
         try {
-            String className = getJavaFunctionClassName(db, funName);
+            String className = getJavaFunctionClassName(key);
             if (StringUtils.isEmpty(className)) {
                 return Optional.empty();
             }
 
             Class<?> clazz = Class.forName(className);
-            log.info("Register table function: db={}, funName={}, className={}", db, funName, className);
+            log.info("Register table function: db={}, funName={}, className={}",
+                    key.database(), key.functionName(), className);
             return Optional.of(clazz);
         } catch (NoSuchObjectException e) {
-            log.info("function: db={}, funName={} not found", db, funName);
+            log.info("function: db={}, funName={} not found", key.database(), key.functionName());
             return Optional.empty();
         } catch (Exception e) {
             throw new JavaFunctionLoadException(e);
         }
     }
 
-    public static String getJavaFunctionClassName(String db, String funName) throws Exception {
-        db = ResourceNames.normalize(db);
-        funName = ResourceNames.normalize(funName);
-        if (FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.containsKey(funName)) {
-            return FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.get(funName);
+    private static String getJavaFunctionClassName(FunctionKey key) throws Exception {
+        String builtIn = FunctionConfigs.DEFAULT_JAVA_FUNCTION_CONFIGS.get(key.functionName());
+        if (builtIn != null) {
+            return builtIn;
         }
         if (skipHmsQuery) {
             return null;
         }
 
         MetadataAccess metadataAccess = MetadataAccessFactory.getInstance();
-        org.apache.hadoop.hive.metastore.api.Function functionObj = metadataAccess.getFunction(db, funName);
+        org.apache.hadoop.hive.metastore.api.Function functionObj =
+                metadataAccess.getFunction(key.database(), key.functionName());
         if (functionObj == null) {
-            throw new Exception("Function not found: " + funName);
+            throw new Exception("Function not found: " + key.functionName());
         }
         return functionObj.getClassName();
     }
 
     public static void registerTableFunction(String db, String funName, Class<?> clazz) {
-        registeredJavaFunctionClassMap.put(
-                getMapKey(ResourceNames.normalize(db), ResourceNames.normalize(funName)),
-                clazz
-        );
+        registeredJavaFunctionClassMap.put(new FunctionKey(db, funName), clazz);
     }
 
     static void unregisterTableFunction(String db, String funName) {
-        registeredJavaFunctionClassMap.remove(
-                getMapKey(ResourceNames.normalize(db), ResourceNames.normalize(funName))
-        );
-    }
-
-    private static String getMapKey(String db, String funName) {
-        return db + "." + funName;
+        registeredJavaFunctionClassMap.remove(new FunctionKey(db, funName));
     }
 
     private static final class JavaFunctionLoadException extends RuntimeException {

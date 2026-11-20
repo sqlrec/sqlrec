@@ -62,11 +62,9 @@ public class RedisSinkTableFunction<IN> extends RichSinkFunction<IN> implements 
         RowData rowData = (RowData) value;
         RowKind kind = rowData.getRowKind();
 
-        Object[] objects = FlinkSchemaUtils.transform(rowData, dataTypes);
-        if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER) {
-            buffer.add(Operation.WRITE, objects);
-        } else if (kind == RowKind.DELETE) {
-            buffer.add(Operation.DELETE, objects);
+        if (kind == RowKind.INSERT || kind == RowKind.UPDATE_AFTER || kind == RowKind.DELETE) {
+            Operation operation = kind == RowKind.DELETE ? Operation.DELETE : Operation.WRITE;
+            buffer.add(operation, FlinkSchemaUtils.transform(rowData, dataTypes));
         }
         buffer.flushIfDue();
     }

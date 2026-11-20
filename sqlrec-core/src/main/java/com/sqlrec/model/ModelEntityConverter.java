@@ -102,7 +102,7 @@ public class ModelEntityConverter {
         return serviceConfig;
     }
 
-    public static String getModelPath(ModelConf modelConfig) {
+    private static String getModelPath(ModelConf modelConfig) {
         if (StringUtils.isEmpty(modelConfig.getModelName())) {
             throw new RuntimeException("modelName is empty");
         }
@@ -124,9 +124,5 @@ public class ModelEntityConverter {
     public static String getModelCheckpointPath(Checkpoint checkpointEntity) throws Exception {
         ModelConf modelConfig = convertToModel(checkpointEntity.getModelDdl());
         return PathUtils.checkpointPath(modelConfig.getPath(), checkpointEntity.getCheckpointName());
-    }
-
-    public static List<String> fixPathProtocol(List<String> partitionPaths) {
-        return PathUtils.fixPathProtocol(partitionPaths);
     }
 }

@@ -1,6 +1,6 @@
 package com.sqlrec.frontend;
 
-import com.sqlrec.model.ModelEntityConverter;
+import com.sqlrec.utils.PathUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -17,7 +17,7 @@ class RuntimeDependencyTest {
         String path = "/user/sqlrec/models/runtime-dependency-test";
 
         List<String> resolvedPaths = assertDoesNotThrow(
-                () -> ModelEntityConverter.fixPathProtocol(Collections.singletonList(path)));
+                () -> PathUtils.fixPathProtocol(Collections.singletonList(path)));
 
         assertEquals(1, resolvedPaths.size());
         assertTrue(resolvedPaths.get(0).endsWith(path));

@@ -2,9 +2,27 @@ package com.sqlrec.utils;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class PathUtilsTest {
+
+    @Test
+    void addsTheDefaultProtocolOnlyToUnqualifiedPaths() {
+        String hdfs = "hdfs://localhost:9000/path/to/table";
+        String s3 = "s3://bucket/path/to/table";
+        String unqualified = "/path/to/local/table";
+
+        assertEquals(List.of(), PathUtils.fixPathProtocol(List.of()));
+        assertEquals(List.of(hdfs, s3), PathUtils.fixPathProtocol(List.of(hdfs, s3)));
+
+        List<String> mixed = PathUtils.fixPathProtocol(List.of(hdfs, unqualified));
+        assertEquals(2, mixed.size());
+        assertEquals(hdfs, mixed.get(0));
+        assertTrue(mixed.get(1).contains(":"));
+        assertTrue(mixed.get(1).endsWith(unqualified));
+    }
 
     @Test
     void checkpointNamesCannotEscapeOrAliasTheModelRoot() {
