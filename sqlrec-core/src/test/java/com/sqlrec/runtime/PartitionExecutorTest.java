@@ -80,6 +80,21 @@ class PartitionExecutorTest {
     }
 
     @Test
+    @SilenceLoggers(PartitionExecutor.class)
+    void partitionWithoutOutputStillCountsAsSuccessful() {
+        Source source = new Source() {
+            @Override public Enumerable<Object[]> bind(CalciteSchema s, ExecuteContext c) {
+                if (id(s) == 1) {
+                    throw new IllegalStateException("discard this partition");
+                }
+                return null;
+            }
+        };
+
+        assertTrue(executor.execute(schema, context(true), source).toList().isEmpty());
+    }
+
+    @Test
     void partitionsRetainTheirInputSnapshotWhenTheOriginalListChanges() throws Exception {
         List<Object[]> inputRows = new ArrayList<>(List.of(new Object[]{0}, new Object[]{1}));
         schema.add("input", new CacheTable("input", Linq4j.asEnumerable(inputRows), FIELDS));

@@ -1,6 +1,6 @@
 package com.sqlrec.frontend.utils;
 
-import com.sqlrec.common.utils.RowTransformUtils;
+import com.sqlrec.common.utils.JsonUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.hive.service.rpc.thrift.*;
@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
@@ -43,8 +44,7 @@ public class ThriftUtils {
     private static TColumn toColumn(Enumerable<Object[]> rows, RelDataTypeField field) {
         int index = field.getIndex();
         return switch (field.getType().getSqlTypeName()) {
-            case VARCHAR, CHAR -> valueColumn(rows, index, String.class,
-                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            case VARCHAR, CHAR -> stringColumn(getValueList(rows, index, String.class));
             case SMALLINT, TINYINT -> valueColumn(rows, index, Short.class,
                     (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
             case INTEGER -> valueColumn(rows, index, Integer.class,
@@ -55,9 +55,12 @@ public class ThriftUtils {
                     (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
             case BOOLEAN -> valueColumn(rows, index, Boolean.class,
                     (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
-            default -> valueColumn(RowTransformUtils.getJsonValueEnumerable(rows, index), 0, String.class,
-                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            default -> stringColumn(getValueList(rows, index, JsonUtils::toJson, ""));
         };
+    }
+
+    private static TColumn stringColumn(Map.Entry<byte[], List<String>> values) {
+        return TColumn.stringVal(new TStringColumn(values.getValue(), ByteBuffer.wrap(values.getKey())));
     }
 
     private static <T> TColumn valueColumn(Enumerable<Object[]> rows, int index, Class<T> type,
@@ -67,6 +70,12 @@ public class ThriftUtils {
     }
 
     public static <T> Map.Entry<byte[], List<T>> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
+        return getValueList(enumerable, index, value -> tryCast(value, clazz), getDefaultValue(clazz));
+    }
+
+    private static <T> Map.Entry<byte[], List<T>> getValueList(
+            Enumerable<Object[]> enumerable, int index, Function<Object, T> convertValue, T nullPlaceholder
+    ) {
         if (enumerable == null) {
             return Map.entry(new byte[0], new ArrayList<>());
         }
@@ -74,7 +83,7 @@ public class ThriftUtils {
         List<T> allDataList = new ArrayList<>();
         for (Object[] objects : enumerable) {
             Object object = objects[index];
-            allDataList.add(tryCast(object, clazz));
+            allDataList.add(object == null ? null : convertValue.apply(object));
         }
 
         byte[] nulls = new byte[(allDataList.size() + 7) / 8];
@@ -83,7 +92,7 @@ public class ThriftUtils {
                 int byteIndex = i / 8;
                 int bitIndex = i % 8;
                 nulls[byteIndex] |= (1 << bitIndex);
-                allDataList.set(i, getDefaultValue(clazz));
+                allDataList.set(i, nullPlaceholder);
             }
         }
         return Map.entry(nulls, allDataList);

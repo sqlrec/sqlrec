@@ -22,7 +22,7 @@ public class ExecuteContextImpl implements ExecuteContext {
     private Map<String, String> variableMap;
     private List<String> funNameStack;
     private Object traceContext;
-    private FunctionReturnState functionReturnState;
+    private final FunctionReturnState functionReturnState;
 
     private final ExecuteContextImpl parent;
     private volatile boolean cancelled = false;
@@ -38,23 +38,18 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     public ExecuteContextImpl(ExecuteContextImpl parentContext) {
-        this(parentContext, parentContext.executionSchema);
+        this(parentContext, parentContext.executionSchema, parentContext.functionReturnState);
     }
 
-    private ExecuteContextImpl(ExecuteContextImpl parentContext, CalciteSchema schema) {
+    private ExecuteContextImpl(
+            ExecuteContextImpl parentContext, CalciteSchema schema, FunctionReturnState functionReturnState
+    ) {
         variableMap = parentContext.variableMap;
         funNameStack = new ArrayList<>(parentContext.funNameStack);
         traceContext = parentContext.traceContext;
-        functionReturnState = parentContext.functionReturnState;
+        this.functionReturnState = functionReturnState;
         executionSchema = Objects.requireNonNull(schema, "schema");
         parent = parentContext;
-    }
-
-    private ExecuteContextImpl(ExecuteContextImpl parentContext, boolean newFunctionFrame) {
-        this(parentContext);
-        if (newFunctionFrame) {
-            functionReturnState = new FunctionReturnState();
-        }
     }
 
     public String getVariable(String key) {
@@ -120,11 +115,11 @@ public class ExecuteContextImpl implements ExecuteContext {
     }
 
     public ExecuteContextImpl createFunctionContext() {
-        return new ExecuteContextImpl(this, true);
+        return new ExecuteContextImpl(this, executionSchema, new FunctionReturnState());
     }
 
     public ExecuteContextImpl createIsolatedReturnContext() {
-        return new ExecuteContextImpl(this, true);
+        return new ExecuteContextImpl(this, executionSchema, new FunctionReturnState());
     }
 
     public void commitFunctionReturnFrom(ExecuteContextImpl isolatedContext) {
@@ -185,7 +180,7 @@ public class ExecuteContextImpl implements ExecuteContext {
 
     /** Enter an isolated function/partition schema while retaining ancestor cancellation. */
     ExecuteContextImpl clone(CalciteSchema schema) {
-        return new ExecuteContextImpl(this, schema);
+        return new ExecuteContextImpl(this, schema, functionReturnState);
     }
 
     private static class FunctionReturnState {

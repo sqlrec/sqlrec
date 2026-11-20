@@ -68,19 +68,6 @@ public final class RowTransformUtils {
         return Linq4j.asEnumerable(list);
     }
 
-    public static Enumerable<Object[]> getJsonValueEnumerable(Enumerable<Object[]> enumerable, int index) {
-        if (enumerable == null) {
-            return null;
-        }
-
-        List<Object[]> list = new ArrayList<>();
-        for (Object[] row : enumerable) {
-            Object value = row[index];
-            list.add(new Object[]{value == null ? null : JsonUtils.toJson(value)});
-        }
-        return Linq4j.asEnumerable(list);
-    }
-
     public static Enumerable<Object[]> getMsgEnumerable(String msg) {
         if (msg == null) {
             return null;
