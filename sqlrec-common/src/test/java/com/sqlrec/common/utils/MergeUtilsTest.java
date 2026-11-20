@@ -1,12 +1,14 @@
 package com.sqlrec.common.utils;
 
-import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.AbstractEnumerable;
+import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.function.Functions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -61,17 +63,6 @@ public class MergeUtilsTest {
     }
 
     @Test
-    public void testSnakeMergeEnumerable() {
-        List<Integer> a = Arrays.asList(1, 3);
-        List<Integer> b = Arrays.asList(2, 4);
-
-        Enumerable<Integer> enumerable = MergeUtils.snakeMergeEnumerable(a, b);
-
-        List<Integer> result = enumerable.toList();
-        assertEquals(Arrays.asList(1, 2, 3, 4), result);
-    }
-
-    @Test
     public void testSnakeMergeNoSources() {
         List<Object> merged = MergeUtils.snakeMerge();
 
@@ -111,5 +102,44 @@ public class MergeUtilsTest {
         );
 
         assertEquals(Arrays.asList(1, 3, 4, 2), merged);
+    }
+
+    @Test
+    void weightedMergeClosesTheSourceWithoutReadingPastTheLimit() {
+        AtomicBoolean closed = new AtomicBoolean();
+        Iterable<Integer> first = new AbstractEnumerable<>() {
+            @Override
+            public Enumerator<Integer> enumerator() {
+                return new Enumerator<>() {
+                    private boolean advanced;
+
+                    @Override
+                    public Integer current() {
+                        return 1;
+                    }
+
+                    @Override
+                    public boolean moveNext() {
+                        assertFalse(advanced, "read past the limit");
+                        advanced = true;
+                        return true;
+                    }
+
+                    @Override
+                    public void reset() {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public void close() {
+                        closed.set(true);
+                    }
+                };
+            }
+        };
+        Iterable<Integer> second = () -> fail("opened another source after reaching the limit");
+
+        assertEquals(List.of(1), MergeUtils.weightedMerge(new int[]{2, 1}, 1, null, first, second));
+        assertTrue(closed.get());
     }
 }

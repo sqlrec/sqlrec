@@ -22,14 +22,14 @@ public class UnionTest {
                 schema,
                 Consts.DEFAULT_SCHEMA_NAME);
         assertTrue(unionAll.getPhysicalPlan().contains("SqlrecEnumerableUnion"));
-        assertTrue(unionAll.getJavaExpression().contains("snakeMergeEnumerable"));
+        assertTrue(unionAll.getJavaExpression().contains("snakeMerge("));
 
         BindableInterface unionDistinct = NormalSqlCompiler.getNormalSqlBindable(
                 "select 1 as id union select 1 as id",
                 schema,
                 Consts.DEFAULT_SCHEMA_NAME);
         assertTrue(unionDistinct.getPhysicalPlan().contains("SqlrecEnumerableUnion"));
-        assertTrue(unionDistinct.getJavaExpression().contains("snakeMergeDistinctEnumerable"));
+        assertTrue(unionDistinct.getJavaExpression().contains("snakeMergeDistinct("));
     }
 
     @Test

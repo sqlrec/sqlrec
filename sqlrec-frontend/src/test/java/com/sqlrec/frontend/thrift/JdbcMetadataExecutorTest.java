@@ -52,7 +52,7 @@ class JdbcMetadataExecutorTest {
     }
 
     @Test
-    void timestampSizeUsesDisplayWidthAndRadixIsNullForNonNumericTypes() throws Exception {
+    void columnMetadataUsesDeclaredTypeBoundsAndNullability() throws Exception {
         MetadataAccess metadata = mock(MetadataAccess.class);
         when(metadata.getDatabases()).thenReturn(List.of("default"));
         Table table = new Table();
@@ -63,6 +63,10 @@ class JdbcMetadataExecutorTest {
         table.putToParameters("flink.schema.0.data-type", "TIMESTAMP(3)");
         table.putToParameters("flink.schema.1.name", "amount");
         table.putToParameters("flink.schema.1.data-type", "DECIMAL(12, 2)");
+        table.putToParameters("flink.schema.2.name", "label");
+        table.putToParameters("flink.schema.2.data-type", "  VARCHAR(24) nOt   nUlL  ");
+        table.putToParameters("flink.schema.3.name", "payload");
+        table.putToParameters("flink.schema.3.data-type", "ROW<`mixedName` VARCHAR(12) NOT NULL>");
         when(metadata.getTables("default")).thenReturn(List.of(table));
         List<Object[]> rows = new JdbcMetadataExecutor(metadata).columns(null, null, null, null)
                 .getEnumerable().toList();
@@ -72,6 +76,12 @@ class JdbcMetadataExecutorTest {
         assertEquals(12, rows.get(1)[6]);
         assertEquals(2, rows.get(1)[8]);
         assertEquals(10, rows.get(1)[9]);
+        assertEquals("VARCHAR(24)", rows.get(2)[5]);
+        assertEquals(24, rows.get(2)[6]);
+        assertEquals(DatabaseMetaData.columnNoNulls, rows.get(2)[10]);
+        assertEquals("NO", rows.get(2)[17]);
+        assertEquals("ROW<`mixedName` VARCHAR(12) NOT NULL>", rows.get(3)[5]);
+        assertEquals(DatabaseMetaData.columnNullable, rows.get(3)[10]);
     }
 
     @Test

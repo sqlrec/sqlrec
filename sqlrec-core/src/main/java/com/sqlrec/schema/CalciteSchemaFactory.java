@@ -17,7 +17,7 @@ public class CalciteSchemaFactory {
     private static final CacheUtils.SingleValueCache<List<String>> databaseListCache =
             CacheUtils.createSingleValueRefreshCache(
                     Duration.ofSeconds(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue()),
-                    ignored -> {
+                    () -> {
                         try {
                             return MetadataAccessFactory.getInstance().getDatabases();
                         } catch (Exception e) {

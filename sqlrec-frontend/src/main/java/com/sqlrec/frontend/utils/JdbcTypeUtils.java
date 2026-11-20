@@ -6,22 +6,29 @@ import java.util.regex.Pattern;
 
 /** SQL type conversions used by JDBC column metadata and GetTypeInfo. */
 public final class JdbcTypeUtils {
+    private static final Pattern NOT_NULL_SUFFIX = Pattern.compile("(?i)\\s+NOT\\s+NULL$");
     private static final Pattern TYPE_PRECISION = Pattern.compile("(?i)^[A-Z_]+\\s*\\(\\s*(\\d+)");
     private static final Pattern DECIMAL_SCALE = Pattern.compile("(?i)^DECIMAL\\s*\\(\\s*\\d+\\s*,\\s*(\\d+)");
 
     private JdbcTypeUtils() {
     }
 
-    public static String typeName(String type) {
-        return type.replaceAll("(?i)\\s+NOT\\s+NULL$", "");
+    public static ColumnType parse(String type) {
+        String name = type.strip();
+        var notNull = NOT_NULL_SUFFIX.matcher(name);
+        boolean nullable = !notNull.find();
+        if (!nullable) {
+            name = name.substring(0, notNull.start());
+        }
+        String base = name.toUpperCase(Locale.ROOT).split("[<(\\s]", 2)[0];
+        var match = TYPE_PRECISION.matcher(name);
+        Integer declaredPrecision = match.find() ? Integer.valueOf(match.group(1)) : null;
+        return new ColumnType(name, jdbcType(base), precision(base, declaredPrecision),
+                scale(name, base, declaredPrecision), nullable);
     }
 
-    public static boolean isNullable(String type) {
-        return !type.toUpperCase(Locale.ROOT).endsWith("NOT NULL");
-    }
-
-    public static int jdbcType(String type) {
-        return switch (baseType(type)) {
+    private static int jdbcType(String base) {
+        return switch (base) {
             case "BOOLEAN" -> Types.BOOLEAN;
             case "TINYINT" -> Types.TINYINT;
             case "SMALLINT" -> Types.SMALLINT;
@@ -42,15 +49,13 @@ public final class JdbcTypeUtils {
         };
     }
 
-    public static int precision(String type) {
-        String base = baseType(type);
+    private static int precision(String base, Integer declaredPrecision) {
         if (base.equals("TIME") || base.equals("TIMESTAMP") || base.equals("TIMESTAMP_LTZ")) {
-            int fraction = fractionalPrecision(type);
+            int fraction = fractionalPrecision(base, declaredPrecision);
             return (base.equals("TIME") ? 8 : 19) + (fraction == 0 ? 0 : fraction + 1);
         }
-        var match = TYPE_PRECISION.matcher(type);
-        if (match.find()) {
-            return Integer.parseInt(match.group(1));
+        if (declaredPrecision != null) {
+            return declaredPrecision;
         }
         return switch (base) {
             case "TINYINT" -> 3;
@@ -66,11 +71,11 @@ public final class JdbcTypeUtils {
         };
     }
 
-    public static Integer scale(String type) {
-        return switch (baseType(type)) {
-            case "TIME", "TIMESTAMP", "TIMESTAMP_LTZ" -> fractionalPrecision(type);
+    private static Integer scale(String name, String base, Integer declaredPrecision) {
+        return switch (base) {
+            case "TIME", "TIMESTAMP", "TIMESTAMP_LTZ" -> fractionalPrecision(base, declaredPrecision);
             case "DECIMAL" -> {
-                var match = DECIMAL_SCALE.matcher(type);
+                var match = DECIMAL_SCALE.matcher(name);
                 yield match.find() ? Integer.valueOf(match.group(1)) : 0;
             }
             case "TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT" -> 0;
@@ -78,13 +83,8 @@ public final class JdbcTypeUtils {
         };
     }
 
-    private static String baseType(String type) {
-        return type.strip().toUpperCase(Locale.ROOT).split("[<(\\s]", 2)[0];
-    }
-
-    private static int fractionalPrecision(String type) {
-        var match = TYPE_PRECISION.matcher(type);
-        return match.find() ? Integer.parseInt(match.group(1)) : baseType(type).equals("TIME") ? 0 : 9;
+    private static int fractionalPrecision(String base, Integer declaredPrecision) {
+        return declaredPrecision != null ? declaredPrecision : base.equals("TIME") ? 0 : 9;
     }
 
     public static Integer numericRadix(int jdbcType) {
@@ -93,5 +93,8 @@ public final class JdbcTypeUtils {
                     Types.FLOAT, Types.DOUBLE, Types.DECIMAL -> 10;
             default -> null;
         };
+    }
+
+    public record ColumnType(String name, int jdbcType, int precision, Integer scale, boolean nullable) {
     }
 }

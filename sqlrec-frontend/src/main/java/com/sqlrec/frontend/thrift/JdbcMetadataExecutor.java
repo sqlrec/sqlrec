@@ -106,17 +106,15 @@ public final class JdbcMetadataExecutor {
 
     private static Object[] columnRow(String database, Table table, FieldSchema column,
             int index, List<String> primaryKeys) {
-        String rawType = column.getType();
-        int type = JdbcTypeUtils.jdbcType(rawType);
-        int size = JdbcTypeUtils.precision(rawType);
-        boolean nullable = !primaryKeys.contains(column.getName())
-                && JdbcTypeUtils.isNullable(rawType);
+        var columnType = JdbcTypeUtils.parse(column.getType());
+        int type = columnType.jdbcType();
+        int size = columnType.precision();
+        boolean nullable = columnType.nullable() && !primaryKeys.contains(column.getName());
         String prefix = "flink.schema." + index + ".";
-        String typeName = JdbcTypeUtils.typeName(rawType);
         Integer characterLength = type == Types.VARCHAR || type == Types.CHAR ? size : null;
         boolean generated = parameters(table).containsKey(prefix + "expr");
         return new Object[]{catalog(), database, table.getTableName(), column.getName(),
-                type, typeName, size, null, JdbcTypeUtils.scale(rawType), JdbcTypeUtils.numericRadix(type),
+                type, columnType.name(), size, null, columnType.scale(), JdbcTypeUtils.numericRadix(type),
                 nullable ? DatabaseMetaData.columnNullable : DatabaseMetaData.columnNoNulls,
                 columnComment(table, column.getName(), prefix), null, null, null, characterLength,
                 index + 1, nullable ? "YES" : "NO", null, null, null, null, "NO", generated ? "YES" : "NO"};
@@ -204,12 +202,13 @@ public final class JdbcMetadataExecutor {
     }
 
     private static Object[] typeInfoRow(String type) {
-        int code = JdbcTypeUtils.jdbcType(type);
+        var columnType = JdbcTypeUtils.parse(type);
+        int code = columnType.jdbcType();
         boolean character = code == Types.CHAR || code == Types.VARCHAR;
         String quote = character ? "'" : null;
         String createParams = type.equals("DECIMAL") ? "precision,scale" : character ? "length" : null;
         short maxScale = (short) (type.equals("DECIMAL") ? 38 : type.equals("TIMESTAMP") ? 9 : 0);
-        return new Object[]{type, code, JdbcTypeUtils.precision(type), quote, quote, createParams,
+        return new Object[]{type, code, columnType.precision(), quote, quote, createParams,
                 (short) DatabaseMetaData.typeNullable, character, (short) DatabaseMetaData.typeSearchable,
                 false, false, false, type, (short) 0, maxScale, null, null, JdbcTypeUtils.numericRadix(code)};
     }

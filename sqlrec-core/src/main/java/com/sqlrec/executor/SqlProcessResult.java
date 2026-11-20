@@ -14,9 +14,10 @@ import java.util.concurrent.TimeoutException;
 
 public class SqlProcessResult implements AutoCloseable {
     private Enumerable<Object[]> enumerable;
-    private List<RelDataTypeField> fields;
+    private final List<RelDataTypeField> fields;
 
     public SqlProcessResult() {
+        this(null, null);
     }
 
     public SqlProcessResult(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
@@ -56,10 +57,6 @@ public class SqlProcessResult implements AutoCloseable {
 
     public List<RelDataTypeField> getFields() {
         return fields;
-    }
-
-    public void setFields(List<RelDataTypeField> fields) {
-        this.fields = fields;
     }
 
     public boolean isCompleted() {

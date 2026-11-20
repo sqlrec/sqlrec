@@ -32,12 +32,13 @@ final class ResourceCommandExecutor {
     SqlProcessResult execute(SqlNode node, String defaultSchema) throws Exception {
         if (node instanceof SqlCreateApi command) {
             saveSqlApi(command);
-            SqlApiCache.invalidateAll();
+            SqlApiCache.invalidate(command.getApiName());
             return message("create api success");
         }
         if (node instanceof SqlDropApi command) {
-            dropApi(command);
-            SqlApiCache.invalidateAll();
+            String apiName = command.getApiName().getSimple();
+            dropApi(apiName, command.isIfExists());
+            SqlApiCache.invalidate(apiName);
             return message("drop api success");
         }
         if (node instanceof SqlDropSqlFunction command) {
@@ -113,10 +114,9 @@ final class ResourceCommandExecutor {
         metadata.deleteSqlFunction(name);
     }
 
-    private void dropApi(SqlDropApi command) {
-        String name = command.getApiName().getSimple();
+    private void dropApi(String name, boolean ifExists) {
         if (metadata.getSqlApi(name) == null) {
-            if (command.isIfExists()) {
+            if (ifExists) {
                 return;
             }
             throw new RuntimeException("api not exists: " + name);

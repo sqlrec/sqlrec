@@ -1,13 +1,12 @@
 package com.sqlrec.common.utils;
 
-import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.function.EqualityComparer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -72,58 +71,41 @@ public class MergeUtils {
             }
         }
 
-        List<Iterator<T>> iterators = new ArrayList<>();
+        List<Enumerator<T>> enumerators = new ArrayList<>(sources.length);
         try {
-            for (Iterable<T> source : sources) {
-                iterators.add(source.iterator());
-            }
-
             List<T> merged = new ArrayList<>();
             while (merged.size() < limit) {
-                boolean consumedAnyValue = false;
-                for (int i = 0; i < iterators.size(); i++) {
-                    Iterator<T> iterator = iterators.get(i);
+                int previousSize = merged.size();
+                for (int i = 0; i < sources.length && merged.size() < limit; i++) {
+                    if (i == enumerators.size()) {
+                        enumerators.add(Linq4j.iterableEnumerator(sources[i]));
+                    }
+                    Enumerator<T> enumerator = enumerators.get(i);
                     int accepted = 0;
                     while (accepted < weights[i]
-                            && iterator.hasNext()
-                            && merged.size() < limit) {
-                        T value = iterator.next();
-                        consumedAnyValue = true;
+                            && merged.size() < limit
+                            && enumerator.moveNext()) {
+                        T value = enumerator.current();
                         if (isNewValue.test(value)) {
                             merged.add(value);
                             accepted++;
                         }
                     }
                 }
-                if (!consumedAnyValue) {
+                if (merged.size() == previousSize) {
                     break;
                 }
             }
 
             return merged;
         } finally {
-            for (Iterator<T> iterator : iterators) {
-                if (iterator instanceof AutoCloseable) {
-                    try {
-                        ((AutoCloseable) iterator).close();
-                    } catch (Exception e) {
-                        // ignore close exception
-                    }
+            for (Enumerator<T> enumerator : enumerators) {
+                try {
+                    enumerator.close();
+                } catch (Exception ignored) {
                 }
             }
         }
-    }
-
-    public static <T> Enumerable<T> snakeMergeEnumerable(Iterable<T>... sources) {
-        List<T> merged = snakeMerge(sources);
-        return Linq4j.asEnumerable(merged);
-    }
-
-    public static <T> Enumerable<T> snakeMergeDistinctEnumerable(
-            EqualityComparer<T> comparer,
-            Iterable<T>... sources
-    ) {
-        return Linq4j.asEnumerable(snakeMergeDistinct(comparer, sources));
     }
 
     private static final class EqualityKey<T> {

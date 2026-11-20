@@ -13,12 +13,9 @@ import java.util.ServiceLoader;
 
 public class ModelControllerFactory {
     private static final Logger log = LoggerFactory.getLogger(ModelControllerFactory.class);
-    public static Map<String, ModelController> getModelControllerMap() {
-        return ControllerHolder.CONTROLLERS;
-    }
 
     public static ModelController getModelController(String modelName) {
-        return getModelControllerMap().get(modelName);
+        return ControllerHolder.CONTROLLERS.get(modelName);
     }
 
     public static ModelController getModelController(ModelConf modelConfig) {

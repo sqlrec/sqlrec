@@ -50,7 +50,7 @@ public class HmsSchema extends AbstractSchema {
         this.metadataAccess = metadataAccess;
         this.tableMapCache = CacheUtils.createSingleValueRefreshCache(
                 refreshInterval,
-                ignored -> computeTableMap()
+                this::computeTableMap
         );
         this.functionMapCache = CacheUtils.createSingleValueRefreshCache(
                 refreshInterval,
@@ -127,7 +127,7 @@ public class HmsSchema extends AbstractSchema {
         MetricsUtils.unregisterTableCacheMetrics(fullName);
     }
 
-    private Multimap<String, Function> computeFunctionMap(Multimap<String, Function> oldFunctionMap) {
+    private Multimap<String, Function> computeFunctionMap() {
         try {
             List<org.apache.hadoop.hive.metastore.api.Function> functionMetas = metadataAccess.getFunctions(databaseName);
             Multimap<String, Function> functionMap = ArrayListMultimap.create();

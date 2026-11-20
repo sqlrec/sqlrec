@@ -10,6 +10,7 @@ import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.util.BuiltInMethod;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -17,9 +18,9 @@ import java.util.List;
 
 public class SqlrecEnumerableUnion extends EnumerableUnion {
     private static final Method MERGE_METHOD = getMergeMethod(
-            "snakeMergeEnumerable", Iterable[].class);
+            "snakeMerge", Iterable[].class);
     private static final Method DISTINCT_MERGE_METHOD = getMergeMethod(
-            "snakeMergeDistinctEnumerable", EqualityComparer.class, Iterable[].class);
+            "snakeMergeDistinct", EqualityComparer.class, Iterable[].class);
 
     public SqlrecEnumerableUnion(RelOptCluster cluster, RelTraitSet traitSet,
                                  List<RelNode> inputs, boolean all) {
@@ -61,7 +62,7 @@ public class SqlrecEnumerableUnion extends EnumerableUnion {
             unionExp = Expressions.call(DISTINCT_MERGE_METHOD, arguments);
         }
 
-        builder.add(unionExp);
+        builder.add(Expressions.call(BuiltInMethod.AS_ENUMERABLE2.method, unionExp));
         final PhysType physType =
                 PhysTypeImpl.of(
                         implementor.getTypeFactory(),

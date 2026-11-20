@@ -15,12 +15,18 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SqlApiCacheTest {
     private MetadataAccess savedMetadataAccess;
@@ -74,6 +80,48 @@ class SqlApiCacheTest {
         assertEquals("API not found: missing", missing.getMessage());
         putApi("missing", "available_now");
         assertEquals("available_now", SqlApiCache.get(cache, "missing").getFunctionName());
+    }
+
+    @Test
+    void invalidationRemovesAnOldValueLoadedDuringAnUpdate() throws Exception {
+        SqlApi original = putApi("racing_api", "function_v1");
+        CountDownLatch loading = new CountDownLatch(1);
+        CountDownLatch finishLoad = new CountDownLatch(1);
+        CountDownLatch invalidating = new CountDownLatch(1);
+        MetadataAccess delayedMetadata = mock(MetadataAccess.class);
+        when(delayedMetadata.getSqlApi("racing_api")).thenAnswer(invocation -> {
+            SqlApi snapshot = metadataAccess.getSqlApi("racing_api");
+            if (snapshot == original) {
+                loading.countDown();
+                assertTrue(finishLoad.await(10, TimeUnit.SECONDS));
+            }
+            return snapshot;
+        });
+        getMetadataAccessField().set(null, delayedMetadata);
+
+        SqlApiCache.invalidate("racing_api");
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            try {
+                var oldRead = executor.submit(() -> SqlApiCache.get("racing_api"));
+                assertTrue(loading.await(5, TimeUnit.SECONDS));
+                SqlApi replacement = putApi("racing_api", "function_v2");
+                var invalidate = executor.submit(() -> {
+                    invalidating.countDown();
+                    SqlApiCache.invalidate("RaCiNg_ApI");
+                });
+                assertTrue(invalidating.await(5, TimeUnit.SECONDS));
+                assertThrows(TimeoutException.class, () -> invalidate.get(100, TimeUnit.MILLISECONDS));
+
+                finishLoad.countDown();
+                assertSame(original, oldRead.get(5, TimeUnit.SECONDS));
+                invalidate.get(5, TimeUnit.SECONDS);
+                assertSame(replacement, SqlApiCache.get("racing_api"));
+            } finally {
+                finishLoad.countDown();
+            }
+        } finally {
+            SqlApiCache.invalidate("racing_api");
+        }
     }
 
     private SqlApi putApi(String name, String functionName) {

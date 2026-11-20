@@ -11,27 +11,30 @@ import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CacheUtilsTest {
     @Test
-    void refreshReceivesPreviousValue() {
+    void refreshLoadsNewValueInBackground() {
         ManualTicker ticker = new ManualTicker();
         QueuedExecutor executor = new QueuedExecutor();
+        AtomicReference<String> value = new AtomicReference<>("initial");
         LoadingCache<String, String> cache = CacheUtils.createRefreshCache(
                 Duration.ofSeconds(1),
                 executor,
                 ticker,
-                (key, oldValue) -> oldValue == null ? "initial" : oldValue + "_updated"
+                key -> value.get()
         );
 
         assertEquals("initial", cache.get("key"));
+        value.set("updated");
         ticker.advance(Duration.ofMillis(1100));
         assertEquals("initial", cache.get("key"));
 
         executor.runAll();
-        assertEquals("initial_updated", cache.get("key"));
+        assertEquals("updated", cache.get("key"));
     }
 
     @Test
@@ -67,22 +70,24 @@ class CacheUtilsTest {
     }
 
     @Test
-    void singleValueCacheDoesNotExposeInternalKey() {
+    void singleValueCacheRefreshesWithNoArgumentLoader() {
         ManualTicker ticker = new ManualTicker();
         QueuedExecutor executor = new QueuedExecutor();
+        AtomicReference<String> value = new AtomicReference<>("initial");
         CacheUtils.SingleValueCache<String> cache = CacheUtils.createSingleValueRefreshCache(
                 Duration.ofSeconds(1),
                 executor,
                 ticker,
-                oldValue -> oldValue == null ? "initial" : oldValue + "_updated"
+                value::get
         );
 
         assertEquals("initial", cache.get());
+        value.set("updated");
         ticker.advance(Duration.ofMillis(1100));
         assertEquals("initial", cache.get());
 
         executor.runAll();
-        assertEquals("initial_updated", cache.get());
+        assertEquals("updated", cache.get());
     }
 
     private static final class ManualTicker implements Ticker {

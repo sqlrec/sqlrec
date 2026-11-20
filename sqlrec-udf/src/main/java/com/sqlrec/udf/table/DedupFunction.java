@@ -13,16 +13,9 @@ import java.util.Set;
 public class DedupFunction {
     /** Keeps the first row for each key, preserving input order. */
     public CacheTable evaluate(CacheTable input, String column) {
-        if (input == null) {
-            throw new IllegalArgumentException("input table cannot be null");
-        }
-        if (column == null || column.isEmpty()) {
-            throw new IllegalArgumentException("column cannot be null or empty");
-        }
-        int index = DataTypeUtils.findFieldIndex(input.getDataFields(), column);
-        if (index < 0) {
-            throw new IllegalArgumentException("column not found in input table: " + column);
-        }
+        requireInput(input);
+        requireColumnName(column, "column");
+        int index = requireColumnIndex(input, column, "column", "input");
         Set<Object> seen = new HashSet<>();
         List<Object[]> rows = new ArrayList<>();
         for (Object[] row : input.scan(null)) {
@@ -38,33 +31,18 @@ public class DedupFunction {
     }
 
     public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String col1, String col2) {
-        if (input == null) {
-            throw new IllegalArgumentException("input table cannot be null");
-        }
-        if (col1 == null || col1.isEmpty()) {
-            throw new IllegalArgumentException("col1 cannot be null or empty");
-        }
-        if (col2 == null || col2.isEmpty()) {
-            throw new IllegalArgumentException("col2 cannot be null or empty");
-        }
-
-        int inputColIndex = DataTypeUtils.findFieldIndex(input.getDataFields(), col1);
-        if (inputColIndex == -1) {
-            throw new IllegalArgumentException("col1 not found in input table: " + col1);
-        }
+        requireInput(input);
+        requireColumnName(col1, "col1");
+        requireColumnName(col2, "col2");
+        int inputColIndex = requireColumnIndex(input, col1, "col1", "input");
 
         Set<Object> existingKeys = new HashSet<>();
         if (dedupTable != null) {
-            int dedupColIndex = DataTypeUtils.findFieldIndex(dedupTable.getDataFields(), col2);
-            if (dedupColIndex == -1) {
-                throw new IllegalArgumentException("col2 not found in dedup table: " + col2);
-            }
-
+            int dedupColIndex = requireColumnIndex(dedupTable, col2, "col2", "dedup");
             Enumerable<Object[]> dedupEnumerable = dedupTable.scan(null);
             if (dedupEnumerable != null) {
                 for (Object[] row : dedupEnumerable) {
-                    Object value = row[dedupColIndex];
-                    existingKeys.add(value);
+                    existingKeys.add(row[dedupColIndex]);
                 }
             }
         }
@@ -74,13 +52,32 @@ public class DedupFunction {
 
         if (inputEnumerable != null) {
             for (Object[] row : inputEnumerable) {
-                Object value = row[inputColIndex];
-                if (!existingKeys.contains(value)) {
+                if (!existingKeys.contains(row[inputColIndex])) {
                     newData.add(row);
                 }
             }
         }
 
         return new CacheTable("dedup_output", Linq4j.asEnumerable(newData), input.getDataFields());
+    }
+
+    private static void requireInput(CacheTable input) {
+        if (input == null) {
+            throw new IllegalArgumentException("input table cannot be null");
+        }
+    }
+
+    private static void requireColumnName(String column, String argument) {
+        if (column == null || column.isEmpty()) {
+            throw new IllegalArgumentException(argument + " cannot be null or empty");
+        }
+    }
+
+    private static int requireColumnIndex(CacheTable table, String column, String argument, String tableRole) {
+        int index = DataTypeUtils.findFieldIndex(table.getDataFields(), column);
+        if (index < 0) {
+            throw new IllegalArgumentException(argument + " not found in " + tableRole + " table: " + column);
+        }
+        return index;
     }
 }

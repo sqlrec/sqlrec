@@ -101,7 +101,7 @@ public class HiveTableUtils {
         return result;
     }
 
-    public static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj) {
+    private static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> flinkTableColumns = new LinkedHashMap<>();
         Map<String, String> tableProperties = tableObj.getParameters();
 
@@ -114,21 +114,10 @@ public class HiveTableUtils {
             if (!tableProperties.containsKey(nameKey) || !tableProperties.containsKey(typeKey)) {
                 break;
             }
-            String columnName = tableProperties.get(nameKey);
-            String columnType = convertHiveType(tableProperties.get(typeKey));
-            flinkTableColumns.put(columnName, columnType);
+            flinkTableColumns.put(tableProperties.get(nameKey), tableProperties.get(typeKey));
         }
 
         return flinkTableColumns;
-    }
-
-    //todo cover more type case
-    public static String convertHiveType(String hiveType) {
-        hiveType = hiveType.toUpperCase();
-        if (hiveType.contains("NOT NULL")) {
-            return hiveType.replace("NOT NULL", "").trim();
-        }
-        return hiveType;
     }
 
     public static String getTablePrimaryKey(org.apache.hadoop.hive.metastore.api.Table tableObj) {

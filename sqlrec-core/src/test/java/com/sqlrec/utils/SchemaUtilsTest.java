@@ -1,6 +1,15 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.sql.parser.SqlCreateModel;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -86,6 +95,26 @@ public class SchemaUtilsTest {
         var result = SchemaUtils.convertPropertyList(null);
         assertNotNull(result);
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void readsSqlRecAndFlinkOptionsFromTheirStringLiterals() throws Exception {
+        var model = (SqlCreateModel) CompileManager.parseSql("""
+                CREATE MODEL sample (x FLOAT) WITH (
+                    'owner''s title' = 'It''s '
+                                       '"ready"',
+                    'binary' = X'AB'
+                )
+                """);
+        assertEquals(Map.of("owner's title", "It's \"ready\"", "binary", "X'AB'"),
+                SchemaUtils.convertPropertyList(model.getPropertyList()));
+
+        var pos = SqlParserPos.ZERO;
+        var options = new SqlNodeList(List.of(
+                new SqlTableOption(SqlLiteral.createCharString("table's title", pos),
+                        SqlLiteral.createCharString("", pos), pos)), pos);
+
+        assertEquals(Map.of("table's title", ""), SchemaUtils.convertPropertyList(options));
     }
 
     @Test

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 
 public final class CacheUtils {
@@ -20,18 +21,11 @@ public final class CacheUtils {
             Duration refreshInterval,
             CacheLoader<K, V> loadFunction
     ) {
-        return createRefreshCache(refreshInterval, (key, oldValue) -> loadFunction.load(key));
-    }
-
-    public static <K, V> LoadingCache<K, V> createRefreshCache(
-            Duration refreshInterval,
-            RefreshLoader<K, V> refreshLoader
-    ) {
         return createRefreshCache(
                 refreshInterval,
                 ExecutorServiceUtils.getCacheRefreshExecutorService(),
                 Ticker.systemTicker(),
-                refreshLoader
+                loadFunction
         );
     }
 
@@ -41,20 +35,6 @@ public final class CacheUtils {
             Ticker ticker,
             CacheLoader<K, V> loadFunction
     ) {
-        return createRefreshCache(
-                refreshInterval,
-                executor,
-                ticker,
-                (key, oldValue) -> loadFunction.load(key)
-        );
-    }
-
-    public static <K, V> LoadingCache<K, V> createRefreshCache(
-            Duration refreshInterval,
-            Executor executor,
-            Ticker ticker,
-            RefreshLoader<K, V> refreshLoader
-    ) {
         return Caffeine.newBuilder()
                 .refreshAfterWrite(refreshInterval)
                 .executor(executor)
@@ -62,13 +42,13 @@ public final class CacheUtils {
                 .build(new CacheLoader<K, V>() {
                     @Override
                     public V load(K key) throws Exception {
-                        return refreshLoader.load(key, null);
+                        return loadFunction.load(key);
                     }
 
                     @Override
                     public V reload(K key, V oldValue) {
                         try {
-                            return refreshLoader.load(key, oldValue);
+                            return load(key);
                         } catch (Exception e) {
                             log.warn("Failed to refresh cache entry: {}", key, e);
                             return oldValue;
@@ -79,7 +59,7 @@ public final class CacheUtils {
 
     public static <V> SingleValueCache<V> createSingleValueRefreshCache(
             Duration refreshInterval,
-            ValueLoader<V> valueLoader
+            Callable<V> valueLoader
     ) {
         return createSingleValueRefreshCache(
                 refreshInterval,
@@ -93,13 +73,13 @@ public final class CacheUtils {
             Duration refreshInterval,
             Executor executor,
             Ticker ticker,
-            ValueLoader<V> valueLoader
+            Callable<V> valueLoader
     ) {
         LoadingCache<SingleValueKey, V> cache = createRefreshCache(
                 refreshInterval,
                 executor,
                 ticker,
-                (key, oldValue) -> valueLoader.load(oldValue)
+                key -> valueLoader.call()
         );
         return new SingleValueCache<>() {
             @Override
@@ -114,20 +94,10 @@ public final class CacheUtils {
         };
     }
 
-    @FunctionalInterface
-    public interface RefreshLoader<K, V> {
-        V load(K key, V oldValue) throws Exception;
-    }
-
     public interface SingleValueCache<V> {
         V get();
 
         void invalidate();
-    }
-
-    @FunctionalInterface
-    public interface ValueLoader<V> {
-        V load(V oldValue) throws Exception;
     }
 
     private enum SingleValueKey {

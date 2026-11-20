@@ -19,19 +19,13 @@ public final class SqlApiCache {
     private SqlApiCache() {
     }
 
-    public static SqlApi get(String apiName) throws Exception {
+    public static SqlApi get(String apiName) {
         return get(CACHE, apiName);
     }
 
-    static SqlApi get(Cache<String, SqlApi> cache, String apiName) throws Exception {
+    static SqlApi get(Cache<String, SqlApi> cache, String apiName) {
         String normalizedName = ResourceNames.normalize(apiName);
-        SqlApi sqlApi = cache.getIfPresent(normalizedName);
-        if (sqlApi == null) {
-            sqlApi = MetadataAccessFactory.getInstance().getSqlApi(normalizedName);
-            if (sqlApi != null) {
-                cache.put(normalizedName, sqlApi);
-            }
-        }
+        SqlApi sqlApi = cache.get(normalizedName, key -> MetadataAccessFactory.getInstance().getSqlApi(key));
         if (sqlApi == null) {
             throw new IllegalArgumentException("API not found: " + normalizedName);
         }
@@ -43,6 +37,10 @@ public final class SqlApiCache {
                 .expireAfterWrite(duration, timeUnit)
                 .ticker(ticker)
                 .build();
+    }
+
+    public static void invalidate(String apiName) {
+        CACHE.invalidate(ResourceNames.normalize(apiName));
     }
 
     public static void invalidateAll() {

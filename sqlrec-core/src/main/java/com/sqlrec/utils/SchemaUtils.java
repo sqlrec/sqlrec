@@ -80,23 +80,33 @@ public class SchemaUtils {
 
     public static Map<String, String> convertPropertyList(SqlNodeList propertyList) {
         Map<String, String> params = new HashMap<>();
-        if (propertyList != null && propertyList.size() > 0) {
-            for (SqlNode property : propertyList) {
-                if (property instanceof SqlTableOption option) {
-                    String key = removeQuotes(option.getKey().toString());
-                    String value = removeQuotes(option.getValue().toString());
-                    params.put(key, value);
-                } else if (property instanceof SqlRecOption option) {
-                    String key = removeQuotes(option.getKey().toString());
-                    String value = removeQuotes(option.getValue().toString());
-                    params.put(key, value);
-                } else {
-                    log.warn("Unsupported property type: {}", property);
-                    throw new IllegalArgumentException("Unsupported property type: " + property);
-                }
+        if (propertyList == null) {
+            return params;
+        }
+        for (SqlNode property : propertyList) {
+            SqlNode key;
+            SqlNode value;
+            if (property instanceof SqlTableOption option) {
+                key = option.getKey();
+                value = option.getValue();
+            } else if (property instanceof SqlRecOption option) {
+                key = option.getKey();
+                value = option.getValue();
+            } else {
+                log.warn("Unsupported property type: {}", property);
+                throw new IllegalArgumentException("Unsupported property type: " + property);
             }
+            params.put(readOptionLiteral(key), readOptionLiteral(value));
         }
         return params;
+    }
+
+    private static String readOptionLiteral(SqlNode node) {
+        if (SqlLiteral.unchain(node) instanceof SqlCharStringLiteral text) {
+            return getValueOfStringLiteral(text);
+        }
+        // Binary options keep their SQL spelling.
+        return node.toString();
     }
 
     public static SqlNodeList addConfigToPropertyList(SqlNodeList propertyList, String key, String value) {

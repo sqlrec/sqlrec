@@ -1,8 +1,12 @@
 package com.sqlrec.connectors.redis.codec;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.HiveTableUtils;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,5 +83,39 @@ class StringCodecTest {
 
         assertEquals(7, decoded[0]);
         assertEquals(42L, decoded[1]);
+    }
+
+    @Test
+    void decodesNonNullNumericColumnsFromHiveFallback() {
+        Table table = new Table();
+        table.setSd(new StorageDescriptor());
+        table.putToParameters("flink.schema.0.name", "count");
+        table.putToParameters("flink.schema.0.data-type", "INT NOT NULL");
+        table.putToParameters("flink.schema.1.name", "id");
+        table.putToParameters("flink.schema.1.data-type", "BIGINT NOT NULL");
+
+        StringCodec codec = new StringCodec();
+        codec.init(HiveTableUtils.parse(table), 1);
+
+        assertArrayEquals(new Object[]{42, 7L}, codec.decode("42".getBytes(StandardCharsets.UTF_8), "7"));
+    }
+
+    @Test
+    void decodesDecimalWithPrecisionAndNullability() {
+        StringCodec codec = new StringCodec();
+        codec.init(twoFields("string", "decimal(12, 2) not null"), 0);
+
+        assertArrayEquals(new Object[]{"rowKey", new BigDecimal("42.50")},
+                codec.decode("42.50".getBytes(StandardCharsets.UTF_8), "rowKey"));
+    }
+
+    @Test
+    void leavesUnknownAndTemporalTypesAsStrings() {
+        StringCodec codec = new StringCodec();
+        codec.init(twoFields("custom_type", "TIMESTAMP(3) NOT NULL"), 0);
+
+        String timestamp = "2026-11-21 12:30:00.123";
+        assertArrayEquals(new Object[]{"rowKey", timestamp},
+                codec.decode(timestamp.getBytes(StandardCharsets.UTF_8), "rowKey"));
     }
 }
