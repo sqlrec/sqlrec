@@ -55,39 +55,29 @@ public class IfBindable extends BindableInterface {
         this.elseClause = elseClause;
         this.timein = timein;
 
-        boolean thenReturns = thenClause.containsReturn();
-        boolean elseReturns = elseClause != null && elseClause.containsReturn();
-        boolean thenIsCache = thenClause instanceof CacheTableBindable;
-        checkReturnBranches(thenReturns, elseReturns);
-        checkBranchCompatibility(thenReturns || elseReturns, thenIsCache);
-        checkTimein(thenIsCache, thenReturns);
-        List<RelDataTypeField> thenFields = thenClause.getReturnDataFields();
-        returnDataFields = elseClause != null && thenFields != null && !thenFields.isEmpty()
-                ? DataTypeUtils.mergeTableSchemas(thenFields, elseClause.getReturnDataFields()) : thenFields;
-        if (thenIsCache) {
-            List<RelDataTypeField> otherFields = elseClause == null
-                    ? existingCacheFields : elseClause.getCacheTableDataFields();
-            cacheTableDataFields = otherFields == null ? thenClause.getCacheTableDataFields()
-                    : DataTypeUtils.mergeTableSchemas(thenClause.getCacheTableDataFields(), otherFields);
-        } else {
-            cacheTableDataFields = null;
+        if (timein && elseClause == null) {
+            throw new RuntimeException("must contain else clause when in timein mode");
         }
+        boolean thenReturns = thenClause.containsReturn();
+        boolean thenIsCache = thenClause instanceof CacheTableBindable;
+        checkBranches(thenReturns, thenIsCache);
+        returnDataFields = mergeReturnFields();
+        if (timein && !thenIsCache && !thenReturns) {
+            throw new RuntimeException("timein mode only supports cache statement in then clause");
+        }
+        cacheTableDataFields = thenIsCache ? mergeCacheFields(existingCacheFields) : null;
     }
 
-    private void checkReturnBranches(boolean thenReturns, boolean elseReturns) {
-        if (elseClause != null && (thenReturns != elseReturns)) {
+    private void checkBranches(boolean thenReturns, boolean thenIsCache) {
+        if (elseClause == null) {
+            return;
+        }
+        if (thenReturns != elseClause.containsReturn()) {
             throw new RuntimeException(
                     "IF with RETURN must either omit ELSE or return from both THEN and ELSE branches"
             );
         }
-    }
-
-    private void checkBranchCompatibility(boolean containsReturn, boolean thenIsCache) {
-        if (elseClause == null) {
-            return;
-        }
-        if (containsReturn) {
-            checkReturnFieldsCompatible();
+        if (thenReturns) {
             return;
         }
         boolean elseIsCache = elseClause instanceof CacheTableBindable;
@@ -95,39 +85,32 @@ public class IfBindable extends BindableInterface {
             throw new RuntimeException(
                     "thenClause and elseClause must be both cache statements or both non-cache statements");
         }
-        if (!thenIsCache) {
-            checkReturnFieldsCompatible();
-            return;
-        }
-        if (!thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
+        if (thenIsCache && !thenClause.getCacheTableName().equals(elseClause.getCacheTableName())) {
             throw new RuntimeException("thenClause and elseClause must have the same table name");
         }
-        DataTypeUtils.checkTableSchemaSame(
-                ((CacheTableBindable) thenClause).getTableDataFields(),
-                ((CacheTableBindable) elseClause).getTableDataFields());
     }
 
-    private void checkTimein(boolean thenIsCache, boolean thenReturns) {
-        if (elseClause == null && timein) {
-            throw new RuntimeException("must contain else clause when in timein mode");
-        }
-
-        if (timein && !thenIsCache && !thenReturns) {
-            throw new RuntimeException("timein mode only supports cache statement in then clause");
-        }
-    }
-
-    private void checkReturnFieldsCompatible() {
+    private List<RelDataTypeField> mergeReturnFields() {
         List<RelDataTypeField> thenFields = thenClause.getReturnDataFields();
+        if (elseClause == null) {
+            return thenFields;
+        }
         List<RelDataTypeField> elseFields = elseClause.getReturnDataFields();
         boolean thenHasFields = thenFields != null && !thenFields.isEmpty();
         boolean elseHasFields = elseFields != null && !elseFields.isEmpty();
         if (thenHasFields != elseHasFields) {
             throw new RuntimeException("thenClause and elseClause must return compatible data fields");
         }
-        if (thenHasFields) {
-            DataTypeUtils.checkTableSchemaSame(thenFields, elseFields);
+        return thenHasFields ? DataTypeUtils.mergeTableSchemas(thenFields, elseFields) : thenFields;
+    }
+
+    private List<RelDataTypeField> mergeCacheFields(List<RelDataTypeField> existingCacheFields) {
+        List<RelDataTypeField> thenFields = thenClause.getCacheTableDataFields();
+        if (elseClause == null && existingCacheFields == null) {
+            return thenFields;
         }
+        List<RelDataTypeField> otherFields = elseClause == null ? existingCacheFields : elseClause.getCacheTableDataFields();
+        return DataTypeUtils.mergeTableSchemas(thenFields, otherFields);
     }
 
     @Override

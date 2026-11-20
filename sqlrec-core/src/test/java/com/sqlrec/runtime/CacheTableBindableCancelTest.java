@@ -3,6 +3,7 @@ package com.sqlrec.runtime;
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
+import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -151,6 +153,7 @@ public class CacheTableBindableCancelTest {
         CalciteSchema directSchema = CalciteSchema.createRootSchema(false);
         ExecuteContextImpl context = new ExecuteContextImpl(directSchema);
         context.setVariable(SqlRecConfigs.NODE_EXEC_TIMEOUT.getKey(), "0");
+        context.setVariable(SqlRecConfigs.IGNORE_UNION_EXCEPTION.getKey(), "true");
 
         CacheTableBindable cacheTableBindable = new CacheTableBindable("t", new TestBindable() {
             @Override
@@ -159,6 +162,7 @@ public class CacheTableBindableCancelTest {
             }
         });
         cacheTableBindable.setIgnoreException(true);
+        cacheTableBindable.setSql("CACHE TABLE t AS SELECT col1 FROM source_table");
 
         RuntimeException directFailure = assertThrows(RuntimeException.class,
                 () -> cacheTableBindable.bind(directSchema, context));
@@ -167,12 +171,16 @@ public class CacheTableBindableCancelTest {
 
         CalciteSchema proxySchema = CalciteSchema.createRootSchema(false);
         Enumerable<Object[]> result = bindWithProxy(cacheTableBindable, proxySchema, context.clone(proxySchema));
-        List<Object[]> rows = new ArrayList<>();
-        result.forEach(rows::add);
+        List<Object[]> rows = result.toList();
         assertEquals(1, rows.size());
         assertEquals("t", rows.get(0)[0]);
         assertEquals(0L, rows.get(0)[1]);
-        assertNotNull(proxySchema.getTable("t", false));
+        CalciteSchema.TableEntry entry = proxySchema.getTable("t", false);
+        assertNotNull(entry);
+        CacheTable table = assertInstanceOf(CacheTable.class, entry.getTable());
+        assertEquals(cacheTableBindable.getSql(), table.getCreateSql());
+        assertEquals(cacheTableBindable.getCacheTableDataFields(), table.getDataFields());
+        assertTrue(table.scan(null).toList().isEmpty());
     }
 
     @Test

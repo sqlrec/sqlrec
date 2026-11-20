@@ -37,11 +37,20 @@ public class CacheTableBindable extends ForwardingBindable {
         Enumerable<Object[]> enumerable = bindable.bind(schema, context);
         // Finish lazy results inside the execution budget, before publishing any table.
         List<Object[]> rows = enumerable == null ? Collections.emptyList() : enumerable.toList();
-        CacheTable cacheTable = new CacheTable(tableName, Linq4j.asEnumerable(rows), bindable.getReturnDataFields());
-        cacheTable.setCreateSql(getSql());
-        publish(schema, context, cacheTable);
+        return publishRows(schema, context, tableName, bindable.getReturnDataFields(), getSql(), rows);
+    }
 
-        // return cache table counts
+    static Enumerable<Object[]> publishRows(
+            CalciteSchema schema,
+            ExecuteContext context,
+            String tableName,
+            List<RelDataTypeField> fields,
+            String sql,
+            List<Object[]> rows
+    ) {
+        CacheTable cacheTable = new CacheTable(tableName, Linq4j.asEnumerable(rows), fields);
+        cacheTable.setCreateSql(sql);
+        publish(schema, context, cacheTable);
         return Linq4j.singletonEnumerable(new Object[]{tableName, (long) rows.size()});
     }
 

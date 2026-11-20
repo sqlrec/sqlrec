@@ -34,6 +34,7 @@ public class FunctionCompiler {
         FUNCTION_DEFINITION,
         FUNCTION_PARAM,
         FUNCTION_BODY,
+        EXPECT_EMPTY_RETURN,
         FUNCTION_RETURN,
     }
 
@@ -46,7 +47,6 @@ public class FunctionCompiler {
     private final CompileManager compileManager;
     private List<RelDataTypeField> returnDataFields;
     private boolean returnDataFieldsInitialized;
-    private boolean awaitingEmptyReturnAfterExhaustiveIf;
 
     public FunctionCompiler(CalciteSchema schema, CompileManager compileManager) {
         this.isOrReplace = false;
@@ -90,19 +90,11 @@ public class FunctionCompiler {
 
     public void compile(SqlNode flinkSqlNode, String sql) throws Exception {
         switch (stage) {
-            case FUNCTION_DEFINITION:
-                compileFunctionDefinition(flinkSqlNode);
-                break;
-            case FUNCTION_PARAM:
-                compileFunctionParam(flinkSqlNode, sql);
-                break;
-            case FUNCTION_BODY:
-                compileFunctionBody(flinkSqlNode, sql);
-                break;
-            case FUNCTION_RETURN:
-                throw new Exception("sql after return is invalid");
-            default:
-                throw new Exception("stage is invalid:" + stage);
+            case FUNCTION_DEFINITION -> compileFunctionDefinition(flinkSqlNode);
+            case FUNCTION_PARAM -> compileFunctionParam(flinkSqlNode, sql);
+            case FUNCTION_BODY -> compileFunctionBody(flinkSqlNode, sql);
+            case EXPECT_EMPTY_RETURN -> compileEmptyTerminatingReturn(flinkSqlNode, sql);
+            case FUNCTION_RETURN -> throw new Exception("sql after return is invalid");
         }
         sqlList.add(sql);
     }
@@ -153,11 +145,6 @@ public class FunctionCompiler {
     }
 
     private void compileFunctionBody(SqlNode flinkSqlNode, String sql) throws Exception {
-        if (awaitingEmptyReturnAfterExhaustiveIf) {
-            compileEmptyTerminatingReturn(flinkSqlNode, sql);
-            return;
-        }
-
         if (flinkSqlNode instanceof SqlReturn sqlReturn) {
             compileTopLevelReturn(sqlReturn, sql);
         } else {
@@ -167,7 +154,7 @@ public class FunctionCompiler {
             collectReturnDataFields(bindable);
             addBodyBindable(bindable, sql, false);
             if (isExhaustiveReturnIf(flinkSqlNode)) {
-                awaitingEmptyReturnAfterExhaustiveIf = true;
+                stage = FunctionCompileStage.EXPECT_EMPTY_RETURN;
             }
         }
     }

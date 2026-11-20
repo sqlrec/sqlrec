@@ -13,14 +13,12 @@ import io.micrometer.core.instrument.Tags;
 import io.opentelemetry.api.trace.Span;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -178,13 +176,8 @@ public class ProxyAllBindable extends ForwardingBindable {
                 .counter(Consts.METRICS_CACHE_TABLE_IGNORE_EXCEPTION, tags)
                 .increment();
 
-        CacheTable cacheTable = new CacheTable(cacheTableName, Linq4j.emptyEnumerable(), cacheTableDataFields);
-        cacheTable.setCreateSql(delegate.getSql());
-        CacheTableBindable.publish(schema, context, cacheTable);
-
-        List<Object[]> rows = new ArrayList<>();
-        rows.add(new Object[]{cacheTableName, 0L});
-        return Linq4j.asEnumerable(rows);
+        return CacheTableBindable.publishRows(
+                schema, context, cacheTableName, cacheTableDataFields, delegate.getSql(), List.of());
     }
 
     private void recordCancelled(ExecuteContext context, String phase) {
