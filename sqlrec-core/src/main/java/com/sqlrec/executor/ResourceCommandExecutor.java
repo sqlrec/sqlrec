@@ -7,7 +7,6 @@ import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.compiler.SqlFunctionCache;
 import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.SqlApi;
 import com.sqlrec.entity.SqlFunction;
 import com.sqlrec.model.ModelManager;
@@ -89,15 +88,10 @@ final class ResourceCommandExecutor {
     private SqlProcessResult dropCheckpoint(SqlAlterModelDropCheckpoint command) throws Exception {
         String modelName = command.getModelName().getSimple();
         String checkpointName = SchemaUtils.removeQuotes(command.getCheckpointName().toString());
-        Checkpoint checkpoint = metadata.getCheckpoint(modelName, checkpointName);
-        if (checkpoint == null) {
-            if (command.isIfExists()) {
-                return message("drop checkpoint success");
-            }
+        if (!ModelManager.deleteCheckpointIfPresent(metadata, modelName, checkpointName) && !command.isIfExists()) {
             throw new RuntimeException(
                     "checkpoint not exists: " + checkpointName + " for model " + modelName);
         }
-        ModelManager.deleteCheckpoint(modelName, checkpointName);
         return message("drop checkpoint success");
     }
 

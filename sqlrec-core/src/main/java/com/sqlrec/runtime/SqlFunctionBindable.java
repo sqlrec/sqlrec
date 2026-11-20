@@ -82,14 +82,13 @@ public class SqlFunctionBindable extends BindableInterface {
         throw new IllegalStateException("SQL function completed without executing a RETURN statement");
     }
 
-    private void execInParallel(CalciteSchema schema, ExecuteContext context) {
-        Map<Integer, CompletableFuture<Object>> bindFutures = new HashMap<>();
+    private void execInParallel(CalciteSchema schema, ExecuteContextImpl context) {
+        Map<Integer, CompletableFuture<Enumerable<Object[]>>> bindFutures = new HashMap<>();
         for (int bindableIndex : sortedBindableList) {
             BindableInterface bindable = bindableList.get(bindableIndex);
-            Set<Integer> dependencyIndices = bindableDependency.get(bindableIndex);
-            CompletableFuture<Object> bindFuture = schedule(
-                    bindable, dependencyIndices, bindFutures, schema, context
-            );
+            var dependencies = bindableDependency.get(bindableIndex).stream().map(bindFutures::get).toList();
+            var bindFuture = ExecutorServiceUtils.submitAfter(
+                    dependencies, () -> bindUnlessReturned(bindable, schema, context));
             bindFuture.whenComplete((result, ex) -> {
                 if (ex != null) {
                     context.cancel();
@@ -101,26 +100,12 @@ public class SqlFunctionBindable extends BindableInterface {
         ExecutorServiceUtils.awaitAll(context, bindFutures.values());
     }
 
-    private CompletableFuture<Object> schedule(
-            BindableInterface bindable,
-            Set<Integer> dependencyIndices,
-            Map<Integer, CompletableFuture<Object>> bindFutures,
-            CalciteSchema schema,
-            ExecuteContext context
-    ) {
-        List<CompletableFuture<Object>> dependencies = dependencyIndices == null
-                ? List.of()
-                : dependencyIndices.stream().map(bindFutures::get).toList();
-        return ExecutorServiceUtils.submitAfter(dependencies, () -> bindUnlessReturned(bindable, schema, context));
-    }
-
     private Enumerable<Object[]> bindUnlessReturned(
             BindableInterface bindable,
             CalciteSchema schema,
-            ExecuteContext context
+            ExecuteContextImpl context
     ) {
-        ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
-        if (functionContext.hasReturnedFromFunction()) {
+        if (context.hasReturnedFromFunction()) {
             return null;
         }
         return bindable.bind(schema, context);

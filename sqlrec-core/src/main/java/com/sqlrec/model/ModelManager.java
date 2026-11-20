@@ -379,13 +379,17 @@ public class ModelManager {
     }
 
     public static void deleteCheckpoint(String modelName, String checkpointName) throws Exception {
-        MetadataAccess db = MetadataAccessFactory.getInstance();
+        deleteCheckpointIfPresent(MetadataAccessFactory.getInstance(), modelName, checkpointName);
+    }
+
+    public static boolean deleteCheckpointIfPresent(MetadataAccess db, String modelName, String checkpointName)
+            throws Exception {
         Checkpoint checkpoint = db.getCheckpoint(modelName, checkpointName);
         if (checkpoint == null) {
-            return;
+            return false;
         }
-
         deleteCheckpoint(db, checkpoint);
+        return true;
     }
 
     private static void deleteCheckpoint(MetadataAccess db, Checkpoint checkpoint) throws Exception {

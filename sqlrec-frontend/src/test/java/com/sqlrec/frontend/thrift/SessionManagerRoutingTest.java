@@ -1,11 +1,14 @@
 package com.sqlrec.frontend.thrift;
 
+import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.frontend.utils.ThriftUtils;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.thrift.TException;
@@ -273,20 +276,32 @@ class SessionManagerRoutingTest {
 
     @Test
     void closingOrCancellingLocalOperationsReleasesTheirObservations() throws Exception {
-        for (String action : java.util.List.of("operation", "cancel", "session")) {
-            try (Session session = new Session()) {
-                SqlProcessResult result = mock(SqlProcessResult.class);
-                when(session.executor.executeSqlAsync(any(SqlNode.class), eq("SELECT 1"))).thenReturn(result);
-                TOperationHandle handle = session.manager.executeStatement(
-                        new TExecuteStatementReq(session.handle, "SELECT 1")).getOperationHandle();
-                switch (action) {
-                    case "operation" -> session.manager.closeOperation(new TCloseOperationReq(handle));
-                    case "cancel" -> session.manager.cancelOperation(new TCancelOperationReq(handle));
-                    case "session" -> session.manager.closeSession(new TCloseSessionReq(session.handle));
+        var composite = MetricsUtils.getCompositeMeterRegistry();
+        var registry = new SimpleMeterRegistry();
+        composite.add(registry);
+        try {
+            var closed = registry.counter(Consts.METRICS_OPERATION_CLOSE_COUNT);
+            for (String action : java.util.List.of("operation", "cancel", "session")) {
+                try (Session session = new Session()) {
+                    SqlProcessResult result = mock(SqlProcessResult.class);
+                    when(session.executor.executeSqlAsync(any(SqlNode.class), eq("SELECT 1"))).thenReturn(result);
+                    TOperationHandle handle = session.manager.executeStatement(
+                            new TExecuteStatementReq(session.handle, "SELECT 1")).getOperationHandle();
+                    double previousCount = closed.count();
+                    switch (action) {
+                        case "operation" -> session.manager.closeOperation(new TCloseOperationReq(handle));
+                        case "cancel" -> session.manager.cancelOperation(new TCancelOperationReq(handle));
+                        case "session" -> session.manager.closeSession(new TCloseSessionReq(session.handle));
+                    }
+                    verify(result, times(1)).close();
+                    assertEquals(previousCount + 1, closed.count(), action);
+                    assertThrows(TException.class,
+                            () -> session.manager.getOperationStatus(new TGetOperationStatusReq(handle)));
                 }
-                verify(result, times(1)).close();
-                assertThrows(TException.class, () -> session.manager.getOperationStatus(new TGetOperationStatusReq(handle)));
             }
+        } finally {
+            composite.remove(registry);
+            registry.close();
         }
     }
 

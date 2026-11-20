@@ -137,10 +137,10 @@ public class SessionManager {
         if (!sessions.remove(session.id, session)) {
             return new TCloseSessionResp(invalidHandleStatus());
         }
-        operations.entrySet().removeIf(entry -> {
-            if (entry.getValue().session() != session) return false;
-            if (entry.getValue().isLocal()) entry.getValue().local().close();
-            return true;
+        operations.forEach((id, entry) -> {
+            if (entry.session() == session) {
+                removeOperation(id, entry);
+            }
         });
         try {
             return session.gateway.closeSession();

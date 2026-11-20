@@ -1,6 +1,7 @@
 package com.sqlrec.executor;
 
 import com.sqlrec.common.utils.SilenceLoggers;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
@@ -8,6 +9,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.db.remote.FlinkHiveDdlAdapter;
+import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.TableFactoryUtils;
@@ -72,6 +74,39 @@ class SqlExecutorLocalMetadataTest {
             assertEquals("metadata DDL completed", result.getEnumerable().toList().get(0)[0]);
             verify(metadata).executeMetadataDdl(isA(SqlDropTable.class), eq("default"));
             caches.verify(CacheManager::invalidateMetadata);
+        }
+    }
+
+    @Test
+    void dropCheckpointLoadsMetadataOnceAndHonorsIfExists() throws Exception {
+        MetadataAccess metadata = mock(MetadataAccess.class);
+        Checkpoint checkpoint = new Checkpoint();
+        checkpoint.setModelName("model_a");
+        checkpoint.setCheckpointName("v1");
+        checkpoint.setModelDdl("CREATE MODEL model_a (x FLOAT) WITH ('MODEL_PATH'='/models/model_a')");
+        checkpoint.setStatus(Consts.CHECKPOINT_STATUS_SUCCEEDED);
+        when(metadata.getCheckpoint("model_a", "v1")).thenReturn(checkpoint);
+
+        try (var factory = mockStatic(MetadataAccessFactory.class);
+             var caches = mockStatic(CacheManager.class)) {
+            factory.when(MetadataAccessFactory::getInstance).thenReturn(metadata);
+            var executor = new SqlExecutor();
+
+            var deleted = executor.executeSqlAsync("ALTER MODEL model_a DROP CHECKPOINT = 'v1'");
+            assertEquals("drop checkpoint success", deleted.getEnumerable().single()[0]);
+            var absent = executor.executeSqlAsync("ALTER MODEL model_a DROP IF EXISTS CHECKPOINT = 'v2'");
+            assertEquals("drop checkpoint success", absent.getEnumerable().single()[0]);
+            var error = assertThrows(RuntimeException.class,
+                    () -> executor.executeSqlAsync("ALTER MODEL model_a DROP CHECKPOINT = 'v3'"));
+            assertEquals("checkpoint not exists: v3 for model model_a", error.getMessage());
+
+            verify(metadata).getCheckpoint("model_a", "v1");
+            verify(metadata).getCheckpoint("model_a", "v2");
+            verify(metadata).getCheckpoint("model_a", "v3");
+            verify(metadata).hdfsDeletePath("/models/model_a/v1");
+            verify(metadata).deleteCheckpoint("model_a", "v1");
+            verify(metadata, times(1)).deleteCheckpoint(anyString(), anyString());
+            caches.verify(CacheManager::invalidateAll, times(2));
         }
     }
 
