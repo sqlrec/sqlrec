@@ -21,7 +21,7 @@ public class MetadataAccessFactory {
             synchronized (MetadataAccessFactory.class) {
                 if (instance == null) {
                     try {
-                        init();
+                        instance = createMetadata();
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -31,7 +31,7 @@ public class MetadataAccessFactory {
         return instance;
     }
 
-    private static void init() throws Exception {
+    private static MetadataAccess createMetadata() throws Exception {
         if (SqlRecConfigs.isFileSystemMetadata()) {
             String sqlSchemaDir = SqlRecConfigs.SQL_SCHEMA_DIR.getValue();
             SqlFileParser parser = new SqlFileParser(sqlSchemaDir);
@@ -45,15 +45,16 @@ public class MetadataAccessFactory {
                     parser.getApiNodes(),
                     parser.getModelNodes()
             );
-            instance = new MetadataAccess(schemaAccess, storeAccess, new LocalHdfsAccess());
+            MetadataAccess metadata = new MetadataAccess(schemaAccess, storeAccess, new LocalHdfsAccess());
             for (SqlNode node : parser.getServiceNodes()) {
-                ServiceManager.loadServiceDefinition((SqlCreateService) node, instance);
+                ServiceManager.loadServiceDefinition((SqlCreateService) node, metadata);
             }
-        } else {
-            HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
-            MetadataAccess metadata = new MetadataAccess(schemaAccess, new DbStoreAccess(), new RemoteHdfsAccess());
-            Runtime.getRuntime().addShutdownHook(new Thread(schemaAccess::close, "sqlrec-hive-ddl"));
-            instance = metadata;
+            return metadata;
         }
+
+        HmsSchemaAccess schemaAccess = new HmsSchemaAccess();
+        MetadataAccess metadata = new MetadataAccess(schemaAccess, new DbStoreAccess(), new RemoteHdfsAccess());
+        Runtime.getRuntime().addShutdownHook(new Thread(schemaAccess::close, "sqlrec-hive-ddl"));
+        return metadata;
     }
 }

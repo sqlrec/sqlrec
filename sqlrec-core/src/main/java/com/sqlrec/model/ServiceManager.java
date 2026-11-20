@@ -91,18 +91,20 @@ public class ServiceManager {
         Service service = buildService(sqlCreateService, db, BuildMode.DEPLOYMENT);
         K8sManager.validateYaml(service.getYaml());
         K8sManager.applyYaml(service.getYaml());
-        persistService(db, service);
+        db.upsertService(service);
+        serviceConfigCache.invalidate(service.getName());
 
         return service.getName();
     }
 
-    /** Loads a file-defined service without deploying it or checking checkpoint readiness. */
+    /** Populates file metadata during initialization, before it is published to service lookups. */
     public static Service loadServiceDefinition(
             SqlCreateService sqlCreateService,
             MetadataAccess db
     ) throws Exception {
         Service service = buildService(sqlCreateService, db, BuildMode.DEFINITION);
-        persistService(db, service);
+        // Cache loaders may be waiting for the metadata factory's initialization lock.
+        db.upsertService(service);
         return service;
     }
 
@@ -164,11 +166,6 @@ public class ServiceManager {
         service.setIfNotExists(sqlCreateService.isIfNotExists());
 
         return service;
-    }
-
-    private static void persistService(MetadataAccess db, Service service) {
-        db.upsertService(service);
-        serviceConfigCache.invalidate(service.getName());
     }
 
     public static void deleteService(String serviceName) {
