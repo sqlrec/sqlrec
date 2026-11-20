@@ -10,6 +10,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.mongodb.calcite.MongoCalciteTable;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
+import com.sqlrec.connectors.mongodb.utils.MongoClientUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -80,7 +81,7 @@ class MongoCalciteResidualFilterTest {
             if (mongoClient != null) {
                 mongoClient.close();
             }
-            MongoHandler.closeAllMongoClients();
+            MongoClientUtils.closeAll();
         }
     }
 

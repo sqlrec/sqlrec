@@ -130,9 +130,10 @@ public final class DppDiversity {
         double[][] embeddings = new double[rows.size()][];
         int expectedDimension = -1;
         for (int i = 0; i < rows.size(); i++) {
-            // Normalization is in-place, so always work on an owned copy. In particular,
-            // toDoubleArray returns the original reference when the input is a double[].
-            double[] vector = VectorMathUtils.toDoubleArray(rows.get(i)[embeddingIndex]).clone();
+            Object embedding = rows.get(i)[embeddingIndex];
+            // Normalization mutates the array. Conversion already copies the other input types.
+            double[] vector = embedding instanceof double[]
+                    ? ((double[]) embedding).clone() : VectorMathUtils.toDoubleArray(embedding);
             if (expectedDimension < 0) {
                 expectedDimension = vector.length;
             } else if (vector.length != expectedDimension) {

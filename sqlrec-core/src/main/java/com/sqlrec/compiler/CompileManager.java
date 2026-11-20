@@ -203,19 +203,14 @@ public class CompileManager {
     }
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {
-        functionName = ResourceNames.normalize(functionName);
-        SqlFunctionBindable cached = functionCache.getIfPresent(functionName);
+        String name = ResourceNames.normalize(functionName);
+        SqlFunctionBindable cached = functionCache.getIfPresent(name);
         if (cached == null) {
-            SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName);
-            functionCache.put(functionName, compiled);
-            return compiled;
+            return compileStoredSqlFunction(name);
         }
 
-        if (functionCache instanceof LoadingCache) {
-            @SuppressWarnings("unchecked")
-            LoadingCache<String, SqlFunctionBindable> loadingCache =
-                    (LoadingCache<String, SqlFunctionBindable>) functionCache;
-            return loadingCache.get(functionName);
+        if (functionCache instanceof LoadingCache<String, SqlFunctionBindable> loadingCache) {
+            return loadingCache.get(name);
         }
         return cached;
     }
@@ -230,31 +225,21 @@ public class CompileManager {
         return executable;
     }
 
-    public SqlFunctionBindable compileSqlFunction(String functionName) throws Exception {
-        functionName = ResourceNames.normalize(functionName);
-        SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName);
-        functionCache.put(functionName, compiled);
-        return compiled;
-    }
-
-    private SqlFunctionBindable compileSqlFunctionDefinition(String functionName) throws Exception {
+    private SqlFunctionBindable compileStoredSqlFunction(String functionName) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
         SqlFunction sqlFunction = db.getSqlFunction(functionName);
         if (sqlFunction == null) {
             throw new Exception("function not fund : " + functionName);
         }
         List<String> sqlList = JsonUtils.parseStringList(sqlFunction.getSqlList());
-        return compileSqlFunctionDefinition(functionName, sqlList);
+        return compileAndCacheSqlFunction(functionName, sqlList);
     }
 
     public SqlFunctionBindable compileSqlFunction(String functionName, List<String> sqlList) throws Exception {
-        functionName = ResourceNames.normalize(functionName);
-        SqlFunctionBindable compiled = compileSqlFunctionDefinition(functionName, sqlList);
-        functionCache.put(functionName, compiled);
-        return compiled;
+        return compileAndCacheSqlFunction(ResourceNames.normalize(functionName), sqlList);
     }
 
-    private SqlFunctionBindable compileSqlFunctionDefinition(
+    private SqlFunctionBindable compileAndCacheSqlFunction(
             String functionName,
             List<String> sqlList
     ) throws Exception {
@@ -273,10 +258,12 @@ public class CompileManager {
         }
 
         if (functionCompiler.isFunctionCompileFinish()) {
-            if (!functionName.equals(functionCompiler.getFunctionBindable().getFunName())) {
+            SqlFunctionBindable compiled = functionCompiler.getFunctionBindable();
+            if (!functionName.equals(compiled.getFunName())) {
                 throw new RuntimeException("function name not match");
             }
-            return functionCompiler.getFunctionBindable();
+            functionCache.put(functionName, compiled);
+            return compiled;
         }
         throw new RuntimeException("function define end without return");
     }

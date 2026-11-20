@@ -13,6 +13,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -20,6 +24,35 @@ class MongoClientUtilsTest {
     @AfterEach
     void closeClients() {
         MongoClientUtils.closeAll();
+    }
+
+    @Test
+    void clientCreatedDuringCloseSurvivesThatClose() throws Exception {
+        String uri = "mongodb://localhost:27017";
+        MongoClient old = mock(MongoClient.class);
+        MongoClient replacement = mock(MongoClient.class);
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch finishClose = new CountDownLatch(1);
+        doAnswer(call -> {
+            closeStarted.countDown();
+            assertTrue(finishClose.await(5, TimeUnit.SECONDS));
+            return null;
+        }).when(old).close();
+        try (MockedStatic<MongoClients> factory = mockStatic(MongoClients.class)) {
+            factory.when(() -> MongoClients.create(uri)).thenReturn(old, replacement);
+            assertSame(old, MongoClientUtils.getOrCreate(uri));
+
+            CompletableFuture<Void> closing = CompletableFuture.runAsync(MongoClientUtils::closeAll);
+            try {
+                assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+                assertSame(replacement, MongoClientUtils.getOrCreate(uri));
+            } finally {
+                finishClose.countDown();
+                closing.get(5, TimeUnit.SECONDS);
+            }
+            assertSame(replacement, MongoClientUtils.getOrCreate(uri));
+            verify(replacement, never()).close();
+        }
     }
 
     @Test
@@ -47,30 +80,8 @@ class MongoClientUtilsTest {
     }
 
     @Test
-    void legacyInvalidationClosesOnlyTheSelectedClientAndAllowsRecreation() {
-        String firstUri = "mongodb://localhost:27017";
-        String secondUri = "mongodb://localhost:27018";
-        MongoClient first = mock(MongoClient.class);
-        MongoClient second = mock(MongoClient.class);
-        MongoClient replacement = mock(MongoClient.class);
-        try (MockedStatic<MongoClients> factory = mockStatic(MongoClients.class)) {
-            factory.when(() -> MongoClients.create(firstUri)).thenReturn(first, replacement);
-            factory.when(() -> MongoClients.create(secondUri)).thenReturn(second);
-            assertSame(first, MongoClientUtils.getOrCreate(firstUri));
-            assertSame(second, MongoClientUtils.getOrCreate(secondUri));
-            MongoHandler.invalidateClient(firstUri);
-            verify(first).close();
-            verify(second, never()).close();
-            assertSame(second, MongoClientUtils.getOrCreate(secondUri));
-            assertSame(replacement, MongoClientUtils.getOrCreate(firstUri));
-            factory.verify(() -> MongoClients.create(firstUri), times(2));
-            factory.verify(() -> MongoClients.create(secondUri), times(1));
-        }
-    }
-
-    @Test
     @SilenceLoggers(MongoClientUtils.class)
-    void legacyCloseAllClearsTheCacheEvenIfOneClientFailsToClose() {
+    void closeAllClearsTheCacheEvenIfOneClientFailsToClose() {
         String uri = "mongodb://localhost:27017";
         String otherUri = "mongodb://localhost:27018";
         MongoClient first = mock(MongoClient.class);
@@ -82,7 +93,7 @@ class MongoClientUtilsTest {
             MongoClientUtils.getOrCreate(uri);
             MongoClientUtils.getOrCreate(otherUri);
             doThrow(new RuntimeException("close failed")).when(first).close();
-            assertDoesNotThrow(MongoHandler::closeAllMongoClients);
+            assertDoesNotThrow(MongoClientUtils::closeAll);
             verify(first).close();
             verify(second).close();
             MongoClientUtils.closeAll();

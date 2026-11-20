@@ -10,7 +10,6 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.frontend.utils.RestUtils;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -57,9 +56,8 @@ public class RestSqlExecutor {
                 return executeData;
             }
             CacheTable result = sqlExecutor.executeSql(sql);
-            Enumerable<Object[]> rows = result.scan(null);
             executeData.setData(RowTransformUtils.convertToMapList(
-                    rows == null ? null : rows.toList(),
+                    result.scan(null),
                     result.getDataFields()
             ));
             if (SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getValue()) {

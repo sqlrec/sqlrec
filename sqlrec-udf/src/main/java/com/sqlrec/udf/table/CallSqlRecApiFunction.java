@@ -53,8 +53,9 @@ public class CallSqlRecApiFunction {
             if (inputs.containsKey(tableName)) {
                 throw new IllegalArgumentException("duplicate input table name: " + tableName);
             }
-            List<Object[]> rows = RowTransformUtils.materializeRows(table);
-            inputs.put(tableName, RowTransformUtils.convertToMapList(rows, table.getDataFields()));
+            var rows = table.scan(null);
+            inputs.put(tableName, RowTransformUtils.convertToMapList(
+                    rows == null ? List.of() : rows, table.getDataFields()));
         }
 
         ExecuteData response = client.call(

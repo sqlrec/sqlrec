@@ -5,6 +5,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.kafka.calcite.KafkaCalciteTable;
 import com.sqlrec.connectors.kafka.config.KafkaConfig;
+import com.sqlrec.connectors.kafka.utils.KafkaProducerUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -49,7 +50,7 @@ public class TestKafkaTable {
         try {
             // Drain asynchronous writes before deleting, so a late send cannot
             // recreate the topic when broker auto-creation is enabled.
-            KafkaCalciteTable.closeAllProducers();
+            KafkaProducerUtils.closeAll();
             if (adminClient.listTopics().names().get(30, TimeUnit.SECONDS).contains(TEST_TOPIC)) {
                 adminClient.deleteTopics(Collections.singletonList(TEST_TOPIC))
                         .all().get(30, TimeUnit.SECONDS);

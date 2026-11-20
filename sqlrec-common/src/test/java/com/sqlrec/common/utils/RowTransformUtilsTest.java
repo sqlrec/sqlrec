@@ -1,6 +1,8 @@
 package com.sqlrec.common.utils;
 
+import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -14,8 +16,35 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class RowTransformUtilsTest {
+    @Test
+    void convertsLazyRowsThatReuseTheSameBufferAndClosesTheEnumerator() {
+        Object[] buffer = new Object[2];
+        AtomicInteger reads = new AtomicInteger();
+        @SuppressWarnings("unchecked")
+        Enumerator<Object[]> enumerator = mock(Enumerator.class);
+        when(enumerator.moveNext()).thenReturn(true, true, false);
+        when(enumerator.current()).thenAnswer(call -> {
+            buffer[0] = reads.incrementAndGet();
+            return buffer;
+        });
+        var rows = new AbstractEnumerable<Object[]>() {
+            @Override
+            public Enumerator<Object[]> enumerator() {
+                return enumerator;
+            }
+        };
+        var fields = List.of(
+                DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER),
+                DataTypeUtils.getRelDataTypeField("missing", 1, SqlTypeName.VARCHAR));
+
+        assertEquals(List.of(Map.of("id", 1), Map.of("id", 2)), RowTransformUtils.convertToMapList(rows, fields));
+        assertEquals(2, reads.get());
+        verify(enumerator).close();
+    }
+
     @Test
     void normalizesRowsInsideArraysAndMapsWithoutChangingNamedInputs() {
         List<RelDataTypeField> fields = List.of(

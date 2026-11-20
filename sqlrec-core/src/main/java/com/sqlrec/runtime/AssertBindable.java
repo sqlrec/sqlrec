@@ -6,7 +6,6 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -38,33 +37,29 @@ public class AssertBindable extends BindableInterface {
 
     @Override
     public Enumerable<Object[]> bind(CalciteSchema schema, ExecuteContext context) {
-        Enumerable<Object[]> result = selectBindable.bind(schema, context);
-        List<Object[]> rows = new ArrayList<>();
-        for (Object[] row : result) {
-            rows.add(row);
-        }
+        List<Object[]> rows = selectBindable.bind(schema, context).toList();
 
         if (rows.isEmpty()) {
             throw new RuntimeException("assert failed: select returned no rows");
         }
 
+        List<RelDataTypeField> fields = selectBindable.getReturnDataFields();
         for (int i = 0; i < rows.size(); i++) {
             Object[] row = rows.get(i);
+            if (row.length != fields.size()) {
+                throw new RuntimeException("assert failed: row " + i + " has " + row.length
+                        + " columns, expected " + fields.size());
+            }
             for (int j = 0; j < row.length; j++) {
                 Object value = row[j];
-                String column = "column '" + selectBindable.getReturnDataFields().get(j).getName() + "' (index " + j + ")";
-                if (value == null) {
-                    throw new RuntimeException("assert failed: row " + i + " " + column
-                            + " returned null");
+                if (Boolean.TRUE.equals(value)) {
+                    continue;
                 }
-                if (!(value instanceof Boolean)) {
-                    throw new RuntimeException("assert failed: row " + i + " " + column
-                            + " returned non-boolean value: " + value);
-                }
-                if (!(Boolean) value) {
-                    throw new RuntimeException("assert failed: row " + i + " " + column
-                            + " returned false");
-                }
+                String column = fields.get(j).getName();
+                String reason = value == null || value instanceof Boolean
+                        ? String.valueOf(value) : "non-boolean value: " + value;
+                throw new RuntimeException("assert failed: row " + i + " column '" + column + "' (index " + j
+                        + ") returned " + reason);
             }
         }
 

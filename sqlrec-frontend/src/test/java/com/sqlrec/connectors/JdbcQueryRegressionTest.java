@@ -5,7 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.compiler.NormalSqlCompiler;
 import com.sqlrec.connectors.jdbc.calcite.JdbcCalciteTable;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
-import com.sqlrec.connectors.jdbc.handler.JdbcHandler;
+import com.sqlrec.connectors.jdbc.utils.JdbcDataSourceUtils;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -54,7 +54,7 @@ class JdbcQueryRegressionTest {
                 assertQuery(schema, "SELECT name FROM items WHERE " + entry.getKey() + " ORDER BY name", entry.getValue());
             }
         } finally {
-            JdbcHandler.closeAllDataSources();
+            JdbcDataSourceUtils.closeAll();
         }
     }
 

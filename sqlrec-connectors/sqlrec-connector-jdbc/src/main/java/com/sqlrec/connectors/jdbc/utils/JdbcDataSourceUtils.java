@@ -6,6 +6,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,17 +28,12 @@ public final class JdbcDataSourceUtils {
 
     public static HikariDataSource getOrCreate(JdbcConfig jdbcConfig) {
         List<Object> key = dataSourceKey(jdbcConfig);
-        HikariDataSource ds = dataSources.get(key);
-        if (ds != null) {
-            return ds;
+        HikariDataSource dataSource = dataSources.get(key);
+        if (dataSource != null) {
+            return dataSource;
         }
         synchronized (dataSources) {
-            ds = dataSources.get(key);
-            if (ds == null) {
-                ds = createDataSource(jdbcConfig);
-                dataSources.put(key, ds);
-            }
-            return ds;
+            return dataSources.computeIfAbsent(key, ignored -> createDataSource(jdbcConfig));
         }
     }
 
@@ -71,23 +67,28 @@ public final class JdbcDataSourceUtils {
      * Close every cached HikariDataSource and clear the cache. Registered as a JVM
      * shutdown hook so pooled DB connections are released on process exit.
      */
-    public static synchronized void closeAll() {
-        for (Map.Entry<List<Object>, HikariDataSource> entry : dataSources.entrySet()) {
+    public static void closeAll() {
+        List<HikariDataSource> pools;
+        synchronized (dataSources) {
+            pools = new ArrayList<>(dataSources.values());
+            dataSources.clear();
+        }
+        for (HikariDataSource pool : pools) {
             try {
-                entry.getValue().close();
+                pool.close();
             } catch (Exception e) {
                 // The map key contains the password because credentials identify a pool;
                 // never include it in logs.
                 logger.warn("Failed to close JDBC connection pool on shutdown: {}", e.getMessage());
             }
         }
-        dataSources.clear();
         logger.info("Closed all JDBC connection pools on shutdown");
     }
 
     private static HikariDataSource createDataSource(JdbcConfig jdbcConfig) {
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(jdbcConfig.url);
+        hikariConfig.setAutoCommit(true);
         if (jdbcConfig.username != null && !jdbcConfig.username.isEmpty()) {
             hikariConfig.setUsername(jdbcConfig.username);
         }

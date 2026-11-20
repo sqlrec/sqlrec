@@ -568,6 +568,20 @@ class FileSystemHandlerTest {
     }
 
     @Test
+    void newWriteBatchUsesTheCurrentFieldTypes() {
+        FileSystemConfig config = createConfig(null, "csv");
+        FileSystemHandler handler = new FileSystemHandler(config);
+        handler.insert(new Object[]{1, "alice", 20});
+
+        config.fieldSchemas = List.of(new FieldSchema("id", "INTEGER"),
+                new FieldSchema("name", "VARCHAR"), new FieldSchema("age", "VARCHAR"));
+        handler.insertAll(Collections.singletonList(new Object[]{2, "bob", "unknown"}));
+
+        assertArrayEquals(new Object[]{2, "bob", "unknown"},
+                handler.getByPrimaryKey(Collections.singleton(2)).get(2).get(0));
+    }
+
+    @Test
     void testInsertNormalizesRowTypes() {
         FileSystemConfig config = new FileSystemConfig();
         config.fieldSchemas = Arrays.asList(

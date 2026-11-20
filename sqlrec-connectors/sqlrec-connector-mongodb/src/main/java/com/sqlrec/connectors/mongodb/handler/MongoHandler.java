@@ -141,23 +141,4 @@ public class MongoHandler implements Serializable {
     void setMongoClientForTest(MongoClient client) {
         this.testMongoClient = client;
     }
-
-    /**
-     * Close and discard the cached MongoClient for {@code uri} so the next call
-     * re-creates it. Intended to be called after a connection-level failure (MongoDB
-     * restart, network blip, credential rotation) so that subsequent calls recover
-     * instead of failing forever on the broken client.
-     */
-    public static synchronized void invalidateClient(String uri) {
-        MongoClientUtils.invalidateClient(uri);
-    }
-
-    /**
-     * Close every cached MongoClient and clear the cache. Registered as a JVM shutdown
-     * hook so connection pools and background monitoring threads are released on exit.
-     */
-    public static synchronized void closeAllMongoClients() {
-        MongoClientUtils.closeAll();
-    }
-
 }

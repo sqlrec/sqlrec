@@ -3,6 +3,7 @@ package com.sqlrec.connectors.filesystem.handler;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,13 +50,13 @@ public class FileSystemHandler {
         return row[fileSystemConfig.primaryKeyIndex];
     }
 
-    private void normalizeRowTypes(Object[] row) {
-        for (int i = 0; i < row.length; i++) {
-            row[i] = ScalarConversions.convert(
-                    row[i],
-                    DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType()).getSqlTypeName()
-            );
+    private SqlTypeName[] writeTypes() {
+        SqlTypeName[] types = new SqlTypeName[fileSystemConfig.fieldSchemas.size()];
+        for (int i = 0; i < types.length; i++) {
+            types[i] = DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType())
+                    .getSqlTypeName();
         }
+        return types;
     }
 
     public synchronized List<Object[]> scan() {
@@ -83,7 +84,7 @@ public class FileSystemHandler {
     }
 
     public synchronized boolean insert(Object[] data) {
-        Object[] row = preparedRow(data);
+        Object[] row = preparedRow(data, writeTypes());
         insertPrepared(row);
         return true;
     }
@@ -97,7 +98,7 @@ public class FileSystemHandler {
     }
 
     public synchronized boolean delete(Object[] data) {
-        return deletePrepared(preparedRow(data));
+        return deletePrepared(preparedRow(data, writeTypes()));
     }
 
     public synchronized boolean deleteAll(Collection<?> dataList) {
@@ -161,24 +162,29 @@ public class FileSystemHandler {
         return false;
     }
 
-    private Object[] preparedRow(Object[] data) {
+    private Object[] preparedRow(Object[] data, SqlTypeName[] types) {
         Object[] row = copyRow(data);
-        if (row.length != fileSystemConfig.fieldSchemas.size()) {
-            throw new IllegalArgumentException("Expected " + fileSystemConfig.fieldSchemas.size()
-                    + " fields, got " + row.length);
+        if (row.length != types.length) {
+            throw new IllegalArgumentException("Expected " + types.length + " fields, got " + row.length);
         }
-        normalizeRowTypes(row);
+        for (int i = 0; i < row.length; i++) {
+            row[i] = ScalarConversions.convert(row[i], types[i]);
+        }
         validatePrimaryKey(getKey(row));
         return row;
     }
 
     private List<Object[]> preparedRows(Collection<?> dataList) {
+        if (dataList.isEmpty()) {
+            return List.of();
+        }
+        SqlTypeName[] types = writeTypes();
         List<Object[]> rows = new ArrayList<>(dataList.size());
         for (Object data : dataList) {
             if (!(data instanceof Object[])) {
                 throw new IllegalArgumentException("Expected a row as Object[]");
             }
-            rows.add(preparedRow((Object[]) data));
+            rows.add(preparedRow((Object[]) data, types));
         }
         return rows;
     }

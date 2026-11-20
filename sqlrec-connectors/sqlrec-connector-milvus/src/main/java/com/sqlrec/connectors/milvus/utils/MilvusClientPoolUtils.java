@@ -1,6 +1,8 @@
 package com.sqlrec.connectors.milvus.utils;
 
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.milvus.pool.MilvusClientV2Pool;
 import io.milvus.pool.PoolConfig;
 import io.milvus.v2.client.ConnectConfig;
@@ -10,13 +12,15 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /** Shared Milvus client pools and their lifecycle. */
 public final class MilvusClientPoolUtils {
     private static final Logger logger = LoggerFactory.getLogger(MilvusClientPoolUtils.class);
-    private static final Map<String, MilvusClientV2Pool> clientPools = new ConcurrentHashMap<>();
+    private static final Map<String, MilvusClientV2Pool> clientPools = new HashMap<>();
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(MilvusClientPoolUtils::closeAll, "MilvusHandler-shutdown"));
@@ -25,20 +29,46 @@ public final class MilvusClientPoolUtils {
     private MilvusClientPoolUtils() {
     }
 
-    /**
-     * Close and discard the cached client pool for {@code key} so the next call builds a
-     * fresh pool. Called after a transport-level failure (Milvus restart, network blip)
-     * so subsequent calls recover instead of reusing broken pooled clients.
-     */
-    public static synchronized void invalidatePool(String key) {
-        MilvusClientV2Pool pool = clientPools.remove(key);
-        if (pool != null) {
+    public static <T> T withClient(MilvusConfig config, Function<MilvusClientV2, T> action) {
+        String key = config.url + "|" + config.token;
+        for (int attempt = 0; ; attempt++) {
+            MilvusClientV2Pool pool = getOrCreatePool(key, config);
+            MilvusClientV2 client = null;
             try {
-                pool.close();
-            } catch (Exception e) {
-                // The cache key includes the authentication token; never log it.
-                logger.warn("Failed to close Milvus client pool during invalidation: {}", e.getMessage());
+                client = pool.getClient(key);
+                if (client == null) {
+                    throw new IllegalStateException("Failed to get Milvus client from pool after timeout");
+                }
+                return action.apply(client);
+            } catch (RuntimeException e) {
+                boolean poolRetiredDuringBorrow = client == null && !isCurrentPool(key, pool);
+                if (attempt != 0 || (!isConnectionFailure(e) && !poolRetiredDuringBorrow)) {
+                    throw e;
+                }
+                logger.warn("Retrying Milvus operation with a fresh or replacement pool: {}", e.getMessage());
+                invalidatePool(key, pool);
+            } finally {
+                if (client != null) {
+                    returnClient(key, pool, client);
+                }
             }
+        }
+    }
+
+    private static void invalidatePool(String key, MilvusClientV2Pool pool) {
+        synchronized (MilvusClientPoolUtils.class) {
+            if (!clientPools.remove(key, pool)) {
+                return;
+            }
+        }
+        closePool(pool);
+    }
+
+    private static void closePool(MilvusClientV2Pool pool) {
+        try {
+            pool.close();
+        } catch (Exception e) {
+            logger.warn("Failed to close Milvus client pool: {}", e.getMessage());
         }
     }
 
@@ -46,52 +76,56 @@ public final class MilvusClientPoolUtils {
      * Close every cached client pool and clear the cache. Registered as a JVM shutdown
      * hook so pooled gRPC channels are released on exit.
      */
-    public static synchronized void closeAll() {
-        for (Map.Entry<String, MilvusClientV2Pool> entry : new ArrayList<>(clientPools.entrySet())) {
-            try {
-                entry.getValue().close();
-            } catch (Exception e) {
-                logger.warn("Failed to close Milvus client pool on shutdown: {}", e.getMessage());
-            }
+    public static void closeAll() {
+        List<MilvusClientV2Pool> pools;
+        synchronized (MilvusClientPoolUtils.class) {
+            pools = new ArrayList<>(clientPools.values());
+            clientPools.clear();
         }
-        clientPools.clear();
+        pools.forEach(MilvusClientPoolUtils::closePool);
         logger.info("Closed all Milvus client pools on shutdown");
     }
 
-    public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {
-        String key = poolKey(milvusConfig);
-        if (clientPools.containsKey(key)) {
-            clientPools.get(key).returnClient(key, client);
-        } else {
-            logger.warn("Milvus client pool is not found; closing the returned client");
+    private static void returnClient(String key, MilvusClientV2Pool pool, MilvusClientV2 client) {
+        if (isCurrentPool(key, pool)) {
+            try {
+                pool.returnClient(key, client);
+                return;
+            } catch (RuntimeException e) {
+                if (isCurrentPool(key, pool)) {
+                    logger.warn("Failed to return Milvus client to pool: {}", e.getMessage());
+                    return;
+                }
+            }
+        }
+        try {
             client.close();
+        } catch (RuntimeException e) {
+            logger.warn("Failed to close retired Milvus client: {}", e.getMessage());
         }
     }
 
-    public static MilvusClientV2 getClient(MilvusConfig milvusConfig) {
-        String key = poolKey(milvusConfig);
-        if (!clientPools.containsKey(key)) {
-            openClientPool(key, milvusConfig);
+    private static boolean isConnectionFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof StatusRuntimeException) {
+                Status.Code code = ((StatusRuntimeException) cause).getStatus().getCode();
+                return code == Status.Code.UNAVAILABLE
+                        || code == Status.Code.DEADLINE_EXCEEDED
+                        || code == Status.Code.UNKNOWN;
+            }
         }
-        MilvusClientV2Pool pool = clientPools.get(key);
-        if (pool == null) {
-            // Pool was invalidated concurrently between containsKey and get (e.g. by a
-            // transport-failure retry); reopen so this call does not NPE.
-            openClientPool(key, milvusConfig);
-            pool = clientPools.get(key);
-        }
-        return pool.getClient(key);
+        return false;
     }
 
-    public static String poolKey(MilvusConfig milvusConfig) {
-        return milvusConfig.url + "|" + milvusConfig.token;
+    private static synchronized boolean isCurrentPool(String key, MilvusClientV2Pool pool) {
+        return clientPools.get(key) == pool;
     }
 
-    private static synchronized void openClientPool(String key, MilvusConfig milvusConfig) {
-        if (clientPools.containsKey(key)) {
-            return;
-        }
+    private static synchronized MilvusClientV2Pool getOrCreatePool(String key, MilvusConfig milvusConfig) {
+        return clientPools.computeIfAbsent(key, ignored -> openClientPool(milvusConfig));
+    }
 
+    private static MilvusClientV2Pool openClientPool(MilvusConfig milvusConfig) {
         ConnectConfig connectConfig = ConnectConfig.builder()
                 .uri(milvusConfig.url)
                 .token(milvusConfig.token)
@@ -106,10 +140,9 @@ public final class MilvusClientPoolUtils {
                 .build();
 
         try {
-            MilvusClientV2Pool pool = new MilvusClientV2Pool(poolConfig, connectConfig);
-            clientPools.put(key, pool);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+            return new MilvusClientV2Pool(poolConfig, connectConfig);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to create Milvus client pool", e);
         }
     }
 }

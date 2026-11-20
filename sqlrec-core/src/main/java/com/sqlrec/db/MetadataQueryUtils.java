@@ -6,6 +6,7 @@ import com.sqlrec.executor.SqlProcessResult;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.flink.sql.parser.dql.SqlShowFunctions;
+import org.apache.flink.table.api.internal.ShowCreateUtil;
 import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.functions.SqlLikeUtils;
 import org.apache.flink.table.module.CoreModule;
@@ -15,6 +16,12 @@ import java.util.*;
 /** Shared, storage-independent metadata names and query results. */
 public final class MetadataQueryUtils {
     private MetadataQueryUtils() {}
+
+    public static SqlProcessResult showCreateTable(ResolvedCatalogTable table, ObjectPath path) {
+        ObjectIdentifier identifier = ObjectIdentifier.of(
+                Consts.HIVE_CATALOG_NAME, path.getDatabaseName(), path.getObjectName());
+        return SqlProcessResult.msg(ShowCreateUtil.buildShowCreateTableRow(table, identifier, false), "result");
+    }
 
     public static SqlProcessResult describeTable(ResolvedSchema schema) {
         List<String> names = new ArrayList<>(List.of("name", "type", "null", "key", "extras", "watermark"));

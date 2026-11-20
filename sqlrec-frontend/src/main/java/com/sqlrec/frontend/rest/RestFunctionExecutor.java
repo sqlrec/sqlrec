@@ -87,8 +87,7 @@ public class RestFunctionExecutor {
                 result.setParams(context.getVariables());
             }
             if (rows != null) {
-                List<Object[]> values = rows.toList();
-                result.setData(RowTransformUtils.convertToMapList(values, bindable.getReturnDataFields()));
+                result.setData(RowTransformUtils.convertToMapList(rows, bindable.getReturnDataFields()));
             } else {
                 result.setMsg("API '" + apiName + "' returned no result");
             }

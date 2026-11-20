@@ -17,7 +17,6 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import org.apache.calcite.jdbc.CalciteSchema;
-import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
@@ -118,7 +117,10 @@ class RestExecutorTest {
             when(fixture.function.getInputTables()).thenReturn(
                     List.of(Map.entry("input", DataTypeUtils.getStringTypeField("value"))));
             AtomicReference<ExecuteContext> context = new AtomicReference<>();
-            Enumerable<Object[]> rows = mock(Enumerable.class);
+            var rows = Linq4j.singletonEnumerable(new Object[]{"result"}).select(row -> {
+                context.get().setVariable("value", "after");
+                return row;
+            });
             when(fixture.proxy.bind(same(fixture.schema), any())).thenAnswer(call -> {
                 ExecuteContext execution = call.getArgument(1);
                 context.set(execution);
@@ -127,10 +129,6 @@ class RestExecutorTest {
                 assertArrayEquals(new Object[]{"input value"}, ((CacheTable) fixture.schema.plus()
                         .getTable("input")).scan(null).toList().get(0));
                 return rows;
-            });
-            when(rows.toList()).thenAnswer(call -> {
-                context.get().setVariable("value", "after");
-                return Collections.singletonList(new Object[]{"result"});
             });
 
             ExecuteData result = RestFunctionExecutor.execute(" Example ",

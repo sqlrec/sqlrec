@@ -1,7 +1,6 @@
 package com.sqlrec.connectors.jdbc.utils;
 
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
-import com.sqlrec.connectors.jdbc.handler.JdbcHandler;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 
@@ -9,12 +8,17 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mockConstruction;
 
 class JdbcDataSourceUtilsTest {
     @Test
-    void sharesMatchingPoolsAndRecreatesThemAfterTheExistingCloseEntryPoint() throws Exception {
+    void sharesMatchingPoolsAndRecreatesThemAfterClose() throws Exception {
         JdbcConfig first = connectionConfig();
         first.connectionPoolSize = 1;
         first.connectionPoolMinIdle = 0;
@@ -32,16 +36,47 @@ class JdbcDataSourceUtilsTest {
             assertEquals(1, shared.getMaximumPoolSize());
             assertEquals(2, separate.getMaximumPoolSize());
 
-            JdbcHandler.closeAllDataSources();
+            JdbcDataSourceUtils.closeAll();
             assertTrue(shared.isClosed());
             assertTrue(separate.isClosed());
             HikariDataSource replacement = JdbcDataSourceUtils.getOrCreate(first);
             assertNotSame(shared, replacement);
             try (var connection = replacement.getConnection()) {
                 assertTrue(connection.isValid(1));
+                assertTrue(connection.getAutoCommit());
             }
         } finally {
-            JdbcHandler.closeAllDataSources();
+            JdbcDataSourceUtils.closeAll();
+        }
+    }
+
+    @Test
+    void poolCreatedDuringCloseSurvivesThatClose() throws Exception {
+        JdbcConfig config = connectionConfig();
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch finishClose = new CountDownLatch(1);
+        try (var pools = mockConstruction(HikariDataSource.class)) {
+            HikariDataSource old = JdbcDataSourceUtils.getOrCreate(config);
+            doAnswer(call -> {
+                closeStarted.countDown();
+                assertTrue(finishClose.await(5, TimeUnit.SECONDS));
+                return null;
+            }).when(old).close();
+
+            CompletableFuture<Void> closing = CompletableFuture.runAsync(JdbcDataSourceUtils::closeAll);
+            HikariDataSource replacement;
+            try {
+                assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+                replacement = JdbcDataSourceUtils.getOrCreate(config);
+            } finally {
+                finishClose.countDown();
+                closing.get(5, TimeUnit.SECONDS);
+            }
+            assertNotSame(old, replacement);
+            assertSame(replacement, JdbcDataSourceUtils.getOrCreate(config));
+            assertEquals(2, pools.constructed().size());
+        } finally {
+            JdbcDataSourceUtils.closeAll();
         }
     }
 

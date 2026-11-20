@@ -5,6 +5,7 @@ import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.VectorSearchRequest;
 import com.sqlrec.common.schema.VectorSearchResult;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.utils.MilvusClientPoolUtils;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
@@ -13,6 +14,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.milvus.pool.MilvusClientV2Pool;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.QueryReq;
@@ -25,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.*;
@@ -41,6 +44,7 @@ public class MilvusHandlerUnitTest {
 
     private MilvusHandler handler;
     private MilvusConfig config;
+    private MockedConstruction<MilvusClientV2Pool> pools;
 
     @BeforeEach
     public void setUp() {
@@ -58,12 +62,17 @@ public class MilvusHandlerUnitTest {
         );
 
         handler = new MilvusHandler(config);
-        MilvusHandler.setClientForTest(mockClient);
+        pools = mockConstruction(MilvusClientV2Pool.class,
+                (pool, context) -> when(pool.getClient(anyString())).thenReturn(mockClient));
     }
 
     @AfterEach
     public void tearDown() {
-        MilvusHandler.clearTestClient();
+        try {
+            MilvusClientPoolUtils.closeAll();
+        } finally {
+            pools.close();
+        }
     }
 
     @Test
@@ -244,7 +253,7 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
-    @SilenceLoggers(MilvusHandler.class)
+    @SilenceLoggers(MilvusClientPoolUtils.class)
     public void testScanRetriesOnConnectionFailure() {
         QueryResp.QueryResult result = mock(QueryResp.QueryResult.class);
         Map<String, Object> entity = new HashMap<>();
@@ -430,7 +439,7 @@ public class MilvusHandlerUnitTest {
     }
 
     @Test
-    @SilenceLoggers(MilvusHandler.class)
+    @SilenceLoggers(MilvusClientPoolUtils.class)
     public void testVectorSearchRetriesOnConnectionFailure() {
         SearchResp response = mock(SearchResp.class);
         when(response.getSearchResults()).thenReturn(Collections.emptyList());

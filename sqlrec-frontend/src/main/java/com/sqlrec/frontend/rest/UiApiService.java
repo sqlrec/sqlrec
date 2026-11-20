@@ -139,15 +139,7 @@ final class UiApiService {
         List<Map<String, Object>> items = metadataAccess
                 .getCheckpointListByModelNamePaged(modelName, page, pageSize)
                 .stream()
-                .map(checkpoint -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("checkpointName", checkpoint.getCheckpointName());
-                    item.put("checkpointType", checkpoint.getCheckpointType());
-                    item.put("status", checkpoint.getStatus());
-                    item.put("createdAt", formatTimestamp(checkpoint.getCreatedAt()));
-                    item.put("updatedAt", formatTimestamp(checkpoint.getUpdatedAt()));
-                    return item;
-                })
+                .map(UiApiService::checkpointSummary)
                 .collect(Collectors.toList());
 
         Map<String, Object> result = new HashMap<>();
@@ -165,14 +157,19 @@ final class UiApiService {
             return null;
         }
 
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = checkpointSummary(checkpoint);
         result.put("modelName", checkpoint.getModelName());
-        result.put("checkpointName", checkpoint.getCheckpointName());
-        result.put("checkpointType", checkpoint.getCheckpointType());
-        result.put("status", checkpoint.getStatus());
         result.put("ddl", checkpoint.getDdl());
         result.put("modelDdl", checkpoint.getModelDdl());
         result.put("yaml", checkpoint.getYaml());
+        return result;
+    }
+
+    private static Map<String, Object> checkpointSummary(Checkpoint checkpoint) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("checkpointName", checkpoint.getCheckpointName());
+        result.put("checkpointType", checkpoint.getCheckpointType());
+        result.put("status", checkpoint.getStatus());
         result.put("createdAt", formatTimestamp(checkpoint.getCreatedAt()));
         result.put("updatedAt", formatTimestamp(checkpoint.getUpdatedAt()));
         return result;

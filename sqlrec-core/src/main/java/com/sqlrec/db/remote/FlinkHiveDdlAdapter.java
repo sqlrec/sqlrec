@@ -15,7 +15,6 @@ import org.apache.flink.sql.parser.ddl.resource.SqlResourceType;
 import org.apache.flink.sql.parser.dql.*;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.flink.table.api.internal.ShowCreateUtil;
 import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.catalog.hive.HiveCatalog;
 import org.apache.flink.table.resource.ResourceType;
@@ -250,9 +249,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
         ObjectPath path = objectPath(show.getTableName().names.toArray(String[]::new), database);
         CatalogManager manager = catalogs();
         var definition = FlinkTableDdl.resolve(hiveCatalog(manager).getTable(path), manager.getDataTypeFactory());
-        String ddl = ShowCreateUtil.buildShowCreateTableRow(definition,
-                ObjectIdentifier.of(Consts.HIVE_CATALOG_NAME, path.getDatabaseName(), path.getObjectName()), false);
-        return SqlProcessResult.msg(ddl, "result");
+        return MetadataQueryUtils.showCreateTable(definition, path);
     }
 
     private SqlProcessResult describeTable(SqlRichDescribeTable describe, String database) throws Exception {

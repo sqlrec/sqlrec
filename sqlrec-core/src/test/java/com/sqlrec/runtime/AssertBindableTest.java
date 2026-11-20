@@ -59,6 +59,22 @@ public class AssertBindableTest {
         }
     }
 
+    @Test
+    void allTrueRowsMustStillMatchTheDeclaredColumnCount() {
+        CalciteSchema schema = buildSchema();
+        ExecuteContextImpl context = new ExecuteContextImpl(schema);
+        BindableInterface source = mock(BindableInterface.class);
+        when(source.getReturnDataFields()).thenReturn(List.of(
+                DataTypeUtils.getRelDataTypeField("expected_boolean", 0, SqlTypeName.BOOLEAN)));
+        AssertBindable assertion = new AssertBindable(source);
+
+        for (Object[] row : List.of(new Object[0], new Object[]{true, true})) {
+            when(source.bind(schema, context)).thenReturn(Linq4j.singletonEnumerable(row));
+            RuntimeException error = assertThrows(RuntimeException.class, () -> assertion.bind(schema, context));
+            assertTrue(error.getMessage().contains("columns, expected 1"));
+        }
+    }
+
 
     @Test
     public void testAssertPassTrue() throws Exception {

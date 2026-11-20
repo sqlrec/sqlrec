@@ -156,13 +156,6 @@ public class JdbcHandler {
     }
 
     private Connection getConnection() throws SQLException {
-        Connection conn = JdbcDataSourceUtils.getOrCreate(jdbcConfig).getConnection();
-        conn.setAutoCommit(true);
-        return conn;
-    }
-
-    /** Closes all shared connection pools and clears the cache. */
-    public static synchronized void closeAllDataSources() {
-        JdbcDataSourceUtils.closeAll();
+        return JdbcDataSourceUtils.getOrCreate(jdbcConfig).getConnection();
     }
 }

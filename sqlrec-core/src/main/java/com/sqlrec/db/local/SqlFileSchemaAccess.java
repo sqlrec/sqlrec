@@ -14,8 +14,6 @@ import org.apache.flink.sql.parser.dql.SqlRichDescribeTable;
 import org.apache.flink.sql.parser.dql.SqlShowCreateTable;
 import org.apache.flink.sql.parser.dql.SqlShowFunctions;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.flink.table.api.internal.ShowCreateUtil;
-import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.hadoop.hive.metastore.api.*;
@@ -251,9 +249,8 @@ public class SqlFileSchemaAccess implements SchemaAccess {
         if (node instanceof SqlShowCreateTable show) {
             TableEntry table = tableDefinition(MetadataQueryUtils.objectPath(
                     show.getTableName().names.toArray(String[]::new), database));
-            return SqlProcessResult.msg(ShowCreateUtil.buildShowCreateTableRow(table.definition(),
-                    ObjectIdentifier.of(Consts.HIVE_CATALOG_NAME, table.metadata().getDbName(),
-                            table.metadata().getTableName()), false), "result");
+            return MetadataQueryUtils.showCreateTable(table.definition(),
+                    new ObjectPath(table.metadata().getDbName(), table.metadata().getTableName()));
         }
         if (node instanceof SqlRichDescribeTable describe) {
             return MetadataQueryUtils.describeTable(tableDefinition(

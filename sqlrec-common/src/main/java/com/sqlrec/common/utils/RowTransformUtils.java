@@ -3,6 +3,7 @@ package com.sqlrec.common.utils;
 import com.sqlrec.common.schema.CacheTable;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -40,9 +41,8 @@ public final class RowTransformUtils {
         return rows;
     }
 
-    public static List<Map<String, Object>> convertToMapList(List<Object[]> results, List<RelDataTypeField> fields) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object[] row : results) {
+    public static List<Map<String, Object>> convertToMapList(Iterable<Object[]> results, List<RelDataTypeField> fields) {
+        return mapRows(results, row -> {
             Map<String, Object> map = new LinkedHashMap<>(fields.size());
             for (int i = 0; i < fields.size(); i++) {
                 RelDataTypeField field = fields.get(i);
@@ -50,9 +50,8 @@ public final class RowTransformUtils {
                     map.put(field.getName(), row[i]);
                 }
             }
-            result.add(map);
-        }
-        return result;
+            return map;
+        });
     }
 
     public static Enumerable<Object[]> convertDataToEnumerable(
@@ -131,7 +130,7 @@ public final class RowTransformUtils {
 
     /** Reorders and copies rows, allowing numeric conversions and conversion to string fields. */
     public static List<Object[]> adaptRowsToSchema(
-            List<Object[]> rows,
+            Iterable<Object[]> rows,
             List<RelDataTypeField> desired,
             List<RelDataTypeField> given
     ) {
@@ -140,11 +139,13 @@ public final class RowTransformUtils {
                     "adaptRowsToSchema failed, rows/desiredFields/givenFields must not be null");
         }
         int[] mapping = mapping(desired, given);
-        List<Object[]> result = new ArrayList<>(rows.size());
-        for (Object[] row : rows) {
-            result.add(row == null ? null : adaptRow(row, desired, mapping));
-        }
-        return result;
+        return mapRows(rows, row -> row == null ? null : adaptRow(row, desired, mapping));
+    }
+
+    private static <T> List<T> mapRows(Iterable<Object[]> rows, Function1<Object[], T> mapper) {
+        Enumerable<Object[]> source = rows instanceof Enumerable<?>
+                ? (Enumerable<Object[]>) rows : Linq4j.asEnumerable(rows);
+        return source.select(mapper).toList();
     }
 
     private static int[] mapping(

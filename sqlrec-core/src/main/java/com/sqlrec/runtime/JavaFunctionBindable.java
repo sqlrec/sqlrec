@@ -142,14 +142,12 @@ public class JavaFunctionBindable extends BindableInterface {
         if (outputTable == null) {
             return null;
         }
-        if (outputTable instanceof CacheTable) {
-            CacheTable cacheTable = (CacheTable) outputTable;
-            List<Object[]> rows = cacheTable.scan(null).toList();
-            rows = RowTransformUtils.adaptRowsToSchema(rows, returnDataFields, cacheTable.getDataFields());
-            return Linq4j.asEnumerable(rows);
-        } else {
+        if (!(outputTable instanceof CacheTable cacheTable)) {
             throw new RuntimeException("output table is not a CacheTable: " + outputTable.getClass().getName());
         }
+        List<Object[]> rows = RowTransformUtils.adaptRowsToSchema(
+                cacheTable.scan(null), returnDataFields, cacheTable.getDataFields());
+        return Linq4j.asEnumerable(rows);
     }
 
     @Override

@@ -16,6 +16,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -57,7 +58,7 @@ public class SqlFileParser {
     private List<Path> collectSqlFiles(Path dir) throws IOException {
         try (Stream<Path> walk = Files.walk(dir)) {
             return walk.filter(Files::isRegularFile)
-                    .filter(this::isSqlFile)
+                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".sql"))
                     .sorted()
                     .toList();
         }
@@ -146,12 +147,6 @@ public class SqlFileParser {
             i++;
         }
         return result.toString();
-    }
-
-    private boolean isSqlFile(Path path) {
-        if (!Files.isRegularFile(path)) return false;
-        String name = path.getFileName().toString().toLowerCase();
-        return name.endsWith(".sql");
     }
 
     public List<SqlNode> getTableNodes() {

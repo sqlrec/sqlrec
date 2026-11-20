@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -299,7 +300,7 @@ public class RedisHandler {
         return redisConfig.dataStructure.equals(RedisOptions.LIST_DATA_STRUCTURE);
     }
 
-    private <T> T await(RedisFuture<T> future) throws Exception {
+    private <T> T await(Future<T> future) throws Exception {
         try {
             return future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -309,15 +310,9 @@ public class RedisHandler {
     }
 
     private void awaitAll(List<RedisFuture<?>> futures) throws Exception {
-        try {
-            CompletableFuture.allOf(futures.stream()
-                            .map(RedisFuture::toCompletableFuture)
-                            .toArray(CompletableFuture[]::new))
-                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            maybeInvalidateOnFailure(e);
-            throw e;
-        }
+        await(CompletableFuture.allOf(futures.stream()
+                .map(RedisFuture::toCompletableFuture)
+                .toArray(CompletableFuture[]::new)));
     }
 
     /**

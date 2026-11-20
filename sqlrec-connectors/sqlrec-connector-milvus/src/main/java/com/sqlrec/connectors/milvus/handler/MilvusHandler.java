@@ -10,8 +10,6 @@ import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.filter.MilvusFilterBuilder;
 import com.sqlrec.connectors.milvus.utils.MilvusClientPoolUtils;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.QueryReq;
@@ -21,87 +19,21 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 import org.apache.calcite.rex.RexNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MilvusHandler {
-    private static final Logger logger = LoggerFactory.getLogger(MilvusHandler.class);
     private static final Gson gson = JsonUtils.getGson();
-
     private final MilvusConfig milvusConfig;
-
-    /** Test-only: when non-null, doWithClient uses this directly instead of the pool. */
-    static volatile MilvusClientV2 testClient;
 
     public MilvusHandler(MilvusConfig milvusConfig) {
         this.milvusConfig = milvusConfig;
     }
 
-    /** Test-only: inject a mock client. */
-    static void setClientForTest(MilvusClientV2 mockClient) {
-        testClient = mockClient;
-    }
-
-    /** Test-only: clear the injected mock client. */
-    static void clearTestClient() {
-        testClient = null;
-    }
-
     private <T> T withClient(Function<MilvusClientV2, T> action) {
-        String key = MilvusClientPoolUtils.poolKey(milvusConfig);
-        try {
-            return doWithClient(action);
-        } catch (RuntimeException e) {
-            if (isConnectionFailure(e)) {
-                logger.warn("Milvus connection failure detected, invalidating pool and retrying once: {}", e.getMessage());
-                invalidatePool(key);
-                return doWithClient(action);
-            }
-            throw e;
-        }
-    }
-
-    private <T> T doWithClient(Function<MilvusClientV2, T> action) {
-        if (testClient != null) {
-            return action.apply(testClient);
-        }
-        MilvusClientV2 client = getClient(milvusConfig);
-        if (client == null) {
-            throw new RuntimeException("Failed to get Milvus client from pool after timeout");
-        }
-        try {
-            return action.apply(client);
-        } finally {
-            try {
-                returnClient(client, milvusConfig);
-            } catch (Exception e) {
-                // Avoid masking the original failure from action.apply().
-                logger.warn("Failed to return Milvus client to pool: {}", e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * Returns true if the throwable (or any cause in its chain) is a gRPC transport-level
-     * failure (connection down, timeout, broken stream) rather than a semantic Milvus
-     * error. Such failures mean the pool may hold broken clients and should be discarded.
-     */
-    private static boolean isConnectionFailure(Throwable t) {
-        Throwable cur = t;
-        while (cur != null) {
-            if (cur instanceof StatusRuntimeException) {
-                Status.Code code = ((StatusRuntimeException) cur).getStatus().getCode();
-                return code == Status.Code.UNAVAILABLE
-                        || code == Status.Code.DEADLINE_EXCEEDED
-                        || code == Status.Code.UNKNOWN;
-            }
-            cur = cur.getCause();
-        }
-        return false;
+        return MilvusClientPoolUtils.withClient(milvusConfig, action);
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
@@ -262,21 +194,5 @@ public class MilvusHandler {
 
     private Object[] toRow(Map<String, Object> entity, List<FieldSchema> fieldSchemas) {
         return RowTransformUtils.projectRow(fieldSchemas, field -> entity.get(field.getName()));
-    }
-
-    public static void returnClient(MilvusClientV2 client, MilvusConfig milvusConfig) {
-        MilvusClientPoolUtils.returnClient(client, milvusConfig);
-    }
-
-    public static MilvusClientV2 getClient(MilvusConfig milvusConfig) {
-        return MilvusClientPoolUtils.getClient(milvusConfig);
-    }
-
-    public static synchronized void invalidatePool(String key) {
-        MilvusClientPoolUtils.invalidatePool(key);
-    }
-
-    public static synchronized void closeAllClientPools() {
-        MilvusClientPoolUtils.closeAll();
     }
 }

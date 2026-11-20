@@ -1,5 +1,6 @@
 package com.sqlrec.model.tzrec;
 
+import com.sqlrec.common.config.ConfigOption;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.K8sYamlBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
@@ -50,13 +51,16 @@ public class TzrecK8sYamlUtils extends K8sYamlBuilder {
                 throw new IllegalArgumentException(option.getKey() + " must be positive");
             }
         }
-        for (var pair : List.of(List.of(Config.POD_MEMORY, Config.POD_MEMORY_LIMIT),
-                List.of(Config.POD_CPU_CORES, Config.POD_CPU_LIMIT))) {
-            Object limit = pair.get(1).getValueOrNull(params);
-            if (limit != null && new Quantity(limit.toString()).getNumericalAmount().compareTo(
-                    new Quantity(pair.get(0).getValue(params).toString()).getNumericalAmount()) < 0) {
-                throw new IllegalArgumentException(pair.get(1).getKey() + " must not be smaller than the request");
-            }
+        validateLimit(params, Config.POD_MEMORY, Config.POD_MEMORY_LIMIT);
+        validateLimit(params, Config.POD_CPU_CORES, Config.POD_CPU_LIMIT);
+    }
+
+    private static void validateLimit(
+            Map<String, String> params, ConfigOption<?> requestOption, ConfigOption<String> limitOption) {
+        String limit = limitOption.getValueOrNull(params);
+        if (limit != null && new Quantity(limit).getNumericalAmount().compareTo(
+                new Quantity(requestOption.getValue(params).toString()).getNumericalAmount()) < 0) {
+            throw new IllegalArgumentException(limitOption.getKey() + " must not be smaller than the request");
         }
     }
 

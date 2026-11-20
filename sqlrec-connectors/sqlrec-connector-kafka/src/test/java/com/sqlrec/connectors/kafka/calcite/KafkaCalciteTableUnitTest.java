@@ -20,6 +20,9 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,13 +52,13 @@ public class KafkaCalciteTableUnitTest {
 
         producerConstruction = mockConstruction(KafkaProducer.class,
                 (producer, context) -> producerProperties.add((Properties) context.arguments().get(0)));
-        mockProducer = KafkaCalciteTable.getKafkaProducer(config);
+        mockProducer = KafkaProducerUtils.getOrCreate(config);
     }
 
     @AfterEach
     public void tearDown() {
         try {
-            KafkaCalciteTable.closeAllProducers();
+            KafkaProducerUtils.closeAll();
         } finally {
             producerConstruction.close();
         }
@@ -76,16 +79,7 @@ public class KafkaCalciteTableUnitTest {
         config2.bootstrapServers = "localhost:9092";
         config2.lingerMs = 20;
 
-        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config2));
-    }
-
-    @Test
-    public void testTableAndUtilityReuseTheSameProducer() {
-        KafkaProducer<String, byte[]> producer = KafkaCalciteTable.getKafkaProducer(config);
-
-        assertSame(mockProducer, producer);
-        assertSame(producer, KafkaProducerUtils.getOrCreate(config));
-        assertEquals(1, producerConstruction.constructed().size());
+        assertNotSame(mockProducer, KafkaProducerUtils.getOrCreate(config2));
     }
 
     @Test
@@ -96,8 +90,8 @@ public class KafkaCalciteTableUnitTest {
         protobufConfig.format = "protobuf";
 
         assertSame(
-                KafkaCalciteTable.getKafkaProducer(config),
-                KafkaCalciteTable.getKafkaProducer(protobufConfig));
+                KafkaProducerUtils.getOrCreate(config),
+                KafkaProducerUtils.getOrCreate(protobufConfig));
         assertEquals(1, producerConstruction.constructed().size());
     }
 
@@ -270,17 +264,41 @@ public class KafkaCalciteTableUnitTest {
 
     @Test
     public void testClosedProducerIsRecreatedOnNextUse() {
-        KafkaCalciteTable.closeAllProducers();
+        KafkaProducerUtils.closeAll();
 
         verify(mockProducer, times(1)).close();
-        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config));
+        assertNotSame(mockProducer, KafkaProducerUtils.getOrCreate(config));
     }
 
     @Test
     public void testCloseAllProducers() {
-        KafkaCalciteTable.closeAllProducers();
+        KafkaProducerUtils.closeAll();
 
         verify(mockProducer, times(1)).close();
+    }
+
+    @Test
+    void producerCreatedDuringCloseSurvivesThatClose() throws Exception {
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch finishClose = new CountDownLatch(1);
+        doAnswer(call -> {
+            closeStarted.countDown();
+            assertTrue(finishClose.await(5, TimeUnit.SECONDS));
+            return null;
+        }).when(mockProducer).close();
+
+        CompletableFuture<Void> closing = CompletableFuture.runAsync(KafkaProducerUtils::closeAll);
+        KafkaProducer<String, byte[]> replacement;
+        try {
+            assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+            replacement = KafkaProducerUtils.getOrCreate(config);
+        } finally {
+            finishClose.countDown();
+            closing.get(5, TimeUnit.SECONDS);
+        }
+        assertNotSame(mockProducer, replacement);
+        assertSame(replacement, KafkaProducerUtils.getOrCreate(config));
+        verify(replacement, never()).close();
     }
 
     @Test
@@ -291,10 +309,10 @@ public class KafkaCalciteTableUnitTest {
         KafkaProducer<String, byte[]> otherProducer = KafkaProducerUtils.getOrCreate(otherConfig);
         doThrow(new RuntimeException("close failed")).when(mockProducer).close();
 
-        assertDoesNotThrow(KafkaCalciteTable::closeAllProducers);
+        assertDoesNotThrow(KafkaProducerUtils::closeAll);
 
         verify(mockProducer).close();
         verify(otherProducer).close();
-        assertNotSame(mockProducer, KafkaCalciteTable.getKafkaProducer(config));
+        assertNotSame(mockProducer, KafkaProducerUtils.getOrCreate(config));
     }
 }

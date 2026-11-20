@@ -74,15 +74,6 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
         return Schemas.tableExpression(schema, getElementType(), tableName, clazz);
     }
 
-    public static KafkaProducer<String, byte[]> getKafkaProducer(KafkaConfig kafkaConfig) {
-        return KafkaProducerUtils.getOrCreate(kafkaConfig);
-    }
-
-    /** Close every cached Kafka producer and clear the cache. */
-    public static synchronized void closeAllProducers() {
-        KafkaProducerUtils.closeAll();
-    }
-
     public static class KafkaCollection extends SqlRecCollection {
         private static final Logger logger = LoggerFactory.getLogger(KafkaCollection.class);
 
@@ -106,7 +97,7 @@ public class KafkaCalciteTable extends SqlRecTable implements ModifiableTable {
                     ? table.protobufRowCodec.encode(objects)
                     : RowJsonEncoder.toJson(objects, kafkaConfig.fieldSchemas)
                             .getBytes(StandardCharsets.UTF_8);
-            KafkaProducer<String, byte[]> producer = getKafkaProducer(kafkaConfig);
+            KafkaProducer<String, byte[]> producer = KafkaProducerUtils.getOrCreate(kafkaConfig);
             // Kafka writes are intentionally fire-and-forget. The callback reports asynchronous
             // send failures, while the collection operation returns after enqueueing the record.
             producer.send(new ProducerRecord<>(kafkaConfig.topic, msg), (metadata, exception) -> {
