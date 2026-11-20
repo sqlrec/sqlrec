@@ -20,7 +20,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
     private final List<SqlNode> inputList;
     private final SqlGetVariable funcNameVariable;
     private final BindableInterface delegate;
-    private final List<RelDataTypeField> returnDataFields;
+    private final List<RelDataTypeField> declaredReturnFields;
     private final boolean async;
     private final PartitionExecutor partitionExecutor;
 
@@ -28,17 +28,17 @@ public class FunctionProxyBindable extends ForwardingBindable {
             SqlCallSqlFunction callSqlFunction,
             List<SqlNode> inputList,
             SqlGetVariable funcNameVariable,
-            List<RelDataTypeField> returnDataFields,
+            List<RelDataTypeField> declaredReturnFields,
             boolean isAsync
     ) {
-        if (returnDataFields == null) {
+        if (declaredReturnFields == null) {
             throw new RuntimeException("return data fields is null");
         }
 
         this.inputList = inputList;
         this.delegate = null;
         this.funcNameVariable = funcNameVariable;
-        this.returnDataFields = returnDataFields;
+        this.declaredReturnFields = declaredReturnFields;
         this.async = isAsync;
         this.partitionExecutor = createPartitionExecutor(callSqlFunction, inputList);
     }
@@ -50,9 +50,9 @@ public class FunctionProxyBindable extends ForwardingBindable {
             boolean isAsync
     ) {
         this.inputList = inputList;
-        this.delegate = delegate;
+        this.delegate = Objects.requireNonNull(delegate);
         this.funcNameVariable = null;
-        this.returnDataFields = delegate.getReturnDataFields();
+        this.declaredReturnFields = null;
         this.async = isAsync;
         this.partitionExecutor = createPartitionExecutor(callSqlFunction, inputList);
     }
@@ -136,7 +136,7 @@ public class FunctionProxyBindable extends ForwardingBindable {
         String functionName = resolveFunctionName(context);
         try {
             return FunctionBindableFactory.createByName(
-                    functionName, schema, inputList, returnDataFields, new CompileManager()
+                    functionName, schema, inputList, declaredReturnFields, new CompileManager()
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -156,21 +156,12 @@ public class FunctionProxyBindable extends ForwardingBindable {
 
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
-        if (delegate != null) {
-            return delegate.getReturnDataFields();
-        }
-        return returnDataFields;
+        return delegate == null ? declaredReturnFields : delegate.getReturnDataFields();
     }
 
     @Override
     public boolean isParallelizable() {
-        if (async) {
-            return true;
-        }
-        if (delegate != null) {
-            return delegate.isParallelizable();
-        }
-        return false;
+        return async || super.isParallelizable();
     }
 
     @Override

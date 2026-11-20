@@ -265,13 +265,9 @@ public class SqlFunctionBindable extends BindableInterface {
     }
 
     private void initExceptionIgnore() {
-        Map<Integer, Boolean> isUnionSource = TopologicalSortUtils.getIsUnionSource(
-                bindableList,
-                sortedBindableList
-        );
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(bindableList);
         for (int i = 0; i < bindableList.size(); i++) {
-            BindableInterface bindable = bindableList.get(i);
-            bindable.setIgnoreException(isUnionSource.getOrDefault(i, false));
+            bindableList.get(i).setIgnoreException(unionSources.contains(i));
         }
     }
 }

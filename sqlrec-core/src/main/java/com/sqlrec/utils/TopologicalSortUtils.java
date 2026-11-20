@@ -34,13 +34,11 @@ public class TopologicalSortUtils {
             optimized.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
-        for (Map.Entry<Integer, Set<Integer>> entry : optimized.entrySet()) {
-            Integer node = entry.getKey();
-            Set<Integer> directDeps = entry.getValue();
+        for (Set<Integer> directDeps : optimized.values()) {
             Set<Integer> toRemove = new HashSet<>();
 
             for (Integer dep : directDeps) {
-                if (hasIndirectPath(optimized, node, dep)) {
+                if (hasIndirectPath(optimized, directDeps, dep)) {
                     toRemove.add(dep);
                 }
             }
@@ -53,37 +51,29 @@ public class TopologicalSortUtils {
 
     private static boolean hasIndirectPath(
             Map<Integer, Set<Integer>> dependency,
-            Integer start,
+            Set<Integer> directDeps,
             Integer target
     ) {
         Set<Integer> visited = new HashSet<>();
-        Queue<Integer> queue = new LinkedList<>();
+        Queue<Integer> queue = new ArrayDeque<>();
 
-        Set<Integer> intermediateNodes = new HashSet<>(dependency.getOrDefault(start, Collections.emptySet()));
-        intermediateNodes.remove(target);
-
-        for (Integer intermediate : intermediateNodes) {
-            if (!intermediate.equals(target)) {
-                queue.offer(intermediate);
-                visited.add(intermediate);
+        for (Integer dep : directDeps) {
+            if (!dep.equals(target)) {
+                visited.add(dep);
+                queue.add(dep);
             }
         }
 
         while (!queue.isEmpty()) {
-            Integer current = queue.poll();
+            Integer current = queue.remove();
 
             if (current.equals(target)) {
                 return true;
             }
 
-            Set<Integer> nextDeps = dependency.getOrDefault(current, Collections.emptySet());
-            for (Integer next : nextDeps) {
-                if (!visited.contains(next) && !next.equals(start)) {
-                    if (next.equals(target)) {
-                        return true;
-                    }
-                    visited.add(next);
-                    queue.offer(next);
+            for (Integer next : dependency.get(current)) {
+                if (visited.add(next)) {
+                    queue.add(next);
                 }
             }
         }
@@ -186,10 +176,7 @@ public class TopologicalSortUtils {
      * not recover automatically, nor may their upstream producers in this function.
      * Other branches and the internals of called functions keep their own policy.
      */
-    public static Map<Integer, Boolean> getIsUnionSource(
-            List<BindableInterface> bindableList,
-            List<Integer> sortedBindableList
-    ) {
+    public static Set<Integer> findRecoverableUnionSources(List<BindableInterface> bindableList) {
         Map<String, Set<Integer>> tableWriters = new HashMap<>();
         Map<Integer, Set<Integer>> readDependencies = new HashMap<>();
         Set<Integer> protectedNodes = new HashSet<>();
@@ -214,7 +201,7 @@ public class TopologicalSortUtils {
                 protectedNodes.addAll(writers);
             }
         }
-        // Read edges always point to earlier statements, so one reverse pass suffices.
+        // Every producer precedes its consumers, so both passes can use reverse statement order.
         for (int i = bindableList.size() - 1; i >= 0; i--) {
             if (protectedNodes.contains(i)) {
                 protectedNodes.addAll(readDependencies.get(i));
@@ -222,17 +209,16 @@ public class TopologicalSortUtils {
         }
 
         Map<Integer, Set<Integer>> tableConsumers = getReverseBindableDependency(readDependencies);
-        Map<Integer, Boolean> unionSources = new HashMap<>();
-        for (int i = sortedBindableList.size() - 1; i >= 0; i--) {
-            int index = sortedBindableList.get(i);
-            if (protectedNodes.contains(index) || bindableList.get(index).containsReturn()) {
-                unionSources.put(index, false);
+        Set<Integer> unionSources = new HashSet<>();
+        for (int i = bindableList.size() - 1; i >= 0; i--) {
+            if (protectedNodes.contains(i) || bindableList.get(i).containsReturn()) {
                 continue;
             }
-            Set<Integer> consumers = tableConsumers.getOrDefault(index, Collections.emptySet());
-            boolean onlyUnionConsumers = !consumers.isEmpty() && consumers.stream().allMatch(consumer ->
-                    bindableList.get(consumer).isUnionSql() || unionSources.getOrDefault(consumer, false));
-            unionSources.put(index, onlyUnionConsumers);
+            Set<Integer> consumers = tableConsumers.getOrDefault(i, Collections.emptySet());
+            if (!consumers.isEmpty() && consumers.stream().allMatch(consumer ->
+                    bindableList.get(consumer).isUnionSql() || unionSources.contains(consumer))) {
+                unionSources.add(i);
+            }
         }
         return unionSources;
     }

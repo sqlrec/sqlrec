@@ -415,14 +415,11 @@ public class TopologicalSortUtilsTest {
                 "CACHE TABLE result_table AS SELECT 2 AS id",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertFalse(unionSources.get(0), "unused non-UNION nodes must not hide failures");
-        assertFalse(unionSources.get(1), "the actual result producer must not hide failures");
-        assertFalse(unionSources.get(2), "RETURN is the result sink");
+        assertFalse(unionSources.contains(0), "unused non-UNION nodes must not hide failures");
+        assertFalse(unionSources.contains(1), "the actual result producer must not hide failures");
+        assertFalse(unionSources.contains(2), "RETURN is the result sink");
     }
 
     @Test
@@ -435,15 +432,9 @@ public class TopologicalSortUtilsTest {
                         "SELECT * FROM left_table UNION ALL SELECT * FROM right_table",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertTrue(unionSources.get(0));
-        assertTrue(unionSources.get(1));
-        assertFalse(unionSources.get(2));
-        assertFalse(unionSources.get(3));
+        assertEquals(Set.of(0, 1), unionSources);
     }
 
     @Test
@@ -453,13 +444,9 @@ public class TopologicalSortUtilsTest {
                 "CACHE TABLE unused_table AS SELECT 1 AS id",
                 "RETURN"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertFalse(unionSources.get(0));
-        assertFalse(unionSources.get(1));
+        assertTrue(unionSources.isEmpty());
     }
 
     @Test
@@ -470,14 +457,9 @@ public class TopologicalSortUtilsTest {
                 "CACHE TABLE unused_result AS SELECT * FROM unused_source",
                 "RETURN"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertFalse(unionSources.get(0));
-        assertFalse(unionSources.get(1));
-        assertFalse(unionSources.get(2));
+        assertTrue(unionSources.isEmpty());
     }
 
     @Test
@@ -490,15 +472,9 @@ public class TopologicalSortUtilsTest {
                         "SELECT * FROM left_table UNION ALL SELECT * FROM right_table ORDER BY id",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertTrue(unionSources.get(0));
-        assertTrue(unionSources.get(1));
-        assertFalse(unionSources.get(2));
-        assertFalse(unionSources.get(3));
+        assertEquals(Set.of(0, 1), unionSources);
     }
 
     @Test
@@ -511,15 +487,9 @@ public class TopologicalSortUtilsTest {
                         "SELECT * FROM left_table UNION ALL SELECT * FROM right_table) AS union_result",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertTrue(unionSources.get(0));
-        assertTrue(unionSources.get(1));
-        assertFalse(unionSources.get(2));
-        assertFalse(unionSources.get(3));
+        assertEquals(Set.of(0, 1), unionSources);
     }
 
     @Test
@@ -533,14 +503,9 @@ public class TopologicalSortUtilsTest {
                         "SELECT * FROM left_table UNION ALL SELECT * FROM right_table",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertTrue(unionSources.get(0));
-        assertFalse(unionSources.get(1));
-        assertTrue(unionSources.get(2));
+        assertEquals(Set.of(0, 2), unionSources);
     }
 
     @Test
@@ -553,15 +518,12 @@ public class TopologicalSortUtilsTest {
                 "CACHE TABLE result_table AS SELECT * FROM source_table",
                 "RETURN result_table"
         ));
-        List<BindableInterface> bindableList = function.getBindableList();
-        List<Integer> sorted = TopologicalSortUtils.topologicalSort(bindableList).executionOrder();
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(function.getBindableList());
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(bindableList, sorted);
-
-        assertFalse(unionSources.get(0), "one returned consumer makes the shared source non-ignorable");
-        assertFalse(unionSources.get(1), "an unused UNION result is not a UNION branch source");
-        assertFalse(unionSources.get(2));
-        assertFalse(unionSources.get(3));
+        assertFalse(unionSources.contains(0), "one returned consumer makes the shared source non-ignorable");
+        assertFalse(unionSources.contains(1), "an unused UNION result is not a UNION branch source");
+        assertFalse(unionSources.contains(2));
+        assertFalse(unionSources.contains(3));
     }
 
     @Test
@@ -580,11 +542,11 @@ public class TopologicalSortUtilsTest {
         when(result.getReadTables()).thenReturn(Set.of("source_table", "merged"));
         when(result.containsReturn()).thenReturn(true);
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(
-                List.of(source, union, insert, result), List.of(0, 1, 2, 3));
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(
+                List.of(source, union, insert, result));
 
-        assertFalse(unionSources.get(0), "INSERT retains old rows needed by the non-UNION result");
-        assertFalse(unionSources.get(2));
+        assertFalse(unionSources.contains(0), "INSERT retains old rows needed by the non-UNION result");
+        assertFalse(unionSources.contains(2));
     }
 
     @Test
@@ -598,14 +560,13 @@ public class TopologicalSortUtilsTest {
         BindableInterface result = tableNode(Set.of("merged"), Set.of());
         when(result.containsReturn()).thenReturn(true);
 
-        Map<Integer, Boolean> unionSources = TopologicalSortUtils.getIsUnionSource(
-                List.of(seed, firstWrite, secondWrite, independentBranch, union, result),
-                List.of(0, 1, 2, 3, 4, 5));
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(
+                List.of(seed, firstWrite, secondWrite, independentBranch, union, result));
 
-        assertFalse(unionSources.get(0));
-        assertFalse(unionSources.get(1));
-        assertFalse(unionSources.get(2));
-        assertTrue(unionSources.get(3), "sharing a healthy input must not protect a sibling branch");
+        assertFalse(unionSources.contains(0));
+        assertFalse(unionSources.contains(1));
+        assertFalse(unionSources.contains(2));
+        assertTrue(unionSources.contains(3), "sharing a healthy input must not protect a sibling branch");
     }
 
     @Test
@@ -617,10 +578,9 @@ public class TopologicalSortUtilsTest {
         when(result.containsReturn()).thenReturn(true);
         List<BindableInterface> nodes = List.of(source, union, result);
 
-        Map<Integer, Boolean> unionSources =
-                TopologicalSortUtils.getIsUnionSource(nodes, List.of(0, 1, 2));
+        Set<Integer> unionSources = TopologicalSortUtils.findRecoverableUnionSources(nodes);
 
-        assertTrue(unionSources.get(0));
+        assertTrue(unionSources.contains(0));
         assertEquals(Set.of(), TopologicalSortUtils.buildBindableDependency(nodes).get(0));
     }
 
