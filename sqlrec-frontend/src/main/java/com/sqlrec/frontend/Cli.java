@@ -18,6 +18,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -141,7 +142,7 @@ public class Cli implements Callable<Integer> {
 
     // ===================== Interactive REPL =====================
 
-    private int runInteractive(SqlExecutor sqlExecutor) {
+    private int runInteractive(SqlExecutor sqlExecutor) throws IOException {
         Terminal terminal;
         try {
             terminal = TerminalBuilder.builder().system(true).build();
@@ -150,15 +151,17 @@ public class Cli implements Callable<Integer> {
             return 1;
         }
 
-        DefaultHistory history = new DefaultHistory();
-        this.reader = createLineReader(terminal, history);
-
-        try {
-            return readStatements(sqlExecutor);
-        } finally {
+        try (terminal) {
+            DefaultHistory history = new DefaultHistory();
+            reader = createLineReader(terminal, history);
             try {
-                history.save();
-            } catch (Exception ignored) {
+                return readStatements(sqlExecutor);
+            } finally {
+                reader = null;
+                try {
+                    history.save();
+                } catch (Exception ignored) {
+                }
             }
         }
     }

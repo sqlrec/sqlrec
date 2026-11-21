@@ -31,10 +31,6 @@ public class RestUtils {
         return build(HttpResponseStatus.OK, content.getBytes(StandardCharsets.UTF_8), contentType, null);
     }
 
-    public static FullHttpResponse ok(byte[] content, String contentType) {
-        return build(HttpResponseStatus.OK, content, contentType, null);
-    }
-
     public static FullHttpResponse ok(byte[] content, String contentType, Map<String, String> extraHeaders) {
         return build(HttpResponseStatus.OK, content, contentType, extraHeaders);
     }
@@ -42,10 +38,6 @@ public class RestUtils {
     public static FullHttpResponse error(HttpResponseStatus status, String msg) {
         String content = JsonUtils.toJson(Map.of("msg", String.valueOf(msg)));
         return build(status, content.getBytes(StandardCharsets.UTF_8), "application/json", null);
-    }
-
-    public static FullHttpResponse error(HttpResponseStatus status, byte[] content, String contentType) {
-        return build(status, content, contentType, null);
     }
 
     public static RequestData parseRequestData(String requestBody) {

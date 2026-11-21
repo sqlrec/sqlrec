@@ -12,9 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 /** Process-wide cache of SQL API metadata. */
 public final class SqlApiCache {
-    private static final Cache<String, SqlApi> CACHE = Caffeine.newBuilder()
-            .expireAfterWrite(SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS)
-            .build();
+    private static final Cache<String, SqlApi> CACHE = createCache(
+            SqlRecConfigs.SCHEMA_CACHE_EXPIRE.getValue(), TimeUnit.SECONDS, Ticker.systemTicker());
 
     private SqlApiCache() {
     }

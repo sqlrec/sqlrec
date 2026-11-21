@@ -113,25 +113,32 @@ class CliTest {
                     text.startsWith("exec error: \n") && text.contains("first statement failed")));
             verify(fixture.reader).printAbove(argThat((String text) ->
                     text.contains("done") && text.endsWith(" row(s)\n")));
-            verify(fixture.history()).save();
+            var cleanupOrder = inOrder(fixture.history(), fixture.terminal);
+            cleanupOrder.verify(fixture.history()).save();
+            cleanupOrder.verify(fixture.terminal).close();
             assertEquals(System.lineSeparator(), fixture.output.toString(StandardCharsets.UTF_8));
         }
     }
 
     @Test
-    void savesHistoryWhenReadingFailsWithoutReplacingTheOriginalFailure() throws Throwable {
+    void cleansUpWhenReadingFailsWithoutReplacingTheOriginalFailure() throws Throwable {
         try (InteractiveFixture fixture = new InteractiveFixture()) {
             IllegalStateException failure = new IllegalStateException("reader failed");
             when(fixture.reader.readLine("sqlrec> ")).thenThrow(failure);
+            IOException closeFailure = new IOException("terminal close failed");
+            doThrow(closeFailure).when(fixture.terminal).close();
             // Reader construction creates the history; its save failure must remain suppressed.
             fixture.readerBuilders.when(LineReaderBuilder::builder).thenAnswer(call -> {
                 doThrow(new IOException("history failed")).when(fixture.history()).save();
                 return fixture.readerBuilder;
             });
 
-            assertSame(failure, assertThrows(IllegalStateException.class,
-                    () -> runInteractive(new Cli(), fixture.executor)));
+            var thrown = assertThrows(IllegalStateException.class,
+                    () -> runInteractive(new Cli(), fixture.executor));
+            assertSame(failure, thrown);
+            assertArrayEquals(new Throwable[]{closeFailure}, thrown.getSuppressed());
             verify(fixture.history()).save();
+            verify(fixture.terminal).close();
             verifyNoInteractions(fixture.executor);
         }
     }
@@ -183,6 +190,7 @@ class CliTest {
     private static final class InteractiveFixture implements AutoCloseable {
         private final SqlExecutor executor = mock(SqlExecutor.class);
         private final LineReader reader = mock(LineReader.class);
+        private final Terminal terminal = mock(Terminal.class);
         private final TerminalBuilder terminalBuilder = mock(TerminalBuilder.class, RETURNS_SELF);
         private final LineReaderBuilder readerBuilder = mock(LineReaderBuilder.class, RETURNS_SELF);
         private final MockedStatic<TerminalBuilder> terminalBuilders = mockStatic(TerminalBuilder.class);
@@ -194,7 +202,7 @@ class CliTest {
 
         private InteractiveFixture() throws IOException {
             terminalBuilders.when(TerminalBuilder::builder).thenReturn(terminalBuilder);
-            when(terminalBuilder.build()).thenReturn(mock(Terminal.class));
+            when(terminalBuilder.build()).thenReturn(terminal);
             readerBuilders.when(LineReaderBuilder::builder).thenReturn(readerBuilder);
             when(readerBuilder.build()).thenReturn(reader);
             System.setOut(capturedOutput);

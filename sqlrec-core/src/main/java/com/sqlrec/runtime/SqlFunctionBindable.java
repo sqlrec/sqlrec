@@ -47,8 +47,7 @@ public class SqlFunctionBindable extends BindableInterface {
         this.bindableDependency = plan.dependencies();
         this.sortedBindableList = plan.executionOrder();
 
-        initAllDependSqlFunctionMap();
-        allDependSqlFunctionMap = Map.copyOf(allDependSqlFunctionMap);
+        allDependSqlFunctionMap = collectDependencyPaths();
 
         // Mark structural UNION sources at compile time. Whether recovery is enabled is
         // evaluated from the execution context, so request-level SET values take effect.
@@ -219,26 +218,27 @@ public class SqlFunctionBindable extends BindableInterface {
         return allDependSqlFunctionMap;
     }
 
-    private void initAllDependSqlFunctionMap() throws Exception {
-        allDependSqlFunctionMap = new HashMap<>();
+    private Map<String, String> collectDependencyPaths() throws Exception {
+        Map<String, String> paths = new HashMap<>();
 
         for (BindableInterface bindable : bindableList) {
             for (String directDependency : bindable.getDependencySqlFuncName()) {
                 if (StringUtils.isEmpty(directDependency)) {
                     continue;
                 }
-                allDependSqlFunctionMap.put(directDependency, directDependency);
+                paths.put(directDependency, directDependency);
                 Map<String, String> transitiveDependencies = bindable.getAllDependSqlFunctionMap();
                 for (Map.Entry<String, String> entry : transitiveDependencies.entrySet()) {
-                    allDependSqlFunctionMap.putIfAbsent(entry.getKey(), directDependency + "->" + entry.getValue());
+                    paths.putIfAbsent(entry.getKey(), directDependency + "->" + entry.getValue());
                 }
             }
         }
 
-        if (allDependSqlFunctionMap.containsKey(funName)) {
+        if (paths.containsKey(funName)) {
             throw new Exception("Sql function " + funName + " has circular dependency: " +
-                    allDependSqlFunctionMap.get(funName));
+                    paths.get(funName));
         }
+        return Map.copyOf(paths);
     }
 
     private void initExceptionIgnore() {
