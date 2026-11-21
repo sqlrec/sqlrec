@@ -42,11 +42,17 @@ public final class RowTransformUtils {
     }
 
     public static List<Map<String, Object>> convertToMapList(Iterable<Object[]> results, List<RelDataTypeField> fields) {
+        return convertToMapList(results, fields, false);
+    }
+
+    public static List<Map<String, Object>> convertToMapList(
+            Iterable<Object[]> results, List<RelDataTypeField> fields, boolean includeNulls
+    ) {
         return mapRows(results, row -> {
             Map<String, Object> map = new LinkedHashMap<>(fields.size());
             for (int i = 0; i < fields.size(); i++) {
                 RelDataTypeField field = fields.get(i);
-                if (row.length > i && row[i] != null) {
+                if (row.length > i && (includeNulls || row[i] != null)) {
                     map.put(field.getName(), row[i]);
                 }
             }
@@ -235,7 +241,8 @@ public final class RowTransformUtils {
     }
 
     private static void checkCompatible(RelDataTypeField desired, RelDataTypeField given) {
-        if (compatibleTypes(desired.getType(), given.getType())) {
+        if (given.getType().getSqlTypeName() == SqlTypeName.NULL
+                || compatibleTypes(desired.getType(), given.getType())) {
             return;
         }
         throw new RuntimeException("adaptRowsToSchema failed, incompatible field type for '"

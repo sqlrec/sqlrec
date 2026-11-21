@@ -215,40 +215,6 @@ public class NodeUtils {
         return tableNames;
     }
 
-    public static List<String> getModifyTablesFromSqlNode(SqlNode flinkSqlNode) {
-        List<String> tableNames = new ArrayList<>();
-        if (flinkSqlNode == null) {
-            return tableNames;
-        }
-
-        class ModifyTableNameVisitor extends SqlBasicVisitor<Void> {
-            @Override
-            public Void visit(SqlCall call) {
-                tryGetModifyTablesFromSqlNode(call, tableNames);
-                return super.visit(call);
-            }
-        }
-
-        ModifyTableNameVisitor visitor = new ModifyTableNameVisitor();
-        flinkSqlNode.accept(visitor);
-
-        return tableNames;
-    }
-
-    public static void tryGetModifyTablesFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode == null) {
-            return;
-        }
-
-        if (sqlNode instanceof SqlInsert insertSql) {
-            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate sqlUpdate) {
-            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete sqlDelete) {
-            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
-        }
-    }
-
     /** Extracts write targets from a validated relational plan. */
     public static List<String> getModifyTablesFromRelNode(RelNode relNode) {
         List<String> tableNames = new ArrayList<>();

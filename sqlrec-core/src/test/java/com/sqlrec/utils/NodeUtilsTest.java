@@ -80,48 +80,6 @@ public class NodeUtilsTest {
     }
 
     @Test
-    public void testGetModifyTablesFromSqlNodeWithNull() {
-        List<String> result = NodeUtils.getModifyTablesFromSqlNode(null);
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    public void testGetModifyTablesFromSqlNodeWithInsert() throws Exception {
-        SqlNode sqlNode = CompileManager.parseSql("insert into target_table select * from source_table");
-        List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("target_table", result.get(0));
-    }
-
-    @Test
-    public void testGetModifyTablesFromSqlNodeWithSelect() throws Exception {
-        SqlNode sqlNode = CompileManager.parseSql("select * from my_table");
-        List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    public void testGetModifyTablesFromSqlNodeWithUpdate() throws Exception {
-        SqlNode sqlNode = CompileManager.parseSql("update target_table set col1 = 'value' where id = 1");
-        List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("target_table", result.get(0));
-    }
-
-    @Test
-    public void testGetModifyTablesFromSqlNodeWithDelete() throws Exception {
-        SqlNode sqlNode = CompileManager.parseSql("delete from target_table where id = 1");
-        List<String> result = NodeUtils.getModifyTablesFromSqlNode(sqlNode);
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("target_table", result.get(0));
-    }
-
-    @Test
     public void testIsKvTableWithNull() {
         boolean result = NodeUtils.isKvTable(null);
         assertFalse(result);

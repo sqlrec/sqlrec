@@ -2,7 +2,6 @@ package com.sqlrec.frontend.rest;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.rest.ExecuteDataList;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.MetricsUtils;
@@ -162,8 +161,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         if (apiName.contains("/")) {
             return RestUtils.error(HttpResponseStatus.NOT_FOUND, "path not found: " + path);
         }
-        ExecuteData result = RestFunctionExecutor.execute(apiName, requestBody);
-        return RestUtils.ok(JsonUtils.toJson(result));
+        return RestUtils.okFunctionResult(RestFunctionExecutor.execute(apiName, requestBody));
     }
 
     private FullHttpResponse handleMetrics() {

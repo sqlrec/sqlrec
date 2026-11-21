@@ -147,21 +147,9 @@ public class RedisHandler {
     }
 
     public void insert(Object[] data) {
-        byte[] key = getKey(data);
-        byte[] value = codec.encode(data);
+        EncodedRow row = encodeRow(data);
         try {
-            if (isListMode()) {
-                // LPUSH is intentional: list mode keeps the newest record at the head of the list.
-                // Issue all commands first, then wait once: avoids serializing
-                // each round trip (lpush -> ltrim -> expire).
-                List<RedisFuture<?>> futures = new ArrayList<>(3);
-                futures.add(redisClient.lpush(key, value));
-                addListMaintenanceCommands(key, futures);
-                awaitAll(futures);
-            } else {
-                // SET key value EX ttl: one command instead of SET + EXPIRE.
-                await(redisClient.setex(key, value, redisConfig.ttl));
-            }
+            insertRows(List.of(row));
         } catch (Exception e) {
             throw new RuntimeException("Failed to insert data to Redis", e);
         }
@@ -172,28 +160,35 @@ public class RedisHandler {
             // Compute keys and encode values before submitting any asynchronous command:
             // a malformed row (e.g. null primary key) fails the whole batch before
             // any command is issued.
-            if (isListMode()) {
-                Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();
-                for (Object[] data : dataList) {
-                    byte[] key = getKey(data);
-                    keyToValues.computeIfAbsent(new String(key, StandardCharsets.UTF_8), k -> new ArrayList<>())
-                            .add(codec.encode(data));
-                }
-                pushListRows(keyToValues);
-                return;
-            }
             List<EncodedRow> rows = new ArrayList<>(dataList.size());
             for (Object[] data : dataList) {
                 rows.add(encodeRow(data));
             }
-            // Each SET with expiry is routed to its own cluster slot.
-            List<RedisFuture<?>> futures = new ArrayList<>(rows.size());
-            for (EncodedRow row : rows) {
-                futures.add(redisClient.setex(row.key, row.value, redisConfig.ttl));
-            }
-            awaitAll(futures);
+            insertRows(rows);
         } catch (Exception e) {
             throw new RuntimeException("Failed to batch insert data to Redis", e);
+        }
+    }
+
+    private void insertRows(List<EncodedRow> rows) throws Exception {
+        if (isListMode()) {
+            Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();
+            for (EncodedRow row : rows) {
+                keyToValues.computeIfAbsent(new String(row.key, StandardCharsets.UTF_8), key -> new ArrayList<>())
+                        .add(row.value);
+            }
+            pushListRows(keyToValues);
+            return;
+        }
+        // Each SET with expiry is routed to its own cluster slot.
+        List<RedisFuture<?>> futures = new ArrayList<>(rows.size());
+        for (EncodedRow row : rows) {
+            futures.add(redisClient.setex(row.key, row.value, redisConfig.ttl));
+        }
+        if (futures.size() == 1) {
+            await(futures.get(0));
+        } else {
+            awaitAll(futures);
         }
     }
 

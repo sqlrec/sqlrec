@@ -447,7 +447,9 @@ Remote SQLRec API call function. Invokes an API published on a remote SQLRec ins
 | `url` | String | Remote SQLRec API URL, e.g. `http://host:port/api/v1/function_name` |
 | `tables` | CacheTable... | One or more input tables; the table name is used as the input placeholder for the remote function |
 
-**Return Value**: Returns a `CacheTable` containing the remote function's result; column names and types are inferred from the response data.
+**Return Value**
+
+Returns a `CacheTable` containing the remote function's result. You must use `LIKE` to specify the return schema. The template must declare the names and types of the required columns.
 
 **Usage Example**:
 
@@ -475,7 +477,8 @@ SELECT * FROM remote_rec;
 - An exception is thrown when the remote API call fails (empty data or error message returned)
 - The input table name must match the input table placeholder in the remote function definition
 - This example assumes an input named `user_info` and outputs `item_id BIGINT, score DOUBLE`; adjust both to the remote contract
-- Use `LIKE output_template` explicitly to avoid calling the remote API to infer its schema before execution
+- `LIKE` supplies the return schema at compile time and keeps the remote API call in the execution phase. The template determines the type of a column even when all of its values are `NULL`
+- The function API represents SQL `NULL` values as JSON `null` in response `data` rows
 
 ---
 

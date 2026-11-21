@@ -120,6 +120,15 @@ class VectorMathUtilsTest {
     }
 
     @Test
+    void normalizesFiniteVectorsAcrossVeryLargeAndSmallScales() {
+        for (double magnitude : new double[]{Double.MAX_VALUE, Double.MIN_VALUE}) {
+            List<Double> result = VectorMathUtils.l2NormalizeList(List.of(magnitude, -magnitude));
+            assertEquals(1 / Math.sqrt(2), result.get(0), 1e-12);
+            assertEquals(-1 / Math.sqrt(2), result.get(1), 1e-12);
+        }
+    }
+
+    @Test
     public void testL2NormalizeListNonNumberThrows() {
         assertThrows(IllegalArgumentException.class,
                 () -> VectorMathUtils.l2NormalizeList(Arrays.asList(1, "x")));

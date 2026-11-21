@@ -8,6 +8,7 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.entity.SqlApi;
@@ -16,8 +17,19 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
+import com.sqlrec.udf.table.CallSqlRecApiFunction;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.CharsetUtil;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
@@ -31,6 +43,67 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RestExecutorTest {
+    @Test
+    void functionApiPreservesAllNullColumnsForTheCallersLikeSchema() throws Exception {
+        try (FunctionFixture fixture = new FunctionFixture()) {
+            var fields = List.of(DataTypeUtils.getRelDataTypeField("score", 0, "DOUBLE"),
+                    DataTypeUtils.getRelDataTypeField("id", 1, "BIGINT"));
+            var attributes = DataTypeUtils.getRelDataTypeField("attributes", 2, "ANY");
+            var nested = Collections.singletonMap("missing", null);
+            when(fixture.proxy.getReturnDataFields()).thenReturn(List.of(fields.get(0), fields.get(1), attributes));
+            when(fixture.proxy.bind(any(), any())).thenReturn(Linq4j.asEnumerable(
+                    List.of(new Object[]{null, 1L, nested}, new Object[]{null, 2L, nested})));
+
+            String json = postFunctionApi();
+            Map<String, Object> body = JsonUtils.parseJsonToMap(json);
+            assertFalse(body.containsKey("columns"));
+            assertFalse(body.containsKey("msg"));
+            var response = JsonUtils.fromJson(json, ExecuteData.class);
+            assertEquals(2, response.getData().size());
+            for (int i = 0; i < response.getData().size(); i++) {
+                var row = response.getData().get(i);
+                assertTrue(row.containsKey("score"));
+                assertNull(row.get("score"));
+                assertEquals(i + 1L, row.get("id"));
+                assertEquals(Map.of(), row.get("attributes"));
+            }
+
+            var call = new CallSqlRecApiFunction((url, data, params) -> response);
+            var input = new CacheTable("input", Linq4j.emptyEnumerable(), fields);
+            var output = call.evaluate(new ExecuteContextImpl(fixture.schema), "http://unused.invalid", input);
+            assertEquals(0, DataTypeUtils.findFieldIndex(output.getDataFields(), "score"));
+            assertEquals(SqlTypeName.NULL, output.getDataFields().getFirst().getType().getSqlTypeName());
+
+            var rows = RowTransformUtils.adaptRowsToSchema(output.scan(null), fields, output.getDataFields());
+            assertArrayEquals(new Object[]{null, 1L}, rows.get(0));
+            assertArrayEquals(new Object[]{null, 2L}, rows.get(1));
+
+            var missing = List.of(DataTypeUtils.getRelDataTypeField("missing", 0, "DOUBLE"));
+            assertTrue(assertThrows(RuntimeException.class, () -> RowTransformUtils.adaptRowsToSchema(
+                    output.scan(null), missing, output.getDataFields())).getMessage().contains("desired field not found"));
+        }
+    }
+
+    private static String postFunctionApi() {
+        EmbeddedChannel channel = new EmbeddedChannel(new HttpServerHandler());
+        try {
+            var request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/api/v1/example",
+                    Unpooled.copiedBuffer("{}", CharsetUtil.UTF_8));
+            request.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json");
+            channel.writeInbound(request);
+            FullHttpResponse response = channel.readOutbound();
+            assertNotNull(response);
+            try {
+                assertEquals(HttpResponseStatus.OK, response.status());
+                return response.content().toString(CharsetUtil.UTF_8);
+            } finally {
+                response.release();
+            }
+        } finally {
+            channel.finishAndReleaseAll();
+        }
+    }
+
     @Test
     void excludesFunctionResultParamsWithoutChangingExecutionVariables() throws Exception {
         boolean previous = SqlRecConfigs.EXECUTE_RESULT_INCLUDE_PARAMS.getDefaultValue();

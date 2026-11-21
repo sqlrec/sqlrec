@@ -68,7 +68,7 @@ class SchemaInferenceTest {
     }
 
     @Test
-    void javaResponsesUseFirstRowKeysAndPreserveIntegralAndArrayPolicies() {
+    void javaResponsesIncludeLaterKeysAndPreserveIntegralAndArrayPolicies() {
         Map<String, Object> first = new LinkedHashMap<>();
         first.put("id", null);
         first.put("empty", Collections.emptyList());
@@ -78,9 +78,10 @@ class SchemaInferenceTest {
         second.put("id", 9007199254740993L);
         second.put("late", true);
         List<RelDataTypeField> fields = SchemaInference.inferFields(Arrays.asList(first, second));
-        assertEquals(Arrays.asList("id", "empty", "nested", "values"),
+        assertEquals(Arrays.asList("id", "empty", "nested", "values", "late"),
                 fields.stream().map(RelDataTypeField::getName).collect(Collectors.toList()));
-        assertEquals(Arrays.asList(SqlTypeName.BIGINT, SqlTypeName.VARCHAR, SqlTypeName.VARCHAR, SqlTypeName.ARRAY),
+        assertEquals(List.of(SqlTypeName.BIGINT, SqlTypeName.VARCHAR, SqlTypeName.VARCHAR,
+                        SqlTypeName.ARRAY, SqlTypeName.BOOLEAN),
                 fields.stream().map(field -> field.getType().getSqlTypeName()).collect(Collectors.toList()));
         assertEquals(SqlTypeName.BIGINT, fields.get(3).getType().getComponentType().getSqlTypeName());
     }
@@ -96,11 +97,11 @@ class SchemaInferenceTest {
     }
 
     @Test
-    void emptyAndAllNullInputsRetainTheirExistingFallbacks() {
+    void returnsNoFieldsForEmptyInputAndInfersNullForExplicitAllNullColumns() {
         assertTrue(SchemaInference.inferFields(null).isEmpty());
         assertTrue(SchemaInference.inferFields(Collections.emptyList()).isEmpty());
         assertTrue(SchemaInference.inferJsonFields(Collections.emptyList()).isEmpty());
-        assertEquals(SqlTypeName.VARCHAR, SchemaInference.inferFields(
+        assertEquals(SqlTypeName.NULL, SchemaInference.inferFields(
                 Collections.singletonList(Collections.singletonMap("value", null)))
                 .get(0).getType().getSqlTypeName());
     }

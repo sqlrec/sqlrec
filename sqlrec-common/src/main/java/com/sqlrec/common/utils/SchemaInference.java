@@ -20,12 +20,16 @@ public final class SchemaInference {
     private SchemaInference() {
     }
 
-    /** Uses the first row's columns, widening mixed integral/floating values across rows. */
+    /** Uses all row keys in encounter order and gives all-null columns the NULL type. */
     public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
         if (rows == null || rows.isEmpty()) {
             return new ArrayList<>();
         }
-        List<FieldSchema> schema = fields(rows.get(0).keySet(), name -> {
+        Collection<String> names = new LinkedHashSet<>();
+        for (Map<String, Object> row : rows) {
+            names.addAll(row.keySet());
+        }
+        List<FieldSchema> schema = fields(names, name -> {
             List<Object> values = new ArrayList<>(rows.size());
             for (Map<String, Object> row : rows) values.add(row.get(name));
             return inferJavaType(values);
@@ -83,7 +87,7 @@ public final class SchemaInference {
             }
             return value instanceof Boolean ? "BOOLEAN" : "VARCHAR";
         }
-        return "VARCHAR";
+        return "NULL";
     }
 
     private static String inferJsonValues(List<JsonElement> values) {

@@ -118,7 +118,7 @@ class CachePublicationTest {
     void returnIsolationKeepsTheSchemaSynchronizationBoundary() throws Exception {
         CalciteSchema schema = ConcurrentCalciteSchema.createRootSchema();
         ExecuteContextImpl parent = new ExecuteContextImpl(schema);
-        ExecuteContextImpl isolated = parent.createFunctionContext().createIsolatedReturnContext();
+        ExecuteContextImpl isolated = parent.createFunctionContext().createFunctionContext();
         CompletableFuture<?> cancellation;
         CountDownLatch started = new CountDownLatch(1);
         synchronized (schema) {

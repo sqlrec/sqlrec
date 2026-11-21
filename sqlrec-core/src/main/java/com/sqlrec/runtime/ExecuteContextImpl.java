@@ -118,10 +118,6 @@ public class ExecuteContextImpl implements ExecuteContext {
         return new ExecuteContextImpl(this, executionSchema, new FunctionReturnState());
     }
 
-    public ExecuteContextImpl createIsolatedReturnContext() {
-        return new ExecuteContextImpl(this, executionSchema, new FunctionReturnState());
-    }
-
     public void commitFunctionReturnFrom(ExecuteContextImpl isolatedContext) {
         if (isolatedContext == null || isolatedContext.functionReturnState == null) {
             throw new IllegalArgumentException("isolated return context is not available");

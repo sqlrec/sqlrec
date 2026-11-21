@@ -190,7 +190,7 @@ public class IfBindable extends BindableInterface {
         ExecuteContextImpl functionContext = (ExecuteContextImpl) context;
         boolean containsReturn = containsReturn();
         ExecuteContextImpl thenContext = containsReturn
-                ? functionContext.createIsolatedReturnContext()
+                ? functionContext.createFunctionContext()
                 : functionContext.clone();
         Enumerable<Object[]> result;
         try {

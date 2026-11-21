@@ -254,19 +254,23 @@ public class CalciteRuleRegressionTest {
 
     @Test
     void tableModifyRuleExecutesInsertUpdateAndDelete() throws Exception {
+        Set<String> target = Set.of(Consts.DEFAULT_SCHEMA_NAME + ".kv_table");
         BindableInterface insert = compile("insert into kv_table values (4, 'Four')");
         assertTrue(insert.getPhysicalPlan().contains("SqlrecEnumerableTableModify"));
+        assertEquals(target, insert.getWriteTables());
         assertArrayEquals(new Object[]{1L}, execute(insert).get(0));
         assertArrayEquals(new Object[]{4, "Four"}, kvTable.row(4));
 
         BindableInterface update = compile(
                 "update kv_table set label = 'Updated' where id = 4");
         assertTrue(update.getPhysicalPlan().contains("SqlrecEnumerableTableModify"));
+        assertEquals(target, update.getWriteTables());
         assertArrayEquals(new Object[]{0L}, execute(update).get(0));
         assertArrayEquals(new Object[]{4, "Updated"}, kvTable.row(4));
 
         BindableInterface delete = compile("delete from kv_table where id = 4");
         assertTrue(delete.getPhysicalPlan().contains("SqlrecEnumerableTableModify"));
+        assertEquals(target, delete.getWriteTables());
         assertArrayEquals(new Object[]{1L}, execute(delete).get(0));
         assertNull(kvTable.row(4));
     }

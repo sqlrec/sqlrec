@@ -76,10 +76,6 @@ public class CalciteBindable extends BindableInterface {
         return writeTables;
     }
 
-    public RelNode getBestExp() {
-        return bestExp;
-    }
-
     public SqlNode getSqlNode() {
         return sqlNode;
     }

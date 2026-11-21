@@ -447,7 +447,9 @@ CALL weighted_merge('item_id', '3,2', 50, recall_a, recall_b);
 | `url` | String | 远端 SQLRec API 地址，例如 `http://host:port/api/v1/function_name` |
 | `tables` | CacheTable... | 一个或多个输入表，表名作为远端函数的输入占位符 |
 
-**返回值**：返回包含远端函数执行结果的 `CacheTable`，列名和类型根据响应数据自动推断。
+**返回值**
+
+返回包含远端函数执行结果的 `CacheTable`。调用时必须使用 `LIKE` 显式指定返回模式，模板应声明所需列的列名和类型。
 
 **使用示例**：
 
@@ -475,7 +477,8 @@ SELECT * FROM remote_rec;
 - 远端 API 调用失败（返回空数据或错误消息）时会抛出异常
 - 输入表的表名需与远端函数定义中的输入表占位符匹配
 - 示例假设远端输入表为 `user_info`，输出为 `item_id BIGINT, score DOUBLE`；按实际协议修改输入名和输出模板
-- 显式使用 `LIKE output_template`，避免在正式执行前为推断结构调用远端 API
+- `LIKE` 在编译阶段提供返回模式，并将远端 API 调用留到执行阶段。即使某列的值全部为 `NULL`，其类型也由模板确定
+- 函数 API 在响应的 `data` 行中用 JSON `null` 表示空值
 
 ---
 

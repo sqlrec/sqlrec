@@ -47,7 +47,7 @@ class ExecuteContextReturnStateTest {
     @Test
     void isolatedReturnIsInvisibleUntilCommitted() {
         ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
-        ExecuteContextImpl isolated = function.createIsolatedReturnContext();
+        ExecuteContextImpl isolated = function.createFunctionContext();
         Enumerable<Object[]> result = result(2);
 
         isolated.returnFromFunction(result);
@@ -62,7 +62,7 @@ class ExecuteContextReturnStateTest {
     void committingAnIsolatedContextWithoutReturnIsANoOp() {
         ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
 
-        function.commitFunctionReturnFrom(function.createIsolatedReturnContext());
+        function.commitFunctionReturnFrom(function.createFunctionContext());
 
         assertFalse(function.hasReturnedFromFunction());
     }
@@ -81,7 +81,7 @@ class ExecuteContextReturnStateTest {
     @Test
     void committingIntoAnAlreadyReturnedFunctionIsRejected() {
         ExecuteContextImpl function = new ExecuteContextImpl(CalciteSchema.createRootSchema(false)).createFunctionContext();
-        ExecuteContextImpl isolated = function.createIsolatedReturnContext();
+        ExecuteContextImpl isolated = function.createFunctionContext();
         Enumerable<Object[]> first = result(1);
         function.returnFromFunction(first);
         isolated.returnFromFunction(result(2));

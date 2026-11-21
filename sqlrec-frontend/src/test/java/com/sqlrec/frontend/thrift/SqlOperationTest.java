@@ -52,6 +52,17 @@ class SqlOperationTest {
     }
 
     @Test
+    void fetchingFailedSqlSurfacesTheOriginalError() {
+        var operation = new SqlOperation(new SqlProcessResult(), "query");
+        var failure = new UnsupportedOperationException("statement failed");
+        operation.fail(failure);
+
+        assertEquals(TOperationState.ERROR_STATE, operation.getState());
+        assertSame(failure, assertThrows(UnsupportedOperationException.class,
+                () -> operation.fetch(TFetchOrientation.FETCH_NEXT, 1)));
+    }
+
+    @Test
     void ordinaryConversionFailureDoesNotConsumeTheResult() {
         assertConversionFailurePreservesRows(false);
     }

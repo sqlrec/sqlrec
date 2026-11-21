@@ -58,13 +58,20 @@ class SessionManagerRoutingTest {
 
     @Test
     @SilenceLoggers(SessionManager.class)
-    void parseFailureReturnsALocalErrorWithoutForwarding() throws Exception {
+    void fetchAfterParseFailureReturnsTheParseErrorWithoutForwarding() throws Exception {
         try (Session session = new Session()) {
             TExecuteStatementResp response = session.manager.executeStatement(
                     new TExecuteStatementReq(session.handle, "SELECT FROM"));
             assertEquals(TStatusCode.SUCCESS_STATUS, response.getStatus().getStatusCode());
-            assertEquals(TOperationState.ERROR_STATE, session.manager.getOperationStatus(
-                    new TGetOperationStatusReq(response.getOperationHandle())).getOperationState());
+            var operation = response.getOperationHandle();
+            var operationStatus = session.manager.getOperationStatus(new TGetOperationStatusReq(operation));
+            assertEquals(TOperationState.ERROR_STATE, operationStatus.getOperationState());
+
+            var fetchStatus = session.manager.fetchResults(
+                    new TFetchResultsReq(operation, TFetchOrientation.FETCH_NEXT, 1)).getStatus();
+            assertEquals(TStatusCode.ERROR_STATUS, fetchStatus.getStatusCode());
+            assertFalse(fetchStatus.getErrorMessage().isBlank());
+            assertTrue(operationStatus.getErrorMessage().contains(fetchStatus.getErrorMessage()));
             verifyNoInteractions(session.executor, session.proxy);
         }
     }

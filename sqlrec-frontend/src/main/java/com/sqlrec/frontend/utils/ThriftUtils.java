@@ -2,6 +2,7 @@ package com.sqlrec.frontend.utils;
 
 import com.sqlrec.common.utils.JsonUtils;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.hive.service.rpc.thrift.*;
 import org.slf4j.Logger;
@@ -30,10 +31,25 @@ public class ThriftUtils {
     }
 
     public static TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
-        TRowSet tRowSet = new TRowSet();
-        List<TColumn> columns = new ArrayList<>();
+        List<ResultColumn<?>> resultColumns = new ArrayList<>(fields.size());
         for (RelDataTypeField field : fields) {
-            columns.add(toColumn(enumerable, field));
+            resultColumns.add(createColumn(field));
+        }
+        if (enumerable != null && !resultColumns.isEmpty()) {
+            try (Enumerator<Object[]> rows = enumerable.enumerator()) {
+                while (rows.moveNext()) {
+                    Object[] row = rows.current();
+                    for (ResultColumn<?> column : resultColumns) {
+                        column.add(row);
+                    }
+                }
+            }
+        }
+
+        TRowSet tRowSet = new TRowSet();
+        List<TColumn> columns = new ArrayList<>(fields.size());
+        for (ResultColumn<?> column : resultColumns) {
+            columns.add(column.finish());
         }
         tRowSet.setRows(new ArrayList<>());
         tRowSet.setColumns(columns);
@@ -41,118 +57,81 @@ public class ThriftUtils {
         return tRowSet;
     }
 
-    private static TColumn toColumn(Enumerable<Object[]> rows, RelDataTypeField field) {
+    private static ResultColumn<?> createColumn(RelDataTypeField field) {
         int index = field.getIndex();
         return switch (field.getType().getSqlTypeName()) {
-            case VARCHAR, CHAR -> stringColumn(getValueList(rows, index, String.class));
-            case SMALLINT, TINYINT -> valueColumn(rows, index, Short.class,
+            case VARCHAR, CHAR -> valueColumn(index, String.class, "",
+                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            case SMALLINT, TINYINT -> valueColumn(index, Short.class, (short) 0,
                     (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
-            case INTEGER -> valueColumn(rows, index, Integer.class,
+            case INTEGER -> valueColumn(index, Integer.class, 0,
                     (values, nulls) -> TColumn.i32Val(new TI32Column(values, nulls)));
-            case BIGINT -> valueColumn(rows, index, Long.class,
+            case BIGINT -> valueColumn(index, Long.class, 0L,
                     (values, nulls) -> TColumn.i64Val(new TI64Column(values, nulls)));
-            case FLOAT, DOUBLE -> valueColumn(rows, index, Double.class,
+            case REAL, FLOAT, DOUBLE -> valueColumn(index, Double.class, 0.0,
                     (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
-            case BOOLEAN -> valueColumn(rows, index, Boolean.class,
+            case BOOLEAN -> valueColumn(index, Boolean.class, false,
                     (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
-            default -> stringColumn(getValueList(rows, index, JsonUtils::toJson, ""));
+            default -> new ResultColumn<>(index, JsonUtils::toJson, "",
+                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
         };
     }
 
-    private static TColumn stringColumn(Map.Entry<byte[], List<String>> values) {
-        return TColumn.stringVal(new TStringColumn(values.getValue(), ByteBuffer.wrap(values.getKey())));
-    }
-
-    private static <T> TColumn valueColumn(Enumerable<Object[]> rows, int index, Class<T> type,
+    private static <T> ResultColumn<T> valueColumn(int index, Class<T> type, T nullPlaceholder,
             BiFunction<List<T>, ByteBuffer, TColumn> constructor) {
-        Map.Entry<byte[], List<T>> values = getValueList(rows, index, type);
-        return constructor.apply(values.getValue(), ByteBuffer.wrap(values.getKey()));
+        return new ResultColumn<>(index, value -> tryCast(value, type), nullPlaceholder, constructor);
     }
 
-    public static <T> Map.Entry<byte[], List<T>> getValueList(Enumerable<Object[]> enumerable, int index, Class<T> clazz) {
-        return getValueList(enumerable, index, value -> tryCast(value, clazz), getDefaultValue(clazz));
-    }
+    private static final class ResultColumn<T> {
+        private final int index;
+        private final Function<Object, T> convert;
+        private final T nullPlaceholder;
+        private final BiFunction<List<T>, ByteBuffer, TColumn> constructor;
+        private final List<T> values = new ArrayList<>();
+        private final BitSet nulls = new BitSet();
 
-    private static <T> Map.Entry<byte[], List<T>> getValueList(
-            Enumerable<Object[]> enumerable, int index, Function<Object, T> convertValue, T nullPlaceholder
-    ) {
-        if (enumerable == null) {
-            return Map.entry(new byte[0], new ArrayList<>());
+        private ResultColumn(int index, Function<Object, T> convert, T nullPlaceholder,
+                BiFunction<List<T>, ByteBuffer, TColumn> constructor) {
+            this.index = index;
+            this.convert = convert;
+            this.nullPlaceholder = nullPlaceholder;
+            this.constructor = constructor;
         }
 
-        List<T> allDataList = new ArrayList<>();
-        for (Object[] objects : enumerable) {
-            Object object = objects[index];
-            allDataList.add(object == null ? null : convertValue.apply(object));
-        }
-
-        byte[] nulls = new byte[(allDataList.size() + 7) / 8];
-        for (int i = 0; i < allDataList.size(); i++) {
-            if (allDataList.get(i) == null) {
-                int byteIndex = i / 8;
-                int bitIndex = i % 8;
-                nulls[byteIndex] |= (1 << bitIndex);
-                allDataList.set(i, nullPlaceholder);
+        private void add(Object[] row) {
+            Object value = row[index];
+            T converted = value == null ? null : convert.apply(value);
+            if (converted == null) {
+                nulls.set(values.size());
+                converted = nullPlaceholder;
             }
+            values.add(converted);
         }
-        return Map.entry(nulls, allDataList);
+
+        private TColumn finish() {
+            byte[] bitmap = Arrays.copyOf(nulls.toByteArray(), (values.size() + 7) / 8);
+            return constructor.apply(values, ByteBuffer.wrap(bitmap));
+        }
     }
 
-    public static <T> T tryCast(Object object, Class<T> clazz) {
-        if (object == null) {
-            return null;
-        }
-
+    private static <T> T tryCast(Object object, Class<T> clazz) {
         if (clazz.isInstance(object)) {
             return clazz.cast(object);
         }
 
-        if (Number.class.isAssignableFrom(clazz) && object instanceof Number) {
-            Number num = (Number) object;
+        if (object instanceof Number number) {
             if (clazz == Integer.class) {
-                return (T) (Integer) num.intValue();
+                return clazz.cast(number.intValue());
             } else if (clazz == Long.class) {
-                return (T) (Long) num.longValue();
+                return clazz.cast(number.longValue());
             } else if (clazz == Double.class) {
-                return (T) (Double) num.doubleValue();
-            } else if (clazz == Float.class) {
-                return (T) (Float) num.floatValue();
+                return clazz.cast(number.doubleValue());
             } else if (clazz == Short.class) {
-                return (T) (Short) num.shortValue();
-            } else if (clazz == Byte.class) {
-                return (T) (Byte) num.byteValue();
+                return clazz.cast(number.shortValue());
             }
         }
 
         logger.warn("Failed to cast {} to {}", object.getClass().getName(), clazz.getName());
-        return null;
-    }
-
-    public static <T> T getDefaultValue(Class<T> clazz) {
-        if (clazz == Integer.class) {
-            return (T) (Integer) 0;
-        }
-        if (clazz == Long.class) {
-            return (T) (Long) 0L;
-        }
-        if (clazz == Double.class) {
-            return (T) (Double) 0.0;
-        }
-        if (clazz == Float.class) {
-            return (T) (Float) 0.0f;
-        }
-        if (clazz == Short.class) {
-            return (T) (Short) (short) 0;
-        }
-        if (clazz == Byte.class) {
-            return (T) (Byte) (byte) 0;
-        }
-        if (clazz == Boolean.class) {
-            return (T) (Boolean) false;
-        }
-        if (clazz == String.class) {
-            return (T) ("");
-        }
         return null;
     }
 
@@ -179,7 +158,7 @@ public class ThriftUtils {
             case TINYINT -> TTypeId.TINYINT_TYPE;
             case INTEGER -> TTypeId.INT_TYPE;
             case BIGINT -> TTypeId.BIGINT_TYPE;
-            case FLOAT -> TTypeId.FLOAT_TYPE;
+            case REAL, FLOAT -> TTypeId.FLOAT_TYPE;
             case DOUBLE -> TTypeId.DOUBLE_TYPE;
             case BOOLEAN -> TTypeId.BOOLEAN_TYPE;
             default -> TTypeId.STRING_TYPE;

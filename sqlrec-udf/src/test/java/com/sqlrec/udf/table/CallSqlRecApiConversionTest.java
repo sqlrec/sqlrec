@@ -4,6 +4,7 @@ import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import org.apache.calcite.linq4j.Linq4j;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
@@ -46,5 +48,24 @@ class CallSqlRecApiConversionTest {
         assertEquals(List.of(0.25d, 0.5d), rows.get(3)[xs]);
         assertEquals(false, rows.get(1)[flag]);
         assertEquals(false, rows.get(2)[flag]);
+    }
+
+    @Test
+    void keepsColumnsMissingFromTheFirstApiRow() {
+        ReadonlyContext context = mock(ReadonlyContext.class);
+        var fields = List.of(DataTypeUtils.getRelDataTypeField("id", 0, "BIGINT"),
+                DataTypeUtils.getRelDataTypeField("score", 1, "BIGINT"));
+        ExecuteData response = new ExecuteData();
+        response.setData(RowTransformUtils.convertToMapList(
+                List.of(new Object[]{1L, null}, new Object[]{2L, 99L}), fields));
+        var function = new CallSqlRecApiFunction((url, data, params) -> response);
+        var input = new CacheTable("input", Linq4j.emptyEnumerable(), fields);
+
+        CacheTable output = function.evaluate(context, "http://unused.invalid", input);
+        var rows = output.scan(null).toList();
+
+        assertEquals(1, DataTypeUtils.findFieldIndex(output.getDataFields(), "score"));
+        assertArrayEquals(new Object[]{1L, null}, rows.get(0));
+        assertArrayEquals(new Object[]{2L, 99L}, rows.get(1));
     }
 }

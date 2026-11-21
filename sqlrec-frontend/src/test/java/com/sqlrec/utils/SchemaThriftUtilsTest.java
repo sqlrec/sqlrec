@@ -1,8 +1,10 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,10 +20,12 @@ public class SchemaThriftUtilsTest {
                 new Object[]{4}, new Object[]{5}, new Object[]{6}, new Object[]{null},
                 new Object[]{null}, new Object[]{9});
 
-        var result = ThriftUtils.getValueList(Linq4j.asEnumerable(rows), 0, Integer.class);
+        var fields = List.of(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER));
+        var column = ThriftUtils.convertObjectArrayToTRowSet(Linq4j.asEnumerable(rows), fields)
+                .getColumns().getFirst().getI32Val();
 
-        assertArrayEquals(new byte[]{(byte) 0x81, 0x01}, result.getKey());
-        assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 0, 0, 9), result.getValue());
+        assertArrayEquals(new byte[]{(byte) 0x81, 0x01}, column.getNulls());
+        assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 0, 0, 9), column.getValues());
         assertNull(rows.get(0)[0]);
         assertEquals(1L, rows.get(1)[0]);
     }
@@ -29,15 +33,17 @@ public class SchemaThriftUtilsTest {
     @Test
     @SilenceLoggers(ThriftUtils.class)
     public void testThriftValuesForMissingInputAndFailedCast() {
-        var empty = ThriftUtils.getValueList(null, 0, String.class);
-        assertArrayEquals(new byte[0], empty.getKey());
-        assertTrue(empty.getValue().isEmpty());
+        var fields = DataTypeUtils.getStringTypeField("name");
+        var empty = ThriftUtils.convertObjectArrayToTRowSet(null, fields)
+                .getColumns().getFirst().getStringVal();
+        assertArrayEquals(new byte[0], empty.getNulls());
+        assertTrue(empty.getValues().isEmpty());
 
-        var result = ThriftUtils.getValueList(
-                Linq4j.asEnumerable(List.of(new Object[]{"value"}, new Object[]{42})),
-                0, String.class);
-        assertArrayEquals(new byte[]{2}, result.getKey());
-        assertEquals(List.of("value", ""), result.getValue());
+        var column = ThriftUtils.convertObjectArrayToTRowSet(
+                Linq4j.asEnumerable(List.of(new Object[]{"value"}, new Object[]{42})), fields)
+                .getColumns().getFirst().getStringVal();
+        assertArrayEquals(new byte[]{2}, column.getNulls());
+        assertEquals(List.of("value", ""), column.getValues());
     }
 
 }

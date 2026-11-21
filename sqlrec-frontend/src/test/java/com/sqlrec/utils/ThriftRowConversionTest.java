@@ -6,6 +6,7 @@ import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.hive.service.rpc.thrift.TTypeId;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ThriftRowConversionTest {
     @Test
-    void preservesTypedColumnsNullsJsonFallbackAndOneEnumerationPerField() {
+    void preservesTypedColumnsNullsAndJsonFallbackWithOneEnumeration() {
         JavaTypeFactoryImpl factory = new JavaTypeFactoryImpl();
         var fields = factory.builder()
                 .add("text", SqlTypeName.VARCHAR).add("char", SqlTypeName.CHAR)
@@ -40,7 +41,7 @@ class ThriftRowConversionTest {
         var result = ThriftUtils.convertObjectArrayToTRowSet(source, fields);
         var columns = result.getColumns();
 
-        assertEquals(10, enumerations.get());
+        assertEquals(1, enumerations.get());
         assertEquals(List.of("text", ""), columns.get(0).getStringVal().getValues());
         assertEquals(List.of("c", ""), columns.get(1).getStringVal().getValues());
         assertEquals(List.of((short) 2, (short) 0), columns.get(2).getI16Val().getValues());
@@ -60,5 +61,41 @@ class ThriftRowConversionTest {
         assertArrayEquals(new byte[]{2}, columns.get(9).getStringVal().getNulls());
         assertTrue(result.getRows().isEmpty());
         assertTrue(result.isSetStartRowOffset());
+    }
+
+    @Test
+    void convertsCellsBeforeTheSourceReusesItsBuffers() {
+        var factory = new JavaTypeFactoryImpl();
+        var fields = factory.builder().add("id", SqlTypeName.INTEGER).add("label", SqlTypeName.VARCHAR)
+                .add("items", SqlTypeName.ANY)
+                .build().getFieldList();
+        int[] items = new int[1];
+        Object[] buffer = {null, null, items};
+        var source = Linq4j.asEnumerable(List.of(1, 2)).select(id -> {
+            buffer[0] = id;
+            buffer[1] = "row " + id;
+            items[0] = id;
+            return buffer;
+        });
+
+        var columns = ThriftUtils.convertObjectArrayToTRowSet(source, fields).getColumns();
+
+        assertEquals(List.of(1, 2), columns.get(0).getI32Val().getValues());
+        assertEquals(List.of("row 1", "row 2"), columns.get(1).getStringVal().getValues());
+        assertEquals(List.of("[1]", "[2]"), columns.get(2).getStringVal().getValues());
+    }
+
+    @Test
+    void realColumnsUseFloatingPointMetadataAndValues() {
+        var factory = new JavaTypeFactoryImpl();
+        var fields = factory.builder().add("value", SqlTypeName.REAL).build().getFieldList();
+        var schema = ThriftUtils.convertFieldsToTTableSchema(fields);
+        var rows = Linq4j.asEnumerable(List.of(new Object[]{1.5f}, new Object[]{null}));
+        var column = ThriftUtils.convertObjectArrayToTRowSet(rows, fields).getColumns().getFirst().getDoubleVal();
+
+        assertEquals(TTypeId.FLOAT_TYPE,
+                schema.getColumns().getFirst().getTypeDesc().getTypes().getFirst().getPrimitiveEntry().getType());
+        assertEquals(List.of(1.5d, 0.0d), column.getValues());
+        assertArrayEquals(new byte[]{2}, column.getNulls());
     }
 }

@@ -71,23 +71,32 @@ public final class VectorMathUtils {
      * L2 normalize a number list, returning a new List<Double>.
      */
     public static List<Double> l2NormalizeList(List<?> list) {
+        List<Double> result = new ArrayList<>(list.size());
         double sum = 0;
-        for (Object o : list) {
-            sum += Math.pow(toDouble(o), 2);
+        double largest = 0;
+        for (Object element : list) {
+            double value = toDouble(element);
+            result.add(value);
+            sum += Math.pow(value, 2);
+            largest = Math.max(largest, Math.abs(value));
         }
-
-        if (sum <= 0) {
-            List<Double> result = new ArrayList<>(list.size());
-            for (Object o : list) {
-                result.add(toDouble(o));
-            }
+        if (largest == 0) {
             return result;
         }
 
+        double scale = 1;
+        if ((sum < Double.MIN_NORMAL || Double.isInfinite(sum)) && Double.isFinite(largest)) {
+            // Scale before squaring to avoid overflow and underflow in the norm.
+            scale = largest;
+            sum = 0;
+            for (double value : result) {
+                double scaled = value / scale;
+                sum += scaled * scaled;
+            }
+        }
         double norm = Math.sqrt(sum);
-        List<Double> result = new ArrayList<>(list.size());
-        for (Object o : list) {
-            result.add(toDouble(o) / norm);
+        for (int i = 0; i < result.size(); i++) {
+            result.set(i, (result.get(i) / scale) / norm);
         }
         return result;
     }
