@@ -248,6 +248,37 @@ class SessionManagerRoutingTest {
     }
 
     @Test
+    void timeoutSweepSkipsLockedSessionThatIsNotIdle() throws Exception {
+        try (Session session = new Session(); var worker = Executors.newSingleThreadExecutor()) {
+            TSessionHandle second = session.manager.openSession(new TOpenSessionReq()).getSessionHandle();
+            try {
+                var sessionsField = SessionManager.class.getDeclaredField("sessions");
+                sessionsField.setAccessible(true);
+                var sessions = (Map<?, ?>) sessionsField.get(session.manager);
+                // Choose the first entry in scan order so the idle session is only reached if it is skipped.
+                var entries = sessions.entrySet().iterator();
+                var active = entries.next();
+                var idle = entries.next();
+                var lastAccess = idle.getValue().getClass().getDeclaredField("lastAccessTime");
+                lastAccess.setAccessible(true);
+                lastAccess.setLong(active.getValue(), System.currentTimeMillis());
+                lastAccess.setLong(idle.getValue(), 0L);
+                var expireSessions = SessionManager.class.getDeclaredMethod("expireSessions", long.class);
+                expireSessions.setAccessible(true);
+
+                synchronized (active.getValue()) {
+                    worker.submit(() -> expireSessions.invoke(session.manager, TimeUnit.MINUTES.toMillis(1)))
+                            .get(5, TimeUnit.SECONDS);
+                    assertTrue(sessions.containsKey(active.getKey()));
+                    assertFalse(sessions.containsKey(idle.getKey()));
+                }
+            } finally {
+                session.manager.closeSession(new TCloseSessionReq(second));
+            }
+        }
+    }
+
+    @Test
     void gatewayExceptionReturnsAnErrorResponseWithoutALocalOperation() throws Exception {
         try (Session session = new Session()) {
             TException failure = new TException("FLINK_GATEWAY_UNAVAILABLE: offline");

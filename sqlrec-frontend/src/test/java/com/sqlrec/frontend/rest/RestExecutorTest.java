@@ -54,7 +54,7 @@ class RestExecutorTest {
             when(fixture.proxy.bind(any(), any())).thenReturn(Linq4j.asEnumerable(
                     List.of(new Object[]{null, 1L, nested}, new Object[]{null, 2L, nested})));
 
-            String json = postFunctionApi();
+            String json = postFunctionApi("{}", HttpResponseStatus.OK);
             Map<String, Object> body = JsonUtils.parseJsonToMap(json);
             assertFalse(body.containsKey("columns"));
             assertFalse(body.containsKey("msg"));
@@ -84,17 +84,17 @@ class RestExecutorTest {
         }
     }
 
-    private static String postFunctionApi() {
+    private static String postFunctionApi(String body, HttpResponseStatus expectedStatus) {
         EmbeddedChannel channel = new EmbeddedChannel(new HttpServerHandler());
         try {
             var request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/api/v1/example",
-                    Unpooled.copiedBuffer("{}", CharsetUtil.UTF_8));
+                    Unpooled.copiedBuffer(body, CharsetUtil.UTF_8));
             request.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json");
             channel.writeInbound(request);
             FullHttpResponse response = channel.readOutbound();
             assertNotNull(response);
             try {
-                assertEquals(HttpResponseStatus.OK, response.status());
+                assertEquals(expectedStatus, response.status());
                 return response.content().toString(CharsetUtil.UTF_8);
             } finally {
                 response.release();
@@ -257,6 +257,21 @@ class RestExecutorTest {
                     () -> RestFunctionExecutor.execute("example", "{\"data\":{}}")).getMessage());
             assertTrue(contexts.constructed().isEmpty());
             fixture.preparation.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void nullInputTableReturnsBadRequestAndEmptyArrayIsAccepted() throws Exception {
+        try (FunctionFixture fixture = new FunctionFixture()) {
+            when(fixture.function.getInputTables()).thenReturn(
+                    List.of(Map.entry("input", DataTypeUtils.getStringTypeField("value"))));
+
+            String error = postFunctionApi("{\"data\":{\"input\":null}}", HttpResponseStatus.BAD_REQUEST);
+            assertEquals("input table 'input' must be an array", JsonUtils.fromJson(error, ExecuteData.class).getMsg());
+            fixture.preparation.verifyNoInteractions();
+
+            postFunctionApi("{\"data\":{\"input\":[]}}", HttpResponseStatus.OK);
+            assertTrue(((CacheTable) fixture.schema.plus().getTable("input")).scan(null).toList().isEmpty());
         }
     }
 

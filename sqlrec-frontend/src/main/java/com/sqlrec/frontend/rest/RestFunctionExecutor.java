@@ -120,11 +120,13 @@ public class RestFunctionExecutor {
             if (params == null) {
                 throw new IllegalArgumentException("data is required for input table '" + tableName + "'");
             }
-            if (!params.containsKey(tableName)) {
-                throw new IllegalArgumentException("input table '" + tableName + "' is missing from data");
+            List<Map<String, Object>> rows = params.get(tableName);
+            if (rows == null) {
+                String reason = params.containsKey(tableName) ? " must be an array" : " is missing from data";
+                throw new IllegalArgumentException("input table '" + tableName + "'" + reason);
             }
 
-            Enumerable<Object[]> enumerable = RowTransformUtils.convertDataToEnumerable(params.get(tableName), dataFields);
+            Enumerable<Object[]> enumerable = RowTransformUtils.convertDataToEnumerable(rows, dataFields);
             CacheTable cacheTable = new CacheTable(tableName, enumerable, dataFields);
             schema.add(tableName, cacheTable);
         }

@@ -30,12 +30,7 @@ class RowTransformUtilsTest {
             buffer[0] = reads.incrementAndGet();
             return buffer;
         });
-        var rows = new AbstractEnumerable<Object[]>() {
-            @Override
-            public Enumerator<Object[]> enumerator() {
-                return enumerator;
-            }
-        };
+        var rows = enumerableWith(enumerator);
         var fields = List.of(
                 DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER),
                 DataTypeUtils.getRelDataTypeField("missing", 1, SqlTypeName.VARCHAR));
@@ -162,16 +157,13 @@ class RowTransformUtilsTest {
     void materializationPreservesOrderAndArrayReferencesAndReadsSourceOnce() {
         Object[] row = {7, "value"};
         int[] arrayCell = {1, 2};
-        AtomicInteger reads = new AtomicInteger();
-        Enumerable<Object> source = Linq4j.asEnumerable(Arrays.asList("scalar", row, null, arrayCell))
-                .select(value -> {
-                    reads.incrementAndGet();
-                    return value;
-                });
+        @SuppressWarnings("unchecked")
+        Enumerator<Object> enumerator = mock(Enumerator.class);
+        when(enumerator.moveNext()).thenReturn(true, true, true, true, false);
+        when(enumerator.current()).thenReturn("scalar", row, null, arrayCell);
 
-        List<Object[]> rows = RowTransformUtils.materializeArrayRows(source);
+        List<Object[]> rows = RowTransformUtils.materializeArrayRows(enumerableWith(enumerator));
 
-        assertEquals(4, reads.get());
         assertEquals(4, rows.size());
         assertArrayEquals(new Object[]{"scalar"}, rows.get(0));
         assertSame(row, rows.get(1));
@@ -179,6 +171,29 @@ class RowTransformUtilsTest {
         assertArrayEquals(new Object[]{arrayCell}, rows.get(3));
         assertSame(arrayCell, rows.get(3)[0]);
         assertTrue(RowTransformUtils.materializeArrayRows(Linq4j.emptyEnumerable()).isEmpty());
+        verify(enumerator, times(4)).current();
+        verify(enumerator).close();
+    }
+
+    @Test
+    void materializationClosesTheEnumeratorWhenReadingFails() {
+        @SuppressWarnings("unchecked")
+        Enumerator<Object> enumerator = mock(Enumerator.class);
+        var failure = new IllegalStateException("read failed");
+        when(enumerator.moveNext()).thenReturn(true).thenThrow(failure);
+
+        assertSame(failure, assertThrows(IllegalStateException.class,
+                () -> RowTransformUtils.materializeArrayRows(enumerableWith(enumerator))));
+        verify(enumerator).close();
+    }
+
+    private static <T> Enumerable<T> enumerableWith(Enumerator<T> enumerator) {
+        return new AbstractEnumerable<>() {
+            @Override
+            public Enumerator<T> enumerator() {
+                return enumerator;
+            }
+        };
     }
 
     // --- getMsgEnumerable ---

@@ -43,6 +43,10 @@ public class SessionManager {
             lastAccessTime = System.currentTimeMillis();
         }
 
+        private boolean isIdle(long timeout) {
+            return System.currentTimeMillis() - lastAccessTime > timeout;
+        }
+
         private void updateGatewayState() {
             gateway.setSessionState(executor.getDefaultSchema(), executor.getSessionSettings());
         }
@@ -78,9 +82,12 @@ public class SessionManager {
 
     private void expireSessions(long timeout) {
         for (Session session : sessions.values()) {
+            if (!session.isIdle(timeout)) {
+                continue;
+            }
             synchronized (session) {
                 // Recheck after acquiring the lock: an in-flight request may have just finished.
-                if (sessions.get(session.id) == session && System.currentTimeMillis() - session.lastAccessTime > timeout) {
+                if (sessions.get(session.id) == session && session.isIdle(timeout)) {
                     try {
                         closeSessionLocked(session);
                     } catch (TException e) {

@@ -35,8 +35,11 @@ public final class RowTransformUtils {
     /** Materializes once, retaining row arrays and wrapping scalar values as single-column rows. */
     public static List<Object[]> materializeArrayRows(Enumerable<?> source) {
         List<Object[]> rows = new ArrayList<>();
-        for (Object value : source) {
-            rows.add(value instanceof Object[] ? (Object[]) value : new Object[]{value});
+        try (var enumerator = source.enumerator()) {
+            while (enumerator.moveNext()) {
+                Object value = enumerator.current();
+                rows.add(value instanceof Object[] ? (Object[]) value : new Object[]{value});
+            }
         }
         return rows;
     }
