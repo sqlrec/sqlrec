@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.filesystem.handler;
 
+import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.ScalarConversions;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
@@ -8,11 +9,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class FileSystemHandler {
     private static final Logger logger = LoggerFactory.getLogger(FileSystemHandler.class);
 
     private final FileSystemConfig fileSystemConfig;
+    private List<String> columnTypeDeclarations;
+    private SqlTypeName[] columnTypes;
     // The declared primary key is a lookup key: each key can hold multiple rows.
     private Map<Object, List<Object[]>> data;
 
@@ -51,12 +55,18 @@ public class FileSystemHandler {
     }
 
     private SqlTypeName[] writeTypes() {
-        SqlTypeName[] types = new SqlTypeName[fileSystemConfig.fieldSchemas.size()];
-        for (int i = 0; i < types.length; i++) {
-            types[i] = DataTypeUtils.getRelDataType(fileSystemConfig.fieldSchemas.get(i).getType())
-                    .getSqlTypeName();
+        List<String> declarations = fileSystemConfig.fieldSchemas.stream()
+                .map(FieldSchema::getType)
+                .collect(Collectors.toList());
+        if (!declarations.equals(columnTypeDeclarations)) {
+            SqlTypeName[] types = new SqlTypeName[declarations.size()];
+            for (int i = 0; i < types.length; i++) {
+                types[i] = DataTypeUtils.getRelDataType(declarations.get(i)).getSqlTypeName();
+            }
+            columnTypes = types;
+            columnTypeDeclarations = declarations;
         }
-        return types;
+        return columnTypes;
     }
 
     public synchronized List<Object[]> scan() {

@@ -211,7 +211,7 @@ public class WeightedMergeFunctionTest {
     }
 
     @Test
-    public void testSchemaMismatchColumnName() {
+    public void testSchemaMismatchColumnType() {
         List<RelDataTypeField> fields2 = new ArrayList<>();
         fields2.add(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER));
         fields2.add(DataTypeUtils.getRelDataTypeField("name", 1, SqlTypeName.INTEGER));
@@ -225,6 +225,21 @@ public class WeightedMergeFunctionTest {
         assertThrows(IllegalArgumentException.class, () -> {
             function.evaluate("id", "1,1", 10, t1, t2);
         });
+    }
+
+    @Test
+    void rejectsReorderedColumnsWithIdenticalTypes() {
+        var id = DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER);
+        var score = DataTypeUtils.getRelDataTypeField("score", 1, SqlTypeName.INTEGER);
+        CacheTable first = new CacheTable("first", Linq4j.asEnumerable(List.<Object[]>of(new Object[]{1, 100})),
+                List.of(id, score));
+        CacheTable second = new CacheTable("second", Linq4j.asEnumerable(List.<Object[]>of(new Object[]{200, 2})),
+                List.of(DataTypeUtils.getRelDataTypeField("score", 0, SqlTypeName.INTEGER),
+                        DataTypeUtils.getRelDataTypeField("id", 1, SqlTypeName.INTEGER)));
+
+        var failure = assertThrows(IllegalArgumentException.class,
+                () -> new WeightedMergeFunction().evaluate("id", "1,1", 2, first, second));
+        assertEquals("Column name mismatch at index 0: id vs score", failure.getMessage());
     }
 
     @Test

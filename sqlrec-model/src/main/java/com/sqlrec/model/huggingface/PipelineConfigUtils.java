@@ -19,13 +19,9 @@ public final class PipelineConfigUtils {
     private PipelineConfigUtils() {
     }
 
-    public static Map<String, String> mergeParams(Map<String, String> base, Map<String, String> overrides) {
-        return ModelConfigUtils.mergeParams(base, overrides);
-    }
-
     /** Operation overrides must preserve the declared SQL input/output contract. */
     static Map<String, String> operationParams(ModelConf model, Map<String, String> overrides) {
-        Map<String, String> params = mergeParams(model.getParams(), overrides);
+        Map<String, String> params = ModelConfigUtils.mergeParams(model.getParams(), overrides);
         if (!Config.TASK.getValue(model.getParams()).equals(Config.TASK.getValue(params))) {
             throw new IllegalArgumentException("Training/serving cannot change the task; create a new model instead");
         }

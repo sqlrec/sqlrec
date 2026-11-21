@@ -172,9 +172,15 @@ final class DataTypeSupport {
                         "Table " + tableIndex + " has different column count than table 0");
             }
             for (int i = 0; i < reference.size(); i++) {
-                if (!reference.get(i).getType().equals(fields.get(i).getType())) {
+                RelDataTypeField expected = reference.get(i);
+                RelDataTypeField actual = fields.get(i);
+                if (!expected.getName().equalsIgnoreCase(actual.getName())) {
+                    throw new IllegalArgumentException("Column name mismatch at index " + i
+                            + ": " + expected.getName() + " vs " + actual.getName());
+                }
+                if (!expected.getType().equals(actual.getType())) {
                     throw new IllegalArgumentException("Column type mismatch at index " + i
-                            + ": " + reference.get(i).getType() + " vs " + fields.get(i).getType());
+                            + ": " + expected.getType() + " vs " + actual.getType());
                 }
             }
         }

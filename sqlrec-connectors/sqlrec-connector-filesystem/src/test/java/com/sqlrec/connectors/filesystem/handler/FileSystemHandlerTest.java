@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.filesystem.handler;
 
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,8 @@ import java.nio.file.Path;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
 
 class FileSystemHandlerTest {
 
@@ -38,6 +41,26 @@ class FileSystemHandlerTest {
         config.primaryKey = "id";
         config.primaryKeyIndex = 0;
         return config;
+    }
+
+    @Test
+    void reusesParsedColumnTypesAcrossWrites() {
+        FileSystemConfig config = createConfig(null, "csv");
+        config.fieldSchemas = List.of(new FieldSchema("id", "BIGINT NOT NULL"),
+                new FieldSchema("score", "DECIMAL(12, 2)"));
+        FileSystemHandler handler = new FileSystemHandler(config);
+        Object[] original = {"1", "2.50"};
+        Object[] replacement = {"2", "3.75"};
+
+        try (var parser = mockStatic(DataTypeUtils.class, CALLS_REAL_METHODS)) {
+            assertTrue(handler.insert(original));
+            assertEquals(1, handler.replaceAll(List.<Object[]>of(original), List.<Object[]>of(replacement)));
+            assertArrayEquals(new Object[]{2L, new BigDecimal("3.75")}, handler.getByPrimaryKey(Set.of(2L)).get(2L).get(0));
+            assertTrue(handler.delete(replacement));
+            assertTrue(handler.scan().isEmpty());
+            parser.verify(() -> DataTypeUtils.getRelDataType("BIGINT NOT NULL"));
+            parser.verify(() -> DataTypeUtils.getRelDataType("DECIMAL(12, 2)"));
+        }
     }
 
     // ===== CSV Tests =====
@@ -579,6 +602,10 @@ class FileSystemHandlerTest {
 
         assertArrayEquals(new Object[]{2, "bob", "unknown"},
                 handler.getByPrimaryKey(Collections.singleton(2)).get(2).get(0));
+
+        config.fieldSchemas.get(2).setType("BIGINT");
+        handler.insert(new Object[]{3, "chris", "40"});
+        assertArrayEquals(new Object[]{3, "chris", 40L}, handler.getByPrimaryKey(Set.of(3)).get(3).get(0));
     }
 
     @Test

@@ -189,7 +189,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     private static Long[] toLongArray(Integer[] intArr) {
         Long[] arr = new Long[intArr.length];
         for (int j = 0; j < intArr.length; j++) {
-            arr[j] = intArr[j].longValue();
+            arr[j] = intArr[j] == null ? null : intArr[j].longValue();
         }
         return arr;
     }
@@ -197,7 +197,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     private static Double[] toDoubleArray(Float[] floatArr) {
         Double[] arr = new Double[floatArr.length];
         for (int j = 0; j < floatArr.length; j++) {
-            arr[j] = floatArr[j].doubleValue();
+            arr[j] = floatArr[j] == null ? null : floatArr[j].doubleValue();
         }
         return arr;
     }

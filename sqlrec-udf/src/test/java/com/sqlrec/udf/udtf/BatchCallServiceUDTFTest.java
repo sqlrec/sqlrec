@@ -99,8 +99,8 @@ class BatchCallServiceUDTFTest {
                 "score", 0.5f,
                 "ints", Arrays.asList(1, "invalid", null),
                 "doubles", Arrays.asList(1.5f, "invalid", null),
-                "intArray", new Integer[]{2, 3},
-                "floatArray", new Float[]{2.5f},
+                "intArray", new Integer[]{2, null, 3},
+                "floatArray", new Float[]{null, 2.5f},
                 "names", new String[]{"a", "b"},
                 "empty", Collections.emptyList(),
                 "missing", null);
@@ -110,9 +110,9 @@ class BatchCallServiceUDTFTest {
         Map<?, ?> longs = (Map<?, ?>) row.getField(3);
         Map<?, ?> doubles = (Map<?, ?>) row.getField(4);
         assertArrayEquals(new Long[]{1L, 0L, 0L}, (Long[]) longs.get("ints"));
-        assertArrayEquals(new Long[]{2L, 3L}, (Long[]) longs.get("intArray"));
+        assertArrayEquals(new Long[]{2L, null, 3L}, (Long[]) longs.get("intArray"));
         assertArrayEquals(new Double[]{1.5d, 0.0d, 0.0d}, (Double[]) doubles.get("doubles"));
-        assertArrayEquals(new Double[]{2.5d}, (Double[]) doubles.get("floatArray"));
+        assertArrayEquals(new Double[]{null, 2.5d}, (Double[]) doubles.get("floatArray"));
         assertArrayEquals(new String[]{"a", "b"}, (String[]) ((Map<?, ?>) row.getField(5)).get("names"));
         for (int i = 0; i < row.getArity(); i++) {
             assertFalse(((Map<?, ?>) row.getField(i)).containsKey("empty"));

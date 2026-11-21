@@ -2,7 +2,9 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.model.common.FieldTypeUtils;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,10 +19,17 @@ final class FeatureOptions {
     private static final Pattern DECIMAL = Pattern.compile("[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
     private FeatureOptions() {}
 
-    static boolean isRaw(String type) {
-        type = compactType(type);
-        return FieldTypeUtils.isFloat(type) || "array<float>".equalsIgnoreCase(type)
-                || "array<double>".equalsIgnoreCase(type);
+    static boolean isRaw(String declaration) {
+        String type = compactType(declaration);
+        if (!FieldTypeUtils.isArray(type)) {
+            return FieldTypeUtils.isFloat(type);
+        }
+        try {
+            SqlTypeName elementType = DataTypeUtils.getRelDataType(declaration).getComponentType().getSqlTypeName();
+            return elementType == SqlTypeName.FLOAT || elementType == SqlTypeName.DOUBLE;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private static String compactType(String type) {
@@ -152,7 +161,7 @@ final class FeatureOptions {
             Set<Integer> fmDims = new HashSet<>();
             for (FieldSchema field : features) {
                 String type = compactType(field.getType());
-                String error = isRaw(type)
+                String error = isRaw(field.getType())
                         ? validateRawFeature(field, type, params, fmDims)
                         : validateIdFeature(field, type, params, fmDims);
                 if (error != null) {

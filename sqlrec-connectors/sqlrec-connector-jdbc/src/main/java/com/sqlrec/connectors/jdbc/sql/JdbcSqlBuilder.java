@@ -73,9 +73,7 @@ public final class JdbcSqlBuilder {
     public static JdbcStatement select(String url, String tableName, List<FieldSchema> fieldSchemas, List<RexNode> filters) {
         validateFieldSchemas(fieldSchemas);
         JdbcStatement where = JdbcFilterBuilder.build(filters, fieldSchemas, url);
-        StringBuilder sql = new StringBuilder("SELECT ");
-        appendColumnNames(sql, fieldSchemas, url);
-        sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
+        StringBuilder sql = selectFrom(url, tableName, fieldSchemas);
         if (!where.getSql().isEmpty()) {
             sql.append(" WHERE ").append(where.getSql());
         }
@@ -93,13 +91,17 @@ public final class JdbcSqlBuilder {
         if (keyCount <= 0) {
             throw new IllegalArgumentException("keyCount must be positive: " + keyCount);
         }
-        StringBuilder sql = new StringBuilder("SELECT ");
-        appendColumnNames(sql, fieldSchemas, url);
-        sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
+        StringBuilder sql = selectFrom(url, tableName, fieldSchemas);
         sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" IN (");
         appendPlaceholders(sql, keyCount);
         sql.append(")");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
+    }
+
+    private static StringBuilder selectFrom(String url, String tableName, List<FieldSchema> fieldSchemas) {
+        StringBuilder sql = new StringBuilder("SELECT ");
+        appendColumnNames(sql, fieldSchemas, url);
+        return sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
     }
 
     /**

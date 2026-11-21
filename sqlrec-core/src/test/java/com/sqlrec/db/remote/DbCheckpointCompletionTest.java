@@ -62,6 +62,14 @@ class DbCheckpointCompletionTest {
         }
     }
 
+    @Test
+    void checkpointPaginationAcceptsOffsetsBeyondIntegerRange() throws Exception {
+        try (Fixture f = new Fixture()) {
+            assertEquals("v1", f.db.getCheckpointListByModelNamePaged("rank", 1, 100).getFirst().getCheckpointName());
+            assertTrue(f.db.getCheckpointListByModelNamePaged("rank", 30_000_001, 100).isEmpty());
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final Connection connection;
         final MetadataAccess db;
@@ -72,9 +80,9 @@ class DbCheckpointCompletionTest {
             connection = source.getConnection();
             try (var statement = connection.createStatement()) {
                 statement.execute("CREATE TABLE checkpoint (model_name VARCHAR, checkpoint_name VARCHAR, "
-                        + "model_ddl VARCHAR, yaml VARCHAR, status VARCHAR, updated_at BIGINT, "
+                        + "model_ddl VARCHAR, yaml VARCHAR, status VARCHAR, created_at BIGINT, updated_at BIGINT, "
                         + "PRIMARY KEY (model_name, checkpoint_name))");
-                statement.execute("INSERT INTO checkpoint VALUES ('rank', 'v1', 'model-ddl', 'old-yaml', 'created', 1)");
+                statement.execute("INSERT INTO checkpoint VALUES ('rank', 'v1', 'model-ddl', 'old-yaml', 'created', 1, 1)");
             }
             var configuration = new Configuration(new Environment("test", new JdbcTransactionFactory(), source));
             configuration.setMapUnderscoreToCamelCase(true);

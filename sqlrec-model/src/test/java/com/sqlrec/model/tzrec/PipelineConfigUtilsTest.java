@@ -296,4 +296,17 @@ class PipelineConfigUtilsTest {
         assertNull(new WideAndDeepModel().checkModel(model));
         assertEquals("\"a\\\"b\\\\c\\012\"", PipelineConfigUtils.quoted("a\"b\\c\n"));
     }
+
+    @Test
+    void vectorsWithNonNullElementsUseRawFeatures() {
+        for (String type : List.of("ARRAY<FLOAT NOT NULL>", "array< double not null >")) {
+            ModelConf model = model("INT");
+            model.setInputFields(List.of(new FieldSchema("id", "INT"), new FieldSchema("vector", type)));
+            model.getParams().put("column.vector.value_dim", "2");
+
+            assertNull(new WideAndDeepModel().checkModel(model), type);
+            assertTrue(PipelineConfigUtils.generateFeatureConfigs(model)
+                    .contains("raw_feature {\n        feature_name: \"vector\""), type);
+        }
+    }
 }

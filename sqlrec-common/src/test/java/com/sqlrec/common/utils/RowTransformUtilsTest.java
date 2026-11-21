@@ -133,6 +133,32 @@ class RowTransformUtilsTest {
     }
 
     @Test
+    void rejectsReorderedFieldsInNestedRows() {
+        for (String structure : List.of("%s", "ARRAY<%s>", "MAP<STRING, %s>")) {
+            var desired = List.of(DataTypeUtils.getRelDataTypeField(
+                    "payload", 0, String.format(structure, "ROW<a INT, b INT>")));
+            var given = List.of(DataTypeUtils.getRelDataTypeField(
+                    "payload", 0, String.format(structure, "ROW<b INT, a INT>")));
+
+            var failure = assertThrows(RuntimeException.class,
+                    () -> RowTransformUtils.adaptRowsToSchema(List.of(), desired, given));
+            assertTrue(failure.getMessage().contains("incompatible field type for 'payload'"));
+        }
+    }
+
+    @Test
+    void convertsNumericFieldsInCompatibleNestedRows() {
+        var desired = List.of(DataTypeUtils.getRelDataTypeField("payload", 0, "ROW<x BIGINT>"));
+        var given = List.of(DataTypeUtils.getRelDataTypeField("payload", 0, "ROW<x INT>"));
+        Object[] source = {new Object[]{7}};
+
+        var result = RowTransformUtils.adaptRowsToSchema(List.<Object[]>of(source), desired, given);
+
+        assertArrayEquals(new Object[]{7L}, (Object[]) result.get(0)[0]);
+        assertArrayEquals(new Object[]{7}, (Object[]) source[0]);
+    }
+
+    @Test
     void materializationPreservesOrderAndArrayReferencesAndReadsSourceOnce() {
         Object[] row = {7, "value"};
         int[] arrayCell = {1, 2};

@@ -80,7 +80,7 @@ public interface DbMapper {
     int getCheckpointCountByModelName(String modelName);
 
     @Select("SELECT * FROM checkpoint WHERE model_name = #{modelName} ORDER BY created_at DESC LIMIT #{limit} OFFSET #{offset}")
-    List<Checkpoint> getCheckpointListByModelNamePaged(@Param("modelName") String modelName, @Param("limit") int limit, @Param("offset") int offset);
+    List<Checkpoint> getCheckpointListByModelNamePaged(@Param("modelName") String modelName, @Param("limit") int limit, @Param("offset") long offset);
 
     @Select("SELECT * FROM checkpoint WHERE model_name = #{modelName} AND checkpoint_name = #{checkpointName}")
     Checkpoint getCheckpoint(@Param("modelName") String modelName, @Param("checkpointName") String checkpointName);

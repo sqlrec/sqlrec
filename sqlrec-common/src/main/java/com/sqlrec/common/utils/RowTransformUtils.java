@@ -245,12 +245,36 @@ public final class RowTransformUtils {
     private static boolean compatibleTypes(RelDataType desired, RelDataType given) {
         SqlTypeName desiredType = desired.getSqlTypeName();
         SqlTypeName givenType = given.getSqlTypeName();
-        if (desiredType == SqlTypeName.ARRAY && givenType == SqlTypeName.ARRAY) {
-            return compatibleTypes(desired.getComponentType(), given.getComponentType());
+        if (desiredType != givenType) {
+            return SqlTypeName.STRING_TYPES.contains(desiredType)
+                    || SqlTypeName.NUMERIC_TYPES.contains(desiredType)
+                    && SqlTypeName.NUMERIC_TYPES.contains(givenType);
         }
-        return desiredType == givenType
-                || SqlTypeName.STRING_TYPES.contains(desiredType)
-                || SqlTypeName.NUMERIC_TYPES.contains(desiredType)
-                && SqlTypeName.NUMERIC_TYPES.contains(givenType);
+        switch (desiredType) {
+            case ARRAY:
+                return compatibleTypes(desired.getComponentType(), given.getComponentType());
+            case MAP:
+                return compatibleTypes(desired.getKeyType(), given.getKeyType())
+                        && compatibleTypes(desired.getValueType(), given.getValueType());
+            case ROW:
+                return compatibleRowFields(desired.getFieldList(), given.getFieldList());
+            default:
+                return true;
+        }
+    }
+
+    private static boolean compatibleRowFields(List<RelDataTypeField> desired, List<RelDataTypeField> given) {
+        if (desired.size() != given.size()) {
+            return false;
+        }
+        for (int i = 0; i < desired.size(); i++) {
+            RelDataTypeField expected = desired.get(i);
+            RelDataTypeField actual = given.get(i);
+            if (!expected.getName().equalsIgnoreCase(actual.getName())
+                    || !compatibleTypes(expected.getType(), actual.getType())) {
+                return false;
+            }
+        }
+        return true;
     }
 }

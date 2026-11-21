@@ -118,7 +118,7 @@ public class RedisHandler {
         });
     }
 
-    public List<Object[]> decodeList(List<byte[]> datas, String primaryKey) {
+    List<Object[]> decodeList(List<byte[]> datas, String primaryKey) {
         if (datas == null) {
             return Collections.emptyList();
         }
