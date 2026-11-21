@@ -18,6 +18,7 @@ public class CalciteBindable extends BindableInterface {
     private final Map<String, Object> parameters;
     private final Bindable<Object[]> bindable;
     private final RelNode bestExp;
+    private final List<RelDataTypeField> outputFields;
     private final SqlNode sqlNode;
     private final Set<String> readTables;
     private final Set<String> writeTables;
@@ -35,9 +36,23 @@ public class CalciteBindable extends BindableInterface {
             String physicalPlan,
             String javaExpression
     ) {
+        this(parameters, bindable, bestExp, null, sqlNode, logicalPlan, physicalPlan, javaExpression);
+    }
+
+    public CalciteBindable(
+            Map<String, Object> parameters,
+            Bindable<Object[]> bindable,
+            RelNode bestExp,
+            List<RelDataTypeField> outputFields,
+            SqlNode sqlNode,
+            String logicalPlan,
+            String physicalPlan,
+            String javaExpression
+    ) {
         this.parameters = parameters;
         this.bindable = bindable;
         this.bestExp = bestExp;
+        this.outputFields = outputFields;
         this.sqlNode = sqlNode;
         this.logicalPlan = logicalPlan;
         this.physicalPlan = physicalPlan;
@@ -58,7 +73,7 @@ public class CalciteBindable extends BindableInterface {
 
     @Override
     public List<RelDataTypeField> getReturnDataFields() {
-        return bestExp.getRowType().getFieldList();
+        return outputFields == null ? bestExp.getRowType().getFieldList() : outputFields;
     }
 
     @Override

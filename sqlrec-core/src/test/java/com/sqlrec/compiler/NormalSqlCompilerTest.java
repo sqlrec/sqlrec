@@ -2,6 +2,7 @@ package com.sqlrec.compiler;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.SqlRecTable;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.utils.SqlTestCase;
@@ -28,6 +29,22 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class NormalSqlCompilerTest {
+    @Test
+    void renamingAllColumnsPreservesAliasesInResultRows() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema()).add("myTable", new MyTable());
+        var expected = List.of(Map.of("user_id", 1, "label", "Alice"),
+                Map.of("user_id", 2, "label", "Bob"), Map.of("user_id", 3, "label", "Charlie"));
+
+        for (String suffix : List.of("", " ORDER BY ID")) {
+            String sql = "SELECT ID AS user_id, NAME AS label FROM myTable" + suffix;
+            var bindable = NormalSqlCompiler.getNormalSqlBindable(sql, schema, Consts.DEFAULT_SCHEMA_NAME);
+            var rows = bindable.bind(schema, new ExecuteContextImpl(schema));
+
+            assertEquals(expected, RowTransformUtils.convertToMapList(rows, bindable.getReturnDataFields()), sql);
+        }
+    }
+
     @Test
     void orderByUnselectedColumnDoesNotExposeTheSortKey() throws Exception {
         assertProjectedNames("SELECT NAME AS label FROM myTable ORDER BY ID DESC",

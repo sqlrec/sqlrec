@@ -24,11 +24,13 @@ import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.runtime.Bindable;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -87,7 +89,17 @@ public class NormalSqlCompiler {
         Program program = getProgram();
         RelTraitSet desiredTraits = getDesiredRootTraitSet(root);
         RelNode bestExp = program.run(planner, root.rel, desiredTraits, new ArrayList<>(), new ArrayList<>());
-        bestExp = restoreVisibleProjection(root, bestExp, catalogReader);
+        List<String> outputNames = SqlKind.DML.contains(root.kind)
+                ? bestExp.getRowType().getFieldNames()
+                : SqlValidatorUtil.uniquify(root.validatedRowType.getFieldNames(),
+                        catalogReader.nameMatcher().isCaseSensitive());
+        bestExp = restoreVisibleProjection(root, bestExp, outputNames);
+        RelDataType outputType = bestExp.getRowType();
+        if (!outputType.getFieldNames().equals(outputNames)) {
+            // An identity projection can be optimized away even when it renames columns.
+            outputType = bestExp.getCluster().getTypeFactory()
+                    .createStructType(RelOptUtil.getFieldTypeList(outputType), outputNames);
+        }
         String physicalPlan = RelOptUtil.toString(bestExp);
         log.info("compile bestExp: {}", physicalPlan);
 
@@ -103,7 +115,8 @@ public class NormalSqlCompiler {
                 EnumerableRel.Prefer.ARRAY
         );
 
-        return new CalciteBindable(parameters, bindable, bestExp, sqlNode, logicalPlan, physicalPlan, javaExpression);
+        return new CalciteBindable(parameters, bindable, bestExp, outputType.getFieldList(),
+                sqlNode, logicalPlan, physicalPlan, javaExpression);
     }
 
     private static SqlToRelConverter createSqlToRelConverter(
@@ -127,7 +140,7 @@ public class NormalSqlCompiler {
     }
 
     private static RelNode restoreVisibleProjection(
-            RelRoot root, RelNode optimized, CalciteCatalogReader catalogReader) {
+            RelRoot root, RelNode optimized, List<String> outputNames) {
         if (root.isRefTrivial()) {
             return optimized;
         }
@@ -138,10 +151,8 @@ public class NormalSqlCompiler {
         for (var field : root.fields) {
             projects.add(rexBuilder.makeInputRef(optimized, field.left));
         }
-        List<String> names = SqlValidatorUtil.uniquify(root.validatedRowType.getFieldNames(),
-                catalogReader.nameMatcher().isCaseSensitive());
         return EnumerableCalc.create(optimized, RexProgram.create(
-                optimized.getRowType(), projects, null, names, rexBuilder));
+                optimized.getRowType(), projects, null, outputNames, rexBuilder));
     }
 
     public static Program getProgram() {
