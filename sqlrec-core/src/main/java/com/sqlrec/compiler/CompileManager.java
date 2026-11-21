@@ -94,7 +94,7 @@ public class CompileManager {
         } else if (flinkSqlNode instanceof SqlSet set) {
             bindable = getSetBindable(set);
         } else {
-            bindable = getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
+            bindable = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
         }
 
         bindable.setSql(originSql);
@@ -124,7 +124,7 @@ public class CompileManager {
             }
             returnBindable = new ReturnBindable(FunctionProxyBindable.getFunctionBindable(call, schema, this));
         } else if (sqlReturn.getSelect() != null) {
-            BindableInterface selectBindable = getNormalSqlBindable(
+            BindableInterface selectBindable = NormalSqlCompiler.getNormalSqlBindable(
                     getSqlStr(sqlReturn.getSelect()), schema, defaultSchema
             );
             returnBindable = new ReturnBindable(selectBindable);
@@ -145,7 +145,7 @@ public class CompileManager {
             }
             source = FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
         } else if (select != null) {
-            source = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+            source = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
         } else {
             throw new Exception("cache sql obj is invalid");
         }
@@ -162,7 +162,7 @@ public class CompileManager {
         SqlNode elseClause = ifCache.getElseClause();
         boolean timein = ifCache.isTimein();
 
-        CalciteBindable conditionBindable = (CalciteBindable) getNormalSqlBindable(
+        CalciteBindable conditionBindable = NormalSqlCompiler.getNormalSqlBindable(
                 getSqlStr(conditionNode), schema, defaultSchema
         );
 
@@ -194,12 +194,8 @@ public class CompileManager {
 
     private BindableInterface getAssertBindable(SqlAssert assertStmt, CalciteSchema schema, String defaultSchema) throws Exception {
         SqlNode select = assertStmt.getSelect();
-        BindableInterface selectBindable = getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+        BindableInterface selectBindable = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
         return new AssertBindable(selectBindable);
-    }
-
-    private static BindableInterface getNormalSqlBindable(String sqlStr, CalciteSchema schema, String defaultSchema) throws Exception {
-        return NormalSqlCompiler.getNormalSqlBindable(sqlStr, schema, defaultSchema);
     }
 
     public SqlFunctionBindable getSqlFunction(String functionName) throws Exception {

@@ -2,11 +2,14 @@ package com.sqlrec.frontend.thrift;
 
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
+import com.sqlrec.frontend.utils.ThriftUtils;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.common.config.SqlRecConfigs;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.hive.service.rpc.thrift.*;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TSerializer;
 import org.apache.thrift.transport.TSocket;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +60,22 @@ class LocalMetadataLifecycleTest {
             service.stop();
             CalciteSchemaFactory.setGlobalSchema(null);
             SqlRecConfigs.FLINK_SQL_GATEWAY_ADDRESS.setDefaultValue(oldAddress);
+        }
+    }
+
+    @Test
+    void metadataErrorResponseOmitsOperationHandleOnTheWire() throws Exception {
+        TCLIServiceImpl service = new TCLIServiceImpl();
+        try {
+            var session = new TSessionHandle(ThriftUtils.getHandleIdentifier());
+            var response = service.GetSchemas(new TGetSchemasReq(session));
+            var decoded = new TGetSchemasResp();
+            new TDeserializer().deserialize(decoded, new TSerializer().serialize(response));
+
+            assertEquals(TStatusCode.ERROR_STATUS, decoded.getStatus().getStatusCode());
+            assertFalse(decoded.isSetOperationHandle());
+        } finally {
+            service.stop();
         }
     }
 

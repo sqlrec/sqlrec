@@ -1,7 +1,6 @@
 package com.sqlrec.compiler;
 
 import com.sqlrec.rules.RuleManager;
-import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.schema.RootFirstCatalogReader;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
@@ -59,7 +58,7 @@ import static org.apache.calcite.prepare.Prepare.THREAD_INSUBQUERY_THRESHOLD;
 public class NormalSqlCompiler {
     private static final Logger log = LoggerFactory.getLogger(NormalSqlCompiler.class);
 
-    public static BindableInterface getNormalSqlBindable(String sql, CalciteSchema schema, String defaultSchema) throws Exception {
+    public static CalciteBindable getNormalSqlBindable(String sql, CalciteSchema schema, String defaultSchema) throws Exception {
         log.info("compile sql: {}", sql);
         SqlParser.Config parserConfig = SqlParser.configBuilder()
                 .setLex(Lex.MYSQL)

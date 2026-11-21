@@ -73,9 +73,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TYPE_INFO,
                 () -> metadata().typeInfo());
         TGetTypeInfoResp response = new TGetTypeInfoResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -84,9 +82,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_CATALOGS,
                 () -> metadata().catalogs());
         TGetCatalogsResp response = new TGetCatalogsResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -95,9 +91,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_SCHEMAS,
                 () -> metadata().schemas(req.getCatalogName(), req.getSchemaName()));
         TGetSchemasResp response = new TGetSchemasResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -106,9 +100,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TABLES,
                 () -> metadata().tables(req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getTableTypes()));
         TGetTablesResp response = new TGetTablesResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -117,9 +109,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_TABLE_TYPES,
                 () -> metadata().tableTypes());
         TGetTableTypesResp response = new TGetTableTypesResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -128,9 +118,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_COLUMNS,
                 () -> metadata().columns(req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getColumnName()));
         TGetColumnsResp response = new TGetColumnsResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -139,9 +127,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.GET_FUNCTIONS,
                 () -> metadata().functions(req.getCatalogName(), req.getSchemaName(), req.getFunctionName()));
         TGetFunctionsResp response = new TGetFunctionsResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
@@ -150,9 +136,7 @@ public class TCLIServiceImpl implements TCLIService.Iface {
         MetadataOutcome result = metadataOperation(req.getSessionHandle(), TOperationType.UNKNOWN,
                 () -> metadata().primaryKeys(req.getCatalogName(), req.getSchemaName(), req.getTableName()));
         TGetPrimaryKeysResp response = new TGetPrimaryKeysResp(result.status());
-        if (result.handle() != null) {
-            response.setOperationHandle(result.handle());
-        }
+        response.setOperationHandle(result.handle());
         return response;
     }
 
