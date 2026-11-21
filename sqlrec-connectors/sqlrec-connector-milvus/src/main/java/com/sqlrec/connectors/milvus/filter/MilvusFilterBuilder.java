@@ -1,8 +1,8 @@
 package com.sqlrec.connectors.milvus.filter;
 
-import com.google.common.collect.BoundType;
 import com.google.common.collect.Range;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.FilterUtils;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -101,27 +101,21 @@ public final class MilvusFilterBuilder {
             return null;
         }
         String field = scanOperand(call.getOperands().get(0), fields);
-        String value = scanConstant(valueNode, fields);
+        String value = scanConstant(valueNode);
         return field == null || value == null ? null
                 : call.getOperator().getName().toLowerCase(Locale.ROOT)
                         + "(" + field + ", " + value + ")";
     }
 
-    private static String scanConstant(RexNode node, List<FieldSchema> fields) {
+    private static String scanConstant(RexNode node) {
         if (node instanceof RexLiteral) {
-            return scanOperand(node, fields);
+            return formatValue(((RexLiteral) node).getValue());
         }
-        if (!node.isA(SqlKind.ARRAY_VALUE_CONSTRUCTOR)) {
-            return null;
+        if (node.isA(SqlKind.ARRAY_VALUE_CONSTRUCTOR)) {
+            return renderArray((RexCall) node, operand -> operand instanceof RexLiteral
+                    ? formatValue(((RexLiteral) operand).getValue()) : null);
         }
-        List<String> values = new ArrayList<>();
-        for (RexNode operand : ((RexCall) node).getOperands()) {
-            if (!(operand instanceof RexLiteral)) {
-                return null;
-            }
-            values.add(scanOperand(operand, fields));
-        }
-        return "[" + String.join(", ", values) + "]";
+        return null;
     }
 
     private static String buildLike(RexCall call, List<FieldSchema> fields) {
@@ -155,10 +149,7 @@ public final class MilvusFilterBuilder {
                 ? sarg.rangeSet.complement().asRanges()
                 : sarg.rangeSet.asRanges();
         for (Range<?> range : ranges) {
-            if (!range.hasLowerBound() || !range.hasUpperBound()
-                    || range.lowerBoundType() != BoundType.CLOSED
-                    || range.upperBoundType() != BoundType.CLOSED
-                    || !range.lowerEndpoint().equals(range.upperEndpoint())) {
+            if (!FilterUtils.isPointRange(range)) {
                 return null;
             }
             values.add(formatValue(range.lowerEndpoint()));
@@ -182,15 +173,7 @@ public final class MilvusFilterBuilder {
             return formatValue(((RexLiteral) node).getValue());
         }
         if (node.isA(SqlKind.ARRAY_VALUE_CONSTRUCTOR)) {
-            List<String> values = new ArrayList<>();
-            for (RexNode operand : ((RexCall) node).getOperands()) {
-                String value = scanOperand(operand, fields);
-                if (value == null) {
-                    return null;
-                }
-                values.add(value);
-            }
-            return "[" + String.join(", ", values) + "]";
+            return renderArray((RexCall) node, operand -> scanOperand(operand, fields));
         }
         return null;
     }
@@ -279,6 +262,11 @@ public final class MilvusFilterBuilder {
         return expression == null ? null : "(" + expression + ")";
     }
 
+    private static String renderArray(RexCall array, Function<RexNode, String> renderElement) {
+        String elements = joinExpressions(array.getOperands(), ", ", renderElement);
+        return elements == null ? null : "[" + elements + "]";
+    }
+
     private static String buildJoinArray(
             RexCall call, Object[] leftRow, int leftSize, List<String> rightFields) {
         if (call.getOperands().size() != 2 || !(call.getOperands().get(0) instanceof RexInputRef)) {
@@ -302,13 +290,12 @@ public final class MilvusFilterBuilder {
                 return null;
             }
         }
-        String value = joinValue(valueNode, leftRow, leftSize, rightFields);
+        String value = joinValue(valueNode, leftRow, leftSize);
         return value == null ? null : call.getOperator().getName().toUpperCase() + "("
                 + rightField(rightFields, arrayIndex - leftSize) + ", " + value + ")";
     }
 
-    private static String joinValue(
-            RexNode node, Object[] leftRow, int leftSize, List<String> rightFields) {
+    private static String joinValue(RexNode node, Object[] leftRow, int leftSize) {
         if (node instanceof RexLiteral) {
             return formatValue(((RexLiteral) node).getValue());
         }
@@ -317,15 +304,7 @@ public final class MilvusFilterBuilder {
             return index >= 0 && index < leftSize ? formatValue(leftRow[index]) : null;
         }
         if (node.isA(SqlKind.ARRAY_VALUE_CONSTRUCTOR)) {
-            List<String> values = new ArrayList<>();
-            for (RexNode element : ((RexCall) node).getOperands()) {
-                String value = joinValue(element, leftRow, leftSize, rightFields);
-                if (value == null) {
-                    return null;
-                }
-                values.add(value);
-            }
-            return "[" + String.join(", ", values) + "]";
+            return renderArray((RexCall) node, element -> joinValue(element, leftRow, leftSize));
         }
         return null;
     }

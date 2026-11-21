@@ -2,6 +2,7 @@ package com.sqlrec.connectors.mongodb.handler;
 
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Range;
+import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -281,10 +282,7 @@ final class MongoFilterTranslator {
                 : sarg.rangeSet.asRanges();
         List<Object> values = new ArrayList<>(ranges.size());
         for (Range<?> range : ranges) {
-            if (!range.hasLowerBound() || !range.hasUpperBound()
-                    || range.lowerBoundType() != BoundType.CLOSED
-                    || range.upperBoundType() != BoundType.CLOSED
-                    || !range.lowerEndpoint().equals(range.upperEndpoint())) {
+            if (!FilterUtils.isPointRange(range)) {
                 return null;
             }
             values.add(convertSargValue(range.lowerEndpoint(), typeName));
@@ -296,10 +294,7 @@ final class MongoFilterTranslator {
         if (!range.hasLowerBound() && !range.hasUpperBound()) {
             return new Document();
         }
-        if (range.hasLowerBound() && range.hasUpperBound()
-                && range.lowerBoundType() == BoundType.CLOSED
-                && range.upperBoundType() == BoundType.CLOSED
-                && range.lowerEndpoint().equals(range.upperEndpoint())) {
+        if (FilterUtils.isPointRange(range)) {
             return Filters.eq(fieldName, convertSargValue(range.lowerEndpoint(), typeName));
         }
 

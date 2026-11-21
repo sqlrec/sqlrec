@@ -1,5 +1,6 @@
 package com.sqlrec.common.utils;
 
+import com.google.common.collect.Range;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,6 +27,14 @@ class FilterUtilsTest {
     void setUp() {
         types = new JavaTypeFactoryImpl();
         rexBuilder = new RexBuilder(types);
+    }
+
+    @Test
+    void pointRangeRequiresEqualClosedBounds() {
+        assertTrue(FilterUtils.isPointRange(Range.singleton(7)));
+        assertFalse(FilterUtils.isPointRange(Range.closed(7, 8)));
+        assertFalse(FilterUtils.isPointRange(Range.closedOpen(7, 7)));
+        assertFalse(FilterUtils.isPointRange(Range.atLeast(7)));
     }
 
     @Test

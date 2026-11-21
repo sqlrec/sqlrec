@@ -47,6 +47,16 @@ class TzrecConfigurationTest {
     }
 
     @Test
+    void onlyDeepFmRequiresMatchingSparseEmbeddingDimensions() {
+        ModelConf model = model("tzrec.deepfm");
+        model.getParams().put("column.uid.embedding_dim", "8");
+        assertEquals("DeepFM sparse feature embedding dimensions must match", new DeepFMModel().checkModel(model));
+
+        model.getParams().put("model", "tzrec.wide_and_deep");
+        assertNull(new WideAndDeepModel().checkModel(model));
+    }
+
+    @Test
     void consumedTrainingAndRuntimeValuesAreStillValidated() {
         WideAndDeepModel controller = new WideAndDeepModel();
         for (Map<String, String> invalid : List.of(Map.of("batch_size", "0"), Map.of("num_workers", "-1"),

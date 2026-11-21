@@ -133,23 +133,15 @@ final class FeatureOptions {
         }
     }
 
-    static String validate(ModelConf model, boolean dssm, boolean deepfm) {
-        return validate(model, dssm, deepfm, false);
+    enum ModelType {
+        WIDE_AND_DEEP, DEEP_FM, DSSM, MMOE, ROCKET_LAUNCHING
     }
 
-    static String validate(ModelConf model, boolean dssm, boolean deepfm, boolean multiTask) {
-        return validate(model, dssm, deepfm, multiTask, false);
-    }
-
-    static String validateDeepOnly(ModelConf model) {
-        return validate(model, false, false, false, true);
-    }
-
-    private static String validate(ModelConf model, boolean dssm, boolean deepfm, boolean multiTask, boolean deepOnly) {
+    static String validate(ModelConf model, ModelType modelType) {
         try {
             Map<String, String> params = model.getParams() == null ? Map.of() : model.getParams();
             List<String> labels = FieldTypeUtils.parseCsvList(params.get("label_columns"));
-            if (multiTask) {
+            if (modelType == ModelType.MMOE) {
                 MultiTaskOptions.parse(model);
             } else if (labels.size() != 1) {
                 return "TZRec requires exactly one label_columns entry";
@@ -180,18 +172,19 @@ final class FeatureOptions {
                     return error;
                 }
             }
-            if (!dssm && !multiTask && !deepOnly && sparseFeatures(model).isEmpty()) {
+            boolean usesWideGroup = modelType == ModelType.WIDE_AND_DEEP || modelType == ModelType.DEEP_FM;
+            if (usesWideGroup && sparseFeatures(model).isEmpty()) {
                 return "Ranking models require at least one sparse feature for the wide group";
             }
-            if (deepfm && fmDims.size() != 1) {
+            if (modelType == ModelType.DEEP_FM && fmDims.size() != 1) {
                 return "DeepFM sparse feature embedding dimensions must match";
             }
-            if (dssm) {
+            if (modelType == ModelType.DSSM) {
                 String error = validateDssmTowers(features, params);
                 if (error != null) {
                     return error;
                 }
-            } else if (!multiTask && !deepOnly) {
+            } else if (usesWideGroup) {
                 hiddenUnits(Config.HIDDEN_UNITS.getValue(params));
             }
             return null;

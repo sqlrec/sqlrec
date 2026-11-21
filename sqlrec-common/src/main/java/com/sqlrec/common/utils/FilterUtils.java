@@ -1,5 +1,7 @@
 package com.sqlrec.common.utils;
 
+import com.google.common.collect.BoundType;
+import com.google.common.collect.Range;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -12,6 +14,13 @@ import java.util.List;
 /** Backend-neutral helpers for inspecting Calcite filter predicates. */
 public final class FilterUtils {
     private FilterUtils() {
+    }
+
+    public static boolean isPointRange(Range<?> range) {
+        return range.hasLowerBound() && range.hasUpperBound()
+                && range.lowerBoundType() == BoundType.CLOSED
+                && range.upperBoundType() == BoundType.CLOSED
+                && range.lowerEndpoint().equals(range.upperEndpoint());
     }
 
     public static Object extractPrimaryKeyValue(List<RexNode> filters, int primaryKeyIndex) {

@@ -29,7 +29,8 @@ public class WideAndDeepModel extends TzrecModelBase {
 
     @Override
     public String checkModel(ModelConf model) {
-        return FeatureOptions.validate(model, false, getModelNameSuffix().equals("deepfm"));
+        return FeatureOptions.validate(model, getModelNameSuffix().equals("deepfm")
+                ? FeatureOptions.ModelType.DEEP_FM : FeatureOptions.ModelType.WIDE_AND_DEEP);
     }
 
     @Override

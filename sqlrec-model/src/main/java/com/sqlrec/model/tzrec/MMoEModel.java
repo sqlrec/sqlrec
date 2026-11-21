@@ -21,7 +21,7 @@ public class MMoEModel extends TzrecModelBase {
 
     @Override
     public String checkModel(ModelConf model) {
-        return FeatureOptions.validate(model, false, false, true);
+        return FeatureOptions.validate(model, FeatureOptions.ModelType.MMOE);
     }
 
     @Override

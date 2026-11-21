@@ -712,6 +712,22 @@ public class MilvusFilterCompatibilityTest {
     }
 
     @Test
+    void resolvesLeftInputInsideJoinArrayAndRejectsItInScanArray() {
+        var stringType = typeFactory.createSqlType(SqlTypeName.VARCHAR);
+        RexNode leftTag = rexBuilder.makeInputRef(stringType, 0);
+        RexNode tags = rexBuilder.makeInputRef(typeFactory.createArrayType(stringType, -1), 1);
+        RexNode array = rexBuilder.makeCall(SqlStdOperatorTable.ARRAY_VALUE_CONSTRUCTOR,
+                leftTag, rexBuilder.makeLiteral("fixed", stringType, false));
+        RexNode condition = rexBuilder.makeCall(ARRAY_CONTAINS_ALL, tags, array);
+
+        assertTrue(MilvusFilterBuilder.supportsJoinFilter(condition, 1, 1));
+        assertEquals("ARRAY_CONTAINS_ALL(tags, [\"left\", \"fixed\"])",
+                MilvusFilterBuilder.buildJoinFilter(condition, new Object[]{"left"}, List.of("tags")));
+        assertNull(MilvusFilterBuilder.buildScanFilter(List.of(condition),
+                List.of(new FieldSchema("tag", "STRING"), new FieldSchema("tags", "ARRAY<STRING>"))));
+    }
+
+    @Test
     public void testCanBuildMilvusJoinFilter_RejectsMixedOr() {
         RexInputRef leftId = rexBuilder.makeInputRef(
                 typeFactory.createSqlType(SqlTypeName.INTEGER), 0);

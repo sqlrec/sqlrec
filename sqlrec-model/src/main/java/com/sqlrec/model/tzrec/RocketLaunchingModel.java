@@ -19,7 +19,7 @@ public class RocketLaunchingModel extends TzrecModelBase {
 
     @Override
     public String checkModel(ModelConf model) {
-        String error = FeatureOptions.validateDeepOnly(model);
+        String error = FeatureOptions.validate(model, FeatureOptions.ModelType.ROCKET_LAUNCHING);
         if (error != null) return error;
         try {
             RocketLaunchingOptions.validate(model);

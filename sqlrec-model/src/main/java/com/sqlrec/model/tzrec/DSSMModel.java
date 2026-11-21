@@ -32,7 +32,7 @@ public class DSSMModel extends TzrecModelBase {
 
     @Override
     public String checkModel(ModelConf model) {
-        return FeatureOptions.validate(model, true, false);
+        return FeatureOptions.validate(model, FeatureOptions.ModelType.DSSM);
     }
 
     @Override
