@@ -12,23 +12,15 @@ final class MultiTaskPipelineConfigUtils {
 
     static String train(ModelConf model, ModelTrainConf train) {
 
-        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model, train.getParams(), true)).toString();
+        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model, train.getParams())).toString();
     }
 
     static String export(ModelConf model, ModelExportConf export) {
 
-        return PipelineConfigUtils.generateExportConfigPrefix(model, export).append(modelConfig(model)).toString();
+        return PipelineConfigUtils.generateExportConfigPrefix(model, export).append(modelConfig(model, Map.of())).toString();
     }
 
-    static String modelConfig(ModelConf model) {
-        return modelConfig(model, true);
-    }
-
-    static String modelConfig(ModelConf model, boolean includeMetrics) {
-        return modelConfig(model, Map.of(), includeMetrics);
-    }
-
-    static String modelConfig(ModelConf model, Map<String, String> training, boolean includeMetrics) {
+    static String modelConfig(ModelConf model, Map<String, String> training) {
         StringBuilder config = new StringBuilder("model_config {\n");
         PipelineConfigUtils.addFeatureGroup(config, "deep", FeatureOptions.features(model).stream().map(FieldSchema::getName).toList(), "DEEP");
         config.append("    mmoe {\n        num_expert: ").append(Config.NUM_EXPERT.getValue(model.getParams())).append("\n");
@@ -40,7 +32,7 @@ final class MultiTaskPipelineConfigUtils {
             config.append("            num_class: 1\n            mlp { hidden_units: [").append(task.hiddenUnits()).append("] }\n");
             config.append("            weight: ").append(task.weight()).append("\n");
             config.append("            losses { ").append(task.type().equals("binary") ? "binary_cross_entropy" : "l2_loss").append(" {} }\n");
-            if (includeMetrics) MetricOptions.addMetrics(config, training, task.metrics(), "            ");
+            MetricOptions.addMetrics(config, training, task.metrics(), "            ");
             config.append("        }\n");
         }
         return config.append("    }\n}\n").toString();

@@ -372,7 +372,7 @@ class ModelManagerTrainingSafetyTest {
             converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old)).thenCallRealMethod();
             controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);
             when(controller.genModelTrainK8sYaml(model, train)).thenReturn("generated-yaml");
-            yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", model, train.getParams()))
+            yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", train.getParams()))
                     .thenReturn("injected-yaml");
         }
         void verifyNoDeletion() { verify(db, never()).hdfsDeletePath(any()); verify(db, never()).deleteCheckpoint(any(), any()); }

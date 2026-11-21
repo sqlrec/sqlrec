@@ -1,7 +1,6 @@
 package com.sqlrec.k8s;
 
 import com.sqlrec.common.config.ModelConfigs;
-import com.sqlrec.common.model.ModelConf;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -15,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.function.Consumer;
 
 public class K8sYamlUtils {
     private static final Logger log = LoggerFactory.getLogger(K8sYamlUtils.class);
@@ -120,15 +118,6 @@ public class K8sYamlUtils {
         return parseK8sYamlAndGetResources(yamlContent, Deployment.class);
     }
 
-    public static String injectEnvVarsIntoYaml(String yamlContent, Map<String, String> envVars) {
-        if (yamlContent == null || yamlContent.isEmpty() || envVars == null || envVars.isEmpty()) {
-            return yamlContent;
-        }
-
-        return updatePodSpecs(yamlContent, "env vars",
-                podSpec -> injectEnvVarsIntoContainers(podSpec.getContainers(), envVars));
-    }
-
     private static String mergeYamlResources(List<HasMetadata> resources) {
         if (resources == null || resources.isEmpty()) {
             return "";
@@ -192,24 +181,6 @@ public class K8sYamlUtils {
         }
     }
 
-    public static String injectVolumeMountIntoYaml(String yamlContent, String pvcName, String volumeName, String mountPath, String subPath) {
-        if (yamlContent == null || yamlContent.isEmpty() || pvcName == null || pvcName.isEmpty() ||
-                volumeName == null || volumeName.isEmpty() || mountPath == null || mountPath.isEmpty()) {
-            return yamlContent;
-        }
-
-        return updatePodSpecs(yamlContent, "volume mount",
-                podSpec -> injectVolumeMount(podSpec, pvcName, volumeName, mountPath, subPath));
-    }
-
-    public static String injectNamespaceIntoYaml(String yamlContent, String namespace) {
-        if (yamlContent == null || yamlContent.isEmpty() || namespace == null || namespace.isEmpty()) {
-            return yamlContent;
-        }
-
-        return updateYaml(yamlContent, "namespace", resource -> injectNamespace(resource, namespace));
-    }
-
     private static void injectNamespace(HasMetadata resource, String namespace) {
         if (namespace == null || namespace.isEmpty() || resource.getMetadata() == null) {
             return;
@@ -217,37 +188,6 @@ public class K8sYamlUtils {
         String existingNamespace = resource.getMetadata().getNamespace();
         if (existingNamespace == null || existingNamespace.isEmpty()) {
             resource.getMetadata().setNamespace(namespace);
-        }
-    }
-
-    public static String injectNodeSelectorIntoYaml(String yamlContent, Map<String, String> nodeSelectors) {
-        if (yamlContent == null || yamlContent.isEmpty() || nodeSelectors == null || nodeSelectors.isEmpty()) {
-            return yamlContent;
-        }
-
-        return updatePodSpecs(yamlContent, "node selector",
-                podSpec -> injectNodeSelector(podSpec, nodeSelectors));
-    }
-
-    private static String updatePodSpecs(String yamlContent, String injection, Consumer<PodSpec> update) {
-        return updateYaml(yamlContent, injection, resource -> {
-            PodSpec podSpec = getPodSpec(resource);
-            if (podSpec != null) {
-                update.accept(podSpec);
-            }
-        });
-    }
-
-    private static String updateYaml(String yamlContent, String injection, Consumer<HasMetadata> update) {
-        try {
-            List<HasMetadata> resources = parseK8sYaml(yamlContent);
-            for (HasMetadata resource : resources) {
-                update.accept(resource);
-            }
-            return mergeYamlResources(resources);
-        } catch (Exception e) {
-            log.error("Failed to inject " + injection + " into YAML: {}", e.getMessage(), e);
-            return yamlContent;
         }
     }
 
@@ -265,7 +205,7 @@ public class K8sYamlUtils {
         podSpec.setNodeSelector(existingNodeSelector);
     }
 
-    private static void injectVolumeMount(PodSpec podSpec, String pvcName, String volumeName, String mountPath, String subPath) {
+    private static void injectVolumeMount(PodSpec podSpec, String pvcName, String volumeName, String mountPath) {
         if (podSpec == null || pvcName == null || pvcName.isEmpty()
                 || volumeName == null || volumeName.isEmpty() || mountPath == null || mountPath.isEmpty()) {
             return;
@@ -274,7 +214,7 @@ public class K8sYamlUtils {
         try {
             ensureVolume(podSpec, pvcName, volumeName);
             for (Container container : podSpec.getContainers()) {
-                ensureVolumeMount(container, volumeName, mountPath, subPath);
+                ensureVolumeMount(container, volumeName, mountPath);
             }
         } catch (Exception e) {
             log.error("Failed to inject volume mount: {}", e.getMessage(), e);
@@ -302,7 +242,7 @@ public class K8sYamlUtils {
         podSpec.setVolumes(volumes);
     }
 
-    private static void ensureVolumeMount(Container container, String volumeName, String mountPath, String subPath) {
+    private static void ensureVolumeMount(Container container, String volumeName, String mountPath) {
         List<VolumeMount> volumeMounts = container.getVolumeMounts();
         if (volumeMounts == null) {
             volumeMounts = new ArrayList<>();
@@ -317,14 +257,11 @@ public class K8sYamlUtils {
         VolumeMount volumeMount = new VolumeMount();
         volumeMount.setName(volumeName);
         volumeMount.setMountPath(mountPath);
-        if (subPath != null && !subPath.isEmpty()) {
-            volumeMount.setSubPath(subPath);
-        }
         volumeMounts.add(volumeMount);
         container.setVolumeMounts(volumeMounts);
     }
 
-    public static String injectPodConfig(String k8sYaml, ModelConf model, Map<String, String> params) {
+    public static String injectPodConfig(String k8sYaml, Map<String, String> params) {
         String namespace = ModelConfigs.NAMESPACE.getValueWithEnvFallback(params);
 
         Map<String, String> envVars = new HashMap<>();
@@ -352,23 +289,29 @@ public class K8sYamlUtils {
 
         String pvcName = ModelConfigs.CLIENT_PVC_NAME.getValue();
         String pvName = ModelConfigs.CLIENT_PV_NAME.getValue();
-        String clientDirValue = ModelConfigs.CLIENT_DIR.getValue();
         Map<String, String> nodeSelectors = parseNodeSelectors(params);
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return k8sYaml;
         }
 
-        return updateYaml(k8sYaml, "pod config", resource -> {
-            injectNamespace(resource, namespace);
-            PodSpec podSpec = getPodSpec(resource);
-            if (podSpec != null) {
-                if (!envVars.isEmpty()) {
-                    injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
+        try {
+            List<HasMetadata> resources = parseK8sYaml(k8sYaml);
+            for (HasMetadata resource : resources) {
+                injectNamespace(resource, namespace);
+                PodSpec podSpec = getPodSpec(resource);
+                if (podSpec != null) {
+                    if (!envVars.isEmpty()) {
+                        injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
+                    }
+                    injectVolumeMount(podSpec, pvcName, pvName, clientDir);
+                    injectNodeSelector(podSpec, nodeSelectors);
                 }
-                injectVolumeMount(podSpec, pvcName, pvName, clientDirValue, null);
-                injectNodeSelector(podSpec, nodeSelectors);
             }
-        });
+            return mergeYamlResources(resources);
+        } catch (Exception e) {
+            log.error("Failed to inject pod config into YAML: {}", e.getMessage(), e);
+            return k8sYaml;
+        }
     }
 
     private static Map<String, String> parseNodeSelectors(Map<String, String> params) {

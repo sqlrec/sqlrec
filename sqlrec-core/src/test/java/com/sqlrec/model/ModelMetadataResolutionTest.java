@@ -156,7 +156,7 @@ class ModelMetadataResolutionTest {
             when(controller.getExportCheckpoints(any())).thenReturn(List.of("export"));
             when(controller.getServiceUrl(any(), any())).thenReturn("http://rank-service/predict");
             when(controller.getServiceK8sYaml(any(), any())).thenReturn("");
-            yaml.when(() -> K8sYamlUtils.injectPodConfig(anyString(), any(), any())).thenAnswer(call -> call.getArgument(0));
+            yaml.when(() -> K8sYamlUtils.injectPodConfig(anyString(), any())).thenAnswer(call -> call.getArgument(0));
             ServiceManager.invalidateCache();
         }
 

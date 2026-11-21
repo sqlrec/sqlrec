@@ -80,12 +80,6 @@ public class NodeUtilsTest {
     }
 
     @Test
-    public void testIsKvTableWithNull() {
-        boolean result = NodeUtils.isKvTable(null);
-        assertFalse(result);
-    }
-
-    @Test
     public void testGetScanTableWithNull() {
         var result = NodeUtils.getScanTable(null);
         assertNull(result);

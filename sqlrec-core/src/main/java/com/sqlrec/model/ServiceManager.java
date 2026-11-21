@@ -149,7 +149,7 @@ public class ServiceManager {
         if (mode == BuildMode.DEPLOYMENT) {
             k8sYaml = modelController.getServiceK8sYaml(serviceConfig.getModelConfig(), serviceConfig);
             if (!StringUtils.isEmpty(k8sYaml)) {
-                k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, serviceConfig.getModelConfig(), serviceConfig.getParams());
+                k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, serviceConfig.getParams());
             }
         }
 

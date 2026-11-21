@@ -414,10 +414,6 @@ public class K8sManager {
         return value == null ? defaultValue : value;
     }
 
-    public static String checkJobsStatusFromYaml(String k8sYaml) {
-        return checkJobsStatusDetailFromYaml(k8sYaml).state();
-    }
-
     /** Completes once all Jobs succeed, or immediately when any Job fails. Cancellation only stops observation. */
     public static CompletableFuture<JobStatus> watchJobsFromYaml(String yaml) {
         CompletableFuture<JobStatus> completion = new CompletableFuture<>();

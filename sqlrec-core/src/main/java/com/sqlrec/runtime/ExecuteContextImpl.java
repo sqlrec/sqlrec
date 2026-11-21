@@ -106,10 +106,6 @@ public class ExecuteContextImpl implements ExecuteContext {
         funNameStack.add(funName);
     }
 
-    public void popFunNameFromStack() {
-        funNameStack.removeLast();
-    }
-
     public List<String> getFunNameStack() {
         return funNameStack;
     }

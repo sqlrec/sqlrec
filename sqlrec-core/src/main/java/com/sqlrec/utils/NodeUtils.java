@@ -9,7 +9,6 @@ import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -42,13 +41,6 @@ public class NodeUtils {
             return null;
         }
         return table.unwrap(CacheTable.class);
-    }
-
-    public static boolean isKvTable(RelOptTable table) {
-        if (table == null) {
-            return false;
-        }
-        return table.unwrap(SqlRecKvTable.class) != null;
     }
 
     public static RelOptTable getScanTable(RelNode aNode) {
@@ -92,17 +84,6 @@ public class NodeUtils {
 
         indexList.sort(Integer::compareTo);
         return Map.entry(indexList.get(0), indexList.get(1));
-    }
-
-    public static boolean hasIpFunction(LogicalProject project) {
-        for (RexNode node : project.getProjects()) {
-            if (node instanceof RexCall call) {
-                if (call.getOperator().getName().equalsIgnoreCase("ip")) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     public static boolean isTrueCondition(LogicalJoin join) {

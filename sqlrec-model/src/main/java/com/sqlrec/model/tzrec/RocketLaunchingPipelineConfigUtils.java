@@ -12,23 +12,15 @@ final class RocketLaunchingPipelineConfigUtils {
 
     static String train(ModelConf model, ModelTrainConf train) {
 
-        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model, train.getParams(), true)).toString();
+        return PipelineConfigUtils.generateTrainConfigPrefix(model, train).append(modelConfig(model, train.getParams())).toString();
     }
 
     static String export(ModelConf model, ModelExportConf export) {
 
-        return PipelineConfigUtils.generateExportConfigPrefix(model, export).append(modelConfig(model)).toString();
+        return PipelineConfigUtils.generateExportConfigPrefix(model, export).append(modelConfig(model, Map.of())).toString();
     }
 
-    static String modelConfig(ModelConf model) {
-        return modelConfig(model, true);
-    }
-
-    static String modelConfig(ModelConf model, boolean includeMetrics) {
-        return modelConfig(model, Map.of(), includeMetrics);
-    }
-
-    static String modelConfig(ModelConf model, Map<String, String> training, boolean includeMetrics) {
+    static String modelConfig(ModelConf model, Map<String, String> training) {
         StringBuilder config = new StringBuilder("model_config {\n");
         PipelineConfigUtils.addFeatureGroup(config, "deep", FeatureOptions.features(model).stream().map(FieldSchema::getName).toList(), "DEEP");
         config.append("    rocket_launching {\n");
@@ -39,7 +31,7 @@ final class RocketLaunchingPipelineConfigUtils {
         config.append("        feature_based_distillation: true\n")
                 .append("        feature_distillation_function: COSINE\n    }\n")
                 .append("    num_class: 1\n    losses { binary_cross_entropy {} }\n");
-        if (includeMetrics) MetricOptions.addMetrics(config, training, MetricOptions.BINARY, "    ");
+        MetricOptions.addMetrics(config, training, MetricOptions.BINARY, "    ");
         return config.append("}\n").toString();
     }
 

@@ -126,12 +126,8 @@ public final class JdbcSqlBuilder {
     /** PostgreSQL uses ANSI double-quoted identifiers. */
     private static JdbcStatement postgresUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = null;
-        StringBuilder sql = new StringBuilder("INSERT INTO ");
-        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
-        appendColumnNames(sql, fieldSchemas, url);
-        sql.append(") VALUES (");
-        appendPlaceholders(sql, fieldSchemas.size());
-        sql.append(") ON CONFLICT (").append(quoteIdentifier(primaryKey, url)).append(") DO UPDATE SET ");
+        StringBuilder sql = insertValues(url, tableName, fieldSchemas);
+        sql.append(" ON CONFLICT (").append(quoteIdentifier(primaryKey, url)).append(") DO UPDATE SET ");
         appendExcludedSet(sql, fieldSchemas, url);
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
@@ -139,14 +135,19 @@ public final class JdbcSqlBuilder {
     /** MySQL uses backtick-quoted identifiers. */
     private static JdbcStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         String url = "jdbc:mysql:";
+        StringBuilder sql = insertValues(url, tableName, fieldSchemas);
+        sql.append(" ON DUPLICATE KEY UPDATE ");
+        appendValuesSet(sql, fieldSchemas, url);
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
+    }
+
+    private static StringBuilder insertValues(String url, String tableName, List<FieldSchema> fieldSchemas) {
         StringBuilder sql = new StringBuilder("INSERT INTO ");
         sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
         appendColumnNames(sql, fieldSchemas, url);
         sql.append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
-        sql.append(") ON DUPLICATE KEY UPDATE ");
-        appendValuesSet(sql, fieldSchemas, url);
-        return new JdbcStatement(sql.toString(), Collections.emptyList());
+        return sql.append(')');
     }
 
     /** H2 uses ANSI double-quoted identifiers. */

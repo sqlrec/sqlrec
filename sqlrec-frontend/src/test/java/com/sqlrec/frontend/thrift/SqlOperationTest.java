@@ -53,27 +53,29 @@ class SqlOperationTest {
 
     @Test
     void fetchingFailedSqlSurfacesTheOriginalError() {
-        var operation = new SqlOperation(new SqlProcessResult(), "query");
-        var failure = new UnsupportedOperationException("statement failed");
-        operation.fail(failure);
+        for (Exception failure : List.of(new UnsupportedOperationException("unsupported statement"),
+                new Exception("statement failed"))) {
+            var operation = new SqlOperation(new SqlProcessResult(), "query");
+            operation.fail(failure);
 
-        assertEquals(TOperationState.ERROR_STATE, operation.getState());
-        assertSame(failure, assertThrows(UnsupportedOperationException.class,
-                () -> operation.fetch(TFetchOrientation.FETCH_NEXT, 1)));
+            assertEquals(TOperationState.ERROR_STATE, operation.getState());
+            assertSame(failure, assertThrows(Exception.class,
+                    () -> operation.fetch(TFetchOrientation.FETCH_NEXT, 1)));
+        }
     }
 
     @Test
-    void ordinaryConversionFailureDoesNotConsumeTheResult() {
+    void ordinaryConversionFailureDoesNotConsumeTheResult() throws Exception {
         assertConversionFailurePreservesRows(false);
     }
 
     @Test
-    void metadataConversionFailureDoesNotAdvanceTheCursor() {
+    void metadataConversionFailureDoesNotAdvanceTheCursor() throws Exception {
         assertConversionFailurePreservesRows(true);
     }
 
     @Test
-    void failedRewindPreservesThePreviousMetadataPosition() {
+    void failedRewindPreservesThePreviousMetadataPosition() throws Exception {
         var fields = new ArrayList<>(List.of(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER)));
         SqlOperation operation = SqlOperation.metadata(SqlProcessResult.of(
                 Linq4j.asEnumerable(List.of(new Object[]{1}, new Object[]{2})), fields), "query");
@@ -87,7 +89,7 @@ class SqlOperationTest {
     }
 
     @Test
-    void ordinaryFetchIgnoresMetadataPaginationArguments() {
+    void ordinaryFetchIgnoresMetadataPaginationArguments() throws Exception {
         SqlOperation operation = new SqlOperation(SqlProcessResult.of(
                 Linq4j.asEnumerable(List.of(new Object[]{"one"}, new Object[]{"two"})),
                 DataTypeUtils.getStringTypeField("name")), "query");
@@ -117,7 +119,7 @@ class SqlOperationTest {
     }
 
     @Test
-    void metadataCanFetchPastTheEndAndRewindWithAnUnboundedPageSize() {
+    void metadataCanFetchPastTheEndAndRewindWithAnUnboundedPageSize() throws Exception {
         SqlOperation operation = SqlOperation.metadata(SqlProcessResult.of(
                 Linq4j.asEnumerable(List.of(new Object[]{"one"}, new Object[]{"two"})),
                 DataTypeUtils.getStringTypeField("name")), "query");
@@ -139,7 +141,7 @@ class SqlOperationTest {
     }
 
     @Test
-    void metadataWithNoRowsReturnsEmptyPagesForBothOrientations() {
+    void metadataWithNoRowsReturnsEmptyPagesForBothOrientations() throws Exception {
         SqlOperation operation = SqlOperation.metadata(SqlProcessResult.of(
                 null, DataTypeUtils.getStringTypeField("name")), "query");
         for (TFetchOrientation orientation : new TFetchOrientation[]{
@@ -151,7 +153,7 @@ class SqlOperationTest {
         }
     }
 
-    private static void assertConversionFailurePreservesRows(boolean metadata) {
+    private static void assertConversionFailurePreservesRows(boolean metadata) throws Exception {
         Object[] row = {1};
         var fields = new ArrayList<>(List.of(DataTypeUtils.getRelDataTypeField("id", 1, SqlTypeName.INTEGER)));
         SqlProcessResult result = SqlProcessResult.of(Linq4j.asEnumerable(List.<Object[]>of(row)), fields);

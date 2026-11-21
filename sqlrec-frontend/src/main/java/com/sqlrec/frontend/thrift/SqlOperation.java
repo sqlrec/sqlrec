@@ -41,12 +41,9 @@ public class SqlOperation implements AutoCloseable {
     }
 
     /** Ordinary SQL consumes all rows once; JDBC metadata supports bounded, rewindable pages. */
-    public synchronized ResultPage fetch(TFetchOrientation orientation, long maxRows) {
-        if (exception instanceof RuntimeException failure) {
-            throw failure;
-        }
+    public synchronized ResultPage fetch(TFetchOrientation orientation, long maxRows) throws Exception {
         if (exception != null) {
-            throw new IllegalStateException(exception.getMessage(), exception);
+            throw exception;
         }
         return metadataOperation ? fetchMetadataPage(orientation, maxRows) : fetchSqlResult();
     }

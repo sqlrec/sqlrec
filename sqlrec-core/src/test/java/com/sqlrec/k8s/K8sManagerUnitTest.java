@@ -115,7 +115,7 @@ public class K8sManagerUnitTest {
                 case "validate" -> () -> K8sManager.validateYaml(yaml);
                 case "delete" -> () -> K8sManager.deleteYaml(yaml);
                 case "deleteAndWait" -> () -> K8sManager.deleteYamlAndWait(yaml);
-                case "job" -> () -> K8sManager.checkJobsStatusFromYaml(yaml);
+                case "job" -> () -> K8sManager.checkJobsStatusDetailFromYaml(yaml);
                 default -> () -> assertFalse(K8sManager.isDeploymentReadyFromYaml(
                         "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
             };
@@ -239,8 +239,8 @@ public class K8sManagerUnitTest {
     @Test
     public void testCheckJobsStatusFromYamlEmpty() {
         // Empty input means no Job to check; should return "succeeded" without calling the client
-        assertEquals("succeeded", K8sManager.checkJobsStatusFromYaml(""));
-        assertEquals("succeeded", K8sManager.checkJobsStatusFromYaml(null));
+        assertEquals("succeeded", K8sManager.checkJobsStatusDetailFromYaml("").state());
+        assertEquals("succeeded", K8sManager.checkJobsStatusDetailFromYaml(null).state());
 
         verifyNoInteractions(mockClient);
     }
@@ -328,7 +328,7 @@ public class K8sManagerUnitTest {
                 .thenThrow(new RuntimeException(new IOException("connection reset")));
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
-                () -> K8sManager.checkJobsStatusFromYaml(
+                () -> K8sManager.checkJobsStatusDetailFromYaml(
                         "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n"));
         assertTrue(failure.getMessage().contains("Cannot determine Job status: default/train"));
 

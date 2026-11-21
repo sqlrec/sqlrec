@@ -334,7 +334,7 @@ class ModelManagerExportTest {
                 events.add("generate");
                 return "generated-yaml";
             });
-            yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", model, export.getParams()))
+            yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", export.getParams()))
                     .thenReturn("injected-yaml");
             doAnswer(invocation -> {
                 events.add("remove:" + invocation.getArgument(0));
