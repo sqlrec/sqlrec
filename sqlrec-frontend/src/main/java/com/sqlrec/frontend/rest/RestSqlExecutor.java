@@ -13,6 +13,7 @@ import com.sqlrec.frontend.utils.RestUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -27,21 +28,21 @@ public class RestSqlExecutor {
             throw new IllegalArgumentException("request body must be a JSON object with a non-empty sqls array");
         }
 
-        if (params.getSqls() == null || params.getSqls().isEmpty()) {
+        List<String> sqls = params.getSqls();
+        if (sqls == null || sqls.isEmpty()) {
             throw new IllegalArgumentException("sqls must be a non-empty array");
         }
 
         SqlExecutor sqlExecutor = new SqlExecutor();
         sqlExecutor.setExecuteParams(params.getParams());
 
-        ExecuteDataList executeDataList = new ExecuteDataList();
-        executeDataList.setData(new ArrayList<>());
-
-        for (int index = 0; index < params.getSqls().size(); index++) {
-            ExecuteData executeData = executeSingleSql(sqlExecutor, params.getSqls().get(index), index);
-            executeDataList.getData().add(executeData);
+        List<ExecuteData> results = new ArrayList<>(sqls.size());
+        for (int index = 0; index < sqls.size(); index++) {
+            results.add(executeSingleSql(sqlExecutor, sqls.get(index), index));
         }
-        return executeDataList;
+        ExecuteDataList response = new ExecuteDataList();
+        response.setData(results);
+        return response;
     }
 
     private static ExecuteData executeSingleSql(SqlExecutor sqlExecutor, String sql, int index) {

@@ -16,6 +16,7 @@ import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import java.sql.DatabaseMetaData;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,30 +95,33 @@ public final class JdbcMetadataExecutor {
     private static List<Object[]> columnRows(String database, Table table, Predicate<String> filter) throws Exception {
         List<FieldSchema> columns = HiveTableUtils.getMetadataFields(table);
         List<String> primaryKeys = loadPrimaryKeys(table).stream().map(PrimaryKey::column).toList();
+        Map<String, String> tableParameters = parameters(table);
+        Map<String, String> hiveComments = tableParameters.containsKey("flink.schema.0.name")
+                ? Map.of() : hiveColumnComments(table);
         List<Object[]> result = new ArrayList<>();
         for (int i = 0; i < columns.size(); i++) {
             FieldSchema column = columns.get(i);
-            if (filter.test(column.getName())) {
-                result.add(columnRow(database, table, column, i, primaryKeys));
+            String name = column.getName();
+            if (!filter.test(name)) {
+                continue;
             }
+
+            var columnType = JdbcTypeUtils.parse(column.getType());
+            int type = columnType.jdbcType();
+            int size = columnType.precision();
+            boolean nullable = columnType.nullable() && !primaryKeys.contains(name);
+            String prefix = "flink.schema." + i + ".";
+            String comment = tableParameters.containsKey(prefix + "name")
+                    ? tableParameters.get(prefix + "comment") : hiveComments.get(name);
+            Integer characterLength = type == Types.VARCHAR || type == Types.CHAR ? size : null;
+            boolean generated = tableParameters.containsKey(prefix + "expr");
+            result.add(new Object[]{catalog(), database, table.getTableName(), name,
+                    type, columnType.name(), size, null, columnType.scale(), JdbcTypeUtils.numericRadix(type),
+                    nullable ? DatabaseMetaData.columnNullable : DatabaseMetaData.columnNoNulls,
+                    comment, null, null, null, characterLength,
+                    i + 1, nullable ? "YES" : "NO", null, null, null, null, "NO", generated ? "YES" : "NO"});
         }
         return result;
-    }
-
-    private static Object[] columnRow(String database, Table table, FieldSchema column,
-            int index, List<String> primaryKeys) {
-        var columnType = JdbcTypeUtils.parse(column.getType());
-        int type = columnType.jdbcType();
-        int size = columnType.precision();
-        boolean nullable = columnType.nullable() && !primaryKeys.contains(column.getName());
-        String prefix = "flink.schema." + index + ".";
-        Integer characterLength = type == Types.VARCHAR || type == Types.CHAR ? size : null;
-        boolean generated = parameters(table).containsKey(prefix + "expr");
-        return new Object[]{catalog(), database, table.getTableName(), column.getName(),
-                type, columnType.name(), size, null, columnType.scale(), JdbcTypeUtils.numericRadix(type),
-                nullable ? DatabaseMetaData.columnNullable : DatabaseMetaData.columnNoNulls,
-                columnComment(table, column.getName(), prefix), null, null, null, characterLength,
-                index + 1, nullable ? "YES" : "NO", null, null, null, null, "NO", generated ? "YES" : "NO"};
     }
 
     public SqlProcessResult functions(String requestedCatalog, String schemaPattern,
@@ -252,10 +256,7 @@ public final class JdbcMetadataExecutor {
         return table.getParameters() == null ? Map.of() : table.getParameters();
     }
 
-    private static String columnComment(Table table, String name, String prefix) {
-        if (parameters(table).containsKey(prefix + "name")) {
-            return parameters(table).get(prefix + "comment");
-        }
+    private static Map<String, String> hiveColumnComments(Table table) {
         List<org.apache.hadoop.hive.metastore.api.FieldSchema> fields = new ArrayList<>();
         if (table.getSd() != null && table.getSd().getCols() != null) {
             fields.addAll(table.getSd().getCols());
@@ -263,9 +264,13 @@ public final class JdbcMetadataExecutor {
         if (table.getPartitionKeys() != null) {
             fields.addAll(table.getPartitionKeys());
         }
-        return fields.stream().filter(field -> field.getName().equals(name))
-                .map(org.apache.hadoop.hive.metastore.api.FieldSchema::getComment)
-                .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        Map<String, String> comments = new HashMap<>();
+        for (var field : fields) {
+            if (field.getComment() != null) {
+                comments.putIfAbsent(field.getName(), field.getComment());
+            }
+        }
+        return comments;
     }
 
     private static List<PrimaryKey> loadPrimaryKeys(Table table) throws Exception {

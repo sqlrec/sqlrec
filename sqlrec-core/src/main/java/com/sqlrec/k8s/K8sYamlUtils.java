@@ -182,7 +182,7 @@ public class K8sYamlUtils {
     }
 
     private static void injectNamespace(HasMetadata resource, String namespace) {
-        if (namespace == null || namespace.isEmpty() || resource.getMetadata() == null) {
+        if (namespace.isEmpty() || resource.getMetadata() == null) {
             return;
         }
         String existingNamespace = resource.getMetadata().getNamespace();
@@ -192,7 +192,7 @@ public class K8sYamlUtils {
     }
 
     private static void injectNodeSelector(PodSpec podSpec, Map<String, String> nodeSelectors) {
-        if (podSpec == null || nodeSelectors == null || nodeSelectors.isEmpty()) {
+        if (nodeSelectors.isEmpty()) {
             return;
         }
 
@@ -206,8 +206,7 @@ public class K8sYamlUtils {
     }
 
     private static void injectVolumeMount(PodSpec podSpec, String pvcName, String volumeName, String mountPath) {
-        if (podSpec == null || pvcName == null || pvcName.isEmpty()
-                || volumeName == null || volumeName.isEmpty() || mountPath == null || mountPath.isEmpty()) {
+        if (pvcName.isEmpty() || volumeName.isEmpty() || mountPath.isEmpty()) {
             return;
         }
 
@@ -265,31 +264,17 @@ public class K8sYamlUtils {
         String namespace = ModelConfigs.NAMESPACE.getValueWithEnvFallback(params);
 
         Map<String, String> envVars = new HashMap<>();
-        String javaHome = ModelConfigs.JAVA_HOME.getValue();
-        if (javaHome != null) {
-            envVars.put("JAVA_HOME", javaHome);
-        }
-        String hadoopHome = ModelConfigs.HADOOP_HOME.getValue();
-        if (hadoopHome != null) {
-            envVars.put("HADOOP_HOME", hadoopHome);
-        }
-        String classpath = ModelConfigs.CLASSPATH.getValue();
-        if (classpath != null) {
-            envVars.put("CLASSPATH", classpath);
-        }
-        String hadoopConfDir = ModelConfigs.HADOOP_CONF_DIR.getValue();
-        if (hadoopConfDir != null) {
-            envVars.put("HADOOP_CONF_DIR", hadoopConfDir);
-        }
+        envVars.put("JAVA_HOME", ModelConfigs.JAVA_HOME.getValue());
+        envVars.put("HADOOP_HOME", ModelConfigs.HADOOP_HOME.getValue());
+        envVars.put("CLASSPATH", ModelConfigs.CLASSPATH.getValue());
+        envVars.put("HADOOP_CONF_DIR", ModelConfigs.HADOOP_CONF_DIR.getValue());
         String clientDir = ModelConfigs.CLIENT_DIR.getValue();
-        if (clientDir != null) {
-            envVars.put("CLIENT_DIR", clientDir);
-        }
-        envVars.putAll(parseEnvVars(params));
+        envVars.put("CLIENT_DIR", clientDir);
+        envVars.putAll(parsePrefixedEntries(params, "kubernetes.env."));
 
         String pvcName = ModelConfigs.CLIENT_PVC_NAME.getValue();
         String pvName = ModelConfigs.CLIENT_PV_NAME.getValue();
-        Map<String, String> nodeSelectors = parseNodeSelectors(params);
+        Map<String, String> nodeSelectors = parsePrefixedEntries(params, "kubernetes.node.selector.");
         if (k8sYaml == null || k8sYaml.isEmpty()) {
             return k8sYaml;
         }
@@ -300,9 +285,7 @@ public class K8sYamlUtils {
                 injectNamespace(resource, namespace);
                 PodSpec podSpec = getPodSpec(resource);
                 if (podSpec != null) {
-                    if (!envVars.isEmpty()) {
-                        injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
-                    }
+                    injectEnvVarsIntoContainers(podSpec.getContainers(), envVars);
                     injectVolumeMount(podSpec, pvcName, pvName, clientDir);
                     injectNodeSelector(podSpec, nodeSelectors);
                 }
@@ -312,14 +295,6 @@ public class K8sYamlUtils {
             log.error("Failed to inject pod config into YAML: {}", e.getMessage(), e);
             return k8sYaml;
         }
-    }
-
-    private static Map<String, String> parseNodeSelectors(Map<String, String> params) {
-        return parsePrefixedEntries(params, "kubernetes.node.selector.");
-    }
-
-    private static Map<String, String> parseEnvVars(Map<String, String> params) {
-        return parsePrefixedEntries(params, "kubernetes.env.");
     }
 
     private static Map<String, String> parsePrefixedEntries(

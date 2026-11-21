@@ -149,7 +149,7 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
     private void outputResults(Map<String, Object> predictions) {
         PredictionResult result = new PredictionResult(predictions);
         for (int i = 0; i < buffer.size(); i++) {
-            Map<String, Object> values = new LinkedHashMap<>(buffer.get(i));
+            Map<String, Object> values = buffer.get(i);
             result.forEachValue(i, values::put);
             collect(toOutputRow(values));
         }

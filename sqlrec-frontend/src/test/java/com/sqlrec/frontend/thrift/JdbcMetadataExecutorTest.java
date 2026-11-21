@@ -34,6 +34,7 @@ class JdbcMetadataExecutorTest {
         StorageDescriptor storage = new StorageDescriptor();
         storage.setCols(List.of(new org.apache.hadoop.hive.metastore.api.FieldSchema("id", "bigint", "identifier")));
         table.setSd(storage);
+        table.setPartitionKeys(List.of(new org.apache.hadoop.hive.metastore.api.FieldSchema("day", "string", "partition day")));
         when(metadata.getTables("default")).thenReturn(List.of(table));
         when(metadata.getTable("default", "native_table")).thenReturn(table);
         SQLPrimaryKey key = new SQLPrimaryKey();
@@ -43,9 +44,12 @@ class JdbcMetadataExecutorTest {
         try (var hms = mockStatic(HmsClient.class)) {
             hms.when(() -> HmsClient.getPrimaryKeys("default", "native_table")).thenReturn(List.of(key));
             JdbcMetadataExecutor executor = new JdbcMetadataExecutor(metadata);
-            Object[] column = executor.columns(null, null, null, null).getEnumerable().toList().get(0);
+            List<Object[]> columns = executor.columns(null, null, null, null).getEnumerable().toList();
+            Object[] column = columns.get(0);
             assertEquals("NO", column[17]);
             assertEquals("identifier", column[11]);
+            assertEquals("day", columns.get(1)[3]);
+            assertEquals("partition day", columns.get(1)[11]);
             assertEquals("native_pk", executor.primaryKeys(null, "default", "native_table")
                     .getEnumerable().toList().get(0)[5]);
         }

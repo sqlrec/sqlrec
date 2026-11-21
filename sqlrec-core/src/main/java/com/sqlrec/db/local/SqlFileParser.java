@@ -79,15 +79,9 @@ public class SqlFileParser {
     void parseContent(String content) throws Exception {
         List<String> statements = SqlStatementUtils.splitStatements(content);
         log.debug("Parsing {} statements", statements.size());
-        parseStatements(statements);
-    }
-
-    void parseStatements(List<String> statements) throws Exception {
         List<SqlNode> currentFunctionNodes = null;
 
         for (String statement : statements) {
-            statement = statement.trim();
-            if (statement.isEmpty()) continue;
             SqlNode sqlNode = CompileManager.parseSql(statement);
             if (currentFunctionNodes != null) {
                 currentFunctionNodes.add(sqlNode);
