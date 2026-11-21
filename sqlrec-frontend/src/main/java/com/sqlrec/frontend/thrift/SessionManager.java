@@ -3,7 +3,6 @@ package com.sqlrec.frontend.thrift;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.MetricsUtils;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.frontend.auth.Authentication;
@@ -241,7 +240,7 @@ public class SessionManager {
         SqlNode node;
         SqlProcessResult result;
         try {
-            node = CompileManager.parseSql(request.getStatement());
+            node = session.executor.parseStatement(request.getStatement());
             result = session.executor.executeSqlAsync(node, request.getStatement());
         } catch (Exception e) {
             logger.error("Failed to execute local SQL", e);
@@ -373,12 +372,19 @@ public class SessionManager {
         if (entry == null) {
             return new TCloseOperationResp(invalidHandleStatus());
         }
-        TCloseOperationResp response = entry.isLocal() ? new TCloseOperationResp(successStatus())
-                : entry.session().gateway.closeOperation(request);
-        if (ThriftUtils.isSuccess(response.getStatus())) {
-            removeOperation(id, entry);
+        try {
+            TCloseOperationResp response = entry.isLocal() ? new TCloseOperationResp(successStatus())
+                    : entry.session().gateway.closeOperation(request);
+            if (ThriftUtils.isSuccess(response.getStatus())) {
+                removeOperation(id, entry);
+            }
+            return response;
+        } catch (TException failure) {
+            if (!entry.session().gateway.hasRemoteOperation(id)) {
+                removeOperation(id, entry);
+            }
+            throw failure;
         }
-        return response;
     }
 
     public TGetQueryIdResp getQueryId(TGetQueryIdReq request) throws TException {

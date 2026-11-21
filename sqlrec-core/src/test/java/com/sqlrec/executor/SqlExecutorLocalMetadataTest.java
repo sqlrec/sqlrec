@@ -16,6 +16,7 @@ import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.jupiter.api.AfterEach;
@@ -264,6 +265,17 @@ class SqlExecutorLocalMetadataTest {
             verifyNoInteractions(metadata);
             caches.verifyNoInteractions();
         }
+    }
+
+    @Test
+    void parseFailureAbandonsTheActiveFunctionDefinition() throws Exception {
+        var executor = new SqlExecutor();
+        executor.executeSqlAsync("CREATE SQL FUNCTION review_function");
+
+        assertThrows(SqlParseException.class, () -> executor.executeSqlAsync("SELECT FROM"));
+        executor.executeSqlAsync("SET 'mode' = 'normal'");
+
+        assertEquals("normal", executor.getSessionSettings().get("mode"));
     }
 
     @Test

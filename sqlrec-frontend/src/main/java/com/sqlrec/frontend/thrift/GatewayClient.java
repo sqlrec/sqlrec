@@ -253,9 +253,13 @@ public final class GatewayClient {
     }
 
     private void requireRemoteOperation(TOperationHandle handle) throws TException {
-        if (handle == null || !remoteOperations.contains(handle.getOperationId())) {
+        if (handle == null || !hasRemoteOperation(handle.getOperationId())) {
             throw new TException("FLINK_REMOTE_SESSION_LOST: remote operation is unknown or belongs to an earlier session");
         }
+    }
+
+    synchronized boolean hasRemoteOperation(THandleIdentifier id) {
+        return remoteOperations.contains(id);
     }
 
     private void trackRemoteOperation(TStatus status, TOperationHandle handle) {

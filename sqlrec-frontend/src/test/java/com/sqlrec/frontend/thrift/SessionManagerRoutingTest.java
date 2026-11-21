@@ -9,6 +9,7 @@ import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.frontend.utils.ThriftUtils;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.hive.service.rpc.thrift.*;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.thrift.TException;
@@ -72,7 +73,8 @@ class SessionManagerRoutingTest {
             assertEquals(TStatusCode.ERROR_STATUS, fetchStatus.getStatusCode());
             assertFalse(fetchStatus.getErrorMessage().isBlank());
             assertTrue(operationStatus.getErrorMessage().contains(fetchStatus.getErrorMessage()));
-            verifyNoInteractions(session.executor, session.proxy);
+            verify(session.executor).parseStatement("SELECT FROM");
+            verifyNoMoreInteractions(session.executor, session.proxy);
         }
     }
 
@@ -191,6 +193,26 @@ class SessionManagerRoutingTest {
     }
 
     @Test
+    void closeReleasesTheLocalEntryAfterGatewayLosesTheOperation() throws Exception {
+        try (Session session = new Session()) {
+            TOperationHandle handle = new TOperationHandle(
+                    ThriftUtils.getHandleIdentifier(), TOperationType.EXECUTE_STATEMENT, true);
+            TExecuteStatementResp executed = new TExecuteStatementResp(success());
+            executed.setOperationHandle(handle);
+            var lost = new TException("FLINK_REMOTE_SESSION_LOST: remote operation belongs to an earlier session");
+            when(session.proxy.executeStatement(any())).thenReturn(executed);
+            when(session.proxy.closeOperation(any())).thenThrow(lost);
+            when(session.proxy.hasRemoteOperation(handle.getOperationId())).thenReturn(false);
+            session.manager.executeStatement(new TExecuteStatementReq(session.handle, "SELECT 1"));
+
+            var close = new TCloseOperationReq(handle);
+            assertSame(lost, assertThrows(TException.class, () -> session.manager.closeOperation(close)));
+            assertEquals(TStatusCode.INVALID_HANDLE_STATUS, session.manager.closeOperation(close).getStatus().getStatusCode());
+            verify(session.proxy, times(1)).closeOperation(close);
+        }
+    }
+
+    @Test
     void failedRemoteCloseRetainsTheOperationForAnotherClose() throws Exception {
         try (Session session = new Session()) {
             TOperationHandle handle = new TOperationHandle(
@@ -198,16 +220,46 @@ class SessionManagerRoutingTest {
             TExecuteStatementResp executed = new TExecuteStatementResp(success());
             executed.setOperationHandle(handle);
             when(session.proxy.executeStatement(any())).thenReturn(executed);
+            var retryable = new TException("temporary close failure");
+            when(session.proxy.hasRemoteOperation(handle.getOperationId())).thenReturn(true);
             when(session.proxy.closeOperation(any()))
+                    .thenThrow(retryable)
                     .thenReturn(new TCloseOperationResp(new TStatus(TStatusCode.ERROR_STATUS)))
                     .thenReturn(new TCloseOperationResp(success()));
             session.manager.executeStatement(new TExecuteStatementReq(session.handle, "SELECT * FROM remote_table"));
+            assertSame(retryable, assertThrows(TException.class,
+                    () -> session.manager.closeOperation(new TCloseOperationReq(handle))));
             assertEquals(TStatusCode.ERROR_STATUS,
                     session.manager.closeOperation(new TCloseOperationReq(handle)).getStatus().getStatusCode());
             assertEquals(TStatusCode.SUCCESS_STATUS,
                     session.manager.closeOperation(new TCloseOperationReq(handle)).getStatus().getStatusCode());
             assertEquals(TStatusCode.INVALID_HANDLE_STATUS,
                     session.manager.closeOperation(new TCloseOperationReq(handle)).getStatus().getStatusCode());
+        }
+    }
+
+    @Test
+    @SilenceLoggers(SessionManager.class)
+    void parseFailureAbandonsTheActiveFunctionDefinitionInThrift() throws Exception {
+        try (var schema = mockStatic(CalciteSchemaFactory.class)) {
+            schema.when(CalciteSchemaFactory::createCalciteSchema).thenReturn(CalciteSchema.createRootSchema(false));
+            var manager = new SessionManager();
+            var handle = manager.openSession(new TOpenSessionReq()).getSessionHandle();
+            try {
+                manager.executeStatement(new TExecuteStatementReq(handle, "CREATE SQL FUNCTION review_function"));
+                var failed = manager.executeStatement(new TExecuteStatementReq(handle, "SELECT FROM")).getOperationHandle();
+                assertEquals(TOperationState.ERROR_STATE,
+                        manager.getOperationStatus(new TGetOperationStatusReq(failed)).getOperationState());
+
+                var setting = manager.executeStatement(new TExecuteStatementReq(handle, "SET 'mode' = 'normal'"))
+                        .getOperationHandle();
+                var page = manager.fetchResults(new TFetchResultsReq(setting, TFetchOrientation.FETCH_NEXT, 1));
+                assertEquals(TStatusCode.SUCCESS_STATUS, page.getStatus().getStatusCode());
+                assertTrue(page.getResults().getColumns().get(0).getStringVal().getValues().get(0)
+                        .startsWith("setting saved in SQLRec session"));
+            } finally {
+                manager.closeSession(new TCloseSessionReq(handle));
+            }
         }
     }
 
@@ -348,6 +400,7 @@ class SessionManagerRoutingTest {
         private final MockedConstruction<SqlExecutor> executors = mockConstruction(SqlExecutor.class, (mock, context) -> {
             when(mock.getDefaultSchema()).thenReturn("default");
             when(mock.getSessionSettings()).thenReturn(Map.of());
+            when(mock.parseStatement(anyString())).thenCallRealMethod();
         });
         private final MockedConstruction<GatewayClient> proxies = mockConstruction(GatewayClient.class, (mock, context) -> {
             when(mock.closeSession()).thenReturn(new TCloseSessionResp(success()));

@@ -101,7 +101,17 @@ public class SqlExecutor {
     }
 
     public synchronized SqlProcessResult executeSqlAsync(String sql) throws Exception {
-        return executeSqlAsync(CompileManager.parseSql(sql), sql);
+        return executeSqlAsync(parseStatement(sql), sql);
+    }
+
+    /** Parses a statement in this session, abandoning an unfinished function on error. */
+    public synchronized SqlNode parseStatement(String sql) throws Exception {
+        try {
+            return CompileManager.parseSql(sql);
+        } catch (Exception failure) {
+            functionCompiler = null;
+            throw failure;
+        }
     }
 
     /** Executes a parsed statement; null means it requires the remote route. */
