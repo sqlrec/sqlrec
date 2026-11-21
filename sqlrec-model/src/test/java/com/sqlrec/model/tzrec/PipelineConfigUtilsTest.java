@@ -132,18 +132,32 @@ class PipelineConfigUtilsTest {
 
 
     @Test
-    void poolSamplingUsesTheTrainingSourceAndNativeDssmPath() {
+    void poolSamplingUsesTheTrainingSourceAndExplicitItemFeatures() {
+        assertPoolSamplingConfig("price,iid", List.of("price", "iid"));
+    }
+
+    @Test
+    void poolSamplingInfersItemFeaturesInInputOrder() {
+        assertPoolSamplingConfig(null, List.of("iid", "price"));
+    }
+
+    private void assertPoolSamplingConfig(String itemFeatures, List<String> expectedFeatures) {
         ModelConf model = model("INT");
         model.getParams().put("model", "tzrec.dssm");
-        model.getParams().put("item_features", "iid,price");
+        model.getParams().put("user_features", "uid");
+        if (itemFeatures != null) {
+            model.getParams().put("item_features", itemFeatures);
+        }
         ModelTrainConf train = new ModelTrainConf();
         train.setParams(Map.of("negative_sampling", "pool", "item_id_column", "iid", "batch_size", "256"));
         train.setTrainDataPaths(List.of("jfs://myjfs/train/*"));
+        TrainingOptions.validate(model, train.getParams());
         String config = PipelineConfigUtils.generateDSSMTrainConfig(model, train);
         assertTrue(config.contains("input_path: \"jfs://myjfs/train/*.parquet\""));
         assertTrue(config.contains("pool_size: 4096"));
-        assertTrue(config.contains("attr_fields: \"price\""));
-        assertFalse(config.contains("attr_fields: \"uid\""));
+        List<String> attributes = config.lines().map(String::strip)
+                .filter(line -> line.startsWith("attr_fields:")).toList();
+        assertEquals(expectedFeatures.stream().map(name -> "attr_fields: \"" + name + "\"").toList(), attributes);
         assertTrue(config.contains("in_batch_negative: false"));
         assertTrue(config.contains("softmax_cross_entropy {}"));
         assertFalse(config.contains("logq"));

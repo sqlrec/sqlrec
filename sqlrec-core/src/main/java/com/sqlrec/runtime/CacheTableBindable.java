@@ -98,10 +98,6 @@ public class CacheTableBindable extends ForwardingBindable {
         return bindable.getReturnDataFields();
     }
 
-    public BindableInterface getBindable() {
-        return bindable;
-    }
-
     @Override
     public String getCacheTableName() {
         return tableName;

@@ -215,10 +215,6 @@ public class CompileManager {
         return cached;
     }
 
-    public BindableInterface getExecutableSqlFunction(String functionName) throws Exception {
-        return prepareSqlFunctionForExecution(getSqlFunction(functionName));
-    }
-
     public static BindableInterface prepareSqlFunctionForExecution(SqlFunctionBindable sqlFunctionBindable) {
         BindableInterface executable = ProxyAllBindable.wrap(sqlFunctionBindable);
         executable.setName(sqlFunctionBindable.getFunName());

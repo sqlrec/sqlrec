@@ -12,12 +12,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class ServiceSqlProcessResult extends SqlProcessResult {
-    private String serviceName;
+    private final String serviceName;
     private volatile long lastCheckTime;
     private volatile boolean cachedCompleted;
-
-    public ServiceSqlProcessResult() {
-    }
 
     public ServiceSqlProcessResult(
             Enumerable<Object[]> enumerable,
@@ -34,14 +31,6 @@ public class ServiceSqlProcessResult extends SqlProcessResult {
                 DataTypeUtils.getStringTypeField(fieldName),
                 serviceName
         );
-    }
-
-    public String getServiceName() {
-        return serviceName;
-    }
-
-    public void setServiceName(String serviceName) {
-        this.serviceName = serviceName;
     }
 
     @Override

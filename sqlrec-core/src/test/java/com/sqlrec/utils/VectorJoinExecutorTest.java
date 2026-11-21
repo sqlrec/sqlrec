@@ -61,7 +61,7 @@ public class VectorJoinExecutorTest {
                 null,
                 1,
                 "embedding",
-                10);
+                10, null);
 
         assertArrayEquals(
                 new Object[]{1, leftRow[1], 100, "book", 0.95d},
@@ -78,7 +78,7 @@ public class VectorJoinExecutorTest {
                 new Object[]{2, Arrays.asList(0.3f, 0.4f)}));
 
         VectorJoinExecutor.execute(
-                left, rightTable, filterMarker, 1, "item_embedding", 7).count();
+                left, rightTable, filterMarker, 1, "item_embedding", 7, null).count();
 
         ArgumentCaptor<VectorSearchRequest> captor =
                 ArgumentCaptor.forClass(VectorSearchRequest.class);
@@ -107,7 +107,7 @@ public class VectorJoinExecutorTest {
                 new Object[]{2, Arrays.asList(0.3f, 0.4f)}));
 
         List<Object[]> rows = VectorJoinExecutor.execute(
-                left, rightTable, null, 1, "embedding", 2).toList();
+                left, rightTable, null, 1, "embedding", 2, null).toList();
 
         assertEquals(4, rows.size());
         assertArrayEquals(
@@ -130,7 +130,7 @@ public class VectorJoinExecutorTest {
                 null,
                 1,
                 "embedding",
-                0).count();
+                0, null).count();
 
         ArgumentCaptor<VectorSearchRequest> captor =
                 ArgumentCaptor.forClass(VectorSearchRequest.class);
@@ -150,7 +150,7 @@ public class VectorJoinExecutorTest {
                 null,
                 1,
                 "embedding",
-                10);
+                10, null);
 
         assertEquals(0, result.count());
         verify(rightTable, never()).searchByEmbedding(any());
@@ -168,7 +168,7 @@ public class VectorJoinExecutorTest {
                 null,
                 1,
                 "embedding",
-                10);
+                10, null);
 
         assertEquals(0, result.count());
     }
@@ -188,7 +188,7 @@ public class VectorJoinExecutorTest {
                 null,
                 1,
                 "embedding",
-                10);
+                10, null);
 
         assertEquals(0, result.count());
     }
@@ -203,7 +203,7 @@ public class VectorJoinExecutorTest {
             when(rightTable.searchByEmbedding(any())).thenThrow(failure);
             Enumerable<Object[]> result = VectorJoinExecutor.execute(
                     Linq4j.singletonEnumerable(new Object[]{List.of(0.1f, 0.2f)}),
-                    rightTable, null, 0, "embedding", 10);
+                    rightTable, null, 0, "embedding", 10, null);
 
             assertSame(failure, assertThrows(RuntimeException.class, result::count));
         }
@@ -224,7 +224,7 @@ public class VectorJoinExecutorTest {
                         null,
                         1,
                         "embedding",
-                        10).count());
+                        10, null).count());
 
         assertEquals("search failed", exception.getMessage());
     }
@@ -258,7 +258,7 @@ public class VectorJoinExecutorTest {
     public void rejectsMissingLeftInput() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> VectorJoinExecutor.execute(null, null, null, 0, "embedding", 10));
+                () -> VectorJoinExecutor.execute(null, null, null, 0, "embedding", 10, null));
 
         assertEquals("left input is null", exception.getMessage());
     }
@@ -268,7 +268,7 @@ public class VectorJoinExecutorTest {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> VectorJoinExecutor.execute(
-                        Linq4j.emptyEnumerable(), null, null, 0, "embedding", 10));
+                        Linq4j.emptyEnumerable(), null, null, 0, "embedding", 10, null));
 
         assertEquals("right table is null", exception.getMessage());
     }
@@ -282,13 +282,13 @@ public class VectorJoinExecutorTest {
         IllegalArgumentException negative = assertThrows(
                 IllegalArgumentException.class,
                 () -> VectorJoinExecutor.execute(
-                        left, rightTable, null, -1, "embedding", 10).count());
+                        left, rightTable, null, -1, "embedding", 10, null).count());
         assertEquals("leftEmbeddingIndex is out of bounds: -1", negative.getMessage());
 
         IllegalArgumentException tooLarge = assertThrows(
                 IllegalArgumentException.class,
                 () -> VectorJoinExecutor.execute(
-                        left, rightTable, null, 2, "embedding", 10).count());
+                        left, rightTable, null, 2, "embedding", 10, null).count());
         assertEquals("leftEmbeddingIndex is out of bounds: 2", tooLarge.getMessage());
         verify(rightTable, never()).searchByEmbedding(any());
     }
@@ -306,7 +306,7 @@ public class VectorJoinExecutorTest {
                 null,
                 0,
                 "embedding",
-                1).single();
+                1, null).single();
 
         assertArrayEquals(new Object[]{embedding, 100, 0.95d}, row);
     }

@@ -105,10 +105,6 @@ public class SqlOperation implements AutoCloseable {
         return msg;
     }
 
-    public synchronized Exception getException() {
-        return exception;
-    }
-
     public synchronized void fail(Exception failure) {
         exception = failure;
         msg = "exec error: " + ExceptionUtils.getStackTrace(failure);

@@ -56,10 +56,6 @@ public abstract class BindableInterface {
         return ignoreException;
     }
 
-    public Set<String> getDependencyJavaFuncName() {
-        return new HashSet<>();
-    }
-
     public Set<String> getDependencySqlFuncName() {
         return new HashSet<>();
     }

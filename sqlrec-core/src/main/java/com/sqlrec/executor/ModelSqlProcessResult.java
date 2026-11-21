@@ -14,12 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class ModelSqlProcessResult extends SqlProcessResult {
-    private List<CheckpointInfo> checkpointInfos = List.of();
-    private volatile CompletableFuture<Void> completion = CompletableFuture.completedFuture(null);
-
-    public ModelSqlProcessResult() {
-        super();
-    }
+    private final CompletableFuture<Void> completion;
 
     public ModelSqlProcessResult(
             Enumerable<Object[]> enumerable,
@@ -27,7 +22,8 @@ public class ModelSqlProcessResult extends SqlProcessResult {
             List<CheckpointInfo> checkpointInfos
     ) {
         super(enumerable, fields);
-        setCheckpointInfos(checkpointInfos);
+        completion = ModelManager.watchCheckpointCompletion(
+                checkpointInfos == null ? List.of() : List.copyOf(checkpointInfos));
     }
 
     public static ModelSqlProcessResult msg(String msg, String fieldName, List<CheckpointInfo> checkpointInfos) {
@@ -38,21 +34,10 @@ public class ModelSqlProcessResult extends SqlProcessResult {
         );
     }
 
-    public List<CheckpointInfo> getCheckpointInfos() {
-        return checkpointInfos;
-    }
-
-    public synchronized void setCheckpointInfos(List<CheckpointInfo> checkpointInfos) {
-        close();
-        this.checkpointInfos = checkpointInfos == null ? List.of() : List.copyOf(checkpointInfos);
-        completion = ModelManager.watchCheckpointCompletion(this.checkpointInfos);
-    }
-
     @Override
     public boolean isCompleted() {
-        CompletableFuture<Void> current = completion;
-        if (!current.isDone()) return false;
-        current.join();
+        if (!completion.isDone()) return false;
+        completion.join();
         return true;
     }
 
@@ -62,7 +47,7 @@ public class ModelSqlProcessResult extends SqlProcessResult {
     }
 
     @Override
-    public synchronized void close() {
+    public void close() {
         completion.cancel(false);
     }
 }

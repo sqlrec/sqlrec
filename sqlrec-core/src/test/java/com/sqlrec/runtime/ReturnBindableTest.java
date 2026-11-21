@@ -84,7 +84,6 @@ class ReturnBindableTest {
         assertTrue(bindable.isTimeoutAble(schema, function));
         assertEquals(Set.of("source"), bindable.getReadTables());
         assertEquals(Set.of("written"), bindable.getWriteTables());
-        assertEquals(Set.of("java_fun"), bindable.getDependencyJavaFuncName());
         assertEquals(Set.of("sql_fun"), bindable.getDependencySqlFuncName());
         assertEquals(Map.of("nested_fun", "sql_fun->nested_fun"), bindable.getAllDependSqlFunctionMap());
         assertTrue(bindable.isUnionSql());
@@ -156,11 +155,6 @@ class ReturnBindableTest {
         @Override
         public Set<String> getWriteTables() {
             return Set.of("written");
-        }
-
-        @Override
-        public Set<String> getDependencyJavaFuncName() {
-            return Set.of("java_fun");
         }
 
         @Override

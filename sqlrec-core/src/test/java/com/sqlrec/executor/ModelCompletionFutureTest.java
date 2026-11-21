@@ -60,8 +60,8 @@ class ModelCompletionFutureTest {
 
             CompletableFuture<Void> next = new CompletableFuture<>();
             models.when(() -> ModelManager.watchCheckpointCompletion(checkpoints)).thenReturn(next);
-            result.setCheckpointInfos(checkpoints);
-            result.close();
+            ModelSqlProcessResult pending = ModelSqlProcessResult.msg("submitted", "msg", checkpoints);
+            pending.close();
             assertTrue(next.isCancelled());
         }
     }

@@ -26,7 +26,6 @@ public final class GatewayClient {
     private TCLIService.Client client;
     private TTransport transport;
 
-    private boolean connected;
     private TOpenSessionReq pendingOpenSessionReq;
     private String desiredDatabase = Consts.DEFAULT_SCHEMA_NAME;
     private Map<String, String> desiredSettings = new LinkedHashMap<>();
@@ -57,7 +56,7 @@ public final class GatewayClient {
 
     private void ensureConnected() throws TException {
         requireGatewayEnabled();
-        if (connected && transport != null && transport.isOpen()) {
+        if (transport != null && transport.isOpen()) {
             return;
         }
 
@@ -72,9 +71,11 @@ public final class GatewayClient {
                 SqlRecConfigs.FLINK_SQL_GATEWAY_PORT.getValue(),
                 SqlRecConfigs.FLINK_SQL_GATEWAY_CONNECT_TIMEOUT.getValue()
         );
+        TCLIService.Client client;
+        THandleIdentifier remoteSessionId;
         try {
             TProtocol protocol = new TBinaryProtocol(transport);
-            TCLIService.Client client = new TCLIService.Client(protocol);
+            client = new TCLIService.Client(protocol);
             transport.open();
 
             TOpenSessionResp remoteResp = client.OpenSession(pendingOpenSessionReq);
@@ -82,16 +83,7 @@ public final class GatewayClient {
             if (remoteResp.getSessionHandle() == null) {
                 throw new TException("Gateway OpenSession returned no session handle");
             }
-            THandleIdentifier remoteSessionId = remoteResp.getSessionHandle().getSessionId().deepCopy();
-
-            // Publish the connection only after OpenSession succeeds. Retain the request for reconnect.
-            this.client = client;
-            this.transport = transport;
-            this.remoteSessionId = remoteSessionId;
-            this.connected = true;
-            this.stateDirty = true;
-
-            logger.info("Gateway session opened, remoteSessionGuid: {}", ThriftUtils.safeHandleId(remoteSessionId));
+            remoteSessionId = remoteResp.getSessionHandle().getSessionId().deepCopy();
         } catch (Exception e) {
             logger.error("Failed to open remote connection: {}", e.getMessage(), e);
             try {
@@ -99,10 +91,15 @@ public final class GatewayClient {
             } catch (Exception closeEx) {
                 logger.warn("Failed to close transport during error handling", closeEx);
             }
-            this.client = null;
-            this.transport = null;
             throw new TException("FLINK_GATEWAY_UNAVAILABLE: could not open a Gateway session: " + e.getMessage(), e);
         }
+
+        // Publish the connection only after OpenSession succeeds. Retain the request for reconnect.
+        this.client = client;
+        this.transport = transport;
+        this.remoteSessionId = remoteSessionId;
+        this.stateDirty = true;
+        logger.info("Gateway session opened, remoteSessionGuid: {}", ThriftUtils.safeHandleId(remoteSessionId));
     }
 
     /**
@@ -121,7 +118,6 @@ public final class GatewayClient {
         this.client = null;
         this.transport = null;
         this.remoteSessionId = null;
-        this.connected = false;
         this.stateDirty = true;
         this.remoteOperations.clear();
         // Keep the open request for reconnect.
@@ -148,7 +144,7 @@ public final class GatewayClient {
 
     private <T> T invokeConnected(RemoteCall<T> call) throws TException {
         requireGatewayEnabled();
-        if (!connected || transport == null || !transport.isOpen()) {
+        if (transport == null || !transport.isOpen()) {
             throw new TException("FLINK_REMOTE_SESSION_LOST: remote operation handles cannot be resumed after reconnect");
         }
         return invokeRemote(call);
@@ -182,7 +178,7 @@ public final class GatewayClient {
 
     private void applyStateStatement(String sql) throws TException {
         executeStateStatement(sql);
-        if (!connected) {
+        if (transport == null) {
             // Cleanup may lose the transport after the command succeeded. A new session must replay all state.
             throw new TException("Gateway connection lost while synchronizing session state");
         }
@@ -245,7 +241,7 @@ public final class GatewayClient {
     }
 
     private void closeStateOperation(TOperationHandle handle) {
-        if (!connected) {
+        if (transport == null) {
             return;
         }
         try {
@@ -270,7 +266,7 @@ public final class GatewayClient {
 
     public synchronized TCloseSessionResp closeSession() throws TException {
         try {
-            if (!connected) {
+            if (transport == null) {
                 return new TCloseSessionResp(new TStatus(TStatusCode.SUCCESS_STATUS));
             }
             TCloseSessionReq request = new TCloseSessionReq(remoteSessionHandle());

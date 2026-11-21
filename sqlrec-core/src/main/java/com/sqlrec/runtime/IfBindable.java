@@ -289,11 +289,6 @@ public class IfBindable extends BindableInterface {
         return collectBranchNames(BindableInterface::getDependencySqlFuncName);
     }
 
-    @Override
-    public Set<String> getDependencyJavaFuncName() {
-        return collectBranchNames(BindableInterface::getDependencyJavaFuncName);
-    }
-
     private Set<String> collectBranchNames(Function<BindableInterface, Set<String>> namesForBranch) {
         Set<String> names = new HashSet<>(namesForBranch.apply(thenClause));
         if (elseClause != null) {

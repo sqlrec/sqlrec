@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Set;
 
 public class JavaFunctionBindable extends BindableInterface {
-    private final String functionName;
     private final Object tableFunction;
     private final List<SqlNode> inputTableList;
     private final List<RelDataTypeField> returnDataFields;
@@ -39,7 +38,6 @@ public class JavaFunctionBindable extends BindableInterface {
             List<RelDataTypeField> returnDataFields,
             CalciteSchema schema
     ) {
-        this.functionName = functionName;
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
         this.evalMethod = JavaFunctionMethodMatcher.selectEvalMethod(functionName, tableFunction.getClass(), inputTableList);
@@ -184,9 +182,5 @@ public class JavaFunctionBindable extends BindableInterface {
     @Override
     public boolean isUnionSql() {
         return tableFunction instanceof UnionLikeTableFunction;
-    }
-
-    public Set<String> getDependencyJavaFuncName() {
-        return Set.of(functionName);
     }
 }

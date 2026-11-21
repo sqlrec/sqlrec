@@ -42,12 +42,6 @@ public abstract class ForwardingBindable extends BindableInterface {
     }
 
     @Override
-    public Set<String> getDependencyJavaFuncName() {
-        BindableInterface delegate = metadataDelegate();
-        return delegate == null ? super.getDependencyJavaFuncName() : delegate.getDependencyJavaFuncName();
-    }
-
-    @Override
     public Set<String> getDependencySqlFuncName() {
         BindableInterface delegate = metadataDelegate();
         return delegate == null ? super.getDependencySqlFuncName() : delegate.getDependencySqlFuncName();

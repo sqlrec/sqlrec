@@ -47,6 +47,18 @@ final class FeatureOptions {
         return result;
     }
 
+    static List<String> poolItemFeatures(Map<String, String> modelParams, List<String> userFeatures,
+                                         List<FieldSchema> features) {
+        List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(modelParams));
+        if (!items.isEmpty()) {
+            return items;
+        }
+        return features.stream()
+                .map(FieldSchema::getName)
+                .filter(name -> !userFeatures.contains(name))
+                .toList();
+    }
+
     static List<String> sparseFeatures(ModelConf model) {
         List<String> result = new ArrayList<>();
         for (FieldSchema field : features(model)) {

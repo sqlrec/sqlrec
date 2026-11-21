@@ -204,17 +204,9 @@ public class SqlFunctionBindable extends BindableInterface {
     }
 
     public Set<String> getDependencySqlFunctions() {
-        return collectDependencies(BindableInterface::getDependencySqlFuncName);
-    }
-
-    public Set<String> getDependencyJavaFunctions() {
-        return collectDependencies(BindableInterface::getDependencyJavaFuncName);
-    }
-
-    private Set<String> collectDependencies(Function<BindableInterface, Set<String>> dependenciesOf) {
         Set<String> dependencies = new HashSet<>();
         for (BindableInterface bindable : bindableList) {
-            for (String name : dependenciesOf.apply(bindable)) {
+            for (String name : bindable.getDependencySqlFuncName()) {
                 if (StringUtils.isNotEmpty(name)) {
                     dependencies.add(name);
                 }

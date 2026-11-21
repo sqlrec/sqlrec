@@ -68,15 +68,10 @@ final class TrainingOptions {
             throw new IllegalArgumentException("negative_pool_size must exceed batch_size");
         }
         String itemId = Config.ITEM_ID_COLUMN.getValue(params);
-        List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(model.getParams()));
-        List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(model.getParams()));
+        Map<String, String> modelParams = model.getParams();
+        List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(modelParams));
         List<FieldSchema> features = FeatureOptions.features(model);
-        if (items.isEmpty()) {
-            items = features.stream()
-                    .map(FieldSchema::getName)
-                    .filter(name -> !users.contains(name))
-                    .toList();
-        }
+        List<String> items = FeatureOptions.poolItemFeatures(modelParams, users, features);
         if (!Collections.disjoint(users, items)) {
             throw new IllegalArgumentException("Pool sampling requires disjoint user_features and item_features");
         }

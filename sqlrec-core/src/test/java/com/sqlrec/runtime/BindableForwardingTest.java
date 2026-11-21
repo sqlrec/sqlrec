@@ -24,14 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Guard against forgotten forwarding overrides in wrapper bindables.
- * Dependency metadata must survive every bindable wrapper layer.
- * refresh and circular dependency detection silently.
+ * SQL function dependencies must survive every bindable wrapper layer.
  */
 public class BindableForwardingTest {
 
     @Test
     void cacheWrapperKeepsItsIdentityOutputAndReturnSemantics() {
-        StubBindable inner = new StubBindable(Set.of("FUN_A"), Set.of("JF_X"), Map.of(), "plan");
+        StubBindable inner = new StubBindable(Set.of("FUN_A"), Map.of(), "plan");
         inner.setName("inner");
         inner.setSql("inner SQL");
         CacheTableBindable cache = new CacheTableBindable("cached", new ReturnBindable(inner));
@@ -72,18 +71,15 @@ public class BindableForwardingTest {
 
     private static class StubBindable extends BindableInterface {
         private final Set<String> dependencySqlFuncName;
-        private final Set<String> dependencyJavaFuncName;
         private final Map<String, String> allDependSqlFunctionMap;
         private final String logicalPlan;
 
         StubBindable(
                 Set<String> dependencySqlFuncName,
-                Set<String> dependencyJavaFuncName,
                 Map<String, String> allDependSqlFunctionMap,
                 String logicalPlan
         ) {
             this.dependencySqlFuncName = dependencySqlFuncName;
-            this.dependencyJavaFuncName = dependencyJavaFuncName;
             this.allDependSqlFunctionMap = allDependSqlFunctionMap;
             this.logicalPlan = logicalPlan;
         }
@@ -126,11 +122,6 @@ public class BindableForwardingTest {
         }
 
         @Override
-        public Set<String> getDependencyJavaFuncName() {
-            return dependencyJavaFuncName;
-        }
-
-        @Override
         public Map<String, String> getAllDependSqlFunctionMap() {
             return allDependSqlFunctionMap;
         }
@@ -163,14 +154,12 @@ public class BindableForwardingTest {
     void cacheTableBindableForwardsDependencyAndPlanMetadata() {
         StubBindable inner = new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 "logical-a"
         );
         CacheTableBindable cacheTable = new CacheTableBindable("t", inner);
 
         assertEquals(Collections.singleton("FUN_A"), cacheTable.getDependencySqlFuncName());
-        assertEquals(Collections.singleton("JF_X"), cacheTable.getDependencyJavaFuncName());
         assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"), cacheTable.getAllDependSqlFunctionMap());
         assertEquals(Collections.singleton("SRC"), cacheTable.getReadTables());
         assertEquals(Collections.singleton("t"), cacheTable.getWriteTables());
@@ -185,13 +174,11 @@ public class BindableForwardingTest {
     void ifCacheBindableMergesBothBranchDependencies() {
         StubBindable thenInner = new StubBindable(
                 new HashSet<>(Arrays.asList("FUN_A", "FUN_SHARED")),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 null
         );
         StubBindable elseInner = new StubBindable(
                 new HashSet<>(Arrays.asList("FUN_B", "FUN_SHARED")),
-                Collections.singleton("JF_Y"),
                 Collections.singletonMap("FUN_D", "FUN_B->FUN_D"),
                 null
         );
@@ -206,7 +193,6 @@ public class BindableForwardingTest {
                 new HashSet<>(Arrays.asList("FUN_A", "FUN_B", "FUN_SHARED")),
                 ifCache.getDependencySqlFuncName()
         );
-        assertEquals(new HashSet<>(Arrays.asList("JF_X", "JF_Y")), ifCache.getDependencyJavaFuncName());
         Map<String, String> expectedAllDepend = new HashMap<>();
         expectedAllDepend.put("FUN_C", "FUN_A->FUN_C");
         expectedAllDepend.put("FUN_D", "FUN_B->FUN_D");
@@ -217,7 +203,6 @@ public class BindableForwardingTest {
     void ifCacheBindableWithoutElseKeepsThenDependency() {
         StubBindable thenInner = new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.emptySet(),
                 Collections.emptyMap(),
                 null
         );
@@ -229,7 +214,6 @@ public class BindableForwardingTest {
         );
 
         assertEquals(Collections.singleton("FUN_A"), ifCache.getDependencySqlFuncName());
-        assertEquals(Collections.emptySet(), ifCache.getDependencyJavaFuncName());
         assertEquals(Collections.emptyMap(), ifCache.getAllDependSqlFunctionMap());
     }
 
@@ -237,14 +221,12 @@ public class BindableForwardingTest {
     void proxyAllBindableForwardsDependencyAndPlanMetadata() {
         StubBindable inner = new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 "logical-a"
         );
         ProxyAllBindable proxy = new ProxyAllBindable(inner);
 
         assertEquals(Collections.singleton("FUN_A"), proxy.getDependencySqlFuncName());
-        assertEquals(Collections.singleton("JF_X"), proxy.getDependencyJavaFuncName());
         assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"), proxy.getAllDependSqlFunctionMap());
         assertEquals(Collections.singleton("SRC"), proxy.getReadTables());
         assertTrue(proxy.isParallelizable());
@@ -259,14 +241,12 @@ public class BindableForwardingTest {
         // simulates a function body node: proxy -> cache table -> call function
         StubBindable callNode = new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 null
         );
         ProxyAllBindable node = new ProxyAllBindable(new CacheTableBindable("t", callNode));
 
         assertEquals(Collections.singleton("FUN_A"), node.getDependencySqlFuncName());
-        assertEquals(Collections.singleton("JF_X"), node.getDependencyJavaFuncName());
         assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"), node.getAllDependSqlFunctionMap());
     }
 
@@ -274,7 +254,6 @@ public class BindableForwardingTest {
     void returnBindableForwardsDependencyAndPlanMetadata() {
         StubBindable inner = new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 "logical-a"
         );
@@ -282,7 +261,6 @@ public class BindableForwardingTest {
 
         assertTrue(returnBindable.containsReturn());
         assertEquals(Collections.singleton("FUN_A"), returnBindable.getDependencySqlFuncName());
-        assertEquals(Collections.singleton("JF_X"), returnBindable.getDependencyJavaFuncName());
         assertEquals(Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 returnBindable.getAllDependSqlFunctionMap());
         assertEquals(Collections.singleton("SRC"), returnBindable.getReadTables());
@@ -295,13 +273,11 @@ public class BindableForwardingTest {
     void ifReturnMergesDependenciesFromBothBranches() {
         ReturnBindable thenReturn = new ReturnBindable(new StubBindable(
                 Collections.singleton("FUN_A"),
-                Collections.singleton("JF_X"),
                 Collections.singletonMap("FUN_C", "FUN_A->FUN_C"),
                 null
         ));
         ReturnBindable elseReturn = new ReturnBindable(new StubBindable(
                 Collections.singleton("FUN_B"),
-                Collections.singleton("JF_Y"),
                 Collections.singletonMap("FUN_D", "FUN_B->FUN_D"),
                 null
         ));
@@ -315,8 +291,6 @@ public class BindableForwardingTest {
         assertTrue(ifReturn.containsReturn());
         assertEquals(new HashSet<>(Arrays.asList("FUN_A", "FUN_B")),
                 ifReturn.getDependencySqlFuncName());
-        assertEquals(new HashSet<>(Arrays.asList("JF_X", "JF_Y")),
-                ifReturn.getDependencyJavaFuncName());
         assertEquals(new HashSet<>(Collections.singletonList("SRC")), ifReturn.getReadTables());
         Map<String, String> expected = new HashMap<>();
         expected.put("FUN_C", "FUN_A->FUN_C");
@@ -327,7 +301,6 @@ public class BindableForwardingTest {
     @Test
     void proxyForwardsContainsReturn() {
         ProxyAllBindable proxy = new ProxyAllBindable(new ReturnBindable(new StubBindable(
-                Collections.emptySet(),
                 Collections.emptySet(),
                 Collections.emptyMap(),
                 null

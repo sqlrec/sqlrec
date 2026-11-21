@@ -166,9 +166,9 @@ public class PipelineConfigUtils {
         config.append("    num_workers: " + numWorkers + "\n");
         if ("tzrec.dssm".equals(model.getParams().get("model"))
                 && "pool".equals(Config.NEGATIVE_SAMPLING.getValue(params))) {
-            List<String> items = FieldTypeUtils.parseCsvList(Config.ITEM_FEATURES.getValueOrNull(model.getParams()));
-            if (items.isEmpty()) items = inferRemainingFeatures(getFeatures(model),
-                    FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(model.getParams())));
+            Map<String, String> modelParams = model.getParams();
+            List<String> users = FieldTypeUtils.parseCsvList(Config.USER_FEATURES.getValueOrNull(modelParams));
+            List<String> items = FeatureOptions.poolItemFeatures(modelParams, users, FeatureOptions.features(model));
             config.append("    pool_negative_sampler {\n");
             String inputPath = trainPaths == null ? "" : parquetInputPaths(String.join(",", trainPaths));
             config.append("        input_path: ").append(quoted(inputPath)).append("\n");

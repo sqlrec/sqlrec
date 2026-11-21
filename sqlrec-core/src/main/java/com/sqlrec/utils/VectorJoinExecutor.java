@@ -27,17 +27,6 @@ public final class VectorJoinExecutor {
             Object pushedFilterObject,
             int leftEmbeddingIndex,
             String rightEmbeddingField,
-            int topKPerLeftRow) {
-        return execute(left, rightTable, pushedFilterObject, leftEmbeddingIndex,
-                rightEmbeddingField, topKPerLeftRow, null);
-    }
-
-    public static <T> Enumerable<Object[]> execute(
-            Enumerable<T> left,
-            VectorSearchable rightTable,
-            Object pushedFilterObject,
-            int leftEmbeddingIndex,
-            String rightEmbeddingField,
             int topKPerLeftRow,
             DataContext dataContext) {
         if (left == null) {
