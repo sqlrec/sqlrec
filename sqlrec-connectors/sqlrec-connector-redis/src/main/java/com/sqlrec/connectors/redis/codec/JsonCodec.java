@@ -9,6 +9,10 @@ import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 
 public class JsonCodec implements AbstractCodec {
@@ -29,7 +33,23 @@ public class JsonCodec implements AbstractCodec {
 
     @Override
     public byte[] encode(Object[] objects) {
-        String json = RowJsonEncoder.toJson(objects, fieldSchemas);
+        Object[] values = objects;
+        for (int i = 0; i < fieldSchemas.size(); i++) {
+            Object value = objects[i];
+            String isoText;
+            if (value instanceof Date) {
+                isoText = ((Date) value).toLocalDate().toString();
+            } else if (value instanceof Timestamp) {
+                isoText = DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(((Timestamp) value).toLocalDateTime());
+            } else {
+                continue;
+            }
+            if (values == objects) {
+                values = Arrays.copyOf(objects, objects.length, Object[].class);
+            }
+            values[i] = isoText;
+        }
+        String json = RowJsonEncoder.toJson(values, fieldSchemas);
         return json.getBytes(StandardCharsets.UTF_8);
     }
 }

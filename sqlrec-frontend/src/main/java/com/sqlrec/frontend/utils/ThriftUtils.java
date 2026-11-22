@@ -4,17 +4,30 @@ import com.sqlrec.common.utils.JsonUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.util.DateString;
+import org.apache.calcite.util.TimestampString;
 import org.apache.hive.service.rpc.thrift.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
+    private static final DateTimeFormatter TIMESTAMP_TEXT = new DateTimeFormatterBuilder()
+            .appendPattern("uuuu-MM-dd HH:mm:ss")
+            .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+            .toFormatter(Locale.ROOT);
 
     public static TStatus errorStatus(Exception error) {
         TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
@@ -60,8 +73,9 @@ public class ThriftUtils {
     private static ResultColumn<?> createColumn(RelDataTypeField field) {
         int index = field.getIndex();
         return switch (field.getType().getSqlTypeName()) {
-            case VARCHAR, CHAR -> valueColumn(index, String.class, "",
-                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            case VARCHAR, CHAR -> stringColumn(index, value -> tryCast(value, String.class));
+            case DATE -> stringColumn(index, ThriftUtils::formatDate);
+            case TIMESTAMP -> stringColumn(index, ThriftUtils::formatTimestamp);
             case SMALLINT, TINYINT -> valueColumn(index, Short.class, (short) 0,
                     (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
             case INTEGER -> valueColumn(index, Integer.class, 0,
@@ -72,9 +86,34 @@ public class ThriftUtils {
                     (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
             case BOOLEAN -> valueColumn(index, Boolean.class, false,
                     (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
-            default -> new ResultColumn<>(index, JsonUtils::toJson, "",
-                    (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+            default -> stringColumn(index, JsonUtils::toJson);
         };
+    }
+
+    private static ResultColumn<String> stringColumn(int index, Function<Object, String> converter) {
+        return new ResultColumn<>(index, converter, "",
+                (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
+    }
+
+    private static String formatDate(Object value) {
+        if (value instanceof Number days) {
+            return DateString.fromDaysSinceEpoch(days.intValue()).toString();
+        }
+        if (value instanceof Date date) {
+            return date.toLocalDate().toString();
+        }
+        return LocalDate.parse(value.toString()).toString();
+    }
+
+    private static String formatTimestamp(Object value) {
+        if (value instanceof Number millis) {
+            // Calcite encodes the wall-clock value as epoch milliseconds.
+            return TimestampString.fromMillisSinceEpoch(millis.longValue()).toString();
+        }
+        LocalDateTime timestamp = value instanceof Timestamp jdbcTimestamp
+                ? jdbcTimestamp.toLocalDateTime()
+                : LocalDateTime.parse(value.toString().replace(' ', 'T'));
+        return TIMESTAMP_TEXT.format(timestamp);
     }
 
     private static <T> ResultColumn<T> valueColumn(int index, Class<T> type, T nullPlaceholder,
@@ -161,6 +200,8 @@ public class ThriftUtils {
             case REAL, FLOAT -> TTypeId.FLOAT_TYPE;
             case DOUBLE -> TTypeId.DOUBLE_TYPE;
             case BOOLEAN -> TTypeId.BOOLEAN_TYPE;
+            case DATE -> TTypeId.DATE_TYPE;
+            case TIMESTAMP -> TTypeId.TIMESTAMP_TYPE;
             default -> TTypeId.STRING_TYPE;
         };
     }

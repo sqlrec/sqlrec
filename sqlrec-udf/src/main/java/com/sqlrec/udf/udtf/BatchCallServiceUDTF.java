@@ -11,9 +11,11 @@ import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.types.Row;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Batches model requests across eval calls and returns buffered inputs with predictions.
@@ -148,19 +150,38 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
 
     private void outputResults(Map<String, Object> predictions) {
         PredictionResult result = new PredictionResult(predictions);
+        // Only numeric arrays participate in promotion. Other rows keep their own conversion rules.
+        Map<String, ArrayType> numericArrayTypes = new LinkedHashMap<>();
         for (int i = 0; i < buffer.size(); i++) {
             Map<String, Object> values = buffer.get(i);
             result.forEachValue(i, values::put);
-            collect(toOutputRow(values));
+            for (Map.Entry<String, Object> entry : values.entrySet()) {
+                String field = entry.getKey();
+                if (numericArrayTypes.get(field) == ArrayType.DOUBLE) {
+                    continue;
+                }
+                Object value = entry.getValue();
+                ArrayType type = arrayType(value);
+                if (type == ArrayType.BIGINT && value instanceof List
+                        && ((List<?>) value).stream().anyMatch(BatchCallServiceUDTF::isFloatingPoint)) {
+                    type = ArrayType.DOUBLE;
+                }
+                if (type == ArrayType.BIGINT || type == ArrayType.DOUBLE) {
+                    numericArrayTypes.put(field, type);
+                }
+            }
         }
-    }
 
-    private static Row toOutputRow(Map<String, Object> values) {
-        OutputFields fields = new OutputFields();
-        for (Map.Entry<String, Object> entry : values.entrySet()) {
-            fields.add(entry.getKey(), entry.getValue());
+        List<Row> output = new ArrayList<>(buffer.size());
+        for (Map<String, Object> values : buffer) {
+            OutputFields fields = new OutputFields();
+            for (Map.Entry<String, Object> entry : values.entrySet()) {
+                String field = entry.getKey();
+                fields.add(field, entry.getValue(), numericArrayTypes.get(field));
+            }
+            output.add(fields.toRow());
         }
-        return fields.toRow();
+        output.forEach(this::collect);
     }
 
     private static boolean isInteger(Object value) {
@@ -186,20 +207,47 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         return ((Number) value).doubleValue();
     }
 
-    private static Long[] toLongArray(Integer[] intArr) {
-        Long[] arr = new Long[intArr.length];
-        for (int j = 0; j < intArr.length; j++) {
-            arr[j] = intArr[j] == null ? null : intArr[j].longValue();
+    private enum ArrayType { BIGINT, DOUBLE, STRING, EMPTY }
+
+    private static ArrayType arrayType(Object value) {
+        if (value instanceof Long[] || value instanceof Integer[]) {
+            return ArrayType.BIGINT;
         }
-        return arr;
+        if (value instanceof Double[] || value instanceof Float[]) {
+            return ArrayType.DOUBLE;
+        }
+        if (value instanceof String[]) {
+            return ArrayType.STRING;
+        }
+        if (value instanceof List) {
+            List<?> values = (List<?>) value;
+            Object first = values.stream().filter(Objects::nonNull).findFirst().orElse(null);
+            if (first == null) {
+                return ArrayType.EMPTY;
+            }
+            if (first instanceof String) {
+                return ArrayType.STRING;
+            }
+            if (isInteger(first)) {
+                return ArrayType.BIGINT;
+            }
+            if (isFloatingPoint(first)) {
+                return ArrayType.DOUBLE;
+            }
+        }
+        return null;
     }
 
-    private static Double[] toDoubleArray(Float[] floatArr) {
-        Double[] arr = new Double[floatArr.length];
-        for (int j = 0; j < floatArr.length; j++) {
-            arr[j] = floatArr[j] == null ? null : floatArr[j].doubleValue();
+    private static Double toArrayDouble(String field, Object value) {
+        if (isInteger(value)) {
+            long integer = ((Number) value).longValue();
+            double converted = integer;
+            if (converted >= 0x1p63 || (long) converted != integer) {
+                throw new IllegalArgumentException("Output array '" + field
+                        + "' has an integer that cannot be represented exactly as DOUBLE: " + integer);
+            }
         }
-        return arr;
+        return toDouble(value);
     }
 
     /** Collects values in the six maps declared by the function's output schema. */
@@ -211,52 +259,48 @@ public class BatchCallServiceUDTF extends TableFunction<Row> {
         private final Map<String, Double[]> doubleArrays = new LinkedHashMap<>();
         private final Map<String, String[]> stringArrays = new LinkedHashMap<>();
 
-        private void add(String key, Object value) {
+        private void add(String key, Object value, ArrayType batchNumericType) {
             if (isInteger(value)) {
                 longs.put(key, toLong(value));
             } else if (isFloatingPoint(value)) {
                 doubles.put(key, toDouble(value));
             } else if (value instanceof String) {
                 strings.put(key, (String) value);
-            } else if (value instanceof List) {
-                addList(key, (List<?>) value);
-            } else if (value instanceof Long[]) {
-                longArrays.put(key, (Long[]) value);
-            } else if (value instanceof Integer[]) {
-                longArrays.put(key, toLongArray((Integer[]) value));
-            } else if (value instanceof Double[]) {
-                doubleArrays.put(key, (Double[]) value);
-            } else if (value instanceof Float[]) {
-                doubleArrays.put(key, toDoubleArray((Float[]) value));
-            } else if (value instanceof String[]) {
-                stringArrays.put(key, (String[]) value);
+            } else {
+                ArrayType type = arrayType(value);
+                if (type == ArrayType.BIGINT || type == ArrayType.EMPTY) {
+                    type = batchNumericType;
+                }
+                if (type != null) {
+                    addArray(key, value, type);
+                }
             }
         }
 
-        private void addList(String key, List<?> values) {
-            if (values.isEmpty()) {
-                return;
-            }
-            // The first element determines the array type; other types keep the original fallbacks.
-            Object first = values.get(0);
-            if (isInteger(first)) {
-                longArrays.put(key, values.stream()
-                        .map(value -> {
-                            if (isInteger(value)) return toLong(value);
-                            return 0L;
-                        })
-                        .toArray(Long[]::new));
-            } else if (isFloatingPoint(first)) {
-                doubleArrays.put(key, values.stream()
-                        .map(value -> {
-                            if (isFloatingPoint(value)) return toDouble(value);
-                            return 0.0;
-                        })
-                        .toArray(Double[]::new));
-            } else if (first instanceof String) {
-                stringArrays.put(key, values.stream()
-                        .map(Object::toString)
-                        .toArray(String[]::new));
+        private void addArray(String key, Object value, ArrayType type) {
+            List<?> elements = value instanceof List ? (List<?>) value : Arrays.asList((Object[]) value);
+            switch (type) {
+                case BIGINT:
+                    longArrays.put(key, value instanceof Long[] ? (Long[]) value : elements.stream()
+                            .map(element -> {
+                                if (element == null) return null;
+                                if (isInteger(element)) return toLong(element);
+                                return 0L;
+                            }).toArray(Long[]::new));
+                    break;
+                case DOUBLE:
+                    doubleArrays.put(key, value instanceof Double[] ? (Double[]) value : elements.stream()
+                            .map(element -> {
+                                if (element == null) return null;
+                                if (isInteger(element) || isFloatingPoint(element)) return toArrayDouble(key, element);
+                                return 0.0;
+                            }).toArray(Double[]::new));
+                    break;
+                case STRING:
+                    stringArrays.put(key, value instanceof String[] ? (String[]) value : elements.stream()
+                            .map(element -> element == null ? null : element.toString())
+                            .toArray(String[]::new));
+                    break;
             }
         }
 

@@ -1,6 +1,7 @@
 package com.sqlrec.udf.udtf;
 
 import com.google.gson.JsonParser;
+import com.sqlrec.common.utils.JsonUtils;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.Collector;
 import org.junit.jupiter.api.Test;
@@ -109,9 +110,9 @@ class BatchCallServiceUDTFTest {
         assertEquals(Map.of("score", 0.5d), row.getField(1));
         Map<?, ?> longs = (Map<?, ?>) row.getField(3);
         Map<?, ?> doubles = (Map<?, ?>) row.getField(4);
-        assertArrayEquals(new Long[]{1L, 0L, 0L}, (Long[]) longs.get("ints"));
+        assertArrayEquals(new Long[]{1L, 0L, null}, (Long[]) longs.get("ints"));
         assertArrayEquals(new Long[]{2L, null, 3L}, (Long[]) longs.get("intArray"));
-        assertArrayEquals(new Double[]{1.5d, 0.0d, 0.0d}, (Double[]) doubles.get("doubles"));
+        assertArrayEquals(new Double[]{1.5d, 0.0d, null}, (Double[]) doubles.get("doubles"));
         assertArrayEquals(new Double[]{null, 2.5d}, (Double[]) doubles.get("floatArray"));
         assertArrayEquals(new String[]{"a", "b"}, (String[]) ((Map<?, ?>) row.getField(5)).get("names"));
         for (int i = 0; i < row.getArity(); i++) {
@@ -121,7 +122,7 @@ class BatchCallServiceUDTFTest {
     }
 
     @Test
-    void rowConversionRetainsTypedArraysAndUsesTheFirstListElement() throws Exception {
+    void rowConversionRetainsTypedArraysAndWidensNumericLists() throws Exception {
         BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> null);
         List<Row> output = new ArrayList<>();
         function.setCollector(new ListCollector(output));
@@ -145,17 +146,124 @@ class BatchCallServiceUDTFTest {
         assertSame(longs, longArrays.get("longArray"));
         assertSame(doubles, doubleArrays.get("doubleArray"));
         assertSame(strings, stringArrays.get("stringArray"));
-        Long[] longList = (Long[]) longArrays.get("longList");
-        Double[] doubleList = (Double[]) doubleArrays.get("doubleList");
-        assertSame(longs[0], longList[0]);
-        assertSame(doubles[0], doubleList[0]);
-        assertArrayEquals(new Long[]{1000L, 0L}, longList);
-        assertArrayEquals(new Double[]{2.5d, 0.0d}, doubleList);
+        assertFalse(longArrays.containsKey("longList"));
+        assertArrayEquals(new Double[]{1000d, 2.5d}, (Double[]) doubleArrays.get("longList"));
+        assertArrayEquals(new Double[]{2.5d, 3d}, (Double[]) doubleArrays.get("doubleList"));
+        assertArrayEquals(new Long[]{null, 1L}, (Long[]) longArrays.get("nullFirst"));
         assertArrayEquals(new String[]{"first", "2", "true"}, (String[]) stringArrays.get("stringList"));
         for (int i = 0; i < row.getArity(); i++) {
-            assertFalse(((Map<?, ?>) row.getField(i)).containsKey("nullFirst"));
             assertFalse(((Map<?, ?>) row.getField(i)).containsKey("unsupportedFirst"));
         }
+    }
+
+    @Test
+    void modelJsonVectorsKeepMixedNumbersAndNullableElements() throws Exception {
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> JsonUtils.parseJsonToMap(
+                "{\"embedding\":[[1,0.25,null],[null,0.5,2]],\"labels\":[[null,\"a\"],[\"b\",null]]}"));
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+
+        function.eval("http://service", 2, "id", 1);
+        function.eval("http://service", 2, "id", 2);
+
+        assertEquals(2, output.size());
+        assertArrayEquals(new Double[]{1.0d, 0.25d, null},
+                (Double[]) ((Map<?, ?>) output.get(0).getField(4)).get("embedding"));
+        assertArrayEquals(new Double[]{null, 0.5d, 2.0d},
+                (Double[]) ((Map<?, ?>) output.get(1).getField(4)).get("embedding"));
+        assertArrayEquals(new String[]{null, "a"},
+                (String[]) ((Map<?, ?>) output.get(0).getField(5)).get("labels"));
+        assertArrayEquals(new String[]{"b", null},
+                (String[]) ((Map<?, ?>) output.get(1).getField(5)).get("labels"));
+    }
+
+    @Test
+    void infersOneNumericArrayTypePerFieldAcrossTheBatch() throws Exception {
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> JsonUtils.parseJsonToMap(
+                "{\"embedding\":[[0,0],[1,0.25],[null,null],[]],\"ids\":[[9007199254740993],[1],[2],[3]]}"));
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+
+        for (int id = 1; id <= 4; id++) {
+            function.eval("http://service", 4, "id", id);
+        }
+
+        assertEquals(4, output.size());
+        List<Double[]> expected = List.of(new Double[]{0d, 0d}, new Double[]{1d, 0.25d},
+                new Double[]{null, null}, new Double[0]);
+        for (int i = 0; i < expected.size(); i++) {
+            Map<?, ?> longs = (Map<?, ?>) output.get(i).getField(3);
+            Map<?, ?> doubles = (Map<?, ?>) output.get(i).getField(4);
+            assertFalse(longs.containsKey("embedding"));
+            assertArrayEquals(expected.get(i), (Double[]) doubles.get("embedding"));
+        }
+        assertArrayEquals(new Long[]{9007199254740993L}, (Long[]) ((Map<?, ?>) output.get(0).getField(3)).get("ids"));
+    }
+
+    @Test
+    void infersArrayTypesIndependentlyForEachBatchIncludingFinish() throws Exception {
+        List<String> bodies = new ArrayList<>();
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> {
+            bodies.add(body);
+            switch (bodies.size()) {
+                case 1: return JsonUtils.parseJsonToMap("{\"embedding\":[[1,0.25],[0,0]]}");
+                case 2: return JsonUtils.parseJsonToMap("{\"embedding\":[[0,0],[0,1]]}");
+                default: return JsonUtils.parseJsonToMap("{\"embedding\":[[0.5,null]]}");
+            }
+        });
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+        for (int id = 1; id <= 5; id++) {
+            function.eval("http://service", 2, "id", id);
+        }
+        function.finish();
+
+        assertEquals(List.of("[{\"id\":1},{\"id\":2}]", "[{\"id\":3},{\"id\":4}]", "[{\"id\":5}]"), bodies);
+        assertEquals(5, output.size());
+        assertArrayEquals(new Double[]{1d, 0.25d}, (Double[]) ((Map<?, ?>) output.get(0).getField(4)).get("embedding"));
+        assertArrayEquals(new Double[]{0d, 0d}, (Double[]) ((Map<?, ?>) output.get(1).getField(4)).get("embedding"));
+        assertArrayEquals(new Long[]{0L, 0L}, (Long[]) ((Map<?, ?>) output.get(2).getField(3)).get("embedding"));
+        assertArrayEquals(new Long[]{0L, 1L}, (Long[]) ((Map<?, ?>) output.get(3).getField(3)).get("embedding"));
+        assertArrayEquals(new Double[]{0.5d, null}, (Double[]) ((Map<?, ?>) output.get(4).getField(4)).get("embedding"));
+    }
+
+    @Test
+    void numericInferencePreservesStringRowsAndSkipsUnsupportedArrays() throws Exception {
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> JsonUtils.parseJsonToMap(
+                "{\"values\":[[7],[true],[\"label\"],[0.25]]}"));
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+
+        for (int id = 1; id <= 4; id++) {
+            function.eval("http://service", 4, "id", id);
+        }
+
+        assertEquals(4, output.size());
+        assertArrayEquals(new Double[]{7d}, (Double[]) ((Map<?, ?>) output.get(0).getField(4)).get("values"));
+        for (int field = 3; field <= 5; field++) {
+            assertFalse(((Map<?, ?>) output.get(1).getField(field)).containsKey("values"));
+        }
+        assertArrayEquals(new String[]{"label"}, (String[]) ((Map<?, ?>) output.get(2).getField(5)).get("values"));
+        assertArrayEquals(new Double[]{0.25d}, (Double[]) ((Map<?, ?>) output.get(3).getField(4)).get("values"));
+    }
+
+    @Test
+    void rejectsLossyNumericPromotionBeforeEmittingAnyBatchRows() throws Exception {
+        BatchCallServiceUDTF function = new BatchCallServiceUDTF((url, body) -> JsonUtils.parseJsonToMap(
+                "{\"embedding\":[[1,0.25],[9007199254740993]]}"));
+        List<Row> output = new ArrayList<>();
+        function.setCollector(new ListCollector(output));
+        function.open(null);
+
+        function.eval("http://service", 2, "id", 1);
+        var failure = assertThrows(RuntimeException.class, () -> function.eval("http://service", 2, "id", 2));
+
+        assertTrue(failure.getMessage().contains("'embedding' has an integer that cannot be represented exactly"));
+        assertTrue(output.isEmpty());
     }
 
     private static final class ListCollector implements Collector<Row> {

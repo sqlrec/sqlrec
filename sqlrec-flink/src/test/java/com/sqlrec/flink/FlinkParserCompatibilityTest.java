@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FlinkParserCompatibilityTest {
     @Test
@@ -24,6 +25,20 @@ class FlinkParserCompatibilityTest {
         StreamTableEnvironment environment = StreamTableEnvironment.create(
                 StreamExecutionEnvironment.getExecutionEnvironment());
         environment.executeSql(sql);
+    }
+
+    @Test
+    void plannerAcceptsOriginalBatchCallServiceArguments() {
+        StreamTableEnvironment environment = StreamTableEnvironment.create(
+                StreamExecutionEnvironment.getExecutionEnvironment());
+        environment.executeSql("CREATE TEMPORARY FUNCTION batch_call_service AS "
+                + "'com.sqlrec.udf.udtf.BatchCallServiceUDTF'");
+
+        String plan = environment.explainSql("SELECT r.double_array_map['embedding'] "
+                + "FROM (VALUES (1), (2)) AS source(id), LATERAL TABLE(batch_call_service("
+                + "'http://model/predict', 2, 'id', id)) AS r");
+
+        assertTrue(plan.contains("batch_call_service"));
     }
 
     @Test
