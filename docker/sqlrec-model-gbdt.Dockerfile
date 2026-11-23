@@ -3,7 +3,7 @@
 # ===========================================================================
 # Stage 1: builder
 #   Compiles the C++ inference servers and assembles a self-contained Python
-#   virtualenv with all packages. Build-only tools (cmake/make/g++/wget) live
+#   virtualenv with all packages. Build-only tools (cmake/make/g++/wget/unzip) live
 #   here and are discarded — they never reach the runtime image.
 # ===========================================================================
 FROM python:3.11-slim-bookworm AS builder
@@ -18,6 +18,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
+        unzip \
         cmake \
         make \
         g++ \
@@ -55,19 +56,24 @@ COPY juicefs-*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/juicefs-*.whl \
     && rm -f /tmp/juicefs-*.whl
 
-# Install the architecture-specific ONNX Runtime C++ SDK.
+# Microsoft's NuGet package contains the C++ headers and Linux shared libraries.
 ENV ONNXRUNTIME_VERSION=1.17.1
 RUN ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" \
     && case "${ARCH}" in \
-         amd64) ONNX_ARCH=x64 ;; \
-         arm64) ONNX_ARCH=aarch64 ;; \
+         amd64) NUGET_ARCH=x64 ;; \
+         arm64) NUGET_ARCH=arm64 ;; \
          *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
        esac \
-    && wget -q -O /tmp/onnxruntime.tgz \
-        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
-    && mkdir -p /opt/onnxruntime \
-    && tar -xzf /tmp/onnxruntime.tgz -C /opt/onnxruntime --strip-components=1 \
-    && rm -f /tmp/onnxruntime.tgz
+    && wget --no-verbose --timeout=30 --tries=3 --retry-on-http-error=429,500,502,503,504 \
+        -O /tmp/onnxruntime.nupkg \
+        "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${ONNXRUNTIME_VERSION}.nupkg" \
+    && mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib \
+    && unzip -qj /tmp/onnxruntime.nupkg 'build/native/include/*.h' -d /opt/onnxruntime/include \
+    && unzip -qj /tmp/onnxruntime.nupkg "runtimes/linux-${NUGET_ARCH}/native/*.so" -d /opt/onnxruntime/lib \
+    && test -s /opt/onnxruntime/include/onnxruntime_cxx_api.h \
+    && test -s /opt/onnxruntime/lib/libonnxruntime.so \
+    && ln -s libonnxruntime.so "/opt/onnxruntime/lib/libonnxruntime.so.${ONNXRUNTIME_VERSION}" \
+    && rm -f /tmp/onnxruntime.nupkg
 
 ENV ONNXRUNTIME_INCLUDE_DIR=/opt/onnxruntime/include
 ENV ONNXRUNTIME_LIB_DIR=/opt/onnxruntime/lib
