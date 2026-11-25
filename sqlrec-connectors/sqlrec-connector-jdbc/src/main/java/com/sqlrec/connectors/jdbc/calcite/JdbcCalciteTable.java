@@ -94,6 +94,11 @@ public class JdbcCalciteTable extends SqlRecKvTable {
         }
 
         @Override
+        protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+            return jdbcHandler.updateBatch(oldRows, newRows);
+        }
+
+        @Override
         protected boolean removeAllImpl(Collection<?> c) {
             List<Object[]> rows = new ArrayList<>(c.size());
             for (Object o : c) {

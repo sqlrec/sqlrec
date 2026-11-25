@@ -88,6 +88,7 @@ CREATE TABLE user_proto (
 - In `list` mode, the primary key is a Redis list lookup key, not a unique row identifier. Multiple rows can share one key. `INSERT` prepends rows, and `max-list-size` limits the list length after writes
 - In `list` mode, `UPDATE` selects old rows using the SQL predicate, removes one exact list entry per selected row, then prepends each new row. Changing the primary key moves the row to the new key. A missing old row is not inserted
 - In `list` mode, `DELETE` removes all list entries identical to a selected row, while `UPDATE` removes one matching entry for each selected old row. The remove and insert commands in `UPDATE` are not atomic
+- In `json` and `string` modes, `UPDATE` can change the primary key, including across Redis Cluster slots. SQLRec writes the new key with the configured TTL before deleting the old key. An existing destination key causes an error. Both keys can be visible between commands and may remain if deletion fails
 - Protobuf format requires the generated Message class on the SQLRec and Flink runtime classpaths
 - `format = protobuf` cannot be combined with `data-structure = string`
 
@@ -227,6 +228,7 @@ CREATE TABLE user_profile (
 - PostgreSQL, MySQL and H2 reserved words and identifiers containing special characters are quoted automatically; declared names must match the database identifiers, including case for quoted names
 - H2 upserts use declared column names, allowing a different physical column order or a subset of columns
 - Supports upsert operations, automatically determining insert or update based on primary key
+- JDBC commits writes one batch at a time and rolls back the batch on failure. `UPDATE` matches the original primary key and can change it, subject to the database's uniqueness and foreign key constraints
 - Custom JDBC properties can be passed via the `jdbc.properties.*` prefix
 
 ### 5. MongoDB Connector
@@ -268,6 +270,7 @@ CREATE TABLE user_behavior (
 - Filter conditions that cannot be pushed down will be handled by Calcite in memory
 - MongoClient instances are shared for the same URI
 - Upsert operations automatically determine insert or update based on primary key
+- `UPDATE` matches documents by their original primary key and can change a lookup key stored in an ordinary field. MongoDB's native `_id` is immutable. If a batch fails, earlier successful writes may already have taken effect
 - Behavior records use `event_id` as the primary key; using `user_id` would make later writes for the same user replace an existing record
 
 ### 6. Filesystem Connector

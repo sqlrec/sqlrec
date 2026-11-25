@@ -163,6 +163,22 @@ public final class JdbcSqlBuilder {
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
+    /** Binds the new column values followed by the original primary key. */
+    public static JdbcStatement updateByPrimaryKey(String url, String tableName, List<FieldSchema> fieldSchemas,
+                                                   String primaryKey) {
+        validateFieldSchemas(fieldSchemas);
+        StringBuilder sql = new StringBuilder("UPDATE ")
+                .append(quoteQualifiedIdentifier(tableName, url)).append(" SET ");
+        for (int i = 0; i < fieldSchemas.size(); i++) {
+            if (i > 0) {
+                sql.append(", ");
+            }
+            sql.append(quoteIdentifier(fieldSchemas.get(i).getName(), url)).append(" = ?");
+        }
+        sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" = ?");
+        return new JdbcStatement(sql.toString(), Collections.emptyList());
+    }
+
     /**
      * Build a delete-by-primary-key statement. The returned statement is a row template:
      * the caller supplies the key value via {@link JdbcStatement#withParameters(List)}.

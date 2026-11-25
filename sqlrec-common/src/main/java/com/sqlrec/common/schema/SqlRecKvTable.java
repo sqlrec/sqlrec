@@ -215,7 +215,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             return;
         }
         int pkIndex = getPrimaryKeyIndex();
-        if (pkIndex < row.length) {
+        if (pkIndex < row.length && row[pkIndex] != null) {
             SqlTypeName primaryKeyType = getPrimaryKeyType();
             Object primaryKeyValue = ScalarConversions.convert(row[pkIndex], primaryKeyType);
             cache.invalidate(primaryKeyValue);

@@ -1,5 +1,9 @@
 package com.sqlrec.connectors;
 
+import com.mongodb.MongoBulkWriteException;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.model.IndexOptions;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
@@ -8,8 +12,6 @@ import com.sqlrec.connectors.mongodb.calcite.MongoCalciteTable;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -20,6 +22,7 @@ import org.apache.calcite.schema.ScannableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.bson.Document;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -32,7 +35,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("integration")
 public class TestMongoTable {
@@ -47,6 +55,8 @@ public class TestMongoTable {
     static void createTestCollection() {
         collectionClient = MongoClients.create(MONGO_URI);
         collectionClient.getDatabase(TEST_DATABASE).createCollection(TEST_COLLECTION);
+        collectionClient.getDatabase(TEST_DATABASE).getCollection(TEST_COLLECTION)
+                .createIndex(new Document("id", 1), new IndexOptions().unique(true));
     }
 
     @AfterAll
@@ -64,7 +74,8 @@ public class TestMongoTable {
     @Test
     public void testMongoTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
-        tableMap.put("t1", getMongoTable());
+        var table = getMongoTable();
+        tableMap.put("t1", table);
         tableMap.put("t2", new MyTable());
 
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
@@ -139,12 +150,48 @@ public class TestMongoTable {
                         new Object[]{3, "Charlie", null, null, null}
                 )).test(schema);
 
+        var collection = collectionClient.getDatabase(TEST_DATABASE).getCollection(TEST_COLLECTION);
+        var originalId = collection.find(new Document("id", 1)).first().get("_id");
+        collection.updateOne(new Document("id", 1), new Document("$set", new Document("extra", "keep")));
+        new SqlTestCase("update t1 set id = id + 10 where id in (1, 2)",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 1", Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t1 where id = 2", Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t1 where id = 11",
+                Collections.singletonList(new Object[]{11, "Alice2", 31})).test(schema);
+        new SqlTestCase("select * from t1 where id = 12",
+                Collections.singletonList(new Object[]{12, "Bob", 25})).test(schema);
+        var updated = collection.find(new Document("id", 11)).first();
+        assertEquals(originalId, updated.get("_id"));
+        assertEquals("keep", updated.getString("extra"));
+
+        new SqlTestCase("update t1 set id = 12, name = 'Conflict' where id = 11", null,
+                new RuntimeException("E11000")).test(schema);
+        new SqlTestCase("select * from t1 where id in (11, 12) order by id",
+                Arrays.asList(new Object[]{11, "Alice2", 31}, new Object[]{12, "Bob", 25})).test(schema);
+        new SqlTestCase("update t1 set id = 13 where id = 1",
+                Collections.singletonList(new Object[]{0L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 13", Collections.emptyList()).test(schema);
+
+        Set<Object> oldKeys = Set.of(11, 12);
+        table.getByPrimaryKey(oldKeys);
+        assertEquals(oldKeys, table.getCachedByPrimaryKey(oldKeys).keySet());
+        var rows = (MongoCalciteTable.MongoCollection) table.getModifiableCollection();
+        var failure = assertThrows(MongoBulkWriteException.class, () -> rows.replaceAll(
+                List.of(new Object[]{11, "Alice2", 31}, new Object[]{12, "Bob", 25}),
+                List.of(new Object[]{13, "Alice2", 31}, new Object[]{13, "Bob", 25})));
+        assertEquals(11000, failure.getWriteErrors().get(0).getCode());
+        assertTrue(table.getCachedByPrimaryKey(oldKeys).isEmpty());
+        new SqlTestCase("select * from t1 where id = 11", Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t1 where id in (12, 13) order by id",
+                Arrays.asList(new Object[]{12, "Bob", 25}, new Object[]{13, "Alice2", 31})).test(schema);
+
         // cleanup
-        new SqlTestCase("delete from t1 where id = 1", null).test(schema);
-        new SqlTestCase("delete from t1 where id = 2", null).test(schema);
+        new SqlTestCase("delete from t1 where id = 12", null).test(schema);
+        new SqlTestCase("delete from t1 where id = 13", null).test(schema);
     }
 
-    public static Table getMongoTable() {
+    public static MongoCalciteTable getMongoTable() {
         List<FieldSchema> fieldSchemas = new ArrayList<>();
         fieldSchemas.add(new FieldSchema("id", "INTEGER"));
         fieldSchemas.add(new FieldSchema("name", "VARCHAR"));

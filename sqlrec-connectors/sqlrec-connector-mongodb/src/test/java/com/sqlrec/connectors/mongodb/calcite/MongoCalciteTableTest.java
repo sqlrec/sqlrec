@@ -1,7 +1,9 @@
 package com.sqlrec.connectors.mongodb.calcite;
 
+import com.mongodb.MongoException;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
+import com.sqlrec.connectors.mongodb.handler.MongoHandler;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -11,8 +13,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class MongoCalciteTableTest {
 
@@ -71,5 +77,22 @@ class MongoCalciteTableTest {
         MongoCalciteTable table = new MongoCalciteTable(mongoConfig);
         MongoCalciteTable.MongoCollection collection = (MongoCalciteTable.MongoCollection) table.getModifiableCollection();
         assertNotNull(collection);
+    }
+
+    @Test
+    void failedUpdateInvalidatesBothKeysOfEverySelectedRow() {
+        var table = mock(MongoCalciteTable.class);
+        when(table.getTableName()).thenReturn("users");
+        var handler = mock(MongoHandler.class);
+        var collection = new MongoCalciteTable.MongoCollection(table, handler);
+        List<Object[]> oldRows = List.of(new Object[]{1, "Alice", 30}, new Object[]{2, "Bob", 25});
+        List<Object[]> newRows = List.of(new Object[]{11, "Alice", 30}, new Object[]{12, "Bob", 25});
+        var failure = new MongoException("ordered bulk update failed");
+        when(handler.updateBatch(oldRows, newRows)).thenThrow(failure);
+
+        assertSame(failure, assertThrows(MongoException.class, () -> collection.replaceAll(oldRows, newRows)));
+        assertEquals(0, collection.size());
+        oldRows.forEach(row -> verify(table).invalidateCache(row));
+        newRows.forEach(row -> verify(table).invalidateCache(row));
     }
 }

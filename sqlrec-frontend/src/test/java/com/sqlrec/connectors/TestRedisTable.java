@@ -59,9 +59,14 @@ public class TestRedisTable {
         new SqlTestCase("update t1 set name = 'Alice1' where id = 1", null).test(schema);
         new SqlTestCase("select * from t1 where id = 1 and name = 'Alice1'",
                 Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
-        new SqlTestCase("delete from t1 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t1 where id = 99", null).test(schema);
+        new SqlTestCase("update t1 set id = 99, name = 'Moved' where id = 1",
+                Collections.singletonList(new Object[]{1L})).test(schema);
         new SqlTestCase("select * from t1 where id = 1",
                 Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t1 where id = 99",
+                Collections.singletonList(new Object[]{99, "Moved", 1})).test(schema);
+        new SqlTestCase("delete from t1 where id = 99", null).test(schema);
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
         new SqlTestCase("delete from t2 where id = 2", null).test(schema);
         new SqlTestCase("delete from t2 where id = 3", null).test(schema);
@@ -156,12 +161,16 @@ public class TestRedisTable {
         new SqlTestCase("select * from t2 where id = 1 order by cnt",
                 Arrays.asList(new Object[]{1, "Alice3", 3}, new Object[]{1, "Alice3", 4})).test(schema);
 
+        new SqlTestCase("delete from t2 where id = 2", null).test(schema);
+        new SqlTestCase("insert into t2 (ID, NAME, CNT) values (2, 'Existing', 5)", null).test(schema);
+        new SqlTestCase("select * from t2 where id = 2",
+                Collections.singletonList(new Object[]{2, "Existing", 5})).test(schema);
         new SqlTestCase("update t2 set id = 2 where id = 1 and cnt = 4",
                 Collections.singletonList(new Object[]{1L})).test(schema);
         new SqlTestCase("select * from t2 where id = 1",
                 Collections.singletonList(new Object[]{1, "Alice3", 3})).test(schema);
-        new SqlTestCase("select * from t2 where id = 2",
-                Collections.singletonList(new Object[]{2, "Alice3", 4})).test(schema);
+        new SqlTestCase("select * from t2 where id = 2 order by cnt",
+                Arrays.asList(new Object[]{2, "Alice3", 4}, new Object[]{2, "Existing", 5})).test(schema);
 
         // Identical list values are separate rows, so UPDATE must replace both.
         new SqlTestCase("insert into t2 (ID, NAME, CNT) values (1, 'Alice3', 3)", null).test(schema);
@@ -169,7 +178,7 @@ public class TestRedisTable {
                 Collections.singletonList(new Object[]{2L})).test(schema);
         new SqlTestCase("select * from t2 where id = 1",
                 Arrays.asList(new Object[]{1, "Updated", 3}, new Object[]{1, "Updated", 3})).test(schema);
-        new SqlTestCase("update t2 set name = 'Missing' where id = 99",
+        new SqlTestCase("update t2 set id = 2 where id = 99",
                 Collections.singletonList(new Object[]{0L})).test(schema);
 
         new SqlTestCase("delete from t2 where id = 1", null).test(schema);
@@ -270,11 +279,20 @@ public class TestRedisTable {
                                 Arrays.asList(4, 5), Arrays.asList("green", "yellow")}))
                 .test(schema);
 
-        new SqlTestCase("delete from redis_proto where int64_value = " + id, null)
-                .test(schema);
-        new SqlTestCase(
-                "select * from redis_proto where int64_value = " + id,
-                Collections.emptyList()).test(schema);
+        long newId = -id;
+        new SqlTestCase("delete from redis_proto where int64_value = " + newId, null).test(schema);
+        try {
+            new SqlTestCase("update redis_proto set int64_value = " + newId + " where int64_value = " + id,
+                    Collections.singletonList(new Object[]{1L})).test(schema);
+            new SqlTestCase("select * from redis_proto where int64_value = " + id,
+                    Collections.emptyList()).test(schema);
+            new SqlTestCase("select * from redis_proto where int64_value = " + newId,
+                    Collections.singletonList(new Object[]{newId, "Alice-updated", 99.25D, false, "DISABLED",
+                            Arrays.asList(4, 5), Arrays.asList("green", "yellow")})).test(schema);
+        } finally {
+            new SqlTestCase("delete from redis_proto where int64_value = " + id, null).test(schema);
+            new SqlTestCase("delete from redis_proto where int64_value = " + newId, null).test(schema);
+        }
     }
 
     @Test
@@ -299,9 +317,14 @@ public class TestRedisTable {
         new SqlTestCase("insert into t5 (ID, SCORE) values (1, 100)", null).test(schema);
         new SqlTestCase("select * from t5 where id = 1",
                 Collections.singletonList(new Object[]{1, 100})).test(schema);
-        new SqlTestCase("delete from t5 where id = 1", null).test(schema);
+        new SqlTestCase("delete from t5 where id = 2", null).test(schema);
+        new SqlTestCase("update t5 set id = 2, score = 200 where id = 1",
+                Collections.singletonList(new Object[]{1L})).test(schema);
         new SqlTestCase("select * from t5 where id = 1",
                 Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from t5 where id = 2",
+                Collections.singletonList(new Object[]{2, 200})).test(schema);
+        new SqlTestCase("delete from t5 where id = 2", null).test(schema);
 
         // double value
         new SqlTestCase("delete from t6 where id = 1", null).test(schema);

@@ -2,6 +2,8 @@ package com.sqlrec.connectors.jdbc.handler;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
+import com.sqlrec.connectors.jdbc.utils.JdbcDataSourceUtils;
+import com.zaxxer.hikari.HikariDataSource;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -21,6 +24,10 @@ import java.sql.Statement;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 class JdbcHandlerTest {
 
@@ -298,6 +305,62 @@ class JdbcHandlerTest {
     }
 
     @Test
+    void updateBatchCountsOnlyMatchedRows() {
+        assertEquals(0, jdbcHandler.updateBatch(List.of(), List.of()));
+        assertEquals(1, jdbcHandler.updateBatch(
+                List.of(new Object[]{99, "missing", 99}, new Object[]{1, "alice", 20}),
+                List.of(new Object[]{100, "missing", 99}, new Object[]{10, "alice", 21})));
+
+        var rows = jdbcHandler.getByPrimaryKey(Set.of(1, 10, 99, 100));
+        assertEquals(Set.of(10), rows.keySet());
+        assertArrayEquals(new Object[]{10, "alice", 21}, rows.get(10).get(0));
+    }
+
+    @Test
+    void updateBatchCountsSuccessWithoutDriverRowCount() throws SQLException {
+        var dataSource = mock(HikariDataSource.class);
+        var connection = mock(Connection.class);
+        var statement = mock(PreparedStatement.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeBatch()).thenReturn(new int[]{Statement.SUCCESS_NO_INFO, 0});
+
+        try (var pools = mockStatic(JdbcDataSourceUtils.class)) {
+            pools.when(() -> JdbcDataSourceUtils.getOrCreate(jdbcConfig)).thenReturn(dataSource);
+            assertEquals(1, jdbcHandler.updateBatch(
+                    List.of(new Object[]{1, "alice", 20}, new Object[]{99, "missing", 30}),
+                    List.of(new Object[]{10, "alice", 21}, new Object[]{100, "missing", 31})));
+        }
+    }
+
+    @Test
+    void updateBatchRollsBackIfNewKeysOverlapOldKeys() {
+        var failure = assertThrows(RuntimeException.class, () -> jdbcHandler.updateBatch(
+                List.of(new Object[]{3, "charlie", 30}, new Object[]{1, "alice", 20}, new Object[]{2, "bob", 25}),
+                List.of(new Object[]{4, "charlie", 31}, new Object[]{2, "alice", 21}, new Object[]{1, "bob", 26})));
+        assertEquals("23505", assertInstanceOf(SQLException.class, failure.getCause()).getSQLState());
+
+        var rows = jdbcHandler.getByPrimaryKey(Set.of(1, 2, 3, 4));
+        assertEquals(Set.of(1, 2, 3), rows.keySet());
+        assertArrayEquals(new Object[]{1, "alice", 20}, rows.get(1).get(0));
+        assertArrayEquals(new Object[]{2, "bob", 25}, rows.get(2).get(0));
+        assertArrayEquals(new Object[]{3, "charlie", 30}, rows.get(3).get(0));
+    }
+
+    @Test
+    void updateBatchRejectsNullPrimaryKeyAndRollsBackEarlierMove() {
+        var failure = assertThrows(RuntimeException.class, () -> jdbcHandler.updateBatch(
+                List.of(new Object[]{1, "alice", 20}, new Object[]{2, "bob", 25}),
+                List.of(new Object[]{4, "alice", 21}, new Object[]{null, "bob", 26})));
+        assertEquals("23502", assertInstanceOf(SQLException.class, failure.getCause()).getSQLState());
+
+        var rows = jdbcHandler.getByPrimaryKey(Set.of(1, 2, 4));
+        assertEquals(Set.of(1, 2), rows.keySet());
+        assertArrayEquals(new Object[]{1, "alice", 20}, rows.get(1).get(0));
+        assertArrayEquals(new Object[]{2, "bob", 25}, rows.get(2).get(0));
+    }
+
+    @Test
     void testUpsertBatch() {
         List<Object[]> rows = Arrays.asList(
                 new Object[]{4, "dave", 35},
@@ -331,6 +394,24 @@ class JdbcHandlerTest {
 
         assertEquals(1, jdbcHandler.scan(Collections.emptyList()).size());
         assertTrue(jdbcHandler.getByPrimaryKey(new HashSet<>(Arrays.asList(1, 2))).isEmpty());
+    }
+
+    @Test
+    void failedBatchDeleteRollsBackEarlierRows() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(JDBC_URL);
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE dependent_row (item_id INT REFERENCES " + TABLE_NAME + "(id))");
+            try {
+                statement.execute("INSERT INTO dependent_row VALUES (2)");
+                List<Object[]> rows = Arrays.asList(
+                        new Object[]{1, "alice", 20}, new Object[]{2, "bob", 25});
+
+                assertThrows(RuntimeException.class, () -> jdbcHandler.deleteBatch(rows));
+                assertEquals(Set.of(1, 2, 3), jdbcHandler.getByPrimaryKey(Set.of(1, 2, 3)).keySet());
+            } finally {
+                statement.execute("DROP TABLE dependent_row");
+            }
+        }
     }
 
     @Test

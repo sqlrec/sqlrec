@@ -127,6 +127,22 @@ public class TestFileSystemTable {
     }
 
     @Test
+    public void testCsvNonPrimaryKeyJoins() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema()).add("users", getCsvUsersTable());
+        new SqlTestCase("insert into users values (4, 'Dave', 30), (5, 'Eve', null)",
+                Collections.singletonList(new Object[]{2L})).test(schema);
+
+        String from = "select ages.age, users.id from (values (25), (30), (99), (cast(null as integer))) as ages(age) ";
+        String orderBy = " order by ages.age nulls last, users.id";
+        new SqlTestCase(from + "inner join users on users.age = ages.age" + orderBy,
+                Arrays.asList(new Object[]{25, 2}, new Object[]{30, 1}, new Object[]{30, 4})).test(schema);
+        new SqlTestCase(from + "left join users on ages.age = users.age" + orderBy,
+                Arrays.asList(new Object[]{25, 2}, new Object[]{30, 1}, new Object[]{30, 4},
+                        new Object[]{99, null}, new Object[]{null, null})).test(schema);
+    }
+
+    @Test
     public void testJsonTable() throws Exception {
         Map<String, Table> tableMap = new HashMap<>();
         tableMap.put("t1", getJsonProductsTable());
@@ -235,7 +251,12 @@ public class TestFileSystemTable {
                 Collections.singletonList(new Object[]{1L})).test(schema);
         new SqlTestCase("select * from t1 where id = 9",
                 Collections.singletonList(new Object[]{9, "Renamed", 32})).test(schema);
-        new SqlTestCase("update t1 set age = 99 where id = 99",
+        new SqlTestCase("update t1 set id = 2 where id = 9",
+                Collections.singletonList(new Object[]{1L})).test(schema);
+        new SqlTestCase("select * from t1 where id = 2 order by name",
+                Arrays.asList(new Object[]{2, "Bob", 25}, new Object[]{2, "Renamed", 32})).test(schema);
+        new SqlTestCase("select * from t1 where id = 9", Collections.emptyList()).test(schema);
+        new SqlTestCase("update t1 set id = 2 where id = 9",
                 Collections.singletonList(new Object[]{0L})).test(schema);
     }
 

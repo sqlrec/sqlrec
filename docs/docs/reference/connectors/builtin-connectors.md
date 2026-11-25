@@ -88,6 +88,7 @@ CREATE TABLE user_proto (
 - `list` 模式下，主键是 Redis 列表的索引键，不要求行唯一；同一个键可以保存多条记录。`INSERT` 将新行写到列表头部，`max-list-size` 限制写入后的列表长度
 - `list` 模式的 `UPDATE` 按查询条件选中旧行，每条旧行只移除列表中一条完全相同的记录，再将新行写入列表头部；修改主键时，新行写到新键下。旧行已不存在时不会补插新行
 - `list` 模式的 `DELETE` 会移除与选中行完全相同的所有列表记录；`UPDATE` 则为每条选中的旧行移除一个匹配项。`UPDATE` 的移除和写入是多条 Redis 命令，不保证原子性
+- `json` 和 `string` 模式下，`UPDATE` 可以修改主键，Redis Cluster 也支持跨槽。SQLRec 用独立命令先写新键并设置 TTL，再删除旧键。目标键已存在时会报错。两步之间可以观察到新旧键同时存在，删旧失败时两个键可能都会保留
 - Protobuf 格式要求 generated Message 类位于 SQLRec 和 Flink 运行时 classpath
 - `format = protobuf` 不支持与 `data-structure = string` 组合使用
 
@@ -227,6 +228,7 @@ CREATE TABLE user_profile (
 - PostgreSQL、MySQL、H2 的保留字及特殊字符标识符会自动加引号；声明名称必须与数据库实际名称一致，尤其是带引号名称的大小写
 - H2 Upsert 按声明列名写入，支持声明列与物理列顺序不同、只声明部分列
 - 支持 Upsert 操作，根据主键自动判断插入或更新
+- JDBC 批量写入按批提交，批内失败会回滚。`UPDATE` 按旧主键定位原行，可以修改主键，数据库会检查唯一约束及外键
 - 可通过 `jdbc.properties.*` 前缀传递自定义 JDBC 属性
 
 ### 5. MongoDB Connector
@@ -267,6 +269,7 @@ CREATE TABLE user_behavior (
 - MongoDB 连接器支持复杂过滤条件，包括 AND、OR、等于、不等于、大于、小于等
 - 无法下推的过滤条件将由 Calcite 在内存中处理
 - Upsert 操作基于主键自动判断插入或更新
+- `UPDATE` 按旧主键匹配文档，可以修改普通字段上的查找键。MongoDB 原生 `_id` 保持不变。批内失败时，之前成功的写入可能已经生效
 - 行为记录使用 `event_id` 作为主键；若改用 `user_id`，同一用户的后续写入会替换已有记录
 
 ### 6. Filesystem Connector

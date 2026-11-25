@@ -3,12 +3,16 @@ package com.sqlrec.connectors.redis.client;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
+import io.lettuce.core.SetArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
+import io.lettuce.core.codec.ByteArrayCodec;
+import io.lettuce.core.protocol.CommandArgs;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -152,6 +156,19 @@ class RedisWrapperUnitTest {
 
         // Verify the underlying async set command was called with SetArgs carrying the ttl
         verify(mockAsync).set(any(), any(), any(io.lettuce.core.SetArgs.class));
+    }
+
+    @Test
+    void setIfAbsentSendsExpiryAndNxTogether() {
+        when(mockConn.async()).thenReturn(mockAsync);
+
+        wrapper.setIfAbsent("key".getBytes(), "value".getBytes(), 60);
+
+        var options = ArgumentCaptor.forClass(SetArgs.class);
+        verify(mockAsync).set(any(), any(), options.capture());
+        var args = new CommandArgs<>(ByteArrayCodec.INSTANCE);
+        options.getValue().build(args);
+        assertEquals("EX 60 NX", args.toCommandString());
     }
 
     @Test

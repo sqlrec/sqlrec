@@ -114,6 +114,17 @@ class SqlRecKvTableScanTest {
     }
 
     @Test
+    void cacheInvalidationSkipsNullPrimaryKeys() {
+        CandidateTable table = new CandidateTable(true);
+        table.initCache(100, 60);
+        table.getByPrimaryKey(Set.of(1));
+
+        table.invalidateCache(new Object[]{null, "Alice"});
+
+        assertEquals(Set.of(1), table.getCachedByPrimaryKey(Set.of(1)).keySet());
+    }
+
+    @Test
     void uncachedLookupNormalizesBackendKeysAndRows() {
         CandidateTable table = new CandidateTable(true);
 

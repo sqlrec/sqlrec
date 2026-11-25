@@ -65,6 +65,10 @@ public abstract class BaseRedisWrapper<C extends AbstractRedisClient,
         return getCommands().set(key, value, SetArgs.Builder.ex(ttlSeconds));
     }
 
+    public RedisFuture<String> setIfAbsent(byte[] key, byte[] value, long ttlSeconds) {
+        return getCommands().set(key, value, SetArgs.Builder.ex(ttlSeconds).nx());
+    }
+
     public RedisFuture<Long> del(byte[] key) {
         return getCommands().del(key);
     }

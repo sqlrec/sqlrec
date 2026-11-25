@@ -72,10 +72,16 @@ public class SqlrecEnumerableKvJoin extends EnumerableNestedLoopJoin {
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
         RelOptTable rightTable = NodeUtils.getScanTable(right);
+        SqlRecKvTable kvTable = rightTable == null ? null : rightTable.unwrap(SqlRecKvTable.class);
         // Key lookups cannot discover unmatched right rows. Use Calcite's general
         // join implementation for every join type other than INNER and LEFT.
-        if ((joinType != JoinRelType.INNER && joinType != JoinRelType.LEFT)
-                || rightTable == null || rightTable.unwrap(SqlRecKvTable.class) == null) {
+        if ((joinType != JoinRelType.INNER && joinType != JoinRelType.LEFT) || kvTable == null) {
+            return super.implement(implementor, pref);
+        }
+        int rightJoinKey = NodeUtils.getJoinKeyColIndex(condition).getValue()
+                - left.getRowType().getFieldCount();
+        // A primary-key-only scan drops non-key filters. Let Calcite evaluate the join condition.
+        if (kvTable.onlyFilterByPrimaryKey() && rightJoinKey != kvTable.getPrimaryKeyIndex()) {
             return super.implement(implementor, pref);
         }
 

@@ -1,5 +1,6 @@
 package com.sqlrec.connectors.mongodb.calcite;
 
+import com.mongodb.MongoException;
 import com.sqlrec.common.schema.SqlRecCollection;
 import com.sqlrec.common.schema.SqlRecKvTable;
 import com.sqlrec.common.schema.SqlRecTable;
@@ -91,6 +92,18 @@ public class MongoCalciteTable extends SqlRecKvTable {
         @Override
         protected boolean addAllImpl(Collection<? extends Object[]> c) {
             return mongoHandler.upsertBatch(c);
+        }
+
+        @Override
+        protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
+            try {
+                return mongoHandler.updateBatch(oldRows, newRows);
+            } catch (MongoException failure) {
+                // An ordered bulk write can fail after moving some of the keys.
+                oldRows.forEach(table::invalidateCache);
+                newRows.forEach(table::invalidateCache);
+                throw failure;
+            }
         }
 
         @Override

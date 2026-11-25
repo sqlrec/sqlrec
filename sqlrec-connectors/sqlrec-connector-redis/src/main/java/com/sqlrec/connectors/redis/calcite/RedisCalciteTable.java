@@ -99,9 +99,17 @@ public class RedisCalciteTable extends SqlRecKvTable {
 
         @Override
         protected int replaceAllImpl(List<Object[]> oldRows, List<Object[]> newRows) {
-            return redisHandler.isListMode()
-                    ? redisHandler.replaceListRows(oldRows, newRows)
-                    : super.replaceAllImpl(oldRows, newRows);
+            if (redisHandler.isListMode()) {
+                return redisHandler.replaceListRows(oldRows, newRows);
+            }
+            try {
+                return redisHandler.replaceSingleValueRows(oldRows, newRows);
+            } catch (RuntimeException failure) {
+                // A batch can fail after other keys have already moved.
+                oldRows.forEach(table::invalidateCache);
+                newRows.forEach(table::invalidateCache);
+                throw failure;
+            }
         }
 
         @Override

@@ -192,6 +192,44 @@ public class RedisHandler {
         }
     }
 
+    /** Apply same-key updates and move changed keys without overwriting existing destinations. */
+    public int replaceSingleValueRows(List<Object[]> oldRows, List<Object[]> newRows) {
+        if (oldRows.size() != newRows.size()) {
+            throw new IllegalArgumentException("UPDATE row counts do not match");
+        }
+        List<byte[]> oldKeys = oldRows.stream().map(this::getKey).collect(Collectors.toList());
+        List<EncodedRow> newValues = newRows.stream().map(this::encodeRow).collect(Collectors.toList());
+        List<EncodedRow> updates = new ArrayList<>();
+        int moved = 0;
+        try {
+            for (int i = 0; i < oldKeys.size(); i++) {
+                byte[] oldKey = oldKeys.get(i);
+                EncodedRow newRow = newValues.get(i);
+                if (Arrays.equals(oldKey, newRow.key)) {
+                    updates.add(newRow);
+                } else if (moveSingleValue(oldKey, newRow)) {
+                    moved++;
+                }
+            }
+            insertRows(updates);
+            return moved + updates.size();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update Redis rows: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean moveSingleValue(byte[] oldKey, EncodedRow newRow) throws Exception {
+        if (await(redisClient.get(oldKey)) == null) {
+            return false;
+        }
+        if (await(redisClient.setIfAbsent(newRow.key, newRow.value, redisConfig.ttl)) == null) {
+            throw new IllegalStateException("Redis UPDATE destination key already exists");
+        }
+        // Separate commands work across cluster slots. If deletion fails, both keys may remain.
+        await(redisClient.del(oldKey));
+        return true;
+    }
+
     /** Replace one occurrence of each selected list row, then prepend its new value. */
     public int replaceListRows(List<Object[]> oldRows, List<Object[]> newRows) {
         if (!isListMode()) {

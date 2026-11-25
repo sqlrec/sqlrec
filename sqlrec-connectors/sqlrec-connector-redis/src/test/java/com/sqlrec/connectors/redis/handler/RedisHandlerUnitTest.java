@@ -8,6 +8,7 @@ import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.RedisFuture;
+import io.lettuce.core.cluster.SlotHash;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -76,11 +78,14 @@ class RedisHandlerUnitTest {
 
     @BeforeEach
     void setUp() {
-        // Build a minimal RedisConfig (json mode, not list)
+        handler = newSingleValueHandler(RedisOptions.SINGLE_MODE, RedisOptions.JSON_DATA_STRUCTURE);
+    }
+
+    private RedisHandler newSingleValueHandler(String mode, String dataStructure) {
         RedisConfig config = new RedisConfig();
         config.url = "redis://localhost:6379";
-        config.redisMode = RedisOptions.SINGLE_MODE;
-        config.dataStructure = RedisOptions.JSON_DATA_STRUCTURE;
+        config.redisMode = mode;
+        config.dataStructure = dataStructure;
         config.database = "testdb";
         config.tableName = "testtable";
         config.primaryKeyIndex = 0;
@@ -92,11 +97,208 @@ class RedisHandlerUnitTest {
         config.ttl = 3600;
         config.maxListSize = 0;
 
-        handler = new RedisHandler(config);
-        // open() creates a real RedisWrapper (only stores url, no connection) and initializes codec/keyPrefix
+        var handler = new RedisHandler(config);
         handler.open();
-        // Replace the real wrapper with the mock
         handler.setRedisClientForTest(mockRedisClient);
+        return handler;
+    }
+
+    @Test
+    void jsonKeyMoveWritesNewValueWithTtlBeforeDeletingOldKey() throws Exception {
+        stubKeyMove("OK");
+        when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        assertEquals(1, handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old-key", "old"}),
+                Collections.singletonList(new Object[]{"new-key", "updated"})));
+
+        byte[] oldKey = "testdb:testtable:old-key".getBytes(StandardCharsets.UTF_8);
+        byte[] newKey = "testdb:testtable:new-key".getBytes(StandardCharsets.UTF_8);
+        InOrder commands = inOrder(mockRedisClient, mockSetFuture);
+        ArgumentCaptor<byte[]> value = ArgumentCaptor.forClass(byte[].class);
+        commands.verify(mockRedisClient).get(aryEq(oldKey));
+        commands.verify(mockRedisClient).setIfAbsent(aryEq(newKey), value.capture(), eq(3600L));
+        commands.verify(mockSetFuture).get(anyLong(), any(TimeUnit.class));
+        commands.verify(mockRedisClient).del(aryEq(oldKey));
+        assertEquals("{\"id\":\"new-key\",\"name\":\"updated\"}", new String(value.getValue(), StandardCharsets.UTF_8));
+        verify(mockRedisClient, never()).setex(any(), any(), anyLong());
+    }
+
+    @Test
+    void clusterStringKeyMoveWorksAcrossSlots() throws Exception {
+        var cluster = newSingleValueHandler(RedisOptions.CLUSTER_MODE, RedisOptions.STRING_DATA_STRUCTURE);
+        stubKeyMove("OK");
+        when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+        byte[] oldKey = "testdb:testtable:{1}:old".getBytes(StandardCharsets.UTF_8);
+        byte[] newKey = "testdb:testtable:{2}:new".getBytes(StandardCharsets.UTF_8);
+        assertNotEquals(SlotHash.getSlot(oldKey), SlotHash.getSlot(newKey));
+
+        assertEquals(1, cluster.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"{1}:old", "old"}),
+                Collections.singletonList(new Object[]{"{2}:new", "new"})));
+
+        verify(mockRedisClient).setIfAbsent(aryEq(newKey), aryEq("new".getBytes(StandardCharsets.UTF_8)), eq(3600L));
+        verify(mockRedisClient).del(aryEq(oldKey));
+    }
+
+    @Test
+    void protobufKeyMoveWritesEncodedNewRow() throws Exception {
+        var protobufHandler = newProtobufHandler(false);
+        byte[] oldKey = "testdb:protobuf_table:old".getBytes(StandardCharsets.UTF_8);
+        byte[] newKey = "testdb:protobuf_table:new".getBytes(StandardCharsets.UTF_8);
+        when(mockRedisClient.get(aryEq(oldKey))).thenReturn(mockGetFuture);
+        when(mockGetFuture.get(anyLong(), any(TimeUnit.class)))
+                .thenReturn(Field.newBuilder().setName("old").setJsonName("before").build().toByteArray());
+        when(mockRedisClient.setIfAbsent(aryEq(newKey), any(), eq(60L))).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
+        when(mockRedisClient.del(aryEq(oldKey))).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        assertEquals(1, protobufHandler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old", "before"}),
+                Collections.singletonList(new Object[]{"new", "after"})));
+
+        ArgumentCaptor<byte[]> value = ArgumentCaptor.forClass(byte[].class);
+        verify(mockRedisClient).setIfAbsent(aryEq(newKey), value.capture(), eq(60L));
+        assertEquals(Field.newBuilder().setName("new").setJsonName("after").build(), Field.parseFrom(value.getValue()));
+    }
+
+    @Test
+    void destinationConflictIsReportedWithoutSeparateDelete() throws Exception {
+        stubKeyMove(null);
+
+        var failure = assertThrows(RuntimeException.class, () -> handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old-key", "old"}),
+                Collections.singletonList(new Object[]{"new-key", "new"})));
+
+        assertTrue(failure.getMessage().contains("destination key already exists"));
+        verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
+    void secondMoveConflictLeavesEarlierMoveApplied() throws Exception {
+        stubKeyMove("OK", (String) null);
+        when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        var failure = assertThrows(RuntimeException.class, () -> handler.replaceSingleValueRows(
+                List.of(new Object[]{"old1", "before"}, new Object[]{"old2", "before"}),
+                List.of(new Object[]{"new1", "after"}, new Object[]{"occupied", "after"})));
+        assertTrue(failure.getMessage().contains("destination key already exists"));
+
+        var commands = inOrder(mockRedisClient);
+        commands.verify(mockRedisClient).get(aryEq("testdb:testtable:old1".getBytes(StandardCharsets.UTF_8)));
+        commands.verify(mockRedisClient).setIfAbsent(
+                aryEq("testdb:testtable:new1".getBytes(StandardCharsets.UTF_8)), any(), eq(3600L));
+        commands.verify(mockRedisClient).del(aryEq("testdb:testtable:old1".getBytes(StandardCharsets.UTF_8)));
+        commands.verify(mockRedisClient).get(aryEq("testdb:testtable:old2".getBytes(StandardCharsets.UTF_8)));
+        commands.verify(mockRedisClient).setIfAbsent(
+                aryEq("testdb:testtable:occupied".getBytes(StandardCharsets.UTF_8)), any(), eq(3600L));
+        verifyNoMoreInteractions(mockRedisClient);
+    }
+
+    @Test
+    void movedOrExpiredSourceIsNotRecreated() throws Exception {
+        when(mockRedisClient.get(any())).thenReturn(mockGetFuture);
+        when(mockGetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(null);
+
+        assertEquals(0, handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old-key", "old"}),
+                Collections.singletonList(new Object[]{"new-key", "new"})));
+        verify(mockRedisClient, never()).setIfAbsent(any(), any(), anyLong());
+        verify(mockRedisClient, never()).setex(any(), any(), anyLong());
+        verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
+    void mixedBatchCountsMovesAndSameKeyUpdatesButSkipsMissingSources() throws Exception {
+        byte[] stay = "testdb:testtable:stay".getBytes(StandardCharsets.UTF_8);
+        byte[] oldKey = "testdb:testtable:old".getBytes(StandardCharsets.UTF_8);
+        byte[] newKey = "testdb:testtable:new".getBytes(StandardCharsets.UTF_8);
+        byte[] missing = "testdb:testtable:missing".getBytes(StandardCharsets.UTF_8);
+        when(mockRedisClient.get(aryEq(oldKey))).thenReturn(mockGetFuture);
+        when(mockRedisClient.get(aryEq(missing))).thenReturn(mockGetFuture);
+        when(mockGetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(new byte[]{1}, (byte[]) null);
+        when(mockRedisClient.setIfAbsent(aryEq(newKey), any(), eq(3600L))).thenReturn(mockSetFuture);
+        when(mockRedisClient.setex(aryEq(stay), any(), eq(3600L))).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
+        when(mockRedisClient.del(aryEq(oldKey))).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(1L);
+
+        assertEquals(2, handler.replaceSingleValueRows(
+                List.of(new Object[]{"stay", "before"}, new Object[]{"old", "before"}, new Object[]{"missing", "gone"}),
+                List.of(new Object[]{"stay", "after"}, new Object[]{"new", "after"}, new Object[]{"unused", "after"})));
+
+        verify(mockRedisClient).get(aryEq(oldKey));
+        verify(mockRedisClient).get(aryEq(missing));
+        verify(mockRedisClient).setIfAbsent(aryEq(newKey), any(), eq(3600L));
+        verify(mockRedisClient).setex(aryEq(stay), any(), eq(3600L));
+        verify(mockRedisClient).del(aryEq(oldKey));
+        verifyNoMoreInteractions(mockRedisClient);
+    }
+
+    @Test
+    void emptyOrInvalidBatchDoesNotChangeRedis() {
+        assertEquals(0, handler.replaceSingleValueRows(List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old", "before"}), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> handler.replaceSingleValueRows(
+                List.of(new Object[]{"old1", "before"}, new Object[]{"old2", "before"}),
+                List.of(new Object[]{"new1", "after"}, new Object[]{null, "after"})));
+        verifyNoInteractions(mockRedisClient);
+    }
+
+    @Test
+    void failedDestinationWriteDoesNotDeleteSource() throws Exception {
+        when(mockRedisClient.get(any())).thenReturn(mockGetFuture);
+        when(mockGetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(new byte[]{1});
+        when(mockRedisClient.setIfAbsent(any(), any(), anyLong())).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class)))
+                .thenThrow(new ExecutionException(new IllegalStateException("write failed")));
+
+        var failure = assertThrows(RuntimeException.class, () -> handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old-key", "old"}),
+                Collections.singletonList(new Object[]{"new-key", "new"})));
+        assertTrue(failure.getMessage().contains("write failed"));
+        verify(mockRedisClient, never()).del(any());
+    }
+
+    @Test
+    void failedSourceDeleteLeavesWrittenDestinationInPlace() throws Exception {
+        stubKeyMove("OK");
+        when(mockRedisClient.del(any())).thenReturn(mockDelFuture);
+        when(mockDelFuture.get(anyLong(), any(TimeUnit.class)))
+                .thenThrow(new ExecutionException(new IllegalStateException("delete failed")));
+
+        var failure = assertThrows(RuntimeException.class, () -> handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"old-key", "old"}),
+                Collections.singletonList(new Object[]{"new-key", "new"})));
+
+        assertTrue(failure.getMessage().contains("delete failed"));
+        verify(mockRedisClient).del(aryEq("testdb:testtable:old-key".getBytes(StandardCharsets.UTF_8)));
+        verify(mockRedisClient, never()).del(aryEq("testdb:testtable:new-key".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void sameKeyUpdateKeepsSetWithExpiry() throws Exception {
+        when(mockRedisClient.setex(any(), any(), eq(3600L))).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn("OK");
+
+        assertEquals(1, handler.replaceSingleValueRows(
+                Collections.singletonList(new Object[]{"key", "old"}),
+                Collections.singletonList(new Object[]{"key", "new"})));
+
+        verify(mockRedisClient).setex(any(), any(), eq(3600L));
+        verifyNoMoreInteractions(mockRedisClient);
+    }
+
+    private void stubKeyMove(String result, String... remainingResults) throws Exception {
+        when(mockRedisClient.get(any())).thenReturn(mockGetFuture);
+        when(mockGetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(new byte[]{1});
+        when(mockRedisClient.setIfAbsent(any(), any(), eq(3600L))).thenReturn(mockSetFuture);
+        when(mockSetFuture.get(anyLong(), any(TimeUnit.class))).thenReturn(result, remainingResults);
     }
 
     @Test

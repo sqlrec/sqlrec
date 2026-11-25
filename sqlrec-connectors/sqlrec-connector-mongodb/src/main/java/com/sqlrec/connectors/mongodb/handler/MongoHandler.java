@@ -1,10 +1,12 @@
 package com.sqlrec.connectors.mongodb.handler;
 
+import com.mongodb.bulk.BulkWriteResult;
 import com.mongodb.client.*;
 import com.mongodb.client.model.DeleteOneModel;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOneModel;
 import com.mongodb.client.model.ReplaceOptions;
+import com.mongodb.client.model.UpdateOneModel;
 import com.mongodb.client.model.WriteModel;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.RowTransformUtils;
@@ -98,6 +100,37 @@ public class MongoHandler implements Serializable {
         }
         collection.bulkWrite(writes);
         return true;
+    }
+
+    public int updateBatch(List<Object[]> oldRows, List<Object[]> newRows) {
+        if (oldRows.isEmpty()) {
+            return 0;
+        }
+        String key = mongoConfig.primaryKey;
+        int keyIndex = mongoConfig.primaryKeyIndex;
+        int idIndex = documentIdIndex();
+        List<WriteModel<Document>> writes = new ArrayList<>(oldRows.size());
+        for (int i = 0; i < oldRows.size(); i++) {
+            Object[] oldRow = oldRows.get(i);
+            Object[] newRow = newRows.get(i);
+            if (idIndex >= 0 && !Objects.deepEquals(oldRow[idIndex], newRow[idIndex])) {
+                throw new UnsupportedOperationException("MongoDB UPDATE cannot change _id");
+            }
+            Document values = rowToDocument(newRow);
+            values.remove("_id");
+            writes.add(new UpdateOneModel<>(Filters.eq(key, oldRow[keyIndex]), new Document("$set", values)));
+        }
+        BulkWriteResult result = getCollection().bulkWrite(writes);
+        return result.wasAcknowledged() ? result.getMatchedCount() : writes.size();
+    }
+
+    private int documentIdIndex() {
+        for (int i = 0; i < mongoConfig.fieldSchemas.size(); i++) {
+            if ("_id".equals(mongoConfig.fieldSchemas.get(i).getName())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public boolean deleteBatch(Collection<? extends Object[]> records) {

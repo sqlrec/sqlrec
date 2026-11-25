@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 import java.util.function.Function;
 
@@ -68,39 +69,71 @@ public class JdbcHandler {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        return executeBatch(
+        executeBatch(
                 dataList,
                 upsertTemplate(),
                 Arrays::asList,
                 "Failed to batch upsert into table " + jdbcConfig.tableName
         );
+        return true;
     }
 
     public boolean deleteBatch(Collection<? extends Object[]> dataList) {
         if (dataList == null || dataList.isEmpty()) {
             return true;
         }
-        return executeBatch(
+        executeBatch(
                 dataList,
                 deleteTemplate(),
-                data -> Collections.singletonList(data[jdbcConfig.primaryKeyIndex]),
+                (Object[] data) -> Collections.singletonList(data[jdbcConfig.primaryKeyIndex]),
                 "Failed to batch delete from table " + jdbcConfig.tableName
         );
+        return true;
     }
 
-    private boolean executeBatch(
-            Collection<? extends Object[]> rows,
+    public int updateBatch(List<Object[]> oldRows, List<Object[]> newRows) {
+        if (oldRows.isEmpty()) {
+            return 0;
+        }
+        JdbcStatement template = JdbcSqlBuilder.updateByPrimaryKey(
+                jdbcConfig.url, jdbcConfig.tableName, jdbcConfig.fieldSchemas, jdbcConfig.primaryKey);
+        List<List<Object>> parameters = new ArrayList<>(oldRows.size());
+        for (int i = 0; i < oldRows.size(); i++) {
+            List<Object> values = new ArrayList<>(Arrays.asList(newRows.get(i)));
+            values.add(oldRows.get(i)[jdbcConfig.primaryKeyIndex]);
+            parameters.add(values);
+        }
+        int[] counts = executeBatch(parameters, template, values -> values,
+                "Failed to batch update table " + jdbcConfig.tableName);
+        return Arrays.stream(counts).map(count -> count == Statement.SUCCESS_NO_INFO ? 1 : count).sum();
+    }
+
+    private <T> int[] executeBatch(
+            Collection<? extends T> rows,
             JdbcStatement template,
-            Function<Object[], List<?>> parameterMapper,
+            Function<T, List<?>> parameterMapper,
             String errorMessage
     ) {
-        try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(template.getSql())) {
-            for (Object[] row : rows) {
-                template.addToBatch(statement, parameterMapper.apply(row));
+        try (Connection connection = getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                int[] counts;
+                try (PreparedStatement statement = connection.prepareStatement(template.getSql())) {
+                    for (T row : rows) {
+                        template.addToBatch(statement, parameterMapper.apply(row));
+                    }
+                    counts = statement.executeBatch();
+                }
+                connection.commit();
+                return counts;
+            } catch (SQLException | RuntimeException failure) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    failure.addSuppressed(rollbackFailure);
+                }
+                throw failure;
             }
-            statement.executeBatch();
-            return true;
         } catch (SQLException e) {
             throw new RuntimeException(errorMessage, e);
         }

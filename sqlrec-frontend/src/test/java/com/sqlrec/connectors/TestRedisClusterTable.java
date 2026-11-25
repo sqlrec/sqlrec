@@ -11,6 +11,7 @@ import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.utils.SqlTestCase;
+import io.lettuce.core.cluster.SlotHash;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -26,6 +27,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Integration test for the Redis Calcite connector in cluster mode.
@@ -72,9 +75,26 @@ public class TestRedisClusterTable {
         new SqlTestCase("update ct1 set name = 'Alice1' where id = 1", null).test(schema);
         new SqlTestCase("select * from ct1 where id = 1 and name = 'Alice1'",
                 Collections.singletonList(new Object[]{1, "Alice1", 1})).test(schema);
-        new SqlTestCase("delete from ct1 where id = 1", null).test(schema);
+        new SqlTestCase("delete from ct1 where id = 99", null).test(schema);
+        assertNotEquals(SlotHash.getSlot("default:ct1:1"), SlotHash.getSlot("default:ct1:99"));
+        new SqlTestCase("update ct1 set id = 99, name = 'Moved' where id = 1",
+                Collections.singletonList(new Object[]{1L})).test(schema);
         new SqlTestCase("select * from ct1 where id = 1",
                 Collections.emptyList()).test(schema);
+        new SqlTestCase("select * from ct1 where id = 99",
+                Collections.singletonList(new Object[]{99, "Moved", 1})).test(schema);
+        try {
+            new SqlTestCase("insert into ct1 (ID, NAME, CNT) values (1, 'Occupied', 10)", null).test(schema);
+            new SqlTestCase("update ct1 set id = 1, name = 'Conflict' where id = 99", null,
+                    new RuntimeException("destination key already exists")).test(schema);
+            new SqlTestCase("select * from ct1 where id = 1",
+                    Collections.singletonList(new Object[]{1, "Occupied", 10})).test(schema);
+            new SqlTestCase("select * from ct1 where id = 99",
+                    Collections.singletonList(new Object[]{99, "Moved", 1})).test(schema);
+        } finally {
+            new SqlTestCase("delete from ct1 where id = 1", null).test(schema);
+            new SqlTestCase("delete from ct1 where id = 99", null).test(schema);
+        }
 
         // List mode tests
         new SqlTestCase("delete from ct2 where id = 1", null).test(schema);

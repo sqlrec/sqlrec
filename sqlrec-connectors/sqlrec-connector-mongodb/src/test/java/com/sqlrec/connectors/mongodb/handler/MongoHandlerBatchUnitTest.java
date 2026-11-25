@@ -1,15 +1,19 @@
 package com.sqlrec.connectors.mongodb.handler;
 
 import com.mongodb.MongoTimeoutException;
+import com.mongodb.bulk.BulkWriteResult;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.DeleteOneModel;
 import com.mongodb.client.model.ReplaceOneModel;
+import com.mongodb.client.model.UpdateOneModel;
 import com.mongodb.client.model.WriteModel;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.connectors.mongodb.calcite.MongoCalciteTable;
 import com.sqlrec.connectors.mongodb.config.MongoConfig;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,8 +26,10 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -48,10 +54,11 @@ class MongoHandlerBatchUnitTest {
     MongoCollection<Document> mockCollection;
 
     private MongoHandler handler;
+    private MongoConfig config;
 
     @BeforeEach
     void setUp() {
-        MongoConfig config = new MongoConfig();
+        config = new MongoConfig();
         config.uri = "mongodb://localhost:27017";
         config.database = "testdb";
         config.collection = "testcollection";
@@ -66,6 +73,94 @@ class MongoHandlerBatchUnitTest {
         // lenient: the empty-batch tests never reach getCollection()
         lenient().when(mockClient.getDatabase("testdb")).thenReturn(mockDatabase);
         lenient().when(mockDatabase.getCollection("testcollection")).thenReturn(mockCollection);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void updateMatchesOldKeysWithoutReadingOrUpserting() {
+        when(mockCollection.bulkWrite(anyList()))
+                .thenReturn(BulkWriteResult.acknowledged(0, 2, 0, 1, List.of(), List.of()));
+
+        var rows = new MongoCalciteTable.MongoCollection(new MongoCalciteTable(config), handler);
+        assertTrue(rows.replaceAll(
+                List.of(new Object[]{"k1", "one"}, new Object[]{"k2", "two"}, new Object[]{"missing", "three"}),
+                List.of(new Object[]{"new1", "changed"}, new Object[]{"k2", "two"}, new Object[]{"new3", "three"})));
+        assertEquals(2, rows.size());
+
+        verify(mockCollection, never()).find(any(Bson.class));
+        ArgumentCaptor<List<WriteModel<Document>>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(mockCollection).bulkWrite(captor.capture());
+        List<WriteModel<Document>> writes = captor.getValue();
+        assertEquals(3, writes.size());
+        assertUpdate(writes.get(0), "k1", "new1", "changed");
+        assertUpdate(writes.get(1), "k2", "k2", "two");
+        assertUpdate(writes.get(2), "missing", "new3", "three");
+    }
+
+    @Test
+    void emptyUpdateDoesNotSendWrites() {
+        assertEquals(0, handler.updateBatch(List.of(), List.of()));
+        verify(mockCollection, never()).bulkWrite(anyList());
+    }
+
+    @Test
+    void updateWithNoMatchesReturnsZero() {
+        when(mockCollection.bulkWrite(anyList()))
+                .thenReturn(BulkWriteResult.acknowledged(0, 0, 0, 0, List.of(), List.of()));
+        var rows = new MongoCalciteTable.MongoCollection(new MongoCalciteTable(config), handler);
+
+        assertFalse(rows.replaceAll(Collections.singletonList(new Object[]{"missing", "value"}),
+                Collections.singletonList(new Object[]{"new-key", "value"})));
+        assertEquals(0, rows.size());
+    }
+
+    @Test
+    void unacknowledgedUpdateReportsSubmittedRows() {
+        when(mockCollection.bulkWrite(anyList())).thenReturn(BulkWriteResult.unacknowledged());
+        assertEquals(2, handler.updateBatch(
+                List.of(new Object[]{"old1", "one"}, new Object[]{"old2", "two"}),
+                List.of(new Object[]{"new1", "one"}, new Object[]{"new2", "two"})));
+    }
+
+    @Test
+    void updateRejectsChangingNativeIdAnywhereInTheBatch() {
+        config.primaryKeyIndex = 1;
+        config.fieldSchemas = List.of(new FieldSchema("_id", "VARCHAR"), new FieldSchema("id", "VARCHAR"));
+
+        var failure = assertThrows(UnsupportedOperationException.class, () -> handler.updateBatch(
+                List.of(new Object[]{"native1", "old1"}, new Object[]{"native2", "old2"}),
+                List.of(new Object[]{"native1", "new1"}, new Object[]{"changed", "new2"})));
+        assertTrue(failure.getMessage().contains("cannot change _id"));
+        verify(mockCollection, never()).bulkWrite(anyList());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void updateWithNativeIdUsesItDirectly() {
+        config.primaryKey = "_id";
+        config.fieldSchemas = List.of(new FieldSchema("_id", "VARCHAR"), new FieldSchema("name", "VARCHAR"));
+        when(mockCollection.bulkWrite(anyList()))
+                .thenReturn(BulkWriteResult.acknowledged(0, 1, 0, 1, List.of(), List.of()));
+
+        assertEquals(1, handler.updateBatch(
+                List.<Object[]>of(new Object[]{"key", "old"}),
+                List.<Object[]>of(new Object[]{"key", "new"})));
+
+        verify(mockCollection, never()).find(any(Bson.class));
+        ArgumentCaptor<List<WriteModel<Document>>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(mockCollection).bulkWrite(captor.capture());
+        var write = (UpdateOneModel<Document>) captor.getValue().get(0);
+        assertEquals("key", write.getFilter().toBsonDocument().getString("_id").getValue());
+        assertEquals(new Document("name", "new").toBsonDocument(),
+                write.getUpdate().toBsonDocument().getDocument("$set"));
+    }
+
+    private static void assertUpdate(WriteModel<Document> write, String oldKey, String newKey, String name) {
+        UpdateOneModel<Document> update = (UpdateOneModel<Document>) write;
+        assertFalse(update.getOptions().isUpsert());
+        assertEquals(new Document("id", oldKey).toBsonDocument(), update.getFilter().toBsonDocument());
+        var values = update.getUpdate().toBsonDocument().getDocument("$set");
+        assertEquals(new Document("id", newKey).append("name", name).toBsonDocument(), values);
     }
 
     @Test

@@ -111,6 +111,18 @@ class JdbcSqlBuilderTest {
     }
 
     @Test
+    void updateQuotesQualifiedTableAndPrimaryKeyForEachDialect() {
+        var columns = List.of(new FieldSchema("display name", "VARCHAR"), new FieldSchema("row id", "INTEGER"));
+
+        for (String url : List.of(PG_URL, H2_URL)) {
+            assertEquals("UPDATE app.\"user table\" SET \"display name\" = ?, \"row id\" = ? WHERE \"row id\" = ?",
+                    JdbcSqlBuilder.updateByPrimaryKey(url, "app.user table", columns, "row id").getSql());
+        }
+        assertEquals("UPDATE app.`user table` SET `display name` = ?, `row id` = ? WHERE `row id` = ?",
+                JdbcSqlBuilder.updateByPrimaryKey(MYSQL_URL, "app.user table", columns, "row id").getSql());
+    }
+
+    @Test
     void testDeleteByPrimaryKey() {
         JdbcStatement template = JdbcSqlBuilder.deleteByPrimaryKey(PG_URL, "users", "id");
         assertEquals("DELETE FROM users WHERE id = ?", template.getSql());

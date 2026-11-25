@@ -24,6 +24,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SqlrecEnumerableKvJoinTest {
     @Test
@@ -49,13 +51,42 @@ class SqlrecEnumerableKvJoinTest {
         assertJoin("LEFT", List.of(1, 2), List.of("[1, 1]", "[2, null]"));
     }
 
+    @Test
+    void primaryKeyJoinsUseLookupWhenRightTableCannotScan() throws Exception {
+        assertJoin("INNER", List.of(1, 2), List.of("[1, 1]"), new LookupOnlyTable());
+        assertJoin("LEFT", List.of(1, 2), List.of("[1, 1]", "[2, null]"), new LookupOnlyTable());
+    }
+
+    @Test
+    void nonPrimaryKeyJoinsPropagateUnsupportedScanEvenWhenLookupErrorsAreIgnored() throws Exception {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        CalciteSchema database = schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema());
+        var right = new LookupOnlyTable();
+        database.add("R", right);
+
+        for (String join : List.of("INNER", "LEFT")) {
+            var bindable = NormalSqlCompiler.getNormalSqlBindable(
+                    "SELECT L.CATEGORY, R.ID FROM (VALUES (9)) AS L(CATEGORY) "
+                            + join + " JOIN R ON L.CATEGORY = R.CATEGORY",
+                    schema, Consts.DEFAULT_SCHEMA_NAME);
+            var context = new ExecuteContextImpl(schema);
+            context.setVariable("IGNORE_JOIN_QUERY_EXCEPTION", "true");
+            assertSame(right.scanFailure, assertThrows(UnsupportedOperationException.class,
+                    () -> bindable.bind(schema, context).toList()), join);
+        }
+    }
+
     private void assertJoin(String join, List<Integer> leftIds, List<String> expected) throws Exception {
+        assertJoin(join, leftIds, expected, new TestKvTable());
+    }
+
+    private void assertJoin(String join, List<Integer> leftIds, List<String> expected, TestKvTable right)
+            throws Exception {
         CalciteSchema schema = CalciteSchema.createRootSchema(false);
         CalciteSchema database = schema.add(Consts.DEFAULT_SCHEMA_NAME, new AbstractSchema());
         var fields = new JavaTypeFactoryImpl().builder().add("ID", SqlTypeName.INTEGER).build().getFieldList();
         database.add("L", new CacheTable("L", Linq4j.asEnumerable(
                 leftIds.stream().map(id -> new Object[]{id}).toList()), fields));
-        var right = new TestKvTable();
         database.add("R", right);
         var bindable = NormalSqlCompiler.getNormalSqlBindable(
                 "SELECT L.ID AS LI, R.ID AS RI FROM L " + join + " JOIN R ON L.ID = R.ID",
@@ -67,7 +98,7 @@ class SqlrecEnumerableKvJoinTest {
     }
 
     private static class TestKvTable extends SqlRecKvTable {
-        private final List<Object[]> rows = Arrays.asList(new Object[]{1}, new Object[]{3});
+        private final List<Object[]> rows = List.of(new Object[]{1, 9}, new Object[]{3, 10});
         private boolean keyLookupUsed;
 
         TestKvTable() {
@@ -76,7 +107,8 @@ class SqlrecEnumerableKvJoinTest {
 
         @Override
         public RelDataType getRowType(RelDataTypeFactory factory) {
-            return factory.builder().add("ID", SqlTypeName.INTEGER).build();
+            return factory.builder().add("ID", SqlTypeName.INTEGER)
+                    .add("CATEGORY", SqlTypeName.INTEGER).build();
         }
 
         @Override
@@ -104,6 +136,21 @@ class SqlrecEnumerableKvJoinTest {
         @Override
         public Collection<?> getModifiableCollection() {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class LookupOnlyTable extends TestKvTable {
+        private final UnsupportedOperationException scanFailure =
+                new UnsupportedOperationException("Full scans are not supported");
+
+        @Override
+        public boolean onlyFilterByPrimaryKey() {
+            return true;
+        }
+
+        @Override
+        protected Enumerable<Object[]> scanImpl(List<RexNode> filters) {
+            throw scanFailure;
         }
     }
 }
