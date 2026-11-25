@@ -119,42 +119,30 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
     }
 
     private RowProjections projectRows(BlockBuilder builder, Result result, Expression childExp) {
-        Expression convertedChildExp;
-        Expression originalChildExp = null;
-        if (!getInput().getRowType().equals(getRowType())) {
-            final JavaTypeFactory typeFactory =
-                    (JavaTypeFactory) getCluster().getTypeFactory();
-            final JavaRowFormat format = EnumerableTableScan.deduceFormat(table);
-            PhysType physType =
-                    PhysTypeImpl.of(typeFactory, table.getRowType(), format);
-            final PhysType childPhysType = result.physType;
-            final ParameterExpression o_ =
-                    Expressions.parameter(childPhysType.getJavaRowType(), "o");
-            FieldProjections fields = projectFields(childPhysType, physType, o_);
+        final JavaTypeFactory typeFactory = (JavaTypeFactory) getCluster().getTypeFactory();
+        final JavaRowFormat format = EnumerableTableScan.deduceFormat(table);
+        // Tables backed by Object[] require an array even when the row has a single field.
+        final PhysType physType = PhysTypeImpl.of(
+                typeFactory, table.getRowType(), format, format != JavaRowFormat.ARRAY);
+        final PhysType childPhysType = result.physType;
+        final ParameterExpression row = Expressions.parameter(childPhysType.getJavaRowType(), "row");
+        FieldProjections fields = projectFields(childPhysType, physType, row);
 
-            // Materialize UPDATE input once so the old and new projections use
-            // exactly the same selected rows, even for a stateful input query.
-            Expression projectionSource = childExp;
-            if (getOperation() == Operation.UPDATE) {
-                Expression inputRows = builder.append("updateInputRows",
-                        Expressions.call(childExp, BuiltInMethod.INTO.method,
-                                Expressions.new_(ArrayList.class)));
-                projectionSource = Expressions.call(Linq4j.class, "asEnumerable", inputRows);
-                originalChildExp = builder.append("originalChild",
-                        Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
-                                Expressions.lambda(physType.record(fields.original()), o_)));
-            }
-            convertedChildExp =
-                    builder.append(
-                            "convertedChild",
-                            Expressions.call(
-                                    projectionSource,
-                                    BuiltInMethod.SELECT.method,
-                                    Expressions.lambda(
-                                            physType.record(fields.updated()), o_)));
-        } else {
-            convertedChildExp = childExp;
+        // Materialize UPDATE input once so both projections use the same selected rows.
+        Expression projectionSource = childExp;
+        Expression originalChildExp = null;
+        if (getOperation() == Operation.UPDATE) {
+            Expression inputRows = builder.append("updateInputRows",
+                    Expressions.call(childExp, BuiltInMethod.INTO.method,
+                            Expressions.new_(ArrayList.class)));
+            projectionSource = Expressions.call(Linq4j.class, "asEnumerable", inputRows);
+            originalChildExp = builder.append("originalChild",
+                    Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
+                            Expressions.lambda(physType.record(fields.original()), row)));
         }
+        Expression convertedChildExp = builder.append("convertedChild",
+                Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
+                        Expressions.lambda(physType.record(fields.updated()), row)));
         return new RowProjections(convertedChildExp, originalChildExp);
     }
 

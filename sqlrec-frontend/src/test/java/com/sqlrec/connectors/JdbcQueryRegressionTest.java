@@ -22,6 +22,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdbcQueryRegressionTest {
     @Test
+    void insertsUpdatesAndDeletesSingleColumnRows() throws Exception {
+        JdbcConfig config = itemsConfig("single_column_dml");
+        config.fieldSchemas = List.of(new FieldSchema("id", "INTEGER"));
+        try (var connection = DriverManager.getConnection(config.url);
+             var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE items (id INT PRIMARY KEY)");
+            CalciteSchema schema = itemsSchema(config);
+
+            assertQuery(schema, "INSERT INTO items VALUES (1), (2)", List.of(2L));
+            assertQuery(schema, "INSERT INTO items SELECT id + 2 FROM items WHERE id = 1", List.of(1L));
+            assertQuery(schema, "SELECT id FROM items ORDER BY id", List.of(1, 2, 3));
+            assertQuery(schema, "UPDATE items SET id = id + 10 WHERE id < 3", List.of(2L));
+            assertQuery(schema, "SELECT id FROM items ORDER BY id", List.of(3, 11, 12));
+            assertQuery(schema, "DELETE FROM items WHERE id = 11", List.of(1L));
+            assertQuery(schema, "UPDATE items SET id = 99 WHERE id = 11", List.of(0L));
+            assertQuery(schema, "DELETE FROM items WHERE id = 11", List.of(0L));
+            assertQuery(schema, "SELECT id FROM items ORDER BY id", List.of(3, 12));
+        } finally {
+            JdbcDataSourceUtils.closeAll();
+        }
+    }
+
+    @Test
     void preservesSqlSemanticsThroughPlanningAndJdbcFiltering() throws Exception {
         JdbcConfig config = new JdbcConfig();
         config.url = "jdbc:h2:mem:query_regression";
