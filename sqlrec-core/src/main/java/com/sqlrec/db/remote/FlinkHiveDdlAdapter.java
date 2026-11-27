@@ -49,7 +49,6 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
 
     public synchronized void executeDdl(SqlNode node, String database) throws Exception {
         try {
-            requirePersistentDdl(node);
             switch (node) {
                 case SqlCreateDatabase create -> createDatabase(create, database);
                 case SqlAlterDatabase alter -> alterDatabase(alter, database);
@@ -96,6 +95,8 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void createTable(SqlCreateTable sql, String database) throws Exception {
+        if (sql.getClass() != SqlCreateTable.class) throw unsupported(sql);
+        validateCreateTable(sql);
         String[] names = sql.fullTableName();
         ObjectPath path = objectPath(names, database);
         HiveCatalog catalog = catalogForDdl(database, names.length == 1);
@@ -104,6 +105,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void createTableLike(SqlCreateTableLike sql, String database) throws Exception {
+        validateCreateTable(sql);
         String[] names = sql.fullTableName();
         String[] sourceNames = sql.getTableLike().getSourceTable().names.toArray(String[]::new);
         ObjectPath path = objectPath(names, database);
@@ -115,7 +117,13 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
         write(() -> catalog.createTable(path, definition, sql.isIfNotExists()));
     }
 
+    private static void validateCreateTable(SqlCreateTable sql) {
+        if (sql.isTemporary()) throw unsupported(sql);
+        FlinkTableDdl.requireSimpleSchema(sql.getColumnList(), sql.getWatermark().isPresent());
+    }
+
     private void dropTable(SqlDropTable sql, String database) throws Exception {
+        if (sql.isTemporary()) throw unsupported(sql);
         String[] names = sql.fullTableName();
         ObjectPath path = objectPath(names, database);
         HiveCatalog catalog = catalogForDdl(database, names.length == 1);
@@ -123,6 +131,12 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void alterTable(SqlAlterTable sql, String database) throws Exception {
+        requireSupportedAlter(sql);
+        if (sql instanceof SqlAlterTableSchema schema) {
+            var columns = schema.getColumnPositions().getList().stream()
+                    .map(position -> ((SqlTableColumnPosition) position).getColumn()).toList();
+            FlinkTableDdl.requireSimpleSchema(columns, schema.getWatermark().isPresent());
+        }
         String[] names = sql.fullTableName();
         ObjectPath path = objectPath(names, database);
         HiveCatalog catalog = catalogForDdl(database, names.length == 1);
@@ -179,6 +193,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void createFunction(SqlCreateFunction sql, String database) throws Exception {
+        if (sql.isTemporary() || sql.isSystemFunction()) throw unsupported(sql);
         String[] names = sql.getFunctionIdentifier();
         ObjectPath path = objectPath(names, database);
         List<ResourceUri> resources = sql.getResourceInfos().stream().map(SqlResource.class::cast)
@@ -191,6 +206,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void alterFunction(SqlAlterFunction sql, String database) throws Exception {
+        if (sql.isTemporary() || sql.isSystemFunction()) throw unsupported(sql);
         String[] names = sql.getFunctionIdentifier();
         ObjectPath path = objectPath(names, database);
         var definition = new CatalogFunctionImpl(literal(sql.getFunctionClassName()), language(sql.getFunctionLanguage()));
@@ -199,6 +215,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void dropFunction(SqlDropFunction sql, String database) throws Exception {
+        if (sql.isTemporary() || sql.isSystemFunction()) throw unsupported(sql);
         String[] names = sql.getFunctionIdentifier();
         ObjectPath path = objectPath(names, database);
         HiveCatalog catalog = catalogForDdl(database, names.length == 1);
@@ -295,33 +312,6 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
 
     private static HiveCatalog hiveCatalog(CatalogManager manager) {
         return (HiveCatalog) manager.getCatalog(Consts.HIVE_CATALOG_NAME).orElseThrow();
-    }
-
-    private static void requirePersistentDdl(SqlNode node) {
-        if (node instanceof SqlCreateTable create) {
-            if (create.isTemporary() || (create.getClass() != SqlCreateTable.class && !(create instanceof SqlCreateTableLike))) {
-                throw unsupported(node);
-            }
-            FlinkTableDdl.requireSimpleSchema(create.getColumnList(), create.getWatermark().isPresent());
-        } else if (node instanceof SqlAlterTable alter) {
-            requireSupportedAlter(alter);
-            if (alter instanceof SqlAlterTableSchema schema) {
-                var columns = schema.getColumnPositions().getList().stream()
-                        .map(position -> ((SqlTableColumnPosition) position).getColumn()).toList();
-                FlinkTableDdl.requireSimpleSchema(columns, schema.getWatermark().isPresent());
-            }
-        } else if (node instanceof SqlDropTable drop) {
-            if (drop.isTemporary()) throw unsupported(node);
-        } else if (node instanceof SqlCreateFunction create) {
-            if (create.isTemporary() || create.isSystemFunction()) throw unsupported(node);
-        } else if (node instanceof SqlAlterFunction alter) {
-            if (alter.isTemporary() || alter.isSystemFunction()) throw unsupported(node);
-        } else if (node instanceof SqlDropFunction drop) {
-            if (drop.isTemporary() || drop.isSystemFunction()) throw unsupported(node);
-        } else if (!(node instanceof SqlCreateDatabase) && !(node instanceof SqlAlterDatabase)
-                && !(node instanceof SqlDropDatabase)) {
-            throw unsupported(node);
-        }
     }
 
     private static void requireSupportedAlter(SqlAlterTable sql) {

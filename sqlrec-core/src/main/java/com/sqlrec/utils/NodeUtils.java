@@ -114,61 +114,45 @@ public class NodeUtils {
             return tableNames;
         }
 
-        class TableNameVisitor extends SqlBasicVisitor<Void> {
+        flinkSqlNode.accept(new SqlBasicVisitor<Void>() {
             @Override
             public Void visit(SqlCall call) {
-                // SELECT owns traversal of its FROM tree. JOIN/AS nodes are then
-                // visited by Calcite as well, so processing them again here would
-                // report every table more than once.
-                if (call instanceof SqlSelect
-                        || call instanceof SqlInsert
-                        || call instanceof SqlUpdate
-                        || call instanceof SqlDelete) {
-                    tryGetTable(call, tableNames);
-                }
+                // SELECT owns its FROM tree. Collecting JOIN/AS here again would duplicate its tables.
+                collectTableNames(tableReference(call), tableNames);
                 return super.visit(call);
             }
-        }
-
-        TableNameVisitor visitor = new TableNameVisitor();
-        flinkSqlNode.accept(visitor);
-
+        });
         return tableNames;
     }
 
     public static void tryGetTable(SqlNode sqlNode, List<String> tableNames) {
-        if (sqlNode == null) {
-            return;
-        }
-
-        if (sqlNode instanceof SqlInsert insertSql) {
-            tryGetTableNameFromSqlNode(insertSql.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlSelect sqlSelect) {
-            tryGetTableNameFromSqlNode(sqlSelect.getFrom(), tableNames);
-        } else if (sqlNode instanceof SqlUpdate sqlUpdate) {
-            tryGetTableNameFromSqlNode(sqlUpdate.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlDelete sqlDelete) {
-            tryGetTableNameFromSqlNode(sqlDelete.getTargetTable(), tableNames);
-        } else if (sqlNode instanceof SqlJoin join) {
-            tryGetTableNameFromSqlNode(join.getLeft(), tableNames);
-            tryGetTableNameFromSqlNode(join.getRight(), tableNames);
-        }
+        collectTableNames(sqlNode instanceof SqlJoin ? sqlNode : tableReference(sqlNode), tableNames);
     }
 
-    private static void tryGetTableNameFromSqlNode(SqlNode sqlNode, List<String> tableNames) {
+    private static SqlNode tableReference(SqlNode node) {
+        return switch (node) {
+            case SqlSelect select -> select.getFrom();
+            case SqlInsert insert -> insert.getTargetTable();
+            case SqlUpdate update -> update.getTargetTable();
+            case SqlDelete delete -> delete.getTargetTable();
+            case null, default -> null;
+        };
+    }
+
+    private static void collectTableNames(SqlNode sqlNode, List<String> tableNames) {
         if (sqlNode instanceof SqlIdentifier identifier) {
             tableNames.add(normalizeTableName(identifier.names));
         } else if (sqlNode instanceof SqlJoin join) {
-            tryGetTableNameFromSqlNode(join.getLeft(), tableNames);
-            tryGetTableNameFromSqlNode(join.getRight(), tableNames);
+            collectTableNames(join.getLeft(), tableNames);
+            collectTableNames(join.getRight(), tableNames);
         } else if (sqlNode instanceof SqlSelect) {
-            // A nested SELECT is visited independently by TableNameVisitor.
+            // The visitor handles nested SELECT statements independently.
             return;
         } else if (sqlNode instanceof SqlCall call) {
             if (call.getKind() == SqlKind.AS && !call.getOperandList().isEmpty()) {
                 // A table alias wraps the actual table/query in operand 0. Do not visit
                 // the alias identifier itself, since it is not a table dependency.
-                tryGetTableNameFromSqlNode(call.getOperandList().get(0), tableNames);
+                collectTableNames(call.getOperandList().get(0), tableNames);
             }
         }
     }

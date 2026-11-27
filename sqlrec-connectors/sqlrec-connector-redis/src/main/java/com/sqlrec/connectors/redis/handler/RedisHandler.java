@@ -64,21 +64,14 @@ public class RedisHandler {
     }
 
     public CompletableFuture<List<Object[]>> scan(String rowKey) {
+        byte[] key = getKeyBytes(rowKey);
         if (isListMode()) {
-            return redisClient.lrange(getKeyBytes(rowKey), 0, -1)
-                    .toCompletableFuture()
-                    .whenComplete((data, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+            return invalidateOnReadFailure(redisClient.lrange(key, 0, -1).toCompletableFuture())
                     .thenApply(data -> decodeList(data, rowKey));
         }
-        return redisClient.get(getKeyBytes(rowKey))
-                .toCompletableFuture()
-                .whenComplete((bytes, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
-                .thenApply(bytes -> {
-                    if (bytes == null) {
-                        return Collections.emptyList();
-                    }
-                    return Collections.singletonList(codec.decode(bytes, rowKey));
-                });
+        return invalidateOnReadFailure(redisClient.get(key).toCompletableFuture())
+                .thenApply(bytes -> bytes == null
+                        ? Collections.emptyList() : Collections.singletonList(codec.decode(bytes, rowKey)));
     }
 
     public CompletableFuture<Map<String, List<Object[]>>> scan(Set<String> keySet) {
@@ -90,8 +83,8 @@ public class RedisHandler {
                     .collect(Collectors.toMap(
                             key -> key,
                             key -> redisClient.lrange(getKeyBytes(key), 0, -1).toCompletableFuture()));
-            return CompletableFuture.allOf(futureMap.values().toArray(new CompletableFuture[0]))
-                    .whenComplete((v, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+            return invalidateOnReadFailure(CompletableFuture.allOf(
+                    futureMap.values().toArray(CompletableFuture<?>[]::new)))
                     .thenApply(v -> {
                         Map<String, List<Object[]>> result = new HashMap<>();
                         futureMap.forEach((key, f) -> result.put(key, decodeList(f.join(), key)));
@@ -100,8 +93,7 @@ public class RedisHandler {
         }
 
         byte[][] keys = keySet.stream().map(this::getKeyBytes).toArray(byte[][]::new);
-        return redisClient.mget(keys).toCompletableFuture()
-                .whenComplete((list, ex) -> { if (ex != null) maybeInvalidateOnFailure(ex); })
+        return invalidateOnReadFailure(redisClient.mget(keys).toCompletableFuture())
                 .thenApply(list -> {
             Map<String, List<Object[]>> result = new HashMap<>();
             if (list == null) {
@@ -116,6 +108,10 @@ public class RedisHandler {
             }
             return result;
         });
+    }
+
+    private <T> CompletableFuture<T> invalidateOnReadFailure(CompletableFuture<T> read) {
+        return read.whenComplete((result, failure) -> maybeInvalidateOnFailure(failure));
     }
 
     List<Object[]> decodeList(List<byte[]> datas, String primaryKey) {
@@ -174,8 +170,7 @@ public class RedisHandler {
         if (isListMode()) {
             Map<String, List<byte[]>> keyToValues = new LinkedHashMap<>();
             for (EncodedRow row : rows) {
-                keyToValues.computeIfAbsent(new String(row.key, StandardCharsets.UTF_8), key -> new ArrayList<>())
-                        .add(row.value);
+                addListValue(keyToValues, row);
             }
             pushListRows(keyToValues);
             return;
@@ -252,9 +247,7 @@ public class RedisHandler {
             for (RowReplacement row : rows) {
                 Long removed = await(redisClient.lrem(row.oldRow.key, 1, row.oldRow.value));
                 if (removed != null && removed > 0) {
-                    String key = new String(row.newRow.key, StandardCharsets.UTF_8);
-                    replacements.computeIfAbsent(key, ignored -> new ArrayList<>())
-                            .add(row.newRow.value);
+                    addListValue(replacements, row.newRow);
                     replaced++;
                 }
             }
@@ -263,6 +256,11 @@ public class RedisHandler {
         } catch (Exception e) {
             throw new RuntimeException("Failed to replace Redis list rows", e);
         }
+    }
+
+    private static void addListValue(Map<String, List<byte[]>> keyToValues, EncodedRow row) {
+        String key = new String(row.key, StandardCharsets.UTF_8);
+        keyToValues.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row.value);
     }
 
     private void pushListRows(Map<String, List<byte[]>> keyToValues) throws Exception {

@@ -12,11 +12,10 @@ import logging
 
 import lightgbm as lgb
 import numpy as np
-import pandas as pd
 
 from common import filesystem as common
 from common.cli import load_pipeline_config_from_args
-from common.training_data import resolve_feature_columns, validate_float_features
+from common.training_data import load_float_training_data
 
 logger = logging.getLogger("gbdt.train_lightgbm")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -53,24 +52,12 @@ def _build_lgb_params(p: dict) -> dict:
 
 
 def train(config: dict) -> None:
-    train_input_path = config["train_input_path"]
     model_dir = config["model_dir"]
     base_model_dir = config.get("base_model_dir", "")
     label_col = config["label_columns"]
-    feature_cols = list(config.get("feature_columns", []))
     params_block = config.get("params", {})
 
-    logger.info("Loading training data from %s", train_input_path)
-    table = common.read_parquet_table(train_input_path)
-    df: pd.DataFrame = common.to_pandas(table)
-    logger.info("Loaded %d rows, columns=%s", len(df), list(df.columns))
-
-    feature_cols = resolve_feature_columns(df.columns, label_col, feature_cols)
-
-    X = df[feature_cols]
-    y = df[label_col]
-
-    validate_float_features(X, feature_cols, "LightGBM")
+    X, y, feature_cols = load_float_training_data(config, label_col, "LightGBM", logger)
 
     # ONNX and the serving engine consume float32; train on the same values.
     with np.errstate(over="ignore", invalid="ignore"):

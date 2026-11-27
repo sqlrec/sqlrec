@@ -1,5 +1,24 @@
-"""Shared feature selection and validation for model training."""
+"""Shared data loading and feature validation for model training."""
 from __future__ import annotations
+
+from logging import Logger
+
+from common import filesystem
+
+
+def load_float_training_data(config: dict, label_col: str, model_name: str, logger: Logger):
+    """Load labeled training data and validate the selected float features."""
+    path = config["train_input_path"]
+    feature_cols = list(config.get("feature_columns", []))
+    logger.info("Loading training data from %s", path)
+    frame = filesystem.to_pandas(filesystem.read_parquet_table(path))
+    logger.info("Loaded %d rows, columns=%s", len(frame), list(frame.columns))
+
+    feature_cols = resolve_feature_columns(frame.columns, label_col, feature_cols)
+    features = frame[feature_cols]
+    labels = frame[label_col]
+    validate_float_features(features, feature_cols, model_name)
+    return features, labels, feature_cols
 
 
 def resolve_feature_columns(columns, label_col: str, feature_cols: list[str]) -> list[str]:

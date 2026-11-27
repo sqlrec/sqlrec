@@ -42,10 +42,8 @@ public final class JdbcMetadataExecutor {
 
     public SqlProcessResult schemas(String requestedCatalog, String schemaPattern) throws Exception {
         List<Object[]> result = new ArrayList<>();
-        if (acceptsCatalog(requestedCatalog)) {
-            for (String database : databases(schemaPattern)) {
-                result.add(new Object[]{database, catalog()});
-            }
+        for (String database : databases(requestedCatalog, schemaPattern)) {
+            result.add(new Object[]{database, catalog()});
         }
         return JdbcMetadataSchema.SCHEMAS.rows(result);
     }
@@ -58,16 +56,15 @@ public final class JdbcMetadataExecutor {
             String tablePattern, List<String> types) throws Exception {
         Predicate<String> tableFilter = nameFilter(tablePattern);
         List<Object[]> result = new ArrayList<>();
-        if (acceptsCatalog(requestedCatalog)) {
-            for (String database : databases(schemaPattern)) {
-                for (Table table : metadata.getTables(database)) {
-                    String type = "VIRTUAL_VIEW".equals(table.getTableType()) ? "VIEW" : "TABLE";
-                    if (tableFilter.test(table.getTableName())
-                            && (types == null || types.stream().anyMatch(type::equalsIgnoreCase))) {
-                        result.add(new Object[]{catalog(), database, table.getTableName(), type,
-                                parameters(table).getOrDefault("flink.comment", parameters(table).get("comment")),
-                                null, null, null, null, null});
-                    }
+        for (String database : databases(requestedCatalog, schemaPattern)) {
+            for (Table table : metadata.getTables(database)) {
+                String name = table.getTableName();
+                String type = "VIRTUAL_VIEW".equals(table.getTableType()) ? "VIEW" : "TABLE";
+                if (tableFilter.test(name) && (types == null || types.stream().anyMatch(type::equalsIgnoreCase))) {
+                    Map<String, String> parameters = parameters(table);
+                    String comment = parameters.getOrDefault("flink.comment", parameters.get("comment"));
+                    result.add(new Object[]{catalog(), database, name, type, comment,
+                            null, null, null, null, null});
                 }
             }
         }
@@ -79,12 +76,9 @@ public final class JdbcMetadataExecutor {
         Predicate<String> tableFilter = nameFilter(tablePattern);
         Predicate<String> columnFilter = nameFilter(columnPattern);
         List<Object[]> result = new ArrayList<>();
-        if (acceptsCatalog(requestedCatalog)) {
-            for (String database : databases(schemaPattern)) {
-                for (Table table : metadata.getTables(database)) {
-                    if (!tableFilter.test(table.getTableName())) {
-                        continue;
-                    }
+        for (String database : databases(requestedCatalog, schemaPattern)) {
+            for (Table table : metadata.getTables(database)) {
+                if (tableFilter.test(table.getTableName())) {
                     result.addAll(columnRows(database, table, columnFilter));
                 }
             }
@@ -128,10 +122,8 @@ public final class JdbcMetadataExecutor {
             String functionPattern) throws Exception {
         Predicate<String> functionFilter = nameFilter(functionPattern);
         List<Object[]> result = new ArrayList<>();
-        if (acceptsCatalog(requestedCatalog)) {
-            for (String database : databases(schemaPattern)) {
-                result.addAll(functionRows(database, functionFilter));
-            }
+        for (String database : databases(requestedCatalog, schemaPattern)) {
+            result.addAll(functionRows(database, functionFilter));
         }
         return JdbcMetadataSchema.FUNCTIONS.rows(result);
     }
@@ -217,7 +209,10 @@ public final class JdbcMetadataExecutor {
                 false, false, false, type, (short) 0, maxScale, null, null, JdbcTypeUtils.numericRadix(code)};
     }
 
-    private List<String> databases(String pattern) throws Exception {
+    private List<String> databases(String requestedCatalog, String pattern) throws Exception {
+        if (!acceptsCatalog(requestedCatalog)) {
+            return List.of();
+        }
         return metadata.getDatabases().stream().filter(nameFilter(pattern)).sorted().toList();
     }
 

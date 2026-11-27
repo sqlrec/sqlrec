@@ -39,73 +39,29 @@ final class ResourceQueryExecutor {
     }
 
     SqlProcessResult execute(SqlNode node, String defaultSchema) throws Exception {
-        if (node instanceof SqlShowDatabases) {
-            return SqlProcessResult.stringList(metadata.getDatabases(), "database name");
-        }
-        if (node instanceof SqlShowTables command) {
-            return showTables(command, defaultSchema);
-        }
-        if (node instanceof SqlShowFunctions) {
-            return metadata.executeMetadataQuery(node, defaultSchema);
-        }
-        if (node instanceof SqlRichDescribeTable command) {
-            return describeTable(command, defaultSchema);
-        }
-        if (node instanceof SqlShowCreateTable command) {
-            return showCreateTable(command, defaultSchema);
-        }
-        if (node instanceof SqlShowSqlFunction) {
-            return SqlProcessResult.stringList(
-                    metadata.getSqlFunctionList().stream()
-                            .map(SqlFunction::getName).collect(Collectors.toList()),
-                    "sql function");
-        }
-        if (node instanceof SqlShowCreateSqlFunction command) {
-            SqlFunction function = metadata.getSqlFunction(command.getFuncName().getSimple());
-            if (function == null) {
-                throw new RuntimeException(
-                        "sql function not exists: " + command.getFuncName().getSimple());
-            }
-            return SqlProcessResult.msg(
-                    String.join(";\n\n", JsonUtils.parseStringList(function.getSqlList())) + ";",
-                    "create sql");
-        }
-        if (node instanceof SqlShowApi) {
-            return SqlProcessResult.stringList(
-                    metadata.getSqlApiList().stream()
-                            .map(SqlApi::getName).collect(Collectors.toList()), "api");
-        }
-        if (node instanceof SqlShowCreateApi command) {
-            SqlApi api = metadata.getSqlApi(command.getApiName().getSimple());
-            if (api == null) {
-                throw new RuntimeException("api not exists: " + command.getApiName());
-            }
-            return SqlProcessResult.msg(
-                    "create api " + api.getName() + " with " + api.getFunctionName(), "create sql");
-        }
-        if (node instanceof SqlShowModel) {
-            return SqlProcessResult.stringList(
-                    metadata.getModelList().stream()
-                            .map(Model::getName).collect(Collectors.toList()), "model");
-        }
-        if (node instanceof SqlShowCreateModel command) {
-            return showCreateModel(command);
-        }
-        if (node instanceof SqlShowCheckpoint command) {
-            return SqlProcessResult.stringList(
+        return switch (node) {
+            case SqlShowDatabases ignored -> SqlProcessResult.stringList(metadata.getDatabases(), "database name");
+            case SqlShowTables command -> showTables(command, defaultSchema);
+            case SqlShowFunctions command -> metadata.executeMetadataQuery(command, defaultSchema);
+            case SqlRichDescribeTable command -> describeTable(command, defaultSchema);
+            case SqlShowCreateTable command -> showCreateTable(command, defaultSchema);
+            case SqlShowSqlFunction ignored -> SqlProcessResult.stringList(
+                    metadata.getSqlFunctionList().stream().map(SqlFunction::getName).toList(), "sql function");
+            case SqlShowCreateSqlFunction command -> showCreateSqlFunction(command);
+            case SqlShowApi ignored -> SqlProcessResult.stringList(
+                    metadata.getSqlApiList().stream().map(SqlApi::getName).toList(), "api");
+            case SqlShowCreateApi command -> showCreateApi(command);
+            case SqlShowModel ignored -> SqlProcessResult.stringList(
+                    metadata.getModelList().stream().map(Model::getName).toList(), "model");
+            case SqlShowCreateModel command -> showCreateModel(command);
+            case SqlShowCheckpoint command -> SqlProcessResult.stringList(
                     metadata.getCheckpointListByModelName(command.getModelName().getSimple()).stream()
-                            .map(Checkpoint::getCheckpointName).collect(Collectors.toList()),
-                    "checkpoint");
-        }
-        if (node instanceof SqlShowService) {
-            return SqlProcessResult.stringList(
-                    metadata.getServiceList().stream()
-                            .map(Service::getName).collect(Collectors.toList()), "service");
-        }
-        if (node instanceof SqlShowCreateService command) {
-            return showCreateService(command);
-        }
-        return null;
+                            .map(Checkpoint::getCheckpointName).toList(), "checkpoint");
+            case SqlShowService ignored -> SqlProcessResult.stringList(
+                    metadata.getServiceList().stream().map(Service::getName).toList(), "service");
+            case SqlShowCreateService command -> showCreateService(command);
+            case null, default -> null;
+        };
     }
 
     private Table sessionTable(List<String> name) {
@@ -151,6 +107,25 @@ final class ResourceQueryExecutor {
             return SqlProcessResult.msg(sqlRecTable.getCreateSql(), "create sql");
         }
         throw new UnsupportedOperationException("Session table has no stored SQL definition: " + command.getTableName());
+    }
+
+    private SqlProcessResult showCreateSqlFunction(SqlShowCreateSqlFunction command) {
+        String name = command.getFuncName().getSimple();
+        SqlFunction function = metadata.getSqlFunction(name);
+        if (function == null) {
+            throw new RuntimeException("sql function not exists: " + name);
+        }
+        return SqlProcessResult.msg(
+                String.join(";\n\n", JsonUtils.parseStringList(function.getSqlList())) + ";", "create sql");
+    }
+
+    private SqlProcessResult showCreateApi(SqlShowCreateApi command) {
+        SqlApi api = metadata.getSqlApi(command.getApiName().getSimple());
+        if (api == null) {
+            throw new RuntimeException("api not exists: " + command.getApiName());
+        }
+        return SqlProcessResult.msg(
+                "create api " + api.getName() + " with " + api.getFunctionName(), "create sql");
     }
 
     private SqlProcessResult showCreateModel(SqlShowCreateModel command) throws Exception {
