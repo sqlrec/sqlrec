@@ -25,9 +25,8 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
         if (oldRows.size() != newRows.size()) {
             throw new IllegalArgumentException("UPDATE row counts do not match");
         }
-        if (collection instanceof SqlRecCollection) {
-            ((SqlRecCollection) collection).replaceAll(
-                    new ArrayList<>(oldRows), new ArrayList<>(newRows));
+        if (collection instanceof SqlRecCollection tableRows) {
+            tableRows.replaceAll(new ArrayList<>(oldRows), new ArrayList<>(newRows));
         } else {
             collection.addAll(newRows);
         }
@@ -71,180 +70,88 @@ public class SqlrecEnumerableTableModify extends EnumerableTableModify {
 
     @Override
     public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
-        final BlockBuilder builder = new BlockBuilder();
-        final Result result =
-                implementor.visitChild(this, 0, (EnumerableRel) getInput(), pref);
-        Expression childExp =
-                builder.append(
-                        "child", result.block);
-        final ParameterExpression collectionParameter = declareCollection(builder);
-        final Expression countParameter =
-                builder.append(
-                        "count",
-                        Expressions.call(collectionParameter, "size"),
-                        false);
-        RowProjections projections = projectRows(builder, result, childExp);
-        appendModification(builder, collectionParameter, projections);
-        appendResult(builder, collectionParameter, countParameter);
-        final PhysType physType =
-                PhysTypeImpl.of(
-                        implementor.getTypeFactory(),
-                        getRowType(),
-                        pref == Prefer.ARRAY
-                                ? JavaRowFormat.ARRAY : JavaRowFormat.SCALAR);
-        return implementor.result(physType, builder.toBlock());
+        BlockBuilder builder = new BlockBuilder();
+        Result input = implementor.visitChild(this, 0, (EnumerableRel) getInput(), pref);
+        Expression inputRows = builder.append("child", input.block);
+        Expression collection = declareCollection(builder);
+        Expression sizeBefore = builder.append("sizeBefore", Expressions.call(collection, "size"), false);
+
+        Expression modification = modifyRows(builder, collection, inputRows, input.physType);
+        builder.add(Expressions.statement(modification));
+
+        Expression sizeChange = Expressions.subtract(Expressions.call(collection, "size"), sizeBefore);
+        Expression affectedRows = Expressions.convert_(Expressions.call(Math.class, "abs", sizeChange), long.class);
+        builder.add(Expressions.return_(null,
+                Expressions.call(BuiltInMethod.SINGLETON_ENUMERABLE.method, affectedRows)));
+        PhysType resultType = PhysTypeImpl.of(implementor.getTypeFactory(), getRowType(),
+                pref == Prefer.ARRAY ? JavaRowFormat.ARRAY : JavaRowFormat.SCALAR);
+        return implementor.result(resultType, builder.toBlock());
     }
 
     private ParameterExpression declareCollection(BlockBuilder builder) {
-        final ParameterExpression collectionParameter =
-                Expressions.parameter(Collection.class,
-                        builder.newName("collection"));
-        final Expression expression = table.getExpression(ModifiableTable.class);
-        if (expression == null) {
+        Expression tableExpression = table.getExpression(ModifiableTable.class);
+        if (tableExpression == null) {
             throw new IllegalStateException("ModifiableTable expression is missing");
         }
-        if (!ModifiableTable.class.isAssignableFrom(Types.toClass(expression.getType()))) {
+        if (!ModifiableTable.class.isAssignableFrom(Types.toClass(tableExpression.getType()))) {
             throw new IllegalStateException(
-                    "Expected a ModifiableTable expression, got " + expression.getType());
+                    "Expected a ModifiableTable expression, got " + tableExpression.getType());
         }
-        builder.add(
-                Expressions.declare(
-                        Modifier.FINAL,
-                        collectionParameter,
-                        Expressions.call(
-                                expression,
-                                BuiltInMethod.MODIFIABLE_TABLE_GET_MODIFIABLE_COLLECTION
-                                        .method)));
-        return collectionParameter;
+        ParameterExpression collection = Expressions.parameter(Collection.class, builder.newName("collection"));
+        Expression getCollection = Expressions.call(tableExpression,
+                BuiltInMethod.MODIFIABLE_TABLE_GET_MODIFIABLE_COLLECTION.method);
+        builder.add(Expressions.declare(Modifier.FINAL, collection, getCollection));
+        return collection;
     }
 
-    private RowProjections projectRows(BlockBuilder builder, Result result, Expression childExp) {
-        final JavaTypeFactory typeFactory = (JavaTypeFactory) getCluster().getTypeFactory();
-        final JavaRowFormat format = EnumerableTableScan.deduceFormat(table);
+    private Expression modifyRows(
+            BlockBuilder builder, Expression collection, Expression inputRows, PhysType inputType) {
+        JavaTypeFactory typeFactory = (JavaTypeFactory) getCluster().getTypeFactory();
+        JavaRowFormat format = EnumerableTableScan.deduceFormat(table);
         // Tables backed by Object[] require an array even when the row has a single field.
-        final PhysType physType = PhysTypeImpl.of(
+        PhysType tableType = PhysTypeImpl.of(
                 typeFactory, table.getRowType(), format, format != JavaRowFormat.ARRAY);
-        final PhysType childPhysType = result.physType;
-        final ParameterExpression row = Expressions.parameter(childPhysType.getJavaRowType(), "row");
-        FieldProjections fields = projectFields(childPhysType, physType, row);
-
-        // Materialize UPDATE input once so both projections use the same selected rows.
-        Expression projectionSource = childExp;
-        Expression originalChildExp = null;
-        if (getOperation() == Operation.UPDATE) {
-            Expression inputRows = builder.append("updateInputRows",
-                    Expressions.call(childExp, BuiltInMethod.INTO.method,
-                            Expressions.new_(ArrayList.class)));
-            projectionSource = Expressions.call(Linq4j.class, "asEnumerable", inputRows);
-            originalChildExp = builder.append("originalChild",
-                    Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
-                            Expressions.lambda(physType.record(fields.original()), row)));
-        }
-        Expression convertedChildExp = builder.append("convertedChild",
-                Expressions.call(projectionSource, BuiltInMethod.SELECT.method,
-                        Expressions.lambda(physType.record(fields.updated()), row)));
-        return new RowProjections(convertedChildExp, originalChildExp);
-    }
-
-    private FieldProjections projectFields(PhysType childPhysType, PhysType physType, ParameterExpression o_) {
-        List<Expression> expressionList = new ArrayList<>();
-        List<Expression> originalExpressionList = new ArrayList<>();
-        final int fieldCount =
-                childPhysType.getRowType().getFieldCount();
-
-        // UPDATE input contains the original table row followed by SET values.
+        int fieldCount = inputType.getRowType().getFieldCount();
         if (getOperation() == Operation.UPDATE) {
             List<String> updateColumns = getUpdateColumnList();
             if (updateColumns == null) {
                 throw new IllegalStateException("UPDATE columns are missing");
             }
-            int updateValueStart = fieldCount - updateColumns.size();
-            for (int i = 0; i < updateValueStart; i++) {
-                String fieldName = getInput().getRowType().getFieldList().get(i).getName();
-                int updateIndex = updateColumns.indexOf(fieldName);
-                int relIndex = updateIndex < 0 ? i : updateValueStart + updateIndex;
-                expressionList.add(
-                        childPhysType.fieldReference(o_, relIndex, physType.getJavaFieldType(i)));
-                originalExpressionList.add(
-                        childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
-            }
-        } else {
-            for (int i = 0; i < fieldCount; i++) {
-                expressionList.add(
-                        childPhysType.fieldReference(o_, i, physType.getJavaFieldType(i)));
-            }
+            // UPDATE input contains the original row followed by SET values.
+            int tableFieldCount = fieldCount - updateColumns.size();
+            // Materialize the input once so both projections see the same rows and SET values.
+            Expression inputList = builder.append("updateInputRows", collectRows(inputRows));
+            Expression source = Expressions.call(Linq4j.class, "asEnumerable", inputList);
+            Expression oldRows = projectRows(source, inputType, tableType, tableFieldCount, List.of());
+            Expression newRows = projectRows(source, inputType, tableType, tableFieldCount, updateColumns);
+            return Expressions.call(SqlrecEnumerableTableModify.class, "replaceRows",
+                    collection, collectRows(oldRows), collectRows(newRows));
         }
-        return new FieldProjections(expressionList, originalExpressionList);
+
+        Expression rows = projectRows(inputRows, inputType, tableType, fieldCount, List.of());
+        return switch (getOperation()) {
+            case INSERT -> Expressions.call(collection, "addAll", collectRows(rows));
+            case DELETE -> Expressions.call(rows, BuiltInMethod.REMOVE_ALL.method, collection);
+            default -> throw new AssertionError(getOperation());
+        };
     }
 
-    private void appendModification(
-            BlockBuilder builder, ParameterExpression collectionParameter, RowProjections projections) {
-        Expression convertedChildExp = projections.updated();
-        Expression originalChildExp = projections.original();
-        switch (getOperation()) {
-            case UPDATE:
-                if (originalChildExp == null) {
-                    throw new IllegalStateException("UPDATE input must contain original rows");
-                }
-                builder.add(Expressions.statement(Expressions.call(
-                        SqlrecEnumerableTableModify.class, "replaceRows",
-                        collectionParameter,
-                        Expressions.call(originalChildExp, BuiltInMethod.INTO.method,
-                                Expressions.new_(ArrayList.class)),
-                        Expressions.call(convertedChildExp, BuiltInMethod.INTO.method,
-                                Expressions.new_(ArrayList.class)))));
-                break;
-            case INSERT:
-                builder.add(
-                        Expressions.statement(
-                                Expressions.call(
-                                        collectionParameter,
-                                        "addAll",
-                                        Expressions.call(
-                                                convertedChildExp,
-                                                BuiltInMethod.INTO.method,
-                                                Expressions.new_(ArrayList.class)))));
-                break;
-            case DELETE:
-                builder.add(
-                        Expressions.statement(
-                                Expressions.call(
-                                        convertedChildExp,
-                                        BuiltInMethod.REMOVE_ALL.method,
-                                        collectionParameter)));
-                break;
-            default:
-                throw new AssertionError(getOperation());
+    private Expression projectRows(Expression source, PhysType inputType, PhysType tableType,
+                                   int fieldCount, List<String> updateColumns) {
+        ParameterExpression row = Expressions.parameter(inputType.getJavaRowType(), "row");
+        var inputFields = getInput().getRowType().getFieldList();
+        List<Expression> fields = new ArrayList<>(fieldCount);
+        for (int i = 0; i < fieldCount; i++) {
+            int updateIndex = updateColumns.isEmpty() ? -1 : updateColumns.indexOf(inputFields.get(i).getName());
+            int inputIndex = updateIndex < 0 ? i : fieldCount + updateIndex;
+            fields.add(inputType.fieldReference(row, inputIndex, tableType.getJavaFieldType(i)));
         }
+        return Expressions.call(source, BuiltInMethod.SELECT.method,
+                Expressions.lambda(tableType.record(fields), row));
     }
 
-    private static void appendResult(
-            BlockBuilder builder, ParameterExpression collectionParameter, Expression countParameter) {
-        final Expression updatedCountParameter =
-                builder.append(
-                        "updatedCount",
-                        Expressions.call(collectionParameter, "size"),
-                        false);
-        builder.add(
-                Expressions.return_(
-                        null,
-                        Expressions.call(
-                                BuiltInMethod.SINGLETON_ENUMERABLE.method,
-                                Expressions.convert_(
-                                        Expressions.condition(
-                                                Expressions.greaterThanOrEqual(
-                                                        updatedCountParameter, countParameter),
-                                                Expressions.subtract(
-                                                        updatedCountParameter, countParameter),
-                                                Expressions.subtract(
-                                                        countParameter, updatedCountParameter)),
-                                        long.class))));
-    }
-
-    private record RowProjections(Expression updated, Expression original) {
-    }
-
-    private record FieldProjections(List<Expression> updated, List<Expression> original) {
+    private static Expression collectRows(Expression rows) {
+        return Expressions.call(rows, BuiltInMethod.INTO.method, Expressions.new_(ArrayList.class));
     }
 
     @Override

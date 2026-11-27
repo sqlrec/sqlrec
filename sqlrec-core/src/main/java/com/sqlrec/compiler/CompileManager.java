@@ -80,23 +80,15 @@ public class CompileManager {
             throw new Exception("sql is not compilable");
         }
 
-        BindableInterface bindable;
-        if (flinkSqlNode instanceof SqlReturn sqlReturn) {
-            bindable = getReturnBindable(sqlReturn, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlCallSqlFunction callSqlFunction) {
-            bindable = FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
-        } else if (flinkSqlNode instanceof SqlIfCache ifCache) {
-            bindable = getIfBindable(ifCache, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlCache cache) {
-            bindable = getCacheBindable(cache, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlAssert assertStatement) {
-            bindable = getAssertBindable(assertStatement, schema, defaultSchema);
-        } else if (flinkSqlNode instanceof SqlSet set) {
-            bindable = getSetBindable(set);
-        } else {
-            bindable = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
-        }
-
+        BindableInterface bindable = switch (flinkSqlNode) {
+            case SqlReturn sqlReturn -> getReturnBindable(sqlReturn, schema, defaultSchema);
+            case SqlCallSqlFunction call -> FunctionProxyBindable.getFunctionBindable(call, schema, this);
+            case SqlIfCache ifCache -> getIfBindable(ifCache, schema, defaultSchema);
+            case SqlCache cache -> getCacheBindable(cache, schema, defaultSchema);
+            case SqlAssert assertion -> getAssertBindable(assertion, schema, defaultSchema);
+            case SqlSet set -> getSetBindable(set);
+            default -> NormalSqlCompiler.getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
+        };
         bindable.setSql(originSql);
         return bindable;
     }
@@ -106,7 +98,6 @@ public class CompileManager {
             CalciteSchema schema,
             String defaultSchema
     ) throws Exception {
-        ReturnBindable returnBindable;
         if (sqlReturn.getTableName() != null) {
             String tableName = sqlReturn.getTableName().getSimple();
             CalciteSchema.TableEntry tableEntry = schema.getTable(tableName, false);
@@ -116,23 +107,18 @@ public class CompileManager {
             if (!(tableEntry.getTable() instanceof CacheTable cacheTable)) {
                 throw new Exception("return table is not cache table");
             }
-            returnBindable = new ReturnBindable(tableName, cacheTable.getDataFields());
-        } else if (sqlReturn.getCallSqlFunction() != null) {
-            SqlCallSqlFunction call = sqlReturn.getCallSqlFunction();
+            return new ReturnBindable(tableName, cacheTable.getDataFields());
+        }
+        SqlCallSqlFunction call = sqlReturn.getCallSqlFunction();
+        if (call != null) {
             if (call.isAsync()) {
                 throw new Exception("async function is not supported in return statement");
             }
-            returnBindable = new ReturnBindable(FunctionProxyBindable.getFunctionBindable(call, schema, this));
-        } else if (sqlReturn.getSelect() != null) {
-            BindableInterface selectBindable = NormalSqlCompiler.getNormalSqlBindable(
-                    getSqlStr(sqlReturn.getSelect()), schema, defaultSchema
-            );
-            returnBindable = new ReturnBindable(selectBindable);
-        } else {
-            returnBindable = new ReturnBindable((BindableInterface) null);
+            return new ReturnBindable(FunctionProxyBindable.getFunctionBindable(call, schema, this));
         }
-
-        return returnBindable;
+        SqlNode select = sqlReturn.getSelect();
+        return new ReturnBindable(select == null ? null
+                : NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema));
     }
 
     private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
