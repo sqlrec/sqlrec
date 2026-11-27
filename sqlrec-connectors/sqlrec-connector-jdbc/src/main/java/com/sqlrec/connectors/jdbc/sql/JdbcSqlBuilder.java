@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * The single place where SQL text is assembled. Every public method returns a
@@ -114,7 +115,7 @@ public final class JdbcSqlBuilder {
         validateFieldSchemas(fieldSchemas);
         String lowerUrl = url.toLowerCase();
         if (lowerUrl.startsWith("jdbc:mysql:")) {
-            return mysqlUpsert(tableName, fieldSchemas, primaryKey);
+            return mysqlUpsert(tableName, fieldSchemas);
         }
         if (lowerUrl.startsWith("jdbc:h2:")) {
             return h2Upsert(tableName, fieldSchemas, primaryKey);
@@ -128,16 +129,16 @@ public final class JdbcSqlBuilder {
         String url = null;
         StringBuilder sql = insertValues(url, tableName, fieldSchemas);
         sql.append(" ON CONFLICT (").append(quoteIdentifier(primaryKey, url)).append(") DO UPDATE SET ");
-        appendExcludedSet(sql, fieldSchemas, url);
+        appendAssignments(sql, fieldSchemas, url, column -> "EXCLUDED." + column);
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /** MySQL uses backtick-quoted identifiers. */
-    private static JdbcStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
+    private static JdbcStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas) {
         String url = "jdbc:mysql:";
         StringBuilder sql = insertValues(url, tableName, fieldSchemas);
         sql.append(" ON DUPLICATE KEY UPDATE ");
-        appendValuesSet(sql, fieldSchemas, url);
+        appendAssignments(sql, fieldSchemas, url, column -> "VALUES(" + column + ")");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
@@ -169,12 +170,7 @@ public final class JdbcSqlBuilder {
         validateFieldSchemas(fieldSchemas);
         StringBuilder sql = new StringBuilder("UPDATE ")
                 .append(quoteQualifiedIdentifier(tableName, url)).append(" SET ");
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            if (i > 0) {
-                sql.append(", ");
-            }
-            sql.append(quoteIdentifier(fieldSchemas.get(i).getName(), url)).append(" = ?");
-        }
+        appendAssignments(sql, fieldSchemas, url, column -> "?");
         sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" = ?");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
@@ -207,23 +203,14 @@ public final class JdbcSqlBuilder {
         }
     }
 
-    private static void appendExcludedSet(StringBuilder sql, List<FieldSchema> fieldSchemas, String url) {
+    private static void appendAssignments(StringBuilder sql, List<FieldSchema> fieldSchemas, String url,
+                                          UnaryOperator<String> valueExpression) {
         for (int i = 0; i < fieldSchemas.size(); i++) {
             if (i > 0) {
                 sql.append(", ");
             }
-            String colName = quoteIdentifier(fieldSchemas.get(i).getName(), url);
-            sql.append(colName).append(" = EXCLUDED.").append(colName);
-        }
-    }
-
-    private static void appendValuesSet(StringBuilder sql, List<FieldSchema> fieldSchemas, String url) {
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            if (i > 0) {
-                sql.append(", ");
-            }
-            String colName = quoteIdentifier(fieldSchemas.get(i).getName(), url);
-            sql.append(colName).append(" = VALUES(").append(colName).append(")");
+            String column = quoteIdentifier(fieldSchemas.get(i).getName(), url);
+            sql.append(column).append(" = ").append(valueExpression.apply(column));
         }
     }
 

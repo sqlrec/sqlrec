@@ -2,7 +2,6 @@
 
 import argparse
 import glob
-import hashlib
 import importlib.metadata
 import json
 import logging
@@ -18,7 +17,7 @@ import common
 from common import filesystem as shared_filesystem
 from tzrec.protos import pipeline_pb2
 from tzrec.utils import config_util
-from validate_export import REQUIRED_FILES
+from validate_export import REQUIRED_FILES, digest_stream
 from prediction_contract import export_contract, validate_scripted_export
 from pipeline_config import prepare_config
 
@@ -36,12 +35,9 @@ def publish_export(staging: str, target: str, config) -> None:
     for directory in directories:
         hashes = {}
         for name in REQUIRED_FILES:
-            digest = hashlib.sha256()
             source_fs, source_path = fsspec.core.url_to_fs(directory + "/" + name)
             with source_fs.open(source_path, "rb") as stream:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            hashes[name] = digest.hexdigest()
+                hashes[name] = digest_stream(stream)
         metadata = {"format_version": 1, "sha256": hashes, "labels": list(config.data_config.label_fields),
                     "architecture": config.model_config.WhichOneof("model"),
                     "torch": torch.__version__, "tzrec": importlib.metadata.version("tzrec")}

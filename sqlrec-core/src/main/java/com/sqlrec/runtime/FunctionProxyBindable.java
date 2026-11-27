@@ -64,35 +64,19 @@ public class FunctionProxyBindable extends ForwardingBindable {
         SqlNode partitionByNode = callSqlFunction.getPartitionBy();
         String partitionTable = null;
         if (partitionByNode != null) {
-            if (partitionByNode instanceof SqlIdentifier) {
-                partitionTable = ((SqlIdentifier) partitionByNode).getSimple();
-            } else {
+            if (!(partitionByNode instanceof SqlIdentifier identifier)) {
                 throw new RuntimeException("PARTITION BY must be a simple identifier");
             }
-            // validate partitionBy must be one of the function input tables
-            boolean found = false;
-            if (inputList != null) {
-                for (SqlNode input : inputList) {
-                    if (input instanceof SqlIdentifier
-                            && NodeUtils.normalizeTableName(((SqlIdentifier) input).getSimple())
-                            .equals(NodeUtils.normalizeTableName(partitionTable))) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found) {
+            partitionTable = identifier.getSimple();
+            if (!inputTableNames(inputList).contains(NodeUtils.normalizeTableName(partitionTable))) {
                 throw new RuntimeException("PARTITION BY table '" + partitionTable
                         + "' must be one of the function input tables");
             }
         }
 
         SqlNode sizeNode = callSqlFunction.getPartitionSize();
-        if (sizeNode != null) {
-            if (!(sizeNode instanceof SqlLiteral)
-                    && !(sizeNode instanceof SqlGetVariable)) {
-                throw new RuntimeException("SIZE must be an integer literal or get()");
-            }
+        if (sizeNode != null && !(sizeNode instanceof SqlLiteral) && !(sizeNode instanceof SqlGetVariable)) {
+            throw new RuntimeException("SIZE must be an integer literal or get()");
         }
         return partitionTable == null ? null : new PartitionExecutor(partitionTable, sizeNode);
     }
@@ -180,18 +164,19 @@ public class FunctionProxyBindable extends ForwardingBindable {
 
     @Override
     public Set<String> getReadTables() {
-        if (delegate != null) {
-            return delegate.getReadTables();
-        }
-        Set<String> readTables = new HashSet<>();
+        return delegate == null ? inputTableNames(inputList) : delegate.getReadTables();
+    }
+
+    private static Set<String> inputTableNames(List<SqlNode> inputList) {
+        Set<String> names = new HashSet<>();
         if (inputList != null) {
             for (SqlNode input : inputList) {
-                if (input instanceof SqlIdentifier) {
-                    readTables.add(NodeUtils.normalizeTableName(((SqlIdentifier) input).getSimple()));
+                if (input instanceof SqlIdentifier identifier) {
+                    names.add(NodeUtils.normalizeTableName(identifier.getSimple()));
                 }
             }
         }
-        return readTables;
+        return names;
     }
 
     @Override

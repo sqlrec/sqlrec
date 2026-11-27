@@ -162,15 +162,15 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
     }
 
     private void addPartitions(SqlAddPartitions sql, ObjectPath path, HiveCatalog catalog) throws Exception {
-        List<CatalogPartitionSpec> specs = new ArrayList<>();
-        List<CatalogPartition> definitions = new ArrayList<>();
+        List<PartitionDefinition> partitions = new ArrayList<>();
         for (int i = 0; i < sql.getPartSpecs().size(); i++) {
-            specs.add(new CatalogPartitionSpec(sql.getPartitionKVs(i)));
-            definitions.add(new CatalogPartitionImpl(FlinkTableDdl.properties(sql.getPartProps().get(i)), null));
+            var spec = new CatalogPartitionSpec(sql.getPartitionKVs(i));
+            var definition = new CatalogPartitionImpl(FlinkTableDdl.properties(sql.getPartProps().get(i)), null);
+            partitions.add(new PartitionDefinition(spec, definition));
         }
         write(() -> {
-            for (int i = 0; i < specs.size(); i++) {
-                catalog.createPartition(path, specs.get(i), definitions.get(i), sql.ifPartitionNotExists());
+            for (PartitionDefinition partition : partitions) {
+                catalog.createPartition(path, partition.spec(), partition.definition(), sql.ifPartitionNotExists());
             }
         });
     }
@@ -369,6 +369,8 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
         catalogs = null;
         if (previous != null) previous.close();
     }
+
+    private record PartitionDefinition(CatalogPartitionSpec spec, CatalogPartition definition) {}
 
     @FunctionalInterface
     private interface CatalogWrite { void execute() throws Exception; }

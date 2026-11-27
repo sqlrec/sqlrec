@@ -6,16 +6,21 @@ import json
 import os
 from pathlib import Path
 import sys
+from typing import BinaryIO
 
 
 REQUIRED_FILES = ("scripted_model.pt", "fg.json", "pipeline.config")
 
 
 def digest(path: Path) -> str:
-    result = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(chunk)
+        return digest_stream(stream)
+
+
+def digest_stream(stream: BinaryIO) -> str:
+    result = hashlib.sha256()
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        result.update(chunk)
     return result.hexdigest()
 
 

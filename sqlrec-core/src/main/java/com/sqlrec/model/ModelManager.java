@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 public class ModelManager {
     private static final Logger log = LoggerFactory.getLogger(ModelManager.class);
@@ -234,26 +235,28 @@ public class ModelManager {
         deleteExportCheckpoints(db, modelExportConf.getModelName(), checkpoints.existing());
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
-        List<CheckpointInfo> checkpointInfos = new ArrayList<>();
-        List<Checkpoint> submitted = new ArrayList<>();
+        String modelName = modelExportConf.getModelName();
+        String checkpointDdl = CompileManager.getSqlStr(sqlExportModel);
+        List<Checkpoint> submitted = new ArrayList<>(exportCheckpointNames.size());
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint checkpoint = createCheckpoint(
-                    modelExportConf.getModelName(),
+                    modelName,
                     exportCheckpointName,
                     modelEntity.getDdl(),
                     k8sYaml,
-                    CompileManager.getSqlStr(sqlExportModel),
+                    checkpointDdl,
                     Consts.CHECKPOINT_TYPE_EXPORT
             );
 
             db.insertCheckpoint(checkpoint);
             submitted.add(checkpoint);
-            checkpointInfos.add(new CheckpointInfo(modelExportConf.getModelName(), exportCheckpointName));
         }
 
         submitCheckpoints(db, k8sYaml, submitted);
 
-        return checkpointInfos;
+        return exportCheckpointNames.stream()
+                .map(name -> new CheckpointInfo(modelName, name))
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private static void submitCheckpoints(MetadataAccess db, String yaml, List<Checkpoint> checkpoints) {
