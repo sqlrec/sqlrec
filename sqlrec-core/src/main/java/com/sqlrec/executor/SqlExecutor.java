@@ -14,12 +14,12 @@ import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.schema.CacheManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
-import com.sqlrec.schema.HmsSchema;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDropSqlFunction;
 import com.sqlrec.sql.parser.SqlDropApi;
 import com.sqlrec.sql.parser.SqlFlush;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.sql.SqlNode;
@@ -107,7 +107,7 @@ public class SqlExecutor {
     /** Parses a statement in this session, abandoning an unfinished function on error. */
     public synchronized SqlNode parseStatement(String sql) throws Exception {
         try {
-            return CompileManager.parseSql(sql);
+            return SqlRecSqlParser.parse(sql);
         } catch (Exception failure) {
             functionCompiler = null;
             throw failure;
@@ -186,9 +186,7 @@ public class SqlExecutor {
             CalciteSchemaFactory.addDatabase(schema, metadata, database);
         } else if (node instanceof SqlDropDatabase drop) {
             String database = MetadataQueryUtils.databaseName(drop.fullDatabaseName(), defaultSchema);
-            CalciteSchemaFactory.evictDatabase(database);
-            CalciteSchema child = schema.getSubSchema(database, false);
-            if (child != null && child.schema instanceof HmsSchema) schema.removeSubSchema(child.name);
+            CalciteSchemaFactory.removeDatabase(schema, database);
         } else if (node instanceof SqlDropTable drop) {
             var path = MetadataQueryUtils.objectPath(drop.fullTableName(), defaultSchema);
             CalciteSchemaFactory.evictTable(path.getDatabaseName(), path.getObjectName());

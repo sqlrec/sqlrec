@@ -10,6 +10,7 @@ import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
 import com.sqlrec.sql.parser.SqlDefineInputTable;
 import com.sqlrec.sql.parser.SqlIfCache;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.sql.parser.SqlReturn;
 import com.sqlrec.utils.NodeUtils;
 import com.sqlrec.utils.SchemaUtils;
@@ -84,7 +85,7 @@ public class FunctionCompiler {
     }
 
     public void compile(String sql) throws Exception {
-        SqlNode flinkSqlNode = CompileManager.parseSql(sql);
+        SqlNode flinkSqlNode = SqlRecSqlParser.parse(sql);
         compile(flinkSqlNode, sql);
     }
 

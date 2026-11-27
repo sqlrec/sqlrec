@@ -5,7 +5,6 @@ import com.sqlrec.common.config.ModelConfigs;
 import com.sqlrec.common.model.*;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.ResourceNames;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Model;
 import com.sqlrec.entity.Service;
@@ -14,6 +13,7 @@ import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlExportModel;
 import com.sqlrec.sql.parser.SqlTrainModel;
+import com.sqlrec.sql.parser.SqlUnparseUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.utils.PathUtils;
@@ -166,7 +166,7 @@ public class ModelManager {
                 modelTrainConf.getCheckpointName(),
                 modelEntity.getDdl(),
                 k8sYaml,
-                CompileManager.getSqlStr(sqlTrainModel),
+                SqlUnparseUtils.format(sqlTrainModel),
                 Consts.CHECKPOINT_TYPE_ORIGIN
         );
 
@@ -236,7 +236,7 @@ public class ModelManager {
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);
 
         String modelName = modelExportConf.getModelName();
-        String checkpointDdl = CompileManager.getSqlStr(sqlExportModel);
+        String checkpointDdl = SqlUnparseUtils.format(sqlExportModel);
         List<Checkpoint> submitted = new ArrayList<>(exportCheckpointNames.size());
         for (String exportCheckpointName : exportCheckpointNames) {
             Checkpoint checkpoint = createCheckpoint(

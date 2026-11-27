@@ -6,18 +6,18 @@ import com.sqlrec.model.common.K8sYamlBuilder;
 import com.sqlrec.model.common.ModelConfigBase;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
-import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.HTTPGetActionBuilder;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ProbeBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
-import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import io.fabric8.kubernetes.api.model.SecretKeySelectorBuilder;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
+import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.apache.commons.lang3.StringUtils;
 
@@ -109,57 +109,42 @@ public class HuggingFaceK8sYamlUtils extends K8sYamlBuilder {
                         .withOptional(false)
                     .endSecretKeyRef().endValueFrom().build());
         }
-        Deployment deployment = new DeploymentBuilder()
-                .withNewMetadata().withName(name).endMetadata()
-                .withNewSpec()
-                    .withReplicas(Config.REPLICAS.getValue(params))
-                    .withNewSelector().withMatchLabels(Map.of("app", name)).endSelector()
-                    .withNewTemplate()
-                        .withNewMetadata()
-                            .withLabels(Map.of("app", name))
-                            // ConfigMap updates alone do not restart the model process.
-                            .addToAnnotations("sqlrec.io/config-checksum", configChecksum)
-                        .endMetadata()
-                        .withNewSpec()
-                            .addNewContainer()
-                                .withName("transformers-service")
-                                .withImage(image)
-                                .withCommand("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME)
-                                .withEnv(env)
-                                .withPorts(new ContainerPortBuilder().withName("http").withContainerPort(80).build())
-                                .withResources(buildServiceResources(params))
-                                .withReadinessProbe(new ProbeBuilder()
-                                        .withHttpGet(new HTTPGetActionBuilder()
-                                                .withPath("/ready")
-                                                .withPort(new IntOrString(80))
-                                                .withScheme("HTTP")
-                                                .build())
-                                        .withInitialDelaySeconds(2)
-                                        .withPeriodSeconds(5)
-                                        .withTimeoutSeconds(2)
-                                        .withFailureThreshold(60)
-                                        .build())
-                                .addNewVolumeMount().withName(CONFIG_VOLUME).withMountPath(Config.SHELL_DIR).endVolumeMount()
-                            .endContainer()
-                            .addNewVolume().withName(CONFIG_VOLUME)
-                                .withNewConfigMap().withName(configMapName).endConfigMap()
-                            .endVolume()
-                        .endSpec()
-                    .endTemplate()
-                .endSpec()
-                .build();
+        Deployment deployment = createDeployment(name, "transformers-service", image,
+                List.of("bash", Config.SHELL_DIR + "/" + Config.START_SHELL_NAME), env, params);
+        var template = deployment.getSpec().getTemplate();
+        // Updating the checksum triggers a rollout when the ConfigMap changes.
+        template.getMetadata().setAnnotations(Map.of("sqlrec.io/config-checksum", configChecksum));
+        var pod = template.getSpec();
+        pod.setVolumes(List.of(new VolumeBuilder().withName(CONFIG_VOLUME)
+                .withNewConfigMap().withName(configMapName).endConfigMap().build()));
+
+        Container container = pod.getContainers().getFirst();
+        container.setVolumeMounts(List.of(new VolumeMountBuilder().withName(CONFIG_VOLUME)
+                .withMountPath(Config.SHELL_DIR).build()));
+        container.setReadinessProbe(new ProbeBuilder()
+                .withHttpGet(new HTTPGetActionBuilder()
+                        .withPath("/ready")
+                        .withPort(new IntOrString(80))
+                        .withScheme("HTTP")
+                        .build())
+                .withInitialDelaySeconds(2)
+                .withPeriodSeconds(5)
+                .withTimeoutSeconds(2)
+                .withFailureThreshold(60)
+                .build());
+        addGpuResources(container, params);
         return Serialization.asYaml(deployment);
     }
 
-    private static ResourceRequirements buildServiceResources(Map<String, String> params) {
-        ResourceRequirementsBuilder builder = new ResourceRequirementsBuilder(buildResourceRequirements(params));
+    private static void addGpuResources(Container container, Map<String, String> params) {
         int gpuCount = Config.POD_GPU.getValue(params);
         if (gpuCount > 0) {
             String resourceName = Config.POD_GPU_RESOURCE.getValue(params);
             Quantity quantity = new Quantity(String.valueOf(gpuCount));
-            builder.addToRequests(resourceName, quantity);
-            builder.addToLimits(resourceName, quantity);
+            container.setResources(new ResourceRequirementsBuilder(container.getResources())
+                    .addToRequests(resourceName, quantity)
+                    .addToLimits(resourceName, quantity)
+                    .build());
         }
-        return builder.build();
     }
 }

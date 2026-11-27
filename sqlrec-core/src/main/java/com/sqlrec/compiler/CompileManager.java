@@ -15,14 +15,12 @@ import com.sqlrec.sql.parser.SqlCallSqlFunction;
 import com.sqlrec.sql.parser.SqlIfCache;
 import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.sql.parser.SqlReturn;
+import com.sqlrec.sql.parser.SqlUnparseUtils;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlWriterConfig;
-import org.apache.calcite.sql.dialect.AnsiSqlDialect;
-import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlSet;
 
@@ -41,19 +39,14 @@ public class CompileManager {
         this.functionCache = functionCache;
     }
 
+    /** Compatibility entry point for callers of the compiler's former parser facade. */
     public static SqlNode parseSql(String sql) throws Exception {
         return SqlRecSqlParser.parse(sql);
     }
 
+    /** Compatibility entry point for callers of the compiler's former formatter. */
     public static String getSqlStr(SqlNode sqlNode) {
-        SqlWriterConfig config = SqlWriterConfig.of()
-                .withDialect(AnsiSqlDialect.DEFAULT)
-                .withIndentation(4)
-                .withClauseStartsLine(true)
-                .withSelectListItemsOnSeparateLines(true);
-        SqlPrettyWriter writer = new SqlPrettyWriter(config);
-        sqlNode.unparse(writer, 0, 0);
-        return writer.toSqlString().getSql();
+        return SqlUnparseUtils.format(sqlNode);
     }
 
     public BindableInterface compileSql(
@@ -87,7 +80,7 @@ public class CompileManager {
             case SqlCache cache -> getCacheBindable(cache, schema, defaultSchema);
             case SqlAssert assertion -> getAssertBindable(assertion, schema, defaultSchema);
             case SqlSet set -> getSetBindable(set);
-            default -> NormalSqlCompiler.getNormalSqlBindable(getSqlStr(flinkSqlNode), schema, defaultSchema);
+            default -> NormalSqlCompiler.getNormalSqlBindable(SqlUnparseUtils.format(flinkSqlNode), schema, defaultSchema);
         };
         bindable.setSql(originSql);
         return bindable;
@@ -118,7 +111,7 @@ public class CompileManager {
         }
         SqlNode select = sqlReturn.getSelect();
         return new ReturnBindable(select == null ? null
-                : NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema));
+                : NormalSqlCompiler.getNormalSqlBindable(SqlUnparseUtils.format(select), schema, defaultSchema));
     }
 
     private BindableInterface getCacheBindable(SqlCache cache, CalciteSchema schema, String defaultSchema) throws Exception {
@@ -131,7 +124,7 @@ public class CompileManager {
             }
             source = FunctionProxyBindable.getFunctionBindable(callSqlFunction, schema, this);
         } else if (select != null) {
-            source = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+            source = NormalSqlCompiler.getNormalSqlBindable(SqlUnparseUtils.format(select), schema, defaultSchema);
         } else {
             throw new Exception("cache sql obj is invalid");
         }
@@ -149,7 +142,7 @@ public class CompileManager {
         boolean timein = ifCache.isTimein();
 
         CalciteBindable conditionBindable = NormalSqlCompiler.getNormalSqlBindable(
-                getSqlStr(conditionNode), schema, defaultSchema
+                SqlUnparseUtils.format(conditionNode), schema, defaultSchema
         );
 
         BindableInterface thenBindable = compileIfBranch(thenClause, schema, defaultSchema);
@@ -175,12 +168,13 @@ public class CompileManager {
     ) throws Exception {
         // IF assembly relies on the concrete branch type for validation and cache-table handling.
         // Only the completed IF node is exposed as an executable proxy.
-        return compileRawSql(branch, schema, defaultSchema, getSqlStr(branch));
+        return compileRawSql(branch, schema, defaultSchema, SqlUnparseUtils.format(branch));
     }
 
     private BindableInterface getAssertBindable(SqlAssert assertStmt, CalciteSchema schema, String defaultSchema) throws Exception {
         SqlNode select = assertStmt.getSelect();
-        BindableInterface selectBindable = NormalSqlCompiler.getNormalSqlBindable(getSqlStr(select), schema, defaultSchema);
+        BindableInterface selectBindable = NormalSqlCompiler.getNormalSqlBindable(
+                SqlUnparseUtils.format(select), schema, defaultSchema);
         return new AssertBindable(selectBindable);
     }
 

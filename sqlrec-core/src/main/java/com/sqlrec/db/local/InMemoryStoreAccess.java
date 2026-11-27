@@ -3,12 +3,12 @@ package com.sqlrec.db.local;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.common.config.Consts;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.StoreAccess;
 import com.sqlrec.entity.*;
 import com.sqlrec.sql.parser.SqlCreateApi;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateSqlFunction;
+import com.sqlrec.sql.parser.SqlUnparseUtils;
 import org.apache.calcite.sql.SqlNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +51,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             String functionName = ResourceNames.of(createFunction.getFuncName());
             List<String> sqlList = new ArrayList<>();
             for (SqlNode node : nodeGroup) {
-                sqlList.add(CompileManager.getSqlStr(node));
+                sqlList.add(SqlUnparseUtils.format(node));
             }
             SqlFunction sqlFunction = new SqlFunction();
             sqlFunction.setName(functionName);
@@ -83,7 +83,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             }
             Model model = new Model();
             model.setName(ResourceNames.of(createModel.getModelName()));
-            model.setDdl(CompileManager.getSqlStr(node));
+            model.setDdl(SqlUnparseUtils.format(node));
             model.setCreatedAt(System.currentTimeMillis());
             model.setUpdatedAt(System.currentTimeMillis());
             modelMap.put(model.getName(), model);

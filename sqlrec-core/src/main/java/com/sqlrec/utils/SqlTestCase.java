@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.DataCheckUtils;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.ExecuteContextImpl;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -92,7 +93,7 @@ public class SqlTestCase {
         Exception actualException = null;
         List<Object[]> actualResults = new ArrayList<>();
         try {
-            SqlNode flinkSqlNode = CompileManager.parseSql(sql);
+            SqlNode flinkSqlNode = SqlRecSqlParser.parse(sql);
             BindableInterface bindable = new CompileManager().compileSql(
                     flinkSqlNode, schema, Consts.DEFAULT_SCHEMA_NAME, sql
             );

@@ -5,9 +5,9 @@ import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.executor.SqlProcessResult;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.frontend.utils.ThriftUtils;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.hive.service.rpc.thrift.*;
@@ -96,11 +96,11 @@ class SessionManagerRoutingTest {
                     ThriftUtils.getHandleIdentifier(), TOperationType.EXECUTE_STATEMENT, true));
             when(session.proxy.executeStatement(any())).thenReturn(remote);
             String sql = "SELECT * FROM remote_table";
-            SqlNode node = CompileManager.parseSql(sql);
-            try (var parser = mockStatic(CompileManager.class)) {
-                parser.when(() -> CompileManager.parseSql(sql)).thenReturn(node);
+            SqlNode node = SqlRecSqlParser.parse(sql);
+            try (var parser = mockStatic(SqlRecSqlParser.class)) {
+                parser.when(() -> SqlRecSqlParser.parse(sql)).thenReturn(node);
                 assertSame(remote, session.manager.executeStatement(new TExecuteStatementReq(session.handle, sql)));
-                parser.verify(() -> CompileManager.parseSql(sql), times(1));
+                parser.verify(() -> SqlRecSqlParser.parse(sql), times(1));
                 verify(session.executor).executeSqlAsync(same(node), eq(sql));
             }
             var order = inOrder(session.proxy);

@@ -7,7 +7,6 @@ import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.utils.ResourceNames;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
@@ -16,6 +15,7 @@ import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateService;
+import com.sqlrec.sql.parser.SqlUnparseUtils;
 import com.sqlrec.utils.CacheUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -158,7 +158,7 @@ public class ServiceManager {
         service.setModelName(serviceConfig.getModelName());
         service.setModelDdl(modelDdl);
         service.setCheckpointName(serviceConfig.getCheckpointName());
-        service.setDdl(CompileManager.getSqlStr(sqlCreateService));
+        service.setDdl(SqlUnparseUtils.format(sqlCreateService));
         service.setYaml(k8sYaml);
         service.setUrl(serviceUrl);
         service.setCreatedAt(System.currentTimeMillis());

@@ -59,6 +59,15 @@ public class CalciteSchemaFactory {
         }
     }
 
+    /** Evict cached metadata and remove the metadata schema from the executing session. */
+    public static void removeDatabase(CalciteSchema root, String database) {
+        evictDatabase(database);
+        CalciteSchema child = root.getSubSchema(database, false);
+        if (child != null && child.schema instanceof HmsSchema) {
+            root.removeSubSchema(child.name);
+        }
+    }
+
     /**
      * Uses the cached database list at session creation. Database DDL updates only its executing
      * session; other existing sessions keep their database membership.

@@ -1,12 +1,16 @@
 package com.sqlrec.sql.parser;
 
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlWriter;
+import org.apache.calcite.sql.SqlWriterConfig;
+import org.apache.calcite.sql.dialect.AnsiSqlDialect;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 
 import java.util.function.IntConsumer;
 
 /**
- * Helpers for {@code unparse} of indented, comma-separated SQL node lists.
+ * Formatting for SQL statements and indented, comma-separated SQL node lists.
  *
  * <p>The GBDT/parser classes (CREATE MODEL / CREATE SERVICE / TRAIN MODEL / EXPORT MODEL /
  * DEFINE INPUT TABLE) all reproduced the same ~10-line skeleton:
@@ -26,6 +30,17 @@ import java.util.function.IntConsumer;
 public final class SqlUnparseUtils {
 
     private SqlUnparseUtils() {
+    }
+
+    public static String format(SqlNode node) {
+        SqlWriterConfig config = SqlWriterConfig.of()
+                .withDialect(AnsiSqlDialect.DEFAULT)
+                .withIndentation(4)
+                .withClauseStartsLine(true)
+                .withSelectListItemsOnSeparateLines(true);
+        SqlPrettyWriter writer = new SqlPrettyWriter(config);
+        node.unparse(writer, 0, 0);
+        return writer.toSqlString().getSql();
     }
 
     /**

@@ -1,13 +1,13 @@
-package com.sqlrec.compiler;
+package com.sqlrec.sql.parser;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class CompileManagerGetSqlStrTest {
+class SqlUnparseUtilsTest {
 
     private static String formatSql(String sql) throws Exception {
-        return CompileManager.getSqlStr(CompileManager.parseSql(sql))
+        return SqlUnparseUtils.format(SqlRecSqlParser.parse(sql))
                 .replace("\r\n", "\n");
     }
 

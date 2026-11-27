@@ -2,10 +2,10 @@ package com.sqlrec.db.remote;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.executor.SqlProcessResult;
 import com.sqlrec.db.FlinkTableDdl;
 import com.sqlrec.db.MetadataQueryUtils;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import org.apache.calcite.sql.*;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.sql.parser.ddl.*;
@@ -333,7 +333,7 @@ public final class FlinkHiveDdlAdapter implements AutoCloseable {
 
     private static SqlNode parseSql(String sql) {
         try {
-            return CompileManager.parseSql(sql);
+            return SqlRecSqlParser.parse(sql);
         } catch (Exception e) {
             throw asRuntimeException(e);
         }

@@ -1,7 +1,6 @@
 package com.sqlrec.db.local;
 
 import com.sqlrec.common.utils.SqlStatementUtils;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.sql.parser.*;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
@@ -82,7 +81,7 @@ public class SqlFileParser {
         List<SqlNode> currentFunctionNodes = null;
 
         for (String statement : statements) {
-            SqlNode sqlNode = CompileManager.parseSql(statement);
+            SqlNode sqlNode = SqlRecSqlParser.parse(statement);
             if (currentFunctionNodes != null) {
                 currentFunctionNodes.add(sqlNode);
                 if (sqlNode instanceof SqlReturn) {

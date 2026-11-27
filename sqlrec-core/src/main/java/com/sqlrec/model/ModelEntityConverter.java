@@ -6,13 +6,13 @@ import com.sqlrec.common.model.ModelExportConf;
 import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.utils.ResourceNames;
-import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlCreateModel;
 import com.sqlrec.sql.parser.SqlCreateService;
 import com.sqlrec.sql.parser.SqlExportModel;
+import com.sqlrec.sql.parser.SqlRecSqlParser;
 import com.sqlrec.sql.parser.SqlTrainModel;
 import com.sqlrec.utils.PathUtils;
 import com.sqlrec.utils.SchemaUtils;
@@ -25,7 +25,7 @@ import java.util.List;
 /** Converts SQL and stored entities; managers resolve metadata and execution paths. */
 public class ModelEntityConverter {
     public static ModelConf convertToModel(String modelDdl) throws Exception {
-        SqlNode modelSqlNode = CompileManager.parseSql(modelDdl);
+        SqlNode modelSqlNode = SqlRecSqlParser.parse(modelDdl);
         if (!(modelSqlNode instanceof SqlCreateModel createModel)) {
             throw new IllegalArgumentException("Invalid model DDL: " + modelDdl);
         }
@@ -92,7 +92,7 @@ public class ModelEntityConverter {
     }
 
     public static ServiceConf convertToServiceConfig(Service service) throws Exception {
-        SqlNode serviceSqlNode = CompileManager.parseSql(service.getDdl());
+        SqlNode serviceSqlNode = SqlRecSqlParser.parse(service.getDdl());
         if (!(serviceSqlNode instanceof SqlCreateService createService)) {
             throw new IllegalArgumentException("Invalid service DDL: " + service.getDdl());
         }
