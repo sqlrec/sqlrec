@@ -20,21 +20,20 @@ class RedisNumericLookupRowTest {
         ResolvedSchema schema = ResolvedSchema.of(
                 Column.physical("id", DataTypes.BIGINT()),
                 Column.physical("amount", DataTypes.DECIMAL(8, 2)),
-                Column.physical("children", DataTypes.MAP(DataTypes.INT(), DataTypes.ARRAY(DataTypes.ROW(
-                        DataTypes.FIELD("Score", DataTypes.FLOAT()), DataTypes.FIELD("Count", DataTypes.INT()))))));
+                Column.physical("scores", DataTypes.MAP(DataTypes.INT(), DataTypes.ARRAY(DataTypes.FLOAT()))));
         JsonCodec codec = new JsonCodec();
         codec.init(FlinkSchemaUtils.getFieldSchemas(schema), 0);
         Object[] decoded = codec.decode(("{\"id\":\"1\",\"amount\":\"12.34\","
-                + "\"children\":{\"7\":[{\"Score\":\"0.25\",\"Count\":\"bad\"},null]}}")
+                + "\"scores\":{\"7\":[\"0.25\",\"bad\",null]}}")
                 .getBytes(StandardCharsets.UTF_8), "1");
         GenericRowData row = FlinkSchemaUtils.toRowData(decoded, schema.getColumnDataTypes());
         assertEquals(1L, row.getLong(0));
         assertEquals(new java.math.BigDecimal("12.34"), row.getDecimal(1, 8, 2).toBigDecimal());
         assertEquals(7, row.getMap(2).keyArray().getInt(0));
-        var child = row.getMap(2).valueArray().getArray(0).getRow(0, 2);
-        assertEquals(0.25f, child.getFloat(0));
-        assertTrue(child.isNullAt(1));
-        assertTrue(row.getMap(2).valueArray().getArray(0).isNullAt(1));
+        var scores = row.getMap(2).valueArray().getArray(0);
+        assertEquals(0.25f, scores.getFloat(0));
+        assertTrue(scores.isNullAt(1));
+        assertTrue(scores.isNullAt(2));
     }
 
     @Test

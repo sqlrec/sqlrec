@@ -27,7 +27,7 @@ class ThriftRowConversionTest {
                 .add("bool", SqlTypeName.BOOLEAN).add("json", SqlTypeName.ANY)
                 .build().getFieldList();
         List<Object[]> rows = Arrays.asList(
-                new Object[]{"text", "c", (byte) 2, 3, 4L, 5, 1.5f, 2.5d, true, List.of(1, 2)},
+                new Object[]{"text", "c", -128, 3, 4L, 5, 1.5f, 2.5d, true, List.of(1, 2)},
                 new Object[10]);
         AtomicInteger enumerations = new AtomicInteger();
         var source = new AbstractEnumerable<Object[]>() {
@@ -44,7 +44,9 @@ class ThriftRowConversionTest {
         assertEquals(1, enumerations.get());
         assertEquals(List.of("text", ""), columns.get(0).getStringVal().getValues());
         assertEquals(List.of("c", ""), columns.get(1).getStringVal().getValues());
-        assertEquals(List.of((short) 2, (short) 0), columns.get(2).getI16Val().getValues());
+        assertEquals(TTypeId.TINYINT_TYPE, ThriftUtils.convertFieldsToTTableSchema(fields)
+                .getColumns().get(2).getTypeDesc().getTypes().getFirst().getPrimitiveEntry().getType());
+        assertEquals(List.of((byte) -128, (byte) 0), columns.get(2).getByteVal().getValues());
         assertEquals(List.of((short) 3, (short) 0), columns.get(3).getI16Val().getValues());
         assertEquals(List.of(4, 0), columns.get(4).getI32Val().getValues());
         assertEquals(List.of(5L, 0L), columns.get(5).getI64Val().getValues());
@@ -53,7 +55,7 @@ class ThriftRowConversionTest {
         assertEquals(List.of(true, false), columns.get(8).getBoolVal().getValues());
         assertEquals(List.of("[1,2]", ""), columns.get(9).getStringVal().getValues());
         assertArrayEquals(new byte[]{2}, columns.get(0).getStringVal().getNulls());
-        assertArrayEquals(new byte[]{2}, columns.get(2).getI16Val().getNulls());
+        assertArrayEquals(new byte[]{2}, columns.get(2).getByteVal().getNulls());
         assertArrayEquals(new byte[]{2}, columns.get(4).getI32Val().getNulls());
         assertArrayEquals(new byte[]{2}, columns.get(5).getI64Val().getNulls());
         assertArrayEquals(new byte[]{2}, columns.get(6).getDoubleVal().getNulls());

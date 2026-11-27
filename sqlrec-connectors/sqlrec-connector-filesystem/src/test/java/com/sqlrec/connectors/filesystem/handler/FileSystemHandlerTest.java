@@ -66,6 +66,21 @@ class FileSystemHandlerTest {
     // ===== CSV Tests =====
 
     @Test
+    void deletesCsvRowsByMatchingRawArrayText() throws IOException {
+        Path csv = tempDir.resolve("array-text.csv");
+        Files.writeString(csv, "id,items\n1,\"[2,3]\"\n1,\"[4,5]\"\n");
+        FileSystemConfig config = createConfig(csv.toString(), "csv");
+        config.fieldSchemas = List.of(new FieldSchema("id", "INT"), new FieldSchema("items", "ARRAY<INT>"));
+        FileSystemHandler handler = new FileSystemHandler(config);
+
+        assertTrue(handler.delete(new Object[]{1, "[2,3]"}));
+
+        var rows = handler.getByPrimaryKey(Set.of(1)).get(1);
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{1, "[4,5]"}, rows.get(0));
+    }
+
+    @Test
     void csvAndJsonKeepScalarValuesWithSerializedTemporalAndBinaryTypes() throws IOException {
         fieldSchemas = List.of(new FieldSchema("id", "BIGINT NOT NULL"),
                 new FieldSchema("clock", "TIME(0)"), new FieldSchema("event_time", "TIMESTAMP(6)"),

@@ -41,21 +41,21 @@ class RowTransformUtilsTest {
     }
 
     @Test
-    void normalizesRowsInsideArraysAndMapsWithoutChangingNamedInputs() {
+    void normalizesNestedArraysAndMapsWithoutChangingInputs() {
         List<RelDataTypeField> fields = List.of(
-                DataTypeUtils.getRelDataTypeField("records", 0, "ARRAY<ROW<id INTEGER, scores ARRAY<FLOAT>>>"),
-                DataTypeUtils.getRelDataTypeField("by_key", 1, "MAP<VARCHAR, ROW<id BIGINT>>"));
-        Map<String, Object> record = Map.of("scores", List.of(0.25f), "id", 3L);
+                DataTypeUtils.getRelDataTypeField("records", 0, "ARRAY<MAP<VARCHAR, ARRAY<FLOAT>>>"),
+                DataTypeUtils.getRelDataTypeField("by_key", 1, "MAP<VARCHAR, MAP<VARCHAR, BIGINT>>"));
+        Map<String, Object> record = Map.of("scores", List.of(0.25f));
         Map<String, Object> input = Map.of("records", Arrays.asList(record, null),
                 "by_key", Map.of("first", Map.of("id", 7)));
 
         Object[] row = RowTransformUtils.convertDataToEnumerable(List.of(input), fields).single();
-        assertArrayEquals(new Object[]{3, List.of(0.25d)}, (Object[]) ((List<?>) row[0]).get(0));
+        assertEquals(Map.of("scores", List.of(0.25d)), ((List<?>) row[0]).get(0));
         assertNull(((List<?>) row[0]).get(1));
-        assertArrayEquals(new Object[]{7L}, (Object[]) ((Map<?, ?>) row[1]).get("first"));
+        assertEquals(Map.of("id", 7L), ((Map<?, ?>) row[1]).get("first"));
         RowTransformUtils.convertRowTypes(Collections.singletonList(row), fields);
-        assertArrayEquals(new Object[]{3, List.of(0.25d)}, (Object[]) ((List<?>) row[0]).get(0));
-        assertEquals(Map.of("scores", List.of(0.25f), "id", 3L), record);
+        assertEquals(Map.of("scores", List.of(0.25d)), ((List<?>) row[0]).get(0));
+        assertEquals(Map.of("scores", List.of(0.25f)), record);
     }
 
     @Test
@@ -125,32 +125,6 @@ class RowTransformUtilsTest {
                 DataTypeUtils.getRelDataTypeField("xs", 0, "ARRAY<ARRAY<VARCHAR>>"));
         assertThrows(RuntimeException.class,
                 () -> RowTransformUtils.adaptRowsToSchema(Collections.emptyList(), desired, given));
-    }
-
-    @Test
-    void rejectsReorderedFieldsInNestedRows() {
-        for (String structure : List.of("%s", "ARRAY<%s>", "MAP<STRING, %s>")) {
-            var desired = List.of(DataTypeUtils.getRelDataTypeField(
-                    "payload", 0, String.format(structure, "ROW<a INT, b INT>")));
-            var given = List.of(DataTypeUtils.getRelDataTypeField(
-                    "payload", 0, String.format(structure, "ROW<b INT, a INT>")));
-
-            var failure = assertThrows(RuntimeException.class,
-                    () -> RowTransformUtils.adaptRowsToSchema(List.of(), desired, given));
-            assertTrue(failure.getMessage().contains("incompatible field type for 'payload'"));
-        }
-    }
-
-    @Test
-    void convertsNumericFieldsInCompatibleNestedRows() {
-        var desired = List.of(DataTypeUtils.getRelDataTypeField("payload", 0, "ROW<x BIGINT>"));
-        var given = List.of(DataTypeUtils.getRelDataTypeField("payload", 0, "ROW<x INT>"));
-        Object[] source = {new Object[]{7}};
-
-        var result = RowTransformUtils.adaptRowsToSchema(List.<Object[]>of(source), desired, given);
-
-        assertArrayEquals(new Object[]{7L}, (Object[]) result.get(0)[0]);
-        assertArrayEquals(new Object[]{7}, (Object[]) source[0]);
     }
 
     @Test

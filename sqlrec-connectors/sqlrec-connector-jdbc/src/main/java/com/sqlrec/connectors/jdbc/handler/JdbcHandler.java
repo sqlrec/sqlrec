@@ -1,10 +1,12 @@
 package com.sqlrec.connectors.jdbc.handler;
 
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.sqlrec.connectors.jdbc.sql.JdbcSqlBuilder;
 import com.sqlrec.connectors.jdbc.sql.JdbcStatement;
 import com.sqlrec.connectors.jdbc.utils.JdbcDataSourceUtils;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,9 +18,18 @@ import java.util.function.Function;
 
 public class JdbcHandler {
     private final JdbcConfig jdbcConfig;
+    private final String arrayColumn;
 
     public JdbcHandler(JdbcConfig jdbcConfig) {
         this.jdbcConfig = jdbcConfig;
+        String firstArrayColumn = null;
+        for (var field : jdbcConfig.fieldSchemas) {
+            if (DataTypeUtils.getRelDataType(field.getType()).getSqlTypeName() == SqlTypeName.ARRAY) {
+                firstArrayColumn = field.getName();
+                break;
+            }
+        }
+        this.arrayColumn = firstArrayColumn;
     }
 
     public List<Object[]> scan(List<RexNode> filters) {
@@ -189,6 +200,9 @@ public class JdbcHandler {
     }
 
     private Connection getConnection() throws SQLException {
+        if (arrayColumn != null) {
+            throw new UnsupportedOperationException("JDBC does not support ARRAY columns: " + arrayColumn);
+        }
         return JdbcDataSourceUtils.getOrCreate(jdbcConfig).getConnection();
     }
 }

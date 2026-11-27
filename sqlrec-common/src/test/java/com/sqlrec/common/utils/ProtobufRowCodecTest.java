@@ -179,8 +179,8 @@ class ProtobufRowCodecTest {
     void roundTripsRepeatedNestedAndEnumFields() throws Exception {
         List<FieldSchema> schema = Arrays.asList(
                 new FieldSchema("name", "VARCHAR"),
-                new FieldSchema("fields", "ARRAY<ROW<name STRING>>"),
-                new FieldSchema("source_context", "ROW<file_name STRING>"),
+                new FieldSchema("fields", "ARRAY<MAP<STRING, STRING>>"),
+                new FieldSchema("source_context", "MAP<STRING, STRING>"),
                 new FieldSchema("syntax", "VARCHAR"));
         ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), schema);
         Map<String, Object> nestedField = Collections.singletonMap("name", "id");
@@ -213,7 +213,7 @@ class ProtobufRowCodecTest {
                 Collections.singletonMap("name", "second")
         };
         List<FieldSchema> schema = Arrays.asList(
-                new FieldSchema("fields", "ARRAY<ROW<name STRING>>"),
+                new FieldSchema("fields", "ARRAY<MAP<STRING, STRING>>"),
                 new FieldSchema("syntax", "INTEGER"));
         ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), schema);
 
@@ -230,7 +230,7 @@ class ProtobufRowCodecTest {
     @Test
     void acceptsMatchingGeneratedMessageForNestedField() throws Exception {
         ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(),
-                List.of(new FieldSchema("source_context", "ROW<file_name STRING>")));
+                List.of(new FieldSchema("source_context", "MAP<STRING, STRING>")));
         SourceContext sourceContext = SourceContext.newBuilder()
                 .setFileName("schema.proto")
                 .build();
@@ -244,7 +244,7 @@ class ProtobufRowCodecTest {
     @Test
     void roundTripsMapWithNestedMessageValues() throws Exception {
         ProtobufRowCodec codec = new ProtobufRowCodec(Struct.class.getName(),
-                List.of(new FieldSchema("fields", "MAP<STRING, ROW<string_value STRING>>")));
+                List.of(new FieldSchema("fields", "MAP<STRING, MAP<STRING, ANY>>")));
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("name", Collections.singletonMap("string_value", "alice"));
 
@@ -259,7 +259,7 @@ class ProtobufRowCodecTest {
     @Test
     void distinguishesAbsentMessageFromDefaultScalar() {
         ProtobufRowCodec codec = new ProtobufRowCodec(Type.class.getName(), List.of(
-                new FieldSchema("source_context", "ROW<file_name STRING>"),
+                new FieldSchema("source_context", "MAP<STRING, STRING>"),
                 new FieldSchema("name", "VARCHAR")));
 
         Object[] decoded = codec.decode(Type.getDefaultInstance().toByteArray());
@@ -299,7 +299,7 @@ class ProtobufRowCodecTest {
     @Test
     void rejectsIncompatibleCollectionAndScalarValues() {
         ProtobufRowCodec fieldsCodec = new ProtobufRowCodec(Type.class.getName(),
-                List.of(new FieldSchema("fields", "ARRAY<ROW<name STRING>>")));
+                List.of(new FieldSchema("fields", "ARRAY<MAP<STRING, STRING>>")));
         assertThrows(IllegalArgumentException.class,
                 () -> fieldsCodec.encode(new Object[]{"not-a-list"}));
         assertThrows(IllegalArgumentException.class,
@@ -313,14 +313,14 @@ class ProtobufRowCodecTest {
                 () -> enumCodec.encode(new Object[]{999}));
 
         ProtobufRowCodec nestedCodec = new ProtobufRowCodec(Type.class.getName(),
-                List.of(new FieldSchema("source_context", "ROW<file_name STRING>")));
+                List.of(new FieldSchema("source_context", "MAP<STRING, STRING>")));
         assertThrows(IllegalArgumentException.class,
                 () -> nestedCodec.encode(new Object[]{Collections.singletonMap("unknown", "value")}));
         assertThrows(IllegalArgumentException.class,
                 () -> nestedCodec.encode(new Object[]{StringValue.of("wrong message type")}));
 
         ProtobufRowCodec structCodec = new ProtobufRowCodec(Struct.class.getName(),
-                List.of(new FieldSchema("fields", "MAP<STRING, ROW<string_value STRING>>")));
+                List.of(new FieldSchema("fields", "MAP<STRING, MAP<STRING, ANY>>")));
         assertThrows(IllegalArgumentException.class,
                 () -> structCodec.encode(new Object[]{"not-a-map"}));
         Map<String, Object> mapWithNullValue = new LinkedHashMap<>();

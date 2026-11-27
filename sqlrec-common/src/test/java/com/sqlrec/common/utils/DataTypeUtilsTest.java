@@ -31,22 +31,15 @@ class DataTypeUtilsTest {
     }
 
     @Test
-    void nestedAliasesAndMixedQuotedNamesPreserveTheirOriginalMeaning() {
-        RelDataType row = DataTypeUtils.getRelDataType(
-                "ROW<Text ARRAY<STRING NOT NULL>, \"Mixed \"\"Name`\" MAP<TEXT, REAL>, `Back``Tick\"` FLOAT>");
-        assertEquals(List.of("Text", "Mixed \"Name`", "Back`Tick\""), row.getFieldNames());
-        RelDataType element = row.getFieldList().get(0).getType().getComponentType();
-        assertEquals(DataTypeUtils.getRelDataType("VARCHAR NOT NULL"), element);
-        RelDataType map = row.getFieldList().get(1).getType();
+    void preservesAliasesInsideCollections() {
+        RelDataType map = DataTypeUtils.getRelDataType("MAP<TEXT, ARRAY<STRING NOT NULL>>");
         assertEquals(DataTypeUtils.getRelDataType("VARCHAR"), map.getKeyType());
-        assertEquals(SqlTypeName.REAL, map.getValueType().getSqlTypeName());
-        assertEquals(SqlTypeName.FLOAT, row.getFieldList().get(2).getType().getSqlTypeName());
+        assertEquals(DataTypeUtils.getRelDataType("VARCHAR NOT NULL"), map.getValueType().getComponentType());
     }
 
     @Test
     void libraryParserRejectsBrokenNestingAndTrailingContent() {
-        for (String invalid : List.of("MAP<INTEGER>", "ROW<id>", "ARRAY<INTEGER", "ARRAY<INTEGER>>",
-                "ROW<id INTEGER,, name STRING>", "ROW<\"unclosed INTEGER>", "INTEGER trailing")) {
+        for (String invalid : List.of("MAP<INTEGER>", "ARRAY<INTEGER", "ARRAY<INTEGER>>", "INTEGER trailing")) {
             assertThrows(IllegalArgumentException.class, () -> DataTypeUtils.getRelDataType(invalid), invalid);
         }
     }
@@ -61,25 +54,25 @@ class DataTypeUtilsTest {
     }
 
     @Test
-    void sqlReservedWordsAreAcceptedAsQuotedRowFieldNames() {
-        RelDataType row = DataTypeUtils.getRelDataType("ROW<`value` INT, \"year\" STRING>");
-        assertEquals(List.of("value", "year"), row.getFieldNames());
-        assertThrows(IllegalArgumentException.class, () -> DataTypeUtils.getRelDataType("ROW<value INT>"));
-    }
-
-    @Test
-    void parsesMapAndRowSchemasWithoutLosingNamesOrNestedBounds() {
+    void parsesNestedCollectionTypesWithoutLosingBounds() {
         RelDataType type = DataTypeUtils.getRelDataType(
-                "MAP<INTEGER NOT NULL, ARRAY<ROW<`Mixed, Name` VARCHAR(12), Amount DECIMAL(8, 2)>>> NOT NULL");
+                "MAP<VARCHAR(12) NOT NULL, ARRAY<DECIMAL(8, 2)>> NOT NULL");
         assertEquals(SqlTypeName.MAP, type.getSqlTypeName());
         assertFalse(type.isNullable());
         assertFalse(type.getKeyType().isNullable());
-        RelDataType row = type.getValueType().getComponentType();
-        assertEquals(List.of("Mixed, Name", "Amount"), row.getFieldNames());
-        assertEquals(8, row.getFieldList().get(1).getType().getPrecision());
-        assertEquals(2, row.getFieldList().get(1).getType().getScale());
-        assertThrows(RuntimeException.class, () -> DataTypeUtils.getRelDataType("MAP<INTEGER>"));
-        assertThrows(RuntimeException.class, () -> DataTypeUtils.getRelDataType("ROW<id>"));
+        assertEquals(12, type.getKeyType().getPrecision());
+        RelDataType amount = type.getValueType().getComponentType();
+        assertEquals(8, amount.getPrecision());
+        assertEquals(2, amount.getScale());
+    }
+
+    @Test
+    void rejectsRowColumnTypesAtAnyDepth() {
+        for (String type : List.of("ROW<id INT>", "ARRAY<ROW<id INT>>", "MAP<ROW<id INT>, INT>",
+                "MAP<STRING, ARRAY<ROW<id INT>>>")) {
+            var error = assertThrows(IllegalArgumentException.class, () -> DataTypeUtils.getRelDataType(type));
+            assertEquals("ROW column types are not supported", error.getMessage());
+        }
     }
 
     @Test
@@ -194,21 +187,10 @@ class DataTypeUtilsTest {
     }
 
     @Test
-    void rejectsDifferentRowFieldTypesNamesAndCounts() {
-        RelDataType row = factory.builder().add("id", SqlTypeName.INTEGER).build();
-        assertIncompatible(row, factory.builder().add("id", SqlTypeName.BIGINT).build());
-        assertIncompatible(row, factory.builder().add("other", SqlTypeName.INTEGER).build());
-        assertIncompatible(row, factory.builder().add("id", SqlTypeName.INTEGER)
-                .add("extra", SqlTypeName.INTEGER).build());
-        assertIncompatible(factory.createArrayType(row, -1), factory.createArrayType(
-                factory.builder().add("id", SqlTypeName.BIGINT).build(), -1));
-    }
-
-    @Test
     void acceptsIdenticalNestedTypes() {
         RelDataType type = factory.createArrayType(factory.createMapType(
                 factory.createSqlType(SqlTypeName.INTEGER),
-                factory.builder().add("id", SqlTypeName.INTEGER).build()), -1);
+                factory.createSqlType(SqlTypeName.BIGINT)), -1);
         DataTypeUtils.checkTableSchemaSame(fields(type), fields(type));
         DataTypeUtils.checkTableSchemaCompatible(fields(type), fields(type));
         assertEquals(type, DataTypeUtils.mergeTableSchemas(fields(type), fields(type)).get(0).getType());

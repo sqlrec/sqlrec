@@ -227,6 +227,7 @@ CREATE TABLE user_profile (
 - JDBC connector supports complex filter conditions, not limited to primary key equality filtering
 - PostgreSQL, MySQL and H2 reserved words and identifiers containing special characters are quoted automatically; declared names must match the database identifiers, including case for quoted names
 - H2 upserts use declared column names, allowing a different physical column order or a subset of columns
+- The JDBC connector does not currently support mapping `ARRAY` columns
 - Supports upsert operations, automatically determining insert or update based on primary key
 - JDBC commits writes one batch at a time and rolls back the batch on failure. `UPDATE` matches the original primary key and can change it, subject to the database's uniqueness and foreign key constraints
 - Custom JDBC properties can be passed via the `jdbc.properties.*` prefix

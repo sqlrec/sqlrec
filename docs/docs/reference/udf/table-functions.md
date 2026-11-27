@@ -178,7 +178,7 @@ CALL add_col(recall_item, 'priority', 10);
 | `batchSize` | Integer | 批量大小，每次请求发送的行数 |
 | `fieldName-value pairs` | Object... | 字段名-值对，用于指定要发送到服务的字段，必须成对出现 |
 
-**返回值**：返回一个 ROW 类型，包含以下字段：
+**结果列**
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|

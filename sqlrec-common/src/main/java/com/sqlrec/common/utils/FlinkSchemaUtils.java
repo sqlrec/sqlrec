@@ -2,6 +2,7 @@ package com.sqlrec.common.utils;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.ConnectorTableMetadata;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.table.catalog.Column;
@@ -16,6 +17,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.*;
+import org.apache.flink.table.types.logical.utils.LogicalTypeChecks;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,11 +40,11 @@ public class FlinkSchemaUtils {
         List<FieldSchema> fieldSchemas = new ArrayList<>();
         for (Column col : schema.getColumns()) {
             LogicalType type = col.getDataType().getLogicalType();
+            requireSupportedColumnType(type);
             String typeName;
             switch (type.getTypeRoot()) {
                 case ARRAY:
                 case MAP:
-                case ROW:
                 case DECIMAL:
                 case TIME_WITHOUT_TIME_ZONE:
                 case TIMESTAMP_WITHOUT_TIME_ZONE:
@@ -58,6 +60,12 @@ public class FlinkSchemaUtils {
             fieldSchemas.add(new FieldSchema(col.getName(), typeName));
         }
         return fieldSchemas;
+    }
+
+    public static void requireSupportedColumnType(LogicalType type) {
+        if (LogicalTypeChecks.hasNested(type, nested -> nested.getTypeRoot() == LogicalTypeRoot.ROW)) {
+            throw new ValidationException("ROW column types are not supported");
+        }
     }
 
     public static String getPrimaryKey(ResolvedSchema schema) {
@@ -149,8 +157,6 @@ public class FlinkSchemaUtils {
                 return toFlinkArray(value, (ArrayType) type);
             case MAP:
                 return toFlinkMap(value, (MapType) type);
-            case ROW:
-                return toFlinkRow(value, (RowType) type);
             default:
                 return value;
         }
@@ -173,16 +179,6 @@ public class FlinkSchemaUtils {
                     toFlinkValue(entry.getValue(), type.getValueType()));
         }
         return new GenericMapData(converted);
-    }
-
-    private static GenericRowData toFlinkRow(Object value, RowType type) {
-        Map<?, ?> fields = (Map<?, ?>) value;
-        GenericRowData row = new GenericRowData(type.getFieldCount());
-        for (int i = 0; i < type.getFieldCount(); i++) {
-            RowType.RowField field = type.getFields().get(i);
-            row.setField(i, toFlinkValue(fields.get(field.getName()), field.getType()));
-        }
-        return row;
     }
 
     public static Object typeConversion(LogicalType fieldType, RowData rowData, int index) {

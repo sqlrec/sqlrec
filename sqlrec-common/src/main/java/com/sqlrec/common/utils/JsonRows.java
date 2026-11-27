@@ -100,8 +100,6 @@ public final class JsonRows {
                     return decodeArray(value, target);
                 case MAP:
                     return decodeMap(value, target);
-                case ROW:
-                    return decodeRow(value, target);
                 case VARCHAR:
                 case CHAR:
                     return value instanceof Map || value instanceof List || value.getClass().isArray()
@@ -136,16 +134,6 @@ public final class JsonRows {
             entries.put(key, decodeValue(entry.getValue(), target.getValueType()));
         }
         return entries;
-    }
-
-    private static Map<String, Object> decodeRow(Object value, RelDataType target) {
-        value = parseContainer(value);
-        if (!(value instanceof Map)) return null;
-        Map<String, Object> row = new LinkedHashMap<>();
-        for (var field : target.getFieldList()) {
-            row.put(field.getName(), decodeValue(((Map<?, ?>) value).get(field.getName()), field.getType()));
-        }
-        return row;
     }
 
     private static Object unwrap(Object value) {

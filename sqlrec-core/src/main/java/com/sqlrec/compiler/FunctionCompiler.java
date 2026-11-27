@@ -112,6 +112,7 @@ public class FunctionCompiler {
     private void compileFunctionParam(SqlNode flinkSqlNode, String sql) throws Exception {
         if (flinkSqlNode instanceof SqlDefineInputTable inputTable) {
             List<RelDataTypeField> relDataTypeFields = resolveInputTableFields(inputTable);
+            relDataTypeFields.forEach(field -> DataTypeUtils.requireSupportedColumnType(field.getType()));
             String tableName = NodeUtils.normalizeTableName(inputTable.getTableName().getSimple());
             if (sqlFunctionBindable.getInputTables().stream().anyMatch(input -> input.getKey().equals(tableName))) {
                 throw new IllegalArgumentException("duplicate input table: " + tableName);

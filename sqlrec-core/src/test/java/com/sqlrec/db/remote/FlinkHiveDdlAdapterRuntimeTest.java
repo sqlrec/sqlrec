@@ -96,7 +96,7 @@ class FlinkHiveDdlAdapterRuntimeTest {
             try {
                 String[] statements = {
                         "CREATE TABLE %s (id BIGINT, category STRING, amount DECIMAL(10,2), "
-                                + "nested ROW<`value` INT, labels ARRAY<STRING>>, "
+                                + "nested ARRAY<ARRAY<STRING>>, "
                                 + "attrs MAP<STRING, BIGINT>, ts TIMESTAMP_LTZ(3), flag BOOLEAN, "
                                 + "tiny TINYINT, small SMALLINT, number INT, f FLOAT, d DOUBLE, "
                                 + "date_value DATE, clock_value TIME, timestamp_value TIMESTAMP, binary_value BYTES, "

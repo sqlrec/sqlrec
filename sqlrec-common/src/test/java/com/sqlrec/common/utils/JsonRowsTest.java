@@ -20,7 +20,7 @@ class JsonRowsTest {
                 new FieldSchema("count", "BIGINT"), new FieldSchema("large", "BIGINT"),
                 new FieldSchema("amount", "DECIMAL(18, 6)"), new FieldSchema("text", "STRING"),
                 new FieldSchema("ids", "ARRAY<INTEGER>"),
-                new FieldSchema("child", "ROW<n BIGINT>"));
+                new FieldSchema("child", "MAP<STRING, BIGINT>"));
         assertArrayEquals(new Object[]{1, 100L, 9007199254740993L, new BigDecimal("9876543210.123400"),
                         "1e2", Arrays.asList(1, 100, -2, null, null), Map.of("n", 200L)},
                 JsonRows.decode("{\"id\":1.0,\"count\":1e2,\"large\":9007199254740993,"
@@ -44,15 +44,11 @@ class JsonRowsTest {
     }
 
     @Test
-    void recursivelyConvertsMapsAndNamedRowsAndKeepsInvalidChildrenNull() {
+    void recursivelyConvertsMapsAndArraysAndKeepsInvalidChildrenNull() {
         List<FieldSchema> schema = List.of(new FieldSchema("values",
-                "MAP<INTEGER, ARRAY<ROW<`User Id` BIGINT, Score FLOAT, Flag BOOLEAN>>>"));
-        Object[] row = JsonRows.decode("{\"values\":{\"7\":[{\"User Id\":\"12\",\"Score\":\"0.25\","
-                + "\"Flag\":\"bad\"},\"invalid row\",null]}}", schema);
-        Map<String, Object> child = new java.util.LinkedHashMap<>();
-        child.put("User Id", 12L);
-        child.put("Score", 0.25d);
-        child.put("Flag", false);
+                "MAP<INTEGER, ARRAY<MAP<STRING, FLOAT>>>"));
+        Object[] row = JsonRows.decode("{\"values\":{\"7\":[{\"Score\":\"0.25\"},\"invalid map\",null]}}", schema);
+        Map<String, Double> child = Map.of("Score", 0.25d);
         assertEquals(Map.of(7, Arrays.asList(child, null, null)), row[0]);
         assertNull(JsonRows.decode("{\"values\":{\"bad\":[]}}", schema)[0]);
         assertNull(JsonRows.decode("{\"values\":{\"01\":[],\"1\":[]}}", schema)[0]);

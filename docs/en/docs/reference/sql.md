@@ -2,6 +2,8 @@
 
 This page covers SQLRec's extended SQL syntax. For ordinary `SELECT`, `INSERT`, and table creation, start with [Writing a Recommendation Flow](../guides/recommendation-flow.md) and [Connecting Data Sources](../guides/data-sources.md).
 
+Table columns, SQL function input fields, and query result columns do not support the `ROW` type, including `ROW` nested inside `ARRAY` or `MAP`.
+
 Find a statement by task:
 
 | What you want to do | Start here |

@@ -40,7 +40,7 @@ class FlinkTableDdlTest {
 
     @Test
     void fileAndCatalogConversionsProduceTheSameSchema() throws Exception {
-        String sql = "CREATE TABLE items (id BIGINT, nested ROW<label STRING, values_array ARRAY<INT>>, "
+        String sql = "CREATE TABLE items (id BIGINT, nested ARRAY<ARRAY<INT>>, "
                 + "attributes MAP<STRING, DECIMAL(12, 3)>, payload BYTES, event_time TIMESTAMP_LTZ(3) "
                 + "METADATA FROM 'timestamp' VIRTUAL, PRIMARY KEY (id) NOT ENFORCED) "
                 + "COMMENT 'same definition' WITH ('connector'='not_installed')";
@@ -49,6 +49,19 @@ class FlinkTableDdlTest {
         assertEquals(catalog.getResolvedSchema(), file.getResolvedSchema());
         assertEquals(catalog.getOptions(), file.getOptions());
         assertEquals(catalog.getComment(), file.getComment());
+    }
+
+    @Test
+    void createAndAlterRejectRowColumnTypes() throws Exception {
+        String sql = "CREATE TABLE items (payload ROW<id INT>)";
+        var catalogError = assertThrows(ValidationException.class, () -> create(sql));
+        var fileError = assertThrows(ValidationException.class,
+                () -> FlinkTableDdl.create((SqlCreateTable) CompileManager.parseSql(sql)));
+        var alterError = assertThrows(ValidationException.class,
+                () -> alter("ALTER TABLE items ADD payload MAP<STRING, ARRAY<ROW<id INT>>>", source()));
+        for (var error : List.of(catalogError, fileError, alterError)) {
+            assertEquals("ROW column types are not supported", error.getMessage());
+        }
     }
 
     @Test

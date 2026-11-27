@@ -1,5 +1,6 @@
 package com.sqlrec.db;
 
+import com.sqlrec.common.utils.FlinkSchemaUtils;
 import org.apache.calcite.sql.*;
 import org.apache.flink.sql.parser.ddl.*;
 import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
@@ -304,6 +305,7 @@ public final class FlinkTableDdl {
         Set<String> names = new HashSet<>();
         Set<String> metadataKeys = new HashSet<>();
         for (Column column : columns) {
+            FlinkSchemaUtils.requireSupportedColumnType(column.getDataType().getLogicalType());
             if (!names.add(column.getName())) throw invalid("Duplicate column: " + column.getName());
             if (column instanceof Column.MetadataColumn metadata
                     && !metadataKeys.add(metadata.getMetadataKey().orElse(metadata.getName()))) {

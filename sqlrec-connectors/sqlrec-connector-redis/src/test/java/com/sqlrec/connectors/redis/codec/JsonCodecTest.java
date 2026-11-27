@@ -8,11 +8,23 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 class JsonCodecTest {
+    @Test
+    void encodesArrayTextAndDecodesItsElements() {
+        JsonCodec codec = new JsonCodec();
+        codec.init(List.of(new FieldSchema("id", "INT"), new FieldSchema("items", "ARRAY<INT>")), 0);
+
+        byte[] encoded = codec.encode(new Object[]{1, "[2,3]"});
+
+        assertEquals("{\"id\":1,\"items\":\"[2,3]\"}", new String(encoded, StandardCharsets.UTF_8));
+        assertArrayEquals(new Object[]{1, List.of(2, 3)}, codec.decode(encoded, "1"));
+    }
+
     @Test
     void convertsDecimalAndExponentNumericLiteralsToDeclaredIntegers() {
         JsonCodec codec = new JsonCodec();

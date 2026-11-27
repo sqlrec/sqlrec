@@ -70,7 +70,7 @@ class JdbcMetadataExecutorTest {
         table.putToParameters("flink.schema.2.name", "label");
         table.putToParameters("flink.schema.2.data-type", "  VARCHAR(24) nOt   nUlL  ");
         table.putToParameters("flink.schema.3.name", "payload");
-        table.putToParameters("flink.schema.3.data-type", "ROW<`mixedName` VARCHAR(12) NOT NULL>");
+        table.putToParameters("flink.schema.3.data-type", "ARRAY<VARCHAR(12) NOT NULL>");
         when(metadata.getTables("default")).thenReturn(List.of(table));
         List<Object[]> rows = new JdbcMetadataExecutor(metadata).columns(null, null, null, null)
                 .getEnumerable().toList();
@@ -84,7 +84,7 @@ class JdbcMetadataExecutorTest {
         assertEquals(24, rows.get(2)[6]);
         assertEquals(DatabaseMetaData.columnNoNulls, rows.get(2)[10]);
         assertEquals("NO", rows.get(2)[17]);
-        assertEquals("ROW<`mixedName` VARCHAR(12) NOT NULL>", rows.get(3)[5]);
+        assertEquals("ARRAY<VARCHAR(12) NOT NULL>", rows.get(3)[5]);
         assertEquals(DatabaseMetaData.columnNullable, rows.get(3)[10]);
     }
 

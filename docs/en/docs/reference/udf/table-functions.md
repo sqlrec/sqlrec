@@ -178,7 +178,7 @@ The final partial batch is sent in `finish()`. An unbounded stream does not flus
 | `batchSize` | Integer | Batch size, number of rows sent per request |
 | `fieldName-value pairs` | Object... | Field name-value pairs specifying fields to send to the service, must appear in pairs |
 
-**Return Value**: Returns a ROW type containing the following fields:
+**Result columns**
 
 | Field Name | Type | Description |
 |------------|------|-------------|

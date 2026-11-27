@@ -65,6 +65,16 @@ class JdbcCalciteTableTest {
     }
 
     @Test
+    void rejectsAccessToTablesWithMappedArrayColumns() {
+        jdbcConfig.fieldSchemas = List.of(new FieldSchema("id", "INTEGER"),
+                new FieldSchema("items", "ARRAY<INTEGER>"));
+        var table = new JdbcCalciteTable(jdbcConfig);
+
+        var failure = assertThrows(UnsupportedOperationException.class, () -> table.scanImpl(List.of()));
+        assertEquals("JDBC does not support ARRAY columns: items", failure.getMessage());
+    }
+
+    @Test
     void testGetPrimaryKeyIndex() {
         JdbcCalciteTable table = new JdbcCalciteTable(jdbcConfig);
         assertEquals(0, table.getPrimaryKeyIndex());

@@ -2,6 +2,8 @@
 
 本文档介绍 SQLRec 支持的扩展 SQL 语法。普通 `SELECT`、`INSERT` 和建表操作可从[编写推荐流程](../guides/recommendation-flow.md)与[接入数据源](../guides/data-sources.md)入手。
 
+表字段、SQL 函数的输入字段和查询结果列暂不支持 `ROW` 类型，包括 `ARRAY` 或 `MAP` 中嵌套的 `ROW`。
+
 按任务查找：
 
 | 你要做什么 | 从这里开始 |

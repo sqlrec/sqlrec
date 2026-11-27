@@ -135,6 +135,24 @@ class SqlFunctionReturnTest {
     }
 
     @Test
+    void rejectsDeclaredAndInheritedRowFieldsInFunctionInputs() {
+        schema.add("row_source", new AbstractTable() {
+            @Override
+            public RelDataType getRowType(RelDataTypeFactory factory) {
+                RelDataType nested = factory.builder().add("id", SqlTypeName.INTEGER).build();
+                return factory.builder().add("payload", nested).build();
+            }
+        });
+        for (String input : List.of("DEFINE INPUT TABLE items(payload ROW(id INT))",
+                "DEFINE INPUT TABLE items LIKE row_source")) {
+            var compiler = new FunctionCompiler(schema, new CompileManager());
+            var error = assertThrows(IllegalArgumentException.class, () -> compiler.compileAllSql(List.of(
+                    "CREATE SQL FUNCTION row_input", input, "RETURN items")));
+            assertEquals("ROW column types are not supported", error.getMessage());
+        }
+    }
+
+    @Test
     void earlyIfReturnStopsLaterStatementsInSerialAndParallelModes() throws Exception {
         for (boolean parallel : List.of(false, true)) {
             SqlRecConfigs.PARALLELISM_EXEC.setDefaultValue(parallel);

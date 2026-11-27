@@ -2,12 +2,12 @@ package com.sqlrec.common.utils;
 
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.MapData;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -53,12 +53,11 @@ class FlinkSchemaUtilsTest {
     void normalizesNumbersInsideNestedCollections() {
         List<Long> ints = Arrays.asList(7L, null);
         List<List<Double>> floats = Arrays.asList(Arrays.asList(0.25d, null), null, Collections.emptyList());
-        Map<Long, Map<String, Object>> children = Collections.singletonMap(3L,
-                Collections.singletonMap("score", 0.5d));
-        GenericRowData row = FlinkSchemaUtils.toRowData(new Object[]{ints, floats, children}, Arrays.asList(
+        Map<Long, Double> scores = Collections.singletonMap(3L, 0.5d);
+        GenericRowData row = FlinkSchemaUtils.toRowData(new Object[]{ints, floats, scores}, Arrays.asList(
                 DataTypes.ARRAY(DataTypes.INT()),
                 DataTypes.ARRAY(DataTypes.ARRAY(DataTypes.FLOAT())),
-                DataTypes.MAP(DataTypes.INT(), DataTypes.ROW(DataTypes.FIELD("score", DataTypes.FLOAT())))));
+                DataTypes.MAP(DataTypes.INT(), DataTypes.FLOAT())));
 
         assertEquals(7, row.getArray(0).getInt(0));
         assertTrue(row.getArray(0).isNullAt(1));
@@ -67,7 +66,7 @@ class FlinkSchemaUtilsTest {
         assertTrue(row.getArray(1).isNullAt(1));
         assertEquals(0, row.getArray(1).getArray(2).size());
         assertEquals(3, row.getMap(2).keyArray().getInt(0));
-        assertEquals(0.5f, row.getMap(2).valueArray().getRow(0, 1).getFloat(0));
+        assertEquals(0.5f, row.getMap(2).valueArray().getFloat(0));
         assertEquals(Long.class, ints.get(0).getClass());
         assertEquals(Double.class, floats.get(0).get(0).getClass());
     }
@@ -78,9 +77,7 @@ class FlinkSchemaUtilsTest {
                 Column.physical("amount", DataTypes.DECIMAL(12, 2)),
                 Column.physical("label", DataTypes.STRING()),
                 Column.physical("tags", DataTypes.ARRAY(DataTypes.STRING())),
-                Column.physical("statuses", DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING())),
-                Column.physical("child", DataTypes.ROW(
-                        DataTypes.FIELD("name", DataTypes.STRING()))));
+                Column.physical("statuses", DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING())));
 
         List<FieldSchema> fields = FlinkSchemaUtils.getFieldSchemas(schema);
 
@@ -91,7 +88,16 @@ class FlinkSchemaUtilsTest {
         assertTrue(fields.get(2).getType().contains("STRING"));
         assertTrue(fields.get(3).getType().startsWith("MAP<"));
         assertEquals(2, fields.get(3).getType().split("STRING", -1).length - 1);
-        assertTrue(fields.get(4).getType().startsWith("ROW<"));
+    }
+
+    @Test
+    void rejectsRowTypesInConnectorSchemas() {
+        DataType rowType = DataTypes.ROW(DataTypes.FIELD("id", DataTypes.INT()));
+        for (DataType type : List.of(rowType, DataTypes.MAP(DataTypes.STRING(), DataTypes.ARRAY(rowType)))) {
+            ResolvedSchema schema = ResolvedSchema.of(Column.physical("value", type));
+            var error = assertThrows(ValidationException.class, () -> FlinkSchemaUtils.getFieldSchemas(schema));
+            assertEquals("ROW column types are not supported", error.getMessage());
+        }
     }
 
     @Test
@@ -100,22 +106,20 @@ class FlinkSchemaUtilsTest {
                 Column.physical("label", DataTypes.STRING()),
                 Column.physical("amount", DataTypes.DECIMAL(8, 2)),
                 Column.physical("tags", DataTypes.ARRAY(DataTypes.STRING())),
-                Column.physical("children", DataTypes.MAP(DataTypes.STRING(),
-                        DataTypes.ROW(DataTypes.FIELD("name", DataTypes.STRING())))));
+                Column.physical("labels", DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING())));
 
         GenericRowData row = FlinkSchemaUtils.toRowData(new Object[]{
                 "item", new BigDecimal("12.34"), Arrays.asList("first", null),
-                Collections.singletonMap("one", Collections.singletonMap("name", "child"))
+                Collections.singletonMap("one", "child")
         }, schema.getColumnDataTypes());
 
         assertEquals(StringData.fromString("item"), row.getString(0));
         assertEquals(new BigDecimal("12.34"), row.getDecimal(1, 8, 2).toBigDecimal());
         assertEquals(StringData.fromString("first"), row.getArray(2).getString(0));
         assertNull(row.getArray(2).getString(1));
-        MapData children = row.getMap(3);
-        assertEquals(StringData.fromString("one"), children.keyArray().getString(0));
-        RowData child = children.valueArray().getRow(0, 1);
-        assertEquals(StringData.fromString("child"), child.getString(0));
+        MapData labels = row.getMap(3);
+        assertEquals(StringData.fromString("one"), labels.keyArray().getString(0));
+        assertEquals(StringData.fromString("child"), labels.valueArray().getString(0));
         assertEquals(StringData.fromString("direct"),
                 FlinkSchemaUtils.toFlinkValue("direct", DataTypes.STRING().getLogicalType()));
         assertThrows(IllegalArgumentException.class,
@@ -156,30 +160,20 @@ class FlinkSchemaUtilsTest {
     }
 
     @Test
-    void recursivelyConvertsCollectionsInMapAndSchemaOrder() {
-        DataType childType = DataTypes.ROW(
-                DataTypes.FIELD("name", DataTypes.STRING()),
-                DataTypes.FIELD("missing", DataTypes.INT()));
-        Map<String, Object> child = new LinkedHashMap<>();
-        child.put("extra", 99);
-        child.put("name", "child");
-        Map<String, Object> children = new LinkedHashMap<>();
-        children.put("second", Arrays.asList(child, null));
-        children.put("first", Collections.emptyList());
-        LogicalType type = DataTypes.MAP(DataTypes.STRING(), DataTypes.ARRAY(childType)).getLogicalType();
+    void recursivelyConvertsCollectionsInMapOrder() {
+        Map<String, List<String>> labels = new LinkedHashMap<>();
+        labels.put("second", Arrays.asList("child", null));
+        labels.put("first", Collections.emptyList());
+        LogicalType type = DataTypes.MAP(DataTypes.STRING(), DataTypes.ARRAY(DataTypes.STRING())).getLogicalType();
 
-        MapData converted = (MapData) FlinkSchemaUtils.toFlinkValue(children, type);
+        MapData converted = (MapData) FlinkSchemaUtils.toFlinkValue(labels, type);
 
         assertEquals(StringData.fromString("second"), converted.keyArray().getString(0));
         assertEquals(StringData.fromString("first"), converted.keyArray().getString(1));
-        RowData row = converted.valueArray().getArray(0).getRow(0, 2);
-        assertEquals(StringData.fromString("child"), row.getString(0));
-        assertTrue(row.isNullAt(1));
+        assertEquals(StringData.fromString("child"), converted.valueArray().getArray(0).getString(0));
         assertTrue(converted.valueArray().getArray(0).isNullAt(1));
         assertEquals(0, converted.valueArray().getArray(1).size());
-        assertEquals(Arrays.asList("second", "first"), new ArrayList<>(children.keySet()));
-        assertEquals(Arrays.asList("extra", "name"), new ArrayList<>(child.keySet()));
-        assertEquals("child", child.get("name"));
+        assertEquals(Arrays.asList("second", "first"), new ArrayList<>(labels.keySet()));
     }
     @Test
     public void testFlinkArrayConversionPreservesNullElements() {

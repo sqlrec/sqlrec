@@ -76,7 +76,9 @@ public class ThriftUtils {
             case VARCHAR, CHAR -> stringColumn(index, value -> tryCast(value, String.class));
             case DATE -> stringColumn(index, ThriftUtils::formatDate);
             case TIMESTAMP -> stringColumn(index, ThriftUtils::formatTimestamp);
-            case SMALLINT, TINYINT -> valueColumn(index, Short.class, (short) 0,
+            case TINYINT -> valueColumn(index, Byte.class, (byte) 0,
+                    (values, nulls) -> TColumn.byteVal(new TByteColumn(values, nulls)));
+            case SMALLINT -> valueColumn(index, Short.class, (short) 0,
                     (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
             case INTEGER -> valueColumn(index, Integer.class, 0,
                     (values, nulls) -> TColumn.i32Val(new TI32Column(values, nulls)));
@@ -167,6 +169,8 @@ public class ThriftUtils {
                 return clazz.cast(number.doubleValue());
             } else if (clazz == Short.class) {
                 return clazz.cast(number.shortValue());
+            } else if (clazz == Byte.class) {
+                return clazz.cast(number.byteValue());
             }
         }
 

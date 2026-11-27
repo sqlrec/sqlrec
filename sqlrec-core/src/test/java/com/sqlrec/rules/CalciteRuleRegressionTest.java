@@ -54,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CalciteRuleRegressionTest {
@@ -90,6 +91,17 @@ public class CalciteRuleRegressionTest {
                 return tables;
             }
         });
+    }
+
+    @Test
+    void rejectsRowResultColumnsAndStillSupportsTuplePredicates() throws Exception {
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> compile("select row(id, name) from left_table"));
+        assertEquals("ROW column types are not supported", error.getMessage());
+
+        List<Object[]> rows = execute(compile("select name from left_table where (id, name) in ((1, 'Alice'))"));
+        assertEquals(1, rows.size());
+        assertArrayEquals(new Object[]{"Alice"}, rows.getFirst());
     }
 
     @Test

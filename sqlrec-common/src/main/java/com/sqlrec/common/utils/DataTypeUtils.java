@@ -82,6 +82,24 @@ public class DataTypeUtils {
         return relDataTypeFields;
     }
 
+    public static RelDataType requireSupportedColumnType(RelDataType type) {
+        switch (type.getSqlTypeName()) {
+            case ROW:
+                throw new IllegalArgumentException("ROW column types are not supported");
+            case ARRAY:
+            case MULTISET:
+                requireSupportedColumnType(type.getComponentType());
+                break;
+            case MAP:
+                requireSupportedColumnType(type.getKeyType());
+                requireSupportedColumnType(type.getValueType());
+                break;
+            default:
+                break;
+        }
+        return type;
+    }
+
     public static List<RelDataTypeField> getStringTypeField(String fieldName) {
         return getStringTypeFieldList(Collections.singletonList(fieldName));
     }
@@ -104,7 +122,7 @@ public class DataTypeUtils {
 
     /**
      * Checks that two field lists describe the same schema: same field count,
-     * same field names and type names, including nested element, key/value and row field types.
+     * same field names and type names, including nested element and key/value types.
      * Nullability and type bounds are ignored; string types (CHAR/VARCHAR/...) are interchangeable.
      */
     public static void checkTableSchemaSame(

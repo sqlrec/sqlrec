@@ -132,14 +132,14 @@ class ProtobufGeneratedClassIntegrationTest {
                 new FieldSchema("string_value", "VARCHAR"),
                 new FieldSchema("bytes_value", "VARBINARY"),
                 new FieldSchema("status", "VARCHAR"),
-                new FieldSchema("nested", "ROW<id BIGINT, name STRING, enabled BOOLEAN>"),
+                new FieldSchema("nested", "MAP<VARCHAR, ANY>"),
                 new FieldSchema("repeated_int32", "ARRAY<INTEGER>"),
                 new FieldSchema("repeated_string", "ARRAY<VARCHAR>"),
                 new FieldSchema("repeated_bytes", "ARRAY<VARBINARY>"),
                 new FieldSchema("repeated_status", "ARRAY<VARCHAR>"),
-                new FieldSchema("repeated_nested", "ARRAY<ROW<id BIGINT, name STRING, enabled BOOLEAN>>"),
+                new FieldSchema("repeated_nested", "ARRAY<MAP<VARCHAR, ANY>>"),
                 new FieldSchema("attributes", "MAP<VARCHAR, BIGINT>"),
-                new FieldSchema("nested_by_name", "MAP<VARCHAR, ROW<id BIGINT, name STRING, enabled BOOLEAN>>"),
+                new FieldSchema("nested_by_name", "MAP<VARCHAR, MAP<VARCHAR, ANY>>"),
                 new FieldSchema("optional_string", "VARCHAR"),
                 new FieldSchema("choice_string", "VARCHAR"));
     }

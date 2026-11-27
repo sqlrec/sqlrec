@@ -1,5 +1,6 @@
 package com.sqlrec.compiler;
 
+import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.rules.RuleManager;
 import com.sqlrec.runtime.CalciteBindable;
 import com.sqlrec.schema.RootFirstCatalogReader;
@@ -75,6 +76,10 @@ public class NormalSqlCompiler {
         CalciteCatalogReader catalogReader = getCatalogReader(schema, defaultSchema);
         SqlValidator validator = createSqlValidator(catalogReader);
         SqlNode validatedSqlNode = validator.validate(sqlNode);
+        if (!SqlKind.DML.contains(validatedSqlNode.getKind())) {
+            validator.getValidatedNodeType(validatedSqlNode).getFieldList()
+                    .forEach(field -> DataTypeUtils.requireSupportedColumnType(field.getType()));
+        }
 
         boolean containKvTable = SqlTypeChecker.isSqlContainKvTable(validatedSqlNode, schema, defaultSchema);
 

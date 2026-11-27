@@ -7,39 +7,28 @@ import org.apache.flink.table.catalog.Column;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.MapData;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class RedisProtobufLookupRowTest {
     @Test
-    void convertsDecodedCollectionsAndNestedMessageToFlinkInternalTypes() {
+    void convertsDecodedCollectionsToFlinkInternalTypes() {
         ResolvedSchema schema = ResolvedSchema.of(
                 Column.physical("string_value", DataTypes.STRING()),
                 Column.physical("repeated_string", DataTypes.ARRAY(DataTypes.STRING())),
                 Column.physical("status_by_name",
-                        DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING())),
-                Column.physical("nested", DataTypes.ROW(
-                        DataTypes.FIELD("id", DataTypes.BIGINT()),
-                        DataTypes.FIELD("name", DataTypes.STRING()),
-                        DataTypes.FIELD("enabled", DataTypes.BOOLEAN()))));
+                        DataTypes.MAP(DataTypes.STRING(), DataTypes.STRING())));
         ProtobufCodec codec = new ProtobufCodec("com.sqlrec.connectors.redis.proto.RedisAllTypes");
         codec.init(FlinkSchemaUtils.getFieldSchemas(schema), 0);
 
-        Map<String, Object> nested = new LinkedHashMap<>();
-        nested.put("id", 7L);
-        nested.put("name", "child");
-        nested.put("enabled", true);
         Object[] decoded = codec.decode(codec.encode(new Object[]{
                 "key", Arrays.asList("red", "blue"),
-                Collections.singletonMap("primary", "ACTIVE"), nested
+                Collections.singletonMap("primary", "ACTIVE")
         }), "key");
 
         GenericRowData row = FlinkSchemaUtils.toRowData(decoded, schema.getColumnDataTypes());
@@ -50,9 +39,5 @@ class RedisProtobufLookupRowTest {
         MapData statuses = row.getMap(2);
         assertEquals(StringData.fromString("primary"), statuses.keyArray().getString(0));
         assertEquals(StringData.fromString("ACTIVE"), statuses.valueArray().getString(0));
-        RowData child = row.getRow(3, 3);
-        assertEquals(7L, child.getLong(0));
-        assertEquals(StringData.fromString("child"), child.getString(1));
-        assertEquals(true, child.getBoolean(2));
     }
 }

@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class HiveTableUtilsTest {
     @Test
     void flinkFallbackPreservesFieldNamesAndNullability() {
-        String declaration = "ROW<`mixedName` VARCHAR(12) NOT NULL> NOT NULL";
+        String declaration = "ARRAY<VARCHAR(12) NOT NULL> NOT NULL";
         Table table = new Table();
         table.setSd(new StorageDescriptor());
         table.putToParameters("flink.schema.0.name", "payload");
@@ -18,10 +18,9 @@ class HiveTableUtilsTest {
 
         var field = HiveTableUtils.parse(table).get(0);
         assertEquals(declaration, field.getType());
-        var rowType = DataTypeUtils.getRelDataType(field.getType());
-        assertFalse(rowType.isNullable());
-        var nested = rowType.getFieldList().get(0);
-        assertEquals("mixedName", nested.getName());
-        assertFalse(nested.getType().isNullable());
+        assertEquals("payload", field.getName());
+        var arrayType = DataTypeUtils.getRelDataType(field.getType());
+        assertFalse(arrayType.isNullable());
+        assertFalse(arrayType.getComponentType().isNullable());
     }
 }

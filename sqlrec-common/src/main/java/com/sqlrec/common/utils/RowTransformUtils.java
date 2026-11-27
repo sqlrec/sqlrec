@@ -196,22 +196,10 @@ public final class RowTransformUtils {
         return result;
     }
 
-    /** Calcite uses Object[] for SQL ROW and Lists for ARRAY, including nested values. */
+    /** Calcite uses lists for ARRAY values, including nested arrays. */
     private static Object convertValue(Object value, RelDataType target) {
         if (value == null) {
             return null;
-        }
-        if (target.getSqlTypeName() == SqlTypeName.ROW) {
-            if (value instanceof Map) {
-                return projectRow(target.getFieldList(),
-                        field -> convertValue(((Map<?, ?>) value).get(field.getName()), field.getType()));
-            }
-            if (value instanceof Object[] || value instanceof List) {
-                Object[] row = value instanceof List ? ((List<?>) value).toArray() : ((Object[]) value).clone();
-                convertRowType(row, target.getFieldList());
-                return row;
-            }
-            return value;
         }
         if (target.getSqlTypeName() == SqlTypeName.MAP && value instanceof Map) {
             Map<Object, Object> converted = new LinkedHashMap<>();
@@ -266,25 +254,8 @@ public final class RowTransformUtils {
             case MAP:
                 return compatibleTypes(desired.getKeyType(), given.getKeyType())
                         && compatibleTypes(desired.getValueType(), given.getValueType());
-            case ROW:
-                return compatibleRowFields(desired.getFieldList(), given.getFieldList());
             default:
                 return true;
         }
-    }
-
-    private static boolean compatibleRowFields(List<RelDataTypeField> desired, List<RelDataTypeField> given) {
-        if (desired.size() != given.size()) {
-            return false;
-        }
-        for (int i = 0; i < desired.size(); i++) {
-            RelDataTypeField expected = desired.get(i);
-            RelDataTypeField actual = given.get(i);
-            if (!expected.getName().equalsIgnoreCase(actual.getName())
-                    || !compatibleTypes(expected.getType(), actual.getType())) {
-                return false;
-            }
-        }
-        return true;
     }
 }
