@@ -1,6 +1,6 @@
 package com.sqlrec.frontend.cli;
 
-import com.sqlrec.common.utils.RowJsonEncoder;
+import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.TableTextFormatter;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -81,7 +81,7 @@ public final class SqlOutputFormatter {
         List<String> lines = new ArrayList<>();
         lines.add("[");
         for (int r = 0; r < rows.size(); r++) {
-            String rowJson = RowJsonEncoder.toJsonByFields(rows.get(r), fields);
+            String rowJson = JsonRows.encodeRowByFields(rows.get(r), fields);
             lines.add("  " + rowJson + (r < rows.size() - 1 ? "," : ""));
         }
         lines.add("]");

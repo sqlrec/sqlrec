@@ -3,7 +3,7 @@ package com.sqlrec.connectors.filesystem.handler;
 import com.google.gson.JsonObject;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonRows;
-import com.sqlrec.common.utils.ScalarConversions;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.commons.csv.CSVFormat;
@@ -110,7 +110,7 @@ final class FileSystemDataLoader {
                 row[i] = null;
             } else {
                 try {
-                    row[i] = ScalarConversions.convert(value, types[i]);
+                    row[i] = RowTransformUtils.convertScalar(value, types[i]);
                 } catch (Exception e) {
                     row[i] = null;
                 }

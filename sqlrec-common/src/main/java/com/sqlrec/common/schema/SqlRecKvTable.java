@@ -6,7 +6,6 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.RowTransformUtils;
-import com.sqlrec.common.utils.ScalarConversions;
 import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
@@ -76,7 +75,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
                     FilterUtils.extractPrimaryKeyValue(candidateFilters, getPrimaryKeyIndex());
             if (primaryKeyValue != null) {
                 SqlTypeName primaryKeyType = getPrimaryKeyType();
-                primaryKeyValue = ScalarConversions.convert(primaryKeyValue, primaryKeyType);
+                primaryKeyValue = RowTransformUtils.convertScalar(primaryKeyValue, primaryKeyType);
                 Map<Object, List<Object[]>> keyResult = getByPrimaryKey(Collections.singleton(primaryKeyValue));
                 List<Object[]> rows = keyResult.getOrDefault(primaryKeyValue, Collections.emptyList());
                 result = Linq4j.asEnumerable(rows);
@@ -217,7 +216,7 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
         int pkIndex = getPrimaryKeyIndex();
         if (pkIndex < row.length && row[pkIndex] != null) {
             SqlTypeName primaryKeyType = getPrimaryKeyType();
-            Object primaryKeyValue = ScalarConversions.convert(row[pkIndex], primaryKeyType);
+            Object primaryKeyValue = RowTransformUtils.convertScalar(row[pkIndex], primaryKeyType);
             cache.invalidate(primaryKeyValue);
         }
     }

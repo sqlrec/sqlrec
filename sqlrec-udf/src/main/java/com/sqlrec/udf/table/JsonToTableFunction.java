@@ -5,7 +5,6 @@ import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonRows;
-import com.sqlrec.common.utils.SchemaInference;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -22,7 +21,7 @@ public class JsonToTableFunction {
         if (objects.isEmpty()) {
             throw new IllegalArgumentException("no json objects found in input");
         }
-        List<FieldSchema> fields = SchemaInference.inferJsonFields(objects);
+        List<FieldSchema> fields = JsonRows.inferJsonFields(objects);
         List<RelDataTypeField> dataFields = DataTypeUtils.getRelDataType(
                 new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), fields).getFieldList();
         List<Object[]> rows = JsonRows.decodeRows(objects, fields);

@@ -14,10 +14,10 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class SchemaInferenceTest {
+class JsonRowInferenceTest {
     @Test
     void mixedNumericResponsesWidenAcrossRowsAndArrayElements() {
-        List<RelDataTypeField> fields = SchemaInference.inferFields(List.of(
+        List<RelDataTypeField> fields = JsonRows.inferFields(List.of(
                 Map.of("score", 1L, "scores", List.of(1L)),
                 Map.of("score", 0.75d, "scores", List.of(1L, 0.5d))));
         assertEquals(SqlTypeName.DOUBLE, fields.stream().filter(f -> f.getName().equals("score"))
@@ -28,7 +28,7 @@ class SchemaInferenceTest {
 
     @Test
     void jsonArrayInferenceUsesLaterRowsAndRecognizesNestedArrays() {
-        List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+        List<FieldSchema> fields = JsonRows.inferJsonFields(JsonRows.readObjects(
                 "[{\"xs\":[],\"matrix\":[]},{\"xs\":[1,0.75],\"matrix\":[[1],[2.5]]}]"));
         assertEquals("ARRAY<DOUBLE>", fields.get(0).getType());
         assertEquals("ARRAY<ARRAY<DOUBLE>>", fields.get(1).getType());
@@ -36,7 +36,7 @@ class SchemaInferenceTest {
 
     @Test
     void jsonIntegersWithinLongRangeUseBigintIncludingNestedArrays() {
-        List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+        List<FieldSchema> fields = JsonRows.inferJsonFields(JsonRows.readObjects(
                 "[{\"id\":null,\"ids\":[],\"matrix\":[]},"
                         + "{\"id\":9007199254740993,\"ids\":[-9223372036854775808,9223372036854775807],"
                         + "\"matrix\":[[1],[2]]}]"));
@@ -47,7 +47,7 @@ class SchemaInferenceTest {
     @Test
     void jsonNumbersWidenAcrossRowsAndArraysRegardlessOfOrder() {
         for (String[] pair : new String[][]{{"1", "0.75"}, {"0.75", "1"}}) {
-            List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+            List<FieldSchema> fields = JsonRows.inferJsonFields(JsonRows.readObjects(
                     "[{\"score\":" + pair[0] + ",\"scores\":[" + pair[0] + "],"
                             + "\"matrix\":[[" + pair[0] + "]]},"
                             + "{\"score\":" + pair[1] + ",\"scores\":[" + pair[1] + "],"
@@ -60,7 +60,7 @@ class SchemaInferenceTest {
     @Test
     void jsonFractionalExponentAndOutOfRangeNumbersUseDouble() {
         for (String number : List.of("1.0", "1e3", "-2E-3", "9223372036854775808", "-9223372036854775809")) {
-            List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+            List<FieldSchema> fields = JsonRows.inferJsonFields(JsonRows.readObjects(
                     "[{\"value\":0,\"values\":[0]},{\"value\":" + number + ",\"values\":[" + number + "]}]"));
             assertEquals("DOUBLE", fields.get(0).getType(), number);
             assertEquals("ARRAY<DOUBLE>", fields.get(1).getType(), number);
@@ -77,7 +77,7 @@ class SchemaInferenceTest {
         Map<String, Object> second = new LinkedHashMap<>(first);
         second.put("id", 9007199254740993L);
         second.put("late", true);
-        List<RelDataTypeField> fields = SchemaInference.inferFields(Arrays.asList(first, second));
+        List<RelDataTypeField> fields = JsonRows.inferFields(Arrays.asList(first, second));
         assertEquals(Arrays.asList("id", "empty", "nested", "values", "late"),
                 fields.stream().map(RelDataTypeField::getName).collect(Collectors.toList()));
         assertEquals(List.of(SqlTypeName.BIGINT, SqlTypeName.VARCHAR, SqlTypeName.VARCHAR,
@@ -88,7 +88,7 @@ class SchemaInferenceTest {
 
     @Test
     void jsonTablesUseAllKeysAndFirstPrimitiveArrayElements() {
-        List<FieldSchema> fields = SchemaInference.inferJsonFields(JsonRows.readObjects(
+        List<FieldSchema> fields = JsonRows.inferJsonFields(JsonRows.readObjects(
                 "[{\"id\":1,\"empty\":[],\"nested\":[{},[1],null,2],\"flag\":null},{\"flag\":true,\"late\":false}]"));
         assertEquals(Arrays.asList("id", "empty", "nested", "flag", "late"),
                 fields.stream().map(FieldSchema::getName).collect(Collectors.toList()));
@@ -98,10 +98,10 @@ class SchemaInferenceTest {
 
     @Test
     void returnsNoFieldsForEmptyInputAndInfersNullForExplicitAllNullColumns() {
-        assertTrue(SchemaInference.inferFields(null).isEmpty());
-        assertTrue(SchemaInference.inferFields(Collections.emptyList()).isEmpty());
-        assertTrue(SchemaInference.inferJsonFields(Collections.emptyList()).isEmpty());
-        assertEquals(SqlTypeName.NULL, SchemaInference.inferFields(
+        assertTrue(JsonRows.inferFields(null).isEmpty());
+        assertTrue(JsonRows.inferFields(Collections.emptyList()).isEmpty());
+        assertTrue(JsonRows.inferJsonFields(Collections.emptyList()).isEmpty());
+        assertEquals(SqlTypeName.NULL, JsonRows.inferFields(
                 Collections.singletonList(Collections.singletonMap("value", null)))
                 .get(0).getType().getSqlTypeName());
     }

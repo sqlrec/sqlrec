@@ -5,9 +5,9 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
-import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.RowJsonEncoder;
+import com.sqlrec.common.utils.JsonRows;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.udf.inference.PredictionClient;
 import com.sqlrec.udf.inference.PredictionRequestEncoder;
 import com.sqlrec.udf.inference.PredictionResult;
@@ -44,7 +44,7 @@ public class CallServiceFunction {
         }
 
         List<FieldSchema> inputFields = serviceConfig.getModelConfig().getInputFields();
-        String jsonData = RowJsonEncoder.toJsonArray(inputData, inputFields, input.getDataFields());
+        String jsonData = JsonRows.encodeRows(inputData, inputFields, input.getDataFields());
 
         return predictAndMerge(service, jsonData, inputData, newDataFields);
     }

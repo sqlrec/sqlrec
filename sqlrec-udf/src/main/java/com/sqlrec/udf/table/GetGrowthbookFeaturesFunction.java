@@ -7,7 +7,7 @@ import com.github.benmanes.caffeine.cache.Scheduler;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.RowJsonEncoder;
+import com.sqlrec.common.utils.JsonRows;
 import growthbook.sdk.java.GrowthBook;
 import growthbook.sdk.java.callback.FeatureRefreshCallback;
 import growthbook.sdk.java.model.GBContext;
@@ -66,7 +66,7 @@ public class GetGrowthbookFeaturesFunction {
         }
 
         Object[] row = userEnumerable.get(0);
-        String attributesJson = RowJsonEncoder.toJsonByFields(row, userFields);
+        String attributesJson = JsonRows.encodeRowByFields(row, userFields);
         GrowthBook gb = CLIENT_CACHE.get(cacheKey(apiHost, clientKey),
                 key -> new FeatureClient(apiHost, clientKey)).forUser(attributesJson);
 

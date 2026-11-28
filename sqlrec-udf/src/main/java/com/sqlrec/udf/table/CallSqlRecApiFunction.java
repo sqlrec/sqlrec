@@ -6,7 +6,6 @@ import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.JsonRows;
 import com.sqlrec.common.utils.RowTransformUtils;
-import com.sqlrec.common.utils.SchemaInference;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -69,7 +68,7 @@ public class CallSqlRecApiFunction {
         }
 
         // infer output fields from response rows
-        List<RelDataTypeField> dataFields = SchemaInference.inferFields(dataRows);
+        List<RelDataTypeField> dataFields = JsonRows.inferFields(dataRows);
 
         // Decode inferred and explicitly declared schemas with the same conversion policy.
         var outputSchema = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT).createStructType(dataFields);

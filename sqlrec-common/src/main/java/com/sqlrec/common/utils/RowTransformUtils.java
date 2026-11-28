@@ -9,6 +9,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.lang.reflect.Array;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -21,7 +22,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Conversions between row arrays, named values and Calcite enumerables. */
+/** Converts scalar values and rows for use with Calcite. */
 public final class RowTransformUtils {
     private RowTransformUtils() {
     }
@@ -108,14 +109,84 @@ public final class RowTransformUtils {
 
     public static Set<Object> convertKeySet(Set<Object> keys, SqlTypeName target) {
         Set<Object> result = new HashSet<>(keys.size());
-        keys.forEach(key -> result.add(ScalarConversions.convert(key, target)));
+        keys.forEach(key -> result.add(convertScalar(key, target)));
         return result;
     }
 
     public static <V> Map<Object, V> convertMapKeys(Map<Object, V> source, SqlTypeName target) {
         Map<Object, V> result = new HashMap<>(source.size());
-        source.forEach((key, value) -> result.put(ScalarConversions.convert(key, target), value));
+        source.forEach((key, value) -> result.put(convertScalar(key, target), value));
         return result;
+    }
+
+    /** Unknown, complex and temporal types pass through without interpretation. */
+    public static Object convertScalar(Object value, String type) {
+        if (value == null) {
+            return null;
+        }
+        String name = type.toUpperCase(Locale.ROOT);
+        switch (name) {
+            case "INT":
+                return convertScalar(value, SqlTypeName.INTEGER);
+            case "NUMERIC":
+                return convertScalar(value, SqlTypeName.DECIMAL);
+            case "STRING":
+            case "TEXT":
+                return convertScalar(value, SqlTypeName.VARCHAR);
+            default:
+                return convertScalar(value, SqlTypeName.get(name));
+        }
+    }
+
+    public static Object convertScalar(Object value, SqlTypeName target) {
+        if (value == null || target == null) {
+            return value;
+        }
+        switch (target) {
+            case TINYINT:
+                return convertNumber(value, target, Byte.class, Number::byteValue, Byte::valueOf);
+            case SMALLINT:
+                return convertNumber(value, target, Short.class, Number::shortValue, Short::valueOf);
+            case INTEGER:
+                return convertNumber(value, target, Integer.class, Number::intValue, Integer::valueOf);
+            case BIGINT:
+                return convertNumber(value, target, Long.class, Number::longValue, Long::valueOf);
+            case REAL:
+                return convertNumber(value, target, Float.class, Number::floatValue, Float::valueOf);
+            // Calcite uses Double for SQL FLOAT and Float for REAL.
+            case FLOAT:
+            case DOUBLE:
+                return convertNumber(value, target, Double.class, Number::doubleValue, Double::valueOf);
+            case DECIMAL:
+                return value instanceof BigDecimal ? value : new BigDecimal(value.toString());
+            case BOOLEAN:
+                return value instanceof Boolean ? value : Boolean.valueOf(value.toString());
+            case VARCHAR:
+            case CHAR:
+                return value.toString();
+            default:
+                return value;
+        }
+    }
+
+    private static Object convertNumber(Object value, SqlTypeName target, Class<? extends Number> targetClass,
+                                        Function<Number, Number> convert, Function<String, Number> parse) {
+        if (targetClass.isInstance(value)) {
+            return value;
+        }
+        if (value instanceof Number) {
+            return convert.apply((Number) value);
+        }
+        if (!(value instanceof String)) {
+            throw new IllegalArgumentException(
+                    "Cannot convert " + value.getClass().getName() + " to numeric type " + target);
+        }
+        try {
+            return parse.apply((String) value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(
+                    "Cannot parse '" + value + "' as " + target + " value", exception);
+        }
     }
 
     /** Normalizes cells for Calcite in place, retaining null rows. */
@@ -208,7 +279,7 @@ public final class RowTransformUtils {
             return converted;
         }
         if (target.getSqlTypeName() != SqlTypeName.ARRAY) {
-            return ScalarConversions.convert(value, target.getSqlTypeName());
+            return convertScalar(value, target.getSqlTypeName());
         }
         RelDataType elementType = target.getComponentType();
         List<Object> converted;

@@ -2,7 +2,7 @@ package com.sqlrec.connectors.redis.codec;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.ScalarConversions;
+import com.sqlrec.common.utils.RowTransformUtils;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.nio.charset.StandardCharsets;
@@ -29,8 +29,8 @@ public class StringCodec implements AbstractCodec {
         String value = new String(bytes, StandardCharsets.UTF_8);
         int valueIndex = 1 - primaryKeyIndex;
         Object[] result = new Object[2];
-        result[primaryKeyIndex] = ScalarConversions.convert(primaryKey, fieldTypes[primaryKeyIndex]);
-        result[valueIndex] = ScalarConversions.convert(value, fieldTypes[valueIndex]);
+        result[primaryKeyIndex] = RowTransformUtils.convertScalar(primaryKey, fieldTypes[primaryKeyIndex]);
+        result[valueIndex] = RowTransformUtils.convertScalar(value, fieldTypes[valueIndex]);
         return result;
     }
 

@@ -1,5 +1,7 @@
 package com.sqlrec.common.utils;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,6 +12,7 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.sqlrec.common.schema.FieldSchema;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -19,12 +22,17 @@ import java.io.StringReader;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
-/** Decodes named JSON values using their declared schema; unconvertible cells become null. */
+/** Reads, infers the schema of, and encodes named rows used in JSON. */
 public final class JsonRows {
     private static final Type OBJECT_TYPE = new TypeToken<Map<String, JsonElement>>() {}.getType();
+    private static final Gson GSON = JsonUtils.getGson();
+    private static final Gson REQUEST_GSON = GSON.newBuilder().serializeNulls().create();
 
     private JsonRows() {
     }
@@ -56,7 +64,7 @@ public final class JsonRows {
         // JsonElement values retain numeric text and make even duplicate null-valued keys detectable.
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) throw new JsonSyntaxException("expected JSON object");
-            Map<String, JsonElement> object = JsonUtils.getGson().fromJson(reader, OBJECT_TYPE);
+            Map<String, JsonElement> object = GSON.fromJson(reader, OBJECT_TYPE);
             if (reader.peek() != JsonToken.END_DOCUMENT) throw new JsonSyntaxException("unexpected content after JSON object");
             return decode(object, schema);
         } catch (IOException invalidJson) {
@@ -77,19 +85,20 @@ public final class JsonRows {
         return rows;
     }
 
-    private static RelDataType resolveSchema(List<FieldSchema> fields) {
-        return DataTypeUtils.getRelDataType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), fields);
-    }
-
     /** Accepts parsed JSON fields or native values from an API response without a JSON round trip. */
     public static Object[] decode(Map<String, ?> object, RelDataType schema) {
         return RowTransformUtils.projectRow(schema.getFieldList(),
                 field -> decodeValue(object.get(field.getName()), field.getType()));
     }
 
+    private static RelDataType resolveSchema(List<FieldSchema> fields) {
+        return DataTypeUtils.getRelDataType(new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT), fields);
+    }
+
+    /** Decodes a cell using its declared type, yielding null if conversion fails. */
     private static Object decodeValue(Object value, RelDataType target) {
         if (target.getSqlTypeName() == SqlTypeName.ANY) {
-            return value instanceof JsonElement ? JsonUtils.getGson().fromJson((JsonElement) value, Object.class) : value;
+            return value instanceof JsonElement ? GSON.fromJson((JsonElement) value, Object.class) : value;
         }
         Object original = value;
         value = unwrap(value);
@@ -103,11 +112,11 @@ public final class JsonRows {
                 case VARCHAR:
                 case CHAR:
                     return value instanceof Map || value instanceof List || value.getClass().isArray()
-                            ? (original instanceof JsonElement ? original : JsonUtils.getGson().toJsonTree(value)).toString()
+                            ? (original instanceof JsonElement ? original : GSON.toJsonTree(value)).toString()
                             : value.toString();
                 default:
                     return value instanceof Map || value instanceof List || value.getClass().isArray()
-                            ? null : ScalarConversions.convert(value, target.getSqlTypeName());
+                            ? null : RowTransformUtils.convertScalar(value, target.getSqlTypeName());
             }
         } catch (RuntimeException invalidValue) {
             return null;
@@ -151,7 +160,186 @@ public final class JsonRows {
     }
 
     private static Object parseContainer(Object value) {
-        if (value.getClass().isArray()) return JsonUtils.getGson().toJsonTree(value).getAsJsonArray().asList();
+        if (value.getClass().isArray()) return GSON.toJsonTree(value).getAsJsonArray().asList();
         return value instanceof String ? unwrap(JsonParser.parseString((String) value)) : value;
+    }
+
+    /** Uses column names in encounter order and gives all-null columns the NULL type. */
+    public static List<RelDataTypeField> inferFields(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<FieldSchema> schema = inferFields(rows, Map::keySet, name -> {
+            List<Object> values = new ArrayList<>(rows.size());
+            for (Map<String, Object> row : rows) {
+                values.add(row.get(name));
+            }
+            return inferJavaType(values);
+        });
+        return new ArrayList<>(resolveSchema(schema).getFieldList());
+    }
+
+    /** Uses JSON keys in encounter order and widens mixed numeric literals to DOUBLE. */
+    public static List<FieldSchema> inferJsonFields(List<JsonObject> objects) {
+        return inferFields(objects, JsonObject::keySet, name -> {
+            List<JsonElement> values = new ArrayList<>(objects.size());
+            for (JsonObject object : objects) {
+                values.add(object.get(name));
+            }
+            return inferJsonType(values);
+        });
+    }
+
+    private static <T> List<FieldSchema> inferFields(
+            List<T> rows, Function<T, Set<String>> getNames, Function<String, String> inferType) {
+        Set<String> names = new LinkedHashSet<>();
+        for (T row : rows) {
+            names.addAll(getNames.apply(row));
+        }
+        List<FieldSchema> fields = new ArrayList<>(names.size());
+        for (String name : names) {
+            fields.add(new FieldSchema(name, inferType.apply(name)));
+        }
+        return fields;
+    }
+
+    private static String inferJavaType(List<?> values) {
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+            if (value instanceof List) {
+                List<Object> elements = new ArrayList<>();
+                for (Object candidate : values) {
+                    if (candidate instanceof List) {
+                        elements.addAll((List<?>) candidate);
+                    }
+                }
+                // Empty and nested Java lists retain their JSON-text fallback.
+                for (Object element : elements) {
+                    if (element != null) {
+                        return element instanceof Map || element instanceof List ? "VARCHAR"
+                                : "ARRAY<" + inferJavaType(elements) + ">";
+                    }
+                }
+                return "VARCHAR";
+            }
+            if (value instanceof Number) {
+                for (Object candidate : values) {
+                    if (candidate instanceof Number && !(candidate instanceof Byte || candidate instanceof Short
+                            || candidate instanceof Integer || candidate instanceof Long)) {
+                        return "DOUBLE";
+                    }
+                }
+                return "BIGINT";
+            }
+            return value instanceof Boolean ? "BOOLEAN" : "VARCHAR";
+        }
+        return "NULL";
+    }
+
+    private static String inferJsonType(List<JsonElement> values) {
+        for (JsonElement value : values) {
+            if (value == null || value.isJsonNull()) {
+                continue;
+            }
+            if (!value.isJsonArray()) {
+                return inferJsonValueType(value, values);
+            }
+            List<JsonElement> elements = new ArrayList<>();
+            for (JsonElement candidate : values) {
+                if (candidate != null && candidate.isJsonArray()) {
+                    candidate.getAsJsonArray().forEach(elements::add);
+                }
+            }
+            List<JsonElement> nested = new ArrayList<>();
+            for (JsonElement element : elements) {
+                if (element.isJsonPrimitive()) {
+                    return "ARRAY<" + inferJsonValueType(element, elements) + ">";
+                }
+                if (element.isJsonArray()) {
+                    nested.add(element);
+                }
+            }
+            return "ARRAY<" + (nested.isEmpty() ? "VARCHAR" : inferJsonType(nested)) + ">";
+        }
+        return "VARCHAR";
+    }
+
+    private static String inferJsonValueType(JsonElement value, List<JsonElement> values) {
+        if (!value.isJsonPrimitive()) {
+            return "VARCHAR";
+        }
+        JsonPrimitive primitive = value.getAsJsonPrimitive();
+        if (!primitive.isNumber()) {
+            return primitive.isBoolean() ? "BOOLEAN" : "VARCHAR";
+        }
+        for (JsonElement candidate : values) {
+            if (candidate == null || !candidate.isJsonPrimitive() || !candidate.getAsJsonPrimitive().isNumber()) {
+                continue;
+            }
+            try {
+                Long.parseLong(candidate.getAsString());
+            } catch (NumberFormatException notBigint) {
+                // Fractions, exponents and integers outside BIGINT use DOUBLE.
+                return "DOUBLE";
+            }
+        }
+        return "BIGINT";
+    }
+
+    /** Encodes one row, omitting null-valued fields. */
+    public static String encodeRow(Object[] row, List<FieldSchema> fields) {
+        return encodeRow(row, fields, FieldSchema::getName);
+    }
+
+    /** Encodes one Calcite row, omitting null-valued fields. */
+    public static String encodeRowByFields(Object[] row, List<RelDataTypeField> fields) {
+        return encodeRow(row, fields, RelDataTypeField::getName);
+    }
+
+    private static <F> String encodeRow(Object[] row, List<F> fields, Function<F, String> nameReader) {
+        JsonObject object = new JsonObject();
+        for (int i = 0; i < fields.size(); i++) {
+            object.add(nameReader.apply(fields.get(i)), GSON.toJsonTree(row[i]));
+        }
+        return GSON.toJson(object);
+    }
+
+    /** Encodes named rows for a request, preserving null-valued fields. */
+    public static String encodeRows(List<Map<String, Object>> rows) {
+        JsonArray array = new JsonArray();
+        for (Map<String, Object> row : rows) {
+            JsonObject object = new JsonObject();
+            row.forEach((name, value) -> object.add(name, REQUEST_GSON.toJsonTree(value)));
+            array.add(object);
+        }
+        return REQUEST_GSON.toJson(array);
+    }
+
+    /** Encodes a batch in the requested field order, preserving explicit nulls and skipping absent fields. */
+    public static String encodeRows(
+            List<Object[]> rows, List<FieldSchema> inputFields, List<RelDataTypeField> dataFields) {
+        JsonArray array = new JsonArray();
+        if (rows.isEmpty()) {
+            return REQUEST_GSON.toJson(array);
+        }
+
+        int[] fieldIndexes = new int[inputFields.size()];
+        for (int i = 0; i < inputFields.size(); i++) {
+            fieldIndexes[i] = DataTypeUtils.findFieldIndex(dataFields, inputFields.get(i).getName());
+        }
+
+        for (Object[] row : rows) {
+            JsonObject object = new JsonObject();
+            for (int i = 0; i < inputFields.size(); i++) {
+                int fieldIndex = fieldIndexes[i];
+                if (fieldIndex >= 0 && fieldIndex < row.length) {
+                    object.add(inputFields.get(i).getName(), REQUEST_GSON.toJsonTree(row[fieldIndex]));
+                }
+            }
+            array.add(object);
+        }
+        return REQUEST_GSON.toJson(array);
     }
 }

@@ -6,7 +6,7 @@ import com.google.gson.reflect.TypeToken;
 import java.util.List;
 import java.util.Map;
 
-/** General JSON serialization; schema-aware row formats live in JsonRows and RowJsonEncoder. */
+/** General JSON serialization with shared Gson settings. */
 public final class JsonUtils {
     private JsonUtils() {
     }

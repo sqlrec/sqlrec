@@ -2,7 +2,7 @@ package com.sqlrec.connectors.filesystem.handler;
 
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.ScalarConversions;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.filesystem.config.FileSystemConfig;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
@@ -178,7 +178,7 @@ public class FileSystemHandler {
             throw new IllegalArgumentException("Expected " + types.length + " fields, got " + row.length);
         }
         for (int i = 0; i < row.length; i++) {
-            row[i] = ScalarConversions.convert(row[i], types[i]);
+            row[i] = RowTransformUtils.convertScalar(row[i], types[i]);
         }
         validatePrimaryKey(getKey(row));
         return row;

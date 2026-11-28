@@ -2,7 +2,7 @@ package com.sqlrec.udf.table;
 
 import com.google.gson.JsonParser;
 import com.sqlrec.common.utils.DataTypeUtils;
-import com.sqlrec.common.utils.RowJsonEncoder;
+import com.sqlrec.common.utils.JsonRows;
 import growthbook.sdk.java.evaluators.ConditionEvaluator;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.Test;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class GrowthBookNullAttributesTest {
     @Test
     void predictionNullEncodingDoesNotChangeGrowthBookExistsTargeting() {
-        String attributes = RowJsonEncoder.toJsonByFields(new Object[]{null},
+        String attributes = JsonRows.encodeRowByFields(new Object[]{null},
                 List.of(DataTypeUtils.getRelDataTypeField("country", 0, SqlTypeName.VARCHAR)));
         var evaluator = new ConditionEvaluator();
         var condition = JsonParser.parseString("{\"country\":{\"$exists\":true}}").getAsJsonObject();

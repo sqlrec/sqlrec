@@ -3,7 +3,6 @@ package com.sqlrec.connectors.redis.codec;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.JsonRows;
-import com.sqlrec.common.utils.RowJsonEncoder;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
@@ -49,7 +48,7 @@ public class JsonCodec implements AbstractCodec {
             }
             values[i] = isoText;
         }
-        String json = RowJsonEncoder.toJson(values, fieldSchemas);
+        String json = JsonRows.encodeRow(values, fieldSchemas);
         return json.getBytes(StandardCharsets.UTF_8);
     }
 }

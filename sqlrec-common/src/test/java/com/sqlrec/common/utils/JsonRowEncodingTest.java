@@ -15,7 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class RowJsonEncoderTest {
+public class JsonRowEncodingTest {
     private static final Gson gson = JsonUtils.getGson();
 
     @Test
@@ -33,7 +33,7 @@ public class RowJsonEncoderTest {
 
         List<RelDataTypeField> dataFields = createTestDataFields();
 
-        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
+        String json = JsonRows.encodeRows(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
@@ -67,12 +67,12 @@ public class RowJsonEncoderTest {
                 new Object[]{"ignored", null});
 
         assertEquals("[{\"score\":0.5,\"name\":\"first\"},{\"name\":null}]",
-                RowJsonEncoder.toJsonArray(rows, modelFields, fields));
+                JsonRows.encodeRows(rows, modelFields, fields));
     }
 
     @Test
     void emptyBatchesDoNotRequireAProjectionSchema() {
-        assertEquals("[]", RowJsonEncoder.toJsonArray(List.of(), null, null));
+        assertEquals("[]", JsonRows.encodeRows(List.of(), null, null));
     }
 
     @Test
@@ -88,7 +88,7 @@ public class RowJsonEncoderTest {
 
         List<RelDataTypeField> dataFields = createTestDataFields();
 
-        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
+        String json = JsonRows.encodeRows(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
@@ -110,14 +110,14 @@ public class RowJsonEncoderTest {
         row.put("id", 1);
         row.put("feature", null);
         assertEquals("[{\"id\":1,\"feature\":null},{\"id\":1,\"feature\":null}]",
-                RowJsonEncoder.toJsonArray(List.of(row, row)));
+                JsonRows.encodeRows(List.of(row, row)));
     }
 
     @Test
     void nonPredictionRowFormatsKeepOmittingNullAttributes() {
-        assertEquals("{\"id\":1}", RowJsonEncoder.toJson(new Object[]{1, null},
+        assertEquals("{\"id\":1}", JsonRows.encodeRow(new Object[]{1, null},
                 List.of(new FieldSchema("id", "INT"), new FieldSchema("country", "STRING"))));
-        assertEquals("{\"id\":1}", RowJsonEncoder.toJsonByFields(new Object[]{1, null},
+        assertEquals("{\"id\":1}", JsonRows.encodeRowByFields(new Object[]{1, null},
                 List.of(DataTypeUtils.getRelDataTypeField("id", 0, SqlTypeName.INTEGER),
                         DataTypeUtils.getRelDataTypeField("country", 1, SqlTypeName.VARCHAR))));
     }
@@ -144,7 +144,7 @@ public class RowJsonEncoderTest {
 
         List<RelDataTypeField> dataFields = createTestDataFieldsWithArray();
 
-        String json = RowJsonEncoder.toJsonArray(data, inputFields, dataFields);
+        String json = JsonRows.encodeRows(data, inputFields, dataFields);
         assertNotNull(json);
 
         Type listType = new TypeToken<List<Map<String, Object>>>(){}.getType();
