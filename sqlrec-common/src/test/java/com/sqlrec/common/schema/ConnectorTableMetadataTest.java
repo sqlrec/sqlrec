@@ -25,7 +25,7 @@ class ConnectorTableMetadataTest {
     void snapshotsMutableFieldsAndOptionsWithoutSharingBackendConfiguration() {
         List<FieldSchema> fields = new ArrayList<>(Collections.singletonList(new FieldSchema("id", "BIGINT")));
         Map<String, String> options = new LinkedHashMap<>(Map.of("connector", "redis"));
-        ConnectorTableMetadata metadata = new ConnectorTableMetadata("db", "items", options, fields, "id", 0);
+        ConnectorTableMetadata metadata = new ConnectorTableMetadata("db", "items", options, fields, "id");
         fields.get(0).setName("changed");
         fields.clear();
         options.clear();
@@ -35,6 +35,7 @@ class ConnectorTableMetadataTest {
 
         assertEquals("id", metadata.getFieldSchemas().get(0).getName());
         assertEquals("BIGINT", metadata.getFieldSchemas().get(0).getType());
+        assertEquals(0, metadata.getPrimaryKeyIndex());
         assertEquals(Map.of("connector", "redis"), metadata.getOptions());
         assertThrows(UnsupportedOperationException.class, () -> metadata.getOptions().clear());
     }

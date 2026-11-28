@@ -152,7 +152,7 @@ class PipelineConfigUtilsTest {
         train.setParams(Map.of("negative_sampling", "pool", "item_id_column", "iid", "batch_size", "256"));
         train.setTrainDataPaths(List.of("jfs://myjfs/train/*"));
         TrainingOptions.validate(model, train.getParams());
-        String config = PipelineConfigUtils.generateDSSMTrainConfig(model, train);
+        String config = new DSSMModel().generateTrainConfig(model, train);
         assertTrue(config.contains("input_path: \"jfs://myjfs/train/*.parquet\""));
         assertTrue(config.contains("pool_size: 4096"));
         List<String> attributes = config.lines().map(String::strip)
@@ -189,14 +189,14 @@ class PipelineConfigUtilsTest {
         ModelTrainConf train = new ModelTrainConf();
         train.setModelDir("/fixture/model"); train.setTrainDataPaths(paths);
         train.setParams(Map.of("eval_input_path", "hdfs://namenode:9000/eval/*,/fixture/eval/*.parquet,/fixture/eval/part-00000"));
-        String trainConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
+        String trainConfig = new WideAndDeepModel().generateTrainConfig(model, train);
         assertTrue(trainConfig.startsWith(expectedInput));
         assertTrue(trainConfig.contains("eval_input_path: \"hdfs://namenode:9000/eval/*.parquet,"
                 + "/fixture/eval/*.parquet,/fixture/eval/part-00000\"\n"));
 
         ModelExportConf export = new ModelExportConf();
         export.setBaseModelDir("/fixture/model"); export.setTrainDataPaths(paths); export.setParams(Map.of());
-        assertTrue(PipelineConfigUtils.generateWideAndDeepExportConfig(model, export).startsWith(expectedInput));
+        assertTrue(new WideAndDeepModel().generateExportConfig(model, export).startsWith(expectedInput));
         assertEquals(paths, train.getTrainDataPaths());
         assertEquals(paths, export.getTrainDataPaths());
     }

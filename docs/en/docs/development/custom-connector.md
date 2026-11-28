@@ -157,15 +157,11 @@ public final class ExampleCalciteTableFactory implements HmsTableFactory {
     @Override
     public Table getTableFromHmsTable(
             org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        Map<String, String> options =
-            HiveTableUtils.getFlinkTableOptions(tableObj);
-        ExampleConfig config = ExampleOptions.getConfig(options);
-        config.fieldSchemas = HiveTableUtils.parse(tableObj);
-        config.primaryKey = HiveTableUtils.getTablePrimaryKey(tableObj);
-        config.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
-            config.fieldSchemas,
-            config.primaryKey
-        );
+        var metadata = HiveTableUtils.getConnectorTableMetadata(tableObj);
+        ExampleConfig config = ExampleOptions.getConfig(metadata.getOptions());
+        config.fieldSchemas = metadata.getFieldSchemas();
+        config.primaryKey = metadata.getPrimaryKey();
+        config.primaryKeyIndex = metadata.getPrimaryKeyIndex();
         return new ExampleCalciteTable(config);
     }
 
@@ -176,7 +172,7 @@ public final class ExampleCalciteTableFactory implements HmsTableFactory {
 }
 ```
 
-Read `WITH` properties with `HiveTableUtils.getFlinkTableOptions()` and obtain fields and the primary key through the other `HiveTableUtils` methods. Do not assume the primary key appears as a custom `primary-key` option.
+For connectors that require a single-column primary key, `HiveTableUtils.getConnectorTableMetadata()` reads the `WITH` options, fields, and primary key together and derives the key index from the field order.
 
 ### 5. Register the SPI
 

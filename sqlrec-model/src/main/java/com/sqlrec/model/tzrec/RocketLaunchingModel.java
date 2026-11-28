@@ -2,10 +2,10 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
-import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.List;
+import java.util.Map;
 
 /** Native booster/light training with a single light prediction service. */
 public class RocketLaunchingModel extends TzrecModelBase {
@@ -30,13 +30,26 @@ public class RocketLaunchingModel extends TzrecModelBase {
     }
 
     @Override
-    protected String generateTrainConfig(ModelConf model, ModelTrainConf train) {
-        return RocketLaunchingPipelineConfigUtils.train(model, train);
+    protected String generateModelConfig(ModelConf model, Map<String, String> trainingOptions) {
+        StringBuilder config = new StringBuilder("model_config {\n");
+        PipelineConfigUtils.addDeepFeatureGroup(config, model);
+        config.append("    rocket_launching {\n");
+        String shared = Config.SHARE_HIDDEN_UNITS.getValueOrNull(model.getParams());
+        if (shared != null) {
+            addMlp(config, "share", shared);
+        }
+        addMlp(config, "booster", Config.BOOSTER_HIDDEN_UNITS.getValue(model.getParams()));
+        addMlp(config, "light", Config.LIGHT_HIDDEN_UNITS.getValue(model.getParams()));
+        config.append("        feature_based_distillation: true\n")
+                .append("        feature_distillation_function: COSINE\n    }\n")
+                .append("    num_class: 1\n    losses { binary_cross_entropy {} }\n");
+        MetricOptions.addMetrics(config, trainingOptions, MetricOptions.BINARY, "    ");
+        return config.append("}\n").toString();
     }
 
-    @Override
-    protected String generateExportConfig(ModelConf model, ModelExportConf export) {
-        return RocketLaunchingPipelineConfigUtils.export(model, export);
+    private static void addMlp(StringBuilder config, String name, String widths) {
+        config.append("        ").append(name).append("_mlp { hidden_units: [")
+                .append(RocketLaunchingOptions.hiddenUnits(widths)).append("] }\n");
     }
 
     @Override

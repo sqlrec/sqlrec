@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.redis.config;
 
 import com.sqlrec.common.config.ConfigOption;
+import com.sqlrec.common.schema.ConnectorTableMetadata;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -106,7 +107,17 @@ public class RedisOptions {
             Long.class
     );
 
-    public static RedisConfig getRedisConfig(Map<String, String> options) {
+    public static RedisConfig fromMetadata(ConnectorTableMetadata metadata) {
+        RedisConfig config = getRedisConfig(metadata.getOptions());
+        config.database = metadata.getDatabase();
+        config.tableName = metadata.getTableName();
+        config.fieldSchemas = metadata.getFieldSchemas();
+        config.primaryKey = metadata.getPrimaryKey();
+        config.primaryKeyIndex = metadata.getPrimaryKeyIndex();
+        return config;
+    }
+
+    static RedisConfig getRedisConfig(Map<String, String> options) {
         RedisConfig redisConfig = new RedisConfig();
         redisConfig.url = URL.getValue(options);
         redisConfig.redisMode = REDIS_MODE.getValue(options);

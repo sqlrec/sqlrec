@@ -1,7 +1,7 @@
 package com.sqlrec.common.utils;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.ConnectorTableMetadata;
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -30,10 +30,8 @@ public class FlinkSchemaUtils {
     /** Reads execution metadata without changing Flink's existing field type conversion rules. */
     public static ConnectorTableMetadata getConnectorTableMetadata(
             String database, String tableName, Map<String, String> options, ResolvedSchema schema) {
-        List<FieldSchema> fields = getFieldSchemas(schema);
-        String primaryKey = getPrimaryKey(schema);
         return new ConnectorTableMetadata(database, tableName, options,
-                fields, primaryKey, HiveTableUtils.getTablePrimaryKeyIndex(fields, primaryKey));
+                getFieldSchemas(schema), getPrimaryKey(schema));
     }
 
     public static List<FieldSchema> getFieldSchemas(ResolvedSchema schema) {

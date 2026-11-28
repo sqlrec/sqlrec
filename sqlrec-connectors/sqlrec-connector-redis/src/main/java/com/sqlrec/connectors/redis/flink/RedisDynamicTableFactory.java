@@ -1,11 +1,10 @@
 package com.sqlrec.connectors.redis.flink;
 
-import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.common.schema.ConnectorTableMetadata;
+import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.redis.config.RedisConfig;
 import com.sqlrec.connectors.redis.config.RedisOptions;
 import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
@@ -13,7 +12,6 @@ import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public class RedisDynamicTableFactory implements DynamicTableSinkFactory, DynamicTableSourceFactory {
@@ -33,18 +31,11 @@ public class RedisDynamicTableFactory implements DynamicTableSinkFactory, Dynami
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         helper.validate();
 
-        Map<String, String> options = context.getCatalogTable().getOptions();
-        ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
-        RedisConfig redisConfig = RedisOptions.getRedisConfig(options);
         ConnectorTableMetadata metadata = FlinkSchemaUtils.getConnectorTableMetadata(
                 context.getObjectIdentifier().getDatabaseName(),
-                context.getObjectIdentifier().getObjectName(), options, tableSchema);
-        redisConfig.database = metadata.getDatabase();
-        redisConfig.tableName = metadata.getTableName();
-        redisConfig.fieldSchemas = metadata.getFieldSchemas();
-        redisConfig.primaryKey = metadata.getPrimaryKey();
-        redisConfig.primaryKeyIndex = metadata.getPrimaryKeyIndex();
-        return redisConfig;
+                context.getObjectIdentifier().getObjectName(),
+                context.getCatalogTable().getOptions(), context.getCatalogTable().getResolvedSchema());
+        return RedisOptions.fromMetadata(metadata);
     }
 
     @Override

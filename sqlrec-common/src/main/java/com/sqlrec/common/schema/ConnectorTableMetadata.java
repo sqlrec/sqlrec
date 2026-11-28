@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Immutable execution metadata shared by HMS and Flink connector factories. */
+/** Immutable execution metadata for connector tables with a single-column primary key. */
 public final class ConnectorTableMetadata {
     private final String database;
     private final String tableName;
@@ -17,13 +17,13 @@ public final class ConnectorTableMetadata {
 
     public ConnectorTableMetadata(
             String database, String tableName, Map<String, String> options,
-            List<FieldSchema> fieldSchemas, String primaryKey, int primaryKeyIndex) {
+            List<FieldSchema> fieldSchemas, String primaryKey) {
         this.database = database;
         this.tableName = tableName;
         this.options = Collections.unmodifiableMap(new LinkedHashMap<>(options));
         this.fieldSchemas = copyFields(fieldSchemas);
         this.primaryKey = primaryKey;
-        this.primaryKeyIndex = primaryKeyIndex;
+        this.primaryKeyIndex = findPrimaryKeyIndex(this.fieldSchemas, primaryKey);
     }
 
     public String getDatabase() {
@@ -49,6 +49,15 @@ public final class ConnectorTableMetadata {
 
     public int getPrimaryKeyIndex() {
         return primaryKeyIndex;
+    }
+
+    private static int findPrimaryKeyIndex(List<FieldSchema> fields, String primaryKey) {
+        for (int i = 0; i < fields.size(); i++) {
+            if (fields.get(i).getName().equalsIgnoreCase(primaryKey)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("Table primary key " + primaryKey + " not found");
     }
 
     private static List<FieldSchema> copyFields(List<FieldSchema> fields) {

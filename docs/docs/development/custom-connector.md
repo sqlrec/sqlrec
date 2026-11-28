@@ -157,15 +157,11 @@ public final class ExampleCalciteTableFactory implements HmsTableFactory {
     @Override
     public Table getTableFromHmsTable(
             org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        Map<String, String> options =
-            HiveTableUtils.getFlinkTableOptions(tableObj);
-        ExampleConfig config = ExampleOptions.getConfig(options);
-        config.fieldSchemas = HiveTableUtils.parse(tableObj);
-        config.primaryKey = HiveTableUtils.getTablePrimaryKey(tableObj);
-        config.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
-            config.fieldSchemas,
-            config.primaryKey
-        );
+        var metadata = HiveTableUtils.getConnectorTableMetadata(tableObj);
+        ExampleConfig config = ExampleOptions.getConfig(metadata.getOptions());
+        config.fieldSchemas = metadata.getFieldSchemas();
+        config.primaryKey = metadata.getPrimaryKey();
+        config.primaryKeyIndex = metadata.getPrimaryKeyIndex();
         return new ExampleCalciteTable(config);
     }
 
@@ -176,7 +172,7 @@ public final class ExampleCalciteTableFactory implements HmsTableFactory {
 }
 ```
 
-使用 `HiveTableUtils.getFlinkTableOptions()` 读取 `WITH` 属性，使用其他 `HiveTableUtils` 方法读取 SQL 表字段和主键，不要假设主键会以自定义的 `primary-key` 参数存在。
+对于需要单列主键的 Connector，`HiveTableUtils.getConnectorTableMetadata()` 一次读取 `WITH` 属性、字段和主键，并按字段顺序计算主键下标。
 
 ### 5. 注册 SPI
 

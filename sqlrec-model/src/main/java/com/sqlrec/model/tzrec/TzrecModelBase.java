@@ -8,14 +8,7 @@ import com.sqlrec.common.model.ServiceConf;
 import com.sqlrec.model.common.ModelConfigUtils;
 import java.util.Map;
 
-/**
- * Shared {@link ModelController} implementation for TZRec models (DSSM / WideAndDeep).
- *
- * <p>Mirrors {@code com.sqlrec.model.gbdt.GbdtModelBase}: concrete subclasses only provide a
- * model name suffix (e.g. {@code dssm}, {@code wide_and_deep}) and the model-specific
- * pipeline.config generation. Train/export Job YAML and serving Deployment/Service YAML are
- * identical across TZRec models and live here.
- */
+/** Assembles the pipeline config and Kubernetes resources for TZRec models. */
 public abstract class TzrecModelBase implements ModelController {
 
     protected abstract String getModelNameSuffix();
@@ -25,11 +18,21 @@ public abstract class TzrecModelBase implements ModelController {
         return "tzrec." + getModelNameSuffix();
     }
 
-    /** Generates training config from the prepared model and merged, validated training options. */
-    protected abstract String generateTrainConfig(ModelConf model, ModelTrainConf trainConf);
+    /** Generates the model-specific section of the pipeline config. */
+    protected abstract String generateModelConfig(ModelConf model, Map<String, String> trainingOptions);
 
-    /** Generates export config from the prepared model and merged export options. */
-    protected abstract String generateExportConfig(ModelConf model, ModelExportConf exportConf);
+    protected final String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
+        return PipelineConfigUtils.generateTrainConfigPrefix(model, trainConf)
+                .append(generateModelConfig(model, trainConf.getParams()))
+                .toString();
+    }
+
+    protected final String generateExportConfig(ModelConf model, ModelExportConf exportConf) {
+        // The model section uses the defaults for training-only options during export.
+        return PipelineConfigUtils.generateExportConfigPrefix(model, exportConf)
+                .append(generateModelConfig(model, Map.of()))
+                .toString();
+    }
 
     @Override
     public String genModelTrainK8sYaml(ModelConf model, ModelTrainConf trainConf) {

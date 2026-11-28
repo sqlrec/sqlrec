@@ -2,11 +2,11 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
-import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * DSSM two-tower model based on TZRec.
@@ -36,13 +36,8 @@ public class DSSMModel extends TzrecModelBase {
     }
 
     @Override
-    protected String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        return PipelineConfigUtils.generateDSSMTrainConfig(model, trainConf);
-    }
-
-    @Override
-    protected String generateExportConfig(ModelConf model, ModelExportConf exportConf) {
-        return PipelineConfigUtils.generateDSSMExportConfig(model, exportConf);
+    protected String generateModelConfig(ModelConf model, Map<String, String> trainingOptions) {
+        return PipelineConfigUtils.generateDSSMModelConfig(model, trainingOptions);
     }
 
     @Override

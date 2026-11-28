@@ -2,8 +2,8 @@ package com.sqlrec.flink;
 
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.FlinkSchemaUtils;
-import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
+import com.sqlrec.connectors.milvus.config.MilvusOptions;
 import com.sqlrec.connectors.milvus.handler.MilvusHandler;
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
@@ -238,7 +238,7 @@ class MilvusConnectorTest {
      * Builds a MilvusHandler with the same config derivation as
      * MilvusDynamicTableFactory, to read back rows by primary key.
      */
-    private MilvusHandler createReadBackHandler() {
+    private MilvusHandler createReadBackHandler(String database, String tableName) {
         ResolvedSchema schema = new ResolvedSchema(
                 Arrays.asList(
                         Column.physical("id", DataTypes.BIGINT()),
@@ -248,15 +248,10 @@ class MilvusConnectorTest {
                 Collections.emptyList(),
                 UniqueConstraint.primaryKey("pk", Collections.singletonList("id")));
 
-        MilvusConfig config = new MilvusConfig();
-        config.url = MILVUS_URL;
-        config.token = MILVUS_TOKEN;
-        config.database = MILVUS_DB;
-        config.collection = TEST_COLLECTION;
-        config.fieldSchemas = FlinkSchemaUtils.getFieldSchemas(schema);
-        config.primaryKey = FlinkSchemaUtils.getPrimaryKey(schema);
-        config.primaryKeyIndex = HiveTableUtils.getTablePrimaryKeyIndex(
-                config.fieldSchemas, config.primaryKey);
+        Map<String, String> options = Map.of(
+                "url", MILVUS_URL, "token", MILVUS_TOKEN, "database", MILVUS_DB, "collection", TEST_COLLECTION);
+        MilvusConfig config = MilvusOptions.fromMetadata(
+                FlinkSchemaUtils.getConnectorTableMetadata(database, tableName, options, schema));
         return new MilvusHandler(config);
     }
 
@@ -302,7 +297,7 @@ class MilvusConnectorTest {
             "  (" + (baseId + 1) + ", 'Verify B', ARRAY['drama'], " + generateEmbeddingLiteral(baseId + 1) + ")"
         ).await();
 
-        MilvusHandler readHandler = createReadBackHandler();
+        MilvusHandler readHandler = createReadBackHandler(tEnv.getCurrentDatabase(), "milvus_verify");
         Map<Object, List<Object[]>> rows = awaitRows(
                 readHandler, Set.of(baseId, baseId + 1), 2);
 
@@ -334,7 +329,7 @@ class MilvusConnectorTest {
         );
         tEnv.fromChangelogStream(changelog).executeInsert("milvus_retract").await();
 
-        MilvusHandler readHandler = createReadBackHandler();
+        MilvusHandler readHandler = createReadBackHandler(tEnv.getCurrentDatabase(), "milvus_retract");
         Map<Object, List<Object[]>> rows = awaitRows(
                 readHandler, Set.of(baseId, baseId + 1, baseId + 2), 2);
 

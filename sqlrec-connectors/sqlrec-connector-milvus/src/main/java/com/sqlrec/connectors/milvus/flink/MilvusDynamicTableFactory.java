@@ -1,7 +1,7 @@
 package com.sqlrec.connectors.milvus.flink;
 
-import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.common.schema.ConnectorTableMetadata;
+import com.sqlrec.common.utils.FlinkSchemaUtils;
 import com.sqlrec.connectors.milvus.config.MilvusConfig;
 import com.sqlrec.connectors.milvus.config.MilvusOptions;
 import org.apache.flink.configuration.ConfigOption;
@@ -11,7 +11,6 @@ import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
@@ -20,21 +19,13 @@ public class MilvusDynamicTableFactory implements DynamicTableSinkFactory {
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         helper.validate();
 
-        MilvusConfig milvusConfig = getMilvusConfig(context);
-        return new MilvusDynamicTableSink(milvusConfig, context.getCatalogTable().getResolvedSchema());
-    }
-
-    private MilvusConfig getMilvusConfig(Context context) {
-        Map<String, String> options = context.getCatalogTable().getOptions();
         ResolvedSchema tableSchema = context.getCatalogTable().getResolvedSchema();
-        MilvusConfig milvusConfig = MilvusOptions.getMilvusConfig(options);
         ConnectorTableMetadata metadata = FlinkSchemaUtils.getConnectorTableMetadata(
                 context.getObjectIdentifier().getDatabaseName(),
-                context.getObjectIdentifier().getObjectName(), options, tableSchema);
-        milvusConfig.fieldSchemas = metadata.getFieldSchemas();
-        milvusConfig.primaryKey = metadata.getPrimaryKey();
-        milvusConfig.primaryKeyIndex = metadata.getPrimaryKeyIndex();
-        return milvusConfig;
+                context.getObjectIdentifier().getObjectName(),
+                context.getCatalogTable().getOptions(), tableSchema);
+        MilvusConfig milvusConfig = MilvusOptions.fromMetadata(metadata);
+        return new MilvusDynamicTableSink(milvusConfig, tableSchema);
     }
 
     @Override

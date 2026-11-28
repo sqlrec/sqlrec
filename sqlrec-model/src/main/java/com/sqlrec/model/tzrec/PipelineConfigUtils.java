@@ -24,20 +24,6 @@ public class PipelineConfigUtils {
         return out.append('"').toString();
     }
 
-    static String generateWideAndDeepTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        StringBuilder config = generateTrainConfigPrefix(model, trainConf);
-        config.append(generateModelConfig(model, trainConf.getParams()));
-
-        return config.toString();
-    }
-
-    static String generateWideAndDeepExportConfig(ModelConf model, ModelExportConf exportConf) {
-        StringBuilder config = generateExportConfigPrefix(model, exportConf);
-        config.append(generateModelConfig(model));
-
-        return config.toString();
-    }
-
     static StringBuilder generateTrainConfigPrefix(ModelConf model, ModelTrainConf trainConf) {
         StringBuilder config = new StringBuilder();
 
@@ -264,7 +250,7 @@ public class PipelineConfigUtils {
         List<String> sparse = FeatureOptions.sparseFeatures(model);
         addFeatureGroup(config, "wide", sparse, "WIDE");
 
-        addFeatureGroup(config, "deep", getFeatures(model), "DEEP");
+        addDeepFeatureGroup(config, model);
 
         String hiddenUnits = Config.HIDDEN_UNITS.getValue(model.getParams());
         boolean deepfm = model.getParams() != null && "tzrec.deepfm".equals(model.getParams().get("model"));
@@ -289,32 +275,18 @@ public class PipelineConfigUtils {
         return FieldTypeUtils.isInteger(fieldType);
     }
 
-    private static List<String> getFeatures(ModelConf model) {
-        List<String> categoricalFeatures = new java.util.ArrayList<>();
-        for (FieldSchema fieldSchema : FeatureOptions.features(model)) {
-            categoricalFeatures.add(fieldSchema.getName());
-        }
-        return categoricalFeatures;
+    static void addDeepFeatureGroup(StringBuilder config, ModelConf model) {
+        addFeatureGroup(config, "deep", getFeatureNames(model), "DEEP");
+    }
+
+    private static List<String> getFeatureNames(ModelConf model) {
+        return FeatureOptions.features(model).stream().map(FieldSchema::getName).toList();
     }
 
     private static void addFeatureNames(StringBuilder config, List<String> featureNames) {
         for (String featureName : featureNames) {
             config.append("        feature_names: ").append(quoted(featureName)).append("\n");
         }
-    }
-
-    static String generateDSSMTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        StringBuilder config = generateTrainConfigPrefix(model, trainConf);
-        config.append(generateDSSMModelConfig(model, trainConf.getParams()));
-
-        return config.toString();
-    }
-
-    static String generateDSSMExportConfig(ModelConf model, ModelExportConf exportConf) {
-        StringBuilder config = generateExportConfigPrefix(model, exportConf);
-        config.append(generateDSSMModelConfig(model));
-
-        return config.toString();
     }
 
     public static String generateDSSMModelConfig(ModelConf model) {
@@ -332,7 +304,7 @@ public class PipelineConfigUtils {
         List<String> userFeatureList = FieldTypeUtils.parseCsvList(userFeatures);
         List<String> itemFeatureList = FieldTypeUtils.parseCsvList(itemFeatures);
 
-        List<String> allFeatures = getFeatures(model);
+        List<String> allFeatures = getFeatureNames(model);
 
         if (userFeatureList.isEmpty() && !itemFeatureList.isEmpty()) {
             userFeatureList = inferRemainingFeatures(allFeatures, itemFeatureList);
@@ -373,7 +345,7 @@ public class PipelineConfigUtils {
         return config.toString();
     }
 
-    static void addFeatureGroup(
+    private static void addFeatureGroup(
             StringBuilder config, String name, List<String> features, String type) {
         config.append("    feature_groups {\n");
         config.append("        group_name: \"").append(name).append("\"\n");

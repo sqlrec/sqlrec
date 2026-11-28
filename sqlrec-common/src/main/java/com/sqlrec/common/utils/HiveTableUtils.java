@@ -1,7 +1,7 @@
 package com.sqlrec.common.utils;
 
-import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.common.schema.ConnectorTableMetadata;
+import com.sqlrec.common.schema.FieldSchema;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,10 +16,8 @@ public class HiveTableUtils {
     public static ConnectorTableMetadata getConnectorTableMetadata(
             org.apache.hadoop.hive.metastore.api.Table table) {
         Map<String, String> options = getFlinkTableOptions(table);
-        List<FieldSchema> fields = parse(table);
-        String primaryKey = getTablePrimaryKey(table);
         return new ConnectorTableMetadata(table.getDbName(), table.getTableName(), options,
-                fields, primaryKey, getTablePrimaryKeyIndex(fields, primaryKey));
+                parse(table), getTablePrimaryKey(table));
     }
 
     public static String getTableConnector(org.apache.hadoop.hive.metastore.api.Table tableObj) {
@@ -133,15 +131,6 @@ public class HiveTableUtils {
             throw new IllegalArgumentException("Table " + tableObj.getTableName() + " primary key must be single column");
         }
         return primaryKey;
-    }
-
-    public static int getTablePrimaryKeyIndex(List<FieldSchema> fieldSchemas, String primaryKey) {
-        for (int i = 0; i < fieldSchemas.size(); i++) {
-            if (fieldSchemas.get(i).getName().equalsIgnoreCase(primaryKey)) {
-                return i;
-            }
-        }
-        throw new IllegalArgumentException("Table primary key " + primaryKey + " not found");
     }
 
     public static long getTableModificationTime(org.apache.hadoop.hive.metastore.api.Table tableObj) {

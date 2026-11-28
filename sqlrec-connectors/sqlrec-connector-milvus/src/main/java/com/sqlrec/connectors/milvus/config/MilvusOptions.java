@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.milvus.config;
 
 import com.sqlrec.common.config.ConfigOption;
+import com.sqlrec.common.schema.ConnectorTableMetadata;
 
 import java.util.Map;
 
@@ -100,7 +101,8 @@ public class MilvusOptions {
             Long.class
     );
 
-    public static MilvusConfig getMilvusConfig(Map<String, String> options) {
+    public static MilvusConfig fromMetadata(ConnectorTableMetadata metadata) {
+        Map<String, String> options = metadata.getOptions();
         MilvusConfig milvusConfig = new MilvusConfig();
         milvusConfig.url = URL.getValue(options);
         milvusConfig.token = TOKEN.getValue(options);
@@ -114,7 +116,9 @@ public class MilvusOptions {
         milvusConfig.poolMinEvictableIdleDuration = POOL_MIN_EVICTABLE_IDLE_DURATION.getValue(options);
         milvusConfig.flushInterval = FLUSH_INTERVAL.getValue(options);
         milvusConfig.rpcDeadlineMs = RPC_DEADLINE_MS.getValue(options);
-
+        milvusConfig.fieldSchemas = metadata.getFieldSchemas();
+        milvusConfig.primaryKey = metadata.getPrimaryKey();
+        milvusConfig.primaryKeyIndex = metadata.getPrimaryKeyIndex();
         return milvusConfig;
     }
 }

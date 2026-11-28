@@ -2,11 +2,11 @@ package com.sqlrec.model.tzrec;
 
 import com.sqlrec.common.model.ModelConf;
 import com.sqlrec.common.model.ModelExportConf;
-import com.sqlrec.common.model.ModelTrainConf;
 import com.sqlrec.common.schema.FieldSchema;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * WideAndDeep model based on TZRec.
@@ -34,13 +34,8 @@ public class WideAndDeepModel extends TzrecModelBase {
     }
 
     @Override
-    protected String generateTrainConfig(ModelConf model, ModelTrainConf trainConf) {
-        return PipelineConfigUtils.generateWideAndDeepTrainConfig(model, trainConf);
-    }
-
-    @Override
-    protected String generateExportConfig(ModelConf model, ModelExportConf exportConf) {
-        return PipelineConfigUtils.generateWideAndDeepExportConfig(model, exportConf);
+    protected String generateModelConfig(ModelConf model, Map<String, String> trainingOptions) {
+        return PipelineConfigUtils.generateModelConfig(model, trainingOptions);
     }
 
     @Override

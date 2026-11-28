@@ -27,7 +27,7 @@ class TrainingOptionsTest {
         ModelTrainConf train = new ModelTrainConf();
         train.setParams(Map.of("log_step_count_steps", "10", "save_checkpoints_epochs", "2",
                 "use_tensorboard", "false", "enable_train_metrics", "true", "train_metric_decay_rate", "0.8"));
-        String config = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
+        String config = new WideAndDeepModel().generateTrainConfig(model, train);
         assertTrue(config.contains("use_tensorboard: false"), config);
         assertTrue(config.contains("log_step_count_steps: 10"), config);
         assertTrue(config.contains("save_checkpoints_epochs: 2"), config);
@@ -51,7 +51,7 @@ class TrainingOptionsTest {
         assertFalse(ranking.contains("mean_squared_error"), ranking);
         model.getParams().put("model", "tzrec.deepfm");
         assertTrue(PipelineConfigUtils.generateModelConfig(model, model.getParams()).contains("train_metrics { auc {}"));
-        assertTrue(RocketLaunchingPipelineConfigUtils.modelConfig(model, model.getParams()).contains("train_metrics { auc {}"));
+        assertTrue(new RocketLaunchingModel().generateModelConfig(model, model.getParams()).contains("train_metrics { auc {}"));
         model.getParams().put("user_features", "uid");
         String retrieval = PipelineConfigUtils.generateDSSMModelConfig(model, model.getParams());
         assertTrue(retrieval.contains("train_metrics { recall_at_k { top_k: 1 }"), retrieval);
@@ -65,7 +65,7 @@ class TrainingOptionsTest {
         model.getParams().putAll(Map.of("label_columns", "label,watch_time", "task.watch_time.type", "regression"));
         model.setInputFields(List.of(new FieldSchema("uid", "INT"), new FieldSchema("label", "INT"),
                 new FieldSchema("watch_time", "DOUBLE")));
-        String tasks = MultiTaskPipelineConfigUtils.modelConfig(model, model.getParams());
+        String tasks = new MMoEModel().generateModelConfig(model, model.getParams());
         assertTrue(tasks.contains("train_metrics { auc {}"), tasks);
         assertTrue(tasks.contains("train_metrics { mean_squared_error {}"), tasks);
         assertTrue(tasks.contains("train_metrics { mean_absolute_error {}"), tasks);
@@ -139,7 +139,7 @@ class TrainingOptionsTest {
         model.getParams().put("save_checkpoints_steps", "50");
         ModelTrainConf train = new ModelTrainConf();
         train.setParams(Map.of("save_checkpoints_steps", "0", "save_checkpoints_epochs", "2"));
-        String epochConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
+        String epochConfig = new WideAndDeepModel().generateTrainConfig(model, train);
         assertTrue(epochConfig.contains("save_checkpoints_steps: 0\n"), epochConfig);
         assertTrue(epochConfig.contains("save_checkpoints_epochs: 2\n"), epochConfig);
         assertEquals("50", model.getParams().get("save_checkpoints_steps"));
@@ -147,7 +147,7 @@ class TrainingOptionsTest {
         model.getParams().remove("save_checkpoints_steps");
         model.getParams().put("save_checkpoints_epochs", "2");
         train.setParams(Map.of("save_checkpoints_epochs", "0", "save_checkpoints_steps", "50"));
-        String stepConfig = PipelineConfigUtils.generateWideAndDeepTrainConfig(model, train);
+        String stepConfig = new WideAndDeepModel().generateTrainConfig(model, train);
         assertTrue(stepConfig.contains("save_checkpoints_steps: 50\n"), stepConfig);
         assertFalse(stepConfig.contains("save_checkpoints_epochs:"), stepConfig);
         assertEquals("2", model.getParams().get("save_checkpoints_epochs"));
