@@ -3,7 +3,6 @@ package com.sqlrec.common.schema;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.RowTransformUtils;
-import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.Table;
@@ -47,13 +46,8 @@ public interface VectorSearchable extends Table {
             status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            Tags tags = Tags.of("table", getTableName(), "outcome", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_VECTOR_SEARCH_DURATION, tags)
-                    .record(System.nanoTime() - startTime, java.util.concurrent.TimeUnit.NANOSECONDS);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_VECTOR_SEARCH_ROWS, tags)
-                    .record(count);
+            MetricsUtils.recordTableQuery(getTableName(), status, Consts.METRICS_TABLE_VECTOR_SEARCH_DURATION,
+                    Consts.METRICS_TABLE_VECTOR_SEARCH_ROWS, System.nanoTime() - startTime, count);
         }
     }
 }

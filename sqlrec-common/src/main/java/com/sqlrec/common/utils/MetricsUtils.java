@@ -39,6 +39,13 @@ public final class MetricsUtils {
         return composite;
     }
 
+    public static void recordTableQuery(String table, String outcome, String durationMetric,
+            String countMetric, long durationNanos, long count) {
+        Tags tags = Tags.of("table", table, "outcome", outcome);
+        composite.timer(durationMetric, tags).record(durationNanos, TimeUnit.NANOSECONDS);
+        composite.summary(countMetric, tags).record(count);
+    }
+
     /** Bind the current table cache, replacing meters for any previous instance. */
     public static synchronized void registerTableCacheMetrics(String table, Cache<?, ?> cache) {
         // Re-registering the same meter IDs alone would keep observing the old cache.

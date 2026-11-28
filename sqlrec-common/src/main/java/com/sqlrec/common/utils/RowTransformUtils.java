@@ -107,6 +107,19 @@ public final class RowTransformUtils {
         return row;
     }
 
+    /** Groups rows by a column value, keeping every row in encounter order within its group. */
+    public static Map<Object, List<Object[]>> groupRowsByKey(Iterable<Object[]> rows, int keyIndex) {
+        Map<Object, List<Object[]>> groups = new HashMap<>();
+        for (Object[] row : rows) {
+            addRowToGroup(groups, row, keyIndex);
+        }
+        return groups;
+    }
+
+    public static void addRowToGroup(Map<Object, List<Object[]>> groups, Object[] row, int keyIndex) {
+        groups.computeIfAbsent(row[keyIndex], key -> new ArrayList<>()).add(row);
+    }
+
     public static Set<Object> convertKeySet(Set<Object> keys, SqlTypeName target) {
         Set<Object> result = new HashSet<>(keys.size());
         keys.forEach(key -> result.add(convertScalar(key, target)));

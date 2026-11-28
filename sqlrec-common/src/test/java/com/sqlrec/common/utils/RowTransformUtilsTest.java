@@ -20,6 +20,22 @@ import static org.mockito.Mockito.*;
 
 class RowTransformUtilsTest {
     @Test
+    void groupsEveryRowInOrderAndKeepsNullKeys() {
+        Object[] first = {"first", 7L};
+        Object[] withoutKey = {"missing", null};
+        Object[] second = {"second", 7L};
+        Object[] third = {"third", 7L};
+
+        Map<Object, List<Object[]>> groups = RowTransformUtils.groupRowsByKey(
+                List.of(first, withoutKey, second), 1);
+        RowTransformUtils.addRowToGroup(groups, third, 1);
+
+        assertEquals(2, groups.size());
+        assertEquals(List.of(first, second, third), groups.get(7L));
+        assertEquals(Collections.singletonList(withoutKey), groups.get(null));
+    }
+
+    @Test
     void convertsLazyRowsThatReuseTheSameBufferAndClosesTheEnumerator() {
         Object[] buffer = new Object[2];
         AtomicInteger reads = new AtomicInteger();

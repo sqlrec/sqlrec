@@ -1,6 +1,7 @@
 package com.sqlrec.connectors.jdbc.handler;
 
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.connectors.jdbc.config.JdbcConfig;
 import com.sqlrec.connectors.jdbc.sql.JdbcSqlBuilder;
 import com.sqlrec.connectors.jdbc.sql.JdbcStatement;
@@ -49,12 +50,7 @@ public class JdbcHandler {
                 .withParameters(new ArrayList<>(keySet));
         List<Object[]> rows = query(statement,
                 "Failed to query by primary key from table " + jdbcConfig.tableName);
-
-        Map<Object, List<Object[]>> result = new HashMap<>();
-        for (Object[] row : rows) {
-            result.computeIfAbsent(row[jdbcConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
-        }
-        return result;
+        return RowTransformUtils.groupRowsByKey(rows, jdbcConfig.primaryKeyIndex);
     }
 
     public boolean upsert(Object[] data) {

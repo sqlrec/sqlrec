@@ -6,7 +6,6 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.RowTransformUtils;
-import io.micrometer.core.instrument.Tags;
 import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Linq4j;
@@ -96,13 +95,8 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            Tags tags = Tags.of("table", getTableName(), "outcome", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_SCAN_DURATION, tags)
-                    .record(System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_SCAN_ROWS, tags)
-                    .record(count);
+            MetricsUtils.recordTableQuery(getTableName(), status, Consts.METRICS_TABLE_SCAN_DURATION,
+                    Consts.METRICS_TABLE_SCAN_ROWS, System.nanoTime() - startTime, count);
         }
     }
 
@@ -179,14 +173,8 @@ public abstract class SqlRecKvTable extends SqlRecTable implements ModifiableTab
             status = MetricsUtils.outcome(e, false);
             throw e;
         } finally {
-            long duration = System.nanoTime() - startTime;
-            Tags tags = Tags.of("table", getTableName(), "outcome", status);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .timer(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DURATION, tags)
-                    .record(duration, TimeUnit.NANOSECONDS);
-            MetricsUtils.getCompositeMeterRegistry()
-                    .summary(Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_KEYS, tags)
-                    .record(totalCount);
+            MetricsUtils.recordTableQuery(getTableName(), status, Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_DURATION,
+                    Consts.METRICS_TABLE_GET_BY_PRIMARY_KEY_KEYS, System.nanoTime() - startTime, totalCount);
         }
     }
 

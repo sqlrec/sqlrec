@@ -181,9 +181,22 @@ public class SessionManager {
         return session;
     }
 
-    private void requireActiveSession(Session session) throws TException {
-        if (sessions.get(session.id) != session) {
-            throw new TException("Session was closed");
+    @FunctionalInterface
+    private interface SessionAction<T, E extends Exception> {
+        T run() throws E;
+    }
+
+    private <T, E extends Exception> T withActiveSession(Session session, SessionAction<T, E> action)
+            throws TException, E {
+        synchronized (session) {
+            try {
+                if (sessions.get(session.id) != session) {
+                    throw new TException("Session was closed");
+                }
+                return action.run();
+            } finally {
+                session.touch();
+            }
         }
     }
 
@@ -224,15 +237,10 @@ public class SessionManager {
 
     public TExecuteStatementResp executeStatement(TExecuteStatementReq request) throws TException {
         Session session = requireSession(request.getSessionHandle());
-        synchronized (session) {
-            try {
-                requireActiveSession(session);
-                return executeInSession(session, request);
-            } catch (TException e) {
-                return new TExecuteStatementResp(ThriftUtils.errorStatus(e));
-            } finally {
-                session.touch();
-            }
+        try {
+            return withActiveSession(session, () -> executeInSession(session, request));
+        } catch (TException e) {
+            return new TExecuteStatementResp(ThriftUtils.errorStatus(e));
         }
     }
 
@@ -283,31 +291,21 @@ public class SessionManager {
     public TOperationHandle openMetadataOperation(TSessionHandle handle, TOperationType type,
             Callable<SqlProcessResult> query) throws Exception {
         Session session = requireSession(handle);
-        synchronized (session) {
-            try {
-                requireActiveSession(session);
-                SqlOperation result = SqlOperation.metadata(query.call(), ThriftUtils.getQueryId());
-                return registerLocalOperation(session, type, result);
-            } finally {
-                session.touch();
-            }
-        }
+        return withActiveSession(session, () -> {
+            SqlOperation result = SqlOperation.metadata(query.call(), ThriftUtils.getQueryId());
+            return registerLocalOperation(session, type, result);
+        });
     }
 
     public TGetCrossReferenceResp getCrossReference(TGetCrossReferenceReq request) throws TException {
         Session session = requireSession(request.getSessionHandle());
-        synchronized (session) {
-            try {
-                requireActiveSession(session);
-                TGetCrossReferenceResp response = session.gateway.getCrossReference(request);
-                if (ThriftUtils.isSuccess(response.getStatus()) && response.getOperationHandle() != null) {
-                    registerOperation(response.getOperationHandle(), OperationEntry.remote(session));
-                }
-                return response;
-            } finally {
-                session.touch();
+        return withActiveSession(session, () -> {
+            TGetCrossReferenceResp response = session.gateway.getCrossReference(request);
+            if (ThriftUtils.isSuccess(response.getStatus()) && response.getOperationHandle() != null) {
+                registerOperation(response.getOperationHandle(), OperationEntry.remote(session));
             }
-        }
+            return response;
+        });
     }
 
     public TGetOperationStatusResp getOperationStatus(TGetOperationStatusReq request) throws TException {

@@ -67,12 +67,7 @@ public class MilvusHandler {
                 .build();
 
         QueryResp queryResp = withClient(client -> client.query(queryReq));
-        List<Object[]> rows = parseQueryResp(queryResp);
-        Map<Object, List<Object[]>> rowsMap = new HashMap<>();
-        for (Object[] row : rows) {
-            rowsMap.computeIfAbsent(row[milvusConfig.primaryKeyIndex], k -> new ArrayList<>()).add(row);
-        }
-        return rowsMap;
+        return RowTransformUtils.groupRowsByKey(parseQueryResp(queryResp), milvusConfig.primaryKeyIndex);
     }
 
     public List<VectorSearchResult> searchByEmbedding(VectorSearchRequest request) {

@@ -55,8 +55,7 @@ public class MongoHandler implements Serializable {
         try (MongoCursor<Document> cursor = collection.find(Filters.in(primaryKey, keyList)).iterator()) {
             while (cursor.hasNext()) {
                 Object[] row = documentToRow(cursor.next());
-                Object key = row[mongoConfig.primaryKeyIndex];
-                result.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+                RowTransformUtils.addRowToGroup(result, row, mongoConfig.primaryKeyIndex);
             }
         }
         return result;
