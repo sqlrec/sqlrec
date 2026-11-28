@@ -177,7 +177,7 @@ final class MongoFilterTranslator {
             escape = escapeString.charAt(0);
         }
 
-        String regex = convertLikePattern(pattern, escape);
+        String regex = FilterUtils.likeToRegex(pattern, escape, false);
         if (regex == null) {
             return null;
         }
@@ -187,36 +187,6 @@ final class MongoFilterTranslator {
         String regexOptions = operator.isCaseSensitive() ? "s" : "is";
         Bson likeFilter = Filters.regex(fieldName, regex, regexOptions);
         return operator.isNegated() ? Filters.nor(likeFilter) : likeFilter;
-    }
-
-    private String convertLikePattern(String pattern, Character escape) {
-        if (pattern == null) {
-            return null;
-        }
-        StringBuilder regex = new StringBuilder("^");
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char c = pattern.charAt(i);
-            if (!escaped && escape != null && c == escape) {
-                escaped = true;
-                continue;
-            }
-            if (!escaped && c == '%') {
-                regex.append(".*");
-            } else if (!escaped && c == '_') {
-                regex.append('.');
-            } else {
-                if ("\\.^$|?*+()[]{}".indexOf(c) >= 0) {
-                    regex.append('\\');
-                }
-                regex.append(c);
-            }
-            escaped = false;
-        }
-        if (escaped) {
-            return null;
-        }
-        return regex.append('$').toString();
     }
 
     private Bson buildBooleanFilter(RexCall call) {

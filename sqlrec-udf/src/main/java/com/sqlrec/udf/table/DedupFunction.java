@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public class DedupFunction {
     /** Keeps the first row for each key, preserving input order. */
@@ -17,13 +18,7 @@ public class DedupFunction {
         requireColumnName(column, "column");
         int index = requireColumnIndex(input, column, "column", "input");
         Set<Object> seen = new HashSet<>();
-        List<Object[]> rows = new ArrayList<>();
-        for (Object[] row : input.scan(null)) {
-            if (seen.add(row[index])) {
-                rows.add(row);
-            }
-        }
-        return new CacheTable("dedup_output", Linq4j.asEnumerable(rows), input.getDataFields());
+        return filterRows(input, index, seen::add);
     }
 
     public CacheTable evaluate(CacheTable input, CacheTable dedupTable, String column) {
@@ -47,18 +42,20 @@ public class DedupFunction {
             }
         }
 
-        Enumerable<Object[]> inputEnumerable = input.scan(null);
-        List<Object[]> newData = new ArrayList<>();
+        return filterRows(input, inputColIndex, key -> !existingKeys.contains(key));
+    }
 
-        if (inputEnumerable != null) {
-            for (Object[] row : inputEnumerable) {
-                if (!existingKeys.contains(row[inputColIndex])) {
-                    newData.add(row);
+    private static CacheTable filterRows(CacheTable input, int keyIndex, Predicate<Object> keepKey) {
+        Enumerable<Object[]> rows = input.scan(null);
+        List<Object[]> result = new ArrayList<>();
+        if (rows != null) {
+            for (Object[] row : rows) {
+                if (keepKey.test(row[keyIndex])) {
+                    result.add(row);
                 }
             }
         }
-
-        return new CacheTable("dedup_output", Linq4j.asEnumerable(newData), input.getDataFields());
+        return new CacheTable("dedup_output", Linq4j.asEnumerable(result), input.getDataFields());
     }
 
     private static void requireInput(CacheTable input) {

@@ -149,10 +149,6 @@ public class NodeUtils {
         return tableNames;
     }
 
-    public static void tryGetTable(SqlNode sqlNode, List<String> tableNames) {
-        collectTableNames(sqlNode instanceof SqlJoin ? sqlNode : tableReference(sqlNode), tableNames);
-    }
-
     private static SqlNode tableReference(SqlNode node) {
         return switch (node) {
             case SqlSelect select -> select.getFrom();

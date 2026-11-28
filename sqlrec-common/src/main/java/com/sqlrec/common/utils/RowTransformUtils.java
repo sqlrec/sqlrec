@@ -11,6 +11,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -105,6 +106,13 @@ public final class RowTransformUtils {
             row[i] = valueReader.apply(fields.get(i));
         }
         return row;
+    }
+
+    /** Copies the input into an Object[] with one additional value. */
+    public static Object[] appendValue(Object[] row, Object value) {
+        Object[] result = Arrays.copyOf(row, row.length + 1, Object[].class);
+        result[row.length] = value;
+        return result;
     }
 
     /** Groups rows by a column value, keeping every row in encounter order within its group. */

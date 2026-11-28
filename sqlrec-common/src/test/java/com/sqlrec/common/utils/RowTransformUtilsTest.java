@@ -20,6 +20,17 @@ import static org.mockito.Mockito.*;
 
 class RowTransformUtilsTest {
     @Test
+    void appendsDifferentValueTypesToStringRowsWithoutChangingTheInput() {
+        String[] source = {"item"};
+
+        Object[] result = RowTransformUtils.appendValue(source, 7);
+
+        assertEquals(Object[].class, result.getClass());
+        assertArrayEquals(new Object[]{"item", 7}, result);
+        assertArrayEquals(new String[]{"item"}, source);
+    }
+
+    @Test
     void groupsEveryRowInOrderAndKeepsNullKeys() {
         Object[] first = {"first", 7L};
         Object[] withoutKey = {"missing", null};

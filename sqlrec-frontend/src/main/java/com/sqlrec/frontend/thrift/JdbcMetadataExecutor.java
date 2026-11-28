@@ -3,6 +3,7 @@ package com.sqlrec.frontend.thrift;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.schema.FieldSchema;
+import com.sqlrec.common.utils.FilterUtils;
 import com.sqlrec.common.utils.HiveTableUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.executor.SqlProcessResult;
@@ -229,21 +230,8 @@ public final class JdbcMetadataExecutor {
         if (pattern == null) {
             return value -> true;
         }
-        StringBuilder expression = new StringBuilder("^");
-        boolean escaped = false;
-        for (char character : pattern.toCharArray()) {
-            if (!escaped && character == '\\') {
-                escaped = true;
-            } else {
-                expression.append(!escaped && character == '%' ? ".*"
-                        : !escaped && character == '_' ? "." : Pattern.quote(String.valueOf(character)));
-                escaped = false;
-            }
-        }
-        if (escaped) {
-            expression.append(Pattern.quote("\\"));
-        }
-        Pattern compiled = Pattern.compile(expression.append('$').toString(), Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        String regex = FilterUtils.likeToRegex(pattern, '\\', true);
+        Pattern compiled = Pattern.compile(regex, Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         return value -> compiled.matcher(value).matches();
     }
 

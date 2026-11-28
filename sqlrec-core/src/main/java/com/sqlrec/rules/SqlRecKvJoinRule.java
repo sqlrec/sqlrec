@@ -9,9 +9,6 @@ import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class SqlRecKvJoinRule extends ConverterRule {
     public static final Config DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(LogicalJoin.class, Convention.NONE,
@@ -31,17 +28,9 @@ public class SqlRecKvJoinRule extends ConverterRule {
             return null;
         }
 
-        List<RelNode> newInputs = new ArrayList<>();
-        for (RelNode input : join.getInputs()) {
-            if (!(input.getConvention() instanceof EnumerableConvention)) {
-                input = convert(input, input.getTraitSet().replace(EnumerableConvention.INSTANCE));
-            }
-            newInputs.add(input);
-        }
-
         return SqlrecEnumerableKvJoin.create(
-                newInputs.get(0),
-                newInputs.get(1),
+                convert(join.getLeft(), EnumerableConvention.INSTANCE),
+                convert(join.getRight(), EnumerableConvention.INSTANCE),
                 join.getCondition(),
                 join.getVariablesSet(),
                 join.getJoinType()

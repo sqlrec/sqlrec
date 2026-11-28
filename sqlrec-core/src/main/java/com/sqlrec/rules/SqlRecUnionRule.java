@@ -8,9 +8,6 @@ import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class SqlRecUnionRule extends ConverterRule {
     public static final Config DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(LogicalUnion.class, Convention.NONE,
@@ -25,18 +22,10 @@ public class SqlRecUnionRule extends ConverterRule {
     public @Nullable RelNode convert(RelNode rel) {
         LogicalUnion union = (LogicalUnion) rel;
 
-        List<RelNode> newInputs = new ArrayList<>();
-        for (RelNode input : union.getInputs()) {
-            if (!(input.getConvention() instanceof EnumerableConvention)) {
-                input = convert(input, input.getTraitSet().replace(EnumerableConvention.INSTANCE));
-            }
-            newInputs.add(input);
-        }
-
         return new SqlrecEnumerableUnion(
                 union.getCluster(),
                 union.getTraitSet().replace(EnumerableConvention.INSTANCE),
-                newInputs,
+                convertList(union.getInputs(), EnumerableConvention.INSTANCE),
                 union.all
         );
     }

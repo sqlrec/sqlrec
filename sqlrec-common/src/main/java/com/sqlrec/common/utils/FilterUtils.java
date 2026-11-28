@@ -11,9 +11,38 @@ import org.apache.calcite.sql.SqlKind;
 import java.util.Collections;
 import java.util.List;
 
-/** Backend-neutral helpers for inspecting Calcite filter predicates. */
+/** Backend-neutral helpers for filter predicates and patterns. */
 public final class FilterUtils {
     private FilterUtils() {
+    }
+
+    /** Converts a LIKE pattern to an anchored regex. A dangling escape is literal only when allowed. */
+    public static String likeToRegex(String pattern, Character escape, boolean literalTrailingEscape) {
+        if (pattern == null) {
+            return null;
+        }
+        StringBuilder regex = new StringBuilder("^");
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (escape != null && c == escape) {
+                if (i + 1 < pattern.length()) {
+                    c = pattern.charAt(++i);
+                } else if (!literalTrailingEscape) {
+                    return null;
+                }
+            } else if (c == '%') {
+                regex.append(".*");
+                continue;
+            } else if (c == '_') {
+                regex.append('.');
+                continue;
+            }
+            if ("\\.^$|?*+()[]{}".indexOf(c) >= 0) {
+                regex.append('\\');
+            }
+            regex.append(c);
+        }
+        return regex.append('$').toString();
     }
 
     public static boolean isPointRange(Range<?> range) {

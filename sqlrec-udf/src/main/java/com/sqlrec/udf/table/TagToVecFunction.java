@@ -50,8 +50,6 @@ public class TagToVecFunction {
         // build new data with multihot vector column
         List<Object[]> newData = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            Object[] newRow = Arrays.copyOf(row, row.length + 1, Object[].class);
-
             Double[] vec = new Double[vecSize];
             Arrays.fill(vec, 0.0d);
             for (String tagStr : extractTags(row[tagColIndex])) {
@@ -60,8 +58,7 @@ public class TagToVecFunction {
                     vec[idx] = 1.0d;
                 }
             }
-            newRow[row.length] = Arrays.asList(vec);
-            newData.add(newRow);
+            newData.add(RowTransformUtils.appendValue(row, Arrays.asList(vec)));
         }
 
         return new CacheTable("output", Linq4j.asEnumerable(newData), newDataFields);

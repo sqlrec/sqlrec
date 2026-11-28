@@ -11,7 +11,6 @@ or import the module directly::
 """
 from common.filesystem import (
     url_to_fs,
-    resolve_path,
     read_text,
     write_text,
     read_binary,
@@ -28,7 +27,6 @@ from common.filesystem import (
 
 __all__ = [
     "url_to_fs",
-    "resolve_path",
     "read_text",
     "write_text",
     "read_binary",

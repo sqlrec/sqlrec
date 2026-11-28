@@ -55,6 +55,17 @@ class FilesystemTest(unittest.TestCase):
         with self.assertRaisesRegex(FileNotFoundError, "missing"):
             filesystem.read_parquet_table(f"{self.base}/missing/*.parquet")
 
+    def test_writes_text_and_binary_to_new_parent_directories(self):
+        with tempfile.TemporaryDirectory() as local_dir:
+            text_path = str(Path(local_dir) / "text" / "notes.txt")
+            binary_path = str(Path(local_dir) / "binary" / "model.bin")
+
+            filesystem.write_text(text_path, "模型")
+            filesystem.write_binary(binary_path, b"\x00\xff")
+
+            self.assertEqual(filesystem.read_text(text_path), "模型")
+            self.assertEqual(filesystem.read_binary(binary_path), b"\x00\xff")
+
     def test_copy_file_between_local_and_remote_storage(self):
         contents = b"\x00model\xff" * 1024
         with tempfile.TemporaryDirectory() as local_dir:

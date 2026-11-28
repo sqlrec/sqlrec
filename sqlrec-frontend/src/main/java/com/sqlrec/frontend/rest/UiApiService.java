@@ -22,6 +22,8 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.sqlrec.utils.ModelUtils.formatTimestamp;
+
 final class UiApiService {
     private final MetadataAccess metadataAccess;
 
@@ -254,10 +256,5 @@ final class UiApiService {
         row.put("col_name", columnName);
         row.put("data_type", dataType);
         return row;
-    }
-
-    private static String formatTimestamp(long timestamp) {
-        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-                .format(new java.util.Date(timestamp));
     }
 }

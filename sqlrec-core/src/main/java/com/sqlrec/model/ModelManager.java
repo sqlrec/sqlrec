@@ -425,10 +425,7 @@ public class ModelManager {
 
     public static void deleteModel(String modelName) throws Exception {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        Model model = db.getModel(modelName);
-        if (model == null) {
-            throw new IllegalArgumentException("model not exists: " + modelName);
-        }
+        Model model = getRequiredModel(db, modelName);
 
         List<Service> services = db.getServiceListByModelName(modelName);
         if (!services.isEmpty()) {

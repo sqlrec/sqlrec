@@ -16,7 +16,6 @@ import growthbook.sdk.java.model.FeatureResult;
 import growthbook.sdk.java.repository.GBFeaturesRepository;
 import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -90,13 +89,8 @@ public class GetGrowthbookFeaturesFunction {
             }
         }
 
-        // Build output CacheTable with tracking callback data for metrics calculation
-        List<RelDataTypeField> dataFields = new ArrayList<>();
-        dataFields.add(DataTypeUtils.getRelDataTypeField("experiment_id", 0, SqlTypeName.VARCHAR));
-        dataFields.add(DataTypeUtils.getRelDataTypeField("variation_id", 1, SqlTypeName.VARCHAR));
-        dataFields.add(DataTypeUtils.getRelDataTypeField("user_id", 2, SqlTypeName.VARCHAR));
-
-        return new CacheTable("growthbook_tracking", Linq4j.asEnumerable(trackingData), dataFields);
+        return new CacheTable("growthbook_tracking", Linq4j.asEnumerable(trackingData),
+                DataTypeUtils.getStringTypeFieldList(List.of("experiment_id", "variation_id", "user_id")));
     }
 
     // SDK 0.10.10's multi-user facade has a process-wide static repository.

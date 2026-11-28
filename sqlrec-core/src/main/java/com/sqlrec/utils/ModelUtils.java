@@ -103,7 +103,8 @@ public class ModelUtils {
         }
     }
 
-    private static String formatTimestamp(long timestamp) {
+    /** Formats a metadata timestamp in milliseconds for display. */
+    public static String formatTimestamp(long timestamp) {
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(timestamp));
     }
 }

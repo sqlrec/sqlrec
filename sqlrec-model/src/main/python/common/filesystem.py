@@ -6,7 +6,7 @@ config files, etc.).
 
 Provides three layers of API:
 
-**Layer A — Path resolution** (``url_to_fs``, ``resolve_path``):
+**Layer A — Path resolution** (``url_to_fs``):
     Split a path into ``(fsspec filesystem, full_path)``. Filesystem instances
     are resolved through fsspec, which manages filesystem instance caching.
 
@@ -66,11 +66,6 @@ def url_to_fs(path: str) -> tuple[fsspec.AbstractFileSystem | None, str]:
     return fs, path
 
 
-def resolve_path(path: str) -> tuple[fsspec.AbstractFileSystem | None, str]:
-    """Alias for :func:`url_to_fs`."""
-    return url_to_fs(path)
-
-
 # ===========================================================================
 # Layer B — Explicit helper functions
 # ===========================================================================
@@ -83,9 +78,7 @@ def read_text(path: str) -> str:
 
 def write_text(path: str, content: str) -> None:
     """Write text, creating parent dirs as needed."""
-    parent = path.rsplit("/", 1)[0] if "/" in path else ""
-    if parent:
-        _patched_makedirs(parent, exist_ok=True)
+    _ensure_parent_directory(path)
     with _patched_open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
@@ -98,11 +91,15 @@ def read_binary(path: str) -> bytes:
 
 def write_binary(path: str, data: bytes) -> None:
     """Write binary data, creating parent dirs as needed."""
-    parent = path.rsplit("/", 1)[0] if "/" in path else ""
-    if parent:
-        _patched_makedirs(parent, exist_ok=True)
+    _ensure_parent_directory(path)
     with _patched_open(path, "wb") as f:
         f.write(data)
+
+
+def _ensure_parent_directory(path: str) -> None:
+    parent = path.rpartition("/")[0]
+    if parent:
+        _patched_makedirs(parent, exist_ok=True)
 
 
 def load_pipeline_config(path: str) -> dict[str, Any]:

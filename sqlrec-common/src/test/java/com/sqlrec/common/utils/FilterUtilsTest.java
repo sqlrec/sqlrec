@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,6 +28,24 @@ class FilterUtilsTest {
     void setUp() {
         types = new JavaTypeFactoryImpl();
         rexBuilder = new RexBuilder(types);
+    }
+
+    @Test
+    void likeRegexRespectsEscapesMetacharactersAndWildcards() {
+        String regex = FilterUtils.likeToRegex("a!%!_[.]_%", '!', false);
+        Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
+
+        assertTrue(pattern.matcher("a%_[.]\nrest").matches());
+        assertFalse(pattern.matcher("a%_(.)xrest").matches());
+        assertTrue(Pattern.matches(FilterUtils.likeToRegex("a\\%", null, false), "a\\rest"));
+    }
+
+    @Test
+    void likeRegexKeepsTheCallersTrailingEscapeRule() {
+        assertNull(FilterUtils.likeToRegex("a\\", '\\', false));
+        String regex = FilterUtils.likeToRegex("a\\", '\\', true);
+        assertTrue(Pattern.matches(regex, "a\\"));
+        assertFalse(Pattern.matches(regex, "a"));
     }
 
     @Test
