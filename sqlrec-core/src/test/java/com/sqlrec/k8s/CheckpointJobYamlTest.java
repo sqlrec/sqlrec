@@ -928,6 +928,7 @@ class CheckpointJobYamlTest {
 
         Fixture(String backend, String modelName, boolean stableNames) throws Exception {
             this.backend = backend;
+            k8s.when(() -> K8sManager.validateYaml(anyString())).thenAnswer(call -> call.getArgument(0));
             // Snapshot the full YAML deterministically; real attempt uniqueness has its own test.
             if (stableNames) {
                 yamls.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString()))

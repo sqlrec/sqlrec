@@ -1,10 +1,15 @@
 package com.sqlrec.k8s;
 
+import io.fabric8.kubernetes.api.model.APIResourceListBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class K8sYamlUtilsTest {
 
@@ -71,6 +76,100 @@ spec:
         var deployments = K8sYamlUtils.parseK8sYamlAndGetDeployments(yamlContent);
         assertEquals(1, deployments.size());
         assertEquals("test-deployment", deployments.get(0).getMetadata().getName());
+    }
+
+    @Test
+    void resourceListIsExpandedForStatusAndCleanup() {
+        String yaml = """
+                apiVersion: v1
+                kind: List
+                items:
+                - apiVersion: batch/v1
+                  kind: Job
+                  metadata: {name: train}
+                - apiVersion: v1
+                  kind: ConfigMap
+                  metadata: {name: train-config}
+                - apiVersion: apps/v1
+                  kind: Deployment
+                  metadata: {name: serve}
+                """;
+        assertEquals(List.of("train", "train-config", "serve"), K8sYamlUtils.parseK8sYaml(yaml).stream()
+                .map(resource -> resource.getMetadata().getName()).toList());
+        assertEquals("train", K8sYamlUtils.parseK8sYamlAndGetJobs(yaml).getFirst().getMetadata().getName());
+        assertEquals("serve", K8sYamlUtils.parseK8sYamlAndGetDeployments(yaml).getFirst().getMetadata().getName());
+        assertTrue(K8sYamlUtils.parseK8sYaml("# no resource documents\n").isEmpty());
+    }
+
+    @Test
+    void bindingPreservesExplicitNamespacesAndClusterScopedResources() {
+        String yaml = """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: {name: config, namespace: explicit}
+                ---
+                apiVersion: v1
+                kind: Namespace
+                metadata: {name: cluster-scoped}
+                ---
+                apiVersion: batch/v1
+                kind: Job
+                metadata: {name: train, namespace: ''}
+                """;
+        KubernetesClient client = mock(KubernetesClient.class);
+        when(client.getNamespace()).thenReturn("client");
+        String bound = K8sYamlUtils.bindNamespaces(yaml, K8sYamlUtils.parseK8sYaml(yaml), client);
+        var resources = K8sYamlUtils.parseK8sYaml(bound);
+        assertEquals("explicit", resources.get(0).getMetadata().getNamespace());
+        assertNull(resources.get(1).getMetadata().getNamespace());
+        assertEquals("client", resources.get(2).getMetadata().getNamespace());
+        assertSame(bound, K8sYamlUtils.bindNamespaces(bound, resources, client));
+
+        String invalid = "apiVersion: batch/v1\nkind: Job\nmetadata: {name: train, namespace: ' '}\n";
+        assertSame(invalid, K8sYamlUtils.bindNamespaces(invalid, K8sYamlUtils.parseK8sYaml(invalid), client));
+    }
+
+    @Test
+    void missingClientNamespaceRequiresExplicitScopeForNewResources() {
+        String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata: {name: train}\n";
+        KubernetesClient client = mock(KubernetesClient.class);
+        for (String namespace : new String[]{null, " "}) {
+            when(client.getNamespace()).thenReturn(namespace);
+            var failure = assertThrows(IllegalArgumentException.class,
+                    () -> K8sYamlUtils.bindNamespaces(yaml, K8sYamlUtils.parseK8sYaml(yaml), client));
+            assertTrue(failure.getMessage().contains("Set metadata.namespace for Job"));
+        }
+
+        Job job = new Job();
+        job.setMetadata(null);
+        when(client.getNamespace()).thenReturn("client");
+        String bound = K8sYamlUtils.bindNamespaces(yaml, List.of(job), client);
+        assertEquals("client", K8sYamlUtils.parseK8sYamlAndGetJobs(bound).getFirst().getMetadata().getNamespace());
+    }
+
+    @Test
+    void discoveryDistinguishesCustomResourceScopes() {
+        String yaml = """
+                apiVersion: review.example/v1
+                kind: WorkItem
+                metadata: {name: work}
+                ---
+                apiVersion: review.example/v1
+                kind: ClusterSetting
+                metadata: {name: setting}
+                """;
+        KubernetesClient client = mock(KubernetesClient.class);
+        when(client.getNamespace()).thenReturn("client");
+        when(client.getApiResources("review.example/v1")).thenReturn(new APIResourceListBuilder()
+                .addNewResource().withName("workitems/status").withKind("WorkItem").withNamespaced(false).endResource()
+                .addNewResource().withName("workitems").withKind("WorkItem").withNamespaced(true).endResource()
+                .addNewResource().withName("clustersettings").withKind("ClusterSetting").withNamespaced(false).endResource()
+                .build());
+
+        String bound = K8sYamlUtils.bindNamespaces(yaml, K8sYamlUtils.parseK8sYaml(yaml), client);
+        var resources = K8sYamlUtils.parseK8sYaml(bound);
+        assertEquals("client", resources.get(0).getMetadata().getNamespace());
+        assertNull(resources.get(1).getMetadata().getNamespace());
     }
 
     @Test

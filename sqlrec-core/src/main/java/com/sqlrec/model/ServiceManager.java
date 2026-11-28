@@ -89,7 +89,7 @@ public class ServiceManager {
         }
 
         Service service = buildService(sqlCreateService, db, BuildMode.DEPLOYMENT);
-        K8sManager.validateYaml(service.getYaml());
+        service.setYaml(K8sManager.validateYaml(service.getYaml()));
         K8sManager.applyYaml(service.getYaml());
         db.upsertService(service);
         serviceConfigCache.invalidate(service.getName());

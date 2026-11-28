@@ -76,6 +76,10 @@ class ModelManagerExportTest {
                 fixture.checkpoint("export_a", status).setYaml("old-job");
                 fixture.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenAnswer(call -> {
                     fixture.events.add("validate");
+                    return "namespace-bound-yaml";
+                });
+                fixture.k8s.when(() -> K8sManager.applyYaml("namespace-bound-yaml")).thenAnswer(call -> {
+                    fixture.events.add("apply");
                     return null;
                 });
 
@@ -90,7 +94,7 @@ class ModelManagerExportTest {
                 assertEquals(2, fixture.inserted.size());
                 for (Checkpoint checkpoint : fixture.inserted) {
                     assertEquals("rank", checkpoint.getModelName());
-                    assertEquals("injected-yaml", checkpoint.getYaml());
+                    assertEquals("namespace-bound-yaml", checkpoint.getYaml());
                     assertEquals(Consts.CHECKPOINT_TYPE_EXPORT, checkpoint.getCheckpointType());
                     assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
                 }

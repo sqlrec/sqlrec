@@ -145,9 +145,12 @@ class ServiceManagerSafetyTest {
     @Test
     void validatesThenSubmitsBeforeSavingMetadata() throws Exception {
         try (Fixture f = new Fixture()) {
+            f.k8s.when(() -> K8sManager.validateYaml(anyString()))
+                    .thenAnswer(invocation -> "# namespace bound\n" + invocation.getArgument(0));
             f.k8s.when(() -> K8sManager.applyYaml(anyString())).thenAnswer(invocation -> {
                 String yaml = invocation.getArgument(0);
-                f.k8s.verify(() -> K8sManager.validateYaml(yaml));
+                assertTrue(yaml.startsWith("# namespace bound\n"));
+                f.k8s.verify(() -> K8sManager.validateYaml(anyString()));
                 return null;
             });
             doAnswer(invocation -> {
@@ -157,7 +160,7 @@ class ServiceManagerSafetyTest {
                 return null;
             }).when(f.db).upsertService(any());
             assertEquals("rank-a", ServiceManager.createService(f.statement("rank-a")));
-            assertNotNull(f.services.get("rank-a"));
+            assertTrue(f.services.get("rank-a").getYaml().startsWith("# namespace bound\n"));
         }
     }
 
@@ -278,6 +281,7 @@ class ServiceManagerSafetyTest {
 
         Fixture() throws Exception {
             CheckpointTestSupport.stubCompletion(db);
+            k8s.when(() -> K8sManager.validateYaml(anyString())).thenAnswer(call -> call.getArgument(0));
             for (ConfigOption<String> option : List.of(ModelConfigs.JAVA_HOME, ModelConfigs.HADOOP_HOME,
                     ModelConfigs.CLASSPATH, ModelConfigs.HADOOP_CONF_DIR, ModelConfigs.CLIENT_DIR,
                     ModelConfigs.CLIENT_PV_NAME, ModelConfigs.CLIENT_PVC_NAME)) {

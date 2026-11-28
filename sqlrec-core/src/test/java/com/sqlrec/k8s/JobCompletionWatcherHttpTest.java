@@ -35,7 +35,12 @@ class JobCompletionWatcherHttpTest {
             server.setExecutor(handlers);
             server.createContext("/", exchange -> {
                 try (exchange) {
-                    boolean jobs = exchange.getRequestURI().getPath().endsWith("/jobs");
+                    String path = exchange.getRequestURI().getPath();
+                    if (!path.contains("/namespaces/test/")) {
+                        exchange.sendResponseHeaders(404, -1);
+                        return;
+                    }
+                    boolean jobs = path.endsWith("/jobs");
                     String query = exchange.getRequestURI().getRawQuery();
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
                     if (query != null && query.contains("watch=true")) {
@@ -73,7 +78,7 @@ class JobCompletionWatcherHttpTest {
             server.start();
             var config = new ConfigBuilder().withMasterUrl("http://127.0.0.1:" + server.getAddress().getPort())
                     // This server implements streaming HTTP, not the WebSocket upgrade protocol.
-                    .withOnlyHttpWatches(true).withNamespace("test").withRequestTimeout(5000).build();
+                    .withOnlyHttpWatches(true).withNamespace("other").withRequestTimeout(5000).build();
             var client = new KubernetesClientBuilder().withConfig(config).build();
             try {
                 var target = new JobBuilder().withNewMetadata().withName("train").withNamespace("test").endMetadata().build();

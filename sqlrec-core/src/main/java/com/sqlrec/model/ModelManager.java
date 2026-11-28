@@ -148,7 +148,7 @@ public class ModelManager {
                 modelTrainConf.getModelName(), modelTrainConf.getCheckpointName()));
         String k8sYaml = modelController.genModelTrainK8sYaml(modelConfig, modelTrainConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelTrainConf.getParams());
-        K8sManager.validateYaml(k8sYaml);
+        k8sYaml = K8sManager.validateYaml(k8sYaml);
 
         if (existingCheckpoint != null) {
             validateCheckpointModification(db, existingCheckpoint);
@@ -225,7 +225,7 @@ public class ModelManager {
                 modelExportConf.getModelName(), modelExportConf.getCheckpointName()));
         String k8sYaml = modelController.genModelExportK8sYaml(modelConfig, modelExportConf);
         k8sYaml = K8sYamlUtils.injectPodConfig(k8sYaml, modelExportConf.getParams());
-        K8sManager.validateYaml(k8sYaml);
+        k8sYaml = K8sManager.validateYaml(k8sYaml);
 
         deleteExportCheckpoints(db, modelExportConf.getModelName(), checkpoints.existing());
         if (StringUtils.isNotEmpty(cleanPath)) db.hdfsDeletePath(cleanPath);

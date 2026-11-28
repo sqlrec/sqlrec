@@ -19,7 +19,7 @@ class K8sManagerDryRunRequestTest {
         String yaml = """
                 apiVersion: batch/v1
                 kind: Job
-                metadata: {name: train, namespace: test}
+                metadata: {name: train}
                 """;
         for (boolean validate : new boolean[]{true, false}) {
             AtomicReference<HttpRequest> request = new AtomicReference<>();

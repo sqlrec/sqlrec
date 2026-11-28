@@ -1,6 +1,9 @@
 package com.sqlrec.k8s;
 
 import com.sqlrec.common.utils.SilenceLoggers;
+import io.fabric8.kubernetes.api.model.APIResourceListBuilder;
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -39,12 +42,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.InputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -53,7 +60,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.clearInvocations;
@@ -94,7 +100,7 @@ public class K8sManagerUnitTest {
     @Test
     @SilenceLoggers(K8sManager.class)
     public void testLateFailureFromAReplacedClientDoesNotCloseItsReplacement() {
-        String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n";
+        String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata: {name: train, namespace: test}\n";
         for (String action : List.of("apply", "validate", "delete", "deleteAndWait", "job", "deployment")) {
             KubernetesClient failing = mock(KubernetesClient.class);
             KubernetesClient replacement = mock(KubernetesClient.class);
@@ -117,7 +123,7 @@ public class K8sManagerUnitTest {
                 case "deleteAndWait" -> () -> K8sManager.deleteYamlAndWait(yaml);
                 case "job" -> () -> K8sManager.checkJobsStatusDetailFromYaml(yaml);
                 default -> () -> assertFalse(K8sManager.isDeploymentReadyFromYaml(
-                        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
+                        "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: serve, namespace: test}\n"));
             };
             if (action.equals("deployment")) request.run();
             else assertThrows(RuntimeException.class, request::run);
@@ -132,6 +138,8 @@ public class K8sManagerUnitTest {
         // Empty string and null should return immediately without calling the client
         K8sManager.applyYaml("");
         K8sManager.applyYaml(null);
+        assertEquals("", K8sManager.validateYaml(""));
+        assertNull(K8sManager.validateYaml(null));
 
         verifyNoInteractions(mockClient);
     }
@@ -178,37 +186,82 @@ public class K8sManagerUnitTest {
         // A user may already have deleted the Job; Fabric8 returns an empty result for 404.
         doReturn(foregroundDeletion).when(jobHandle).withPropagationPolicy(DeletionPropagation.FOREGROUND);
         when(foregroundDeletion.delete()).thenReturn(List.of());
+        when(jobHandle.informOnCondition(any())).thenReturn(CompletableFuture.completedFuture(List.of()));
+        when(configHandle.informOnCondition(any())).thenReturn(CompletableFuture.completedFuture(List.of()));
 
-        K8sManager.deleteYamlAndWait("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n"
-                + "---\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n");
+        K8sManager.deleteYamlAndWait("apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: test}\n"
+                + "---\napiVersion: batch/v1\nkind: Job\nmetadata: {name: train, namespace: test}\n");
 
         InOrder order = inOrder(jobHandle, foregroundDeletion, configHandle);
         order.verify(jobHandle).withPropagationPolicy(DeletionPropagation.FOREGROUND);
         order.verify(foregroundDeletion).delete();
-        order.verify(jobHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));
+        order.verify(jobHandle).informOnCondition(any());
         order.verify(configHandle).delete();
-        order.verify(configHandle).waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS));
+        order.verify(configHandle).informOnCondition(any());
     }
 
     @Test
     @SuppressWarnings("unchecked")
     public void testDeletionWaitPreservesInterruption() {
         NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        var deletion = new CompletableFuture<List<HasMetadata>>();
         when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
-        when(resource.waitUntilCondition(any(), eq(60L), eq(TimeUnit.SECONDS))).thenAnswer(call -> {
+        when(resource.informOnCondition(any())).thenAnswer(call -> {
             Thread.currentThread().interrupt();
-            throw new KubernetesClientException("interrupted", new InterruptedException());
+            return deletion;
         });
 
         try {
             RuntimeException error = assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(
-                    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n"));
-            assertInstanceOf(InterruptedException.class, error.getCause().getCause());
+                    "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: test}\n"));
+            assertInstanceOf(InterruptedException.class, error.getCause());
             assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(deletion.isCancelled());
             verify(mockClient, never()).close();
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void interruptionDuringDeleteStopsBeforeStartingTheWatch() {
+        NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
+        var interruption = new KubernetesClientException("interrupted", new InterruptedException());
+        when(resource.delete()).thenAnswer(call -> {
+            Thread.currentThread().interrupt();
+            throw interruption;
+        });
+
+        try {
+            var error = assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(
+                    "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: test}\n"));
+            assertSame(interruption, error.getCause());
+            assertTrue(Thread.currentThread().isInterrupted());
+            verify(resource, never()).informOnCondition(any());
+            verify(mockClient, never()).close();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    @SuppressWarnings("unchecked")
+    void deletionTimeoutCancelsOnlyTheResourceWatch() throws Exception {
+        NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        CompletableFuture<List<HasMetadata>> deletion = mock(CompletableFuture.class);
+        when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
+        when(resource.informOnCondition(any())).thenReturn(deletion);
+        when(deletion.get(60, TimeUnit.SECONDS)).thenThrow(new TimeoutException());
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(
+                "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: test}\n"));
+
+        assertTrue(error.getMessage().contains("Timed out after 60s waiting for deletion of ConfigMap cfg"));
+        verify(deletion).cancel(false);
+        verify(mockClient, never()).close();
     }
 
     @Test
@@ -255,6 +308,86 @@ public class K8sManagerUnitTest {
     }
 
     @Test
+    void unnamedWorkloadsCannotBeReportedAsComplete() {
+        String job = "apiVersion: batch/v1\nkind: Job\nmetadata: {}\n";
+        String deployment = "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: ''}\n";
+
+        assertEquals("Missing metadata.name for Job", assertThrows(IllegalArgumentException.class,
+                () -> K8sManager.checkJobsStatusDetailFromYaml(job)).getMessage());
+        assertEquals("Missing metadata.name for Job", assertThrows(CompletionException.class,
+                () -> K8sManager.watchJobsFromYaml(job).join()).getCause().getMessage());
+        assertEquals("Missing metadata.name for Deployment", assertThrows(IllegalArgumentException.class,
+                () -> K8sManager.isDeploymentReadyFromYaml(deployment)).getMessage());
+        verifyNoInteractions(mockClient);
+    }
+
+    @Test
+    void resourceWithoutMetadataReportsItsMissingName() {
+        Job job = new Job();
+        job.setMetadata(null);
+        assertEquals("Missing metadata.name for Job", assertThrows(IllegalArgumentException.class,
+                () -> K8sManager.requireResourceNamespace(job)).getMessage());
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    void missingStoredNamespaceRejectsLookupsAndPreventsPartialCleanup() {
+        String job = "apiVersion: batch/v1\nkind: Job\nmetadata: {name: train}\n";
+        String deployment = "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: serve, namespace: ''}\n";
+        String batch = """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: {name: cfg, namespace: test}
+                ---
+                apiVersion: v1
+                kind: Namespace
+                metadata: {name: test}
+                ---
+                """ + job;
+        String missingJobNamespace = "Missing metadata.namespace for Job train";
+
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> K8sManager.checkJobsStatusDetailFromYaml(job)).getMessage().contains(missingJobNamespace));
+        assertTrue(assertThrows(CompletionException.class,
+                () -> K8sManager.watchJobsFromYaml(job).join()).getCause().getMessage().contains(missingJobNamespace));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> K8sManager.isDeploymentReadyFromYaml(deployment)).getMessage()
+                .contains("Missing metadata.namespace for Deployment serve"));
+        assertTrue(assertThrows(RuntimeException.class,
+                () -> K8sManager.deleteYaml(batch)).getMessage().contains(missingJobNamespace));
+        assertTrue(assertThrows(RuntimeException.class,
+                () -> K8sManager.deleteYamlAndWait(batch)).getMessage().contains(missingJobNamespace));
+        verifyNoInteractions(mockClient);
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    void ambiguousCustomResourcePreventsAnyDeletionInTheBatch() {
+        String yaml = """
+                apiVersion: v1
+                kind: List
+                items:
+                - apiVersion: batch/v1
+                  kind: Job
+                  metadata: {name: train, namespace: test}
+                - apiVersion: review.example/v1
+                  kind: WorkItem
+                  metadata: {name: work}
+                """;
+        when(mockClient.getApiResources("review.example/v1"))
+                .thenReturn(new APIResourceListBuilder()
+                        .addNewResource().withName("workitems").withKind("WorkItem").withNamespaced(true).endResource()
+                        .build())
+                .thenReturn(null);
+
+        assertTrue(assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(yaml))
+                .getMessage().contains("Missing metadata.namespace for WorkItem work"));
+        assertTrue(assertThrows(RuntimeException.class, () -> K8sManager.deleteYamlAndWait(yaml))
+                .getMessage().contains("Cannot determine scope for review.example/v1 WorkItem"));
+        verify(mockClient, never()).resource(any(HasMetadata.class));
+    }
+
+    @Test
     @SilenceLoggers(K8sManager.class)
     public void testApplyYamlUsesInjectedClient() {
         // Non-empty YAML will call client.load(...).dryRun(false).serverSideApply().
@@ -272,15 +405,23 @@ public class K8sManagerUnitTest {
     @Test
     @SilenceLoggers(K8sManager.class)
     public void testDeploymentReadinessPreservesDefaultCountsAndCriteria() {
-        var resource = deploymentResource();
-        var deployment = new DeploymentBuilder().withNewMetadata().withName("serve").endMetadata()
+        var resource = deploymentResource("workloads");
+        var deployment = new DeploymentBuilder().withNewMetadata().withName("serve").withGeneration(2L).endMetadata()
                 .withNewSpec().withReplicas(1).endSpec().withNewStatus()
                 .withReadyReplicas(1).withUpdatedReplicas(1).endStatus().build();
         when(resource.get()).thenReturn(deployment);
-        String yaml = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n";
+        String yaml = "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: serve, namespace: workloads}\n";
 
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setObservedGeneration(1L);
+        assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.getStatus().setObservedGeneration(2L);
         // Available replicas are diagnostic only.
         assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        var metadata = deployment.getMetadata();
+        deployment.setMetadata(null);
+        assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
+        deployment.setMetadata(metadata);
         deployment.getSpec().setReplicas(null);
         // An omitted replica count defaults to one without unboxing null.
         assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
@@ -300,7 +441,7 @@ public class K8sManagerUnitTest {
         assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
 
         deployment.getSpec().setReplicas(0);
-        deployment.setStatus(new DeploymentStatusBuilder().build());
+        deployment.setStatus(new DeploymentStatusBuilder().withObservedGeneration(2L).build());
         assertTrue(K8sManager.isDeploymentReadyFromYaml(yaml));
         deployment.setStatus(null);
         assertFalse(K8sManager.isDeploymentReadyFromYaml(yaml));
@@ -311,11 +452,11 @@ public class K8sManagerUnitTest {
     @Test
     @SilenceLoggers(K8sManager.class)
     public void testDeploymentTransportFailureResetsClientAndReturnsNotReady() {
-        when(deploymentResource().get())
+        when(deploymentResource("default").get())
                 .thenThrow(new RuntimeException(new IOException("connection reset")));
 
         assertFalse(K8sManager.isDeploymentReadyFromYaml(
-                "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: serve\n"));
+                "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: serve, namespace: default}\n"));
 
         verify(mockClient).close();
         assertNull(K8sManager.kubernetesClient);
@@ -324,13 +465,13 @@ public class K8sManagerUnitTest {
     @Test
     @SilenceLoggers(K8sManager.class)
     public void testJobTransportFailureResetsClientAndReportsUnknownStatus() {
-        when(jobResource().get())
+        when(jobResource("workloads").get())
                 .thenThrow(new RuntimeException(new IOException("connection reset")));
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> K8sManager.checkJobsStatusDetailFromYaml(
-                        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n"));
-        assertTrue(failure.getMessage().contains("Cannot determine Job status: default/train"));
+                        "apiVersion: batch/v1\nkind: Job\nmetadata: {name: train, namespace: workloads}\n"));
+        assertTrue(failure.getMessage().contains("Cannot determine Job status: workloads/train"));
 
         verify(mockClient).close();
         assertNull(K8sManager.kubernetesClient);
@@ -350,8 +491,22 @@ public class K8sManagerUnitTest {
         assertNull(K8sManager.imagePullFailure(new PodBuilder().build()));
     }
 
+    @Test
+    void jobPodFailureHandlesMissingOwnershipAndMissingJobUid() {
+        Pod pod = new PodBuilder().withNewStatus().addNewContainerStatus().withName("trainer")
+                .withNewState().withNewWaiting().withReason("ErrImagePull").endWaiting().endState()
+                .endContainerStatus().endStatus().build();
+        pod.setMetadata(null);
+        Pod withoutOwner = new PodBuilder(pod).withNewMetadata().withName("unowned").endMetadata().build();
+        withoutOwner.getMetadata().setOwnerReferences(null);
+
+        assertNull(K8sManager.jobPodImagePullFailure(Arrays.asList(null, pod, withoutOwner), "test", "train", "uid"));
+        assertTrue(K8sManager.jobPodImagePullFailure(List.of(pod), "test", "train", null)
+                .contains("Pod unknown: container trainer is waiting: ErrImagePull"));
+    }
+
     @SuppressWarnings("unchecked")
-    private RollableScalableResource<Deployment> deploymentResource() {
+    private RollableScalableResource<Deployment> deploymentResource(String namespace) {
         AppsAPIGroupDSL apps = mock(AppsAPIGroupDSL.class);
         MixedOperation<Deployment, DeploymentList, RollableScalableResource<Deployment>> deployments =
                 mock(MixedOperation.class);
@@ -360,13 +515,13 @@ public class K8sManagerUnitTest {
         RollableScalableResource<Deployment> resource = mock(RollableScalableResource.class);
         when(mockClient.apps()).thenReturn(apps);
         when(apps.deployments()).thenReturn(deployments);
-        when(deployments.inNamespace("default")).thenReturn(namespaced);
+        when(deployments.inNamespace(namespace)).thenReturn(namespaced);
         when(namespaced.withName("serve")).thenReturn(resource);
         return resource;
     }
 
     @SuppressWarnings("unchecked")
-    private ScalableResource<Job> jobResource() {
+    private ScalableResource<Job> jobResource(String namespace) {
         BatchAPIGroupDSL batch = mock(BatchAPIGroupDSL.class);
         V1BatchAPIGroupDSL v1 = mock(V1BatchAPIGroupDSL.class);
         MixedOperation<Job, JobList, ScalableResource<Job>> jobs = mock(MixedOperation.class);
@@ -375,7 +530,7 @@ public class K8sManagerUnitTest {
         when(mockClient.batch()).thenReturn(batch);
         when(batch.v1()).thenReturn(v1);
         when(v1.jobs()).thenReturn(jobs);
-        when(jobs.inNamespace("default")).thenReturn(namespaced);
+        when(jobs.inNamespace(namespace)).thenReturn(namespaced);
         when(namespaced.withName("train")).thenReturn(resource);
         return resource;
     }
@@ -394,15 +549,19 @@ public class K8sManagerUnitTest {
         MixedOperation<Pod, PodList, PodResource> pods = mock(MixedOperation.class);
         NonNamespaceOperation<Pod, PodList, PodResource> namespacedPods = mock(NonNamespaceOperation.class);
         FilterWatchListDeletable<Pod, PodList, PodResource> selectedPods = mock(FilterWatchListDeletable.class);
-        Job job = new JobBuilder().withNewMetadata().withName("train").withNamespace("sqlrec")
+        Job job = new JobBuilder().withNewMetadata().withName("train").withNamespace("sqlrec").withUid("job-uid")
                 .endMetadata().withNewSpec().withNewSelector()
-                .addToMatchLabels("batch.kubernetes.io/controller-uid", "job-uid")
+                .addToMatchLabels("app", "trainer")
                 .endSelector().endSpec().build();
-        Pod pod = new PodBuilder().withNewMetadata().withName("train-abc").endMetadata()
+        Pod pod = new PodBuilder().withNewMetadata().withName("train-abc").addToLabels("app", "trainer")
+                .addNewOwnerReference().withUid("job-uid").endOwnerReference().endMetadata()
                 .withNewStatus().addNewContainerStatus().withName("trainer")
                     .withNewState().withNewWaiting().withReason("ErrImagePull")
                         .withMessage("pull access denied").endWaiting().endState()
                 .endContainerStatus().endStatus().build();
+        Pod oldPod = new PodBuilder(pod).editMetadata().withName("train-old")
+                .withOwnerReferences(new OwnerReferenceBuilder().withUid("previous-job-uid").build())
+                .endMetadata().build();
         when(client.batch()).thenReturn(batch);
         when(batch.v1()).thenReturn(v1);
         when(v1.jobs()).thenReturn(jobs);
@@ -411,11 +570,12 @@ public class K8sManagerUnitTest {
         when(namedJob.get()).thenReturn(job);
         when(client.pods()).thenReturn(pods);
         when(pods.inNamespace("sqlrec")).thenReturn(namespacedPods);
-        when(namespacedPods.withLabels(Map.of("batch.kubernetes.io/controller-uid", "job-uid")))
-                .thenReturn(selectedPods);
-        when(selectedPods.list()).thenReturn(new PodListBuilder().addToItems(pod).build());
-
+        when(namespacedPods.withLabels(Map.of("app", "trainer"))).thenReturn(selectedPods);
         String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n  namespace: sqlrec\n";
+        when(selectedPods.list()).thenReturn(new PodListBuilder().addToItems(oldPod).build());
+        assertEquals(K8sManager.JobState.RUNNING, K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
+
+        when(selectedPods.list()).thenReturn(new PodListBuilder().addToItems(oldPod, pod).build());
         K8sManager.JobStatus status = K8sManager.checkJobsStatusDetailFromYaml(yaml);
 
         assertEquals(K8sManager.JobState.FAILED, status.state());
@@ -459,18 +619,48 @@ public class K8sManagerUnitTest {
         NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
         Resource<HasMetadata> handle = mock(Resource.class);
         when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
-        when(resource.inNamespace("default")).thenReturn(handle);
-        var existing = new io.fabric8.kubernetes.api.model.ConfigMap();
-        when(handle.get()).thenReturn(existing, existing, null);
+        when(resource.inNamespace("workloads")).thenReturn(handle);
+        KubernetesClientException forbidden = new KubernetesClientException("forbidden", 403, null);
+        KubernetesClientException conflict = new KubernetesClientException("conflict", 409, null);
         when(handle.delete()).thenThrow(
+                forbidden,
                 new KubernetesClientException("forbidden", 403, null),
-                new KubernetesClientException("not found", 404, null));
-        String yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n";
+                new KubernetesClientException("not found", 404, null),
+                conflict).thenReturn(List.of());
+        when(handle.get()).thenReturn(new ConfigMap()).thenReturn(null);
+        String yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: workloads}\n";
 
-        assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml));
-        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
-        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
-        verify(handle, times(2)).delete();
+        assertSame(forbidden, assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml))
+                .getCause().getCause());
+        assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
+        assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
+        assertSame(conflict, assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml))
+                .getCause().getCause());
+        assertDoesNotThrow(() -> K8sManager.deleteYaml(yaml));
+        verify(handle, times(5)).delete();
+        verify(handle, times(2)).get();
+    }
+
+    @Test
+    @SilenceLoggers(K8sManager.class)
+    @SuppressWarnings("unchecked")
+    void failedExistenceCheckPreservesTheDeletionRejection() {
+        NamespaceableResource<HasMetadata> resource = mock(NamespaceableResource.class);
+        Resource<HasMetadata> handle = mock(Resource.class);
+        when(mockClient.resource(any(HasMetadata.class))).thenReturn(resource);
+        when(resource.inNamespace("test")).thenReturn(handle);
+        var deletion = new KubernetesClientException("delete forbidden", 403, null);
+        var lookup = new KubernetesClientException("get forbidden", 403, null);
+        when(handle.delete()).thenThrow(deletion);
+        when(handle.get()).thenThrow(lookup, deletion);
+        String yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cfg, namespace: test}\n";
+
+        var error = assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml));
+        assertSame(deletion, error.getCause().getCause());
+        assertEquals(List.of(lookup), List.of(deletion.getSuppressed()));
+        assertSame(deletion, assertThrows(RuntimeException.class, () -> K8sManager.deleteYaml(yaml))
+                .getCause().getCause());
+        assertEquals(List.of(lookup), List.of(deletion.getSuppressed()));
     }
 
 }

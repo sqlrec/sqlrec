@@ -10,7 +10,6 @@ import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -28,8 +27,8 @@ final class JobCompletionWatcher {
 
     private JobCompletionWatcher(KubernetesClient client, Job target) {
         this.client = client;
-        this.namespace = Objects.requireNonNullElse(target.getMetadata().getNamespace(), "default");
-        this.name = Objects.requireNonNull(target.getMetadata().getName(), "Job name");
+        this.name = K8sManager.requireResourceName(target);
+        this.namespace = K8sManager.requireResourceNamespace(target);
         this.uid = target.getMetadata().getUid();
         // Event handlers only signal the outcome. Stop observers off the event thread and
         // finish cleanup before exposing the result to callers that may immediately close the client.
@@ -89,19 +88,9 @@ final class JobCompletionWatcher {
 
     private synchronized void onPods(List<Pod> pods) {
         if (outcome.isDone()) return;
-        for (Pod pod : pods) {
-            // Labels can survive a same-name retry; only this Job's Pods belong to the operation.
-            if (uid != null && (pod.getMetadata() == null || pod.getMetadata().getOwnerReferences() == null
-                    || pod.getMetadata().getOwnerReferences().stream().noneMatch(owner -> uid.equals(owner.getUid())))) {
-                continue;
-            }
-            String failure = K8sManager.imagePullFailure(pod);
-            if (failure != null) {
-                String podName = pod.getMetadata() == null ? "unknown" : pod.getMetadata().getName();
-                outcome.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED,
-                        "Job " + namespace + "/" + name + ", Pod " + podName + ": " + failure));
-                return;
-            }
+        String failure = K8sManager.jobPodImagePullFailure(pods, namespace, name, uid);
+        if (failure != null) {
+            outcome.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED, failure));
         }
     }
 

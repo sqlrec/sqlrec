@@ -55,7 +55,7 @@ class ModelManagerTrainingSafetyTest {
             });
             f.k8s.when(() -> K8sManager.validateYaml("injected-yaml")).thenAnswer(invocation -> {
                 events.add("validate");
-                return null;
+                return "namespace-bound-yaml";
             });
             f.k8s.when(() -> K8sManager.deleteYamlAndWait("old-yaml")).thenAnswer(invocation -> {
                 events.add("stop");
@@ -65,7 +65,7 @@ class ModelManagerTrainingSafetyTest {
                 events.add("persist");
                 return null;
             }).when(f.db).upsertCheckpoint(any());
-            f.k8s.when(() -> K8sManager.applyYaml("injected-yaml")).thenAnswer(invocation -> {
+            f.k8s.when(() -> K8sManager.applyYaml("namespace-bound-yaml")).thenAnswer(invocation -> {
                 events.add("apply");
                 return null;
             });
@@ -79,7 +79,7 @@ class ModelManagerTrainingSafetyTest {
                     "v1".equals(checkpoint.getCheckpointName())
                             && Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())
                             && Consts.CHECKPOINT_TYPE_ORIGIN.equals(checkpoint.getCheckpointType())
-                            && "injected-yaml".equals(checkpoint.getYaml())
+                            && "namespace-bound-yaml".equals(checkpoint.getYaml())
                             && "model-ddl".equals(checkpoint.getModelDdl())
                             && checkpoint.getCreatedAt() == 123L));
             verify(f.db, never()).insertCheckpoint(any());

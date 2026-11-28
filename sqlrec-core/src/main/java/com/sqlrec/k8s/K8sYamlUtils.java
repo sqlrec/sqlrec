@@ -4,6 +4,7 @@ import com.sqlrec.common.config.ModelConfigs;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,21 +81,24 @@ public class K8sYamlUtils {
         }
 
         try (InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8))) {
-            Object resource = Serialization.unmarshal(inputStream);
-            if (resource instanceof Iterable) {
-                for (Object item : (Iterable<?>) resource) {
-                    if (item instanceof HasMetadata metadata) {
-                        resources.add(metadata);
-                    }
-                }
-            } else if (resource instanceof HasMetadata metadata) {
-                resources.add(metadata);
-            }
+            addResources(Serialization.unmarshal(inputStream), resources);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse YAML: " + e.getMessage(), e);
         }
 
         return resources;
+    }
+
+    private static void addResources(Object resource, List<HasMetadata> resources) {
+        if (resource instanceof KubernetesResourceList<?> list) {
+            addResources(list.getItems(), resources);
+        } else if (resource instanceof HasMetadata metadata) {
+            resources.add(metadata);
+        } else if (resource instanceof Iterable<?> items) {
+            for (Object item : items) {
+                addResources(item, resources);
+            }
+        }
     }
 
     private static <T extends HasMetadata> List<T> parseK8sYamlAndGetResources(String yamlContent, Class<T> resourceType) {
@@ -132,6 +136,45 @@ public class K8sYamlUtils {
             yamlBuilder.append(resourceYaml);
         }
         return yamlBuilder.toString();
+    }
+
+    static String bindNamespaces(String yaml, List<HasMetadata> resources, KubernetesClient client) {
+        String clientNamespace = client.getNamespace();
+        boolean changed = false;
+        for (HasMetadata resource : resources) {
+            var metadata = resource.getMetadata();
+            String namespace = metadata == null ? null : metadata.getNamespace();
+            if ((namespace == null || namespace.isEmpty()) && isNamespaced(resource, client)) {
+                if (clientNamespace == null || clientNamespace.isBlank()) {
+                    throw new IllegalArgumentException("Set metadata.namespace for " + resource.getKind()
+                            + " or configure a Kubernetes client namespace.");
+                }
+                if (metadata == null) {
+                    metadata = new ObjectMeta();
+                    resource.setMetadata(metadata);
+                }
+                metadata.setNamespace(clientNamespace);
+                changed = true;
+            }
+        }
+        return changed ? mergeYamlResources(resources) : yaml;
+    }
+
+    static boolean isNamespaced(HasMetadata resource, KubernetesClient client) {
+        if (!(resource instanceof GenericKubernetesResource)) {
+            return resource instanceof Namespaced;
+        }
+        var discovery = client.getApiResources(resource.getApiVersion());
+        if (discovery != null && discovery.getResources() != null) {
+            for (APIResource type : discovery.getResources()) {
+                if (resource.getKind().equals(type.getKind()) && type.getNamespaced() != null
+                        && type.getName() != null && !type.getName().contains("/")) {
+                    return type.getNamespaced();
+                }
+            }
+        }
+        throw new IllegalArgumentException("Cannot determine scope for " + resource.getApiVersion()
+                + " " + resource.getKind() + " from Kubernetes API discovery.");
     }
 
     private static PodSpec getPodSpec(HasMetadata resource) {

@@ -20,15 +20,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class K8sManager {
@@ -56,6 +55,35 @@ public class K8sManager {
             }
         }
         return current;
+    }
+
+    static String requireResourceName(HasMetadata resource) {
+        var metadata = resource.getMetadata();
+        String name = metadata == null ? null : metadata.getName();
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Missing metadata.name for " + resource.getKind());
+        }
+        return name;
+    }
+
+    static String requireResourceNamespace(HasMetadata resource) {
+        var metadata = resource.getMetadata();
+        String namespace = metadata == null ? null : metadata.getNamespace();
+        if (namespace == null || namespace.isBlank()) {
+            throw new IllegalArgumentException("Missing metadata.namespace for " + resource.getKind()
+                    + " " + requireResourceName(resource) + ". Restore the resource's original namespace in the stored YAML.");
+        }
+        return namespace;
+    }
+
+    private static void requireStoredNamespaces(List<HasMetadata> resources, KubernetesClient client) {
+        for (HasMetadata resource : resources) {
+            var metadata = resource.getMetadata();
+            String namespace = metadata == null ? null : metadata.getNamespace();
+            if ((namespace == null || namespace.isBlank()) && K8sYamlUtils.isNamespaced(resource, client)) {
+                requireResourceNamespace(resource);
+            }
+        }
     }
 
     /**
@@ -119,20 +147,28 @@ public class K8sManager {
         applyYaml(yamlContent, false);
     }
 
-    /** Run the same API validation and admission as apply, without creating resources. */
-    public static void validateYaml(String yamlContent) {
-        applyYaml(yamlContent, true);
+    /** Dry-run the manifest and return the exact YAML to persist and submit. */
+    public static String validateYaml(String yamlContent) {
+        return applyYaml(yamlContent, true);
     }
 
-    private static void applyYaml(String yamlContent, boolean dryRun) {
+    private static String applyYaml(String yamlContent, boolean dryRun) {
         if (yamlContent == null || yamlContent.isEmpty()) {
-            return;
+            return yamlContent;
         }
         KubernetesClient client = null;
         try {
             client = getKubernetesClient();
-            InputStream inputStream = new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8));
-            client.load(inputStream).dryRun(dryRun).serverSideApply();
+            var loaded = client.load(new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8)));
+            if (dryRun) {
+                String validatedYaml = K8sYamlUtils.bindNamespaces(yamlContent, loaded.items(), client);
+                if (!validatedYaml.equals(yamlContent)) {
+                    yamlContent = validatedYaml;
+                    loaded = client.load(new ByteArrayInputStream(yamlContent.getBytes(StandardCharsets.UTF_8)));
+                }
+            }
+            loaded.dryRun(dryRun).serverSideApply();
+            return yamlContent;
         } catch (Exception e) {
             String action = dryRun ? "validate" : "apply";
             log.error("Failed to {} YAML: {}", action, e.getMessage(), e);
@@ -150,8 +186,9 @@ public class K8sManager {
 
         KubernetesClient client = null;
         try {
-            client = getKubernetesClient();
             List<HasMetadata> resources = K8sYamlUtils.parseK8sYaml(yamlContent);
+            client = getKubernetesClient();
+            requireStoredNamespaces(resources, client);
 
             for (HasMetadata resource : resources) {
                 String kind = resource.getKind();
@@ -165,18 +202,13 @@ public class K8sManager {
                     throw new RuntimeException("unsupport k8s resource: " + kind);
                 }
 
-                String namespace = Objects.requireNonNullElse(metadata.getNamespace(), "default");
+                String namespace = metadata.getNamespace();
                 Resource<HasMetadata> handle = client.resource(resource).inNamespace(namespace);
-                if (handle.get() == null) {
-                    log.info("Skipping non-existent {}: {}/{}", kind, namespace, name);
-                    continue;
-                }
                 try {
                     handle.delete();
-                    log.info("Successfully deleted {}: {}/{}", kind, namespace, name);
-                } catch (Exception e) {
-                    log.error("Failed to delete {}: {}/{}, error: {}", kind, namespace, name, e.getMessage());
-                    if (!(e instanceof KubernetesClientException failure) || failure.getCode() != 404) {
+                    log.info("Deleted {} if present: {}/{}", kind, namespace, name);
+                } catch (KubernetesClientException e) {
+                    if (!alreadyDeleted(handle, e)) {
                         throw new RuntimeException("Failed to delete " + kind + ": " + namespace + "/" + name, e);
                     }
                 }
@@ -187,6 +219,23 @@ public class K8sManager {
                 resetClient(client);
             }
             throw new RuntimeException("Failed to delete YAML: " + e.getMessage(), e);
+        }
+    }
+
+    private static boolean alreadyDeleted(Resource<HasMetadata> handle, KubernetesClientException failure) {
+        if (failure.getCode() == 404) {
+            return true;
+        }
+        if (failure.getCode() != 403) {
+            return false;
+        }
+        try {
+            return handle.get() == null;
+        } catch (RuntimeException lookupFailure) {
+            if (lookupFailure != failure) {
+                failure.addSuppressed(lookupFailure);
+            }
+            return false;
         }
     }
 
@@ -202,16 +251,13 @@ public class K8sManager {
 
         KubernetesClient client = null;
         try {
-            client = getKubernetesClient();
             List<HasMetadata> resources = K8sYamlUtils.parseK8sYaml(yamlContent);
+            client = getKubernetesClient();
+            requireStoredNamespaces(resources, client);
             // Stop the old workload before removing the resources it depends on.
             resources.sort(Comparator.comparingInt(resource -> "Job".equals(resource.getKind()) ? 0 : 1));
             for (HasMetadata resource : resources) {
-                String name = resource.getMetadata() != null ? resource.getMetadata().getName() : null;
-                if (name == null || name.isEmpty()) {
-                    throw new IllegalArgumentException("Cannot delete " + resource.getKind() + " without a name");
-                }
-
+                String name = requireResourceName(resource);
                 Resource<HasMetadata> handle = client.resource(resource);
                 if ("Job".equals(resource.getKind())) {
                     // Keep the Job until its Pods are gone, so retries cannot share a writer.
@@ -219,13 +265,21 @@ public class K8sManager {
                 } else {
                     handle.delete();
                 }
-                handle.waitUntilCondition(Objects::isNull, DELETE_WAIT_SECONDS, TimeUnit.SECONDS);
+                var deletion = handle.informOnCondition(List::isEmpty);
+                try {
+                    deletion.get(DELETE_WAIT_SECONDS, TimeUnit.SECONDS);
+                } catch (TimeoutException e) {
+                    throw new IllegalStateException("Timed out after " + DELETE_WAIT_SECONDS
+                            + "s waiting for deletion of " + resource.getKind() + " " + name, e);
+                } finally {
+                    deletion.cancel(false);
+                }
                 log.info("Deleted {} before checkpoint retry: {}/{}", resource.getKind(),
                         resource.getMetadata().getNamespace(), name);
             }
         } catch (Exception e) {
-            // Fabric8 restores the interrupt flag when its blocking wait is interrupted.
-            if (Thread.currentThread().isInterrupted()) {
+            if (e instanceof InterruptedException || Thread.currentThread().isInterrupted()) {
+                Thread.currentThread().interrupt();
                 throw new RuntimeException("Interrupted while deleting old checkpoint resources", e);
             }
             log.error("Failed to delete old checkpoint resources: {}", e.getMessage(), e);
@@ -249,18 +303,17 @@ public class K8sManager {
         KubernetesClient client = null;
         try {
             client = getKubernetesClient();
-            String resolvedNamespace = namespace != null ? namespace : "default";
             Job job = client.batch().v1().jobs()
-                    .inNamespace(resolvedNamespace)
+                    .inNamespace(namespace)
                     .withName(jobName)
                     .get();
 
-            JobStatus knownStatus = knownJobStatus(job, jobName, resolvedNamespace);
+            JobStatus knownStatus = knownJobStatus(job, jobName, namespace);
             if (knownStatus != null) {
                 return knownStatus;
             }
 
-            String imagePullFailure = findImagePullFailure(client, job, resolvedNamespace);
+            String imagePullFailure = findImagePullFailure(client, job, namespace);
             return imagePullFailure == null
                     ? new JobStatus(JobState.RUNNING, null)
                     : new JobStatus(JobState.FAILED, imagePullFailure);
@@ -270,7 +323,7 @@ public class K8sManager {
                 resetClient(client);
             }
             throw new IllegalStateException("Cannot determine Job status: "
-                    + (namespace != null ? namespace : "default") + "/" + jobName, e);
+                    + namespace + "/" + jobName, e);
         }
     }
 
@@ -331,10 +384,20 @@ public class K8sManager {
         if (podList == null || podList.getItems() == null) {
             return null;
         }
-        for (Pod pod : podList.getItems()) {
+        return jobPodImagePullFailure(podList.getItems(), namespace, jobName, job.getMetadata().getUid());
+    }
+
+    static String jobPodImagePullFailure(List<Pod> pods, String namespace, String jobName, String jobUid) {
+        for (Pod pod : pods) {
+            var metadata = pod == null ? null : pod.getMetadata();
+            // Labels can survive a same-name retry. Check ownership when the Job UID is known.
+            if (jobUid != null && (metadata == null || metadata.getOwnerReferences() == null
+                    || metadata.getOwnerReferences().stream().noneMatch(owner -> jobUid.equals(owner.getUid())))) {
+                continue;
+            }
             String failure = imagePullFailure(pod);
             if (failure != null) {
-                String podName = pod.getMetadata() != null ? pod.getMetadata().getName() : "unknown";
+                String podName = metadata != null ? metadata.getName() : "unknown";
                 return "Job " + namespace + "/" + jobName + ", Pod " + podName + ": " + failure;
             }
         }
@@ -371,7 +434,7 @@ public class K8sManager {
         try {
             client = getKubernetesClient();
             Deployment deployment = client.apps().deployments()
-                    .inNamespace(namespace != null ? namespace : "default")
+                    .inNamespace(namespace)
                     .withName(deploymentName)
                     .get();
 
@@ -387,11 +450,17 @@ public class K8sManager {
 
     private static boolean isDeploymentReady(Deployment deployment, String deploymentName, String namespace) {
         if (deployment == null) {
-            log.warn("Deployment not found: {}/{}", namespace != null ? namespace : "default", deploymentName);
+            log.warn("Deployment not found: {}/{}", namespace, deploymentName);
             return false;
         }
 
         if (deployment.getStatus() != null) {
+            Long generation = deployment.getMetadata() == null ? null : deployment.getMetadata().getGeneration();
+            Long observedGeneration = deployment.getStatus().getObservedGeneration();
+            if (generation != null && (observedGeneration == null || observedGeneration < generation)) {
+                log.info("Deployment {}/{} is waiting for generation {} to be observed", namespace, deploymentName, generation);
+                return false;
+            }
             int replicas = valueOrDefault(deployment.getSpec() != null ? deployment.getSpec().getReplicas() : null, 1);
             int readyReplicas = valueOrDefault(deployment.getStatus().getReadyReplicas(), 0);
             int updatedReplicas = valueOrDefault(deployment.getStatus().getUpdatedReplicas(), 0);
@@ -424,7 +493,7 @@ public class K8sManager {
     public static CompletableFuture<JobStatus> watchJobsFromYaml(String yaml) {
         CompletableFuture<JobStatus> completion = new CompletableFuture<>();
         try {
-            List<Job> jobs = yaml == null || yaml.isEmpty() ? List.of() : K8sYamlUtils.parseK8sYamlAndGetJobs(yaml);
+            List<Job> jobs = K8sYamlUtils.parseK8sYamlAndGetJobs(yaml);
             if (jobs.isEmpty()) return CompletableFuture.completedFuture(new JobStatus(JobState.SUCCEEDED, null));
             AtomicInteger remaining = new AtomicInteger(jobs.size());
             KubernetesClient client = getKubernetesClient();
@@ -445,68 +514,25 @@ public class K8sManager {
     }
 
     public static JobStatus checkJobsStatusDetailFromYaml(String k8sYaml) {
-        if (k8sYaml == null || k8sYaml.isEmpty()) {
-            return new JobStatus(JobState.SUCCEEDED, null);
-        }
-
-        List<Job> jobs = K8sYamlUtils.parseK8sYamlAndGetJobs(k8sYaml);
-
-        if (jobs.isEmpty()) {
-            return new JobStatus(JobState.SUCCEEDED, null);
-        }
-
-        boolean anyFailed = false;
         boolean anyRunning = false;
-        String failureDetail = null;
-
-        for (Job job : jobs) {
-            String namespace = job.getMetadata() != null ? job.getMetadata().getNamespace() : null;
-            String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
-            if (name != null) {
-                JobStatus status = checkJobStatusByName(name, namespace);
-                if (status.state() == JobState.FAILED) {
-                    anyFailed = true;
-                    if (failureDetail == null) {
-                        failureDetail = status.detail();
-                    }
-                } else if (status.state() == JobState.RUNNING) {
-                    anyRunning = true;
-                }
+        for (Job job : K8sYamlUtils.parseK8sYamlAndGetJobs(k8sYaml)) {
+            String name = requireResourceName(job);
+            JobStatus status = checkJobStatusByName(name, requireResourceNamespace(job));
+            if (status.state() == JobState.FAILED) {
+                return status;
             }
+            anyRunning |= status.state() == JobState.RUNNING;
         }
-
-        if (anyFailed) {
-            return new JobStatus(JobState.FAILED, failureDetail);
-        }
-        if (anyRunning) {
-            return new JobStatus(JobState.RUNNING, null);
-        }
-        return new JobStatus(JobState.SUCCEEDED, null);
+        return new JobStatus(anyRunning ? JobState.RUNNING : JobState.SUCCEEDED, null);
     }
 
     public static boolean isDeploymentReadyFromYaml(String k8sYaml) {
-        if (k8sYaml == null || k8sYaml.isEmpty()) {
-            return true;
-        }
-
-        List<Deployment> deployments = K8sYamlUtils.parseK8sYamlAndGetDeployments(k8sYaml);
-
-        if (deployments.isEmpty()) {
-            return true;
-        }
-
-        boolean allReady = true;
-
-        for (Deployment deployment : deployments) {
-            String namespace = deployment.getMetadata() != null ? deployment.getMetadata().getNamespace() : null;
-            String name = deployment.getMetadata() != null ? deployment.getMetadata().getName() : null;
-            if (name != null) {
-                if (!isDeploymentReadyByName(name, namespace)) {
-                    allReady = false;
-                }
+        for (Deployment deployment : K8sYamlUtils.parseK8sYamlAndGetDeployments(k8sYaml)) {
+            String name = requireResourceName(deployment);
+            if (!isDeploymentReadyByName(name, requireResourceNamespace(deployment))) {
+                return false;
             }
         }
-
-        return allReady;
+        return true;
     }
 }

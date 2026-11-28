@@ -29,6 +29,7 @@ class ModelJobTestFixture implements AutoCloseable {
         CheckpointTestSupport.stubCompletion(db);
         metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
         yaml.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString())).thenCallRealMethod();
+        k8s.when(() -> K8sManager.validateYaml(anyString())).thenAnswer(call -> call.getArgument(0));
     }
 
     final void stubModel(String name, ModelConf model) throws Exception {
