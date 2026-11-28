@@ -317,29 +317,10 @@ public final class RowTransformUtils {
 
     private static void checkCompatible(RelDataTypeField desired, RelDataTypeField given) {
         if (given.getType().getSqlTypeName() == SqlTypeName.NULL
-                || compatibleTypes(desired.getType(), given.getType())) {
+                || DataTypeUtils.compatibleTypes(desired.getType(), given.getType(), true)) {
             return;
         }
         throw new RuntimeException("adaptRowsToSchema failed, incompatible field type for '"
                 + desired.getName() + "': desired " + desired.getType() + ", given " + given.getType());
-    }
-
-    private static boolean compatibleTypes(RelDataType desired, RelDataType given) {
-        SqlTypeName desiredType = desired.getSqlTypeName();
-        SqlTypeName givenType = given.getSqlTypeName();
-        if (desiredType != givenType) {
-            return SqlTypeName.STRING_TYPES.contains(desiredType)
-                    || SqlTypeName.NUMERIC_TYPES.contains(desiredType)
-                    && SqlTypeName.NUMERIC_TYPES.contains(givenType);
-        }
-        switch (desiredType) {
-            case ARRAY:
-                return compatibleTypes(desired.getComponentType(), given.getComponentType());
-            case MAP:
-                return compatibleTypes(desired.getKeyType(), given.getKeyType())
-                        && compatibleTypes(desired.getValueType(), given.getValueType());
-            default:
-                return true;
-        }
     }
 }

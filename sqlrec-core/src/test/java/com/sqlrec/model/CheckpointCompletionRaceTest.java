@@ -24,7 +24,7 @@ class CheckpointCompletionRaceTest {
         try (Fixture f = new Fixture()) {
             var first = f.watch();
             var second = f.watch();
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             assertTrue(first.isDone());
             assertTrue(second.isDone());
             first.join();
@@ -39,7 +39,7 @@ class CheckpointCompletionRaceTest {
             Checkpoint stale = checkpoint("old-yaml", 1);
             assertTrue(f.db.completeCheckpoint(f.db.getCheckpoint("rank", "v1"), Consts.CHECKPOINT_STATUS_SUCCEEDED));
             f.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("old-yaml"))
-                    .thenReturn(new K8sManager.JobStatus("failed", "Job not found"));
+                    .thenReturn(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "Job not found"));
 
             assertTrue(CheckpointCompletion.canReuseCreated(f.db, stale));
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, stale.getStatus());
@@ -52,7 +52,7 @@ class CheckpointCompletionRaceTest {
         try (Fixture f = new Fixture()) {
             f.onCompletionRead = () -> f.store.deleteCheckpoint("rank", "v1");
             var operation = f.watch();
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
 
             assertThrows(CompletionException.class, operation::join);
             assertNull(f.store.getCheckpoint("rank", "v1"));
@@ -66,7 +66,7 @@ class CheckpointCompletionRaceTest {
             Checkpoint retry = checkpoint("new-yaml", 2);
             f.onCompletionRead = () -> f.store.upsertCheckpoint(retry);
             var operation = f.watch();
-            f.observation.complete(new K8sManager.JobStatus("failed", "old Job failed"));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "old Job failed"));
 
             assertThrows(CompletionException.class, operation::join);
             assertSame(retry, f.store.getCheckpoint("rank", "v1"));

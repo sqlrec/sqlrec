@@ -15,16 +15,21 @@ import com.sqlrec.runtime.SqlFunctionBindable;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.search.Search;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.ToDoubleFunction;
+import java.util.function.ToLongFunction;
 
 final class FunctionDagBuilder {
     private static final Logger logger = LoggerFactory.getLogger(FunctionDagBuilder.class);
@@ -156,33 +161,26 @@ final class FunctionDagBuilder {
     }
 
     private static double getNodeAvgExecTime(String nodeName) {
-        try {
-            Tags tags = Tags.of("name", nodeName, "outcome", "success");
-            java.util.Collection<Timer> timers = MetricsUtils.getCompositeMeterRegistry()
-                    .find(Consts.METRICS_NODE_EXEC_DURATION)
-                    .tags(tags)
-                    .timers();
-            long count = timers.stream().mapToLong(Timer::count).sum();
-            double total = timers.stream().mapToDouble(timer -> timer.totalTime(TimeUnit.MILLISECONDS)).sum();
-            return count > 0 ? total / count : -1;
-        } catch (Exception e) {
-            logger.debug("Failed to get avg exec time for node: {}", nodeName);
-            return -1;
-        }
+        return getNodeAverage(nodeName, Consts.METRICS_NODE_EXEC_DURATION, Search::timers,
+                Timer::count, timer -> timer.totalTime(TimeUnit.MILLISECONDS));
     }
 
     private static double getNodeAvgDataCount(String nodeName) {
+        return getNodeAverage(nodeName, Consts.METRICS_NODE_ROWS, Search::summaries,
+                DistributionSummary::count, DistributionSummary::totalAmount);
+    }
+
+    private static <T> double getNodeAverage(String nodeName, String metricName,
+            Function<Search, Collection<T>> findMeters, ToLongFunction<T> countOf, ToDoubleFunction<T> totalOf) {
         try {
             Tags tags = Tags.of("name", nodeName, "outcome", "success");
-            java.util.Collection<DistributionSummary> summaries = MetricsUtils.getCompositeMeterRegistry()
-                    .find(Consts.METRICS_NODE_ROWS)
-                    .tags(tags)
-                    .summaries();
-            long count = summaries.stream().mapToLong(DistributionSummary::count).sum();
-            double total = summaries.stream().mapToDouble(DistributionSummary::totalAmount).sum();
+            Collection<T> meters = findMeters.apply(MetricsUtils.getCompositeMeterRegistry()
+                    .find(metricName).tags(tags));
+            long count = meters.stream().mapToLong(countOf).sum();
+            double total = meters.stream().mapToDouble(totalOf).sum();
             return count > 0 ? total / count : -1;
         } catch (Exception e) {
-            logger.debug("Failed to get avg data count for node: {}", nodeName);
+            logger.debug("Failed to get {} average for node: {}", metricName, nodeName);
             return -1;
         }
     }

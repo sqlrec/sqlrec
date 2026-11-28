@@ -238,26 +238,31 @@ public class DataTypeUtils {
             if (!expected.getName().equalsIgnoreCase(actual.getName())) {
                 throw new RuntimeException(nameMismatch + expected.getName() + " != " + actual.getName());
             }
-            if (!compatibleTypes(expected.getType(), actual.getType())) {
+            if (!compatibleTypes(expected.getType(), actual.getType(), false)) {
                 throw new RuntimeException(typeMismatch + expected.getType() + " != " + actual.getType());
             }
         }
     }
 
-    private static boolean compatibleTypes(RelDataType first, RelDataType second) {
+    static boolean compatibleTypes(RelDataType first, RelDataType second, boolean allowRowConversion) {
         SqlTypeName firstType = first.getSqlTypeName();
         SqlTypeName secondType = second.getSqlTypeName();
         if (firstType != secondType) {
+            if (allowRowConversion) {
+                return SqlTypeName.STRING_TYPES.contains(firstType)
+                        || (SqlTypeName.NUMERIC_TYPES.contains(firstType) && SqlTypeName.NUMERIC_TYPES.contains(secondType));
+            }
             return SqlTypeName.STRING_TYPES.contains(firstType) && SqlTypeName.STRING_TYPES.contains(secondType);
         }
-        // Composite types must also agree internally because schema merging does not convert row values.
         switch (firstType) {
             case ARRAY:
+                return compatibleTypes(first.getComponentType(), second.getComponentType(), allowRowConversion);
             case MULTISET:
-                return compatibleTypes(first.getComponentType(), second.getComponentType());
+                // Row adaptation passes MULTISET values through.
+                return allowRowConversion || compatibleTypes(first.getComponentType(), second.getComponentType(), false);
             case MAP:
-                return compatibleTypes(first.getKeyType(), second.getKeyType())
-                        && compatibleTypes(first.getValueType(), second.getValueType());
+                return compatibleTypes(first.getKeyType(), second.getKeyType(), allowRowConversion)
+                        && compatibleTypes(first.getValueType(), second.getValueType(), allowRowConversion);
             default:
                 return true;
         }

@@ -58,7 +58,7 @@ class ModelManagerCheckpointFailureTest {
             k8s.verify(() -> K8sManager.watchJobsFromYaml(yaml), times(1));
             k8s.verify(() -> K8sManager.deleteYaml(yaml), never());
 
-            observation.complete(new K8sManager.JobStatus("succeeded", null));
+            observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             completion.join();
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, user.getStatus());
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, item.getStatus());
@@ -83,7 +83,7 @@ class ModelManagerCheckpointFailureTest {
              MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
             metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
             k8s.when(() -> K8sManager.watchJobsFromYaml(checkpoint.getYaml()))
-                    .thenReturn(CompletableFuture.completedFuture(new K8sManager.JobStatus("failed",
+                    .thenReturn(CompletableFuture.completedFuture(new K8sManager.JobStatus(K8sManager.JobState.FAILED,
                             "Pod train-abc: container trainer is waiting: ErrImagePull")));
 
             RuntimeException error = assertThrows(RuntimeException.class,
@@ -135,7 +135,7 @@ class ModelManagerCheckpointFailureTest {
 
         try (MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
             k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
-                    .thenReturn(new K8sManager.JobStatus("failed", "Job not found"));
+                    .thenReturn(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "Job not found"));
 
             assertFalse(CheckpointCompletion.canReuseCreated(db, checkpoint));
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, checkpoint.getStatus());
@@ -152,7 +152,7 @@ class ModelManagerCheckpointFailureTest {
 
         try (MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class)) {
             k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(checkpoint.getYaml()))
-                    .thenReturn(new K8sManager.JobStatus("running", null));
+                    .thenReturn(new K8sManager.JobStatus(K8sManager.JobState.RUNNING, null));
 
             assertTrue(CheckpointCompletion.canReuseCreated(db, checkpoint));
             assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());

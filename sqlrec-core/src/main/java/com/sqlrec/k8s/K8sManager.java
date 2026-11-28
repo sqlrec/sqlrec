@@ -236,7 +236,13 @@ public class K8sManager {
         }
     }
 
-    public record JobStatus(String state, String detail) {
+    public enum JobState {
+        RUNNING,
+        SUCCEEDED,
+        FAILED
+    }
+
+    public record JobStatus(JobState state, String detail) {
     }
 
     private static JobStatus checkJobStatusByName(String jobName, String namespace) {
@@ -256,8 +262,8 @@ public class K8sManager {
 
             String imagePullFailure = findImagePullFailure(client, job, resolvedNamespace);
             return imagePullFailure == null
-                    ? new JobStatus("running", null)
-                    : new JobStatus("failed", imagePullFailure);
+                    ? new JobStatus(JobState.RUNNING, null)
+                    : new JobStatus(JobState.FAILED, imagePullFailure);
         } catch (Exception e) {
             log.error("Failed to check job status: {}", e.getMessage(), e);
             if (isK8sClientFailure(e)) {
@@ -273,7 +279,7 @@ public class K8sManager {
         if (job == null) {
             String detail = "Job not found: " + resolvedNamespace + "/" + jobName;
             log.error(detail);
-            return new JobStatus("failed", detail);
+            return new JobStatus(JobState.FAILED, detail);
         }
 
         if (job.getStatus() != null) {
@@ -283,7 +289,7 @@ public class K8sManager {
                         String detail = condition.getMessage();
                         log.error("Job failed: {}/{}, reason: {}, message: {}",
                                 resolvedNamespace, jobName, condition.getReason(), detail);
-                        return new JobStatus("failed", "Job failed: " + resolvedNamespace + "/" + jobName
+                        return new JobStatus(JobState.FAILED, "Job failed: " + resolvedNamespace + "/" + jobName
                                 + (detail == null || detail.isBlank() ? "" : " (" + detail + ")"));
                     }
                 }
@@ -293,7 +299,7 @@ public class K8sManager {
             // Kubernetes defaults completions to one when the field is omitted.
             if (succeeded != null && succeeded >= (completions != null ? completions : 1)) {
                 log.info("Job completed successfully: {}/{}", resolvedNamespace, jobName);
-                return new JobStatus("succeeded", null);
+                return new JobStatus(JobState.SUCCEEDED, null);
             }
 
             // Ready Pods have already started all their containers. Avoid listing Pods
@@ -302,7 +308,7 @@ public class K8sManager {
             Integer active = job.getStatus().getActive();
             Integer ready = job.getStatus().getReady();
             if (active != null && active > 0 && active.equals(ready)) {
-                return new JobStatus("running", null);
+                return new JobStatus(JobState.RUNNING, null);
             }
         }
         return null;
@@ -419,7 +425,7 @@ public class K8sManager {
         CompletableFuture<JobStatus> completion = new CompletableFuture<>();
         try {
             List<Job> jobs = yaml == null || yaml.isEmpty() ? List.of() : K8sYamlUtils.parseK8sYamlAndGetJobs(yaml);
-            if (jobs.isEmpty()) return CompletableFuture.completedFuture(new JobStatus("succeeded", null));
+            if (jobs.isEmpty()) return CompletableFuture.completedFuture(new JobStatus(JobState.SUCCEEDED, null));
             AtomicInteger remaining = new AtomicInteger(jobs.size());
             KubernetesClient client = getKubernetesClient();
             for (Job job : jobs) {
@@ -428,8 +434,8 @@ public class K8sManager {
                 completion.whenComplete((result, failure) -> observation.cancel(false));
                 observation.whenComplete((status, failure) -> {
                     if (failure != null) completion.completeExceptionally(failure);
-                    else if ("failed".equals(status.state())) completion.complete(status);
-                    else if (remaining.decrementAndGet() == 0) completion.complete(new JobStatus("succeeded", null));
+                    else if (status.state() == JobState.FAILED) completion.complete(status);
+                    else if (remaining.decrementAndGet() == 0) completion.complete(new JobStatus(JobState.SUCCEEDED, null));
                 });
             }
         } catch (Exception failure) {
@@ -440,13 +446,13 @@ public class K8sManager {
 
     public static JobStatus checkJobsStatusDetailFromYaml(String k8sYaml) {
         if (k8sYaml == null || k8sYaml.isEmpty()) {
-            return new JobStatus("succeeded", null);
+            return new JobStatus(JobState.SUCCEEDED, null);
         }
 
         List<Job> jobs = K8sYamlUtils.parseK8sYamlAndGetJobs(k8sYaml);
 
         if (jobs.isEmpty()) {
-            return new JobStatus("succeeded", null);
+            return new JobStatus(JobState.SUCCEEDED, null);
         }
 
         boolean anyFailed = false;
@@ -458,24 +464,24 @@ public class K8sManager {
             String name = job.getMetadata() != null ? job.getMetadata().getName() : null;
             if (name != null) {
                 JobStatus status = checkJobStatusByName(name, namespace);
-                if ("failed".equals(status.state())) {
+                if (status.state() == JobState.FAILED) {
                     anyFailed = true;
                     if (failureDetail == null) {
                         failureDetail = status.detail();
                     }
-                } else if ("running".equals(status.state())) {
+                } else if (status.state() == JobState.RUNNING) {
                     anyRunning = true;
                 }
             }
         }
 
         if (anyFailed) {
-            return new JobStatus("failed", failureDetail);
+            return new JobStatus(JobState.FAILED, failureDetail);
         }
         if (anyRunning) {
-            return new JobStatus("running", null);
+            return new JobStatus(JobState.RUNNING, null);
         }
-        return new JobStatus("succeeded", null);
+        return new JobStatus(JobState.SUCCEEDED, null);
     }
 
     public static boolean isDeploymentReadyFromYaml(String k8sYaml) {

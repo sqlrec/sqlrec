@@ -110,15 +110,7 @@ json normalize_request(const json& data) {
         size_t length = it.value().size();
         if (length != batch && length != 1) throw std::invalid_argument("Column lengths must match or be 1");
     }
-    json rows = json::array();
-    for (size_t i = 0; i < batch; ++i) {
-        json row = json::object();
-        for (auto it = data.begin(); it != data.end(); ++it) {
-            row[it.key()] = it.value()[it.value().size() == 1 ? 0 : i];
-        }
-        rows.push_back(std::move(row));
-    }
-    return rows;
+    return expand_columnar_rows(data, batch);
 }
 }  // namespace
 

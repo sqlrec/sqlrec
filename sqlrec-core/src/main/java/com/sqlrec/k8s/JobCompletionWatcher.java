@@ -57,7 +57,7 @@ final class JobCompletionWatcher {
     private synchronized void onJobs(List<Job> jobs) {
         if (outcome.isDone()) return;
         if (jobs.isEmpty()) {
-            outcome.complete(new K8sManager.JobStatus("failed", "Job not found: " + namespace + "/" + name));
+            outcome.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "Job not found: " + namespace + "/" + name));
             return;
         }
         Job job = jobs.getFirst();
@@ -68,7 +68,7 @@ final class JobCompletionWatcher {
         }
         uid = observedUid;
         K8sManager.JobStatus status = K8sManager.knownJobStatus(job, name, namespace);
-        if (status != null && !"running".equals(status.state())) {
+        if (status != null && status.state() != K8sManager.JobState.RUNNING) {
             outcome.complete(status);
             return;
         }
@@ -98,7 +98,7 @@ final class JobCompletionWatcher {
             String failure = K8sManager.imagePullFailure(pod);
             if (failure != null) {
                 String podName = pod.getMetadata() == null ? "unknown" : pod.getMetadata().getName();
-                outcome.complete(new K8sManager.JobStatus("failed",
+                outcome.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED,
                         "Job " + namespace + "/" + name + ", Pod " + podName + ": " + failure));
                 return;
             }

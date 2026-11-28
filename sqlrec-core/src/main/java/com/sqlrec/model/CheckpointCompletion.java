@@ -6,6 +6,8 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
 import com.sqlrec.k8s.K8sManager;
+import com.sqlrec.k8s.K8sManager.JobState;
+import com.sqlrec.k8s.K8sManager.JobStatus;
 import com.sqlrec.utils.ExecutorServiceUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -20,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Observes checkpoint attempts and reconciles their completion before consumption or retry. */
 final class CheckpointCompletion {
+    private static final JobStatus MISSING_JOB_YAML = new JobStatus(JobState.FAILED, "k8sYaml is empty");
+
     private CheckpointCompletion() {
     }
 
@@ -47,8 +51,8 @@ final class CheckpointCompletion {
             for (var group : groups.entrySet()) {
                 if (completion.isDone()) break;
                 String yaml = group.getKey();
-                CompletableFuture<K8sManager.JobStatus> observation = yaml.isEmpty()
-                        ? CompletableFuture.completedFuture(new K8sManager.JobStatus("failed", "k8sYaml is empty"))
+                CompletableFuture<JobStatus> observation = yaml.isEmpty()
+                        ? CompletableFuture.completedFuture(MISSING_JOB_YAML)
                         : K8sManager.watchJobsFromYaml(yaml);
                 completion.whenComplete((result, failure) -> observation.cancel(false));
                 observation.thenAcceptAsync(status -> {
@@ -69,7 +73,7 @@ final class CheckpointCompletion {
     private record CheckpointAttempt(String modelName, String checkpointName, long updatedAt) {}
 
     private static void finishCheckpointGroup(
-            MetadataAccess db, String yaml, List<CheckpointAttempt> attempts, K8sManager.JobStatus status) {
+            MetadataAccess db, String yaml, List<CheckpointAttempt> attempts, JobStatus status) {
         List<Checkpoint> checkpoints = new ArrayList<>();
         for (CheckpointAttempt attempt : attempts) {
             Checkpoint checkpoint = db.getCheckpoint(attempt.modelName(), attempt.checkpointName());
@@ -83,10 +87,11 @@ final class CheckpointCompletion {
         }
         List<String> failures = new ArrayList<>();
         boolean updated = false;
+        String checkpointStatus = Objects.requireNonNullElse(
+                terminalCheckpointStatus(status.state()), Consts.CHECKPOINT_STATUS_FAILED);
         for (Checkpoint checkpoint : checkpoints) {
             if (Consts.CHECKPOINT_STATUS_CREATED.equals(checkpoint.getStatus())) {
-                updated |= updateCheckpointStatus(db, checkpoint, "succeeded".equals(status.state())
-                        ? Consts.CHECKPOINT_STATUS_SUCCEEDED : Consts.CHECKPOINT_STATUS_FAILED);
+                updated |= updateCheckpointStatus(db, checkpoint, checkpointStatus);
             }
             if (Consts.CHECKPOINT_STATUS_FAILED.equals(checkpoint.getStatus())) failures.add(checkpoint.getCheckpointName());
         }
@@ -104,20 +109,27 @@ final class CheckpointCompletion {
             return;
         }
         String yaml = checkpoint.getYaml();
-        K8sManager.JobStatus status = StringUtils.isEmpty(yaml)
-                ? new K8sManager.JobStatus("failed", "k8sYaml is empty")
+        JobStatus status = StringUtils.isEmpty(yaml)
+                ? MISSING_JOB_YAML
                 : K8sManager.checkJobsStatusDetailFromYaml(yaml);
-        if ("succeeded".equals(status.state())) {
-            updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_SUCCEEDED);
-        } else if ("failed".equals(status.state())) {
-            updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);
+        String checkpointStatus = terminalCheckpointStatus(status.state());
+        if (checkpointStatus != null) {
+            updateCheckpointStatus(db, checkpoint, checkpointStatus);
         }
+    }
+
+    private static String terminalCheckpointStatus(JobState state) {
+        return switch (state) {
+            case SUCCEEDED -> Consts.CHECKPOINT_STATUS_SUCCEEDED;
+            case FAILED -> Consts.CHECKPOINT_STATUS_FAILED;
+            case RUNNING -> null;
+        };
     }
 
     static boolean canReuseCreated(MetadataAccess db, Checkpoint checkpoint) {
         String yaml = checkpoint.getYaml();
         if (!StringUtils.isEmpty(yaml)
-                && !"failed".equals(K8sManager.checkJobsStatusDetailFromYaml(yaml).state())) {
+                && K8sManager.checkJobsStatusDetailFromYaml(yaml).state() != JobState.FAILED) {
             return true;
         }
         updateCheckpointStatus(db, checkpoint, Consts.CHECKPOINT_STATUS_FAILED);

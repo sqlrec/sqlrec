@@ -239,8 +239,8 @@ public class K8sManagerUnitTest {
     @Test
     public void testCheckJobsStatusFromYamlEmpty() {
         // Empty input means no Job to check; should return "succeeded" without calling the client
-        assertEquals("succeeded", K8sManager.checkJobsStatusDetailFromYaml("").state());
-        assertEquals("succeeded", K8sManager.checkJobsStatusDetailFromYaml(null).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, K8sManager.checkJobsStatusDetailFromYaml("").state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, K8sManager.checkJobsStatusDetailFromYaml(null).state());
 
         verifyNoInteractions(mockClient);
     }
@@ -418,38 +418,38 @@ public class K8sManagerUnitTest {
         String yaml = "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: train\n  namespace: sqlrec\n";
         K8sManager.JobStatus status = K8sManager.checkJobsStatusDetailFromYaml(yaml);
 
-        assertEquals("failed", status.state());
+        assertEquals(K8sManager.JobState.FAILED, status.state());
         assertTrue(status.detail().contains("Pod train-abc"));
         assertTrue(status.detail().contains("ErrImagePull"));
         assertTrue(status.detail().contains("pull access denied"));
 
         when(selectedPods.list()).thenReturn(new PodListBuilder().build());
         job.setStatus(new JobStatusBuilder().withFailed(1).build());
-        assertEquals("running", K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
+        assertEquals(K8sManager.JobState.RUNNING, K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
 
         job.setStatus(new JobStatusBuilder().withFailed(1).withSucceeded(1).addNewCondition()
                 .withType("Failed").withStatus("True").withMessage("BackoffLimitExceeded")
                 .endCondition().build());
         K8sManager.JobStatus failedJob = K8sManager.checkJobsStatusDetailFromYaml(yaml);
-        assertEquals("failed", failedJob.state());
+        assertEquals(K8sManager.JobState.FAILED, failedJob.state());
         assertTrue(failedJob.detail().contains("BackoffLimitExceeded"));
 
         job.setStatus(new JobStatusBuilder().withSucceeded(1).build());
-        assertEquals("succeeded", K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
 
         job.setStatus(new JobStatusBuilder().withActive(1).withReady(1).build());
         clearInvocations(pods);
-        assertEquals("running", K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
+        assertEquals(K8sManager.JobState.RUNNING, K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
         verifyNoInteractions(pods);
 
         // A new Pending Pod makes active > ready, so image-pull detection resumes.
         job.setStatus(new JobStatusBuilder().withActive(2).withReady(1).build());
         when(selectedPods.list()).thenReturn(new PodListBuilder().addToItems(pod).build());
-        assertEquals("failed", K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
+        assertEquals(K8sManager.JobState.FAILED, K8sManager.checkJobsStatusDetailFromYaml(yaml).state());
 
         when(namedJob.get()).thenReturn(null);
         K8sManager.JobStatus missingJob = K8sManager.checkJobsStatusDetailFromYaml(yaml);
-        assertEquals("failed", missingJob.state());
+        assertEquals(K8sManager.JobState.FAILED, missingJob.state());
         assertTrue(missingJob.detail().contains("Job not found"));
     }
     @Test

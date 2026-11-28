@@ -220,32 +220,29 @@ public class FlinkSchemaUtils {
     }
 
     private static List<Object> toJavaArray(ArrayData array, LogicalType elementType) {
+        ArrayData.ElementGetter getter = arrayElementGetter(elementType);
         List<Object> values = new ArrayList<>(array.size());
         for (int i = 0; i < array.size(); i++) {
-            values.add(readArrayElement(array, elementType, i));
+            Object value = array.isNullAt(i) ? null : getter.getElementOrNull(array, i);
+            values.add(value instanceof StringData ? value.toString() : value);
         }
         return values;
     }
 
-    private static Object readArrayElement(ArrayData array, LogicalType type, int index) {
-        if (array.isNullAt(index)) {
-            return null;
+    private static ArrayData.ElementGetter arrayElementGetter(LogicalType type) {
+        switch (type.getTypeRoot()) {
+            case INTEGER:
+            case BIGINT:
+            case FLOAT:
+            case DOUBLE:
+            case CHAR:
+            case VARCHAR:
+                return ArrayData.createElementGetter(type);
+            default:
+                // Empty arrays and null elements are accepted without reading a value.
+                return (array, index) -> {
+                    throw new UnsupportedOperationException("Unsupported array element type: " + type);
+                };
         }
-        if (type instanceof IntType) {
-            return array.getInt(index);
-        }
-        if (type instanceof BigIntType) {
-            return array.getLong(index);
-        }
-        if (type instanceof FloatType) {
-            return array.getFloat(index);
-        }
-        if (type instanceof DoubleType) {
-            return array.getDouble(index);
-        }
-        if (type instanceof VarCharType || type instanceof CharType) {
-            return array.getString(index).toString();
-        }
-        throw new UnsupportedOperationException("Unsupported array element type: " + type);
     }
 }

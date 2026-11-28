@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HiveTableUtilsTest {
     @Test
@@ -22,5 +23,20 @@ class HiveTableUtilsTest {
         var arrayType = DataTypeUtils.getRelDataType(field.getType());
         assertFalse(arrayType.isNullable());
         assertFalse(arrayType.getComponentType().isNullable());
+    }
+
+    @Test
+    void missingFlinkTypeStopsConnectorFallbackButFailsMetadataReading() {
+        Table table = new Table();
+        table.setSd(new StorageDescriptor());
+        table.putToParameters("flink.schema.0.name", "id");
+        table.putToParameters("flink.schema.0.data-type", "BIGINT");
+        table.putToParameters("flink.schema.1.name", "partial");
+
+        var fields = HiveTableUtils.parse(table);
+        assertEquals(1, fields.size());
+        assertEquals("id", fields.get(0).getName());
+        var error = assertThrows(IllegalArgumentException.class, () -> HiveTableUtils.getMetadataFields(table));
+        assertEquals("Missing Flink type for partial", error.getMessage());
     }
 }

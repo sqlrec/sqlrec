@@ -183,7 +183,7 @@ class ServiceManagerSafetyTest {
 
     @Test
     void reconcilesUnfinishedCheckpointBeforeCreatingService() throws Exception {
-        for (String actual : List.of("running", "succeeded", "failed")) {
+        for (K8sManager.JobState actual : K8sManager.JobState.values()) {
             try (Fixture f = new Fixture()) {
                 Checkpoint checkpoint = new Checkpoint();
                 checkpoint.setModelName("rank");
@@ -198,7 +198,7 @@ class ServiceManagerSafetyTest {
                 var statement = (SqlCreateService) CompileManager.parseSql(
                         "CREATE SERVICE `rank-a` ON MODEL `rank` CHECKPOINT='v1' WITH ('NAMESPACE'='test')");
 
-                if (actual.equals("succeeded")) {
+                if (actual == K8sManager.JobState.SUCCEEDED) {
                     assertEquals("rank-a", ServiceManager.createService(statement));
                     assertNotNull(f.services.get("rank-a"));
                 } else {
@@ -206,9 +206,14 @@ class ServiceManagerSafetyTest {
                     verify(f.db, never()).upsertService(any());
                     f.k8s.verify(() -> K8sManager.applyYaml(any()), never());
                 }
-                assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
-                        checkpoint.getStatus());
-                verify(f.db, times(actual.equals("running") ? 0 : 1)).completeCheckpoint(eq(checkpoint), anyString());
+                String expectedStatus = switch (actual) {
+                    case RUNNING -> Consts.CHECKPOINT_STATUS_CREATED;
+                    case SUCCEEDED -> Consts.CHECKPOINT_STATUS_SUCCEEDED;
+                    case FAILED -> Consts.CHECKPOINT_STATUS_FAILED;
+                };
+                assertEquals(expectedStatus, checkpoint.getStatus());
+                verify(f.db, times(actual == K8sManager.JobState.RUNNING ? 0 : 1))
+                        .completeCheckpoint(eq(checkpoint), anyString());
                 f.k8s.verify(() -> K8sManager.deleteYaml(any()), never());
             }
         }

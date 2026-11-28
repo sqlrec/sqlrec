@@ -2,8 +2,8 @@ package com.sqlrec.model;
 
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.*;
-import com.sqlrec.db.*;
-import com.sqlrec.entity.*;
+import com.sqlrec.entity.Checkpoint;
+import com.sqlrec.entity.Service;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlTrainModel;
@@ -11,7 +11,6 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -142,13 +141,13 @@ class ModelManagerTrainingSafetyTest {
 
     @Test
     void runningCheckpointIsReusedAndFailedCreatedJobIsRetriedWithoutDataDeletion() throws Exception {
-        for (String jobState : List.of("running", "succeeded", "failed")) {
+        for (K8sManager.JobState jobState : K8sManager.JobState.values()) {
             try (Fixture f = new Fixture(Consts.CHECKPOINT_STATUS_CREATED)) {
                 f.db.getCheckpoint("model", "v1").setYaml("old-yaml");
                 f.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("old-yaml"))
                         .thenReturn(new K8sManager.JobStatus(jobState, null));
                 assertEquals("v1", ModelManager.trainModel(f.statement, "default").get(0).getCheckpointName());
-                if (jobState.equals("failed")) {
+                if (jobState == K8sManager.JobState.FAILED) {
                     f.k8s.verify(() -> K8sManager.deleteYamlAndWait("old-yaml"));
                     f.k8s.verify(() -> K8sManager.applyYaml("injected-yaml"));
                     verify(f.db).upsertCheckpoint(argThat(checkpoint ->
@@ -344,38 +343,26 @@ class ModelManagerTrainingSafetyTest {
         }
     }
 
-    private static class Fixture implements AutoCloseable {
-        final MetadataAccess db = mock(MetadataAccess.class);
+    private static final class Fixture extends ModelJobTestFixture {
         final SqlTrainModel statement = mock(SqlTrainModel.class);
-        final ModelController controller = mock(ModelController.class);
         final ModelConf model = new ModelConf();
         final ModelTrainConf train = new ModelTrainConf();
-        final MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
-        final MockedStatic<ModelEntityConverter> converter = mockStatic(ModelEntityConverter.class);
-        final MockedStatic<ModelControllerFactory> controllers = mockStatic(ModelControllerFactory.class);
-        final MockedStatic<K8sYamlUtils> yaml = mockStatic(K8sYamlUtils.class);
-        final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
+
         Fixture(String status) throws Exception {
-            CheckpointTestSupport.stubCompletion(db);
-            yaml.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString())).thenCallRealMethod();
-            Model entity = new Model(); entity.setDdl("model-ddl"); when(db.getModel("model")).thenReturn(entity);
             Checkpoint old = new Checkpoint(); old.setModelName("model"); old.setCheckpointName("v1"); old.setStatus(status);
-            old.setModelDdl("model-ddl");
+            old.setModelDdl(MODEL_DDL);
             old.setCheckpointType(Consts.CHECKPOINT_TYPE_ORIGIN);
             when(db.getCheckpoint("model", "v1")).thenReturn(old);
             when(db.getServiceListByCheckpoint("model", "v1")).thenReturn(List.of());
             model.setPath("/models/model"); model.setParams(Map.of("model", "gbdt.lightgbm"));
             train.setModelName("model"); train.setCheckpointName("v1"); train.setModelDir("/models/model/v1"); train.setTrainDataPaths(List.of());
-            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
+            stubModel("model", model);
             converter.when(() -> ModelEntityConverter.convertToModelTrainConf(statement)).thenReturn(train);
-            converter.when(() -> ModelEntityConverter.convertToModel("model-ddl")).thenReturn(model);
             converter.when(() -> ModelEntityConverter.getModelCheckpointPath(old)).thenCallRealMethod();
-            controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);
             when(controller.genModelTrainK8sYaml(model, train)).thenReturn("generated-yaml");
             yaml.when(() -> K8sYamlUtils.injectPodConfig("generated-yaml", train.getParams()))
                     .thenReturn("injected-yaml");
         }
         void verifyNoDeletion() { verify(db, never()).hdfsDeletePath(any()); verify(db, never()).deleteCheckpoint(any(), any()); }
-        public void close() { k8s.close(); yaml.close(); controllers.close(); converter.close(); metadata.close(); }
     }
 }

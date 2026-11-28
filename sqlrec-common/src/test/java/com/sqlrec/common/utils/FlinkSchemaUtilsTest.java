@@ -130,7 +130,7 @@ class FlinkSchemaUtilsTest {
     void readsSupportedArrayElementsWithoutDroppingNulls() {
         DataType[] elementTypes = {
                 DataTypes.INT(), DataTypes.BIGINT(), DataTypes.FLOAT(), DataTypes.DOUBLE(),
-                DataTypes.CHAR(4), DataTypes.STRING()
+                DataTypes.CHAR(4), DataTypes.STRING().notNull()
         };
         Object[] internalValues = {
                 7, 7L, 7.5f, 7.5d, StringData.fromString("char"), StringData.fromString("text")

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "httplib.h"
 #include "json.hpp"
@@ -71,6 +72,20 @@ inline std::string get_string_value(const nlohmann::json& row, const std::string
     throw std::invalid_argument("Categorical feature '" + col + "' must be an integer, string or null");
 }
 
+// Expand validated columns, broadcasting length-one columns to the requested row count.
+inline nlohmann::json expand_columnar_rows(const nlohmann::json& columns, size_t row_count) {
+    nlohmann::json rows = nlohmann::json::array();
+    for (size_t i = 0; i < row_count; ++i) {
+        nlohmann::json row = nlohmann::json::object();
+        for (auto it = columns.begin(); it != columns.end(); ++it) {
+            const auto& values = it.value();
+            row[it.key()] = values[values.size() == 1 ? 0 : i];
+        }
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
 // Normalize request data to row-wise format.
 // Accepts both row-wise [{"f1":1,"f2":"a"}, ...] and columnar {"f1":[1,...], "f2":["a",...]}.
 // Columnar input is converted to row-wise; row-wise input is passed through.
@@ -127,17 +142,7 @@ inline nlohmann::json parse_request_data(const nlohmann::json& data) {
         n = non_1_len;
     }
 
-    // Build rows, broadcasting length-1 lists.
-    nlohmann::json rows = nlohmann::json::array();
-    for (size_t i = 0; i < n; ++i) {
-        nlohmann::json row = nlohmann::json::object();
-        for (auto it = data.begin(); it != data.end(); ++it) {
-            const auto& arr = it.value();
-            row[it.key()] = (arr.size() == 1) ? arr[0] : arr[i];
-        }
-        rows.push_back(row);
-    }
-    return rows;
+    return expand_columnar_rows(data, n);
 }
 
 // --- Server utilities ---

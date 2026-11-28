@@ -3,17 +3,12 @@ package com.sqlrec.model;
 import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.model.CheckpointInfo;
 import com.sqlrec.common.model.ModelConf;
-import com.sqlrec.common.model.ModelController;
 import com.sqlrec.common.model.ModelExportConf;
-import com.sqlrec.db.MetadataAccess;
-import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.Checkpoint;
-import com.sqlrec.entity.Model;
 import com.sqlrec.k8s.K8sManager;
 import com.sqlrec.k8s.K8sYamlUtils;
 import com.sqlrec.sql.parser.SqlExportModel;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,7 +54,7 @@ class ModelManagerExportTest {
             running.setYaml("running-job");
             Checkpoint missingYaml = fixture.checkpoint("export_b", Consts.CHECKPOINT_STATUS_CREATED);
             fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("running-job"))
-                    .thenReturn(new K8sManager.JobStatus("running", null));
+                    .thenReturn(new K8sManager.JobStatus(K8sManager.JobState.RUNNING, null));
 
             List<CheckpointInfo> result = fixture.export();
 
@@ -129,7 +124,7 @@ class ModelManagerExportTest {
             Checkpoint old = fixture.checkpoint("export_a", Consts.CHECKPOINT_STATUS_CREATED);
             old.setYaml("injected-yaml");
             fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml("injected-yaml"))
-                    .thenReturn(new K8sManager.JobStatus("succeeded", null));
+                    .thenReturn(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             CheckpointCompletion.refresh(fixture.db, old);
             assertEquals(Consts.CHECKPOINT_STATUS_SUCCEEDED, old.getStatus());
 
@@ -297,36 +292,21 @@ class ModelManagerExportTest {
         }
     }
 
-    private static final class ExportFixture implements AutoCloseable {
-        private final MetadataAccess db = mock(MetadataAccess.class);
+    private static final class ExportFixture extends ModelJobTestFixture {
         private final SqlExportModel statement = mock(SqlExportModel.class);
-        private final ModelController controller = mock(ModelController.class);
         private final List<String> events = new ArrayList<>();
         private final List<Checkpoint> inserted = new ArrayList<>();
         private final ModelExportConf export = new ModelExportConf();
-        private final MockedStatic<MetadataAccessFactory> metadata = mockStatic(MetadataAccessFactory.class);
-        private final MockedStatic<ModelEntityConverter> converter = mockStatic(ModelEntityConverter.class);
-        private final MockedStatic<ModelControllerFactory> controllers = mockStatic(ModelControllerFactory.class);
-        private final MockedStatic<K8sYamlUtils> yaml = mockStatic(K8sYamlUtils.class);
-        private final MockedStatic<K8sManager> k8s = mockStatic(K8sManager.class);
-
         private ExportFixture() throws Exception {
-            CheckpointTestSupport.stubCompletion(db);
-            yaml.when(() -> K8sYamlUtils.checkpointAttemptJobId(anyString(), anyString(), anyString())).thenCallRealMethod();
-            Model modelEntity = new Model();
-            modelEntity.setDdl("model-ddl");
             ModelConf model = new ModelConf();
             model.setPath("/models/rank");
             export.setModelName("rank");
             export.setCheckpointName("source");
             export.setParams(Map.of());
 
-            metadata.when(MetadataAccessFactory::getInstance).thenReturn(db);
+            stubModel("rank", model);
             converter.when(() -> ModelEntityConverter.convertToModelExportConf(statement))
                     .thenReturn(export);
-            converter.when(() -> ModelEntityConverter.convertToModel("model-ddl")).thenReturn(model);
-            controllers.when(() -> ModelControllerFactory.getRequiredModelController(model)).thenReturn(controller);
-            when(db.getModel("rank")).thenReturn(modelEntity);
             checkpoint("source", Consts.CHECKPOINT_STATUS_SUCCEEDED);
             when(controller.getExportCheckpoints(export)).thenReturn(List.of("export_a", "export_b"));
             when(controller.getExportCleanPath(export)).thenReturn("/models/rank/export");
@@ -366,7 +346,7 @@ class ModelManagerExportTest {
             checkpoint.setCheckpointName(name);
             checkpoint.setStatus(status);
             checkpoint.setCheckpointType(name.equals("source") ? Consts.CHECKPOINT_TYPE_ORIGIN : Consts.CHECKPOINT_TYPE_EXPORT);
-            checkpoint.setModelDdl("model-ddl");
+            checkpoint.setModelDdl(MODEL_DDL);
             converter.when(() -> ModelEntityConverter.getModelCheckpointPath(checkpoint)).thenCallRealMethod();
             when(db.getCheckpoint("rank", name)).thenReturn(checkpoint);
             return checkpoint;
@@ -376,14 +356,6 @@ class ModelManagerExportTest {
             return ModelManager.exportModel(statement, "default");
         }
 
-        @Override
-        public void close() {
-            k8s.close();
-            yaml.close();
-            controllers.close();
-            converter.close();
-            metadata.close();
-        }
     }
     @Test
     void failedOrRunningSourceIsRejectedBeforeCleanupOrSubmission() throws Exception {
@@ -399,22 +371,27 @@ class ModelManagerExportTest {
 
     @Test
     void reconcilesUnfinishedSourceBeforeExporting() throws Exception {
-        for (String actual : List.of("running", "succeeded", "failed")) {
+        for (K8sManager.JobState actual : K8sManager.JobState.values()) {
             try (ExportFixture fixture = new ExportFixture()) {
                 Checkpoint source = fixture.checkpoint("source", Consts.CHECKPOINT_STATUS_CREATED);
                 source.setYaml("shared-source-job");
                 fixture.k8s.when(() -> K8sManager.checkJobsStatusDetailFromYaml(source.getYaml()))
                         .thenReturn(new K8sManager.JobStatus(actual, null));
 
-                if (actual.equals("succeeded")) {
+                if (actual == K8sManager.JobState.SUCCEEDED) {
                     assertEquals(2, fixture.export().size());
                 } else {
                     assertThrows(IllegalArgumentException.class, fixture::export);
                     assertTrue(fixture.events.isEmpty());
                 }
-                assertEquals(actual.equals("running") ? Consts.CHECKPOINT_STATUS_CREATED : actual,
-                        source.getStatus());
-                verify(fixture.db, times(actual.equals("running") ? 0 : 1)).completeCheckpoint(eq(source), anyString());
+                String expectedStatus = switch (actual) {
+                    case RUNNING -> Consts.CHECKPOINT_STATUS_CREATED;
+                    case SUCCEEDED -> Consts.CHECKPOINT_STATUS_SUCCEEDED;
+                    case FAILED -> Consts.CHECKPOINT_STATUS_FAILED;
+                };
+                assertEquals(expectedStatus, source.getStatus());
+                verify(fixture.db, times(actual == K8sManager.JobState.RUNNING ? 0 : 1))
+                        .completeCheckpoint(eq(source), anyString());
                 fixture.k8s.verify(() -> K8sManager.deleteYaml("shared-source-job"), never());
             }
         }

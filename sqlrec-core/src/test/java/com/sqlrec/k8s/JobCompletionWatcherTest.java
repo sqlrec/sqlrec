@@ -37,7 +37,7 @@ class JobCompletionWatcherTest {
 
         f.jobs.handler.onUpdate(f.job(0), f.job(2));
 
-        assertEquals("succeeded", completion.get(5, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.get(5, TimeUnit.SECONDS).state());
         f.jobs.assertStopped();
     }
 
@@ -86,7 +86,7 @@ class JobCompletionWatcherTest {
         } finally {
             release.countDown();
         }
-        assertEquals("succeeded", completion.get(5, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.get(5, TimeUnit.SECONDS).state());
         f.jobs.assertStopped();
     }
 
@@ -95,7 +95,7 @@ class JobCompletionWatcherTest {
         Fixture f = new Fixture();
         f.jobs.initial = List.of(f.job(2));
         var completion = f.watch();
-        assertEquals("succeeded", completion.join().state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.join().state());
         assertNull(f.pods.handler);
         f.jobs.assertStopped();
     }
@@ -109,7 +109,7 @@ class JobCompletionWatcherTest {
         f.jobs.emit(List.of(f.job(1)));
         assertFalse(completion.isDone());
         f.jobs.emit(List.of(f.job(2)));
-        assertEquals("succeeded", completion.join().state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.join().state());
         f.jobs.assertStopped();
         f.pods.assertStopped();
         verify(f.client.batch().v1().jobs().inNamespace("test").withName("train"), never()).get();
@@ -124,7 +124,7 @@ class JobCompletionWatcherTest {
                 .withType("Failed").withStatus("True").withMessage("trainer crashed")
                 .endCondition().endStatus().build();
         f.jobs.emit(List.of(failed));
-        assertEquals("failed", completion.join().state());
+        assertEquals(K8sManager.JobState.FAILED, completion.join().state());
         assertTrue(completion.join().detail().contains("trainer crashed"));
     }
 
@@ -136,7 +136,7 @@ class JobCompletionWatcherTest {
         f.pods.emit(List.of(f.failedPod("previous-uid")));
         assertFalse(completion.isDone());
         f.pods.emit(List.of(f.failedPod("uid")));
-        assertEquals("failed", completion.join().state());
+        assertEquals(K8sManager.JobState.FAILED, completion.join().state());
         assertTrue(completion.join().detail().contains("ImagePullBackOff"));
         f.jobs.assertStopped();
     }
@@ -154,7 +154,7 @@ class JobCompletionWatcherTest {
         Fixture deleted = new Fixture();
         var missing = deleted.watch();
         deleted.jobs.emit(List.of());
-        assertEquals("failed", missing.join().state());
+        assertEquals(K8sManager.JobState.FAILED, missing.join().state());
         assertTrue(missing.join().detail().contains("not found"));
     }
 
@@ -206,7 +206,7 @@ class JobCompletionWatcherTest {
                     metadata: {name: other, namespace: test}
                     """);
             f.jobs.emit(List.of());
-            assertEquals("failed", completion.join().state());
+            assertEquals(K8sManager.JobState.FAILED, completion.join().state());
             other.assertStopped();
         } finally {
             K8sManager.resetClient();

@@ -31,7 +31,7 @@ class CheckpointCompletionWatchTest {
                     List.of(new CheckpointInfo("rank", "user"), new CheckpointInfo("rank", "item")),
                     task -> { throw rejected; });
 
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
 
             var error = assertThrows(java.util.concurrent.ExecutionException.class,
                     () -> operation.get(2, TimeUnit.SECONDS));
@@ -58,7 +58,7 @@ class CheckpointCompletionWatchTest {
             });
             var operation = f.watch("user", "item");
             assertFalse(operation.isDone());
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             operation.join();
             f.k8s.verify(() -> K8sManager.watchJobsFromYaml("shared"), times(1));
             f.k8s.verify(() -> K8sManager.deleteYaml("shared"), times(1));
@@ -71,7 +71,7 @@ class CheckpointCompletionWatchTest {
             Checkpoint user = f.checkpoint("user", "shared");
             Checkpoint item = f.checkpoint("item", "shared");
             var operation = f.watch("user", "item");
-            f.observation.complete(new K8sManager.JobStatus("failed", "ImagePullBackOff"));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "ImagePullBackOff"));
             var failure = assertThrows(CompletionException.class, operation::join);
             assertTrue(failure.getCause().getMessage().contains("ImagePullBackOff"));
             assertEquals(Consts.CHECKPOINT_STATUS_FAILED, user.getStatus());
@@ -109,7 +109,7 @@ class CheckpointCompletionWatchTest {
             Checkpoint checkpoint = f.checkpoint("user", "shared");
             var operation = f.watch("user");
             checkpoint.setUpdatedAt(2);
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             assertTrue(assertThrows(CompletionException.class, operation::join).getCause().getMessage().contains("replaced"));
             assertEquals(Consts.CHECKPOINT_STATUS_CREATED, checkpoint.getStatus());
             verify(f.db, never()).upsertCheckpoint(any());
@@ -128,7 +128,7 @@ class CheckpointCompletionWatchTest {
             f.checkpoint("user", "shared");
             doThrow(new IllegalStateException("database unavailable")).when(f.db).completeCheckpoint(any(), anyString());
             var operation = f.watch("user");
-            f.observation.complete(new K8sManager.JobStatus("succeeded", null));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.SUCCEEDED, null));
             assertThrows(CompletionException.class, operation::join);
             f.k8s.verify(() -> K8sManager.deleteYaml(anyString()), never());
         }
@@ -142,7 +142,7 @@ class CheckpointCompletionWatchTest {
             CompletableFuture<K8sManager.JobStatus> other = new CompletableFuture<>();
             f.k8s.when(() -> K8sManager.watchJobsFromYaml("other")).thenReturn(other);
             var operation = f.watch("user", "item");
-            f.observation.complete(new K8sManager.JobStatus("failed", "trainer failed"));
+            f.observation.complete(new K8sManager.JobStatus(K8sManager.JobState.FAILED, "trainer failed"));
             assertThrows(CompletionException.class, operation::join);
             assertTrue(other.isCancelled());
         }

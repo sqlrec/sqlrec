@@ -85,7 +85,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
     void observesRealJobSuccessAcrossAllCompletions() throws Exception {
         Job job = createJob("success", "sleep 1; exit 0", 2);
         var completion = watch(job);
-        assertEquals("succeeded", completion.get(90, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.get(90, TimeUnit.SECONDS).state());
         Job finished = client.batch().v1().jobs().inNamespace(namespace).withName("success").get();
         assertEquals(2, finished.getStatus().getSucceeded());
         assertEquals(job.getMetadata().getUid(), finished.getMetadata().getUid());
@@ -94,10 +94,10 @@ class JobCompletionWatcherMinikubeIntegrationTest {
     @Test
     void initialSnapshotRecognizesAnAlreadyCompletedJob() throws Exception {
         Job job = createJob("already-complete", "exit 0", 1);
-        assertEquals("succeeded", watch(job).get(90, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, watch(job).get(90, TimeUnit.SECONDS).state());
         assertEquals(1, client.batch().v1().jobs().inNamespace(namespace).withName("already-complete")
                 .get().getStatus().getSucceeded());
-        assertEquals("succeeded", watch(job).get(15, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, watch(job).get(15, TimeUnit.SECONDS).state());
     }
 
     @Test
@@ -105,7 +105,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
     void nonzeroContainerExitProducesARealJobFailure() throws Exception {
         Job job = createJob("failure", "exit 17", 1);
         K8sManager.JobStatus status = watch(job).get(90, TimeUnit.SECONDS);
-        assertEquals("failed", status.state());
+        assertEquals(K8sManager.JobState.FAILED, status.state());
         assertTrue(status.detail().contains("Job failed"), status.detail());
         Job failed = client.batch().v1().jobs().inNamespace(namespace).withName("failure").get();
         assertTrue(failed.getStatus().getConditions().stream().anyMatch(condition ->
@@ -118,7 +118,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
                 .editFirstContainer().withImage("invalid image reference").endContainer().endSpec().endTemplate().endSpec().build();
         Job created = client.batch().v1().jobs().inNamespace(namespace).resource(definition).create();
         K8sManager.JobStatus status = watch(created).get(90, TimeUnit.SECONDS);
-        assertEquals("failed", status.state());
+        assertEquals(K8sManager.JobState.FAILED, status.state());
         assertTrue(status.detail().contains("InvalidImageName"), status.detail());
         Job current = client.batch().v1().jobs().inNamespace(namespace).withName("invalid-image").get();
         assertTrue(current.getStatus().getConditions() == null || current.getStatus().getConditions().stream()
@@ -132,7 +132,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
         assertThrows(TimeoutException.class, () -> completion.get(25, TimeUnit.MILLISECONDS));
         assertFalse(completion.isDone());
         assertNotNull(client.batch().v1().jobs().inNamespace(namespace).withName("timeout").get());
-        assertEquals("succeeded", completion.get(90, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, completion.get(90, TimeUnit.SECONDS).state());
     }
 
     @Test
@@ -153,7 +153,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
         var completion = watch(job);
         client.batch().v1().jobs().inNamespace(namespace).withName("delete").delete();
         K8sManager.JobStatus status = completion.get(30, TimeUnit.SECONDS);
-        assertEquals("failed", status.state());
+        assertEquals(K8sManager.JobState.FAILED, status.state());
         assertTrue(status.detail().contains("not found"), status.detail());
     }
 
@@ -162,7 +162,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
         String previousId = K8sYamlUtils.checkpointAttemptJobId("train", "rank", "v1");
         String nextId = K8sYamlUtils.checkpointAttemptJobId("train", "rank", "v1");
         Job previous = createJob(previousId + "-job", "exit 0", 1);
-        assertEquals("succeeded", watch(previous).get(90, TimeUnit.SECONDS).state());
+        assertEquals(K8sManager.JobState.SUCCEEDED, watch(previous).get(90, TimeUnit.SECONDS).state());
         Job next = createJob(nextId + "-job", "sleep 60", 1);
         var previousConfig = client.configMaps().inNamespace(namespace).resource(new ConfigMapBuilder()
                 .withNewMetadata().withName(previousId + "-cm").endMetadata().build()).create();
@@ -192,7 +192,7 @@ class JobCompletionWatcherMinikubeIntegrationTest {
             var completion = JobCompletionWatcher.watch(retryClient, job);
             observations.add(completion);
             K8sManager.deleteYamlAndWait(Serialization.asYaml(job));
-            assertEquals("failed", completion.get(10, TimeUnit.SECONDS).state());
+            assertEquals(K8sManager.JobState.FAILED, completion.get(10, TimeUnit.SECONDS).state());
             assertNull(client.batch().v1().jobs().inNamespace(namespace).withName("retry-delete").get());
             assertTrue(client.pods().inNamespace(namespace).withLabel("job-name", "retry-delete").list().getItems().isEmpty());
         } finally {

@@ -36,10 +36,11 @@ public class HiveTableUtils {
                 fieldSchemaList.add(new FieldSchema(fieldSchema.getName(), fieldSchema.getType()));
             }
         } else {
-            Map<String, String> flinkTableColumns = getFlinkTableColumns(tableObj);
-            for (Map.Entry<String, String> entry : flinkTableColumns.entrySet()) {
-                fieldSchemaList.add(new FieldSchema(entry.getKey(), entry.getValue()));
+            Map<String, FieldSchema> fieldsByName = new LinkedHashMap<>();
+            for (FieldSchema field : readFlinkFields(tableObj.getParameters(), false)) {
+                fieldsByName.put(field.getName(), field);
             }
+            fieldSchemaList.addAll(fieldsByName.values());
         }
 
         if (fieldSchemaList.isEmpty()) {
@@ -77,17 +78,7 @@ public class HiveTableUtils {
     public static List<FieldSchema> getMetadataFields(org.apache.hadoop.hive.metastore.api.Table tableObj) {
         Map<String, String> properties = tableObj.getParameters();
         if (properties != null && properties.containsKey("flink.schema.0.name")) {
-            List<FieldSchema> fields = new ArrayList<>();
-            for (int i = 0; properties.containsKey("flink.schema." + i + ".name"); i++) {
-                String prefix = "flink.schema." + i + ".";
-                // Keep nullability and nested field names exactly as serialized by Flink.
-                String type = properties.get(prefix + "data-type");
-                if (type == null) {
-                    throw new IllegalArgumentException("Missing Flink type for " + properties.get(prefix + "name"));
-                }
-                fields.add(new FieldSchema(properties.get(prefix + "name"), type));
-            }
-            return fields;
+            return readFlinkFields(properties, true);
         }
         List<FieldSchema> result = new ArrayList<>();
         if (tableObj.getSd() != null && tableObj.getSd().getCols() != null) {
@@ -99,23 +90,28 @@ public class HiveTableUtils {
         return result;
     }
 
-    private static Map<String, String> getFlinkTableColumns(org.apache.hadoop.hive.metastore.api.Table tableObj) {
-        Map<String, String> flinkTableColumns = new LinkedHashMap<>();
-        Map<String, String> tableProperties = tableObj.getParameters();
-
-        if (tableProperties == null) {
-            return flinkTableColumns;
+    private static List<FieldSchema> readFlinkFields(Map<String, String> properties, boolean requireTypes) {
+        List<FieldSchema> fields = new ArrayList<>();
+        if (properties == null) {
+            return fields;
         }
-        for (int index = 0; ; index++) {
-            String nameKey = "flink.schema." + index + ".name";
-            String typeKey = "flink.schema." + index + ".data-type";
-            if (!tableProperties.containsKey(nameKey) || !tableProperties.containsKey(typeKey)) {
+        for (int i = 0; ; i++) {
+            String prefix = "flink.schema." + i + ".";
+            if (!properties.containsKey(prefix + "name")) {
                 break;
             }
-            flinkTableColumns.put(tableProperties.get(nameKey), tableProperties.get(typeKey));
+            String name = properties.get(prefix + "name");
+            String typeKey = prefix + "data-type";
+            String type = properties.get(typeKey);
+            if (requireTypes && type == null) {
+                throw new IllegalArgumentException("Missing Flink type for " + name);
+            }
+            if (!properties.containsKey(typeKey)) {
+                break;
+            }
+            fields.add(new FieldSchema(name, type));
         }
-
-        return flinkTableColumns;
+        return fields;
     }
 
     public static String getTablePrimaryKey(org.apache.hadoop.hive.metastore.api.Table tableObj) {

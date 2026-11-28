@@ -83,7 +83,7 @@ class JobCompletionWatcherHttpTest {
                     assertTrue(podsWatching.await(5, TimeUnit.SECONDS));
                     assertFalse(completion.isDone());
                     finishJob.countDown();
-                    assertEquals("succeeded", completion.get(5, TimeUnit.SECONDS).state());
+                    assertEquals(K8sManager.JobState.SUCCEEDED, completion.get(5, TimeUnit.SECONDS).state());
                     assertEquals(1, jobLists.get());
                 } finally {
                     completion.cancel(false);
